@@ -24,6 +24,12 @@ measured `estimate`. The fixture's `words` block is still exactly the apps'
 own, so their copies keep matching - the new sentences are under
 `confirm_words` and inside the answers themselves (the apps lane adds them).
 
+Since the owner's 2026-11-08 ruling there is NO item cap: a preview of more
+than `LARGE_WIPE_ITEMS` (the old 200) is listed in full and offered in one
+action, and the body says `large_wipe` / `large_wipe_words` - the threshold is
+named in `limits`, never used as a limit. Nothing in this path touches a
+backup.
+
 It also carries what both apps must say the same way: `words` (the
 backend's own WORDS - the screens' buttons and sentences), the quick
 choices (`presets`) and the limits. The clock and the time zone are fixed
@@ -261,13 +267,15 @@ def cases() -> dict:
                                   mem=w.mem, chats=w.log)
     out["asked_which_days"] = {"said": said, "opens": opens}
 
-    w = _World("many")
+    # The owner's 2026-11-08 ruling: NO item cap. A selection one past the old
+    # 200 is a LARGE wipe, listed in full and offered in one action.
+    w = _World("large")
     with closing(sqlite3.connect(w.mem.path)) as c:
-        for i in range(FR.MAX_ITEMS + 1):
+        for i in range(FR.LARGE_WIPE_ITEMS + 1):
             c.execute("INSERT INTO facts (text, source, created, valid_from) VALUES (?,?,?,?)",
                       (f"Fact number {i}", "cases", _at(2026, 9, 2) + i, _at(2026, 9, 2)))
         c.commit()
-    out["preview_too_many"] = w.get(FR.PREVIEW, q)
+    out["preview_large_wipe"] = w.get(FR.PREVIEW, q)
     FR._reset_for_tests()
     return {
         "routes": {"status": FR.ROUTE, "preview": FR.PREVIEW, "undo": FR.UNDO,
@@ -277,7 +285,10 @@ def cases() -> dict:
         # and the sentence the PC would say.
         "confirm_words": {"yes": FR.CONFIRM_YES, "text": FR.CONFIRM_TEXT},
         "presets": [{"id": k, "label": v} for k, v in FR.PRESETS],
-        "limits": {"max_items": FR.MAX_ITEMS, "undo_minutes": FR.UNDO_MINUTES,
+        # There is no item cap (owner's 2026-11-08 ruling); `large_wipe_items`
+        # is the threshold at which the words say LARGE, never a limit.
+        "limits": {"large_wipe_items": FR.LARGE_WIPE_ITEMS,
+                   "undo_minutes": FR.UNDO_MINUTES,
                    "confirm_seconds": FR.HOLD_SECONDS},
         "card_title": W.title_for(FR.ACTION),
         "cases": out,

@@ -727,12 +727,20 @@
    * 2e. Spoken replies: kept on screen when the answer is private, and
    *     this computer's voices only
    *
-   * The page reads every answer aloud with the browser's speech synthesis.
-   * Two rules stand in front of it. Neither is a new permission path and
-   * neither adds a setting: they are the rules the other windows already
-   * run, read off the one fact this page already has - the route its own
-   * chat header carried (`HudReply.route`, the same `X-Jarvis-Route` the
-   * page draws the lane and the gate from).
+   * THIS GATE NO LONGER SITS ON THE PAGE'S READ-ALOUD (TASK-51, 2026-11-09).
+   * A tapped answer is now played as AUDIO the PC made in the configured
+   * Jarvis voice (`speak_reply`; jarvis_hud.html's own player), so it never
+   * touches `speechSynthesis` - and the page asks `private-speech.js` for
+   * THAT answer before it starts. The wrapper below stays as the guard for
+   * any speech synthesis that might return to this page (the page had one
+   * until today), and its local-voices-only rule still stands in front of
+   * any such call: an "Online (Natural)" voice would send the text to
+   * Microsoft to be spoken.
+   *
+   * The privacy rule itself is unchanged, and it is the rule the other
+   * windows already run, read off the one fact this page already has - the
+   * route its own chat header carried (`HudReply.route`, the same
+   * `X-Jarvis-Route` the page draws the lane and the gate from).
    *
    * 1. **An answer that used a sensitive saved fact stays on screen**, and
    *    so does one the PC gated as private (`gate: "private"`). This is the
@@ -1254,6 +1262,14 @@
    *     before it speaks one word. An answer that must stay on screen is never
    *     read: the item's receipt is the rule's own line ("It's on your
    *     screen."). The receipt is "Reading." while it starts, like "Copied.".
+   *     Since TASK-51 (2026-11-09) the page reads it in Jarvis's configured
+   *     voice - the PC's own (`speak_reply`), never the webview's voice list -
+   *     and says so in one line when the PC cannot make the sound.
+   *   - Pause / Resume and Stop reading: drawn beside it only while THIS answer
+   *     is being read, from the page player's own state (`window.__jarvisSpeech`
+   *     -> `pauseSpeechPlayback` / `resumeSpeechPlayback` / `stopSpeechPlayback`).
+   *     Pause's label says what the next tap will do; Stop resets the clip, the
+   *     queue and every line under the answer.
    *   - Copy answer: the answer's own words, through the clipboard; the item
    *     says "Copied." in place, never a toast.
    *
@@ -1361,6 +1377,13 @@
         items[next].focus();
       }
     });
+    // TASK-51: the page's read-aloud player announces every state change on
+    // `window` (`jarvis-speech`); the open menu repaints Pause/Resume/Stop from
+    // it, so a read that finishes - or a PC switch turned OFF mid-answer - does
+    // not leave a stale "Pause" on screen.
+    window.addEventListener("jarvis-speech", function () {
+      if (openAnswerTools && openAnswerTools.paintSpeech) openAnswerTools.paintSpeech();
+    });
   }
 
   function expectAnswer(turnId) {
@@ -1411,6 +1434,10 @@
     var answer = "";
     var readItem = null;
     var copyItem = null;
+    // TASK-51 (2026-11-09): Pause/Resume and Stop reading, drawn beside Read
+    // out loud only while this answer is the one being read.
+    var pauseItem = null;
+    var stopItem = null;
     // Wave 10 (Q2.1): what the PC already has saved for THIS answer - the mark
     // it carries, the reason it was marked with, and the owner's own words.
     // Read once per menu open through the shell (`get_feedback_mark`), so a
@@ -1464,11 +1491,42 @@
     /** What the menu shows right now: the answer exists, and one mark at most.
      *  "Read out loud" is ALWAYS there for a finished answer (owner's ask of
      *  2026-11-07); whether it may actually speak is the page's privacy rule,
-     *  asked at the tap, and the item's receipt says so when it refuses. */
+     *  asked at the tap, and the item's receipt says so when it refuses.
+     *  Pause / Resume and Stop reading appear only while THIS answer is the
+     *  one being read (TASK-51, 2026-11-09). */
     tools.refresh = function () {
       if (readItem) readItem.hidden = !answer;
       if (copyItem) copyItem.hidden = !answer;
+      paintSpeech();
     };
+    tools.paintSpeech = paintSpeech;
+
+    /** The page's player state for THIS answer, or "idle" when the page is an
+     *  older copy, has no player, or is reading a different answer. */
+    function speechStateHere() {
+      var speech = window.__jarvisSpeech;
+      if (!speech || typeof speech.stateFor !== "function") return "idle";
+      try {
+        return speech.stateFor(msg) || "idle";
+      } catch (err) {
+        return "idle";
+      }
+    }
+
+    /** Pause (or Resume) and Stop reading are drawn from the page's own state,
+     *  never from a click: the label says what the next tap will do. A tap only
+     *  ever reaches the page's one player (`window.__jarvisSpeech`), whose own
+     *  functions are `pauseSpeechPlayback`, `resumeSpeechPlayback` and
+     *  `stopSpeechPlayback` - this menu holds no audio of its own. */
+    function paintSpeech() {
+      var now = speechStateHere();
+      var reading = now === "playing" || now === "paused";
+      if (pauseItem) {
+        pauseItem.hidden = !reading;
+        pauseItem.textContent = now === "paused" ? "Resume" : "Pause";
+      }
+      if (stopItem) stopItem.hidden = !reading;
+    }
 
     function paintMarks() {
       right.setAttribute("aria-checked", String(current === "right"));
@@ -1922,6 +1980,24 @@
       }).catch(function () {
         receipt(button, "Could not read it.");
       });
+    });
+    /* Pause / Resume and Stop reading, beside Read out loud (TASK-51, the
+     * owner's decision of 2026-11-08, Gemini's Q7). Hidden until the page says
+     * THIS answer is being read; the page owns the audio, the queue and the
+     * state, and these two items only call its own functions through
+     * `window.__jarvisSpeech`. A tap never starts a second read: Read out loud
+     * is still the only item that speaks. */
+    pauseItem = item("Pause", function () {
+      var speech = window.__jarvisSpeech;
+      if (!speech) return;
+      if (speechStateHere() === "paused") speech.resume();
+      else speech.pause();
+      paintSpeech();
+    });
+    stopItem = item("Stop reading", function () {
+      var speech = window.__jarvisSpeech;
+      if (speech) speech.stop();
+      paintSpeech();
     });
     copyItem = item("Copy answer", function (button) {
       if (!answer) return;
@@ -2840,6 +2916,12 @@
    * actOnOpenRoute above has carried the same literal since 2026-10-31. */
   var SETTINGS_PLACE_KEY = "jarvis.settings.place";
 
+  /* Where the Brain reads the place it should open (src/forget-range.js
+   * BRAIN_PLACE_KEY). The bar and the palette have left this key since
+   * 2026-09-28; the Galaxy door below is the HUD's own use of it. Spelled a
+   * second time here for the same reason as the Settings key above. */
+  var BRAIN_PLACE_KEY = "jarvis.brain.place";
+
   /** A system line in the page's own chat log, or the console when the page is
    *  not far enough along to have one. The same shape `hudMicNote` uses. */
   function hudNavNote(text) {
@@ -2871,8 +2953,27 @@
     if (p && p.catch) p.catch(function () {});
   }
 
-  /** Opens the Brain window at one of its own places. */
+  /** Opens the Brain window at one of its own places.
+   *
+   *  "galaxy" is the Brain's own memory-map view (2026-11-09, the IA
+   *  recommendations). It is NOT a new route or a new command: the door is the
+   *  same `open_fix_place {place: "brain"}` the two Brain buttons use, with
+   *  the Brain's own place key left first - exactly the shape the settings
+   *  gear's `openSettingsAt` above uses for its card. The key is the one the
+   *  Jarvis bar already leaves for "earlier chats"/"forget a time frame", so
+   *  no field, no grant and no command is added.
+   */
   function openBrainAt(place) {
+    if (place === "galaxy") {
+      try {
+        localStorage.setItem(
+          BRAIN_PLACE_KEY,
+          JSON.stringify({ place: "galaxy", at: Date.now() })
+        );
+      } catch (err) {
+        /* no storage: the Brain opens where it was, and the button's own words said where */
+      }
+    }
     var named = place === "history" || place === "tutorials" ? place : "brain";
     var p = navInvoke("open_fix_place", { place: named });
     if (p && p.catch) p.catch(function () {});
@@ -2912,6 +3013,35 @@
     document.addEventListener("DOMContentLoaded", wireBrainWindowDoors, { once: true });
   } else {
     wireBrainWindowDoors();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The HUD's one-click door to the Brain's memory map
+   *
+   * 2026-11-09, the IA recommendations: the owner asked for one press that
+   * opens the Brain's own Galaxy view, and for that entry to say what it is.
+   * #rail-galaxy-map is page markup (hidden in a plain browser, revealed here
+   * only when a shell can send the command), and its click calls the SAME
+   * `openBrainAt` above with "galaxy", so there is one opener, one command and
+   * no second window. A separate wirer on purpose: the two Brain-window doors
+   * have their own id list, which tests/hud-brain-doors.mjs holds to exactly
+   * those two ids.
+   * ---------------------------------------------------------------- */
+  function openGalaxyMapFromHud(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    openBrainAt("galaxy");
+  }
+
+  function wireGalaxyMapDoor() {
+    var el = document.getElementById("rail-galaxy-map");
+    if (!el) return;
+    el.hidden = false;
+    el.addEventListener("click", openGalaxyMapFromHud);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireGalaxyMapDoor, { once: true });
+  } else {
+    wireGalaxyMapDoor();
   }
 
   /** The areas this PAGE can switch: the ones the Rust table can send as a

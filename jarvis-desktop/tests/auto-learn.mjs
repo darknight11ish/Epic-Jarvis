@@ -234,16 +234,23 @@ const settingsText = (page) => page.locator("#memory-auto").innerText();
 const listText = (page) => page.locator("#memory-auto-list").innerText();
 const autoState = (page) => page.evaluate(() => window.__auto);
 
-await check("all three switches sit with the learning switch, in the contract's words, as the PC has them", async () => {
+await check("the Brain shows the learning state and one door to Settings, and keeps only the switch Settings does not own", async () => {
+  // Brain IA audit, recommendation 1 (2026-11-09). "Also remember sensitive
+  // topics automatically" and "Save facts even when Jarvis had to reword
+  // them" are changed in Settings, Learning; this pane says what they are
+  // doing. "Learn automatically" stays a real switch because the Settings
+  // card deliberately does not hold its write (`learning-settings` grants the
+  // state read, background learning and the two remembering switches - not
+  // `brain_memory_learning_auto`), so it is not a duplicate of anything.
   const page = await memoryTab({ facts: LIST.facts });
   const inLearning = await page.locator("#view-memory .card", { has: page.locator("#memory-learning") })
     .locator("#memory-auto").count();
   const text = await settingsText(page);
   const auto = await page.locator("#memory-auto-on").isChecked();
-  const sensitive = await page.locator("#memory-sensitive-on").isChecked();
-  // 2026-11-02: the third switch, drawn the same way and OFF by default.
-  const paraphrase = await page.locator("#memory-paraphrase-on").isChecked();
   const roles = await page.locator("#memory-auto [role=switch]").count();
+  const sensitiveState = await page.locator("#memory-sensitive-state").innerText();
+  const paraphraseState = await page.locator("#memory-paraphrase-state").innerText();
+  const door = await page.locator("#learning-open-settings").innerText();
   const heading = await page.locator("#memory-auto-card h2").textContent();
   const errors = page.__errors;
   await page.close();
@@ -252,9 +259,10 @@ await check("all three switches sit with the learning switch, in the contract's 
   assert.ok(text.includes(SENSITIVE_LABEL) && text.includes(SENSITIVE_DETAIL), text);
   assert.ok(text.includes(PARAPHRASE_LABEL) && text.includes(PARAPHRASE_DETAIL), text);
   assert.equal(auto, true);
-  assert.equal(sensitive, false);
-  assert.equal(paraphrase, false);
-  assert.equal(roles, 3);
+  assert.equal(roles, 1, "the Brain still changes a learning switch Settings owns");
+  assert.equal(sensitiveState, `${SENSITIVE_LABEL} — off.`, sensitiveState);
+  assert.equal(paraphraseState, `${PARAPHRASE_LABEL} — off.`, paraphraseState);
+  assert.match(door, /^Change these in Settings, Learning$/);
   assert.equal(heading, "Saved automatically");
   assert.deepEqual(errors, []);
 });
@@ -335,20 +343,82 @@ await check("Load older asks for the page before the oldest shown, and adds it u
   assert.equal(more, 0, "offered more after a short page");
 });
 
-await check("turning sensitive topics ON raises a card and shows waiting - it is not on yet", async () => {
-  const page = await memoryTab({ waits: ["sensitive"] });
-  await page.locator("#memory-sensitive-on").click();
-  await page.waitForTimeout(400);
-  const sent = (await autoState(page)).switches;
-  const line = await page.locator("#memory-auto .learning-waiting").allInnerTexts();
-  const checked = await page.locator("#memory-sensitive-on").isChecked();
-  const toast = await page.locator("#toast").innerText();
+/* ── Settings, Learning: the one control page (2026-11-09) ─────────────── */
+
+// The three switches that were duplicated on the Brain moved here (Brain IA
+// audit, recommendation 1). The write path did not go away and neither did
+// its tests: what used to be driven through `#memory-sensitive-on` and
+// "Start background learning" is driven through the Settings card, which
+// calls the same three commands.
+
+async function settingsLearning(extra = {}) {
+  const page = await K.open(browser, base, "settings.html", extra, SIZE);
+  await page.locator("#learning").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  return page;
+}
+
+await check("Settings, Learning draws its switches from the PC's own answer", async () => {
+  const page = await settingsLearning();
+  const background = await page.locator("#learning-background").isChecked();
+  const sensitive = await page.locator("#learning-sensitive").isChecked();
+  const paraphrase = await page.locator("#learning-paraphrase").isChecked();
+  const line = await page.locator("#learning-background-line").innerText();
+  const errors = page.__errors;
   await page.close();
-  assert.deepEqual(sent, [{ which: "sensitive", enabled: true }]);
-  assert.equal(line.length, 1);
-  assert.match(line[0], /^Waiting for your approval to remember sensitive topics automatically\. Approve it in the Jarvis bar/);
-  assert.equal(checked, false, "shown as on before the card was approved");
-  assert.match(toast, /Waiting for your approval/);
+  assert.equal(background, true);
+  assert.equal(sensitive, false);
+  assert.equal(paraphrase, false);
+  assert.match(line, /^On\./);
+  assert.deepEqual(errors, []);
+});
+
+await check("turning background learning OFF reaches the PC and says what it said", async () => {
+  // The check that used to be "the learning switch reflects what the server
+  // said", on the Brain. Same rule, now at the one control page.
+  const page = await settingsLearning();
+  await page.locator("#learning-background").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#learning-status").innerText();
+  await page.close();
+  assert.equal(said, "Off.");
+});
+
+await check("turning a switch ON raises ONE card and says waiting - it is not on yet", async () => {
+  // learning-asks.patch: ON answers 202 {waiting: true, enabled: false}. A
+  // page that rendered its own request would show the switch as on. The
+  // switch starts OFF so this click is the ON one.
+  const page = await settingsLearning({
+    auto: { status: { enabled: false } }, learningWaits: true });
+  await page.locator("#learning-background").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#learning-status").innerText();
+  const waiting = await page.locator("#learning-background-waiting").innerText();
+  await page.close();
+  assert.match(said, /Waiting for your approval/);
+  assert.match(waiting, /Waiting for your approval card/);
+});
+
+await check("a floor the PC set is relayed in the PC's own words, never as success", async () => {
+  // JARVIS_EXTRACT=0 is a floor the switch cannot lift: the PC answers 200 and
+  // still refuses. This is the check that used to live in tests/memory.mjs.
+  const page = await settingsLearning({
+    auto: { status: { enabled: false } }, learningFloor: true });
+  await page.locator("#learning-background").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#learning-status").innerText();
+  await page.close();
+  assert.match(said, /JARVIS_EXTRACT/);
+});
+
+await check("CONTROL: the Brain calls no learning write - Settings is the one control page", async () => {
+  const brain = read("src/brain.js");
+  const settings = read("src/learning-settings.js");
+  for (const cmd of ["brain_memory_learning", "brain_memory_learning_sensitive",
+                     "brain_memory_learning_paraphrase"]) {
+    assert.ok(!brain.includes(`invoke("${cmd}"`), `the Brain still writes ${cmd}`);
+    assert.ok(settings.includes(`"${cmd}"`), `Settings does not write ${cmd}`);
+  }
 });
 
 await check("a card raised on the phone shows the waiting line, and it goes with the card", async () => {
@@ -396,18 +466,18 @@ await check("the card leaving the queue unapproved ends the wait and says so", a
 });
 
 await check("a card the PC refused says the PC's plain words - never \"denied or ran out of time\"", async () => {
-  const CARD = { id: "gate-sens-2", action: "learning_sensitive_enable", tier: "ask", detail: {}, created: 1 };
+  const CARD = { id: "gate-auto-2", action: "learning_auto_enable", tier: "ask", detail: {}, created: 1 };
   const MESSAGE = "Your PC's settings do not let this be approved, so it stayed off.";
-  const page = await memoryTab({ waits: ["sensitive"] });
+  const page = await memoryTab({ waits: ["auto"], status: { auto: false } });
   await page.evaluate((card) => { window.__pendingNow = [card]; }, CARD);
-  await page.locator("#memory-sensitive-on").click();
+  await page.locator("#memory-auto-on").click();
   await page.waitForTimeout(300);
   await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), CARD);
   await page.waitForTimeout(100);
   await page.evaluate((message) => {
     window.__pendingNow = [];
-    window.__auto.status.sensitive_waiting = false;
-    window.__auto.status.sensitive_last = { outcome: "refused", message, at: 1,
+    window.__auto.status.auto_waiting = false;
+    window.__auto.status.auto_last = { outcome: "refused", message, at: 1,
       why: "the gate answered at tier 'auto', which is not a person saying yes" };
     window.__emit("approvals-changed", { count: 0, items: [] });
   }, MESSAGE);
@@ -465,16 +535,19 @@ await check("a damaged settings file: the PC's sentence under \"Learn automatica
   assert.equal(none, 0);
 });
 
-await check("the sensitive switch says it does nothing while \"Learn automatically\" is off", async () => {
+await check("the two Settings-owned rows say they do nothing while \"Learn automatically\" is off", async () => {
   assert.equal(SENSITIVE_NEEDS_AUTO, "\"Learn automatically\" is off, so this changes nothing until it is on.");
   const off = await memoryTab({ status: { auto: false } });
   const offText = await settingsText(off);
+  const hints = await off.locator("#memory-auto .auto-needs-auto").count();
   await off.close();
   const on = await memoryTab({});
   const onText = await settingsText(on);
   await on.close();
   assert.ok(offText.includes(SENSITIVE_NEEDS_AUTO), offText);
   assert.ok(!onText.includes(SENSITIVE_NEEDS_AUTO), onText);
+  // One hint under each of the two state rows (the third is the real switch).
+  assert.equal(hints, 2, "a state row does not say it is inert without the first switch");
 });
 
 await check("while a card waits the switch is greyed; Cancel turns it OFF, withdraws the card, and is never held", async () => {
@@ -520,18 +593,18 @@ await check("while a card waits the switch is greyed; Cancel turns it OFF, withd
 });
 
 await check("OFF says the PC's own sentence, and the app's own only when the PC sent none", async () => {
-  const page = await memoryTab({ offMessage: "Sensitive topics now wait for your yes." , status: { auto_sensitive: true } });
-  await page.locator("#memory-sensitive-on").click();
+  const page = await memoryTab({ offMessage: "Jarvis now waits for your yes.", status: { auto: true } });
+  await page.locator("#memory-auto-on").click();
   await page.waitForTimeout(400);
   const said = await page.locator("#toast").innerText();
   await page.close();
-  const older = await memoryTab({ offSilent: true, status: { auto_sensitive: true } });
-  await older.locator("#memory-sensitive-on").click();
+  const older = await memoryTab({ offSilent: true, status: { auto: true } });
+  await older.locator("#memory-auto-on").click();
   await older.waitForTimeout(400);
   const own = await older.locator("#toast").innerText();
   await older.close();
-  assert.equal(said, "Sensitive topics now wait for your yes.");
-  assert.equal(own, SWITCHES.sensitive.off);
+  assert.equal(said, "Jarvis now waits for your yes.");
+  assert.equal(own, SWITCHES.auto.off);
 });
 
 await check("the empty list, on and off, and the History line under Saved automatically", async () => {
@@ -549,8 +622,11 @@ await check("the empty list, on and off, and the History line under Saved automa
   assert.equal(note, HISTORY_NOTE);
   assert.equal(HISTORY_NOTE,
     "Deleting a conversation from History does not forget facts learned from it - use Forget here.");
+  // 2026-11-09: the desktop's sentence names Settings, Learning, because the
+  // button it used to point at is not on this pane any more (the phone still
+  // draws it, so its own sentence still says "above" - net/AutoLearn.kt).
   assert.equal(LEARNING_OFF_NOTE,
-    "Background learning is off, so nothing is saved automatically. Start background learning above to use this.");
+    "Background learning is off, so nothing is saved automatically. Turn it on in Settings, Learning to use this.");
 });
 
 await check("saves while the Brain was closed are counted: Rust hands them over, and opening the list clears both", async () => {
@@ -613,11 +689,12 @@ await check("turning Learn automatically OFF is immediate, and what was saved st
 
 await check("on a stale link ON is greyed and Forget with it; OFF never is", async () => {
   const page = await memoryTab({ facts: LIST.facts }, { link: { stale: true } });
-  const sensitiveOn = await page.locator("#memory-sensitive-on").isDisabled();
+  // The two Settings-owned rows have nothing to grey: they are read-only.
+  const gone = await page.locator("#memory-sensitive-on, #memory-paraphrase-on").count();
   const autoOff = await page.locator("#memory-auto-on").isDisabled();
   const forget = await page.locator("#memory-auto-list").getByRole("button", { name: "Forget" }).first().isDisabled();
   await page.close();
-  assert.equal(sensitiveOn, true, "ON could be asked for on a stale link");
+  assert.equal(gone, 0, "a Settings switch came back to the Brain");
   assert.equal(autoOff, false, "OFF was held on a stale link");
   assert.equal(forget, true, "Forget was offered on a stale link");
 });
@@ -690,7 +767,7 @@ await check("a memory_saved on another tab waits for the Memory tab, and the lis
   assert.match(rows, /Drives a blue car/);
 });
 
-await check("private answers hide the list, keep the count and the switches, and Show brings it back", async () => {
+await check("private answers hide the list, keep the count and the switch, and Show brings it back", async () => {
   const page = await memoryTab({ facts: many(3) }, { security: { hidden: true } });
   const hidden = await listText(page);
   const switches = await page.locator("#memory-auto [role=switch]").count();
@@ -700,8 +777,8 @@ await check("private answers hide the list, keep the count and the switches, and
   await page.close();
   assert.match(hidden, /3 facts, hidden until Windows Hello confirms it is you/);
   assert.doesNotMatch(hidden, /Fact number/);
-  assert.equal(switches, 3,
-    "the two switches and 2026-11-02's reworded-facts switch stay beside the count");
+  assert.equal(switches, 1,
+    "Learn automatically stays beside the count; the Settings-owned rows are not switches");
   assert.equal(shown, 3);
 });
 
@@ -732,13 +809,13 @@ await check("the PC's own 'waiting' shows the line even before the queue has the
   assert.ok(reads >= 1, "the switches were not read from GET /api/memory/learning");
 });
 
-await check("an older PC without the learning route: the switches come from the list", async () => {
+await check("an older PC without the learning route: the state comes from the list", async () => {
   const page = await memoryTab({ statusMissing: true, status: { auto: false, auto_sensitive: true } });
   const auto = await page.locator("#memory-auto-on").isChecked();
-  const sensitive = await page.locator("#memory-sensitive-on").isChecked();
+  const sensitive = await page.locator("#memory-sensitive-state").innerText();
   await page.close();
   assert.equal(auto, false);
-  assert.equal(sensitive, true);
+  assert.equal(sensitive, `${SENSITIVE_LABEL} — on.`, sensitive);
 });
 
 await check("a card that stayed a card says why, in the PC's words", async () => {

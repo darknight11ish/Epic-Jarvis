@@ -3,9 +3,16 @@
 Pure data plus pure helpers; reads nothing except, since 2026-10-27, WHICH
 cloud key is saved on this PC (Credential Manager presence only - never a key,
 never a fragment) and this month's spend against the owner's own limit, which
-is what the Cloud row in the Presets menu shows. It still switches nothing and
-starts nothing: every apply raises the one ask card itself, and the cloud
-provider's apply changes NO model and starts NO lane.
+is what the Cloud row in the Presets menu shows. It still switches nothing by
+itself: a MODEL/chat apply raises the one `switch_model` ask card inside
+`jarvis_models.switch_to`, and the cloud provider's apply raises the one
+`change_own_config` card and changes NO model and starts NO lane.
+
+ONE exception, 2026-11-09: a local preset clicked in either app's own preset
+control applies at once with no card, because it is the owner's own reversible
+click. That road is the `POST /api/work/apply` route alone; the model/chat
+path keeps its card. The boundary and its reasoning sit above
+`apply_preset`.
 
 The nine local presets: the original five (General, General Uncensored, Coding,
 Agentic+Vision, Fast) and four capability rows added 2026-10-27 at the owner's
@@ -58,9 +65,11 @@ LANES = {
                "words": "one model across all three cards"},
 }
 
-#: What the one owner-approved action is. It is a preset application, never a
-#: route that runs by itself: every apply raises the existing switch_model card
-#: (tier "ask"), and a lane start is only ever part of that same asked action.
+#: What the one action is called. It is a preset application, never a route
+#: that runs by itself: a model/chat apply raises the existing switch_model card
+#: (tier "ask"), and a lane start is only ever part of that same action. Since
+#: 2026-11-09 a LOCAL preset clicked in either app's own control applies at once
+#: with no card (it is the owner's own reversible click); see `apply_preset`.
 APPLY_ACTION = "Use this preset"
 SWITCH_ROUTE = "/api/models/switch"
 LANE_START_ROUTE = "/api/model-lanes/start"
@@ -1178,29 +1187,42 @@ def lane_num_ctx(url) -> Optional[int]:
     return pooled_num_ctx()
 
 
+def _bare_model(model) -> str:
+    """A model name without the ":latest" tag Ollama adds for itself.
+
+    Measured on the live install, 2026-11-09 (Q6b defect): `/api/ps` reported the
+    pooled 30B as `qwen3-coder-30b-a3b-ud-q3-k-xl:latest`, the exact-name compare
+    below did not recognise it, and the everyday lane warmed a second copy of the
+    30B (74% on card / 26% on CPU - the copy the owner photographed).
+    """
+    x = str(model or "").strip()
+    return x[:-7] if x.endswith(":latest") else x
+
+
 def is_pooled_model(model) -> bool:
     """Is `model` a pooled-lane (three-card) model name? Never a 11436 client.
 
     Q6 (2026-11-08): the everyday lane must never be asked to load one of these
     - the 30B model cannot fit one card, and loading it there is the duplicate
-    copy (74% GPU / 26% CPU) the owner photographed.
+    copy (74% GPU / 26% CPU) the owner photographed. The comparison strips the
+    ":latest" tag Ollama reports (Q6b, measured live 2026-11-09).
     """
-    name = str(model or "").strip()
+    name = _bare_model(model)
     if not name:
         return False
     try:
         import jarvis_big_coder as big
-        if str(getattr(big, "MODEL", "") or "").strip() == name:
+        if _bare_model(getattr(big, "MODEL", "")) == name:
             return True
         for key in getattr(big, "MODES", ()) or ():
             profile = big.MODES[key] if isinstance(big.MODES, dict) else key
-            if str(getattr(profile, "model", "") or "").strip() == name:
+            if _bare_model(getattr(profile, "model", "")) == name:
                 return True
     except Exception:
         pass
     try:
         import jarvis_model_lanes as lanes
-        if str(getattr(lanes, "POOLED_MODEL", "") or "").strip() == name:
+        if _bare_model(getattr(lanes, "POOLED_MODEL", "")) == name:
             return True
     except Exception:
         pass
@@ -1340,20 +1362,282 @@ def live_status() -> dict:
     }
 
 
+# --------------------------------------------------------------------------
+#   A preset clicked in an app: the owner's own act (2026-11-09)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, 2026-11-09: *"if i manually click and change the preset for
+# jarvis, it shouldnt need a card"* and *"if i manually choose anything in the
+# jarvis app or deskstop program, and its something that i can easily click and
+# change back right away, it shouldnt need a card"*.
+#
+# WHAT CHANGES. A local preset that is ONE model switch on one of the owner's
+# own lanes (`heavy_mode` is False) is applied AT ONCE when the request came
+# through `POST /api/work/apply` - the route only the two apps' own preset
+# controls call. The preset it replaced goes into a receipt (jarvis_receipts);
+# clicking that preset in the same menu switches straight back, and Undo is
+# offered on the receipt.
+#
+# THE MODEL PATH KEEPS ITS CARD, and nothing here is a flag a caller can put in
+# a request. The private `_apply_body(..., owner_ui=True)` is called from ONE
+# place, this module's own route wrapper (`install()`), and the request body is
+# never read for it. Everything else - `jarvis_model_knowledge.apply_preset`
+# (the spoken "use the X preset" command), `jarvis_settings_registry.
+# set_focus_preset` ("set the focus preset to X") and every direct Python
+# caller - goes through the public `apply_from_body`, which is still the
+# carded `jarvis_models.switch_to` (tier "ask", `switch_model`).
+#
+# WHY THE ROUTE IS ENOUGH TO KNOW IT WAS A SCREEN. The model never posts to its
+# own HTTP routes: a chat tool call reaches this module in-process. The route
+# already demands the server's origin check and the pairing token
+# (`presets.patch` passes `_origin_ok`/`_token_ok` in), so a request that gets
+# this far came from a paired app. No tier is loosened and no header is
+# trusted: the tier table still says `switch_model = "ask"`, and the model path
+# still reads it.
+#
+# THE REVERSIBLE BOUNDARY, and what stays carded:
+#   * a local, non-heavy preset -> no card. One click back, nothing is
+#     downloaded, nothing is deleted, nothing is spent.
+#   * Coding (heavy) -> STILL a card. Its apply unloads BOTH lane models and
+#     loads a 14.8 GB one for about half a minute; that is not "clicked and
+#     changed back right away", and the card is the warning before the first
+#     unload (`jarvis_model_lanes.start_pooled_lane`, its own card).
+#   * Cloud -> STILL a card. It chooses where the owner's words go
+#     (`apply_cloud`, `change_own_config`).
+#   * installs and downloads -> untouched; still `ask`.
+
+#: The receipt name for one preset clicked in an app, so Undo knows how to put
+#: the model, the lane and the chosen preset back (jarvis_receipts.py). It is
+#: registered at import, the same way jarvis_antislop.py's own receipts are.
+OWNER_RECEIPT_TOOL = "preset_apply"
+
+
+def _current_model() -> str:
+    """The model steward's current model, or "" when it cannot be read."""
+    try:
+        import jarvis_models as M
+        return str(M.current_model() or "")
+    except Exception:
+        return ""
+
+
+def _restorable_preset(preset_id) -> bool:
+    """Can this preset be put back by the same uncarded app click?
+
+    Only a local, non-heavy preset can: Coding raises the pooled lane's card
+    and Cloud raises `change_own_config`, and an Undo that raised a SECOND card
+    would be a different action wearing Undo's name. An unknown id (a hand-
+    edited file) is not restorable either; the receipt is still written.
+    """
+    if not preset_id:
+        return True                      # "no preset was chosen": restorable by hand
+    p = by_id(preset_id)
+    return bool(p is not None and not p.heavy_mode and not p.pending)
+
+
+def _owner_before(previous_preset, previous_lane) -> Optional[dict]:
+    """The before snapshot a receipt keeps, or None when it cannot be undone."""
+    if not _restorable_preset(previous_preset):
+        return None
+    return {"preset": previous_preset or None,
+            "model": _current_model(),
+            "lane": str(previous_lane or "")}
+
+
+def restore_from_before(before) -> None:
+    """Put the model, the chat lane and the chosen preset back from a receipt.
+
+    This is BOTH the live Undo callable and the snapshot path jarvis_receipts
+    uses after a restart. It takes the same uncarded owner path a click takes,
+    because the Undo itself was already decided by the receipt's own card.
+    Raises on a snapshot it cannot use or a restore that will not happen;
+    jarvis_receipts turns that into plain words and changes nothing else.
+    """
+    if not isinstance(before, dict):
+        raise ValueError("this is not a preset receipt snapshot")
+    preset_id = str(before.get("preset") or "")
+    if preset_id:
+        code, out = apply_preset(preset_id, owner_ui=True)
+        out = out if isinstance(out, dict) else {}
+        if code >= 400 or not out.get("ok"):
+            raise RuntimeError(str(out.get("error") or
+                                   "the preset could not be put back"))
+        return
+    model = str(before.get("model") or "")
+    if model:
+        got = _switch_for_the_owner(model)
+        if not got.get("ok"):
+            raise RuntimeError(str(got.get("reason") or
+                                   "the model could not be put back"))
+    lane = str(before.get("lane") or "")
+    if lane and not _set_active_url(lane):
+        raise RuntimeError("the chat lane could not be put back")
+    try:
+        _choice_path().unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _register_receipt() -> bool:
+    """Tell jarvis_receipts.py how a preset click is put back. Never raises."""
+    try:
+        import jarvis_receipts
+        return bool(jarvis_receipts.register_restorer(
+            OWNER_RECEIPT_TOOL, restore_from_before))
+    except Exception:
+        return False
+
+
+_register_receipt()
+
+
+def _record_owner_preset(previous_preset, previous_lane, preset) -> str:
+    """One receipt for a preset changed by an app click, or "". Never raises.
+
+    Written BEFORE the switch (jarvis_receipts' own rule), so it exists even if
+    the switch then fails - `_discard_owner_receipt` removes it in that case.
+    Undo is pointed at the before snapshot only when the preset it replaced is
+    itself a local, non-heavy one (`_owner_before`): going back to Coding or
+    Cloud raises their own card, so the menu row is that way back, not Undo.
+    The receipt is written either way, so the change is always visible.
+    """
+    try:
+        import jarvis_receipts
+    except Exception:
+        return ""
+    before = _owner_before(previous_preset, previous_lane)
+    if previous_preset:
+        was = by_id(previous_preset)
+        was_words = was.title if was is not None else str(previous_preset)
+        summary = f"Preset: {preset.title}. Before it: {was_words}."
+    else:
+        summary = f"Preset: {preset.title}. No preset was chosen before."
+    after = {"preset": preset.id, "model": preset.model, "lane": preset.lane}
+    undo = (lambda: restore_from_before(before)) if before is not None else None
+    try:
+        return jarvis_receipts.record(OWNER_RECEIPT_TOOL, summary,
+                                      before=before, after=after, undo=undo)
+    except Exception:
+        return ""
+
+
+def _discard_owner_receipt(receipt_id: str) -> None:
+    """Remove a receipt whose change did not happen. Never raises."""
+    if not receipt_id:
+        return
+    try:
+        import jarvis_receipts
+        jarvis_receipts.discard(receipt_id)
+    except Exception:
+        pass
+
+
+def _switch_for_the_owner(ref: str, why: str = "a preset clicked in an app") -> dict:
+    """Make `ref` the local lane's model with NO card - the owner's own click.
+
+    The same model record `jarvis_models.switch_to` writes, and the same
+    tripwire smoke test it runs afterwards, minus the gate: the request came
+    from a paired app's own preset control (see this section's comment), and
+    the way back is the same menu. The model must already be installed -
+    nothing here downloads, and an install stays carded.
+
+    A missing model steward, an uninstalled model or a state file that will not
+    write answers `{"ok": False, "reason": ...}`; nothing is claimed that was
+    not seen. A tripwire that is not on this PC is reported as unavailable and
+    does not undo the switch.
+    """
+    try:
+        import jarvis_models as M
+    except Exception as exc:
+        return {"ok": False, "ref": str(ref),
+                "reason": f"the model steward is not available ({type(exc).__name__})"}
+    try:
+        ref = M.safe_ref(ref)
+    except ValueError as exc:
+        return {"ok": False, "ref": str(ref), "reason": str(exc)}
+    try:
+        if not M.is_installed(ref):
+            return {"ok": False, "ref": ref,
+                    "reason": "not installed on this machine; download it first"}
+        st = M._read_state()
+    except Exception as exc:
+        return {"ok": False, "ref": ref,
+                "reason": f"the model state could not be read ({type(exc).__name__})"}
+    cur = st.get("current")
+    if cur == ref:
+        return {"ok": True, "ref": ref, "unchanged": True,
+                "reason": "already the current model"}
+    # The outgoing model's answers, before it stops being the one in use - the
+    # same reason `switch_to` records this baseline first.
+    probe = None
+    try:
+        probe = M._probe_asker(cur)
+        import jarvis_tripwire
+        jarvis_tripwire.baseline(probe, cur or "previous")
+    except Exception:
+        probe = None
+    now = time.time()
+    st["previous"] = cur
+    st["current"] = ref
+    st["switched_at"] = now
+    st["why"] = str(why or "a preset clicked in an app")[:300]
+    log = list(st.get("switches") or [])
+    log.append({"from": cur, "to": ref, "at": now})
+    st["switches"] = log[-int(getattr(M, "MAX_HISTORY", 20) or 20):]
+    try:
+        wrote = bool(M._write_state(st))
+    except Exception:
+        wrote = False
+    if not wrote:
+        return {"ok": False, "ref": ref,
+                "reason": "could not write the model state file; nothing changed"}
+    out = {"ok": True, "ref": ref, "previous": cur, "no_card": True,
+           "revert_with": "the model's own rollback",
+           "reason": f"local lane now uses {ref}"}
+    try:
+        import jarvis_tripwire
+        out["tripwire"] = jarvis_tripwire.after_swap(
+            probe or M._probe_asker(ref), ref)
+    except Exception as exc:
+        out["tripwire"] = {"available": False, "reason": str(exc)}
+    return out
+
+
+def switch_model_for_the_owner(ref: str, why: str = "") -> dict:
+    """The uncarded model switch, by the public name `jarvis_reversible_ui` uses.
+
+    Called by `jarvis_reversible_ui.install()` for a model picked in either
+    app's own model list - the manual-click rule (Gemini Q2, 2026-11-09). It is
+    the same body a preset click uses, so the two owner clicks share ONE
+    implementation and one model record; the `why` is the only difference.
+    Every model/chat path still reaches `jarvis_models.switch_to`, which asks.
+    """
+    return _switch_for_the_owner(ref, why=why or "a model picked in an app")
+
+
 def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
-                 switch_model=None, active_url=None, set_active_url=None,
+                 switch_model=None, switch_for_owner=None, owner_ui=False,
+                 active_url=None, set_active_url=None,
                  read_choice=None, write_choice=None, rollback_model=None,
                  stop_pooled=None) -> tuple:
-    """Apply ONE preset after the owner's single card.
+    """Apply ONE preset: after the owner's card, or at once for an app click.
+
+    `owner_ui=True` is set by ONE caller - this module's own route wrapper
+    (`install()`), the road both apps' preset controls use. It means "the
+    owner clicked this", and on a local, non-heavy preset it applies with no
+    card, writing a receipt first. It is NOT read from a request body, and
+    every model/chat caller leaves it False and keeps the `switch_model` card.
 
     `preset_id == "cloud"` is its own branch (`apply_cloud`): it raises ONE
     `change_own_config` card for the service, writes the choice, and starts no
     lane and switches no model - so `start_lane`, `switch_model`,
-    `rollback_model` and `set_active_url` are never touched on it. Everything
-    below this line is the local-preset path, unchanged.
+    `rollback_model` and `set_active_url` are never touched on it. A heavy
+    preset keeps its card too (the pooled lane's own, raised inside
+    `start_lane`), so `owner_ui` changes nothing on either branch.
 
     Order: start the named lane if it is down -> switch the model (the ask card
-    lives inside switch_model) -> point chat at it -> save the chosen preset.
+    lives inside switch_model on the ordinary path) -> point chat at it ->
+    save the chosen preset.
     The lane start is BEFORE the card on purpose: a lane that is down cannot
     answer the switch's is_installed read, so switch-first is not possible.
     That means a card the owner DENIES leaves the started lane RUNNING (it
@@ -1399,10 +1683,19 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     if p.pending:
         return 409, {"ok": False, "changed": False, "error": PENDING_LINE}
     heavy = bool(p.heavy_mode)
+    # THE ONE CONDITION THAT MAKES A PRESET CLICK UNCARDED: the request came
+    # from the apps' own route (`owner_ui`) AND the apply is one model switch
+    # on an existing lane. Coding keeps the pooled lane's own card; Cloud
+    # returned above. See the section above `apply_preset`.
+    direct_owner = bool(owner_ui) and not heavy
     start_lane = start_lane or (lambda key: _default_start_lane(key))
-    switch_model = switch_model or (
-        (lambda ref: _default_adopt(ref)) if heavy
-        else (lambda ref: _default_switch(ref)))
+    if direct_owner:
+        switch_model = (switch_for_owner or switch_model
+                        or (lambda ref: _switch_for_the_owner(ref)))
+    elif switch_model is None:
+        switch_model = (
+            (lambda ref: _default_adopt(ref)) if heavy
+            else (lambda ref: _default_switch(ref)))
     active_url = active_url or _active_url
     set_active_url = set_active_url or _set_active_url
     read_choice = read_choice or choice
@@ -1449,6 +1742,12 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     # already running before it): a rollback must not end a mode the owner had
     # already turned on.
     started_pooled = heavy and bool(start_body.get("changed"))
+    # The receipt is written BEFORE the switch, the project's own rule, and
+    # removed again if the switch (or anything after it) does not happen. It is
+    # written for the app-click path only: the carded paths already have their
+    # approval card as the record.
+    receipt_id = (_record_owner_preset(previous_preset, previous_lane, p)
+                  if direct_owner else "")
     try:
         switched = switch_model(p.model)
     except Exception as exc:
@@ -1531,6 +1830,7 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
         # `changed: false` means the preset is NOT the chosen one. It says
         # nothing about the model, the lane or the choice file - `restored` and
         # `not_restored` are the facts about those, and both are always sent.
+        _discard_owner_receipt(receipt_id)
         return code, {"ok": False, "changed": False,
                       "error": f"{reason}; {note}",
                       "restored": restored, "not_restored": failed}
@@ -1553,10 +1853,19 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
         choice_ok = False
     if not choice_ok:
         return rollback("the chosen preset could not be saved")
+    # Re-picking the preset that is already in force changed nothing, so it must
+    # not leave an Undo row that would only "put back" the same thing.
+    if (receipt_id and previous_preset == p.id
+            and isinstance(switched, dict) and switched.get("unchanged")):
+        _discard_owner_receipt(receipt_id)
+        receipt_id = ""
     return 200, {"ok": True, "changed": True, "preset": p.view(),
                  "lane": dict(p.lane_info), "base_url": target_lane,
                  "model": p.model, "switched": switched,
-                 "previous_preset": previous_preset}
+                 "previous_preset": previous_preset,
+                 # "" on every carded path; an app click leaves the receipt the
+                 # owner can see in GET /api/receipts and undo from there.
+                 "receipt_id": receipt_id}
 
 
 def _default_start_lane(key: str):
@@ -1679,16 +1988,35 @@ def _default_adopt(ref: str):
 def apply_from_body(body) -> tuple:
     """`POST /api/work/apply {"preset": "<id>", "provider": "<service>"}`.
 
-    `provider` is read only for the `"cloud"` preset and ignored everywhere
-    else, which is what keeps every existing call's bytes meaning exactly what
-    they meant before (a body with no `provider` is the same request it was).
+    The public entry point, and the one every model/chat path calls
+    (`jarvis_model_knowledge.apply_preset`, `jarvis_settings_registry.
+    set_focus_preset`): it keeps the `switch_model` ask card. `provider` is
+    read only for the `"cloud"` preset and ignored everywhere else, which is
+    what keeps every existing call's bytes meaning exactly what they meant
+    before (a body with no `provider` is the same request it was).
+
+    It is deliberately NOT the road the apps' own preset controls take: the
+    route wrapper below calls `_apply_body(..., owner_ui=True)` itself, and the
+    body is never asked for a "no card" field of any kind.
+    """
+    return _apply_body(body, owner_ui=False)
+
+
+def _apply_body(body, *, owner_ui: bool) -> tuple:
+    """`apply_from_body` with the road named; private on purpose.
+
+    `owner_ui=True` is passed by ONE caller in this program - `install()`'s
+    POST wrapper, the route both apps' preset controls use - so no Python
+    caller can turn a card off by accident, and no request field can ask for
+    it. `owner_ui=False` is the carded path, unchanged.
     """
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "expected a JSON object"}
     provider = body.get("provider")
     if provider is not None and not isinstance(provider, str):
         return 400, {"ok": False, "error": '"provider" must be text'}
-    return apply_preset(body.get("preset"), provider=provider)
+    return apply_preset(body.get("preset"), provider=provider,
+                        owner_ui=owner_ui)
 
 
 def install(Handler, *, origin_ok, token_ok, read_body):
@@ -1696,8 +2024,24 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     POST /api/work/apply and POST /api/work/cloud-escalate onto the HUD's
     Handler. Returns the status line the banner prints. Reads nothing from the
     owner's PC except what live_status() reports; it approves nothing: the
-    local apply raises the one switch_model ask card itself, and the cloud
-    apply and the escalation switch raise the one change_own_config card."""
+    cloud apply and the escalation switch raise their one change_own_config
+    card. A LOCAL preset applied through this route is the owner's own click:
+    it applies at once, writes a receipt, and the model path keeps its card."""
+    # THE MANUAL-CLICK RULE'S MODEL SWITCH (Gemini Q2, 2026-11-09). A model
+    # already on this PC, picked in either app's own model list, takes the same
+    # uncarded road a preset click takes. `jarvis_reversible_ui.py` is the
+    # allow-list and the route; this installer is already wired into the HUD by
+    # presets.patch, so the model picker needs no second patch. It intercepts
+    # ONE path, checks the same origin and token as this wrapper, and forwards
+    # every other path untouched. It is installed BEFORE `original` below is
+    # captured, so `original` is the switch's own forwarder.
+    try:
+        import jarvis_reversible_ui
+        print("  " + jarvis_reversible_ui.install(
+            Handler, origin_ok=origin_ok, token_ok=token_ok,
+            read_body=read_body))
+    except Exception as exc:                     # noqa: BLE001 - never blocks start-up
+        print(f"  reversible  not installed ({type(exc).__name__})")
     original_get = getattr(Handler, "do_GET", None)
 
     def do_GET(self):
@@ -1739,9 +2083,15 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         # The standing escalation switch is its OWN route, because it is its
         # own verb: applying a preset says which model answers, and this says
         # whether Jarvis may ask the cloud with no per-question yes. Both raise
-        # a card through the same gate, so neither is reachable without one.
+        # a card through the same gate.
+        #
+        # THIS IS THE ONLY PLACE `owner_ui=True` IS SET, and this route already
+        # passed the server's origin and token checks above. It is what makes a
+        # local preset click apply at once; the body cannot ask for it, and
+        # every other caller of apply_from_body keeps the card. Cloud and the
+        # heavy Coding preset still card here (apply_preset decides).
         code, out = (escalate_from_body(body) if path == CLOUD_ESCALATE_PATH
-                     else apply_from_body(body))
+                     else _apply_body(body, owner_ui=True))
         return self._send(code, out)
 
     Handler.do_POST = do_POST

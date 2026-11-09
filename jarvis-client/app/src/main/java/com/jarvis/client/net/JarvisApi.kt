@@ -3451,9 +3451,10 @@ class JarvisApi(
     /**
      * The ONE apply action the focus-preset contract names: a POST to the
      * route the CONTRACT supplies (never one invented here), with the
-     * contract's body. It raises the usual approval card on the PC; [FocusPresets.replyLine]
-     * turns the answer into words. Only `/api/...` routes are accepted, and the
-     * pairing routes are refused outright.
+     * contract's body. A local preset applies at once (the owner's own
+     * reversible pick); Coding and Cloud still raise the PC's approval card.
+     * [FocusPresets.replyLine] turns the answer into words. Only `/api/...`
+     * routes are accepted, and the pairing routes are refused outright.
      */
     suspend fun focusPresetApply(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {

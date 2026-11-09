@@ -58,6 +58,10 @@ sys.path.append(str(HERE / "rebuilt"))
 import _stack  # noqa: E402
 import jarvis_agent as AG  # noqa: E402
 import jarvis_documents as D  # noqa: E402
+try:                                        # the vault door, for its own caps
+    import jarvis_notion_obsidian as N  # noqa: E402
+except Exception:                           # pragma: no cover - shipped beside it
+    N = None  # type: ignore
 
 def _block(src, marker):
     """The block `marker` opens, delimited by INDENTATION, not by a count.
@@ -754,6 +758,228 @@ def t_the_notion_import():
     check("safe_parts keeps an ordinary name", D.safe_parts("A/b c.md") == ["A", "b c.md"])
     check("the console's own names are made safe too", D.safe_parts("x/CONIN$.md")
           == ["x", "_CONIN$.md"] and D.safe_parts("NUL") == ["_NUL"])
+    fresh()
+
+
+# --------------------------------------------------- the 4 GB import (TASK-53)
+
+def _declare_size(path: Path, member: str, size: int) -> bool:
+    """Rewrite ONE member's declared uncompressed size in a zip's own central
+    directory, leaving its bytes alone.
+
+    THE STAND-IN FOR A REAL 276 MB EXPORT. `infolist()` - what every guard here
+    reads before a byte is written - takes its numbers from this directory, so
+    a small archive can say it unpacks to 276 MB without the test writing
+    276 MB. The forged member is a kind the importer SKIPS (`.exe`), so it is
+    never opened and its forged size is never read back; the real members
+    beside it still import.
+    """
+    raw = bytearray(path.read_bytes())
+    i = raw.find(b"PK\x01\x02")                       # the first central entry
+    while i >= 0:
+        name_len = int.from_bytes(raw[i + 28:i + 30], "little")
+        extra_len = int.from_bytes(raw[i + 30:i + 32], "little")
+        comment_len = int.from_bytes(raw[i + 32:i + 34], "little")
+        name = raw[i + 46:i + 46 + name_len].decode("utf-8", "replace")
+        end = i + 46 + name_len + extra_len + comment_len
+        if name == member:
+            raw[i + 24:i + 28] = int(size).to_bytes(4, "little")
+            path.write_bytes(bytes(raw))
+            return True
+        i = raw.find(b"PK\x01\x02", end)
+    return False
+
+
+def _big_export(path: Path, declared: int, members: int = 1) -> None:
+    """A real, tiny export whose DIRECTORY declares `declared` bytes across
+    `members` skipped `.exe` members (each at most 500 MiB, the most one
+    32-bit central-directory field can hold)."""
+    each = declared // members
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr(f"Export/{NOTION}.md", "# Trip\nLisbon")
+        z.writestr("Export/pic.png", b"\x89PNG")
+        for i in range(members):
+            z.writestr(f"Export/skip{i}.exe", b"MZ")
+    for i in range(members):
+        assert _declare_size(path, f"Export/skip{i}.exe", each), "the forge failed"
+
+
+def t_a_276_mb_export_is_accepted_and_the_guards_still_refuse():
+    """TASK-53, the owner's decision of 2026-11-09: the unpacked-size ceiling is
+    4 GB, the free-space preflight names real numbers, the import reports
+    progress, and every guard that was there before still refuses.
+    """
+    fresh()
+    dest = folder("BigNotes")
+    listed(dest)
+    roots = [os.path.realpath(str(dest))]
+
+    check("the unpacked ceiling is 4 GB (the owner's 2026-11-09 decision)",
+          D.EXPORT_UNCOMPRESSED_MAX == 4 * 1024 ** 3, D.EXPORT_UNCOMPRESSED_MAX)
+    check("the counted cap moved with it, so it is never tighter than the ceiling",
+          D.IMPORT_MAX_BYTES == 4 * 1024 ** 3
+          and D.IMPORT_MAX_BYTES >= D.EXPORT_UNCOMPRESSED_MAX,
+          (D.IMPORT_MAX_BYTES, D.EXPORT_UNCOMPRESSED_MAX))
+    check("every other guard is unchanged: 20,000 files, 200 MB a file, a 2 GB zip",
+          (D.IMPORT_MAX_FILES, D.IMPORT_MAX_ONE, D.IMPORT_MAX_ZIP)
+          == (20_000, 200 * 1024 ** 2, 2 * 1024 ** 3),
+          (D.IMPORT_MAX_FILES, D.IMPORT_MAX_ONE, D.IMPORT_MAX_ZIP))
+
+    # (a) A 276 MB-equivalent export imports. The old 250 MB ceiling refused
+    # this exact shape, which is the refusal the owner hit.
+    zp = TMP / "owner-export.zip"
+    _big_export(zp, 276 * 1024 * 1024)
+    with zipfile.ZipFile(zp) as zf:
+        declared = D.declared_unpacked(zf)
+    check("the stand-in declares about 276 MB to the guard's own reader - over the "
+          "old 250 MB ceiling, under the new 4 GB one",
+          250 * 1024 * 1024 < declared < 277 * 1024 * 1024, declared)
+    out = D.import_notion(str(zp), roots[0], roots=roots, today="2026-11-09")
+    new = Path(out["folder"])
+    files = sorted(str(p.relative_to(new)).replace(os.sep, "/") for p in new.rglob("*")
+                   if p.is_file())
+    check("a 276 MB export imports (it was refused at 250 MB before)",
+          out["ok"] and f"Export/{NOTION}.md" in files and "Export/pic.png" in files,
+          (out, files))
+    check("...and its skipped member is not written", "Export/skip0.exe" not in files, files)
+
+    # (b) An over-cap declared size is still refused, with the REAL numbers in
+    # the sentence instead of a bare "too large".
+    over = TMP / "over-cap.zip"
+    _big_export(over, 9 * 500 * 1024 * 1024, members=9)
+    said = ""
+    try:
+        D.import_notion(str(over), roots[0], roots=roots, today="2026-11-10")
+    except D.ImportRefused as exc:
+        said = str(exc)
+    check("an over-cap declared size is still refused", bool(said), said)
+    check("...and the sentence names both real numbers, not a bare 'too large'",
+          "4 GB" in said and "4.4 GB" in said and "zip-bomb" in said
+          and "too large" not in said, said)
+    code, body = D.request_import({"zip": str(over), "into": roots[0]}, here=True)
+    check("the Settings page's own route carries that sentence, prefixed",
+          code == 400 and str(body.get("error", "")).startswith("Nothing was brought in: ")
+          and "4.4 GB" in str(body.get("error", "")), (code, body))
+    check("...and nothing was left behind by either refusal",
+          not any(p.name.startswith((".jarvis-import", "Notion export 2026-11-10"))
+                  for p in dest.iterdir()), sorted(p.name for p in dest.iterdir()))
+
+    # (c) The ratio guard is the vault module's (outside this door) - keep the
+    # real number pinned here so a change is visible where the caps live.
+    if N is not None:
+        check("the zip-bomb ratio is still 100:1", N.MAX_ZIP_RATIO == 100, N.MAX_ZIP_RATIO)
+        check("the vault importer's declared ceiling is 4 GB too, not 500 MB",
+              N.MAX_ZIP_UNCOMPRESSED == 4 * 1024 ** 3, N.MAX_ZIP_UNCOMPRESSED)
+
+    # (d) The per-file cap and the file-count cap still refuse.
+    real_one, real_files = D.IMPORT_MAX_ONE, D.IMPORT_MAX_FILES
+    D.IMPORT_MAX_ONE = 1024 * 1024
+    try:
+        big_one = TMP / "one-too-big.zip"
+        with zipfile.ZipFile(big_one, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr(f"Export/{NOTION}.md", "a" * (2 * 1024 * 1024))
+        said = ""
+        try:
+            D.import_notion(str(big_one), roots[0], roots=roots, today="2026-11-11")
+        except D.ImportRefused as exc:
+            said = str(exc)
+        check("one file over the per-file cap still refuses, in its own words",
+              "larger than 1 MB" in said, said)
+    finally:
+        D.IMPORT_MAX_ONE = real_one
+    D.IMPORT_MAX_FILES = 2
+    try:
+        many = TMP / "too-many.zip"
+        with zipfile.ZipFile(many, "w") as z:
+            for i in range(3):
+                z.writestr(f"Export/page {i}.md", "x")
+        said = ""
+        try:
+            D.import_notion(str(many), roots[0], roots=roots, today="2026-11-12")
+        except D.ImportRefused as exc:
+            said = str(exc)
+        check("more files than the cap still refuses", "more than 2 files" in said, said)
+    finally:
+        D.IMPORT_MAX_FILES = real_files
+    check("nothing from a refused import is left on disk",
+          not any(p.name.startswith((".jarvis-import", "Notion export 2026-11-1"))
+                  for p in dest.iterdir()), sorted(p.name for p in dest.iterdir()))
+
+    # (e) The free-space preflight: declared x 1.2 must be free, and the
+    # refusal names what it needs and what the drive has.
+    check("the preflight's factor is a fifth more", D.EXPORT_ROOM_FACTOR == 1.2,
+          D.EXPORT_ROOM_FACTOR)
+    check("the real drive is measured, not guessed", D._free_bytes(str(dest)) > 0)
+    check("a real drive with room passes", D.disk_space_problem(str(dest), 0) == "")
+    said = D.disk_space_problem(str(dest), 10 ** 15)
+    check("a real drive without room is refused with the numbers",
+          "not enough free space" in said and "GB" in said and "free" in said, said)
+    real_free = D._free_bytes
+    D._free_bytes = lambda folder: 1024 * 1024          # a drive with 1 MB left
+    try:
+        small = TMP / "small-export.zip"
+        _big_export(small, 8 * 1024 * 1024)             # declares 8 MB
+        said = ""
+        try:
+            D.import_notion(str(small), roots[0], roots=roots, today="2026-11-13")
+        except D.ImportRefused as exc:
+            said = str(exc)
+        check("a nearly full drive refuses BEFORE a byte is written, with the numbers",
+              "not enough free space" in said and "8 MB" in said and "9.6 MB" in said
+              and "1 MB" in said, said)
+        check("...and the refusal leaves no new folder and no staging behind",
+              not (dest / "Notion export 2026-11-13").exists()
+              and not any(p.name.startswith(".jarvis-import") for p in dest.iterdir()),
+              sorted(p.name for p in dest.iterdir()))
+    finally:
+        D._free_bytes = real_free
+
+    # (f) Progress: the callback sees real, growing counts, the live record is
+    # readable WHILE it runs, and both are gone when the import ends.
+    seen = []
+    live_seen = []
+
+    def watch(snap):
+        seen.append(dict(snap))
+        live_seen.append(D.importing())
+    out = D.import_notion(str(zp), roots[0], roots=roots, today="2026-11-14",
+                          progress=watch)
+    check("progress is reported as the bytes are really written",
+          len(seen) >= 2 and seen[0]["files"] == 0 and seen[-1]["files"] >= 1
+          and seen[-1]["bytes"] > 0, seen)
+    check("...with the archive's own declared totals, for the 'of N' half",
+          seen[-1]["of_bytes"] == declared and seen[-1]["of_files"] >= 2,
+          (seen[-1], declared))
+    check("...and the live record GET /api/folders carries is readable meanwhile",
+          all(v is not None and v["bytes"] >= 0 for v in live_seen), live_seen[:3])
+    check("the live record is cleared once the import is over", D.importing() is None)
+    check("...and the list's own answer says so",
+          out["ok"] and "importing" in D.view(here=True)
+          and D.view(here=True)["importing"] is None)
+    said = ""
+    try:
+        D.import_notion(str(over), roots[0], roots=roots)
+    except D.ImportRefused as exc:
+        said = str(exc)
+    check("a refused import clears it too - no stale 'unzipping' line",
+          bool(said) and D.importing() is None, said)
+
+    # (g) The phone shows the PC's own sentence, and its 4 GB raw-upload cap is
+    # the phone's OWN number (the raw zip bytes it sends) even though the owner
+    # raised it on 2026-11-09 to match the PC's 4 GB unpacked ceiling - the two
+    # limits are still two numbers (ARCHITECTURE.md section 8).
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "net" / "NotionImport.kt").read_text(encoding="utf-8")
+    check("the phone relays the PC's refusal sentence verbatim",
+          "DesktopWrite.asSentence(why)" in kt, "")
+    up = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "net" / "Upload.kt").read_text(encoding="utf-8")
+    check("the phone's raw-upload cap is its own 4 GB, raised on 2026-11-09",
+          "NOTION_MAX = 4L * 1024 * 1024 * 1024" in up, "")
+    arch = (REPO / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    check("the two numbers and the phone's new cap are recorded in ARCHITECTURE.md section 8",
+          "The phone may send a 4 GB Notion export too" in arch
+          and "they are still two numbers" in arch, "")
     fresh()
 
 

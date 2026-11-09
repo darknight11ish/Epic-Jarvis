@@ -148,7 +148,10 @@ NOTE_KINDS = frozenset((".md", ".markdown"))
 #: The most of any one export. Counted as it is written, never as the zip
 #: claims: a zip bomb lies in its own header.
 MAX_FILES = 20_000
-MAX_BYTES = 1024 * 1024 * 1024
+#: 4 GB, raised from 1 GB with the declared total below (owner's decision
+#: 2026-11-09): the counted cap is the backstop for an archive whose header
+#: lies, so it must never be TIGHTER than the declared ceiling it backs up.
+MAX_BYTES = 4 * 1024 * 1024 * 1024
 MAX_ONE = 200 * 1024 * 1024
 MAX_ZIP = 2 * 1024 * 1024 * 1024
 #: The two numbers a zip's OWN directory is judged by, before a byte is
@@ -158,15 +161,18 @@ MAX_ZIP = 2 * 1024 * 1024 * 1024
 #: The absolute caps above stay as the backstop: a header can lie, and the
 #: bytes actually written are what fill a disk.
 #:
-#: THIS module's declared-total number is 500 MB, and that is on purpose:
-#: `jarvis_documents.EXPORT_UNCOMPRESSED_MAX` is 250 MB for the folder import
-#: that unpacks a Notion export only to READ it, while this one WRITES a new
-#: vault and copies its attachments too. The total check itself is
-#: `jarvis_documents.zip_bomb_problem` (imported, not copied); the ratio is
-#: the extra rule a zip bomb needs. The member COUNT and the largest single
-#: member are checked from `infolist()` in `_zip_problem` as well, before any
-#: member is opened (2026-10-21 audit, R2/R3).
-MAX_ZIP_UNCOMPRESSED = 500 * 1024 * 1024
+#: THE DECLARED TOTAL IS 4 GB TOO (2026-11-09). It was 500 MB here and 250 MB
+#: in `jarvis_documents.EXPORT_UNCOMPRESSED_MAX`; the owner could not bring in
+#: a 276 MB Notion export because of the 250 MB one, and the two doors must
+#: answer the same question the same way or the phone and the PC disagree
+#: about the same file. Every other guard is unchanged: the 100:1 ratio below,
+#: 200 MB a file, 20,000 files, a 2 GB zip. The total check itself is
+#: `jarvis_documents.zip_bomb_problem` (imported, not copied) and it names the
+#: real numbers now; the ratio is the extra rule a zip bomb needs. The member
+#: COUNT and the largest single member are checked from `infolist()` in
+#: `_zip_problem` as well, before any member is opened (2026-10-21 audit,
+#: R2/R3).
+MAX_ZIP_UNCOMPRESSED = 4 * 1024 * 1024 * 1024
 MAX_ZIP_RATIO = 100
 MAX_NAME = 120                                # characters in one path part
 #: The longest a Notion property value may be before it is cut. A runaway value
@@ -363,17 +369,17 @@ def _zip_problem(zf: zipfile.ZipFile) -> str:
         packed += int(info.compress_size or 0)
     # The declared TOTAL is `jarvis_documents`' own check - the same function its
     # Notion import uses - so this module keeps importing that guard rather than
-    # copying it. The numbers differ on purpose and both are stated here: that
-    # import unpacks a folder to READ it (`jarvis_documents.EXPORT_UNCOMPRESSED_MAX`,
-    # 250 MB); this one WRITES a new vault including the attachments
-    # (`MAX_ZIP_UNCOMPRESSED`, 500 MB).
+    # copying it, and the answer now names the declared size and the ceiling.
+    # Since 2026-11-09 the two doors use the SAME number (4 GB): the owner could
+    # not bring a 276 MB export in while the folder import's ceiling was 250 MB,
+    # and a phone and a PC must not disagree about the same file.
     if docs is not None:
         why = docs.zip_bomb_problem(zf, MAX_ZIP_UNCOMPRESSED)
         if why:
             return f"{why}, so nothing was unpacked"
     elif unpacked > MAX_ZIP_UNCOMPRESSED:
         return (f"the zip says it holds more than "
-                f"{MAX_ZIP_UNCOMPRESSED // (1024 * 1024)} MB once unpacked, so "
+                f"{MAX_ZIP_UNCOMPRESSED // (1024 ** 3)} GB once unpacked, so "
                 f"nothing was unpacked")
     if unpacked > 0 and packed == 0:
         return ("the zip says it holds data but no compressed bytes at all, so "
@@ -385,63 +391,104 @@ def _zip_problem(zf: zipfile.ZipFile) -> str:
     return ""
 
 
-def _read_zip(zip_path: str, dest: str, counts: dict, depth: int = 0) -> None:
+def _read_zip(zip_path: str, dest: str, counts: dict, depth: int = 0,
+              progress: Optional[Callable[[dict], None]] = None) -> None:
     """Unpack one zip into `dest`. Refuses traversal, links and the caps.
 
     The name check is `jarvis_documents.safe_parts` - the same function the
     Notion import in that module uses - so a `..`, an absolute path, a drive
     letter or a link is refused by the guard that already exists rather than by
     a second one written here.
+
+    `progress` is called with `{"files", "bytes", "of_files", "of_bytes"}` as
+    the members are written (throttled: about twice a second, never once a
+    member), so a caller with a screen - or a test - can watch a 4 GB export
+    move. A callback that raises is ignored: the import is the work.
     """
     if docs is None:
         raise _refused("jarvis_documents.py is not beside this module, so the safety "
                        "checks that refuse a zip's `..` names are missing - nothing "
                        "was unpacked")
+    last = [0.0]
+    of_files = 0
+    of_bytes = 0
+
+    def tick(force: bool = False) -> None:
+        if progress is None:
+            return
+        now = time.monotonic()
+        if not force and now - last[0] < 0.4:
+            return
+        last[0] = now
+        try:
+            progress({"files": int(counts["files"]), "bytes": int(counts["bytes"]),
+                      "of_files": of_files, "of_bytes": of_bytes})
+        except Exception:                                    # noqa: BLE001
+            pass
+
     with zipfile.ZipFile(zip_path) as zf:
         why = _zip_problem(zf)
         if why:
             raise _refused(why)
+        if docs is not None and depth == 0:
+            # No room, no unpack: the target drive is measured BEFORE the first
+            # byte, and the refusal names what the export declares against what
+            # the drive has (the same preflight the folder import uses).
+            try:
+                of_files = sum(1 for i in zf.infolist() if not i.is_dir())
+                of_bytes = docs.declared_unpacked(zf)
+                why = docs.disk_space_problem(dest if os.path.isdir(dest)
+                                              else os.path.dirname(dest), of_bytes)
+            except Exception:                                # noqa: BLE001
+                why = ""
+            if why:
+                raise _refused(why)
+            tick(force=True)
         for info in zf.infolist():
             if info.is_dir():
                 continue
-            parts = docs.safe_parts(info.filename)
-            if parts is None:
-                counts["skipped"] += 1
-                continue
-            if (info.external_attr >> 16) & 0o170000 == 0o120000:
-                counts["skipped"] += 1                 # a symlink, never followed
-                continue
-            ext = os.path.splitext(parts[-1])[1].lower()
-            if ext == ".zip" and depth == 0:
-                inner = os.path.join(dest, f".part-{uuid.uuid4().hex[:8]}.zip")
-                try:
-                    with zf.open(info) as src, open(inner, "wb") as out:
-                        _copy_capped(src, out, counts, MAX_ZIP)
-                    counts["bytes"] -= os.path.getsize(inner)
+            try:
+                parts = docs.safe_parts(info.filename)
+                if parts is None:
+                    counts["skipped"] += 1
+                    continue
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    counts["skipped"] += 1                 # a symlink, never followed
+                    continue
+                ext = os.path.splitext(parts[-1])[1].lower()
+                if ext == ".zip" and depth == 0:
+                    inner = os.path.join(dest, f".part-{uuid.uuid4().hex[:8]}.zip")
                     try:
-                        _read_zip(inner, dest, counts, depth + 1)
-                    except zipfile.BadZipFile:
-                        counts["skipped"] += 1
-                finally:
-                    _remove(inner)
-                continue
-            counts["skipped"] += 0 if ext else 1
-            target = os.path.join(dest, *parts)
-            real = os.path.realpath(target)
-            if not _inside(os.path.realpath(dest), real):
-                counts["skipped"] += 1
-                continue
-            if os.path.exists(real):
-                counts["skipped"] += 1
-                continue
-            os.makedirs(os.path.dirname(real), exist_ok=True)
-            with zf.open(info) as src, open(real, "wb") as out:
-                _copy_capped(src, out, counts, MAX_ONE)
-            counts["files"] += 1
-            # The per-archive check above cannot see the other Part-N zips, so
-            # the same cap is counted again here, as the bytes are written.
-            if counts["files"] > MAX_FILES:
-                raise _refused(f"the export has more than {MAX_FILES:,} files")
+                        with zf.open(info) as src, open(inner, "wb") as out:
+                            _copy_capped(src, out, counts, MAX_ZIP)
+                        counts["bytes"] -= os.path.getsize(inner)
+                        try:
+                            _read_zip(inner, dest, counts, depth + 1, progress)
+                        except zipfile.BadZipFile:
+                            counts["skipped"] += 1
+                    finally:
+                        _remove(inner)
+                    continue
+                counts["skipped"] += 0 if ext else 1
+                target = os.path.join(dest, *parts)
+                real = os.path.realpath(target)
+                if not _inside(os.path.realpath(dest), real):
+                    counts["skipped"] += 1
+                    continue
+                if os.path.exists(real):
+                    counts["skipped"] += 1
+                    continue
+                os.makedirs(os.path.dirname(real), exist_ok=True)
+                with zf.open(info) as src, open(real, "wb") as out:
+                    _copy_capped(src, out, counts, MAX_ONE)
+                counts["files"] += 1
+                # The per-archive check above cannot see the other Part-N zips, so
+                # the same cap is counted again here, as the bytes are written.
+                if counts["files"] > MAX_FILES:
+                    raise _refused(f"the export has more than {MAX_FILES:,} files")
+            finally:
+                tick()
+        tick(force=True)
 
 
 def _copy_capped(src, out, counts: dict, one_max: int) -> None:
@@ -506,7 +553,8 @@ def _copy_tree(src: str, dest: str, counts: dict) -> None:
                 continue
             counts["bytes"] += size
             if counts["bytes"] > MAX_BYTES or size > MAX_ONE:
-                raise _refused("the export is bigger than this importer will take")
+                raise _refused(f"the export is bigger than {MAX_BYTES // (1024 ** 3)} GB "
+                               f"once its files are counted")
             if counts["files"] > MAX_FILES:
                 raise _refused(f"the export has more than {MAX_FILES:,} files")
             os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -521,16 +569,24 @@ def _is_link(path: str) -> bool:
         return True
 
 
-def extract(source: str, dest: str) -> dict:
-    """`source` (a .zip or a folder) into `dest`. Returns the counts."""
+def extract(source: str, dest: str,
+            progress: Optional[Callable[[dict], None]] = None) -> dict:
+    """`source` (a .zip or a folder) into `dest`. Returns the counts.
+
+    A zip is measured before it is opened: its own size against `MAX_ZIP`, its
+    directory against `_zip_problem`, and `dest`'s drive against what it
+    declares it unpacks to (times 1.2, the same preflight the folder import
+    keeps). `progress` is passed on to `_read_zip` and does nothing for a
+    folder that was already unzipped - there are no declared sizes to report.
+    """
     counts = {"files": 0, "skipped": 0, "bytes": 0}
     if os.path.isdir(source):
         _copy_tree(source, dest, counts)
     elif source.lower().endswith(".zip") and os.path.isfile(source):
         if os.path.getsize(source) > MAX_ZIP:
-            raise _refused("that zip is larger than 2 GB")
+            raise _refused(f"that zip is larger than {MAX_ZIP // (1024 ** 3)} GB")
         try:
-            _read_zip(source, dest, counts)
+            _read_zip(source, dest, counts, 0, progress)
         except zipfile.BadZipFile:
             raise _refused("that file is not a zip this can open")
         except _REFUSALS:

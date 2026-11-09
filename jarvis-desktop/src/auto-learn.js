@@ -179,9 +179,17 @@ export function stillOffLine(which) {
   return sw ? `"${sw.label}" stays off. The card was not approved.` : "";
 }
 
-/** "Learn automatically" has meaning only while background learning is on. */
+/** Under the automatic-learning rows while "Learn automatically" is off.
+ *
+ *  2026-11-09: it used to end "Start background learning above to use this",
+ *  because the button was on this pane. The button moved to Settings,
+ *  Learning (Brain IA audit, recommendation 1), so the desktop sentence names
+ *  the place the control now lives. The phone still draws that button on its
+ *  own Memory plate (net/AutoLearn.kt, MemoryCountsPlate.kt), so its words
+ *  still say "above" - the two sentences differ because the two screens do.
+ */
 export const LEARNING_OFF_NOTE =
-  "Background learning is off, so nothing is saved automatically. Start background learning above to use this.";
+  "Background learning is off, so nothing is saved automatically. Turn it on in Settings, Learning to use this.";
 
 /** The quiet line on a `memory_saved` event: "Jarvis remembered 2 things". */
 export function rememberedLine(n) {

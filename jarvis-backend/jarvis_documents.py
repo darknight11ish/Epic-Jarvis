@@ -123,6 +123,14 @@ it, never over anything. Safe unzipping:
     they are written (not as the zip claims), one file at most
     IMPORT_MAX_ONE; one level of zip inside the zip (Notion splits a big
     workspace into "Part-1.zip" ...), no deeper;
+  * the unpacked total it DECLARES is judged before a byte is written
+    (EXPORT_UNCOMPRESSED_MAX, 4 GB since 2026-11-09), and the target drive
+    must have a fifth more free than that declared total, measured then and
+    named in the refusal - so a full drive is a sentence, not a half-written
+    folder;
+  * the bytes really written are counted too, and the import can be watched
+    while it runs: `importing()` is what `GET /api/folders` carries as
+    `importing`, and `import_notion(..., progress=...)` takes a callback;
   * written to a hidden folder first and moved into place in one step, so a
     refused import leaves nothing behind.
 No card: the owner picked the file and the folder on the PC, the folder is
@@ -138,6 +146,7 @@ index is used, and never required). Nothing here opens a socket.
 """
 from __future__ import annotations
 
+import errno
 import json
 import ntpath
 import os
@@ -265,13 +274,30 @@ DOC_KINDS = {".pdf": "PDF", ".docx": "Word", ".xlsx": "Excel", ".pptx": "PowerPo
 IMPORT_KINDS = frozenset(set(TEXT_KINDS) | set(DOC_KINDS) | {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"})
 IMPORT_MAX_FILES = 20_000
-IMPORT_MAX_BYTES = 1024 * 1024 * 1024
+#: THE COUNTED CAP, AND WHY IT IS 4 GB TOO (owner's decision 2026-11-09). The
+#: bytes actually written used to be capped at 1 GB, and the declared unpacked
+#: total at 250 MB. Raising only the declared cap would have moved the owner's
+#: refusal from "250 MB" to "1 GB" and fixed nothing: the backstop for an
+#: archive whose header lies must never be TIGHTER than the declared ceiling it
+#: is the backstop for, or every honest export the header check lets through
+#: fails on the way out. Both are 4 GB now, so the guard still bounds the disk
+#: by the same number the person was told.
+IMPORT_MAX_BYTES = 4 * 1024 * 1024 * 1024
 IMPORT_MAX_ONE = 200 * 1024 * 1024
 IMPORT_MAX_ZIP = 2 * 1024 * 1024 * 1024
 #: A chat/Notion export is also a ZIP. The same member check as DOC above, with
-#: the export ceiling the 2026-10-20 audit asks for (250 MiB, not 100); the
+#: the export ceiling RAISED TO 4 GB on 2026-11-09: the owner could not bring in
+#: a 276 MB Notion export because its DECLARED unpacked total passed 250 MB (the
+#: Settings page said the unzipped size was too large). Every other guard is
+#: unchanged and still refuses - the 100:1 ratio (`MAX_ZIP_RATIO`, in
+#: jarvis_notion_obsidian), 200 MB a file, 20,000 files, a 2 GB zip - and the
 #: byte counter in _copy still bounds what is really written.
-EXPORT_UNCOMPRESSED_MAX = 250 * 1024 * 1024
+EXPORT_UNCOMPRESSED_MAX = 4 * 1024 * 1024 * 1024
+#: Free space the target drive must have, as a multiple of what the zip
+#: DECLARES it unpacks to. A fifth more than the export itself: the copy is
+#: written while the archive it came from still sits on the same disk, and a
+#: drive filled to its last byte by an import is its own kind of failure.
+EXPORT_ROOM_FACTOR = 1.2
 IMPORT_NAME_CHARS = 150
 
 #: Notion's ids in names: "Trip plan 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d.md".
@@ -609,6 +635,10 @@ def view(*, here: bool = False, ready: Optional[bool] = None) -> dict:
         "documents": {"ready": conv, "said": CONVERTER_READY if conv else CONVERTER_MISSING},
         "notion": {"title": NOTION_TITLE, "detail": NOTION_DETAIL, "can_import": bool(here)},
         "remove_label": REMOVE_LABEL,
+        # The import running right now, as the counts it has really written,
+        # or None. Additive: an app that does not know this key ignores it,
+        # and the Settings page polls this route to show a long unzip moving.
+        "importing": importing(),
     }
 
 
@@ -853,16 +883,81 @@ def zip_path_problem(zf: zipfile.ZipFile) -> str:
     return ""
 
 
-def zip_bomb_problem(zf: zipfile.ZipFile, limit: int) -> str:
-    """'' when the declared uncompressed total is at or under `limit`, else why
-    not. Declared sizes do not replace counting what is written on extraction;
-    `IMPORT_MAX_BYTES` still does that."""
+def _size_words(count: int) -> str:
+    """A byte count in plain words the owner reads the way Windows shows him:
+    "276 MB", "4 GB", "4.5 GB". Binary units (1 MB = 1024 * 1024 bytes) are
+    what Explorer calls MB and GB, and one decimal is used only when the
+    number is not whole, so a refusal never says "4.0 GB" and never rounds a
+    near miss into a number that looks exactly like the cap."""
+    count = max(0, int(count))
+    if count >= 1024 ** 3:
+        value, unit = count / (1024 ** 3), "GB"
+    elif count >= 1024 ** 2:
+        value, unit = count / (1024 ** 2), "MB"
+    elif count >= 1024:
+        value, unit = count / 1024, "KB"
+    else:
+        return f"{count} byte{'s' if count != 1 else ''}"
+    return (f"{value:.0f} {unit}" if abs(value - round(value)) < 0.05
+            else f"{value:.1f} {unit}")
+
+
+def _free_bytes(folder: str) -> int:
+    """Free bytes on the drive holding `folder`, measured now. A seam: a suite
+    can put a drive with any amount of room behind it without filling one."""
+    return int(shutil.disk_usage(folder).free)
+
+
+def disk_space_problem(folder: str, declared: int, *,
+                       factor: float = EXPORT_ROOM_FACTOR) -> str:
+    """'' when the drive holding `folder` has room for `declared` bytes times
+    `factor`, else why not, with BOTH real numbers in it.
+
+    THE PREFLIGHT (owner's decision 2026-11-09). A 4 GB unpack that fills the
+    target drive leaves a half-written folder and a desktop that cannot save
+    anything else; refusing first costs one `shutil.disk_usage` call. The
+    number named is what the archive DECLARES it unpacks to, times the factor,
+    against what the drive really has free - never a bare "not enough space".
+    A drive that cannot be measured is never refused on a guess.
+    """
+    need = int(max(0, int(declared)) * float(factor))
+    if need <= 0:
+        return ""
+    try:
+        free = _free_bytes(folder)
+    except OSError:
+        return ""
+    if free >= need:
+        return ""
+    return (f"there is not enough free space on that drive: this export declares "
+            f"{_size_words(declared)} once unzipped, so it needs {_size_words(need)} "
+            f"free (a fifth more, for the copy), and the drive has "
+            f"{_size_words(free)} free")
+
+
+def declared_unpacked(zf: zipfile.ZipFile) -> int:
+    """The unpacked total `zf`'s own directory declares. Never what is really
+    written: that is counted by `_copy` as it goes, because a header can lie."""
     total = 0
     for info in zf.infolist():
         total += max(0, int(info.file_size or 0))
-        if limit and total > limit:
-            return (f"it unpacks to more than {limit // (1024 * 1024)} MB "
-                    "(a zip-bomb guard)")
+    return total
+
+
+def zip_bomb_problem(zf: zipfile.ZipFile, limit: int) -> str:
+    """'' when the declared uncompressed total is at or under `limit`, else why
+    not, in the REAL numbers (what it declares, and the ceiling).
+
+    Declared sizes do not replace counting what is written on extraction;
+    `IMPORT_MAX_BYTES` still does that. The sentence keeps the phrase
+    "unpacks to more than" because the phone's upload screen (`ZIP_PROBLEM`)
+    and this module's own counted cap both say it that way, and it now names
+    the declared total as well, so "too large" is never a bare claim.
+    """
+    total = declared_unpacked(zf)
+    if limit and total > limit:
+        return (f"it unpacks to more than {_size_words(limit)}: it declares "
+                f"{_size_words(total)} once unzipped (a zip-bomb guard)")
     return ""
 
 
@@ -2224,66 +2319,148 @@ def _is_link(info: zipfile.ZipInfo) -> bool:
     return stat.S_ISLNK(mode)
 
 
-def _unzip(zf: zipfile.ZipFile, dest: str, counts: dict, depth: int) -> None:
+# --------------------------------------------------------------------------
+#   The import running right now, so a long unzip is not a silent wait
+# --------------------------------------------------------------------------
+#
+# A 4 GB export is minutes of work behind ONE blocking POST, and until now the
+# Settings page showed nothing at all while it ran. The counts below are what
+# has REALLY been written, updated as the bytes are copied (throttled to about
+# twice a second, so a 20,000-file export does not rewrite a dict 20,000 times),
+# read by `GET /api/folders` as `importing`, and cleared on success AND on every
+# failure - a stale "unzipping" line after a refusal would be a lie.
+
+_LIVE_LOCK = threading.Lock()
+_LIVE: dict = {}
+_LIVE_EVERY = 0.4                       # seconds between two progress updates
+
+
+def importing() -> Optional[dict]:
+    """What the import in flight has really written, or None when none is.
+
+    `{"files", "bytes", "of_files", "of_bytes"}` - files and bytes written so
+    far, and the same numbers the archive declares, so the page can say
+    "4,231 of 12,340 files". A copy, never the dict itself.
+    """
+    with _LIVE_LOCK:
+        return dict(_LIVE) if _LIVE else None
+
+
+def _ticker(counts: dict, of_files: int, of_bytes: int,
+            progress: Optional[Callable[[dict], None]] = None, *,
+            clock: Callable[[], float] = time.monotonic) -> Callable[..., None]:
+    """The throttle between the copy loop and two listeners: the live record
+    above (which `GET /api/folders` carries) and an optional `progress`
+    callback (which a test, or a caller with its own screen, passes in). A
+    callback that raises is swallowed: the import is the work, not the
+    reporting."""
+    last = [0.0]
+
+    def tick(force: bool = False) -> None:
+        now = clock()
+        if not force and now - last[0] < _LIVE_EVERY:
+            return
+        last[0] = now
+        snapshot = {"files": int(counts["files"]), "bytes": int(counts["bytes"]),
+                    "of_files": int(of_files), "of_bytes": int(of_bytes)}
+        with _LIVE_LOCK:
+            _LIVE.clear()
+            _LIVE.update(snapshot)
+        if progress is not None:
+            try:
+                progress(dict(snapshot))
+            except Exception:                            # noqa: BLE001
+                pass
+
+    return tick
+
+
+def _room_for(dest: str, declared: int) -> None:
+    """Refuse now, with the real numbers, when `dest`'s drive has no room for
+    `declared` bytes times `EXPORT_ROOM_FACTOR`."""
+    why = disk_space_problem(dest, declared)
+    if why:
+        raise ImportRefused(why)
+
+
+def _unzip(zf: zipfile.ZipFile, dest: str, counts: dict, depth: int,
+           tick: Optional[Callable[..., None]] = None) -> None:
     why = zip_bomb_problem(zf, EXPORT_UNCOMPRESSED_MAX)
     if why:
         raise ImportRefused(f"Jarvis will not open that export: {why}")
     for info in zf.infolist():
         if info.is_dir():
             continue
-        parts = safe_parts(info.filename)
-        if parts is None or _is_link(info):
-            counts["skipped"] += 1
-            continue
-        ext = os.path.splitext(parts[-1])[1].lower()
-        if ext == ".zip" and depth == 0:
-            # Notion splits a big workspace into Part-1.zip, Part-2.zip ...
-            # One level only; its contents land beside the rest.
-            # Kept in the hidden folder being filled - never a shared temp
-            # folder - and deleted as soon as it is unpacked.
-            inner_path = os.path.join(dest, f".inner-{uuid.uuid4().hex[:8]}.zip")
-            try:
-                with zf.open(info) as src, open(inner_path, "xb") as out:
-                    _copy(src, out, counts, IMPORT_MAX_ZIP)
-                counts["bytes"] -= os.path.getsize(inner_path)   # counted as it unpacks
-                try:
-                    with zipfile.ZipFile(inner_path) as inner:
-                        _unzip(inner, dest, counts, depth + 1)
-                except zipfile.BadZipFile:
-                    counts["skipped"] += 1
-            finally:
-                try:
-                    os.remove(inner_path)
-                except OSError:
-                    pass
-            continue
-        if ext not in IMPORT_KINDS:
-            counts["skipped"] += 1
-            continue
-        if counts["files"] >= IMPORT_MAX_FILES:
-            raise ImportRefused(f"it has more than {IMPORT_MAX_FILES:,} files")
-        target = os.path.join(dest, *parts)
-        real = os.path.realpath(target)
-        if not _inside(os.path.realpath(dest), real):
-            counts["skipped"] += 1
-            continue
-        if os.path.exists(real):
-            base, e = os.path.splitext(real)
-            i = 2
-            while os.path.exists(f"{base} ({i}){e}"):
-                i += 1
-            real = f"{base} ({i}){e}"
         try:
-            os.makedirs(os.path.dirname(real), exist_ok=True)
-            with zf.open(info) as src, open(real, "xb") as out:
-                _copy(src, out, counts, IMPORT_MAX_ONE)
-        except ImportRefused:
-            raise
-        except OSError:
-            # A name Windows cannot take (a path too long, for one).
-            counts["failed"] += 1
-            continue
-        counts["files"] += 1
+            parts = safe_parts(info.filename)
+            if parts is None or _is_link(info):
+                counts["skipped"] += 1
+                continue
+            ext = os.path.splitext(parts[-1])[1].lower()
+            if ext == ".zip" and depth == 0:
+                # Notion splits a big workspace into Part-1.zip, Part-2.zip ...
+                # One level only; its contents land beside the rest.
+                # Kept in the hidden folder being filled - never a shared temp
+                # folder - and deleted as soon as it is unpacked.
+                inner_path = os.path.join(dest, f".inner-{uuid.uuid4().hex[:8]}.zip")
+                try:
+                    with zf.open(info) as src, open(inner_path, "xb") as out:
+                        _copy(src, out, counts, IMPORT_MAX_ZIP)
+                    counts["bytes"] -= os.path.getsize(inner_path)   # counted as it unpacks
+                    try:
+                        with zipfile.ZipFile(inner_path) as inner:
+                            # A part's own contents are NOT in the outer
+                            # archive's declared total, so the room is checked
+                            # again for the part before it is unpacked. Without
+                            # this, the preflight would under-count exactly the
+                            # export it exists for.
+                            _room_for(dest, declared_unpacked(inner))
+                            _unzip(inner, dest, counts, depth + 1, tick)
+                    except zipfile.BadZipFile:
+                        counts["skipped"] += 1
+                finally:
+                    try:
+                        os.remove(inner_path)
+                    except OSError:
+                        pass
+                continue
+            if ext not in IMPORT_KINDS:
+                counts["skipped"] += 1
+                continue
+            if counts["files"] >= IMPORT_MAX_FILES:
+                raise ImportRefused(f"it has more than {IMPORT_MAX_FILES:,} files")
+            target = os.path.join(dest, *parts)
+            real = os.path.realpath(target)
+            if not _inside(os.path.realpath(dest), real):
+                counts["skipped"] += 1
+                continue
+            if os.path.exists(real):
+                base, e = os.path.splitext(real)
+                i = 2
+                while os.path.exists(f"{base} ({i}){e}"):
+                    i += 1
+                real = f"{base} ({i}){e}"
+            try:
+                os.makedirs(os.path.dirname(real), exist_ok=True)
+                with zf.open(info) as src, open(real, "xb") as out:
+                    _copy(src, out, counts, IMPORT_MAX_ONE)
+            except ImportRefused:
+                raise
+            except OSError as exc:
+                if getattr(exc, "errno", None) == errno.ENOSPC:
+                    # THE DISK FILLED UP MID-EXTRACTION. Not a bad name: the
+                    # refusal says so with the real numbers, and the caller's
+                    # `finally` removes the half-written folder.
+                    raise ImportRefused(
+                        f"the drive ran out of room while writing: "
+                        f"{_size_words(counts['bytes'])} had been written when it did")
+                # A name Windows cannot take (a path too long, for one).
+                counts["failed"] += 1
+                continue
+            counts["files"] += 1
+        finally:
+            if tick is not None:
+                tick()
 
 
 def _copy(src, out, counts: dict, one_max: int) -> None:
@@ -2296,17 +2473,27 @@ def _copy(src, out, counts: dict, one_max: int) -> None:
         n += len(chunk)
         counts["bytes"] += len(chunk)
         if n > one_max:
-            raise ImportRefused(f"one file in it is larger than {one_max // (1024 * 1024)} MB")
+            raise ImportRefused(f"one file in it is larger than {_size_words(one_max)}")
         if counts["bytes"] > IMPORT_MAX_BYTES:
             raise ImportRefused(f"it unpacks to more than "
-                                f"{IMPORT_MAX_BYTES // (1024 * 1024 * 1024)} GB")
+                                f"{_size_words(IMPORT_MAX_BYTES)}: "
+                                f"{_size_words(counts['bytes'])} has been written so far")
         out.write(chunk)
 
 
 def import_notion(zip_path, into, *, roots: Optional[list] = None,
-                  today: Optional[str] = None) -> dict:
+                  today: Optional[str] = None,
+                  progress: Optional[Callable[[dict], None]] = None) -> dict:
     """Unzip a Notion export into a NEW folder inside a listed folder.
-    {"ok", "folder", "files", "skipped", "failed", "said"} or ImportRefused."""
+    {"ok", "folder", "files", "skipped", "failed", "said"} or ImportRefused.
+
+    `progress` is called with `{"files", "bytes", "of_files", "of_bytes"}` as
+    the bytes are really written (throttled, so it is not once a member) and
+    the same counts are readable meanwhile through `importing()`; the Settings
+    page shows them while the POST is still running. Nothing is left behind on
+    any failure: the hidden staging folder is removed and the live record is
+    cleared in the `finally`.
+    """
     roots = folders() if roots is None else roots
     if not isinstance(zip_path, str) or not zip_path.strip():
         raise ImportRefused("pick the .zip file Notion made")
@@ -2352,7 +2539,16 @@ def import_notion(zip_path, into, *, roots: Optional[list] = None,
                 why = zip_bomb_problem(zf, EXPORT_UNCOMPRESSED_MAX)
                 if why:
                     raise ImportRefused(f"Jarvis will not open that export: {why}")
-                _unzip(zf, tmp, counts, 0)
+                declared = declared_unpacked(zf)
+                # THE FREE-SPACE PREFLIGHT: refused BEFORE a byte is written,
+                # with the real numbers, so a 4 GB export on a full drive does
+                # not leave a half-written folder behind it.
+                _room_for(target_root, declared)
+                of_files = sum(1 for i in zf.infolist() if not i.is_dir())
+                tick = _ticker(counts, of_files, declared, progress)
+                tick(force=True)
+                _unzip(zf, tmp, counts, 0, tick)
+                tick(force=True)
         except zipfile.BadZipFile:
             raise ImportRefused("that file is not a zip Jarvis can open")
         if counts["files"] == 0:
@@ -2361,6 +2557,9 @@ def import_notion(zip_path, into, *, roots: Optional[list] = None,
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
+    finally:
+        with _LIVE_LOCK:
+            _LIVE.clear()
     said = f"Brought in {counts['files']:,} file{'s' if counts['files'] != 1 else ''} into " \
            f"\"{os.path.basename(final)}\"."
     if counts["skipped"]:

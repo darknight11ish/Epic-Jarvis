@@ -262,6 +262,11 @@ pub fn open_for(app: &AppHandle, conversation: Option<String>) -> Result<String,
     .focused(false)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
+    // The same setting the HUD window carries, for the same reason: this page
+    // attaches a dropped file itself (JARVIS-API.md section 163), and Tauri's
+    // internal drag-drop handler would swallow the HTML5 `drop` event on
+    // Windows. No Rust listener exists for that event.
+    .disable_drag_drop_handler()
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("unable to open a chat window: {e}"))?;

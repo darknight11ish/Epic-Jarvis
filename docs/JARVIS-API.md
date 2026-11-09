@@ -233,7 +233,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions). `done` makes the animals' orb glow once - "a long answer is ready" (`face-moments.js`); the robot, which has no orb, brightens its eyes and fins once instead | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`); `done` makes the animal's orb glow once, the robot's eyes and fins (`face/AnimalNow.kt`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
-| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
+| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201). The HUD page reads the same frame from its own stream and, on `false`, stops a tapped "Read out loud" where it is (section 208) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
 
 `devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
 a device was paired or removed, or the old shared key was retired or
@@ -4190,13 +4190,23 @@ every memory answer on screen.
 It was the one surface that read a **typed** answer aloud - the HUD has no
 voice input of its own; its page's own chat box is typed, and its mic button
 opens the Jarvis bar - and it did so with none of the rules above.
-`jarvis-desktop/src-tauri/src/hud_bootstrap.js` (section 2e) now wraps that
-page's `speechSynthesis.speak` and refuses an answer whose route says
-`injected_sensitive` above 0, or `gate: "private"`; instead it draws the
+`jarvis-desktop/src-tauri/src/hud_bootstrap.js` (section 2e) wrapped that
+page's `speechSynthesis.speak` and refused an answer whose route said
+`injected_sensitive` above 0, or `gate: "private"`; instead it drew the
 bar's own one line, **"It's on your screen."** (`private-speech.js`
-`PRIVATE_LINE`), under the answer. It reads the same `X-Jarvis-Route` the
-page already draws the lane and the gate from, so it is this rule, not a
-second one - and read the scope honestly: the rule above was written for a
+`PRIVATE_LINE`), under the answer. That wrapper still stands as the guard for
+any speech-synthesis path that might return to that page, and its
+local-voices-only rule is still in front of the same call (an "Online
+(Natural)" voice would send the text to Microsoft). **Since TASK-51
+(2026-11-09) the page's own read-aloud no longer goes through a browser
+voice at all**, so the refusal it must survive is its own: the speaker beside
+an answer and the answer menu's "Read out loud" both ask
+`private-speech.js`'s `mayReadAloud` for THAT answer's own route first, and
+failing closed if the module cannot be loaded (§208) - a refused answer is
+never handed to the player, and the receipt is the rule's own line. The
+route is the same `X-Jarvis-Route` the page already draws the lane and the
+gate from, so it is this rule, not a second one - and read the scope
+honestly: the rule above was written for a
 **voice** answer, and a typed question is otherwise allowed to be read aloud
 (`jarvis_voice.may_speak(private, origin="typed")`). **That exception is
 removed in that one window, on his instruction** - *"Gate it - keep
@@ -4205,12 +4215,12 @@ and the widget are unchanged, and the phone did not read typed answers then.
 The phone gained its own tap-only typed read-aloud on 2026-10-27 under a
 stricter gate than this one (it refuses when the route header is missing and
 checks the real tool and screen facts) - a new, narrower decision, not this
-one reaching the phone. `tests/hud.mjs` drives the real HUD
-window once per route and holds the gate against `usedSensitiveFact` here,
-so the two cannot drift; the local-voices-only rule that was already in that
-wrapper (an "Online (Natural)" voice would send the text to Microsoft) still
-stands in front of the same call. A route the window does not have - an
-older PC, a chat that failed - gates nothing, which is how the bar reads a
+one reaching the phone. `tests/hud.mjs` drives the real HUD window's wrapper
+directly (its local-voices rule and its kept-on-screen refusal), and
+`tests/hud-live-read-aloud.mjs` drives the page's own gate: a speaker is
+offered only for an answer the rule allows, and a refused answer reaches
+neither the PC's voice nor the browser's. A route the window does not have -
+an older PC, a chat that failed - gates nothing, which is how the bar reads a
 missing route too.
 
 **Known gap, said plainly:** the server cannot yet label a finished answer
@@ -7252,6 +7262,24 @@ window both act on those fields, and a program named in the words is started
 in Rust by the same shared call (`commands.rs::open_app_from_route`) from
 either chat. Backend: `backend/test_jarvis_open.py` (243 checks), including
 that real programs, the refusals and "open my calendar" are unchanged.
+
+**And the HUD's one-click way into the memory map (2026-11-09).** The HUD
+window's left rail has a **"Galaxy - everything at a glance"** button that
+opens the Brain window at its Galaxy view, which is now titled **"The memory
+map"** with **"what Jarvis remembers"** under it. It adds no route, field,
+command or phone surface: the shell leaves the Brain's own place key
+(`jarvis.brain.place`, the one the Jarvis bar already uses for "earlier chats"
+and "forget a time frame") and then calls the same navigation-only
+`open_fix_place {place: "brain"}` the settings gear's own door uses - the same
+shape `main.js`'s palette already leaves for a Brain place. The Brain accepts
+`"galaxy"` as one of its own view places (`forget-range-panel.js`'s
+`takeAnyPlace`, `brain.js`'s `showPlace`), opens the "Advanced" disclosure so
+the selected tab is visible, and shows the map. Nothing is read, changed or
+approved by the press. `/api/graph` stays off the phone and no phone file
+changed. Tests: `jarvis-desktop/tests/hud-brain-doors.mjs` (the door, the one
+opener, the key both files spell, and the Brain's acceptance of "galaxy") and
+`jarvis-desktop/tests/galaxy.mjs` (the plain-words title, with the view and
+tab ids unchanged).
 
 Tests: `backend/test_calendar_answer.py` - the setup sentences this answer keeps
 and the card's own shapes checked to belong to the card, the phrase→owner table
@@ -13745,14 +13773,17 @@ NOTHING that acts - it only starts a repeating check-in, which is data,
 not action. Every acting step still needs its own separate card, raised by
 the ordinary chat/tool path, never by this feature.
 
-**Both apps' UI is built.** The phone: Brain, "Goals", right beside "Coming
-up" (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`) - it reuses
+**Both apps' UI is built.** The phone: Brain, the "Your projects and goals"
+section, its "Goals" plate after Projects (`net/Goals.kt`,
+`ui/screens/GoalsPlate.kt`; `BrainSections.kt` places it there) - it reuses
 `net/Schedule.kt`'s own job parser to read the check-in job `accept`'s
 answer carries, and `Schedule.actionsOf` gives that row no Pause/Delete of
 its own, since only Stop tracking, on the goal itself, can take the
-check-in down cleanly. The desktop: Brain -> Work -> Goals, beside Coming
-up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
-goals.rs`) - it reads its own limits back from `GET /api/goals` rather
+check-in down cleanly. The desktop: Brain -> Projects -> Goals, after the
+project list (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
+goals.rs`) - the same place the phone draws it since 2026-11-09 (the IA
+recommendations; it was on Work until then) - it reads its own limits back
+from `GET /api/goals` rather
 than hard-coding them, and redacts a goal's and a step's own words under
 the same "Windows Hello for memory lists and chat history" gate Coming up
 already uses. Both apps find the weekly check-in's live state (paused, its
@@ -15066,6 +15097,20 @@ were wrong. Three things changed, all additive:
   chats. The platform gate (Windows Hello on the PC, the phone's screen lock)
   stays on the card, where a person approves.
 
+**No item cap (owner's ruling, 2026-11-08).** Verbatim: *"why is there a cap
+at 200? I say i should be able to wipe as many as i want as long as there is a
+double confirmation and it doesn't touch any backups."* So there is no 200-item
+ceiling: any time frame is listed in FULL and forgotten in one action. A
+selection above `large_wipe_items` (200 - the OLD cap, now only a THRESHOLD,
+never a limit) is called a **large wipe** in the preview (`large_wipe`,
+`large_wipe_words`), on the card, in the status and in both apps; the two yesses
+are unchanged (the card is the FIRST yes, `/confirm` the SECOND), so a big wipe
+still needs both and nothing above the threshold is refused, hidden or split.
+**No backup is ever touched:** the only stores this path writes are
+`memory.db` (retire/unforget) and `chat-history.db` (take_out/put_back); it
+never reads, writes, copies, prunes or rotates a backup - the card's own
+sentence says copies in older backups stay until they age out.
+
 `backend/jarvis_forget_range.py` (shipped whole), installed by
 `forget-range.patch` (the startup `install()` block, and the gate's risk
 line). Desktop: a card on the Brain's History tab (`forget-range.js`,
@@ -15098,16 +15143,19 @@ hidden with every other title - it is a list of chat titles, as `chats` is
   these days - the whole chat is deleted."
 - **A PINNED chat is never deleted (added 2026-11-04).** Pinning is the
   owner's own "keep this", so it outranks a later "forget that week": a
-  pinned chat is not in the tickable `chats` list (the list budget of 200
-  counts only what can be ticked), and a request that names one anyway is
+  pinned chat is not in the tickable `chats` list (it is not in the count
+  "Forget these" sends), and a request that names one anyway is
   refused `409` with `"changed": true` - never a silent delete. The preview
   carries the kept ones as `pinned_kept` and `pinned_kept_count`, the status
   carries `pinned_kept_count`, and the card says "N pinned chats are kept".
 - **Days are the PC's own local time, and inclusive**: "1 to 15 September"
   runs from midnight at the start of the 1st to the end of the 15th. A frame
   may carry a time of day ("this morning": midnight to 11:59 am).
-- **At most 200 facts and chats together.** More: `too_many`, the counts
-  only, no list, and "Choose fewer days" - nothing can be forgotten from it.
+- **NO item cap (2026-11-08).** Any number of facts and chats is listed in
+  full and offered in one action. Above `large_wipe_items` (200 - the old cap,
+  now only the size at which the words say "large wipe") the preview's
+  `large_wipe` is true and `large_wipe_words` says so; nothing is refused,
+  hidden or split. **Nothing here touches a backup** (see the intro above).
 - **Each chat carries its kind** (since the chat audit, 2026-09-28, §18.6:
   `"kind"` and `"ticked"` on every chat of the preview). A
   **customer-support chat's record starts UNticked** - the owner's "Forget
@@ -15122,16 +15170,19 @@ hidden with every other title - it is a list of chat titles, as `chats` is
 
 `GET /api/memory/forget_range` - the status:
 `{"available": true, "waiting", "waiting_for", "confirm": null | {"route",
-"id", "expires_in", "text"}, "pinned_kept_count", "undo": null | {"until",
+"id", "expires_in", "text", "large_wipe", "large_wipe_words"},
+"pinned_kept_count", "undo": null | {"until",
 "seconds_left", "minutes_left", "facts", "chats", "frame", "said"}, "last":
 null | {"outcome", "message", "at"}, "asked": null | {"id", "from", "to",
-"said", "kinds"}, "max_items": 200, "undo_minutes": 10, "presets": [{"id",
+"said", "kinds"}, "large_wipe": false, "large_wipe_items": 200,
+"large_wipe_words": "", "undo_minutes": 10, "presets": [{"id",
 "label"}]}`. `asked` is a request said or typed in the last 30 minutes -
 the days the apps fill in. `confirm` is non-null exactly while a card has
 been approved and its items wait for the SECOND yes: `id` is the held id,
 `expires_in` counts down from 120, and `text` is "Say yes again to finish.
-Undo stays available for 10 minutes." It is not an error state when it
-disappears. `pinned_kept_count` is the number of pinned chats from the
+Undo stays available for 10 minutes." (For a LARGE selection it is
+`CONFIRM_TEXT_LARGE`, which starts "This is a large wipe." - the same second
+yes, said bigger.) It is not an error state when it disappears. `pinned_kept_count` is the number of pinned chats from the
 range that are being kept (0 when neither a card nor a second yes is
 waiting).
 
@@ -15145,15 +15196,17 @@ waiting).
 "started", "updated", "turns", "in_frame", "spills", "label"}], "counts":
 {"facts"?, "chats"?}, "pinned_kept": [{"id", "title", "messages"}],
 "pinned_kept_count", "estimate": {"facts", "chats", "messages", "seconds",
-"text"}, "too_many", "empty", "said", "chats_why"}`.
+"text"}, "large_wipe", "large_wipe_items", "large_wipe_words", "empty",
+"said", "chats_why"}`.
 `chats` holds only what may be ticked (pinned chats are in `pinned_kept`).
 `estimate.seconds` is the measured cost of this batch, never less than 1:
 20 ms per fact retired, 5 ms per chat taken out and 0.1 ms per message row,
 each rounded UP from a 2026-11-04 measurement on the owner's PC (best of
 three; best measured: 15.7 ms, 0.82 ms, 0.016 ms), and `text` is the human
-sentence. Over the cap the sentence says the batch must be narrowed, that
-each request covers 200 items and that repeating the request covers the
-rest. `chats_why`: the chats could not be read (the history key). `400` a
+sentence. There is no cap: above `large_wipe_items` (200) `large_wipe` is
+true and `large_wipe_words` says so in words - the list is still complete and
+the request below still accepts it. `chats_why`: the chats could not be read
+(the history key). `400` a
 date that is not one, a frame in the future, a kind that is not `facts` or
 `chats` - its sentence in `error`.
 
@@ -15164,9 +15217,11 @@ deletable (a chat - a pinned one is not), and still from those days -
 anything else is `409 {"changed": true}` ("The list changed since you read
 it ... Read the list again."), so nothing off the list the owner read can
 ride on the card. **202** `{"waiting": true, "counts",
-"pinned_kept_count", "confirm": {"route", "id", "expires_in": 120,
-"text"}}` and ONE card - and **nothing is forgotten or deleted**: the card
-is the FIRST yes. `400` nothing ticked, more than 200, a bad id or date.
+"pinned_kept_count", "large_wipe", "large_wipe_items", "large_wipe_words",
+"confirm": {"route", "id", "expires_in": 120, "text", "large_wipe"}}` and
+ONE card - and **nothing is forgotten or deleted**: the card is the FIRST
+yes. There is NO item cap: a large selection is accepted and its 202 body
+says `large_wipe`. `400` nothing ticked, a bad id or date.
 `409` a card already waiting, a second yes already held, or an Undo still
 open (one Undo window at a time: "You can still undo the last time frame
 you forgot, for about N more minutes..."). `503` the tier is not `ask`, or
@@ -15216,6 +15271,11 @@ and the status's `confirm` block appears. `POST /confirm` with the literal
 `yes: true` is the SECOND yes; without it, or after the 120 seconds, the
 hold is simply dropped and nothing was changed. The platform gate runs on
 the card (Windows Hello / phone screen lock), not on the confirm.
+
+For a LARGE selection (more than `large_wipe_items`) nothing about the two
+yesses changes; only the words do: the card carries "This is a large wipe."
+and both apps' second-yes line is the PC's `CONFIRM_TEXT_LARGE`. The card is
+still the FIRST yes and `/confirm` still the SECOND.
 
 - Each fact: `jarvis_memory.retire()`, the call Forget makes - so it gets
   Forget's own "forgotten" mark (`meta.forgotten_at`): a question about the
@@ -15286,6 +15346,11 @@ nothing - the second yes is a tap on the confirm block, never a voice.
   deletion is only after the 200 from `/confirm` (then the status says
   `last.outcome` "done"), and the 10-minute Undo it starts is drawn like any
   other.
+- **A large wipe is said in words (2026-11-08).** Both apps show the PC's
+  `large_wipe_words` under the list before anything is sent (the desktop's
+  `.fr-large-wipe` line, the phone's warning line), and the card/confirm text
+  says it too. The list stays complete, the `estimate.text` stays, and "Forget
+  these" stays offered - there is no cap and no refusal; only the two yesses.
 - **A pinned chat is never sent** (it is not in `chats`) and never rendered
   as tickable; both apps show the `pinned_kept` names as kept, with the PC's
   own "N pinned chats are kept" and why, and the `estimate.text` line as the
@@ -25610,6 +25675,30 @@ visible rather than asserted.
 verdict is `refuse` (`scanner_missing`), and a scanner that RAISES is a refusal
 too (`scan_failed`).
 
+**WIRED INTO THE ONE SCAN (2026-11-09).** `jarvis_skills.vet()` - the scan every
+install, preview and pack door already runs - CALLS `extra_findings()` below, the
+function that holds these four checks, so they are judged on every install and
+not only when this lock surface is read. Before this fix `scan_skill_text()` had
+**no production caller** (only `backend/test_skill_hub.py`), which is exactly the
+gap the four checks were written to close: a Hermes skill using the inline form
+installed as "clean". `jarvis_skills.vet()` reports `extra_checks: 1` when the hub
+was beside it and `0` when it was not, and a hub scanner that RAISES is a block
+(`extra_scan_failed`), the same fail-closed rule as below. One definition, two
+callers - `scan_skill_text()` and `vet()` - is the point: the shapes are not
+copied into the install path.
+
+**WIRED INTO THE SKILL LIFE CYCLE (2026-11-09).** The lock is no longer a
+surface for a file nothing writes: `jarvis_skills.install()` writes ONE row on
+every install, edit and turn-on (`lock_entry()` then `write_lock()`), carrying
+the sha256 the install pinned and the scan's verdict and findings - so the four
+extra checks and any bundled-script warning are recorded with it - and
+`uninstall()` deletes that row through the new `forget_lock()`. Both calls are
+lazy imports exactly like `_extra_findings()`: an older base without the hub
+behaves as before, and a lock write that fails never fails the install (the
+skill is already copied and indexed; the lock is a record, not the gate). A
+refused or denied install writes NO row. Proved by
+`backend/test_skills_lock_wired.py`.
+
 ### 138.3 The lock file
 
 Beside the skill folder, `skills.lock`, written whole through a temp file and a
@@ -25696,9 +25785,13 @@ than guessed at.
 **Nothing here approves anything and nothing here adds a route that decides
 anything.** The one new route is a read; it is a `GET`, it raises no card, and
 the gate's own table already tiers `skill_list`, `skill_load` and `skill_scan` as
-`auto` (`jarvis_gate.py:850`). The only writer in the whole module is still
-`write_skill()`, through `POST /api/skills/learn` (§135.3), one
-`modify_own_code` card, before the file is written.
+`auto` (`jarvis_gate.py:850`). The only writer of SKILL CONTENT in the whole
+module is still `write_skill()`, through `POST /api/skills/learn` (§135.3), one
+`modify_own_code` card, before the file is written. The lock file gained two
+writers on 2026-11-09 - `write_lock()` from the install path and
+`forget_lock()` from `uninstall()` - both called from `jarvis_skills.py`;
+neither is a permission, neither writes a skill file, and both are no-ops when
+the hub is not beside the base.
 
 `docs/ARCHITECTURE.md` §8 carries the row for the app surfaces: the lock, the
 conventions and the suggestions are readable by either app and **no app calls
@@ -26230,6 +26323,17 @@ running - it starts no model and switches nothing. A `pending` preset refuses
 before anything happens. Both apps call this route now: the desktop's
 focus-presets bridge sends it, and the Android preset screen reads and sends
 the same `apply_path` the GET advertises.
+
+**Changed 2026-11-09: a local preset picked in either app raises NO card.**
+This is the owner's own reversible click, and this route is the one road it
+takes; the model/chat path still raises the `switch_model` card. The apply now
+also answers `receipt_id` (the `preset_apply` receipt naming the preset, model
+and lane it replaced) and the preset it replaced is one click away in the same
+menu. Coding (its pooled lane pauses both other models) and the Cloud row still
+raise their card exactly as this section describes. See section 209 for the
+preset's own rule, and section 210 for the whole manual-click allow-list it now
+belongs to (a model already installed and picked in either app's own model list
+switches without a card too).
 
 ### 145.1 The Coding preset's pooled both-card lane (2026-11-02, added)
 
@@ -29083,13 +29187,14 @@ computed from the measured numbers. This section documents the backend contract
 and the desktop Brain panel built against it (`brain.js`, `model-advisor.js`,
 the `brain_model_recommend` command).
 
-**Five routes, all PC-only.** Each answers 403 from any device but this PC,
+**Six routes, all PC-only.** Each answers 403 from any device but this PC,
 checked with `jarvis_owner_check.from_this_pc` before a body is read. This is
 the standing rule that the phone must not grow a model catalogue
 (`docs/ARCHITECTURE.md` §8), not a missing phone screen.
 
 ```
 GET  /api/models/recommendations
+GET  /api/models/resources                what is loaded now + cards + Jarvis
 POST /api/models/check                    {}
 POST /api/models/benchmark                {"ref": "<installed model>"}
 POST /api/presets/recommend               {}
@@ -29261,6 +29366,186 @@ no network, so the suite injects the catalogue pass. The shape and the refusal
 paths are tested; the first real click on the owner's PC is the field test. And
 no model's QUALITY is measured by any of this - the feature compares tokens per
 second, video memory and context window, and says exactly that.
+
+### 160.1 What is loaded right now, and what it costs: `GET /api/models/resources` (added 2026-11-09)
+
+The owner's ask of 2026-11-08, from two Brain -> Model screenshots: *"the model
+section should tell me whats currently loaded into jarvis, how much memory is
+jarvis using of each gpu, how much other computer resources jarvis is uses
+besides vram on the gpus, what the context size is, and any other important
+info"* - and, because the COMPUTE panel said "Runs on graphics card 2" while
+the Coding preset's pooled three-card lane held the coder across all three
+cards, *"i have the coding preset loaded into jarvis right now, and it still
+says this"*.
+
+It is a READ, served by the SAME already-installed PC-only wrapper as
+`/api/models/recommendations` (`jarvis_model_recommendations.install()`), so it
+adds no permission, no install call, no card and no second HTTP stack. It runs
+`jarvis_model_resources.collect()`: every known local lane's own `/api/ps` (a
+read that loads nothing), `nvidia-smi`'s card rows and compute-process rows,
+`netstat` for the lane listeners, and the operating system's numbers for
+Jarvis's own process. It writes nothing and starts nothing.
+
+```json
+{"available": true,
+ "read_at": 1762750000, "read_at_words": "21:52:03",
+ "active_lane": {"url": "http://127.0.0.1:11450",
+                 "source": "presets-active-lane.json", "fallback": false,
+                 "file": "C:\\Users\\...\\.openjarvis\\presets-active-lane.json",
+                 "preset": "coding", "preset_title": "Coding",
+                 "words": "Chat is using the \"Coding\" preset's lane: ..."},
+ "lanes": [{"key": "pooled", "label": "the Coding preset's lane (all three cards)",
+            "url": "http://127.0.0.1:11450", "port": 11450,
+            "preset_ids": ["coding"], "preset_titles": ["Coding"],
+            "is_chat_lane": true, "state": "loaded",
+            "model": "qwen3-coder-30b-a3b-ud-q3-k-xl:latest",
+            "context_length": 8192, "size_bytes": 14497590799,
+            "size_vram_bytes": 14497590799, "spill_bytes": 0,
+            "on_card_percent": 100, "gpu_indices": [0, 1, 2],
+            "words": "... 8,192 tokens of context, 13.5 GiB in video memory, 100% on all three graphics cards (0, 1, 2)"}],
+ "gpus": [{"index": 0, "uuid": "GPU-...", "name": "NVIDIA GeForce RTX 2060",
+           "total_mb": 12288, "used_mb": 6064, "free_mb": 6224,
+           "display_active": false, "jarvis_mb": null, "other_mb": null}],
+ "gpu_share": {"known": false,
+               "why": "the graphics driver does not report how much video memory each program is using, so Jarvis's share of each card is not guessed",
+               "loaded_vram_gib": 13.5, "cards": [0, 1, 2]},
+ "jarvis": {"available": true, "pid": 3420, "rss_mb": 210.5, "private_mb": 195.2,
+            "cpu_seconds": 321.4, "cpu_percent": 3.0, "handles": 812,
+            "uptime_s": 13400,
+            "model_servers": [{"pid": 18496, "rss_mb": 4800.3, "available": true}],
+            "model_servers_rss_mb": 4800.3,
+            "words": "Jarvis itself is using 211 MiB of RAM and 3.0% of the processor on average since it started."},
+ "warnings": [], "notes": ["Read-only: this answer only looked. ..."],
+ "words": ["Chat is using the \"Coding\" preset's lane: ...", "..."]}
+```
+
+Field rules, each proved by `backend/test_model_resources.py`:
+
+- **The chat lane is the PRODUCT's lane rule**, not `/api/presets`' lane
+  concept and not a module constant: the loopback `base_url` in
+  `presets-active-lane.json` under the config folder (`OPENJARVIS_CONFIG_DIR`,
+  else `~/.openjarvis`), exactly what `jarvis_hud.active_ollama_url()` returns;
+  `source` and `fallback` say which branch ran, and a non-loopback value is
+  ignored the same way the product ignores it.
+- **A lane is `loaded`, `not_loaded` or `unreachable`, and the words say
+  which.** A lane that does not answer is "not running - nothing answers on
+  port N"; a lane with an empty `/api/ps` is "nothing loaded". Neither ever
+  reports a 0 as a fact about memory.
+- **`context_length` is the context the lane is really serving** (Ollama's own
+  `/api/ps` field), `null` when the lane does not report it - never a 0.
+- **Spill is told, not hidden:** `spill_bytes = size - size_vram` and
+  `on_card_percent` are computed from the lane's own numbers; a partial load
+  carries them so a screen can say "74% on the cards, N MiB spilled into system
+  RAM".
+- **Cards per lane** come from the model server's own compute-process GPU rows
+  (`llama-server.exe`/`ollama.exe`), because the Ollama listener spawns the
+  runner under a different pid. With exactly one loaded lane they are that
+  lane's cards; with two loaded lanes the split cannot be told from these reads
+  and the lane's `gpu_indices` is left empty - never guessed.
+- **`jarvis_mb`/`other_mb` are `null` when the driver does not report
+  per-program video memory.** This PC's Windows driver answers `[N/A]` for
+  `used_memory` on every compute-apps row, so `gpu_share.known` is `false`, the
+  loaded model's total video memory (`gpu_share.loaded_vram_gib`, Ollama's own
+  measured `size_vram`) is shown instead, and `notes` says exactly why the
+  per-card split is missing. A driver that reports it gets `known: true` and a
+  per-card `jarvis_mb`, proved with a fixture.
+- **`jarvis` is the web server's own process** (`os.getpid()`): resident
+  memory, private memory, processor seconds and an average percent, handles and
+  uptime, read with the Windows process APIs. `available: false` plus `why`
+  when it cannot be read; the words never invent a 0. The Ollama model servers
+  it runs are listed with their own resident memory, because that is where a
+  spilled model's RAM lives.
+- **`read_at`/`read_at_words`** date the read. The Brain's COMPUTE panel uses
+  them so its free-memory numbers are marked as this read, not as a cached
+  plan.
+- **`words`** is a plain-sentence fallback for any screen that cannot draw the
+  rows; the Brain pane draws the structured fields through
+  `model-resources.js` (`plateModel`, `computeModel`), where every sentence is
+  proved by `jarvis-desktop/tests/model-resources.mjs`.
+
+The route is PC-only and `GET`-only: a phone is refused 403 before the read
+(same rule and sentence as its neighbours), and nothing here is on the phone's
+radar - see `docs/ARCHITECTURE.md` §8 for that one-sided decision and why.
+
+### 160.2 Measured results: `GET /api/models/measured` (added 2026-11-09)
+
+**What it is.** The Brain Model pane's "Measured results" card: the benchmark
+results that are ALREADY stored on this PC, in the two plain stores section 205
+above answers "what has been measured" from - `jarvis_bench.BenchLog` (speed
+runs: model, lane, decode rate, spill, pass/fail, date, `bench.jsonl`) and
+`jarvis_bench.ScoreLog` (one row per suite per model/quant/context/digest, with
+score, items passed, decode rate and date, `bench-scores.jsonl`). Section 205's
+answer tells the owner the results are "kept in Brain, Model, Models"; this is
+that card, and it is the same two stores, read through `jarvis_bench`'s own
+readers (`BenchLog.runs()`, `score_history()`) so the card, the chat answer and
+the benchmark that wrote the row cannot disagree about the file or the shape.
+
+**Read-only, and nothing invents a number.** `jarvis_model_resources.measured()`
+copies each row's allowlisted fields: a number the row does not hold is ABSENT
+rather than 0, and the sentence describing a result is the row's own `words`
+field, written by `jarvis_bench` when it measured it - a failed run, a spilled
+run and a skipped suite therefore keep their own words on the card instead of
+being re-worded by a screen. The newest three speed runs and newest five
+scorecards are shown, and `counts` carries how many rows are stored, so the card
+says "showing the newest 3 of 12" rather than making three look like everything.
+An empty list carries its OWN reason (`empty.runs`/`empty.scorecards`): no such
+file yet, a file with no readable row, or a read that failed - three different
+silences, said differently. A backend without `jarvis_bench.py` answers
+`available: false` with a sentence and still invents no row.
+
+```json
+{"available": true, "read_at": 1762750000, "read_at_words": "21:52:03",
+ "runs": [{"kind": "speed run", "model": "qwen3.5:9b", "lane": "everyday",
+           "preset": "general", "ok": true, "spilled": false,
+           "gen_median": 41.2, "prefill_median": 900.5,
+           "at": 1762750000, "day": "2026-11-08",
+           "words": "qwen3.5:9b on the everyday lane at 16,384 tokens: 41.2 tokens a second decode, ..."}],
+ "scorecards": [{"kind": "scorecard", "model": "qwen3.5:9b", "suite": "coding",
+                 "suite_label": "Coding", "skipped": false, "passed": true,
+                 "score_pct": 83.33, "items": 6, "items_passed": 5,
+                 "decode_tps": 41.2, "ctx": 8192, "quant": "Q4_K_M",
+                 "at": 1762750000, "day": "2026-11-08",
+                 "words": "5 of 6 coding tasks passed, each checked by running its own test."}],
+ "counts": {"runs": 12, "scorecards": 7},
+ "stores": {"speed": {"name": "bench.jsonl", "exists": true},
+            "scores": {"name": "bench-scores.jsonl", "exists": true}},
+ "empty": {"runs": "", "scorecards": ""},
+ "notes": ["Read-only: this answer only read the two benchmark stores. ..."],
+ "words": ["Newest speed run: ..."]}
+```
+
+Field rules, each proved by `backend/test_model_resources.py` against the real
+stores (a temporary `BenchLog`/`ScoreLog`, never a second copy of the shape):
+
+- **Only stored rows.** `BenchLog.runs()` returns the `bench-run` aggregate rows
+  (a repeat row is not a run), newest first; `score_history()` returns the
+  scorecards, newest first. Nothing is synthesised, averaged or rounded again.
+- **A failed run is shown, not hidden.** It keeps `ok: false` and its stored
+  `why`; it has no `gen_median` key at all rather than a 0 tokens a second.
+- **A skipped suite is shown as skipped**, with no `score_pct`.
+- **The label is the module's own.** `suite_label` comes from
+  `jarvis_bench.SUITES`, the table the suite runner uses, so "Vision / OCR" is
+  not retyped by a screen.
+- **`at` is the stored epoch and `day` is that epoch on this PC's own clock**
+  (`YYYY-MM-DD`); a row with no stamp has `at: null` and `day: ""`, never today.
+- **No prompt, answer or owner word can reach it**: both stores' writers use
+  allowlists, and this read copies a fixed field list from the cleaned rows.
+- **`stores`** names each store file and whether it exists, so the empty state
+  can be specific about which one is missing.
+- **`words`** is a plain-sentence fallback for a screen that cannot draw the
+  rows; the Brain pane draws the structured rows through
+  `model-results.js`, whose wording is proved by
+  `jarvis-desktop/tests/model-results.mjs`.
+
+**What it never does.** It starts no benchmark, loads no model, writes no row,
+raises no card and calls no model. Starting a run is the existing machinery
+described in section 205 (`jarvis_bench.start` / `start_suites`) or the
+"Benchmark on this PC" button, and the results appear here after the run.
+
+The route is PC-only and `GET`-only: a phone is refused 403 before the read
+(the same sentence as its neighbours), and `docs/ARCHITECTURE.md` §8 records
+that one-sided decision and why. `tools/check_parity.py` classifies the route
+`deliberate` with that reason.
 
 ## 161. Google Calendar, both ways: a private iCal link or a real Google sign-in over loopback (added 2026-10-28)
 
@@ -29687,12 +29972,52 @@ Nothing from a file can approve, spend or write.
 
 ### 163.6 Both apps
 
-**Desktop HUD** (`jarvis-desktop/src/jarvis_hud.html`, and the two byte-identical
-copies the base and the desktop carry): one hidden `<input type="file" accept>`,
-a drop handler for a file dragged onto the window, a paste handler for a file on
-the clipboard, a chip under the composer showing the name, the size and "Read on
-your PC", the refusal sentences, and the attachment on the newest message of the
-`send()` body. **No Rust**, no new command, no new window.
+**Desktop HUD and every chat window** (`jarvis-desktop/src/jarvis_hud.html`, and
+the two byte-identical copies the base and the desktop carry): one hidden
+`<input type="file" accept>`, a drop handler for files dragged onto the window, a
+paste handler for a file on the clipboard, a chip under the composer showing the
+name, the size and "Read on your PC", the refusal sentences, and the attachment
+on the newest message of the `send()` body. **No new command, no new window and
+no new route.** The one Rust line it needs is a WINDOW SETTING, not a route: the
+HUD and each chat window are built with `disable_drag_drop_handler()`
+(`lib.rs:924`, `chat_windows.rs:269`), because on Windows Tauri' s own drag-drop
+handler **replaces** WebView2' s and the page' s `drop` event then never sees
+`dataTransfer.files` - the listener existed and worked in a browser, but did
+nothing in the packaged window until 2026-11-09. **A drop carries a list, and one
+file goes with a question** (§163.1): the page attaches the first dropped file
+that passes those kind and cap checks (checked before a byte is read, as the
+picker does), and the
+chip adds "One file goes with a question, so the other N were not attached.";
+when nothing in the batch can be attached it adds "None of the N dropped files
+were attached." after the first file' s own refusal. A batch is therefore not
+refused because a bad file was dropped beside a good one, and a good file is
+never silently ignored. Nothing auto-sends: the file waits on the chip and Remove
+takes it away.
+
+**The Alt+Space bar has the same file door** (the owner's decision of
+2026-11-09, chosen on a clickable card: a dropped file must work in the small
+bar too, not only in the HUD and the chat windows). `index.html`/`main.js`:
+the bar highlights while a file is held over the window, takes a dropped file,
+checks the **same eight kinds and the same 2,500,000-byte cap BEFORE a byte is
+read**, and says the **same refusal sentences** and the same "Read on your
+PC." line as the HUD - `jarvis-desktop/tests/quickbar-attach.mjs` reads both
+files and pins the words to each other. A name chip with its own Remove sits
+beside the bar's other controls; **one file goes with a question**, so a second
+drop replaces the file already waiting, in the HUD's own "One file goes with a
+question, so ..." words. **Nothing auto-sends:** the file waits on the chip
+until Enter, Esc takes it away, and only the PC ever reads it, under the same
+`read_files_readonly` gate. The bar's chat is built in Rust rather than posted
+by the page, so the file rides **`stream_chat`'s own `attachment` argument**
+(`commands.rs`), and the body Rust builds is the HUD's own shape: `attachment:
+{name, mime, size, data}` on the newest user message, `has_file: true` at the
+top level. **No new route, no upload, no new command, no new permission** - the
+window's `dragDropEnabled: false` (`tauri.conf.json`, the `quickbar` entry) is
+already off, so a dropped file reaches the page. **Still NOT-TESTABLE at a
+desk:** a real Explorer drag onto the packaged window (that the Tauri runtime
+hands the drop over), and the chip's look with a real file name from the owner's
+PC; the page half is driven in a browser with a synthetic `File`, and the body
+it results in is asserted in Rust.
+
 
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
 with the same document list, plus an image wildcard only while the PC's
@@ -29725,7 +30050,21 @@ private. `backend/test_chat_log.py` opens the stored row and proves it holds onl
 the owner's words, and `backend/test_backup.py` decrypts the archived history and
 scans every archive member to prove no backup carries the file's body, its
 base64 or its name. The HUD half is `jarvis-desktop/tests/attach.mjs`, which
-pins the caps, the wording and the part shape.
+pins the caps, the wording, the part shape, the several-file rule (the first
+file that passes the kind and cap checks is the one attached, the rest are named
+as not attached, and a batch with nothing readable says so) and the window
+setting that lets the drop through at all - a source pin, because driving a real
+Explorer-to-window drag is NOT-TESTABLE at a desk.
+
+pins the caps, the wording and the part shape. The Alt+Space bar's half is
+`jarvis-desktop/tests/quickbar-attach.mjs`: the same kinds, cap and sentences
+read out of the HUD and compared with the bar's, the refusal before a read, the
+one-file rule and Remove, that nothing auto-sends, the request shape
+(`attachRide`), and that `stream_chat` carries `attachment` and builds the body
+with `has_file`; Rust's `commands::chat_attachment_tests` proves the body and
+the plain refusals. **A real Explorer drag is NOT-TESTABLE at a desk** - it needs
+the packaged app, the Tauri runtime handing the drop over, and the owner's own
+file.
 
 ---
 
@@ -31206,6 +31545,112 @@ failure/TOCTOU writing nothing, protected/hidden/symlink/`..` refusals, hidden
 cards, preview sentences and over-capture. It uses a fake gate and a temporary
 vault; the real desktop/phone cards are covered by the field check.
 
+### 170.11 Smart note creation: title, body, pin and date from ONE sentence (added 2026-11-09)
+
+The owner reported, 2026-11-09, having said:
+
+    create a new note called Workout Log, pin it, and add using todays date
+    that i used the punching bag
+
+and having got a note whose **title was the whole sentence** and whose body was
+empty. Measured on the tree before this change: the file was named
+`Workout Log, pin it, and add using todays date that i used the punching
+bag.md` and held nothing. The chat grammar in `jarvis_quick.py` took every word
+after "called" as the name.
+
+This section is that sentence read as the **four facts** it actually holds. It
+is local, deterministic code in `jarvis_quick.py` (no model, no network, no new
+route, no new tool). Both apps reach it through the one they already use:
+`POST /api/chat` -> `jarvis_quick.answer_turn()` -> `answer()` -> `match()`.
+
+**The four facts, and the words that carry them**
+
+| fact | read from |
+|---|---|
+| **title** | the words after `called`/`titled`/`named`, up to the first clause boundary: a comma, `with`/`saying`/`containing`, `and add`/`put`/`write`/`say`/`use`/`set`, a pin clause, or a date clause. A title's own `and` ("Salt and Pepper") and `on` ("Notes on Physics") are kept. |
+| **body** | after the title: `with X` / `containing X` / `saying X`, `add X` / `put X` / `write X` / `say X`, `that X`, or the words after the title's comma. A trailing `and pin it` or `using <date>` is taken back out, and `and put X in it` leaves X. |
+| **pin** | `pin it`, `pin this note`, `and pin it` anywhere in the sentence, before or after the body. `unpin it` in a CREATE writes nothing: a brand-new note is not pinned, so there is no pin to remove and none is pretended. |
+| **date** | `today`, `todays date`, `today's date`, `yesterday`, `tomorrow`, or an explicit date (`2026-11-03`, `3 November`, `November 3rd`, `12/11/2026`), normally after `using` / `dated` / `on` / `for`. Normalised to `YYYY-MM-DD`. An explicit date with **no year is THIS year** - a note records what a date was, unlike a reminder, which looks forward to the next time that day comes. |
+
+The parsing runs on the sentence the chat already normalises (lower case,
+spoken punctuation folded), and the owner's capital letters are restored for
+the title and body exactly as every other chat name is.
+
+**What is written.** A pin and/or a date become the new note's own front
+matter, in the same YAML shape `jarvis_notes_edit.py`'s `set_property` already
+writes (and Obsidian shows in the note's Properties panel). The owner's
+sentence above now writes `Workout Log.md` with exactly:
+
+```markdown
+---
+pinned: true
+date: 2026-11-09
+---
+i used the punching bag
+```
+
+With neither a pin nor a date, the request writes exactly the bytes it wrote
+before this change - no front matter - so every older shape keeps its answer.
+A body-only sentence ("write a note for me about the gym trip") is still a
+body-only note with its title drawn from the words, and `... called Shopping
+with milk and eggs` still has exactly `milk and eggs` as its body.
+
+**The permission model is UNCHANGED, on purpose.**
+
+- **A NEW note from chat is card-free**, the owner's decision of 2026-10-31
+  (Gemini round-3 ruling 2): additive, it cannot destroy content, it is
+  collision-refused (`409` before any card, and the write itself is `O_EXCL`),
+  and its undo receipt is recorded **before** the file exists. This change only
+  changes WHICH words become the title, the body and the two properties.
+- **Pinning or unpinning an EXISTING note is an EDIT**, so it keeps its ONE
+  `edit_vault_note` card, the File Guardian copy first and one Undo. It rides
+  the customize route's own `set_property` / `remove_property` action - no new
+  route, no new card, no second card. Pinning a note that is already pinned is
+  a `200 unchanged` with **no card**; unpinning a note that is not pinned says
+  so with no card. When the removed property was the note's ONLY property, the
+  empty `---`/`---` block is taken away too, so the note is byte-for-byte what
+  it was before it was pinned.
+- **The hidden lists / App lock rule is unchanged.** A new note is still
+  created card-free and its reply names no title and no date; pin/unpin is
+  refused with no card and no title.
+- **No bulk, no delete, no second note.** One sentence is one note. Several
+  notes in one request are still refused in words.
+
+**Both apps, backend-side.** Nothing about this reading is in either client:
+the phone's chat (`JarvisApi.chatCall`, `ChatHistory.requestBody`) and the
+desktop's both POST `/api/chat`, so both get the same note, the same pin, the
+same date and the same reply sentence. The desk's chat and the phone's chat
+were both driven through `answer_turn()` with their own body shapes in
+`backend/test_notes_smart_create.py`; the phone needs no rebuild for this.
+
+**What this does NOT do (said plainly).**
+
+- **The pin is a note property, not a screen.** Neither app has a "Pinned"
+  group, a pin button or pinned-first sorting yet; the property is visible and
+  searchable in Obsidian itself. A UI for it would be a separate feature on
+  BOTH apps (`docs/ARCHITECTURE.md` section 8).
+- A **standalone `pin it`** with no note named, after some earlier action, is
+  not matched: nothing here remembers which note that was. Name it ("pin my
+  Workout Log note").
+- A note's `date` property is not a calendar entry, a reminder or a daily note;
+  it records the day the note is about.
+- A "title" longer than 120 characters is not treated as a name: the older
+  grammar keeps that request.
+- The date is not put into the body as text; it is the note's own property.
+
+**Proven.** `backend/test_notes_smart_create.py` (83 checks) pins all of it on
+a temporary vault with a fake gate: the owner's exact sentence and its exact
+bytes, the card-free create and its undo receipt, a body-only control, an
+existing title's `and`/`on`, a trailing `yesterday` staying in the body, pin +
+add in one sentence, every date word above, pin/unpin of an existing note as
+exactly ONE `edit_vault_note` card (and no second card when nothing would
+change), the hidden-lists refusals, the collision, one note per request, both
+apps' chat bodies through `answer_turn()` (and the two `/api/notes` reads their
+Notes plate makes), the byte-identical twin and this section. Not tested here:
+the live PC (this is a repository change; the deploy is its own pass).
+
+The module's twin `jarvis-backend/jarvis_quick.py` is byte-identical.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
@@ -32297,6 +32742,18 @@ and takes ONE name - there is no list form anywhere.
    the same regex-over-raw-bytes scanner, the same limits - run before any card
    exists. A `.zip` is unpacked into a throwaway folder first (below) and its
    contents are scanned exactly as a folder's would be.
+
+   **The four shapes the base scanner does not cover run inside that same
+   `vet()` scan (wired 2026-11-09).** `jarvis_skill_hub`'s four checks - the
+   Hermes inline host-execution form `` !`command` ``, exfiltration said in
+   words, "the approval is already approved" claims, and the bare-URL warning -
+   are CALLED by `jarvis_skills.vet()` through `jarvis_skill_hub.extra_findings()`,
+   so the install card, the menu's preview, the pack door and a project skill all
+   judge the same shapes from the same regexes. Before this fix the four checks
+   existed and were tested but were called by NOTHING in production, so a Hermes
+   skill using the inline form installed as "clean". The report says
+   `extra_checks: 1`, or `0` when an older base has no hub beside it - the layer
+   did not run, said out loud rather than silently passed.
 2. **A refusal never becomes a card.** A `refuse` verdict is copied into
    `skills-quarantine\` with its report and returns `{"asked": false}`. This is
    the point of the whole module: the attack these rules exist for works by
@@ -32835,7 +33292,7 @@ same file, not a second file. The two new columns are added to an existing
 2026-11-02 keeps working; the progress table is created by the same
 `CREATE TABLE IF NOT EXISTS` script.
 
-**BOTH APPS, SAID PLAINLY.** The PC's Brain -> Work -> Goals plate is
+**BOTH APPS, SAID PLAINLY.** The PC's Brain -> Projects -> Goals plate is
 unchanged: it reads the same route, shows its plan and steps as before, and
 ignores the new fields. The phone's Reminders screen gets the third choice,
 **Goals**, in the follow-up PR on top of #1102's screen; until that lands the
@@ -35890,9 +36347,9 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 |---|---|---|
 | one piece | 1 MiB of raw bytes | about 1.37 MB of base64 and JSON, a third of the server's 4 MiB request-body cap (MAX_BODY), and the same number `import_history.py` already reads in |
 | a document | 50 MiB | the number the desktop reader already handles (`jarvis_documents.MAX_DOC_BYTES`), so nothing can be stored that Jarvis cannot open |
-| a Notion export | 250 MiB | it is stored and unpacked, never parsed as a document (`EXPORT_UNCOMPRESSED_MAX`) |
+| a Notion export | 4 GiB | it is stored and unpacked, never parsed as a document; the PC's unpacked ceiling is its own 4 GB check (`EXPORT_UNCOMPRESSED_MAX`), and the 250 MiB of 2026-11-05 was raised by the owner on 2026-11-09 |
 | uploads in flight | 3 | so a stolen token cannot keep a queue of half files |
-| staged in all | 512 MiB | the disk ceiling before anything is landed |
+| staged in all | 4 GiB | the disk ceiling before anything is landed; raised with the Notion cap so one full export can be staged |
 | an id's life | 30 minutes | one `finish`, then the id and its bytes are gone; a sweep on the next `begin` clears what a phone that died left |
 
 **Every way it refuses, in plain words.** At `begin`: no such folder on the list, an empty list, a damaged list, a name with a path or a reserved word in it, an extension outside the eight, a declared size over the cap, a fourth upload in flight, the staging quota, a protected destination and a "Protected from Jarvis" block. At `chunk`: an unknown or expired id, the card still waiting (409), the card denied (403), a piece out of turn (409), a piece over 1 MiB (413) and a piece past the declared size (413). At `finish`: bytes that do not match the name, an encrypted PDF, a zip bomb, zero bytes, a short upload, a sha256 that does not match, a destination that disappeared, a link where a folder should be, and a disk that will not take it (a sentence, never a stack trace).
@@ -36383,19 +36840,22 @@ OFF from Settings, chat or Live silences the answer already being spoken. (Befor
 this it was read at the start of each voice turn, so one OFF stopped only the
 next answer.) It is **PC-only**
 (`tools/check_parity.py` classifies it `deliberate`; ARCHITECTURE section 8):
-the route controls the desktop HUD's speakers for voice-turn answers, while the
+the route controls the desktop's speakers for voice-turn answers, while the
 phone has its own on-device remembered-answer switch and its own per-answer
 Read out loud, and never calls this route.
 
-What the two apps do with it: the desktop HUD speaks a **voice-turn** answer
-when the switch is ON; a **typed** answer is never spoken automatically on
-either app (the phone already worked this way). Every finished answer on the
+What the two apps do with it: the desktop's Jarvis bar speaks a **voice-turn**
+answer when the switch is ON; a **typed** answer is never spoken automatically
+on either app (the phone already worked this way). Every finished answer on the
 desktop keeps a "Read out loud" item in its own answer menu beside Right/Wrong,
-with a receipt; the phone has the same item in its message menu, reading that
+with a receipt; since TASK-51 (2026-11-09) that item - and the speaker beside
+an answer - reads in Jarvis's configured voice, with Pause / Resume beside it
+and a Stop that resets the player, and it stops at once on the OFF frame above
+(§208). The phone has the same item in its message menu, reading that
 answer through `/api/voice/say` under the existing lock rules. The
 `private-speech` rule still wins over the switch: a sensitive saved fact, a
-private tool and an answer about the owner's screen are never read aloud by the
-automatic path.
+private tool and an answer about the owner's screen are never read aloud by
+the automatic path.
 
 Chat and Jarvis Live own sentences (deterministic; no model, no card):
 "stop reading your replies out loud", "read your replies out loud",
@@ -36609,3 +37069,427 @@ appears that is not in the store, blocks the model entry point and the network,
 and uses a fake `jarvis_bench.start`/`start_suites` - no benchmark is started by
 the tests and no live lane is contacted.
 
+
+
+
+## 206. What's new in Jarvis: the Brain's Tutorials tab shows the recent-changes record (Task-50, Wave 12)
+
+One read, no card, no write: `GET /api/recent-changes` carries the generated
+`jarvis_recent_changes.py` module - the same bullets the chat's "what changed in
+your last update?" answer reads (section 158.2) - to the Brain's "What's new in
+Jarvis" pane. The route lives in `jarvis_brain_reads.py`
+(`RECENT_CHANGES_PATH`) and is installed by `brain-reads.patch`'s existing
+`install()` call, so it needs no patch of its own. It is behind the pairing token
+and the origin check like every other Brain read.
+
+| field | meaning |
+|---|---|
+| `ok` | true on a read that produced an answer |
+| `available` | true when the module is installed on this PC; `false` with `why` when it is not |
+| `version` | the `VERSION` beside the module, read at answer time, or `""` when this PC has none |
+| `bullets` | the module's own newest-first bullets, at most 20, each cut to 400 characters |
+| `empty_words` | the module's own `NO_RECORD_WORDS`, for a record that carries nothing |
+| `source` | `"jarvis_recent_changes.py"` |
+
+**It never invents a change.** A missing module answers `501` with
+`available: false` and the standard "run apply-patches.ps1" sentence; a module
+that raises answers `500` with a plain sentence; an empty record answers `200`
+with `bullets: []` and the module's own sentence, which the pane prints instead
+of a list. Nothing here reads the owner's data, so nothing is withheld: the
+changelog is already public. The read is bounded, so a runaway record cannot
+flood a window.
+
+**Where it is drawn.** Desktop only: Brain -> Tutorials and the FAQ, the "What's
+new in Jarvis" pane (`tutorials.rs` `get_recent_changes`, `src/tutorials.js`).
+Its one control, "Open Settings -> Updates", calls `open_fix_place` with
+`place: "updates"` - a navigation that opens Settings at its Updates card, under
+the same App lock as the tray. That card is also where the four-state update
+truth is read (Task-50): `update.rs`'s `Status.state` is `unknown` /
+`cannot_check` / `up_to_date` / `update_available`, with `checked_at` as the
+PC's own wall clock ("YYYY-MM-DD HH:MM"), and **both** the tray's report row
+("Up to date - checked 14:32") and the Updates card render that one field, so
+the menu and the card cannot disagree. `unknown` and `cannot_check` are said as
+themselves - a check that never ran, or could not answer, is never drawn as "the
+newest published".
+
+**The phone has no such pane, and that is one-sided on purpose**
+(`docs/ARCHITECTURE.md` section 8): the phone does not install or update Jarvis,
+so it has no Settings -> Updates to open and no install to describe; its
+Tutorials tab keeps the shared catalogue (section 114). `tools/check_parity.py`
+classifies the route `deliberate` with that reason.
+
+## 207. A Notion import may unpack to 4 GB, and every refusal names the real numbers (added 2026-11-09)
+
+The owner's report: Notion exported his workspace as a 276 MB `.zip`, and
+Settings, Folders Jarvis may look in refused it, saying the unzipped size was
+too large.
+
+**The door, traced rather than assumed.** The desktop Settings button is
+`import_notion` (`jarvis-desktop/src-tauri/src/folders.rs:188` on this branch's
+base, `2003bf30f`): it opens the Windows `.zip` picker and posts
+`{"zip", "into"}` to `POST /api/folders/import` (`folders.rs:37`). That route is
+`jarvis_documents.request_import` -> `import_notion`, and the cap it hit is
+`EXPORT_UNCOMPRESSED_MAX` (`backend/jarvis_documents.py:274` on that same base:
+250 MB), applied to the total the zip's own directory DECLARES by
+`zip_bomb_problem` (`jarvis_documents.py:856`), raised for the import at
+`jarvis_documents.py:2352`. The sentence shown was, in full:
+
+```
+Jarvis will not open that export: it unpacks to more than 250 MB (a zip-bomb guard)
+```
+
+That is "the unzipped size is too large", and it is the folder import, not the
+vault converter. The vault converter (`backend/jarvis_notion_obsidian.py`, the
+phone's and the plugin's door, `/api/notion/preview` and `/api/notion/import`)
+has its own declared ceiling, `MAX_ZIP_UNCOMPRESSED` (500 MB before this
+change), and it is not what refused this file.
+
+**The limits now.** Two numbers moved; every other guard is unchanged and still
+refuses:
+
+| limit | before | now | what it judges |
+| --- | --- | --- | --- |
+| `jarvis_documents.EXPORT_UNCOMPRESSED_MAX` | 250 MB | **4 GB** | the unpacked TOTAL an export's directory declares, before a byte is written |
+| `jarvis_documents.IMPORT_MAX_BYTES` | 1 GB | **4 GB** | the bytes really written, counted as they arrive (the backstop for a header that lies) |
+| `jarvis_notion_obsidian.MAX_ZIP_UNCOMPRESSED` | 500 MB | **4 GB** | the same declared total, at the vault door |
+| `jarvis_notion_obsidian.MAX_BYTES` | 1 GB | **4 GB** | the same counted bytes, at the vault door |
+| `IMPORT_MAX_ONE` / `MAX_ONE` | 200 MB | unchanged | one member, declared and then counted |
+| `IMPORT_MAX_FILES` / `MAX_FILES` | 20,000 | unchanged | members, declared then counted |
+| `IMPORT_MAX_ZIP` / `MAX_ZIP` | 2 GB | unchanged | the `.zip` file itself |
+| `MAX_ZIP_RATIO` (vault door) | 100:1 | unchanged | declared unpacked against compressed (a zip bomb's shape) |
+| `EXPORT_ROOM_FACTOR` (new) | - | **1.2** | free space the target drive must have, against the declared total |
+
+The counted cap moved WITH the declared one on purpose: a backstop that is
+tighter than the ceiling it backs up would refuse every honest export the
+declared check lets through, and would have moved the owner's refusal from
+"250 MB" to "1 GB" without fixing anything.
+
+**Every refusal names the real numbers.** `_size_words()` writes a byte count
+the way Windows shows it ("276 MB", "4 GB", "4.5 GB"), and the sentences now
+carry both sides of the comparison:
+
+```
+Jarvis will not open that export: it unpacks to more than 4 GB: it declares
+4.5 GB once unzipped (a zip-bomb guard)
+
+there is not enough free space on that drive: this export declares 3.2 GB once
+unzipped, so it needs 3.8 GB free (a fifth more, for the copy), and the drive
+has 1.1 GB free
+
+it unpacks to more than 4 GB: 4.0 GB has been written so far
+
+one file in it is larger than 200 MB
+```
+
+The free-space preflight is new (`jarvis_documents.disk_space_problem`, and the
+room is checked AGAIN for each Notion `Part-N.zip` inside the export, because a
+part's own contents are not in the outer archive's declared total). It measures
+the target drive with `shutil.disk_usage` BEFORE the first byte, and a drive
+that cannot be measured is never refused on a guess. If the disk fills anyway,
+the write's `ENOSPC` is its own refusal (not "a name too long") and the hidden
+staging folder is removed - a refused import leaves nothing behind, on every
+path.
+
+**It can be watched while it runs.** `import_notion(..., progress=callable)`
+reports `{"files", "bytes", "of_files", "of_bytes"}` as the bytes are really
+written (about twice a second, never once per member), and the same counts are
+readable meanwhile: `GET /api/folders` carries a new additive key,
+`"importing": {"files", "bytes", "of_files", "of_bytes"}` (`null` when no
+import is running; cleared on success and on every refusal). The desktop
+Settings page polls that read once a second while its import is in flight and
+shows the counts instead of one frozen sentence, and the window's own timeout
+for this command went from 600 s to 1800 s (`folders.rs:57`) because a 4 GB
+unpack is minutes. The phone needs no change for this: it reads the PC's own
+sentences, and no route, control, approval card or permission changed.
+
+**The phone sends the same export now (owner decision 2026-11-09).**
+`jarvis_upload.py`'s `MAX_NOTION_BYTES` is the RAW ZIP BYTES the phone sends
+over his private network; it was 250 MiB (the owner's 2026-11-05 number) and he
+raised it to **4 GiB** on 2026-11-09 so a 276 MB export sent from the phone is
+accepted like the PC's picker. The staging ceiling moved with it
+(`STAGING_MAX` 512 MiB -> 4 GiB), because a full-size export could not otherwise
+be staged at all; the unpacked check on the staged upload still follows the
+4 GB constant above. The phone streams the file in 1 MiB chunks straight from
+the provider, so the cap is a ceiling on the transfer, not on the phone's
+memory. `docs/ARCHITECTURE.md` section 8 records the numbers and their history.
+
+**What proves it** (`backend/test_documents.py`,
+`backend/test_notion_obsidian.py`; no 276 MB fixture is written): a synthetic
+zip whose own directory DECLARES 276 MB - a real small export with one skipped
+member's declared size rewritten - imports successfully (it is over the old
+250 MB ceiling and under the new 4 GB one); a declared total over 4 GB is still
+refused, with both numbers in the sentence; the ratio (100:1, a real
+highly-compressible archive), the 200 MB per-file cap, the 20,000-file cap and
+the 2 GB zip cap all still refuse; the free-space preflight is tested with a
+drive seam (1 MB free behind an 8 MB export) AND against the real drive; the
+progress callback and the live `importing` record are checked during and after
+an import, including after a refusal; and the phone's relay of the PC's
+sentence and its 4 GB raw-upload cap are pinned (raised 2026-11-09). `tools/gen_folders_cases.py`
+regenerated the two `folders-cases.json` copies for the additive `importing`
+key, and `backend/test_documents.py` checks they match the backend.
+
+**Not tested here:** a real 276 MB Notion export was not available, so the
+owner's file itself is the field test; and the desktop's progress line is
+proved by the JavaScript suite against a stubbed bridge, not by watching a
+real import in the packaged app.
+
+## 208. Read out loud in Jarvis's own voice, with Pause / Resume and a real Stop (2026-11-09)
+
+**The bug, as it stood, with the evidence.** The desktop HUD
+(`jarvis-desktop/src/jarvis_hud.html`) is the one window that reads a TYPED
+answer aloud. Its `voice.speak` did that with the webview's own speech engine:
+`speechSynthesis.speak(new SpeechSynthesisUtterance(...))` after selecting a
+voice by hand - `/en-GB/` plus a male name first, then any English voice, then
+`null` (the file's own comment said *"Match the Kokoro bm_george choice:
+British, male if one exists"*). That was never the voice Jarvis speaks in: the
+owner's configured voice is Kokoro's (`jarvis_voices.speaker()`; the shipped
+default is `af_heart`, a woman), the same voice a spoken answer and Jarvis Live
+use. WebView2 cannot produce a Kokoro voice at all - its list is Windows'
+SAPI voices - so the "any English voice" step was the first voice in that
+list, and the owner's report of 2026-11-08 names what it was on his PC: index
+0, `Microsoft David`, a man. The shell's own local-voices wrapper
+(`hud_bootstrap.js` section 2e) then chose `english[0] || mine[0]` when the page
+left the voice empty, which is the same first-in-list fallback a second time.
+Both code paths were read in the source; the NAME of the voice that came out
+is the owner's observation, not a measurement made here.
+
+**What it does now.** A tap on an answer's speaker, or "Read out loud" in its
+answer menu, plays **audio this PC made in the configured voice**, through the
+SAME Rust command a spoken answer uses: `speak_reply` -> `POST /api/voice/say`
+-> `jarvis_speech.say()` -> `jarvis_voices.speaker()` (or the owner's custom
+voice). The page never touches `speechSynthesis`, `SpeechSynthesisUtterance` or
+`getVoices`, so there is no index-0 and no male substitute to fall back to. A
+long answer is cut into pieces of at most 500 characters (`speechPieces`, the
+page's own pure function) and asked for one piece at a time, so it also fits the
+command's 30-second fetch budget; `speak_reply` caps one request at 4,000
+characters in CODE (`SAY_MAX_CHARS`), because the HUD is now a caller. Inside
+the shell the command holds the token; in a plain browser (the backend still
+serves this page at "/") the page asks the same route directly, so the voice is
+the same one either way - and the sound arrives as a `data:audio/wav` URI, never
+a blob or object URL (the HUD holds no file/blob road). **One thing had to
+change in the page's own policy for that to work, and it was found by
+measuring:** the page's `<meta>` CSP said `media-src 'self' blob:`, which
+refused every `data:` clip with `NotSupportedError` and a `media-src data`
+violation even though the shell's header CSP already allowed it; it now says
+`media-src 'self' data: blob:`, and `tests/hud-live-read-aloud.mjs` drives a
+real `data:` clip through both policies so this cannot silently come back.
+
+**Pause, Resume, Stop.** `pauseSpeechPlayback()` pauses the clip playing now
+where it is; `resumeSpeechPlayback()` carries on from there. Both are the page's
+own functions, reached through one window object (`window.__jarvisSpeech`), and
+their state is the player's (`idle | loading | playing | paused`).
+`stopSpeechPlayback()` is the full reset: it bumps the token (so a request or a
+clip still in flight is dropped instead of played), empties the queue, pauses
+and detaches the audio element, clears the line under the answer and settles the
+meter. It is called by the answer menu's **Stop reading**, by Stop everything
+(the page listens for the shell's `stop-everything` event, which
+`commands.rs::stop_everything_now` emits before it asks the PC to stop anything)
+and by the PC's **`read_aloud {enabled: false}`** frame - so the automatic
+switch's OFF is literal for a tapped read too, exactly as it is for the bar's
+queue (§201). The answer menu draws **Pause / Resume and Stop reading beside
+Read out loud**, only while THAT answer is the one being read, and Pause's label
+says what the next tap will do.
+
+**When the voice is unavailable, it is said - never substituted.** If the PC
+cannot make the sound (no Kokoro or custom voice, a 503, the command refused),
+the player stops and the page draws one fixed plain line under the answer:
+"Jarvis's voice could not read this aloud, so nothing was spoken." Nothing else
+is played: there is no browser-voice fallback anywhere in this path. That is the
+owner's 2026-11-08 rule, and it is pinned by a test.
+
+**The privacy rule is unchanged and still comes first.** The speaker is drawn
+only for an answer `private-speech.js`'s `mayReadAloud` allows, and both tap
+paths (`window.__jarvisReadAnswer` for the menu, the speaker's own click) ask
+the same rule for THAT answer's route before anything is requested - failing
+closed if the module cannot load. The shell's `speechSynthesis.speak` wrapper
+and its "It's on your screen." line stay as the guard for any speech-synthesis
+path that might return to that page.
+
+**One new permission, as narrow as it can be.** `capabilities/hud.json` pulls
+in ONE new set, `hud-speech`, which grants exactly `allow-speak-reply` - the
+voice command the Jarvis bar already holds. There is no microphone command, no
+recording command, no new route and no approval card in it, and
+`tools/check_invoke_grants.py` holds the page's one `speak_reply` call to that
+set (it fails if the grant is removed). The `voice` set stays the bar's.
+
+**What was NOT touched.** The phone. Its tap-only Read out loud already speaks
+with Android's own on-device synthesiser under its own lock rules; there is no
+WebView2 voice list to fall back through, and the PC's Kokoro voice cannot be
+shipped to it. In particular **the phone's voice-print / speaker-verification
+path is untouched**: `jarvis_voice.py`, the enrolment routes and every
+`voiceprint`-class command are exactly as they were on both apps, and no
+microphone, recording or verification code was edited for this slice. ARCHITECTURE
+section 8 records why this is desktop-only on purpose.
+
+**How it is held.** `jarvis-desktop/tests/hud-read-aloud-voice.mjs` (pure node,
+no browser) checks that the page has no browser-voice code left, that its one
+source of sound is the PC's voice route, that Pause/Resume/Stop exist and Stop
+resets everything, that the failure is said in one plain line, that Stop
+everything and `read_aloud OFF` both call the reset, that the privacy rule comes
+first, that the grant is the narrow set, and it lifts the real `speechPieces`
+out and runs it. `tests/hud-live-read-aloud.mjs` drives the real page: a speaker
+asks the PC for THAT answer's words (and never the browser engine), Pause becomes
+Resume and carries on, and the PC's `read_aloud {"enabled": false}` frame stops
+the clip and takes the items away. `voice.rs`'s `speech_text_tests` proves the
+4,000-character bound in characters. **NOT-TESTABLE here, said plainly:** the
+real WebView2 voice list, the real Kokoro audio coming out of the owner's
+speakers, and how a long answer sounds in his configured voice. Those need the
+owner at his PC; what is proved here is that the page cannot reach a browser
+voice and that the one path it does use is the one a spoken answer uses.
+
+## 209. A preset clicked in either app raises no card (2026-11-09)
+
+The owner's ask, in his own words: *"if i manually click and change the preset
+for jarvis, it shouldnt need a card"* and *"if i manually choose anything in the
+jarvis app or deskstop program, and its something that i can easily click and
+change back right away, it shouldnt need a card"*.
+
+**The rule.** A local focus preset picked in either app's own preset control
+applies at once, with no approval card. The preset it replaced is written into
+a receipt (`preset_apply` in `jarvis_receipts.py`), and the menu it was picked
+from puts the old preset one click away - that menu row is the everyday way
+back. The receipt is readable through `GET /api/receipts` and undoable through
+`POST /api/receipts/<receipt_id>/undo`; the apply's own answer carries its id
+as `receipt_id`, and `previous_preset` names what was replaced. Undo is
+registered only when the preset it replaced is itself a local one: if the row
+it replaced was Coding or Cloud, the receipt is still written, but Undo is not
+offered, because going back to either of those raises its own card and that
+menu row is the way back. (Receipts are routes only today - there is no
+separate receipts screen in either app - so the receipt is the machine record
+plus the Undo the existing route can run, not a new button.)
+
+**Why this is the owner's click and not the model's.** Both apps' preset
+controls call ONE route, `POST /api/work/apply` (`jarvis_presets.install()`,
+wired by `presets.patch` onto the HUD's `Handler`), and that route already
+demands the server's origin check and the pairing token before it reads the
+body. The model never posts to its own HTTP API: its path is in-process -
+`jarvis_model_knowledge.apply_preset` (the spoken "use the X preset" command),
+`jarvis_settings_registry.set_focus_preset` ("set the focus preset to X"), and
+`jarvis_quick`'s command path all call `jarvis_presets.apply_from_body`. That
+function is unchanged and still carded: it raises the existing
+`switch_model` card inside `jarvis_models.switch_to`. The uncarded road is a
+private call, `_apply_body(..., owner_ui=True)`, made by the route wrapper
+alone; there is no header, body field or query parameter that asks for it, and
+`[autonomy.tiers]` still says `switch_model = "ask"`.
+
+**The boundary - "easily click and change back right away" means all four:**
+the request is a paired app's screen, the change is one model switch on a lane
+that already exists, the preset it replaced is one click away in the same menu,
+and nothing is downloaded, installed, deleted or spent. Under that rule:
+
+* the nine local presets, except Coding, apply with no card;
+* **Coding keeps its card.** Its pooled three-card lane unloads both other lane
+  models and loads a 14.8 GB model for about half a minute; that is not a quick
+  click back, and the card is the warning before the first unload
+  (`jarvis_model_lanes.start_pooled_lane` raises it, unchanged);
+* **the Cloud row keeps its card.** It chooses where the owner's words go, and
+  its card is `change_own_config` (`jarvis_presets.apply_cloud`, unchanged);
+* **installs and downloads keep their cards.** `download_model` and
+  `/api/models/install` are untouched: a full-model install is not this case;
+* a preset asked for in chat or by voice keeps its card: that is the model's
+  path, and the owner did not click it.
+
+**What a failed apply does.** The receipt is written BEFORE the switch and
+removed again if the switch does not happen, so a refused or failed apply never
+leaves a receipt claiming a change. A failure after the switch rolls the model,
+the chat lane and the saved preset back exactly as before, and names only the
+restores it saw succeed (`restored` / `not_restored` in the answer).
+
+**Both apps.** The desktop chip, Settings -> Focus presets and the HUD Presets
+menu apply through `apply_focus_preset` (Rust) to the same route; the phone's
+Focus presets plate does the same through `JarvisApi.focusPresetApply`. So the
+rule is one-sided in neither app, and `tools/check_parity.py` is unaffected.
+The phone's own sentence says the same thing as the desktop's: a local preset
+switches at once, and Coding and Cloud still ask.
+
+**Proved by:** `backend/test_presets_owner_ui.py` - the route applies a local
+preset with zero `jarvis_gate.check()` calls and writes one undoable receipt;
+Undo puts the previous preset, model and lane back; `apply_from_body` (the
+model/chat road) raises exactly one `switch_model` card and writes no receipt;
+Coding still goes through its pooled lane's asking start; Cloud still raises
+`change_own_config`; no request field can ask for the uncarded road; and the
+shipped `jarvis_models.switch_to` still asks. `backend/test_presets_apply.py`
+keeps the carded path's rollback and refusal checks.
+
+## 210. The manual-click rule: one allow-list, and the model path still asks (2026-11-09)
+
+The owner's words, again: *"if i manually choose anything in the jarvis app or
+deskstop program, and its something that i can easily click and change back
+right away, it shouldnt need a card"*. Section 209 covers the first click that
+took that road (a local focus preset). This section covers the rule itself: the
+ONE allow-list every such click must be on, the ONE signal that makes a request
+a screen rather than a model, the reversible choices wired today, the settings
+that already needed no card, and the list that must always ask.
+
+**The allow-list.** `backend/jarvis_reversible_ui.py` (shipped whole, twin in
+the base) holds `REVERSIBLE_UI_CHOICES`, an explicit mapping of action name to
+the plain-words reason it is reversible and the ONE model/chat path that still
+raises a card for it. Two entries today:
+
+* `apply_preset` - a local, non-heavy preset; the uncarded road is
+  `POST /api/work/apply` -> `jarvis_presets.install()` ->
+  `_apply_body(..., owner_ui=True)`; the model path (`apply_from_body`, the
+  spoken and Settings setters) still raises `switch_model`. Section 209 is this
+  row in full.
+* `switch_model` - a model already installed on this PC, picked in either app's
+  own model list. The uncarded road is `POST /api/models/switch` ->
+  `jarvis_reversible_ui.install()` ->
+  `jarvis_presets.switch_model_for_the_owner` (one model record and one
+  tripwire, no card). The model path is `jarvis_quick` ->
+  `jarvis_model_knowledge.switch_model` -> `jarvis_models.switch_to(ref,
+  why="chat")`, whose `switch_model` card is unchanged; the tier table still
+  says `switch_model = "ask"`.
+
+`is_reversible_ui_choice(name)` is the only test, and it fails closed: a
+non-string, an empty name or an unknown action is not reversible.
+
+**The trusted-UI signal is the route, never a field.** `install()` wraps ONE
+path on the HUD's own Handler, after the same origin check and pairing-token
+check the HUD's own branch makes, and copies its answer shape exactly (`400`
+with no ref, `200` on success, `409` on a refusal). Every other path is
+forwarded untouched to the handler that already owned it. The model never posts
+to its own HTTP routes - a chat tool call reaches the modules in-process - so a
+request that arrives here came from a paired app's own control. Only `ref` and
+`why` are read from the body; `owner_ui`, `ui_direct`, `no_card` or any other
+invented field is not looked at, and no header or query parameter is read.
+
+**The boundary, in one line each:** reversible means one click back, already
+installed, nothing downloaded/installed/deleted, no spend, and no privacy or
+security downgrade. `REVERSIBLE_UI_CHOICES` therefore never contains: deleting
+or erasing a memory, `forget_range`, deleting a skill or model, reverting files;
+installing or editing a skill, plugin or model (`download_model`), applying
+self-code patches, running updates; turning Lockdown off, changing App Lock /
+Windows Hello, revealing a private list, storing a credential, raising a spend
+or safety cap; `github_create_repo`, sending email or messages, importing an
+external archive. Those names are listed with their reasons in
+`EXCLUDED_UI_ACTIONS`, the allow-list refuses them, and this change intercepts
+no route that reaches them.
+
+**The everyday settings, audited 2026-11-09 - most needed no change.**
+Already cardless on both roads, so they are not on the allow-list (there is no
+fence to claim): read-aloud; the built-in voice picker; the theme/face; to-do
+carry-over; the six PC notification switches. Already cardless when turned OFF
+and still carded when turned ON, deliberately, because ON gives Jarvis more
+reach: the Wi-Fi auto-reconnect, the three learning switches, phone
+notifications, watch notifications, and a skill turned back on (its scanner's
+`modify_own_code` card). Not wired, and said so in the module: the morning
+briefing's hour, whose setter lives in the live HUD this repository does not
+ship.
+
+**Both apps.** The desktop's Brain -> Model list and the phone's Brain -> Models
+plate already post `/api/models/switch`; nothing in either app asks for the
+uncarded road, and neither app needed a change. `tools/check_parity.py` is
+unaffected.
+
+**Proved by:** `backend/test_reversible_ui_choices.py` - for both allow-listed
+actions the trusted-UI route runs with zero `jarvis_gate.check()` calls and
+writes its normal record (a `preset_apply` receipt; the model state plus one
+switch-log entry and the tripwire); the same actions through the model path
+raise exactly one card, with `switch_model` driven through the REAL shipped
+`jarvis-backend/jarvis_models.py`; the excluded set is refused and its real code
+still asks (a download, `forget_range`, Lockdown off; source pins for the
+live-only modules); a body naming `owner_ui`/`ui_direct` is ignored in both
+directions, and no query or header is read; the tier table still says
+`switch_model = "ask"`; the module is in both SHIPPED lists and the two copies
+are byte-equal. `backend/test_presets_owner_ui.py` keeps section 209's own
+proof.

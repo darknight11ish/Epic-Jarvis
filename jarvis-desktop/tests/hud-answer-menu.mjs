@@ -130,10 +130,34 @@ check("the page's __jarvisReadAnswer hook asks the privacy rule for THAT answer"
     "the HUD page provides no per-answer read hook");
   assert.match(HTML, /answerMayBeSpoken\(said\.route\)/,
     "the hook does not ask private-speech.js for this answer's own route");
-  assert.match(HTML, /voice\.speak\(said\.text\)/,
-    "an allowed answer is not read through the page's one voice path");
+  // TASK-51 (2026-11-09): the hook hands the answer and its bubble to the
+  // page's one player, which asks the PC for the sound in Jarvis's configured
+  // voice. It used to call `voice.speak`, the webview's own engine - the wrong
+  // voice, and the fallback to Windows' index-0 `Microsoft David`.
+  assert.match(HTML, /return readAnswerAloud\(said\.text, bubble\);/,
+    "an allowed answer is not handed to the page's own player with its bubble");
+  assert.doesNotMatch(HTML, /voice\.speak\(said\.text\)/,
+    "the answer is still read through the webview's own voice");
   assert.match(HTML, /ok: false, why:[\s\S]{0,200}It'?s on your screen/,
     "a refused answer does not come back with the rule's own line as the receipt");
+});
+
+check("Pause / Resume and Stop reading sit beside Read out loud (TASK-51)", () => {
+  // The owner's decision of 2026-11-08: an inline Pause / Resume beside Read
+  // out loud, and a Stop that fully resets the page's player.
+  assert.match(SECTION, /pauseItem = item\("Pause"/);
+  assert.match(SECTION, /stopItem = item\("Stop reading"/);
+  assert.match(SECTION, /pauseItem\.textContent = now === "paused" \? "Resume" : "Pause";/,
+    "Pause does not say what the next tap will do");
+  assert.match(SECTION, /pauseItem\.hidden = !reading;/,
+    "Pause is drawn when nothing is being read");
+  assert.match(SECTION, /stopItem\.hidden = !reading;/);
+  assert.match(SECTION, /speechStateFor\(\)|speechStateHere\(\)/,
+    "the menu never reads the page's player state");
+  assert.match(SECTION, /window\.__jarvisSpeech/,
+    "the menu has no door to the page's only player");
+  // It holds no audio of its own: one player in the page, never a copy here.
+  assert.doesNotMatch(SECTION, /new Audio\(|createElement\("audio"\)/);
 });
 
 check("Copy answer confirms in place, and Right/Wrong do too", () => {

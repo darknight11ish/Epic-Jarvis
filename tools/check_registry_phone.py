@@ -334,6 +334,25 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"wifi-reconnect",',
     },
+    "brain.model.resources": {
+        "name": "Loaded now / Resources",
+        "why": ("What is loaded into Jarvis on the PC's own graphics cards, read from the PC "
+                "itself (each Ollama lane's /api/ps, nvidia-smi and the server process). The "
+                "phone has no view of the PC's cards or processes, so its generated catalogue "
+                "marks the card desktop-only (ARCHITECTURE section 8, JARVIS-API section 160.1)."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt",
+        "must_contain": 'Menu("brain.model.resources",',
+    },
+    "brain.model.measured": {
+        "name": "Measured results",
+        "why": ("The benchmark rows already measured on the PC's own cards and its own Ollama "
+                "lanes (the two stores JARVIS-API section 205 names). The phone can neither run "
+                "nor verify a benchmark, so it keeps no second, staler view; its generated "
+                "catalogue marks the card desktop-only (ARCHITECTURE section 8, JARVIS-API "
+                "section 160.2)."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt",
+        "must_contain": 'Menu("brain.model.measured",',
+    },
 }
 
 #: The menu ids the audit found on the phone while the registry called them

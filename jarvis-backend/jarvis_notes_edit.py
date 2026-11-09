@@ -2249,8 +2249,14 @@ def _property_edit(text: str, action: str, key: str, value: str):
             return text, f"That note has no \"{key_s}\" property.", {}, ""
         idx = hits[0]
         new_front = front[:idx] + front[idx + 1:]
-        fresh = opened + "".join(new_front) + "---" + eol + body
         preview = _preview(_line_body(front[idx]), "", note="the property removed")
+        if not new_front:
+            # The note's ONLY property (2026-11-09: "unpin my ... note"): take
+            # the whole front matter away rather than leave an empty "---/---"
+            # block behind, so the note is byte-for-byte what it was before
+            # the property was added.
+            return body, f'Removed the "{key_s}" property.', preview, ""
+        fresh = opened + "".join(new_front) + "---" + eol + body
         return fresh, f'Removed the "{key_s}" property.', preview, ""
     val = str(value or "").strip()
     if val.lower() in ("true", "false"):

@@ -2845,11 +2845,21 @@ $SHIPPED = @(
 'jarvis_product_capture.py'
 # Model/preset recommendations (2026-10-28, the owner's request): one cached
 # check of the public model catalogues, a bounded benchmark of an INSTALLED
-# model on this PC, and preset changes justified only by measured numbers. Five
+# model on this PC, and preset changes justified only by measured numbers. Seven
 # PC-only routes; approves, downloads and applies nothing (the existing
 # /api/models/install and /api/work/apply cards remain the only ways to act).
 # backend/_where.py's SHIPPED list has the same entry, at the end too.
 'jarvis_model_recommendations.py'
+# What is loaded right now, and what it costs (2026-11-09, the owner's ask):
+# the chat lane's model with its real context size and spill, the cards carrying
+# it, every card's free memory, and Jarvis's own RAM/CPU. A READ served by the
+# recommendation module's already-installed PC-only wrapper at
+# GET /api/models/resources; it loads nothing, switches nothing and writes
+# nothing. It also serves the Brain's "Measured results" card at
+# GET /api/models/measured, reading the speed runs and five-suite scorecards
+# `jarvis_bench` already stored and starting no run. Same position as its entry
+# in backend/_where.py's SHIPPED.
+'jarvis_model_resources.py'
 # A real two-way Google Calendar (2026-10-28, the owner chose "both at once"):
 # the private iCal link (read-only) or a Google sign-in over a LOOPBACK redirect
 # with PKCE and a checked state (read/write), one active at a time. Its routes
@@ -3140,6 +3150,15 @@ $SHIPPED = @(
     # attempt logged and reported. Its route is a drop-in plugin, so no patch.
     # The same entry, in the same position, is in backend/_where.py's SHIPPED.
     'jarvis_wifi.py'
+    # The manual-click rule's ONE allow-list (jarvis_reversible_ui.py,
+    # 2026-11-09; Gemini's Q2 ruling on the owner's "if i manually choose
+    # anything ... and its something that i can easily click and change back
+    # right away, it shouldnt need a card"). One explicit table of reversible
+    # choices, the ONE route the two apps' own model list already uses (the
+    # trusted-UI signal is the route, never a body/header field), and the
+    # honest audit of the everyday settings. Every model/chat path still asks.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED.
+    'jarvis_reversible_ui.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

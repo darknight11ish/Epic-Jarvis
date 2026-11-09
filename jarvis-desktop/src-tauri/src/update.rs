@@ -1,6 +1,21 @@
 //! Checking GitHub for a newer Jarvis Desktop, and never installing one on its
 //! own.
 //!
+//! ## Four states, and no invented "up to date"
+//!
+//! `Status::state` is one of `unknown`, `cannot_check`, `up_to_date` and
+//! `update_available`, computed by `state_of` from what a check actually
+//! recorded (Task-50, Wave 12). Before that, a fresh launch sent no version,
+//! no error and no time, and Settings drew that as "the newest published" - a
+//! claim no check had made. The rule now: `up_to_date` is reachable only after
+//! a check really asked the endpoint and got an answer; a failed check is
+//! `cannot_check`, carrying its reason; a build with no update key is
+//! `cannot_check` and never carries a time (it never asked); and no check yet
+//! is `unknown`. `Status::checked_at` is the owner's own wall clock at the
+//! moment the check finished ("YYYY-MM-DD HH:MM") - the tray row and the
+//! Settings card both print that same field, so the time is the check's, not
+//! the screen's.
+//!
 //! ## What this does and does not do
 //!
 //! It **checks**. It reports. It installs only when a person presses the
@@ -174,6 +189,27 @@ pub struct Status {
     /// there is nothing to install, so a card with no Install button has nothing
     /// to warn about.
     pub install_notice: Option<String>,
+    /// The four-state truth, computed by [`finish`] from the fields above and
+    /// never typed in by a screen: `"unknown"` (no check has run),
+    /// `"cannot_check"` (the last check could not answer, or this build cannot
+    /// check at all), `"up_to_date"` (a check ran and found nothing newer) or
+    /// `"update_available"` (`available` is `Some`).
+    ///
+    /// It exists because a fresh launch used to send `available: None,
+    /// error: None` and Settings drew that as "the newest published" - a claim
+    /// no check had made. The tray reads this same field, so the menu row and
+    /// the card cannot hold different views of the same fact.
+    #[serde(default)]
+    pub state: String,
+    /// When the last check COMPLETED - success or failure - as the owner's own
+    /// wall clock, `"YYYY-MM-DD HH:MM"`, read from the OS at that moment.
+    ///
+    /// `None` means no check has run since this process started, and is the
+    /// only honest answer before one has: a time beside a state no check
+    /// produced would be a made-up time. A build with no update key never
+    /// checks, so it never carries one either.
+    #[serde(default)]
+    pub checked_at: Option<String>,
 }
 
 /// How far a download has gotten. Sent while `install_update` is in flight —
@@ -247,12 +283,124 @@ fn version(app: &AppHandle) -> String {
 }
 
 fn base(app: &AppHandle) -> Status {
-    Status {
+    finish(Status {
         current: version(app),
         supported: configured(app),
         check_on_start: check_on_start(app),
         ..Status::default()
+    })
+}
+
+/// The owner's wall clock at the moment it is called, `"YYYY-MM-DD HH:MM"`.
+///
+/// Read from the OS, not computed from an epoch: this is the time the owner
+/// read off their own clock, and a UTC figure would be an hour or more out for
+/// most of the year on this PC. Off Windows there is no local-time call here,
+/// so the figure is UTC - the updater's real target is Windows, and the one
+/// place this is drawn (Settings, the tray) is a Windows surface.
+fn local_stamp() -> String {
+    match local_clock() {
+        Some((y, m, d, h, min)) => format!("{y:04}-{m:02}-{d:02} {h:02}:{min:02}"),
+        // A clock that cannot be read must not become a made-up time. The
+        // empty string says "no time to show" to every caller, and the state
+        // still says what the check found.
+        None => String::new(),
     }
+}
+
+/// The OS's local date, `"YYYY-MM-DD"`, for deciding whether a checked stamp
+/// is today's. `None` when the clock cannot be read - the tray then prints the
+/// full stamp instead of guessing that an old check happened today.
+pub(crate) fn local_day() -> Option<String> {
+    local_clock().map(|(y, m, d, _, _)| format!("{y:04}-{m:02}-{d:02}"))
+}
+
+#[cfg(windows)]
+fn local_clock() -> Option<(u16, u16, u16, u16, u16)> {
+    use windows_sys::Win32::Foundation::SYSTEMTIME;
+    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+    // SAFETY: `SYSTEMTIME` is a plain struct of `u16`s, so all-zero is a valid
+    // value - which is the function's only requirement. `GetLocalTime` returns
+    // nothing and cannot fail.
+    let mut now: SYSTEMTIME = unsafe { std::mem::zeroed() };
+    unsafe { GetLocalTime(&mut now) };
+    if now.wYear == 0 {
+        return None;
+    }
+    Some((now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute))
+}
+
+#[cfg(not(windows))]
+fn local_clock() -> Option<(u16, u16, u16, u16, u16)> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as i64;
+    let days = secs.div_euclid(86_400);
+    let rem = secs.rem_euclid(86_400);
+    // Civil-from-days (Howard Hinnant's algorithm), the standard conversion
+    // from a Unix day count to a calendar date - no dependency needed for the
+    // one line this file draws.
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    Some((
+        y as u16,
+        m as u16,
+        d as u16,
+        (rem / 3_600) as u16,
+        ((rem % 3_600) / 60) as u16,
+    ))
+}
+
+/// The four-state truth, computed in ONE place from what a check actually set.
+///
+/// Public to this crate so the tray and the tests read the same rule Settings
+/// is sent: a second implementation in JavaScript or in `tray.rs` is how the
+/// menu row and the card would end up disagreeing about the same fact.
+///
+/// The order is deliberate. An update that IS known wins over everything: it is
+/// the one state the owner can act on. Then a failure, because "we could not
+/// tell" must never be drawn as "nothing to do". Then a build that can never
+/// check, which is a failure that keeps being true. Only a successful check
+/// with nothing newer is `up_to_date`, and only a successful check carries a
+/// time - there is no fifth "probably fine".
+pub(crate) fn state_of(
+    available: Option<&str>,
+    error: Option<&str>,
+    supported: bool,
+    checked_at: Option<&str>,
+) -> &'static str {
+    if available.is_some() {
+        return "update_available";
+    }
+    if error.is_some() || !supported {
+        return "cannot_check";
+    }
+    // `Some` - even an unreadable clock's empty string - means a check really
+    // finished. Only `None` (no check since launch) is `unknown`.
+    if checked_at.is_some() {
+        return "up_to_date";
+    }
+    "unknown"
+}
+
+/// [`state_of`] over a whole `Status`, so a caller cannot pass the fields in
+/// the wrong order or forget one.
+fn finish(mut status: Status) -> Status {
+    status.state = state_of(
+        status.available.as_deref(),
+        status.error.as_deref(),
+        status.supported,
+        status.checked_at.as_deref(),
+    )
+    .to_string();
+    status
 }
 
 /// Asks the endpoint whether there is anything newer. Downloads nothing.
@@ -264,14 +412,19 @@ pub async fn look(app: &AppHandle) -> Status {
              not try. Install a signed release to enable updates."
                 .to_string(),
         );
-        return status;
+        // NO checked_at here on purpose: this build never asked anything, so a
+        // time would say a check happened that did not.
+        return finish(status);
     }
 
     let updater = match app.updater_builder().timeout(CHECK_TIMEOUT).build() {
         Ok(updater) => updater,
         Err(err) => {
+            // The check was attempted and failed before it left this PC; that
+            // is a failure to report, and it is not a made-up "up to date".
+            status.checked_at = Some(local_stamp());
             status.error = Some(format!("the updater could not start: {err}"));
-            return status;
+            return finish(status);
         }
     };
 
@@ -292,7 +445,10 @@ pub async fn look(app: &AppHandle) -> Status {
             status.error = Some(friendly(&err.to_string()));
         }
     }
-    status
+    // Every ending that got this far really did ask the endpoint: that moment
+    // is what "checked HH:MM" means, whichever way the answer went.
+    status.checked_at = Some(local_stamp());
+    finish(status)
 }
 
 /// The pre-click sentence, or `None` when there is no Install control to show.
@@ -357,12 +513,26 @@ pub fn available_version(app: &AppHandle) -> Option<String> {
         .and_then(|status| status.available)
 }
 
+/// The whole answer for the tray's own status row: the cache when a check has
+/// answered, or the fresh-launch one before that.
+///
+/// `base()` is not a made-up status - it carries the running version, whether
+/// this build can check at all, and `checked_at: None`, which `state_of` reads
+/// as `unknown` (or `cannot_check` for a build with no update key). That is
+/// exactly what the row should say at launch, and it is why this returns a
+/// `Status` rather than an `Option` a caller might mistake for an answer.
+pub(crate) fn last_status(app: &AppHandle) -> Status {
+    app.state::<UpdateState>()
+        .get()
+        .unwrap_or_else(|| base(app))
+}
+
 /// Checks now, because someone pressed Check.
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Status {
     let status = look(&app).await;
     app.state::<UpdateState>().put(status.clone());
-    crate::tray::on_update_status(&app, status.available.as_deref());
+    crate::tray::on_update_status(&app, &status);
     say_available_in_hud(&app, status.available.as_deref());
     let _ = app.emit(crate::events::UPDATE_STATUS, status.clone());
     status
@@ -2015,7 +2185,7 @@ pub fn spawn_startup_check(app: &AppHandle) {
                 &format!("Version {version} is ready to install from Settings. {INSTALL_CLOSES_AND_RESTARTS}"),
             );
         }
-        crate::tray::on_update_status(&handle, status.available.as_deref());
+        crate::tray::on_update_status(&handle, &status);
         let _ = handle.emit(crate::events::UPDATE_STATUS, status);
     });
 }
@@ -2024,12 +2194,126 @@ pub fn spawn_startup_check(app: &AppHandle) {
 mod tests {
     use super::{
         both_updated, chat_facts, claim_update_both, clear_pending, desktop_half_allowed,
-        desktop_half_trace, ending_words, friendly, install_notice_for, is_update_card,
-        mark_launched, read_pending, reconcile, same_version, step_starting, write_pending,
-        BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf, PendingDesktopInstall, Status,
-        Step, BEFORE_INSTALLER, DESKTOP_HALF, DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL,
-        INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE, STEP_BACKEND, STEP_DESKTOP,
+        desktop_half_trace, ending_words, finish, friendly, install_notice_for, is_update_card,
+        local_stamp, mark_launched, read_pending, reconcile, same_version, state_of, step_starting,
+        write_pending, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
+        PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
+        DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL, INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE,
+        STEP_BACKEND, STEP_DESKTOP,
     };
+
+    // ---- the four-state truth (Task-50, Wave 12) ---------------------------
+
+    /// A Status built the way `look()` builds one, then finished the one way
+    /// every surface gets it.
+    fn checked(
+        available: Option<&str>,
+        error: Option<&str>,
+        supported: bool,
+        at: Option<&str>,
+    ) -> Status {
+        finish(Status {
+            current: "0.2.320".to_string(),
+            available: available.map(str::to_string),
+            error: error.map(str::to_string),
+            supported,
+            checked_at: at.map(str::to_string),
+            ..Status::default()
+        })
+    }
+
+    #[test]
+    fn a_fresh_launch_is_unknown_and_never_up_to_date() {
+        let status = checked(None, None, true, None);
+        assert_eq!(status.state, "unknown");
+        assert!(status.checked_at.is_none());
+        // The old bug in one line: `available: None, error: None` used to be
+        // drawn as "the newest published" with no check behind it.
+        assert_ne!(status.state, "up_to_date");
+    }
+
+    #[test]
+    fn a_successful_check_with_nothing_newer_is_up_to_date_with_its_time() {
+        let status = checked(None, None, true, Some("2026-11-09 02:14"));
+        assert_eq!(status.state, "up_to_date");
+        assert_eq!(status.checked_at.as_deref(), Some("2026-11-09 02:14"));
+    }
+
+    #[test]
+    fn a_found_update_is_update_available() {
+        let status = checked(Some("0.2.400"), None, true, Some("2026-11-09 02:14"));
+        assert_eq!(status.state, "update_available");
+    }
+
+    #[test]
+    fn a_failed_check_is_cannot_check_and_keeps_the_reason() {
+        let status = checked(
+            None,
+            Some("Could not reach the release endpoint"),
+            true,
+            Some("2026-11-09 02:14"),
+        );
+        assert_eq!(status.state, "cannot_check");
+        assert!(status.error.unwrap().contains("Could not reach"));
+        // It did ask, so the time is real and stays.
+        assert_eq!(status.checked_at.as_deref(), Some("2026-11-09 02:14"));
+    }
+
+    #[test]
+    fn a_build_that_cannot_check_says_so_and_never_claims_a_time() {
+        let status = checked(None, Some("This build has no update key"), false, None);
+        assert_eq!(status.state, "cannot_check");
+        assert!(
+            status.checked_at.is_none(),
+            "a build that never asked carried a checked time"
+        );
+    }
+
+    #[test]
+    fn the_state_is_derived_not_copied() {
+        // A Status that arrives with a wrong state (an older cached answer, a
+        // fixture) is recomputed from the facts before any screen sees it.
+        let mut status = checked(None, None, true, None);
+        status.state = "up_to_date".to_string();
+        assert_eq!(finish(status).state, "unknown");
+    }
+
+    #[test]
+    fn a_finished_check_with_an_unreadable_clock_is_still_up_to_date() {
+        // `Some("")` is what `local_stamp()` writes when the OS clock cannot be
+        // read: the check DID happen, so the state is the good one and only the
+        // time is missing. `None` is the only "no check" answer.
+        assert_eq!(state_of(None, None, true, Some("")), "up_to_date");
+        assert_eq!(state_of(None, None, true, Some("   ")), "up_to_date");
+        assert_eq!(state_of(None, None, true, None), "unknown");
+    }
+
+    #[test]
+    fn an_update_outranks_a_half_read() {
+        // A known update is the one thing the owner can act on; nothing may
+        // hide it behind "cannot check".
+        assert_eq!(
+            state_of(Some("0.2.400"), Some("boom"), true, None),
+            "update_available"
+        );
+    }
+
+    #[test]
+    fn the_stamp_is_a_real_wall_clock_string() {
+        let stamp = local_stamp();
+        assert_eq!(stamp.len(), 16, "not YYYY-MM-DD HH:MM: {stamp:?}");
+        let at: Vec<char> = stamp.chars().collect();
+        assert_eq!(
+            (at[4], at[7], at[10], at[13]),
+            ('-', '-', ' ', ':'),
+            "{stamp}"
+        );
+        let hour: u32 = stamp[11..13].parse().expect("hour");
+        let minute: u32 = stamp[14..16].parse().expect("minute");
+        assert!(hour < 24 && minute < 60, "{stamp}");
+        // A zero epoch would be exactly the invented time this module refuses.
+        assert_ne!(stamp, "1970-01-01 00:00");
+    }
 
     // ---- what the chat answers read (2026-10-26) --------------------------
 

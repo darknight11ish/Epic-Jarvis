@@ -280,8 +280,18 @@ class FindAnythingTest {
             // there is no phone place to add. It is still a name the catalogue
             // carries, so the count moves with it - the same reason the three
             // desktop-only rows above moved it.
+            //
+            // 133 -> 135 (2026-11-09, the model-truth lane): TWO cards joined
+            // the desktop's Brain, Model pane - `brain.model.resources` (what is
+            // loaded on the PC's own graphics cards right now) and
+            // `brain.model.measured` (the benchmark rows already stored by
+            // `jarvis_bench`). Both are DESKTOP ONLY because they are measured
+            // from the PC itself, so `phone` is false and there is no phone place
+            // to add; the catalogue still carries both names so the finder can
+            // say "only in Jarvis on your PC" for them, which is the same reason
+            // `settings.skills-menu` and `settings.wifi-reconnect` moved it.
             "the catalogue must still carry the names at all",
-            133,
+            135,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

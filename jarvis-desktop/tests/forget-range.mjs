@@ -115,7 +115,8 @@ await check("every real answer reads", async () => {
   assert.equal(fresh.available, true);
   assert.equal(fresh.waiting, false);
   assert.equal(fresh.undo, null);
-  assert.equal(fresh.maxItems, 200);
+  assert.equal(fresh.largeWipeItems, 200);
+  assert.equal(fresh.largeWipe, false);
   assert.deepEqual(fresh.presets.map((p) => p.id), PRESETS.map((p) => p.id));
   assert.equal(readStatus(C.status_waiting.body).waiting, true);
   const undo = readStatus(C.status_undo.body).undo;
@@ -138,9 +139,16 @@ await check("every real answer reads", async () => {
   assert.equal(p.facts[1].betweenUs, true);
   assert.deepEqual(p.chats.map((c) => [c.title, c.spills]),
     [["Help me write a poem", true], ["Plan the trip to Rome", false]]);
-  const many = readPreview(C.preview_too_many.body);
-  assert.equal(many.tooMany, true);
-  assert.equal(many.facts.length, 0);
+  // No item cap (the owner's 2026-11-08 ruling): the list is FULL even past
+  // the old 200; `largeWipe` only says the selection is big enough to be called
+  // that, and the PC's own words say a second yes will be asked for.
+  const many = readPreview(C.preview_large_wipe.body);
+  assert.equal(many.largeWipe, true);
+  assert.equal(many.largeWipeItems, 200);
+  assert.equal(many.facts.length, C.preview_large_wipe.body.facts.length);
+  assert.ok(many.largeWords.includes("large wipe"));
+  assert.ok(many.largeWords.includes("say yes a second time"));
+  assert.equal(many.facts.length > 200, true);
   assert.equal(readPreview(C.preview_empty.body).empty, true);
 
   const ticked = allTicked(p);
@@ -182,7 +190,10 @@ await check("the extended answers read: pinned kept, the estimate, the held seco
   const held = readStatus(C.status_confirm.body);
   assert.equal(held.waiting, false);
   assert.deepEqual(held.confirm,
-    { id: "hold-id", expiresIn: 120, text: EXTRA.confirm_text });
+    { id: "hold-id", expiresIn: 120, text: EXTRA.confirm_text,
+      // No item cap (2026-11-08): these say only whether the selection is a
+      // large wipe; the PC's own `text` above is what both apps show.
+      largeWipe: false, largeWords: "" });
   assert.equal(held.confirm.text, CASES.confirm_words.text);
   assert.deepEqual(confirmBody(held.confirm.id), { id: "hold-id", yes: true });
   assert.equal(JSON.stringify(confirmBody(held.confirm.id)),
@@ -631,17 +642,23 @@ await check("typed dates: the custom choice sends the two dates", async () => {
     kinds: ["chats"] });
 });
 
-await check("too many, and nothing then: said, and no list", async () => {
-  const page = await historyTab({ preview: C.preview_too_many.body });
-  await showList(page);
-  const text = await page.locator("#forget-range").innerText();
-  const items = await page.locator("#forget-range .fr-item").count();
-  const go = await page.locator("#forget-range-go").count();
-  await page.close();
-  assert.match(text, /more than 200 at once\. Choose fewer days\./);
-  assert.equal(items, 0);
-  assert.equal(go, 0);
-});
+await check("a large wipe: the FULL list, its warning, and Forget these - never a refusal",
+  async () => {
+    const page = await historyTab({ preview: C.preview_large_wipe.body });
+    await showList(page);
+    const text = await page.locator("#forget-range").innerText();
+    const items = await page.locator("#forget-range .fr-item").count();
+    const count = C.preview_large_wipe.body.facts.length;
+    const go = await page.locator("#forget-range-go").count();
+    const label = await page.locator("#forget-range-go").innerText();
+    await page.close();
+    assert.match(text, /large wipe/);
+    assert.match(text, /say yes a second time/);
+    assert.equal(items, count, "the whole selection is listed - there is no cap");
+    assert.equal(count > 200, true, "the fixture is past the old 200");
+    assert.equal(go, 1, "a large wipe is still offered in one action");
+    assert.equal(label, `Forget these (${count})`);
+  });
 
 await check("hidden with the private lists: counts and Show only", async () => {
   const page = await historyTab({ hidden: true });

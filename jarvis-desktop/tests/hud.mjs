@@ -3181,7 +3181,13 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   assert.deepEqual(cap.permissions,
     ["core:app:default", "core:event:allow-listen", "core:event:allow-unlisten",
       "core:path:default", "core:webview:default", "core:window:default",
-      "core:webview:allow-set-webview-zoom", "hud-voice", "hud-link",
+      "core:webview:allow-set-webview-zoom", "hud-voice",
+      // TASK-51 (2026-11-09): ONE command from the voice area, `speak_reply` -
+      // the bar's own - so Read out loud plays the PC's configured Jarvis
+      // voice instead of the webview's list (which the owner heard fall back
+      // to Windows' index-0 `Microsoft David`). No microphone and no
+      // recording command in this set; `voice` stays the quickbar's.
+      "hud-speech", "hud-link",
       // The settings gear the OWNER ASKED FOR on this window (2026-10-10,
       // question 2 of docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the same
       // navigation-only `open_fix_place` the bar's gear and the widget's gear

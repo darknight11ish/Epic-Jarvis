@@ -1773,7 +1773,54 @@ if (secDom.hello) {
    through this file that installs without one — `check_for_update` and
    `install_update` are separate commands in Rust for the same reason, so that
    no later edit can turn a check into an install by passing a flag.
+
+   THE FOUR STATES (Task-50, Wave 12). `update.rs`'s `Status.state` is one of
+   `unknown`, `cannot_check`, `up_to_date` and `update_available`, computed
+   there from what a check actually recorded, and this file only renders it.
+   The card used to say "Version X — the newest published" whenever
+   `available` was null — including on a fresh launch where no check had run
+   at all, so the screen claimed something it could not know. Now:
+     * `unknown`          — no check yet: say so and offer Check;
+     * `cannot_check`     — say it failed, with the reason the PC gave;
+     * `up_to_date`       — only after a check answered, with its time;
+     * `update_available` — the version, and its time.
+   `checked_at` is the PC's own wall clock ("YYYY-MM-DD HH:MM"), written at the
+   moment a check finished — never a time this page made up.
    ========================================================================== */
+
+/** The four words `update.rs` sends, in one list. */
+const UPDATE_STATES = ["unknown", "cannot_check", "up_to_date", "update_available"];
+
+/**
+ * The state of one status, from the PC's own field.
+ *
+ * The field is authoritative: `update.rs` computes it in one place so this
+ * page cannot disagree with the tray. The fallback below is only for a status
+ * that arrived WITHOUT one (an old cached answer, or a test double) — and it
+ * errs toward "unknown", because a missing field is not a licence to say
+ * "up to date". `up_to_date` needs a real checked time behind it.
+ */
+function updateStateOf(status) {
+  if (!status) return "unknown";
+  // A version that is known to exist IS an available update, whatever a stale
+  // field says - the same precedence `update.rs`'s `state_of` uses.
+  if (status.available) return "update_available";
+  const given = String(status.state || "");
+  if (UPDATE_STATES.includes(given)) return given;
+  if (status.error || status.supported === false) return "cannot_check";
+  return String(status.checked_at || "").trim() ? "up_to_date" : "unknown";
+}
+
+/** "14:32" for a check today, "2026-11-08 09:05" for an older one. */
+function checkedWords(checkedAt, now = new Date()) {
+  const stamp = String(checkedAt || "").trim();
+  if (!stamp) return "";
+  const [day, time] = stamp.split(" ");
+  if (!time) return stamp;
+  const pad = (n) => String(n).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return day === today ? time : `${day} ${time}`;
+}
 
 function paintUpdate(status) {
   if (!status) return;
@@ -1805,18 +1852,39 @@ function paintUpdate(status) {
   }
 
   dom.updateCheck.disabled = false;
-  if (status.available) {
+  const state = updateStateOf(status);
+  const when = checkedWords(status.checked_at);
+  // The time is said only when a check really ran. `up_to_date` without one
+  // cannot happen on the PC (Rust computes both), but if a status ever
+  // arrives that way this page must not invent the time either.
+  const checked = when ? ` Last checked ${when}.` : "";
+
+  if (state === "update_available" && status.available) {
     dom.updateState.textContent =
       `Version ${status.available} is available. You are running ${status.current}` +
-      (status.date ? ` · published ${status.date}` : "") + ".";
+      (status.date ? ` · published ${status.date}` : "") + "." + checked;
     dom.updateInstall.hidden = false;
     dom.updateInstall.textContent = `Install ${status.available}`;
-  } else {
-    dom.updateInstall.hidden = true;
-    dom.updateState.textContent = status.error
-      ? `Version ${status.current}. ${status.error}`
-      : `Version ${status.current} — the newest published.`;
+    return;
   }
+  dom.updateInstall.hidden = true;
+  if (state === "cannot_check") {
+    dom.updateState.textContent = status.error
+      ? `Version ${status.current}. ${status.error}${checked}`
+      : `Version ${status.current}. The last check could not run, so whether ` +
+        `this is the newest is unknown.` + checked;
+    return;
+  }
+  if (state === "up_to_date") {
+    dom.updateState.textContent =
+      `Version ${status.current} — the newest published.` + checked;
+    return;
+  }
+  // `unknown`: no check has run, so the card says exactly that instead of
+  // claiming this build is the newest.
+  dom.updateState.textContent =
+    `Version ${status.current}. Not checked yet — press Check now to compare ` +
+    `with the newest release.`;
 }
 
 async function loadUpdate() {

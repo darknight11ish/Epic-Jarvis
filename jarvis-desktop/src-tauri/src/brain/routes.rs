@@ -31,6 +31,17 @@ const READ_ROUTES: &[(&str, &str)] = &[
     // that asks for a fresh one (`brain_model_recommend`), because a read grant
     // must never be able to start a network lookup.
     ("model_recommendations", "/api/models/recommendations"),
+    // The Brain Model pane's "Loaded now / Resources" plate (2026-11-09):
+    // what is loaded right now, its context size, its spill, the cards
+    // carrying it, each card's free memory, and Jarvis's own RAM/CPU.
+    // A READ of the PC's own lanes and nvidia-smi: it loads nothing,
+    // switches nothing and raises no card.
+    ("model_resources", "/api/models/resources"),
+    // The Brain Model pane's "Measured results" card (2026-11-09): the speed
+    // runs and five-suite scorecards ALREADY stored by the benchmark (the two
+    // stores docs/JARVIS-API.md section 205 uses). A READ of the stored rows:
+    // it measures nothing, loads nothing and starts no run.
+    ("model_measured", "/api/models/measured"),
     ("compute", "/api/compute"),
     ("skills", "/api/skills"),
     ("jobs", "/api/jobs"),

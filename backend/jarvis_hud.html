@@ -21,7 +21,16 @@
      webview (no manifest is fetched there - the Tauri window is not a tab). -->
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0a1119">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<!-- media-src carries `data:` because a tapped Read out loud plays a clip this
+     PC made in the configured voice (`speak_reply` answers with a
+     `data:audio/wav` URI; TASK-51, 2026-11-09). Measured, not assumed: with
+     `media-src 'self' blob:` alone, Chromium refuses the clip with
+     NotSupportedError and logs `media-src data` - the header CSP already
+     allows `data:`, and this page's own policy is the second one enforced, so
+     without it the player could never play what the PC made.
+     tests/hud-read-aloud-voice.mjs pins this, and tests/hud-live-read-aloud.mjs
+     drives a real data: clip through this policy. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:* http://localhost:*; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
 <!-- Self-hosted, and this page's own <meta> CSP is not the only one that
      matters: Tauri serves the app's `app.security.csp` as a response HEADER on
      every .html asset, and BOTH policies are enforced. The header has no https
@@ -1465,6 +1474,19 @@ html[data-hud-shell="single-stage-bento"] .history-bar{
    the one rule this icon adds: size, colour, hover and the Studio shrink are
    the shared `.rail-toolbar-btn` rules above. */
 .rail-toolbar #rail-faces{flex:0 1 auto;}
+
+/* The Galaxy map's door (2026-11-09) carries the owner's whole sentence as its
+   word, so it takes a row of its own in the 212px rail and wraps there instead
+   of squeezing the three labelled buttons beside it. Wrapping changes nothing
+   while the shorter buttons still fit - the shared rule above already wraps
+   the row when they do not. */
+.rail-toolbar #rail-galaxy-map{flex:1 1 100%;}
+.rail-toolbar #rail-galaxy-map .rt-label{white-space:normal; line-height:1.3;}
+/* The Studio shell turns this bar into a 42px COLUMN, where "100%" would be
+   the column's height rather than its width - so there the button keeps the
+   shared 42x38 icon box instead. The id keeps this rule ahead of the shell's
+   .rail-toolbar-btn rule above. */
+html[data-hud-shell="split-stage"] .rail-toolbar #rail-galaxy-map{flex:0 0 auto;}
 
 .bento-empty{
   display:none; margin:2px 0 4px; font-family:var(--f-mono); font-size:11px;
@@ -3315,6 +3337,31 @@ html[data-cal-view="day"] .cal-side{display:none;}
           <path d="M8 9.2c1.4-1.7 2.7 1.7 4 0M12 12.4c1.3-1.5 2.5 1.5 3.8 0"/>
         </svg>
         <span class="rt-label">Brain</span>
+      </button>
+      <!-- The one press from the HUD to the Brain's MEMORY MAP (2026-11-09,
+           the IA recommendations: "honest Galaxy labels + a 1-click HUD->Brain
+           map button"). It is the Brain WINDOW's own Galaxy view - not this
+           HUD's inline picture, which the rail's "Galaxy" view already shows -
+           opened through the SAME opener and the SAME navigation-only command
+           as the two Brain buttons above (`open_fix_place {place: "brain"}`,
+           hud_bootstrap.js's openBrainAt("galaxy")). The shell leaves the
+           Brain's own place key first, exactly as the settings gear's
+           `openSettingsAt` leaves the Settings place; the Brain reads it and
+           opens on its map. No route, no command, no card, and the phone is
+           untouched (/api/graph stays off it). Hidden until the shell is
+           there, like its neighbours: a plain browser has no command to send.
+           Its word is the owner's own sentence, so it takes its own row in
+           the rail (the #rail-galaxy-map rules in the style above). -->
+      <button type="button" class="rail-toolbar-btn" id="rail-galaxy-map"
+              title="Galaxy: everything at a glance - the memory map, in the Brain window"
+              aria-label="Galaxy - everything at a glance" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="2.4"/>
+          <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-18 12 12)"/>
+          <circle cx="19.2" cy="8.6" r="1.3"/>
+        </svg>
+        <span class="rt-label">Galaxy - everything at a glance</span>
       </button>
       <!-- Why Live did not start, for a screen reader. The button's title
            carries the on/off wording; the READABLE refusal is the stage's
@@ -6493,22 +6540,360 @@ const voice = (() => {
     reactor.set("idle");
   }
 
-  function speak(text){
-    if(!window.speechSynthesis) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text.replace(/[*_`#]/g,""));
-    // Match the Kokoro bm_george choice: British, male if one exists.
-    const voices = speechSynthesis.getVoices();
-    u.voice = voices.find(v => /en-GB/i.test(v.lang) && /male|daniel|george|arthur/i.test(v.name))
-           || voices.find(v => /en-GB/i.test(v.lang))
-           || voices.find(v => /^en/i.test(v.lang)) || null;
-    u.rate = 1.05; u.pitch = 0.92;
-    u.onstart = () => { reactor.set("speaking"); $("r-tts").textContent = "speaking"; };
-    u.onend   = () => { reactor.set("idle");     $("r-tts").textContent = "idle"; };
-    speechSynthesis.speak(u);
-  }
+  /* READ OUT LOUD IS NOT IN HERE (TASK-51, 2026-11-09). It used to be a
+   * `speechSynthesis.speak` in this very module, choosing a voice by hand -
+   * "Match the Kokoro bm_george choice: British, male if one exists" - and
+   * that was never the voice Jarvis speaks in. The browser's list is
+   * Windows' SAPI voices; when no British one was installed the choice fell
+   * to the first English one, and the owner's report of 2026-11-08 names that
+   * voice on his PC: index 0, `Microsoft David`, a man. A tap now asks THIS
+   * PC for the answer's own sound in the configured Jarvis voice, below
+   * ("Reading an answer aloud"). A missing voice is said in words; it is
+   * never replaced by a different one. */
 
-  return { start, stop, speak, get listening(){ return listening; }, supported: false };
+  return { start, stop, get listening(){ return listening; }, supported: false };
+})();
+
+/* ==================================================================
+ * Reading an answer aloud, in Jarvis's OWN voice (TASK-51, 2026-11-09;
+ * the owner's decision of 2026-11-08, Gemini's Q7)
+ *
+ * THE BUG THIS REPLACES. Until today this page read a tapped answer out
+ * through the webview's own speech engine, choosing a voice by hand: a
+ * British one first, then any English one, then whatever the list gave. The
+ * comment beside that code said "match the Kokoro bm_george choice: British,
+ * male" - a man, and not even the configured one. When no British voice was
+ * installed the choice fell to the first English voice in WebView2's list;
+ * the owner's report of 2026-11-08 names it: index 0, `Microsoft David`. The
+ * voice the owner configured is Kokoro's (default `af_heart`, a woman), and
+ * it is the same voice a spoken answer and Jarvis Live already use.
+ *
+ * WHAT IT DOES NOW. A tap asks THIS PC for the sound of that answer, in the
+ * one voice the PC is configured to speak in, through the SAME Rust command a
+ * spoken answer uses: `speak_reply` -> `POST /api/voice/say` ->
+ * `jarvis_speech.say()` -> `jarvis_voices.speaker()` (or the owner's custom
+ * voice). The page plays the returned audio. There is deliberately NO
+ * browser-voice fallback: the owner's rule is that another voice is not a
+ * substitute but the bug itself, so when the PC cannot make the sound the
+ * page says so in one plain line under the answer and speaks nothing.
+ *
+ * WHAT IT IS NOT.
+ *  1. Not a second voice. The command is the quickbar's own (`voice.rs`
+ *     `speak_reply`, and a test pins that it still asks `/api/voice/say`), so
+ *     the two surfaces cannot come to two voices.
+ *  2. Not a way round the privacy rule. A read still starts only after
+ *     `private-speech.js`'s `mayReadAloud` says yes for THAT answer
+ *     (`answerMayBeSpoken`, which fails closed) - the speaker icon and the
+ *     menu item both ask it before anything here runs.
+ *  3. Not automatic. Nothing in this page speaks by itself (the typed answer
+ *     rule of 2026-11-07); only the owner's tap reaches this block, and the
+ *     PC's `read_aloud` OFF frame stops it exactly like it stops the bar.
+ *
+ * PAUSE / RESUME / STOP. `pauseSpeechPlayback()` and `resumeSpeechPlayback()`
+ * act on the clip playing now; `stopSpeechPlayback()` is the full reset -
+ * token, queue, the audio element, the line under the answer and the meter -
+ * and is what Stop everything and `read_aloud {enabled: false}` call.
+ * The answer menu's Pause / Resume / Stop reading items (hud_bootstrap.js
+ * section 6) reach these through `window.__jarvisSpeech`, so there is one
+ * player and one state, never a second copy in the shell.
+ * ================================================================== */
+
+/** Characters of an answer per request. A long answer is read as several
+ *  clips, the way the quickbar reads one sentence at a time (`speak_reply`
+ *  has a 30-second fetch budget on the PC; one 5,000-character answer would
+ *  not fit in it). */
+const READ_PIECE_MAX = 500;
+/** A sentence end earlier than this in a piece is not worth a very short
+ *  request: the text is cut at a space instead. */
+const READ_PIECE_MIN_CUT = 120;
+/** What the page says when the PC cannot make the sound. Fixed words, never
+ *  a guess at the reason (the reason goes to the console and the log). */
+const READ_FAILED_LINE =
+  "Jarvis's voice could not read this aloud, so nothing was spoken.";
+
+/** One answer, cut into the pieces one read asks for. Pure: no DOM, no state,
+ *  which is why tests/hud-read-aloud-voice.mjs can drive it directly. */
+function speechPieces(text){
+  let rest = String(text == null ? "" : text)
+    .replace(/[*_`#]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const out = [];
+  while(rest){
+    let take = rest.length;
+    if(take > READ_PIECE_MAX){
+      const head = rest.slice(0, READ_PIECE_MAX);
+      let cut = -1;
+      for(const mark of [". ", "! ", "? "]){
+        const at = head.lastIndexOf(mark);
+        if(at > cut) cut = at;
+      }
+      if(cut >= READ_PIECE_MIN_CUT) take = cut + 1;
+      else {
+        const space = head.lastIndexOf(" ");
+        take = space > 0 ? space : READ_PIECE_MAX;
+      }
+    }
+    const piece = rest.slice(0, take).trim();
+    if(piece) out.push(piece);
+    rest = rest.slice(take).trim();
+  }
+  return out;
+}
+
+/* The one player's state. `token` is bumped by every stop: a request or a
+ * clip that comes back after the owner stopped is dropped instead of played,
+ * which is what makes Stop literal mid-answer rather than "after this
+ * sentence". */
+const readAloudState = {
+  token: 0,
+  pieces: [],
+  at: 0,
+  audio: null,
+  bubble: null,
+  state: "idle",   // idle | loading | playing | paused
+  /** Settles the promise the player is waiting on, so a stop releases the
+   *  read loop instead of leaving it waiting on a clip that will never end. */
+  settle: null,
+};
+
+/** Tell the shell the player moved (the answer menu repaints its items). */
+function speechChanged(){
+  try{ window.dispatchEvent(new CustomEvent("jarvis-speech")); }catch(error){ /* no events: the menu reads on open */ }
+}
+
+/** The one place the player's state, the face and the meter move together. */
+function speechSetState(next){
+  if(readAloudState.state === next) return;
+  readAloudState.state = next;
+  reactor.set(next === "playing" ? "speaking" : "idle");
+  const readout = $("r-tts");
+  if(readout){
+    readout.textContent = next === "loading" ? "reading"
+      : next === "paused" ? "paused"
+      : next === "playing" ? "speaking" : "idle";
+  }
+  speechChanged();
+}
+
+/** The words, under the answer they are about - the shell's own line shape
+ *  (`.jarvis-kept`), so the page needs no new stylesheet entry. */
+function showReadFailed(bubble){
+  let node = bubble;
+  if(!node){
+    const answers = document.querySelectorAll("#log .msg.jarvis");
+    node = answers.length ? answers[answers.length - 1] : null;
+  }
+  if(!node) return;
+  clearReadFailed(node);
+  const line = document.createElement("p");
+  line.className = "jarvis-kept jarvis-read-failed";
+  line.setAttribute("role", "status");
+  line.textContent = READ_FAILED_LINE;
+  node.appendChild(line);
+}
+
+/** Take this answer's line away (a new read, a stop, or the retry). */
+function clearReadFailed(bubble){
+  if(!bubble || typeof bubble.querySelector !== "function") return;
+  const old = bubble.querySelector(".jarvis-read-failed");
+  if(old && old.parentNode) old.parentNode.removeChild(old);
+}
+
+/** Ask for one piece's sound, in the configured voice. Inside the shell the
+ *  command holds the token and asks the PC; in a plain browser (the backend
+ *  serves this page at "/") the same route is called directly, so the voice
+ *  is the same one either way. Never a browser speech engine. */
+function speechRequest(piece){
+  const tauri = window.__TAURI__;
+  if(tauri && tauri.core && typeof tauri.core.invoke === "function"){
+    // Spelled `__TAURI__.core.invoke(` on purpose: tools/check_invoke_grants.py
+    // reads exactly this spelling, so the page's one command here is held to
+    // capabilities/hud.json's `hud-speech` set instead of slipping past it.
+    return window.__TAURI__.core.invoke("speak_reply", { text: piece });
+  }
+  return jfetch("/api/voice/say", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ text: piece }),
+  }).then((res) => {
+    if(!res.ok) throw new Error("the PC answered HTTP " + res.status);
+    return res.blob();
+  }).then((blob) => new Promise((resolve, reject) => {
+    // A data URI, never an object URL: this page holds no `blob:` road at all
+    // (tests/hud-shell.mjs pins that), and the shell's own answer is the same
+    // `data:audio/wav;base64,...` shape.
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("the spoken reply could not be read"));
+    reader.readAsDataURL(blob);
+  }));
+}
+
+/** Play one clip to its end, or reject. `onended` resolves it; a stop settles
+ *  it through `readAloudState.settle` (its handlers are detached first). */
+function speechPlay(uri, token){
+  return new Promise((resolve, reject) => {
+    let audio;
+    try{ audio = new Audio(uri); }catch(error){ reject(error); return; }
+    readAloudState.audio = audio;
+    function detach(){
+      audio.onended = null;
+      audio.onerror = null;
+      if(readAloudState.audio === audio) readAloudState.audio = null;
+      if(readAloudState.settle === settle) readAloudState.settle = null;
+    }
+    /** The stop path: stopSpeechPlayback calls this, so speechRun is released
+     *  instead of waiting on a clip that will never end; its token check then
+     *  ends the read. */
+    function settle(){ detach(); resolve(); }
+    audio.onended = () => { detach(); resolve(); };
+    audio.onerror = () => { detach(); reject(new Error("the clip could not be played")); };
+    readAloudState.settle = settle;
+    let started;
+    try{ started = audio.play(); }catch(error){ detach(); reject(error); return; }
+    const mark = () => {
+      if(readAloudState.token === token && readAloudState.audio === audio) speechSetState("playing");
+    };
+    if(started && typeof started.then === "function") started.then(mark, (error) => { detach(); reject(error); });
+    else mark();
+  });
+}
+
+/** Make and play the pieces in order. A stop or a newer read bumps the token
+ *  and this loop simply falls out. */
+async function speechRun(token){
+  for(let i = 0; i < readAloudState.pieces.length; i++){
+    if(readAloudState.token !== token) return;
+    readAloudState.at = i;
+    let uri = null;
+    try{
+      uri = await speechRequest(readAloudState.pieces[i]);
+    }catch(error){
+      if(readAloudState.token !== token) return;
+      console.info("[jarvis] Jarvis's voice could not make this sentence:", error);
+      speechGiveUp(token);
+      return;
+    }
+    if(readAloudState.token !== token) return;
+    if(typeof uri !== "string" || !uri){ speechGiveUp(token); return; }
+    try{
+      await speechPlay(uri, token);
+    }catch(error){
+      if(readAloudState.token !== token) return;
+      console.info("[jarvis] Jarvis's voice could not play this sentence:", error);
+      speechGiveUp(token);
+      return;
+    }
+  }
+  if(readAloudState.token === token) speechEnd();
+}
+
+/** The PC could not make the sound: reset the player, then say so in words
+ *  under the answer. No other voice is tried. */
+function speechGiveUp(token){
+  if(readAloudState.token !== token) return;
+  const bubble = readAloudState.bubble;
+  stopSpeechPlayback();
+  showReadFailed(bubble);
+}
+
+/** The last piece ended: nothing left to pause, play or stop. */
+function speechEnd(){
+  readAloudState.pieces = [];
+  readAloudState.at = 0;
+  readAloudState.bubble = null;
+  speechSetState("idle");
+  clearReadFailed();
+}
+
+/** Read ONE answer aloud, in Jarvis's voice. Returns `{ok, why}` at once -
+ *  the menu's receipt says "Reading.", and a failure is said under the
+ *  answer, not invented into the receipt. */
+function readAnswerAloud(text, bubble){
+  const pieces = speechPieces(text);
+  if(!pieces.length) return Promise.resolve({ ok: false, why: "Nothing to read." });
+  stopSpeechPlayback();
+  readAloudState.token += 1;
+  const token = readAloudState.token;
+  readAloudState.pieces = pieces;
+  readAloudState.at = 0;
+  readAloudState.bubble = bubble || null;
+  clearReadFailed(readAloudState.bubble);
+  speechSetState("loading");
+  speechRun(token).catch(() => { /* speechRun reports its own failure */ });
+  return Promise.resolve({ ok: true, why: "Reading." });
+}
+
+/** Pause the clip playing now, where it is. False when nothing is playing
+ *  (the menu's own item is drawn from `window.__jarvisSpeech`'s state). */
+function pauseSpeechPlayback(){
+  const audio = readAloudState.audio;
+  if(!audio || readAloudState.state !== "playing") return false;
+  try{ audio.pause(); }catch(error){ return false; }
+  speechSetState("paused");
+  return true;
+}
+
+/** Carry on from where it paused. False unless a paused clip is waiting. */
+function resumeSpeechPlayback(){
+  const audio = readAloudState.audio;
+  if(!audio || readAloudState.state !== "paused") return false;
+  let started;
+  try{ started = audio.play(); }catch(error){ return false; }
+  if(started && typeof started.catch === "function") started.catch(() => {});
+  speechSetState("playing");
+  return true;
+}
+
+/** Stop this page's reading completely: the token (so a request or a clip
+ *  still on its way is dropped), the queue, the audio element, the line under
+ *  the answer and the meter. Called by the menu's Stop reading, by Stop
+ *  everything and by `read_aloud` OFF. */
+function stopSpeechPlayback(){
+  readAloudState.token += 1;
+  readAloudState.pieces = [];
+  readAloudState.at = 0;
+  const audio = readAloudState.audio;
+  readAloudState.audio = null;
+  const settle = readAloudState.settle;
+  readAloudState.settle = null;
+  if(audio){
+    audio.onended = null;
+    audio.onerror = null;
+    try{ audio.pause(); }catch(error){ /* already stopped */ }
+    try{ audio.removeAttribute("src"); audio.load(); }catch(error){ /* already gone */ }
+  }
+  // Release the read loop that was waiting on that clip; its token check ends
+  // it, so a stop never leaves a half-alive read behind.
+  if(settle){ try{ settle(); }catch(error){ /* already settled */ } }
+  const bubble = readAloudState.bubble;
+  readAloudState.bubble = null;
+  clearReadFailed(bubble);
+  speechSetState("idle");
+}
+
+/* What the answer menu and Stop everything may reach. The page's own
+ * functions are the player; this is a window, not a second copy. */
+window.__jarvisSpeech = {
+  state(){ return readAloudState.state; },
+  /** "playing"/"paused"/"loading" only for the answer the menu is on. */
+  stateFor(bubble){ return bubble && readAloudState.bubble === bubble ? readAloudState.state : "idle"; },
+  pause: pauseSpeechPlayback,
+  resume: resumeSpeechPlayback,
+  stop: stopSpeechPlayback,
+};
+/* Stop everything: Rust emits `stop-everything` to every window before it
+ * asks the PC to stop anything (commands.rs `stop_everything_now`), so a
+ * tapped answer is silenced by the same hotkey, tray item and HUD stop
+ * button that silence the bar. Registered once, only inside the shell. */
+(function stopReadingOnStopEverything(){
+  const events = window.__TAURI__ && window.__TAURI__.event;
+  if(!events || typeof events.listen !== "function") return;
+  try{
+    const pending = events.listen("stop-everything", () => stopSpeechPlayback());
+    if(pending && typeof pending.catch === "function") pending.catch(() => {});
+  }catch(error){ /* no events here: the menu's Stop still works */ }
 })();
 
 /* ==================================================================
@@ -6520,19 +6905,21 @@ const voice = (() => {
  *
  * THREE THINGS THIS IS NOT, because each one would be a bug:
  *
- *  1. Not a second voice path. A click calls `voice.speak` above - the same
- *     function the page's automatic read-aloud calls two hundred lines down -
- *     so the voice, its rate, its pitch and the shell's local-voices-only rule
- *     (`hud_bootstrap.js` wraps `getVoices`) are all unchanged.
+ *  1. Not a second voice path. A click calls `readAnswerAloud` above, whose
+ *     one source of sound is the PC's own voice (`speak_reply`, the quickbar's
+ *     command) - the same voice, rate and pitch a spoken answer and Jarvis
+ *     Live use. The webview's own voice list is not consulted at all.
  *  2. Not a change to automatic read-aloud. The switch is read HERE and
  *     nowhere else; with it off the page behaves exactly as it does today, and
  *     turning it on speaks nothing by itself.
  *  3. Not a way round the privacy rule. An answer is given a speaker only when
  *     `private-speech.js`'s `mayReadAloud` says this window would already have
- *     spoken it, judged on THAT answer's own route - and the shell's
- *     `speechSynthesis.speak` wrapper refuses a kept-on-screen answer anyway,
- *     drawing "It's on your screen." under it (bootstrap section 2e). Two
- *     refusals, and this file loosens neither.
+ *     spoken it, judged on THAT answer's own route; the menu's own item asks
+ *     the same rule again (`__jarvisReadAnswer`). The shell's
+ *     `speechSynthesis.speak` wrapper and its "It's on your screen." line stay
+ *     as the guard for any speech-synthesis path that might return (bootstrap
+ *     section 2e) - read-aloud itself no longer needs it, because an answer
+ *     refused above never reaches the player.
  *
  * The setting's key and its reading rule are ALSO in src/read-aloud-icons.js,
  * which is what Settings writes and what `tests/hud-live-read-aloud.mjs` holds
@@ -6601,9 +6988,10 @@ function paintSpeakButton(bubble){
     }
     btn.appendChild(svg);
     btn.addEventListener("click", () => {
-      // Said through the page's own speak path, so the shell's refusal and its
-      // "It's on your screen." line apply exactly as they do automatically.
-      voice.speak(ANSWER_SAID.get(bubble) ? ANSWER_SAID.get(bubble).text : "");
+      // Said through the one player above, in the PC's configured voice -
+      // never the webview's own list. The privacy rule was asked before this
+      // button was drawn, and the menu asks it again for its own item.
+      readAnswerAloud(ANSWER_SAID.get(bubble) ? ANSWER_SAID.get(bubble).text : "", bubble);
     });
     bubble.appendChild(btn);
   }).catch(() => {});
@@ -6641,8 +7029,10 @@ window.__jarvisReadAnswer = function(bubble){
         .then(rule => ({ ok: false, why: (rule && rule.PRIVATE_LINE) || "It's on your screen." }))
         .catch(() => ({ ok: false, why: "It's on your screen." }));
     }
-    voice.speak(said.text);
-    return { ok: true, why: "Reading." };
+    // In Jarvis's voice, through the one player above; `bubble` is handed
+    // over so the menu's Pause / Resume / Stop items can tell WHICH answer is
+    // being read (window.__jarvisSpeech.stateFor).
+    return readAnswerAloud(said.text, bubble);
   }).catch(() => ({ ok: false, why: "Could not read it." }));
 };
 
@@ -7132,7 +7522,8 @@ async function send(){
     // deliberately gone - nothing here speaks by itself. Every finished answer
     // still gets its own speaker (when the owner's speaker switch is on) and
     // the answer menu's "Read out loud"; both are the owner's own tap, one
-    // answer at a time, and both still ask the private-speech rule first.
+    // answer at a time, both still ask the private-speech rule first, and both
+    // now read in Jarvis's configured voice (the player above).
     //
     // The chat question is recorded as typed so an answer can never be spoken
     // by a future path that forgets this rule.
@@ -7208,7 +7599,15 @@ $("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
  * window, and a file on the clipboard - and ONE shape out: the newest user
  * message of the ordinary /api/chat body carries
  *   attachment: {name, mime, size, data}    (base64 of the raw bytes)
- * with `has_file: true` beside it. No new route, no upload, no Rust.
+ * with `has_file: true` beside it. No new route and no upload; the only Rust
+ * is the window setting that lets the gesture reach this page at all.
+ *
+ * A DROP OF SEVERAL FILES (2026-11-09): one file goes with a question, so the
+ * first dropped file this page can attach is the one taken, and the chip says
+ * plainly how many others were not. The window turns Tauri's OWN drag-drop
+ * handler off (lib.rs, chat_windows.rs): on Windows that handler REPLACES
+ * WebView2's, so without the setting this page's `drop` event never fires in
+ * the packaged app - it only ever worked in a browser.
  *
  * The caps and the wording are the backend's own (jarvis_attached_file.py),
  * and tests/attach.mjs pins both here so the two apps cannot drift.
@@ -7237,6 +7636,18 @@ function attachExt(name){
   return at <= 0 ? "" : String(name).toLowerCase().slice(at);
 }
 
+/** " One file goes with a question, so the other 2 were not attached." */
+function attachOthers(n){
+  if(!n || n < 1) return "";
+  return " One file goes with a question, so the other " + n
+    + (n === 1 ? " was" : " were") + " not attached.";
+}
+
+/** " None of the 3 dropped files were attached." - a multi-file drop only. */
+function attachNone(n){
+  return n > 1 ? " None of the " + n + " dropped files were attached." : "";
+}
+
 /** The chip, or the sentence that says why nothing was attached. */
 function attachShow(text, bad){
   const chip = $("attach-chip");
@@ -7259,9 +7670,13 @@ function attachClear(){
   if(pick) pick.hidden = false;
 }
 
-/** Take one File the owner picked, dropped or pasted. Refuses in words. */
-function attachTake(file){
+/** Take one File the owner picked, dropped or pasted. Refuses in words.
+ *  `extra` is how many OTHER files arrived with it in the same drop (0 for the
+ *  picker and the clipboard): only one file can ride on a question, so the
+ *  chip names the rest rather than dropping them in silence. */
+function attachTake(file, extra){
   if(!file) return;
+  const others = extra || 0;
   const name = String(file.name || "the file you attached");
   const ext = attachExt(name);
   // Checked BEFORE the file is read, so a 40 MB video is refused without ever
@@ -7269,14 +7684,15 @@ function attachTake(file){
   if(ATTACH_KINDS.indexOf(ext) < 0){
     const picture = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"].indexOf(ext) >= 0;
     attachClear();
-    attachShow(picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND, true);
+    attachShow((picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND)
+      + attachNone(others + 1), true);
     return;
   }
   if(file.size > ATTACH_MAX_BYTES){
     attachClear();
     attachShow("That file is " + attachSize(file.size) + ". Files up to "
       + attachSize(ATTACH_MAX_BYTES) + " can be attached; for bigger ones, put it in a "
-      + "folder Jarvis may look in.", true);
+      + "folder Jarvis may look in." + attachNone(others + 1), true);
     return;
   }
   const reader = new FileReader();
@@ -7288,9 +7704,29 @@ function attachTake(file){
     ATTACH = {name: name, mime: String(file.type || ""), size: file.size,
               data: url.slice(comma + 1)};
     attachShow(name + " — " + attachSize(file.size) + " " + ATTACH_READ_ON_PC + " "
-      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN, false);
+      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN + attachOthers(others), false);
   };
   reader.readAsDataURL(file);
+}
+
+/** A drop carries a LIST. Take the first file this page can actually attach -
+ *  kind and cap checked BEFORE a byte is read - and name how many others were
+ *  left out, so a batch is not refused because of a bad file beside a good one
+ *  and a good one is never silently ignored. */
+function attachDrop(files){
+  const list = Array.from(files || []);
+  if(!list.length) return;
+  let take = -1;
+  for(let i = 0; i < list.length; i++){
+    const file = list[i];
+    if(ATTACH_KINDS.indexOf(attachExt(file.name)) >= 0 && file.size <= ATTACH_MAX_BYTES){
+      take = i;
+      break;
+    }
+  }
+  // Nothing in the batch can be attached: the first file's own refusal names
+  // the real rule, and attachTake adds the count of the rest.
+  attachTake(list[take < 0 ? 0 : take], list.length - 1);
 }
 
 $("attach-pick").addEventListener("click", () => $("attach-file").click());
@@ -7310,7 +7746,9 @@ window.addEventListener("drop", e => {
   const files = e.dataTransfer && e.dataTransfer.files;
   if(!files || !files.length) return;
   e.preventDefault();
-  attachTake(files[0]);
+  // A drop can carry several files; attachDrop picks the one that can go and
+  // names the rest (one file goes with a question).
+  attachDrop(files);
 });
 // A file on the clipboard (a copied PDF, a screenshot's own file). A TEXT
 // paste is untouched: only a paste that really carries a file comes here.
@@ -9835,6 +10273,16 @@ function subscribe(){
   es.addEventListener("power", (m) => {
     const d = dataOf(m);
     reactor.setPower(typeof d.value === "string" ? d.value : d.mode);
+  });
+  // The PC's automatic read-aloud switch (jarvis_read_aloud.py; JARVIS-API
+  // section 201). `{"enabled": false}` stops an answer being read HERE too:
+  // the owner's decision of 2026-11-08 (TASK-51c) is the same rule the bar's
+  // queue obeys - OFF is literal mid-answer, not "from the next answer".
+  // Only OFF stops anything; ON changes no rule this page holds (a typed
+  // answer is silent unless the owner taps, which the switch never overrides).
+  es.addEventListener("read_aloud", (m) => {
+    const d = dataOf(m);
+    if (d.enabled === false) stopSpeechPlayback();
   });
   // The Reminders tab (2026-10-21): a schedule frame is named `schedule`, so
   // it reaches addEventListener and never onmessage. The tab re-reads the

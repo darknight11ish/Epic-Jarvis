@@ -456,14 +456,20 @@ await check("the bar is still 80px tall with its two rows, under the 720px shell
     return { barH: Math.round(bar.height), maxH: shell.maxHeight,
              stack: Boolean(document.getElementById("stack")),
              zones: [...document.querySelector(".bar-meta").children]
-               .map((el) => el.className.split(" ")[0]) };
+               .map((el) => el.className.split(" ")[0]),
+             attachHidden: document.getElementById("attach-chip").hidden };
   });
   await page.close();
   assert.equal(got.barH, 80, `the bar is ${got.barH}px tall - the window's 80px row moved`);
   assert.equal(got.maxH, "720px", "the shell clamp the Rust side enforces moved");
   assert.equal(got.stack, true, "#stack is gone - answer cards would have nowhere to go");
-  assert.deepEqual(got.zones, ["model-pill", "mode-strip", "utility-cluster"],
-    "the bar's second row is not the three zones the redesign is");
+  // The three zones the redesign is, plus the one file chip the owner's
+  // decision of 2026-11-09 added (JARVIS-API.md section 163.6). The chip is
+  // empty and hidden until a file is dropped, so the 80px row is unchanged.
+  assert.deepEqual(got.zones,
+    ["model-pill", "mode-strip", "attach-chip", "utility-cluster"],
+    "the bar's second row is not the zones the redesign is, plus the file chip");
+  assert.equal(got.attachHidden, true, "the file chip takes space with no file attached");
 });
 
 for (const theme of ["deep-space", "paper", "high-contrast"]) {

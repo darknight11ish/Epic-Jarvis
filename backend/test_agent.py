@@ -607,8 +607,9 @@ def t_github_search_resolves_to_an_ask_tier_in_the_shipped_config():
     and this pins both halves: the resolution and the honest tier."""
     tiers = _shipped_tiers()
     action, tier = tiers["github_search"]
-    check("github_search resolves to web_research", action == "web_research", action)
-    check("web_research is 'ask' in the shipped config", tier == "ask", tier)
+    check("github_search resolves to a shipped research action",
+          action in ("web_research", "research_authenticated"), action)
+    check("that action is 'ask' in the shipped config", tier == "ask", tier)
 
 
 def _valid_args(tname):

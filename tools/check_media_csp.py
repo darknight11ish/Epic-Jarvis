@@ -108,6 +108,13 @@ RUNTIME_SOURCES = {
         "the `hear_voice_sample` reply (`out.audio`), built at run time in "
         "voice_training.rs as a `data:audio/wav` URI",
         "src/voice_training.rs", "data:audio/wav;base64"),
+    # The HUD's own tapped Read out loud, TASK-51 (2026-11-09): the page plays
+    # the clip `speak_reply` answered with - the same Rust command the bar's
+    # spoken answer uses, so the URI is a `data:audio/wav` clip built at
+    # run time in voice.rs and the page only ever sees the finished string.
+    ("jarvis_hud.html", "speechPlay", "uri"): (
+        "the `data:audio/wav` clip `speak_reply` answered with (the HUD's read-aloud, TASK-51)",
+        "src/voice.rs", "data:audio/wav;base64"),
 }
 
 # The lifecycle types `EventSource`/`media` know about, so that "no scheme at

@@ -23,6 +23,7 @@ import {
   actions,
   ADD_LABEL,
   folderLines,
+  importLine,
   NOTION_LABEL,
   readFolders,
   STALE,
@@ -123,6 +124,11 @@ function paint() {
   el.notionInto.disabled = busy || !can.notion;
   el.notionPick.textContent = NOTION_LABEL;
   el.notionPick.disabled = busy || !can.notion;
+  // WHILE AN EXPORT IS BEING UNZIPPED, the PC's own counts are shown as a
+  // progress line instead of one unchanging sentence - a 4 GB import is
+  // minutes, and a page that looks frozen for minutes is its own bug. The
+  // numbers come from GET /api/folders (`importing`), never from a timer here.
+  if (view.importing) say(importLine(view.importing));
   if (view.lastWords && !el.status.textContent) say(view.lastWords);
 }
 
@@ -147,6 +153,13 @@ async function run(command, args, working) {
   busy = true;
   say(working);
   paint();
+  // Poll the same read the page already makes while a command is in flight,
+  // so the PC's `importing` counts can be shown. It is one cheap GET a second,
+  // it is stopped however the command ends, and it changes nothing.
+  let poll = null;
+  if (command === "import_notion") {
+    poll = setInterval(() => { load(); }, 1000);
+  }
   try {
     const out = await TAURI.core.invoke(command, args);
     if (out && out.cancelled) {
@@ -159,6 +172,7 @@ async function run(command, args, working) {
   } catch (error) {
     say(problemWords(error), "bad");
   } finally {
+    if (poll) clearInterval(poll);
     busy = false;
   }
   await load();

@@ -187,6 +187,83 @@ check("no inline handler or new script was smuggled in with the doors", () => {
     "the top-menu word markup changed shape");
 });
 
+/* ── 4. The Galaxy map's one-click door (2026-11-09) ────────────────────── */
+
+// The owner's IA recommendations: "honest Galaxy labels + a 1-click HUD->Brain
+// map button". The new door is NOT a second Brain-window opener: it is the same
+// `openBrainAt`, given the Brain's own "galaxy" place, which leaves the Brain
+// place key first (the settings gear's own shape) and calls the same
+// navigation-only `open_fix_place`.
+
+check("the Galaxy map's door is in the rail's always-visible toolbar, after Brain", () => {
+  const railLeft = between(HUD, 'id="rail-left"', "</aside>", 40000);
+  const toolbar = between(railLeft, 'id="rail-toolbar"', "</div>", 20000);
+  assert.match(toolbar, /id="rail-galaxy-map"/,
+    "no #rail-galaxy-map inside .rail-toolbar - a rail block a shell hides would not reach him");
+  assert.ok(toolbar.indexOf('id="rail-brain-window"') < toolbar.indexOf('id="rail-galaxy-map"'),
+    "the memory-map door should follow the Brain window's own door");
+});
+
+check("the Galaxy map's door says the owner's words, and is a rail button like its neighbours", () => {
+  const button = buttonById(HUD, "rail-galaxy-map");
+  assert.match(button, /<span class="rt-label">Galaxy - everything at a glance<\/span>/,
+    "the visible word is not the owner's own sentence");
+  assert.match(button, /aria-label="Galaxy - everything at a glance"/,
+    "a screen reader does not hear the same words");
+  assert.match(button, /title="Galaxy: everything at a glance - the memory map, in the Brain window"/,
+    "the title does not say what pressing it opens");
+  assert.match(button, /class="rail-toolbar-btn"/, "it does not wear the rail's button class");
+  assert.match(button, /<svg class="glyph"/, "it has no monochrome glyph like its neighbours");
+  assert.match(button, /\shidden(\s|>)/,
+    "it would draw in a plain browser with no command to send");
+  assert.doesNotMatch(button, /\son[a-z]+=/, "it carries an inline event handler");
+  // Its own row in the narrow rail: the page's own rule, not an inline style.
+  const css = between(HUD, "<style>", "</style>", HUD.length);
+  assert.match(css, /\.rail-toolbar #rail-galaxy-map\{flex:1 1 100%;\}/,
+    "the long word does not take its own row in the rail");
+  assert.match(css, /html\[data-hud-shell="split-stage"\] \.rail-toolbar #rail-galaxy-map\{flex:0 0 auto;\}/,
+    "in the Studio column the button would stretch to the column's full height");
+});
+
+check("the bootstrap reveals the Galaxy door and wires it to the one opener", () => {
+  assert.match(BOOT, /function wireGalaxyMapDoor\(\)/, "the reveal/wire function is gone");
+  assert.match(BOOT, /var el = document\.getElementById\("rail-galaxy-map"\)/,
+    "the bootstrap no longer looks for the Galaxy door's id");
+  assert.match(BOOT, /el\.addEventListener\("click", openGalaxyMapFromHud\)/,
+    "the door is not wired to its one handler");
+  assert.match(BOOT, /function openGalaxyMapFromHud\(event\)[\s\S]{0,160}openBrainAt\("galaxy"\)/,
+    "the handler does not call the existing opener with the Galaxy place");
+});
+
+check("the Galaxy door uses the SAME command, and leaves the Brain's own place key first", () => {
+  const opener = between(BOOT, "function openBrainAt(place)", "function openBrainWindowFromHud");
+  const navCalls = [...opener.matchAll(/navInvoke\("([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(navCalls, ["open_fix_place"],
+    "the Galaxy place is opened through a command other than the shell's open_fix_place");
+  assert.match(opener, /place: named/, "the place is not passed through to the command");
+  // The gear's pattern: the place key first, then the one command. The key is
+  // spelled in two files that cannot import each other - held equal here.
+  assert.match(BOOT, /var BRAIN_PLACE_KEY = "jarvis\.brain\.place";/);
+  const BRAIN = read(join(SRC, "forget-range.js"));
+  assert.match(BRAIN, /export const BRAIN_PLACE_KEY = "jarvis\.brain\.place";/,
+    "the Brain reads a different key from the one the HUD leaves");
+  assert.match(opener, /localStorage\.setItem\(\s*BRAIN_PLACE_KEY,\s*JSON\.stringify\(\{ place: "galaxy", at: Date\.now\(\) \}\)/,
+    "the Galaxy place is not left under the Brain's key");
+});
+
+check("the Brain accepts 'galaxy' as a place, opens Advanced, and shows its map", () => {
+  const PANEL = read(join(SRC, "forget-range-panel.js"));
+  assert.match(PANEL, /left\.place === "galaxy"/,
+    "takeAnyPlace still drops the HUD's Galaxy place, so the press would land elsewhere");
+  const BRAIN_JS = read(join(SRC, "brain.js"));
+  assert.match(BRAIN_JS, /Object\.prototype\.hasOwnProperty\.call\(VIEWS, place\)/,
+    "showPlace no longer opens one of the rail's own views by its key");
+  assert.match(BRAIN_JS, /if \(ADVANCED_VIEWS\.includes\(place\) && !advancedOpen\) dom\.advancedToggle\?\.click\(\);/,
+    "Galaxy is behind Advanced: the place must open the disclosure, or the selected tab is hidden");
+  assert.match(BRAIN_JS, /galaxy: \{ title: "The memory map", sub: "what Jarvis remembers" \}/,
+    "the view's plain-words title is gone");
+});
+
 console.log(`\n${fails.length ? fails.length + " failed" : "all checks passed"}: ` +
-  `${fails.length ? fails.join(", ") : "the HUD's two Brain-window doors hold"}`);
+  `${fails.length ? fails.join(", ") : "the HUD's two Brain-window doors and the Galaxy map door hold"}`);
 process.exit(fails.length ? 1 : 0);

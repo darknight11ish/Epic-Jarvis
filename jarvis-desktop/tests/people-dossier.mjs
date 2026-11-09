@@ -155,7 +155,7 @@ check("the command is granted to the Brain window only, and registered once", ()
 check("the backend refuses another device BEFORE the module or the name", () => {
   const py = read("backend/jarvis_brain_reads.py");
   assert.match(py, /PEOPLE_DOSSIER_PATH = "\/api\/people\/dossier"/);
-  assert.match(py, /PEOPLE_DOSSIER_PATH\)/, "the route is in PATHS");
+  assert.match(py, /PEOPLE_DOSSIER_PATH[,)]/, "the route is in PATHS");
   const branch = py.slice(py.indexOf("if path == PEOPLE_DOSSIER_PATH:"));
   const owner = branch.indexOf("if not _from_this_pc(peer, local):");
   const importAt = branch.indexOf("import jarvis_people_crm");

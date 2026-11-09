@@ -31,12 +31,14 @@
  *
  * TWO KINDS, TWO RULES, and the second one is why this file now fetches:
  *
- *   * A MODEL PRESET IS A LOOSENING. Applying one starts its lane and raises
- *     the PC's ONE `change_own_config` (switch_model) approval card; nothing is
- *     chosen until the owner answers it, so NOTHING IS MARKED CHOSEN HERE. The
- *     mark comes from a REFETCH of the PC's own `chosen_preset`, never from the
- *     click that asked for it - a denied card changes nothing and must not look
- *     like a success.
+ *   * A LOCAL MODEL PRESET IS THE OWNER'S OWN CLICK (2026-11-09). Applying one
+ *     starts its lane and switches the model AT ONCE: the PC keeps its ONE
+ *     `switch_model` card for the model/chat path and for the two presets that
+ *     are not a quick, reversible switch - Coding (its pooled lane pauses both
+ *     other models) and Cloud (it changes where the owner's words go, and its
+ *     card is `change_own_config`). The chosen mark still comes from a REFETCH
+ *     of the PC's own `chosen_preset`, never from this click, so the menu can
+ *     never mark a preset the PC did not record.
  *   * A PERSONALITY IS WORDING ONLY. The PC says it plainly ("Nothing here
  *     raises a card", `jarvis_manner.py`), so the click is immediate: the menu
  *     shows the PC's own `said` (its switch_ack), then refetches and marks the
@@ -77,9 +79,10 @@
  * drawn ONLY from the PC's own `GET /api/presets` answer's `cloud` object
  * (`provider`, `providers[]`, `escalate{on,why}`); a PC that does not send one
  * gets no row and no invented provider. Picking a provider is an APPLY, the
- * same road and the same ONE approval card as every other preset - it changes
- * where the owner's words go, so it is a loosening - and nothing is marked
- * chosen until a REFETCH of the PC's answer names it. A service with no key
+ * same road and the same ONE approval card it keeps (2026-11-09: the Cloud row
+ * is NOT one of the local presets that switch at once) - it changes where the
+ * owner's words go, so it is a loosening - and nothing is marked chosen until
+ * a REFETCH of the PC's answer names it. A service with no key
  * saved is NOT a button: it shows the PC's own `key_line` and says to add the
  * key on the PC, because a key is never typed, pasted or sent from an app
  * (rule 3).
@@ -828,11 +831,13 @@ export function mountHudPresets(options = {}) {
       .then(done);
   }
 
-  /** ONE model-preset click. The PC's `switch_model` card is raised by the
-   *  apply itself, and the apply only answers 2xx once the owner approved it -
-   *  so this waits, says what it is waiting for, and then lets a REFETCH of the
-   *  PC's own contract decide the mark. A denied card returns a refusal and
-   *  marks nothing.
+  /** ONE model-preset click. A LOCAL preset is the owner's own reversible
+   *  click (2026-11-09), so it switches at once and the refetched contract
+   *  decides the mark. The PC still raises its ONE `switch_model` card for the
+   *  two rows that are not a quick switch - Coding (its pooled lane pauses
+   *  both other models) and the Cloud row (`change_own_config`) - so this says
+   *  what to expect from the row that was pressed, and never marks anything
+   *  from the click itself.
    *
    *  `provider` is only ever given by the Cloud section: picking a service is
    *  the SAME apply with one more field (2026-10-27). */
@@ -841,9 +846,13 @@ export function mountHudPresets(options = {}) {
     pcBusy.preset = id;
     pcBusy.provider = provider || "";
     renderMenu();
-    announce(provider
-      ? `Asked the PC to use ${title || id} for the cloud. Nothing changes until you answer its approval card.`
-      : `Asked the PC to apply ${title || id}. Nothing changes until you answer its approval card.`);
+    const pressed = modelPresetRows(pcPresets).find((item) => item.id === id);
+    const wantsCard = Boolean(provider) || Boolean(pressed && pressed.heavy);
+    announce(wantsCard
+      ? (provider
+        ? `Asked the PC to use ${title || id} for the cloud. Nothing changes until you answer its approval card.`
+        : `Asked the PC to apply ${title || id}. Its coding lane pauses both other models first, so nothing changes until you answer its approval card.`)
+      : `Applying ${title || id} on the PC. It switches at once - press another preset to switch straight back.`);
     try {
       await applyFocusPresetOnPc(win, id, provider);
       pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
@@ -1081,7 +1090,7 @@ export function mountHudPresets(options = {}) {
       group.appendChild(note("The PC listed no presets."));
       return group;
     }
-    group.appendChild(note("Applying one asks the PC for ONE approval card - nothing is chosen until you answer it."));
+    group.appendChild(note("Local presets switch at once when you pick one - pick another to switch straight back. Coding (it pauses both other models first) and Cloud (it changes where your words go) still ask for the PC's ONE approval card."));
     for (const row of rows) {
       const asking = pcBusy.preset === row.id;
       const button = menuItem(

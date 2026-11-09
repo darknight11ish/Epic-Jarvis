@@ -53,7 +53,7 @@ class UploadTest {
         assertEquals("/api/upload/finish", Upload.FINISH_PATH)
         assertEquals(1_048_576, Upload.CHUNK_BYTES)
         assertEquals(50L * 1024 * 1024, Upload.DOCUMENT_MAX)
-        assertEquals(250L * 1024 * 1024, Upload.NOTION_MAX)
+        assertEquals(4L * 1024 * 1024 * 1024, Upload.NOTION_MAX)
         assertEquals("document", Upload.Purpose.DOCUMENT.wire)
         assertEquals("notion", Upload.Purpose.NOTION.wire)
     }
@@ -184,7 +184,7 @@ class UploadTest {
         val bigZip = Upload.refusal("Export.zip", "application/zip", Upload.NOTION_MAX + 1,
             Upload.Purpose.NOTION)
         assertNotNull(bigZip)
-        assertTrue(bigZip!!.contains("250 MB"))
+        assertTrue(bigZip!!.contains("4 GB"))
     }
 
     // ------------------------------------------------------- answer mapping ---

@@ -44,10 +44,12 @@ import kotlinx.coroutines.launch
  *  - a Settings -> Hardware "Focus presets" plate, replacing the old work
  *    setups plate in the same section.
  *
- * Nothing auto-applies: each button posts the contract's one apply action,
- * which raises the existing approval card (tier "ask"); the list is re-read
- * afterwards. Every press is disabled while the link is stale (rule 4), and a
- * pending preset shows the PC's "being prepared" words and no button.
+ * Nothing auto-applies: each button posts the contract's one apply action; the
+ * list is re-read afterwards. A local preset switches at once (the owner's own
+ * reversible pick, 2026-11-09); Coding and the Cloud row still raise the
+ * existing approval card (tier "ask"). Every press is disabled while the link
+ * is stale (rule 4), and a pending preset shows the PC's "being prepared"
+ * words and no button.
  */
 @Composable
 fun FocusPresetChip(link: LinkState, stale: Boolean) {
@@ -136,7 +138,9 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     Gap(4)
     Text(
         "Presets choose the local model and card for the work you are about to do. " +
-            "Using one raises a single approval card on your PC; nothing changes until you approve it. " +
+            "Picking a local preset switches at once, and picking another switches straight back. " +
+            "Coding pauses both other models first, and the Cloud row changes where your words go, " +
+            "so those two still raise a single approval card on your PC. " +
             "The Fast preset uses the 2080 SUPER.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,

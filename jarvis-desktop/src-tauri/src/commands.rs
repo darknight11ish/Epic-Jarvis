@@ -2122,7 +2122,14 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 /// "`offer` in `X-Jarvis-Route`"; backend/cloud-say-yes.patch): never sent
 /// as `false`, the same rule `temporary` already follows.
 ///
-/// Ten arguments, three over clippy's line: each is a field main.js already
+/// `attachment` (the owner's decision of 2026-11-09; JARVIS-API.md section
+/// 163.6): the ONE file a drop put on the bar, with its base64 bytes. It is
+/// an argument on its own rather than a field of `messages` so that the body
+/// is built in one place ([`add_chat_attachment`]) and always carries
+/// `has_file` beside it - the HUD's own shape (section 163.1). Absent for
+/// every ordinary turn, which then sends exactly what it always did.
+///
+/// Eleven arguments, four over clippy's line: each is a field main.js already
 /// names at the top level of the call (the tests read them there), and
 /// folding some into a struct would change that call's shape for nothing.
 /// Adds the one chat-mode flag the turn needs: `private`, else `temporary`,
@@ -2146,6 +2153,139 @@ pub(crate) fn add_chat_mode_flags(
     }
 }
 
+/// The eight kinds a chat accepts (JARVIS-API.md section 163.1): the same
+/// list the HUD, every chat window, the quick bar and the PC enforce.
+pub(crate) const CHAT_ATTACH_KINDS: [&str; 8] = [
+    ".pdf",
+    ".docx",
+    ".xlsx",
+    ".pptx",
+    ".md",
+    ".markdown",
+    ".txt",
+    ".csv",
+];
+
+/// The most a chat accepts in one file, in bytes (JARVIS-API.md section
+/// 163.1). The page shows it as "2.5 MB"; both read this same number.
+pub(crate) const CHAT_ATTACH_MAX_BYTES: u64 = 2_500_000;
+
+/// The picture kinds: refused down their own path, with the page's picture
+/// sentence, rather than being read here as if they were documents.
+const CHAT_ATTACH_PICTURE_KINDS: [&str; 7] =
+    [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"];
+
+/// Longest file name a turn carries. The name is shown on the chip and
+/// nowhere else; this only stops an unbounded string riding the IPC.
+const CHAT_ATTACH_NAME_MAX: usize = 255;
+
+/// One file the owner dropped on the quick bar, as the page holds it: the
+/// base64 of the raw bytes, exactly what the HUD puts on its newest message
+/// (JARVIS-API.md section 163.1). It is an ARGUMENT of [`stream_chat`], not a
+/// field of the page's own messages, so the body is built in one place and a
+/// page cannot post a file without `has_file` beside it.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ChatAttachment {
+    pub name: String,
+    pub mime: String,
+    pub size: u64,
+    pub data: String,
+}
+
+/// "1.2 MB", "640 KB", "12 bytes" - the page's own words for a size
+/// (`attachSize` in main.js and jarvis_hud.html), so a refusal from either
+/// side reads the same.
+pub(crate) fn attach_size_words(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1} MB", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{} KB", n / 1_000)
+    } else {
+        format!("{n} byte{}", if n == 1 { "" } else { "s" })
+    }
+}
+
+/// What is wrong with this attachment, in the page's own plain words, or
+/// `None` when the bar may send it. Checked BEFORE the body is built, so a
+/// page bug (or a hand-made IPC call) cannot push a file the PC will refuse.
+/// The PC checks all of this again under the `read_files_readonly` gate; this
+/// is the second line, not the gate.
+pub(crate) fn chat_attachment_problem(att: &ChatAttachment) -> Option<String> {
+    if att.name.is_empty() || att.name.len() > CHAT_ATTACH_NAME_MAX {
+        return Some("That file has no usable name, so it was not attached.".into());
+    }
+    let lower = att.name.to_ascii_lowercase();
+    let kind = match lower.rfind('.') {
+        Some(at) if at > 0 => &lower[at..],
+        _ => "",
+    };
+    if !CHAT_ATTACH_KINDS.contains(&kind) {
+        if CHAT_ATTACH_PICTURE_KINDS.contains(&kind) {
+            return Some(
+                "A picture goes in as a picture: attach it with the picture button, and this PC will read its words. Nothing was read from it here."
+                    .into(),
+            );
+        }
+        return Some(
+            "Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a chat, and that one is not a kind Jarvis reads."
+                .into(),
+        );
+    }
+    if att.size == 0 || att.size > CHAT_ATTACH_MAX_BYTES {
+        return Some(format!(
+            "That file is {}. Files up to {} can be attached; for bigger ones, put it in a folder Jarvis may look in.",
+            attach_size_words(att.size),
+            attach_size_words(CHAT_ATTACH_MAX_BYTES)
+        ));
+    }
+    if att.data.is_empty() {
+        return Some("That file could not be read here.".into());
+    }
+    None
+}
+
+/// Puts ONE file on the NEWEST user message of a `/api/chat` body and sets
+/// `has_file: true` beside it - the HUD's own shape (JARVIS-API.md section
+/// 163.1). The message is replaced by a COPY, because the page re-sends its
+/// whole history on every turn: an attachment left in it would be uploaded
+/// again and again. Refuses when the newest message is not a user turn rather
+/// than hanging a file on an assistant's answer.
+pub(crate) fn add_chat_attachment(
+    body: &mut serde_json::Value,
+    attachment: ChatAttachment,
+) -> Result<(), String> {
+    if let Some(problem) = chat_attachment_problem(&attachment) {
+        return Err(problem);
+    }
+    {
+        let messages = body
+            .get_mut("messages")
+            .and_then(|m| m.as_array_mut())
+            .filter(|m| !m.is_empty())
+            .ok_or_else(|| "There is no question to attach that file to.".to_string())?;
+        let newest = messages.last_mut().expect("checked not empty");
+        if newest.get("role").and_then(|r| r.as_str()) != Some("user") {
+            return Err("There is no question to attach that file to.".to_string());
+        }
+        let fields = newest
+            .as_object_mut()
+            .ok_or_else(|| "There is no question to attach that file to.".to_string())?;
+        fields.insert(
+            "attachment".into(),
+            serde_json::json!({
+                "name": attachment.name,
+                "mime": attachment.mime,
+                "size": attachment.size,
+                "data": attachment.data,
+            }),
+        );
+    }
+    if let Some(fields) = body.as_object_mut() {
+        fields.insert("has_file".into(), serde_json::json!(true));
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn stream_chat(
@@ -2158,6 +2298,7 @@ pub async fn stream_chat(
     temporary: Option<bool>,
     private: Option<bool>,
     cloud_yes: Option<bool>,
+    attachment: Option<ChatAttachment>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
@@ -2217,6 +2358,20 @@ pub async fn stream_chat(
         // never from the page: `chat_extras` above keeps only checked page
         // fields, and this is added after it.
         body.insert("desktop".into(), crate::update::desktop_chat_facts(&app));
+    }
+
+    // A file dropped on the quick bar (the owner's decision of 2026-11-09;
+    // JARVIS-API.md section 163.6). It is the same `/api/chat` body the HUD
+    // sends - one file on the newest user message, `has_file: true` beside it
+    // - built here because this window's chat is posted by Rust. No new
+    // route, no upload, no new permission: the PC still reads the file under
+    // its own `read_files_readonly` gate. A refused attachment stops the turn
+    // in the page's own words rather than being silently dropped.
+    if let Some(file) = attachment {
+        if let Err(refusal) = add_chat_attachment(&mut payload, file) {
+            app.state::<ChatState>().finish(&cancel);
+            return Err(refusal);
+        }
     }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
@@ -3404,8 +3559,11 @@ pub fn stop_everything_now(app: &AppHandle) {
     // `stop_push_to_talk`).
     crate::voice::stop_push_to_talk(app);
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
-    // The HUD window is the backend's own page and speaks through the
-    // browser's speech engine; a fixed line, no payload.
+    // The HUD window's read-aloud is AUDIO it plays itself (the PC's own voice,
+    // `speak_reply`; TASK-51, 2026-11-09), and that page stops it on the same
+    // `stop-everything` event emitted just above. This eval is the other half:
+    // any speech the browser's own engine might still be making in that window
+    // is silenced too, so no path is left talking.
     if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
         if let Err(err) = hud
             .eval("try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}")
@@ -8082,6 +8240,127 @@ mod turn_tests {
             assert!(chat_extras(None, Some(bad)).is_empty(), "{bad:?}");
         }
         assert!(chat_extras(None, None).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod chat_attachment_tests {
+    use super::{
+        add_chat_attachment, attach_size_words, chat_attachment_problem, ChatAttachment,
+        CHAT_ATTACH_KINDS, CHAT_ATTACH_MAX_BYTES,
+    };
+    use serde_json::json;
+
+    fn file(name: &str, size: u64) -> ChatAttachment {
+        ChatAttachment {
+            name: name.into(),
+            mime: "application/pdf".into(),
+            size,
+            data: "aGVsbG8=".into(),
+        }
+    }
+
+    /// The command's own body, built by the function it really calls: the file
+    /// rides the NEWEST user message only, `has_file` sits at the top level
+    /// beside `has_image`, and the question itself is unchanged. This is the
+    /// HUD's shape (JARVIS-API.md section 163.1), built in Rust because the
+    /// quick bar's chat is posted from here.
+    #[test]
+    fn the_file_rides_the_newest_user_message_and_sets_has_file() {
+        let mut body = json!({
+            "messages": [
+                {"role": "user", "content": "earlier"},
+                {"role": "assistant", "content": "an answer"},
+                {"role": "user", "content": "what does this say?"}
+            ],
+            "has_image": false,
+            "stream": true,
+            "auto": true,
+        });
+        add_chat_attachment(&mut body, file("tenancy.pdf", 12_000)).unwrap();
+        assert_eq!(body["has_file"], true);
+        assert_eq!(body["messages"][2]["attachment"]["name"], "tenancy.pdf");
+        assert_eq!(body["messages"][2]["attachment"]["mime"], "application/pdf");
+        assert_eq!(body["messages"][2]["attachment"]["size"], 12_000);
+        assert_eq!(body["messages"][2]["attachment"]["data"], "aGVsbG8=");
+        assert_eq!(body["messages"][2]["content"], "what does this say?");
+        for i in [0, 1] {
+            assert!(
+                body["messages"][i].get("attachment").is_none(),
+                "message {i} carries the file too"
+            );
+        }
+        // Everything else in the body is exactly as it was.
+        assert_eq!(body["has_image"], false);
+        assert_eq!(body["messages"].as_array().unwrap().len(), 3);
+        assert!(body.get("temporary").is_none() && body.get("private").is_none());
+    }
+
+    /// The sentence a refusal uses names both sizes in the page's own words,
+    /// so the two windows cannot describe the same cap differently.
+    #[test]
+    fn the_size_words_are_the_pages_own() {
+        assert_eq!(attach_size_words(1_200_000), "1.2 MB");
+        assert_eq!(attach_size_words(CHAT_ATTACH_MAX_BYTES), "2.5 MB");
+        assert_eq!(attach_size_words(640_000), "640 KB");
+        assert_eq!(attach_size_words(12), "12 bytes");
+        assert_eq!(attach_size_words(1), "1 byte");
+    }
+
+    /// The eight kinds are the list, case does not hide a kind, a picture and
+    /// an unknown type are refused before anything is built, and the cap is
+    /// inclusive at exactly 2,500,000 bytes.
+    #[test]
+    fn a_file_the_pc_cannot_read_is_refused_before_the_body_is_built() {
+        for kind in CHAT_ATTACH_KINDS {
+            let ok = file(&format!("notes{kind}"), 12);
+            assert!(chat_attachment_problem(&ok).is_none(), "{kind}");
+            let upper = file(&format!("NOTES{}", kind.to_uppercase()), 12);
+            assert!(chat_attachment_problem(&upper).is_none(), "{kind}");
+        }
+        assert!(chat_attachment_problem(&file("holiday.png", 10))
+            .unwrap()
+            .contains("picture"));
+        assert!(chat_attachment_problem(&file("song.mp3", 10)).is_some());
+        // A name with no extension (or a dot at the start, like `.env`) has
+        // no kind at all.
+        for nameless in ["README", ".env", ""] {
+            assert!(
+                chat_attachment_problem(&file(nameless, 10)).is_some(),
+                "{nameless}"
+            );
+        }
+        assert!(chat_attachment_problem(&file("at-the-cap.pdf", CHAT_ATTACH_MAX_BYTES)).is_none());
+        let over = chat_attachment_problem(&file("big.pdf", 4_400_000)).unwrap();
+        assert!(over.contains("That file is 4.4 MB"), "{over}");
+        assert!(
+            over.contains("Files up to 2.5 MB can be attached"),
+            "{over}"
+        );
+        assert!(over.contains("folder Jarvis may look in"), "{over}");
+        // A zero-byte file, and bytes the page said it could not read.
+        assert!(chat_attachment_problem(&file("empty.pdf", 0)).is_some());
+        let mut blank = file("notes.txt", 10);
+        blank.data = String::new();
+        assert!(chat_attachment_problem(&blank).is_some());
+    }
+
+    /// A refused attachment never reaches the body, and a file is never hung
+    /// on an assistant's answer or on a body with no question at all.
+    #[test]
+    fn a_refused_file_leaves_the_body_alone() {
+        let mut body = json!({"messages": [{"role": "user", "content": "hello"}]});
+        assert!(add_chat_attachment(&mut body, file("song.mp3", 10)).is_err());
+        assert!(body.get("has_file").is_none());
+        assert!(body["messages"][0].get("attachment").is_none());
+
+        let mut answer = json!({"messages": [{"role": "assistant", "content": "hi"}]});
+        assert!(add_chat_attachment(&mut answer, file("notes.txt", 10)).is_err());
+        assert!(answer.get("has_file").is_none());
+
+        let mut none = json!({"messages": []});
+        assert!(add_chat_attachment(&mut none, file("notes.txt", 10)).is_err());
+        assert!(none.get("has_file").is_none());
     }
 }
 

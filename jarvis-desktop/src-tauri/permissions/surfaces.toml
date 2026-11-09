@@ -168,7 +168,10 @@ permissions = [
 
 # Real microphone capture and the spoken reply - see src-tauri/src/voice.rs's
 # own module docstring for why this is granted to the quickbar and NOT to the
-# hud window, which loads a vendored page with no app commands at all.
+# hud window, which loads a vendored page. (The HUD does hold ONE command from
+# this area since TASK-51 - `allow-speak-reply`, in the `hud-speech` set below -
+# because its read-aloud must play the PC's configured voice rather than the
+# webview's; everything recording-related stays here, with the bar.)
 # Push-to-talk only: nothing here can start listening on its own, and
 # `cancel_voice_capture` exists specifically so releasing the control early
 # can throw the clip away rather than only ever being able to send it.
@@ -220,6 +223,36 @@ permissions = [
   "allow-hud-open-bar",
   "allow-hide-quickbar",
 ]
+
+# The HUD's own read-aloud, in Jarvis's voice instead of the webview's
+# (TASK-51, 2026-11-09; the owner's decision of 2026-11-08 and Gemini's Q7;
+# docs/JARVIS-API.md section 206). ONE command, `speak_reply` - the SAME one
+# the Jarvis bar's spoken answers already use: it asks THIS PC's backend for
+# the sound of a piece of text (`POST /api/voice/say`) in the voice the PC is
+# configured to speak in (Kokoro's chosen speaker, or one of the owner's custom
+# voices), and returns it as a `data:audio/wav` URI the page plays.
+#
+# WHY THE HUD AND NOT JUST THE BAR. The HUD is the one surface that reads a
+# TYPED answer aloud (the speaker beside an answer, and "Read out loud" in its
+# answer menu), and until now it did that with the webview's `speechSynthesis`:
+# a hand-picked British voice, then any English one, then whatever came first -
+# on a stock Windows 11 that is index 0, `Microsoft David`, a man. That was
+# never the owner's configured voice, so the page now asks the PC for its own.
+# The command adds the token in Rust, as every other call from this page does;
+# the page holds none.
+#
+# WHAT THIS GRANT CAN AND CANNOT DO. It makes the PC speak text: the text is
+# the answer already on screen (the owner tapped it), the audio comes back to
+# this page, nothing is recorded, no approval is raised, no setting is written
+# and no route becomes reachable that was not before (`/api/voice/say` already
+# answers the bar). It is deliberately NOT the `voice` set above: there is no
+# microphone command here, so this page still cannot record, and still cannot
+# start automatic listening. `tools/check_invoke_grants.py` holds the page's
+# one `speak_reply` call to this set.
+[[set]]
+identifier = "hud-speech"
+description = "Ask this PC to speak a piece of an answer in Jarvis's configured voice, and play it here. No microphone, no recording, no setting and no approval."
+permissions = ["allow-speak-reply"]
 
 # The HUD page's requests to Jarvis, made in Rust with the token, so the page
 # never holds it (apps security audit M2; hud_proxy.rs). Its reads from a
@@ -2084,6 +2117,11 @@ permissions = [
   "allow-get-tutorials",
   "allow-mark-tutorial",
   "allow-get-faq",
+  # "What's new in Jarvis" (Task-50, Wave 12): the generated recent-changes
+  # module's own bullets. A read of the project's own record - nothing written,
+  # no card. Its one control uses the `open-fix-place` grant this window
+  # already holds (brain.js's own navigation), asking for `updates`.
+  "allow-get-recent-changes",
 ]
 
 # How long "Solve it here" stays on offer (handoff.rs; backend/jarvis_handoff_mode.py;

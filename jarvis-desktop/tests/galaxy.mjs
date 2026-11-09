@@ -193,6 +193,65 @@ async function galaxy(extra = {}, brainExtra = {}) {
   return page;
 }
 
+await check("the view says what it is in plain words, and its id stays `galaxy`", async () => {
+  // The owner's IA recommendations (2026-11-09): "the Galaxy view's
+  // label/title should say what it is, in plain words: 'The memory map - what
+  // Jarvis remembers'". Renamed in words only: the view id, the tab id and the
+  // selectors every other test uses are unchanged.
+  const html = read("src/brain.html");
+  const js = read("src/brain.js");
+  assert.match(html, /id="view-title">The memory map<\/h1>/,
+    "the view's own title does not say what the picture is");
+  assert.match(html, /id="view-sub">what Jarvis remembers<\/p>/,
+    "the line under it does not say what it holds");
+  assert.match(html, /<span class="rail-label">The memory map<\/span>/,
+    "the rail's own word for the tab does not say what it is");
+  assert.match(js, /galaxy: \{ title: "The memory map", sub: "what Jarvis remembers" \}/,
+    "the title the page switches to no longer says what the picture is");
+  assert.match(html, /id="tab-galaxy"[^>]*data-goto="galaxy"[^>]*aria-controls="view-galaxy"/,
+    "the tab's id or its controls link changed");
+  assert.match(html, /<section class="view view-galaxy" id="view-galaxy"/,
+    "the view's id changed");
+  assert.match(js, /if \(name === "galaxy"\) fitCanvas\(\);/,
+    "the view's own key changed");
+});
+
+await check("the HUD's own place key opens the map, Advanced included, and is taken", async () => {
+  // The one press the owner asked for (2026-11-09, the IA recommendations):
+  // the HUD leaves `jarvis.brain.place` and calls the same navigation-only
+  // `open_fix_place {place: "brain"}` the settings gear uses. This drives the
+  // Brain's own half of that with the key, exactly as the HUD would: the
+  // focus handler consumes the place through takeAnyPlace(), showPlace()
+  // opens the view, and the Advanced disclosure comes with it so the selected
+  // tab is visible.
+  const page = await K.open(browser, base, "brain.html", {}, SIZE);
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    localStorage.setItem("jarvis.brain.place",
+      JSON.stringify({ place: "galaxy", at: Date.now() }));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await page.waitForTimeout(600);
+  const state = await page.evaluate(() => ({
+    shown: !document.getElementById("view-galaxy").hidden,
+    tab: document.getElementById("tab-galaxy").getAttribute("aria-selected"),
+    advanced: document.getElementById("rail-advanced-toggle").getAttribute("aria-expanded"),
+    title: document.getElementById("view-title").textContent,
+    sub: document.getElementById("view-sub").textContent,
+    key: localStorage.getItem("jarvis.brain.place"),
+  }));
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(errors, [], "the place threw while it opened the map");
+  assert.equal(state.shown, true, "the Galaxy view was not the one showing");
+  assert.equal(state.tab, "true", "the Galaxy tab does not say it is the one showing");
+  assert.equal(state.advanced, "true",
+    "the Advanced disclosure stayed shut, so the selected tab cannot be seen");
+  assert.equal(state.title, "The memory map");
+  assert.equal(state.sub, "what Jarvis remembers");
+  assert.equal(state.key, null, "the place was not taken; a second press would repeat it");
+});
+
 await check("Galaxy reads the people-and-things list, never the old graph, and counts names and links", async () => {
   const page = await galaxy();
   const asked = await page.evaluate(() => window.__calls.filter((c) => c[0] === "brain_read")

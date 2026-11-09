@@ -988,8 +988,14 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
     "the personalities' titles are not the PC's own");
   assert.equal(menu.mine.length, 0, "a My personalities section appeared with no saved ones");
   const modelRule = (menu.groups.find((g) => g.heading === "Focus presets") || { notes: [] }).notes.join(" ");
+  assert.match(modelRule, /at once/i,
+    `the menu does not say a local preset switches at once: ${modelRule}`);
+  assert.match(modelRule, /Coding/,
+    `the menu does not say Coding still asks: ${modelRule}`);
+  assert.match(modelRule, /Cloud/,
+    `the menu does not say the Cloud row still asks: ${modelRule}`);
   assert.match(modelRule, /ONE approval card/i,
-    `the menu does not say the model cards' rule: ${modelRule}`);
+    `the menu does not say which rows still ask: ${modelRule}`);
   assert.equal(menu.line, "", "the menu said something before any action ran");
   assert.deepEqual(problems, []);
 });

@@ -1267,6 +1267,49 @@ in `jarvis_asks_first.NOT_A_SWITCH` - the data sandbox, the product check and
 the two web-search grant tools, each decided by its own switch. **No fourth
 "settings-file only" tool tier may be added.**
 
+**A direct click on the owner's own screen, where the way back is the same
+click, raises no card - and nothing else does** (2026-11-09). The owner's rule:
+*"if i manually choose anything in the jarvis app or deskstop program, and its
+something that i can easily click and change back right away, it shouldnt need a
+card."* The first feature under it is a local focus preset: the one route both
+apps' own preset controls call (`POST /api/work/apply`) applies it at once with
+no `jarvis_gate` question, and writes a `preset_apply` receipt through
+`jarvis_receipts` naming the preset, model and lane it replaced, so the change
+is recorded and the existing receipts route can undo it (when the preset it
+replaced is itself a local one; going back to Coding or Cloud is a carded menu
+click, not an Undo). The everyday way back is the old preset's own menu row.
+Four facts must ALL hold, and they are the boundary: the request came from a
+route only a screen calls (the model's own
+tool path never posts to the HTTP API - it calls
+`jarvis_presets.apply_from_body` in-process and keeps its card), the change is
+one model switch on a lane that already exists, the preset it replaced is one
+click away in the same menu, and nothing is downloaded, installed, deleted or
+spent. `jarvis_presets.apply_preset` applies this rule; `owner_ui` is set by ONE
+caller, the route wrapper, and is never read from a request body. It is
+deliberately NOT a tier change: `switch_model` stays `ask` in
+`[autonomy.tiers]`, and a chat/voice apply, the heavy Coding preset (its pooled
+lane unloads both other models) and the Cloud row (it changes where the owner's
+words go) all still raise their card; `install` and `download_model` are
+untouched. JARVIS-API section 209 has the full preset rule,
+`backend/test_presets_owner_ui.py` proves both halves.
+
+**The same rule is ONE allow-list, not a second code path.** Since 2026-11-09
+`backend/jarvis_reversible_ui.py` holds the explicit allow-list
+(`REVERSIBLE_UI_CHOICES`) the owner's manual-click rule is allowed to use: a
+local preset, and a model already installed that is picked in either app's own
+model list. The trusted-UI signal is the ROUTE - `POST /api/models/switch`,
+wrapped by the module's own `install()` after the HUD's origin and pairing-token
+checks - never a header, query parameter or body field. A model already on this
+PC switches at once and writes the same model record and runs the same tripwire
+smoke test `switch_to` does, without the card; every model/chat path is
+unchanged and still raises its one `switch_model` card, `switch_model` stays
+`ask` in `[autonomy.tiers]`, and a download/install still asks. Destructive and
+boundary-changing actions (forget/`forget_range`, deletes, installs, Lockdown
+off, app lock, credentials, repo creation, sends, imports) are excluded by name
+and keep their card on both roads. JARVIS-API section 210 has the rule, the
+audit of the everyday settings, and the proof
+(`backend/test_reversible_ui_choices.py`).
+
 ---
 
 ## 4. The egress boundary
@@ -2535,17 +2578,30 @@ holds one command for it, `hud-approvals` -> `allow-decide-approval`, so
 Windows Hello, the stale-link refusal, the cut-off refusal and the App-lock
 rule apply there unchanged. What that page's own `fetch` still cannot do is
 post a decision itself: `hud_bootstrap.js`'s shim refuses `/api/approve` and
-`/api/deny` whatever the link is doing. **The same file also keeps a private
-answer on screen there** (2026-10-16, the owner's decision *"Gate it - keep
-sensitive answers on screen in the HUD too"*): that page is the one surface
-which reads a TYPED answer aloud, and its `speechSynthesis.speak` is now
-refused for an answer whose route says `injected_sensitive` above 0 or
-`gate: "private"`, with the bar's own line ("It's on your screen.") drawn
-under the answer instead - the rule of `docs/JARVIS-API.md` §16 step 3, read
-off the route the page already has. It is a decision, not an oversight: the
-step-3 exception that a typed question may be read aloud is removed in that
-one window and nowhere else. No window may `emit` events to the
-others either (M1).
+`/api/deny` whatever the link is doing. **The same file also keeps a private answer on screen there** (2026-10-16, the owner's decision *"Gate it - keep sensitive answers on screen in the HUD too"*): that page is the one surface which reads a TYPED answer aloud, and an answer whose route says `injected_sensitive` above 0 or `gate: "private"` is refused, with the bar's own line ("It's on your screen.") drawn under the answer instead - the rule of `docs/JARVIS-API.md` §16 step 3, read off the route the page already has. It is a decision, not an oversight: the step-3 exception that a typed question may be read aloud is removed in that one window and nowhere else. **The refusal is now the page's own, asked before a tap can start anything** (`private-speech.js` through `mayReadAloud`, failing closed); the shell's `speechSynthesis.speak` wrapper and its kept-on-screen line stay as the guard for any speech-synthesis path that might return to that page. **And since TASK-51 (2026-11-09, the owner's decision of 2026-11-08) that page no longer speaks with the webview's voice at all**: a tapped answer is played as audio the PC made in the configured Jarvis voice, through the bar's own `speak_reply` command (`POST /api/voice/say`, granted to the HUD as one narrow `hud-speech` set), with Pause / Resume beside Read out loud and a Stop that resets the player; a voice the PC cannot make is said in words and never replaced by a Windows one (JARVIS-API §206). No window may `emit` events to the others either (M1).
+
+**A dropped file is one door per window, and the Alt+Space bar now has it too**
+(2026-11-09; the owner's decision, JARVIS-API §163.6). The HUD and every chat
+window take a dropped file because their Rust builders turn Tauri's own
+drag-drop handler off (`disable_drag_drop_handler()`): on Windows Tauri
+**replaces** WebView2's handler, so the page's `drop` event never fires while it
+is on - the listener existed, worked in a browser, and did nothing in the
+packaged window. The Alt+Space bar is declared in `tauri.conf.json` rather than
+built in Rust, and its `dragDropEnabled: false` is that same switch, so a
+dropped file reaches `index.html`. One file goes with a question: the same
+eight kinds, the same 2,500,000-byte cap checked **before a byte is read**, the
+same plain refusal sentences as the HUD, a name chip with its own Remove, and
+**nothing auto-sends** - the file waits on the chip until Enter, and Esc takes
+it away. The bar's chat body is built in Rust, so the file rides
+`stream_chat`'s own `attachment` argument, and the body is the HUD's shape
+(`attachment` on the newest user message, `has_file: true` at the top level):
+no new route, no new command, no new permission, and the PC's
+`read_files_readonly` gate is unchanged. **NOT-TESTABLE at a desk:** a real drag
+from Explorer onto the packaged window - that the Tauri runtime hands the drop
+over at all - and the chip's look with a real file name from the owner's PC;
+the desk tests lift the page's own rule block out of `main.js` and run it
+(`tests/quickbar-attach.mjs`), and assert the resulting body in Rust
+(`commands.rs`'s `chat_attachment_tests`).
 
 **The HUD page draws only while it is being looked at** (2026-10-23, the
 idle-power review). Its Galaxy map has one drawing loop, and it runs only while
@@ -3522,7 +3578,10 @@ owner's 2026-09-20 decision makes the phone's install a name TYPED by hand - a
 list of what could be installed is exactly the thing kept off it, and a phone
 version of this screen would be that list. The benchmark is the other half of
 the reason: it measures the PC's own graphics cards, which the phone cannot run
-or see. So the five routes the advisor uses (`GET /api/models/recommendations`,
+or see. So the seven routes the advisor uses (`GET /api/models/recommendations`,
+`GET /api/models/resources` (added 2026-11-09: the loaded-model/resources
+read, PC-only for the same reason), `GET /api/models/measured` (added
+2026-11-09: the stored benchmark rows, PC-only for the same reason),
 `POST /api/models/check`, `POST /api/models/benchmark`, `POST
 /api/presets/recommend`, `POST /api/presets/recommend/opinion`) are
 `deliberate` in `tools/check_parity.py`, and neither app claims a phone half.
@@ -4656,8 +4715,10 @@ standing rule rather than a missing phone screen** (2026-10-28; their words:
 local ai models being used) with a one click check for new models button and it
 will look on hugging face for newer potentially better models ... then it will
 recommend changing the presets based on the local gpus and what model goes
-where"*; `docs/JARVIS-API.md` section 160). The five routes
-(`GET /api/models/recommendations`, `POST /api/models/check`,
+where"*; `docs/JARVIS-API.md` section 160). The seven routes
+(`GET /api/models/recommendations`, `GET /api/models/resources` (added
+2026-11-09: the loaded-model/resources read), `GET /api/models/measured`
+(added 2026-11-09: the stored benchmark rows), `POST /api/models/check`,
 `POST /api/models/benchmark`, `POST /api/presets/recommend` and
 `POST /api/presets/recommend/opinion`) are PC-only in the backend itself: each
 one answers 403 from any device but this PC, checked with
@@ -4912,6 +4973,10 @@ what is missing is only the Settings screen agreeing about who turned it off.
 - **The per-repository GitHub watcher has no screen in either app, on purpose (2026-11-07).** It is controlled entirely by one sentence in chat and in Jarvis Live - the same matcher, the same runner, the same store - and what it would have said is read from the existing `GET /api/watch/decisions` route. So neither app gains a page, a toggle or a card: adding a screen to only one of them would be the one-sided case, and adding the same screen to both would duplicate a control the owner asked to be conversational ("through jarvis live and chat").
 
 
+- **The Brain's "Loaded now / Resources" plate is the PC's alone, and that is one-sided on purpose (2026-11-09).** The owner asked the Model pane to say what is loaded into Jarvis right now, how much memory it uses of each graphics card, what else of the computer it is using, and what the context size is (JARVIS-API section 160.1; `GET /api/models/resources`). The answer is measured from the PC itself - each Ollama lane's own `/api/ps`, `nvidia-smi`'s card and compute-process rows, and the web server process's own memory and processor numbers - so the backend serves it PC-only (`jarvis_owner_check.from_this_pc` refuses another device with 403 before the read), and `tools/check_parity.py` classifies the route `deliberate` with this reason. There is no phone plate: the phone already lists the installed models it can switch between, and a phone screen of the PC's cards and processes would be a second, staler copy of facts only the PC can measure - not a parity gap. Both apps are unchanged in what they can do; the desktop gains the plate and the corrected COMPUTE panel words, and nothing here raises a card, loads a model or changes a setting.
+
+- **The Brain's "Measured results" plate is the PC's alone too, and that is one-sided on purpose (2026-11-09).** The card shows what benchmarks have ALREADY measured on this PC - the speed runs and the five-suite scorecards from the two stores `jarvis_bench` writes (`BenchLog`/`bench.jsonl` and `ScoreLog`/`bench-scores.jsonl`, the same two JARVIS-API section 205 answers "what have you measured" from), served read-only at `GET /api/models/measured` (JARVIS-API section 160.2). It is PC-only for the same reason as its neighbour and one more of its own: a benchmark measures the PC's own graphics cards and its own Ollama lanes, so the only screen that can run one is the one that holds the run that produced these rows. A phone copy would be a second, staler view of facts the phone can neither produce nor verify, and it would put the run's model names and numbers on a device the owner deliberately keeps out of the model-catalogue surface. `jarvis_owner_check.from_this_pc` refuses another device with 403 before the read, and `tools/check_parity.py` classifies the route `deliberate` with this reason. Nothing is removed from the phone: it still lists the models it can switch between and still has its own benchmark sentence in chat (section 205's answer, which needs no route). The desktop gains the plate; nothing here starts a run, loads a model, writes a row or raises a card.
+
 - **The automatic read-aloud switch is PC-only, and the phone has its own on-device switch - one-sided on purpose (2026-11-07).** The owner asked for a real control over Jarvis reading replies aloud: typed answers stay silent by default, voice answers are spoken, and an answer that uses what Jarvis remembers is read aloud by default in Jarvis Live too, unless it is extremely sensitive. The PC half is the backend-owned `GET/POST /api/read-aloud` switch (ON by default), wired from brain to mouth by the ready plug-in `plugins/ready/read-aloud` (`backend/jarvis_read_aloud.py`, `backend/test_read_aloud.py`): the Settings switch, the chat/Live sentences and the HUD quickbar all speak the same state, and a model answer can never toggle it. The phone half is its own local switch (`MemoryAloud`, `PrivateAloud`, default ON including "hey Jarvis"/Live), its own chat sentences and its own per-answer Read out loud in the message menu; the phone never calls `/api/read-aloud`. That is deliberate: the PC route controls the PC's speakers, and a phone change must not silence or unmute the desktop by accident. `tools/check_parity.py` classifies `/api/read-aloud` as `deliberate` with that reason; what is one-sided is the *switch's owner*, not the permission, and both apps still show every answer and the same sensitive-answer rule.
 
 - **The auto Wi-Fi reconnect is the PC's, and only the PC's** (2026-11-08; the
@@ -4950,6 +5015,46 @@ what is missing is only the Settings screen agreeing about who turned it off.
   attempt (a card every 2 hours is not answerable). JARVIS-API section 204
   records the route and the guardrails.
 
+- **The phone may send a 4 GB Notion export too, and the PC's unpacked ceiling
+  is also 4 GB, but they are still two numbers** (2026-11-09; the owner's
+  decision that a 276 MB Notion export must import, first on the PC and then
+  from the phone; `backend/jarvis_documents.py`, `backend/jarvis_notion_obsidian.py`,
+  `backend/jarvis_upload.py`, JARVIS-API §207). The labels used to be mixed up:
+  the PC's ceiling is on the UNPACKED total an export's own directory declares
+  (it was 250 MB at the folder import and 500 MB at the vault converter, and
+  the 250 MB one is what refused the owner's file; both are 4 GB now), while the
+  phone's number is on the RAW ZIP BYTES it sends over his private network. The
+  phone's was 250 MB (the owner's 2026-11-05 decision) and **he raised it to
+  4 GB on 2026-11-09** when he chose phone parity, so a 276 MB export sent from
+  the phone is accepted; its staging ceiling moved with it (512 MiB -> 4 GiB),
+  because a full-size export could not otherwise be staged, and the three
+  uploads-in-flight cap still bounds what a stolen token can leave on disk.
+  Both apps show the PC's refusal sentence verbatim - `NotionImport.nothing()`
+  on the phone passes it through `DesktopWrite.asSentence()` - so the wording
+  reaches both without a second copy anywhere. Nothing new is one-sided in the
+  permission model: no route, control or card was added and
+  `tools/check_parity.py` has nothing to classify.
+
+
+- **"What's new in Jarvis" is the desktop's pane, and that is one-sided on
+  purpose** (Task-50, Wave 12; `docs/JARVIS-API.md` section 206;
+  `backend/jarvis_brain_reads.py`'s `RECENT_CHANGES_PATH`, reading the generated
+  `backend/jarvis_recent_changes.py`; `tutorials.rs` `get_recent_changes`,
+  `src/tutorials.js`). The Brain's Tutorials and the FAQ tab shows the project's
+  own recent-changes record - the same bullets the chat's "what changed in your
+  last update?" answer reads - and its one control opens Settings at the Updates
+  card (`open_fix_place` with `place: "updates"`, a navigation only). **The
+  phone shows no such pane because it has nowhere for the door to go:** the
+  phone does not install or update Jarvis (the desktop's updater runs on this
+  PC), so a "What's new" pane there could describe a change and then offer
+  nothing to act on. The phone's Tutorials tab keeps the shared catalogue
+  (`JARVIS-API` section 114). `tools/check_parity.py` classifies
+  `/api/recent-changes` `deliberate` with this reason. The pane invents nothing:
+  a module that is missing, empty or unreadable answers with a sentence saying
+  so, never with a list.
+
+
+- **Read-aloud in Jarvis's own voice, with Pause and Stop, is the desktop's - one-sided on purpose (2026-11-09, TASK-51; the owner's decision of 2026-11-08 and Gemini's Q7).** The desktop HUD is the one surface that reads a TYPED answer aloud, and it used to do that with WebView2's speech engine, hand-picking a British voice and falling back to the first English voice in the list - which the owner's report of 2026-11-08 names on his PC as Windows' index-0 `Microsoft David`, a man, while his configured voice is Kokoro's (default `af_heart`, a woman). Since this slice the HUD plays AUDIO the PC made through the bar's own `speak_reply` (`POST /api/voice/say` -> `jarvis_speech.say()` -> `jarvis_voices.speaker()`, or the owner's custom voice), so the voice is the same one a spoken answer and Jarvis Live use; when that voice cannot be made the page says so in one line and speaks nothing else. It also gains an inline Pause / Resume beside Read out loud and a Stop that fully resets the player, and it stops on Stop everything and on the PC's `read_aloud {enabled: false}` event (JARVIS-API §206). **Nothing of this is ported to the phone, and nothing of the phone's voice path is touched:** the phone's tap-only Read out loud already speaks with Android's own on-device synthesiser under its own lock rules and its own voice, there is no WebView2-style voice list on Android to fall back through, and the PC's Kokoro voice cannot be shipped to it - so a phone port would be a second, different voice, which is the bug this slice removes. **The phone's voice-print / speaker-verification path is deliberately untouched by this work**: `jarvis_voice.py`, the enrolment routes and `voiceprint`-class commands are unchanged on both apps; the new desktop grant is ONE speech command (`hud-speech` = `allow-speak-reply`), with no microphone command, no recording command and no route added, so the owner check that guards what Jarvis acts on is exactly where it was. `tools/check_parity.py` has nothing new to classify: `/api/voice/say` was already there and already used by both apps' read-aloud.
 
 ## 9. Where the backend lives
 

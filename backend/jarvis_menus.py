@@ -656,9 +656,9 @@ MENUS: tuple = (
        area="brain", view="history", kind="tab", names=("history", "chat history")),
     _m("brain.tab.faculties", "Model", "The models, compute and skills.", (DESKTOP,),
        area="brain", view="faculties", kind="tab", names=("model",)),
-    _m("brain.tab.work", "Work", "Focus, chatbots, today, goals, quiz and the rest.", (DESKTOP,),
+    _m("brain.tab.work", "Work", "Focus, chatbots, today, quiz and the rest.", (DESKTOP,),
        area="brain", view="work", kind="tab", names=("work",)),
-    _m("brain.tab.projects", "Projects", "Projects, their notes and benchmarks.",
+    _m("brain.tab.projects", "Projects", "Projects, their notes, benchmarks and goals.",
        area="brain", view="projects", kind="tab", group="goals-projects", names=("projects",)),
     # Named as the phone's plate is named (the cohesion audit of 2026-10-08:
     # this one place was "Tutorials" on the PC and "Tutorials and the FAQ" on
@@ -747,6 +747,19 @@ MENUS: tuple = (
     # ---- Brain: Model --------------------------------------------------
     _m("brain.model.models", "Models", "The models Jarvis can use.",
        area="brain", view="faculties", names=("models list", "model list")),
+    # The two cards the owner asked for on 2026-11-08 (JARVIS-API sections
+    # 160.1 and 160.2). Both answer from THIS PC's own reads, so both are the
+    # desktop's alone - the same one-sided rule as `brain.model.memory`.
+    _m("brain.model.resources", "Loaded now / Resources",
+       "What is loaded into Jarvis right now, on which graphics card, at which "
+       "context, and what Jarvis itself is using.",
+       (DESKTOP,), area="brain", view="faculties",
+       names=("loaded now", "resources")),
+    _m("brain.model.measured", "Measured results",
+       "What benchmarks have already measured on this PC: the speed runs and "
+       "the five-suite scorecards.",
+       (DESKTOP,), area="brain", view="faculties",
+       names=("measured results", "benchmark results")),
     _m("brain.model.compute", "Compute", "The graphics card plan.",
        area="brain", view="faculties", names=("compute",)),
     _m("brain.model.skills", "Skills", "Installed skills with scan verdicts.",
@@ -795,7 +808,7 @@ MENUS: tuple = (
        why="A reminder that is due shows here; it must stay reachable.",
        names=("coming up",)),
     _m("brain.work.goals", "Goals", "Plans you edit, with a weekly check-in.",
-       area="brain", view="work", group="goals-projects", names=("goals",)),
+       area="brain", view="projects", group="goals-projects", names=("goals",)),
     _m("brain.work.quiz", "Quiz me on a text", "Questions on a text you paste or a YouTube link.",
        area="brain", view="work", group="study", names=("quiz", "quizzes")),
     _m("brain.work.quiz.youtube", "Quiz from a YouTube link",

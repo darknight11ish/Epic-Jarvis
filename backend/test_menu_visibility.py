@@ -229,13 +229,19 @@ def t_state_machine():
     check("showing a group clears the group and its members", st.hidden == set())
     st = S()
     M.hide(st, "brain.tab.work")
-    check("a hidden tab hides its cards", M.is_hidden(st, "brain.work.goals"))
+    check("a hidden tab hides its cards", M.is_hidden(st, "brain.work.quiz"))
     check("...but not the ones that can never be hidden", not M.is_hidden(st, "brain.work.undo"))
+    check("...and Goals is NOT one of them, because it moved to Projects (2026-11-09)",
+          not M.is_hidden(st, "brain.work.goals"))
     M.show(st, "brain.work.quiz.youtube")
     check("showing a row under a hidden tab shows the row and what holds it",
           not M.is_hidden(st, "brain.work.quiz.youtube") and not M.is_hidden(st, "brain.work.quiz")
           and "brain.tab.work" not in st.hidden)
-    check("...and hides the tab's other cards one by one", M.is_hidden(st, "brain.work.goals"))
+    check("...and hides the tab's other cards one by one", M.is_hidden(st, "brain.work.decks"))
+    st = S()
+    M.hide(st, "brain.tab.projects")
+    check("a hidden Projects tab hides its Goals card (the 2026-11-09 move)",
+          M.is_hidden(st, "brain.work.goals"))
     st = S()
     check("a phone cannot hide a desktop-only menu", M.hide(st, "brain.tab.galaxy", "phone") == "unknown")
     check("a phone cannot hide a group with no phone member",

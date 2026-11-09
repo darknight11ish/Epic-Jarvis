@@ -274,6 +274,31 @@
           </button>
           </div>
 
+          <!-- ── The file dropped on the bar ─────────────────────────────
+               The owner's decision of 2026-11-09 (chosen on a card): a
+               compatible file dropped on the Alt+Space bar must work here,
+               not only in the HUD and the chat windows. ONE file goes with a
+               question, so this is a name and a Remove - never a second copy
+               of the HUD's attach bar. The bytes are read by the page, held
+               for exactly one turn, and ride `stream_chat`'s own `attachment`
+               argument; nothing is sent until the owner presses Enter
+               (JARVIS-API.md section 163.6). The sentence that matters - the
+               refusal, or "Read on your PC." - is the line under the bar. -->
+          <span class="attach-chip" id="attach-chip" hidden>
+            <span class="attach-chip-name" id="attach-chip-name"></span>
+            <button
+              class="icon-button attach-chip-remove"
+              id="attach-chip-remove"
+              type="button"
+              title="Remove the file"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+              <span class="sr-only">Remove the file</span>
+            </button>
+          </span>
+
           <!-- ── Zone 3: the window utilities ───────────────────────────
                Secondary window controls, grouped and separated from the
                modes by a hairline. Each keeps the id, title and screen-reader
@@ -433,6 +458,16 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- The file's own line, directly under the bar: while a file waits,
+             its name, size and "Read on your PC." plus the HUD's two warnings;
+             after a refusal, the HUD's own sentence saying why nothing was
+             attached. Empty and hidden the rest of the time. It sits in the
+             stack so the bar's own height measurement (syncWindowHeight) grows
+             the window to show every word - a refusal squeezed into the
+             80-pixel bar would be cut off, and a cut-off refusal is not a
+             refusal. -->
+        <p class="attach-note" id="attach-note" hidden></p>
+
         <!-- Focus presets, opened from the chip in the bar. Every word of
              every row is the PC's (focus-presets.js); this page owns only the
              headings and the one action's name. Selecting a row changes

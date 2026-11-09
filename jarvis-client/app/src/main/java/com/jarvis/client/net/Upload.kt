@@ -43,11 +43,15 @@ import java.util.Locale
  * the same chunk size the PC's own history importer uses. The number is not
  * new to the project.
  *
- * TWO CAPS, THE OWNER'S DECISION OF 2026-11-05: 50 MB for a document (exactly
- * what the PC's reader already handles, so nothing can be stored that Jarvis
- * cannot open - `jarvis_documents.MAX_DOC_BYTES`) and 250 MB for a Notion
- * export (it is only stored and unpacked - `EXPORT_UNCOMPRESSED_MAX`). They
- * are checked here before a byte leaves the phone, and again by the PC.
+ * TWO CAPS, THE OWNER'S DECISIONS: 50 MB for a document (exactly what the PC's
+ * reader already handles, so nothing can be stored that Jarvis cannot open -
+ * `jarvis_documents.MAX_DOC_BYTES`) and 4 GB for a Notion export (raised from
+ * 250 MB on 2026-11-09, when the owner chose to send the same export from the
+ * phone that the PC imports). The Notion one is the RAW ZIP BYTES that cross
+ * his private network, not the PC's unpacked ceiling - that ceiling is 4 GB too,
+ * but it answers a different question (what the archive expands to) and it is
+ * checked on the PC. They are checked here before a byte leaves the phone, and
+ * again by the PC.
  *
  * HONEST DEGRADATION. A PC without these routes answers 404 (an older backend,
  * or the upload module missing). Then the answer is [notHere] and NOTHING is
@@ -78,8 +82,8 @@ object Upload {
     /** Most raw bytes one document may carry - the PC's `MAX_DOC_BYTES`. */
     const val DOCUMENT_MAX = 50L * 1024 * 1024
 
-    /** Most raw bytes one Notion export may carry - the owner's 250 MB. */
-    const val NOTION_MAX = 250L * 1024 * 1024
+    /** Most raw bytes one Notion export may carry, as it is sent - the owner's 4 GB (was 250 MB; raised 2026-11-09). */
+    const val NOTION_MAX = 4L * 1024 * 1024 * 1024
 
     /** What the phone is sending. The PC reads this word, and nothing about it is a path. */
     enum class Purpose(val wire: String) {
@@ -152,13 +156,13 @@ object Upload {
             " up to ${capWords(purpose)} can be sent from your phone."
 
     /**
-     * The cap in the owner's own words: 50 MB for a document, 250 MB for a
-     * Notion export (his decision of 2026-11-05). NOT [AttachFile.sizeWords]
-     * of the byte count: 50 MiB measures 52.4 MB in decimal units, and the
-     * owner decided a number he can read as fifty.
+     * The cap in the owner's own words: 50 MB for a document, 4 GB for a
+     * Notion export (the 250 MB of 2026-11-05 was raised on 2026-11-09). NOT
+     * [AttachFile.sizeWords] of the byte count: 50 MiB measures 52.4 MB in
+     * decimal units, and the owner decided a number he can read as fifty.
      */
     fun capWords(purpose: Purpose): String =
-        if (purpose == Purpose.NOTION) "250 MB" else "50 MB"
+        if (purpose == Purpose.NOTION) "4 GB" else "50 MB"
 
     /** The one cap for a purpose. */
     fun cap(purpose: Purpose): Long =

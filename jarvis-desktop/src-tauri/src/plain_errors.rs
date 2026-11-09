@@ -617,13 +617,19 @@ pub async fn set_thinking(
 }
 
 /// The place an error's fix button opens: "settings", "brain", "history",
-/// "tutorials" or "personalize-jarvis". Nothing else is accepted.
+/// "tutorials", "updates" or "personalize-jarvis". Nothing else is accepted.
 ///
 /// `"personalize-jarvis"` (2026-11-03, Wave B) is the HUD's "Finish now" door:
 /// the HUD holds no token and cannot post, so the one thing it may ask for is
 /// this navigation - Settings, opened at the "Personalize Jarvis" card. It
 /// answers no question and applies nothing; the card's own Apply is still the
 /// only write.
+///
+/// `"updates"` (Task-50, Wave 12) is the "What's new in Jarvis" pane's "Open
+/// Settings -> Updates" button: Settings, scrolled to its Updates card. It is
+/// the same place the tray's old "Update available" row opened
+/// (`windows::SETTINGS_PLACES` already held it); this only lets the Brain ask
+/// for it too.
 ///
 /// `async`, not a plain command: both windows are built the first time
 /// they are shown, and a plain command runs on the WebView2 callback
@@ -641,6 +647,10 @@ pub async fn open_fix_place(app: AppHandle, place: String) -> Result<(), String>
         // Brain, on "Tutorials and the FAQ" - the one Help place, and the same
         // destination the palette's Help row opens. Navigation only.
         "tutorials" => crate::windows::show_brain_at(&app, "tutorials"),
+        // "What's new in Jarvis" (Task-50, Wave 12): Settings, at the Updates
+        // card. The same destination and the same App lock as the tray's own
+        // door; nothing is checked, installed or changed by opening it.
+        "updates" => crate::windows::show_settings_at(&app, "updates"),
         // The HUD's "Finish now" (2026-11-03): Settings, at the Personalize
         // Jarvis card. `show_settings_at` still holds the closed place list and
         // the App lock, exactly as for the tray's own row.
@@ -960,6 +970,9 @@ mod tests {
             "brain",
             "history",
             "tutorials",
+            // Task-50 (Wave 12): "What's new in Jarvis" opens Settings at its
+            // Updates card. A navigation only, like the rest.
+            "updates",
             "personalize-jarvis",
         ] {
             assert!(

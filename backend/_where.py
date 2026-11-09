@@ -1393,11 +1393,22 @@ SHIPPED = (
     # Model/preset recommendations (2026-10-28, the owner's request): one cached
     # check of the public model catalogues, a bounded benchmark of an INSTALLED
     # model on this PC, and preset changes justified only by measured numbers.
-    # Five PC-only routes; approves, downloads and applies nothing (the existing
+    # Seven PC-only routes; approves, downloads and applies nothing (the existing
     # /api/models/install and /api/work/apply cards remain the only ways to act).
     # model-recommendations.patch adds the ONE install block; no gate row, no
     # tier line, no timer. The same entry is at the end of the script's $SHIPPED.
     "jarvis_model_recommendations.py",
+    # What is loaded right now, and what it costs (2026-11-09, the owner's ask):
+    # the chat lane's model with its real context size and spill, the cards
+    # carrying it, every card's free memory, and Jarvis's own RAM/CPU. A READ
+    # served by the recommendation module's already-installed PC-only wrapper at
+    # GET /api/models/resources - no new permission, no new install call, and
+    # nothing here loads, switches, applies or writes. It also serves the
+    # Brain's "Measured results" card at GET /api/models/measured: the speed
+    # runs and five-suite scorecards ALREADY in `jarvis_bench`'s two stores, read
+    # and never written (docs/JARVIS-API.md section 160.2). The same entry
+    # follows the recommendations one in the script's $SHIPPED.
+    "jarvis_model_resources.py",
     # A real two-way Google Calendar (2026-10-28, the owner chose "both at
     # once"): the private iCal link (read-only) or a Google sign-in over a
     # LOOPBACK redirect with PKCE and a checked `state` (read/write), one
@@ -1734,6 +1745,19 @@ SHIPPED = (
     # calm line. Route GET/POST /api/wifi-reconnect comes from its own
     # install(), loaded by plugins/ready/wifi-reconnect - no patch.
     "jarvis_wifi.py",
+    # The manual-click rule's ONE allow-list (jarvis_reversible_ui.py,
+    # 2026-11-09; Gemini's Q2 ruling on the owner's "if i manually choose
+    # anything in the jarvis app or deskstop program, and its something that i
+    # can easily click and change back right away, it shouldnt need a card").
+    # One explicit table of the choices that are one click back, the ONE route
+    # the two apps' own model list already uses (the trusted-UI signal is the
+    # route, never a body/header field), and the honest audit of the everyday
+    # settings that were already cardless. It decides nothing else: every
+    # model/chat path still asks, and the tier table is untouched. Standard
+    # library only, no card and no model at import. The same entry, in the same
+    # position, is in scripts/apply-patches.ps1's $SHIPPED - above
+    # jarvis_bench.py, which stays last.
+    "jarvis_reversible_ui.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

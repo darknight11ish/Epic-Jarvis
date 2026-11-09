@@ -915,6 +915,13 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .focused(false)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
+    // A FILE DROPPED ON THE CHAT (JARVIS-API.md section 163). Tauri's own
+    // drag-drop handler REPLACES WebView2's on Windows, so while it is on the
+    // page's `drop` listener never receives `dataTransfer.files`: the gesture
+    // worked in a browser and silently did nothing in the packaged window.
+    // Nothing in Rust listens for `tauri://drag-drop`; the page handles the
+    // drop itself, so every window that loads jarvis_hud.html turns it off.
+    .disable_drag_drop_handler()
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
@@ -1415,6 +1422,11 @@ pub fn run() {
             tutorials::get_tutorials,
             tutorials::mark_tutorial,
             tutorials::get_faq,
+            // "What's new in Jarvis" (Task-50, Wave 12): the generated
+            // recent-changes module's own bullets, read by the Brain's
+            // Tutorials tab. A read of the project's own record; nothing here
+            // writes or approves.
+            tutorials::get_recent_changes,
             web_search::get_web_search,
             web_search::set_web_search,
             web_search::test_web_search,

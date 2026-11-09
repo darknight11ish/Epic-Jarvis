@@ -362,7 +362,13 @@ private fun ListPart(
         return
     }
     Text(p.said, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
-    if (p.tooMany || p.empty) return
+    // A LARGE selection is said in the PC's own words before anything is sent
+    // (owner's 2026-11-08 ruling: no cap, but a big wipe keeps the two yesses).
+    if (p.largeWipe) {
+        Gap(4)
+        Text(p.largeWords, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+    }
+    if (p.empty) return
     if (p.chatsWhy.isNotEmpty()) {
         Gap(4)
         Text(p.chatsWhy, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)

@@ -86,6 +86,8 @@ import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 // commands (brain/tutorials.rs), progress kept on this PC (JARVIS-API 114).
 import { showTutorials, TUTORIALS_PLACE } from "./tutorials.js";
 import { tellChatsGone } from "./chat-history.js";
+import * as Resources from "./model-resources.js";
+import * as Results from "./model-results.js";
 // Brain -> History -> "Forget a time frame": its own module too.
 import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
 import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
@@ -666,7 +668,7 @@ const VIEWS = {
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
-  projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
+  projects: { title: "Projects", sub: "what you are working on, your goals, and the numbers you track" },
   // The owner's own request (2026-10-05): a skippable intro and a tutorial for
   // each major part, the same ones the phone shows, with reading progress kept
   // on this PC and shared by both apps (JARVIS-API section 114). Named for the
@@ -674,7 +676,11 @@ const VIEWS = {
   // was folded in here - the same words the phone's own menu carries
   // (`brain.tab.tutorials`, PR #108's retitle).
   tutorials: { title: "Tutorials and the FAQ", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
-  galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
+  // Named in plain words (2026-11-09, the IA recommendations): "Galaxy" on
+  // its own never said what the picture is. The view's key, its id and its
+  // tab's id all stay `galaxy`, and the button that opens it from the HUD
+  // still says "Galaxy - everything at a glance" (the owner's own wording).
+  galaxy: { title: "The memory map", sub: "what Jarvis remembers" },
   // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
   // not confused with Jarvis Live (the voice conversation).
   now: { title: "Now", sub: "what Jarvis is doing" },
@@ -695,7 +701,9 @@ const VIEW_SECTIONS = {
   // The model advisor's last answer, for showing it when the view opens rather
   // than a blank panel: the GET is a read of what the PC last worked out, dated
   // by its own `checked_at`. A fresh check is the POST behind the one button.
-  faculties: ["models", "model_recommendations", "compute", "skills", "memory", "memory_pending"],
+  faculties: ["models", "model_recommendations", "model_resources",
+              "model_measured", "compute",
+              "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
   memory: ["memory_facts", "memory_pending", "memory_entities"],
@@ -779,6 +787,8 @@ const dom = {
   traceClear: $("trace-clear"),
 
   models: $("models"),
+  resources: $("resources"),
+  measured: $("measured"),
   compute: $("compute"),
   skills: $("skills"),
   memory: $("memory"),
@@ -1343,6 +1353,8 @@ function render(name) {
       break;
     case "faculties":
       renderModels();
+      renderResources();
+      renderMeasured();
       renderCompute();
       renderSkills();
       renderMemory();
@@ -1369,7 +1381,6 @@ function render(name) {
       renderChatbot();
       renderSupport();
       renderComingUp();
-      renderGoals();
       renderQuiz();
       renderDecks();
       retirementCard.enter();
@@ -1381,6 +1392,10 @@ function render(name) {
     case "projects":
       // Its own read; the status line is painted again once it is in.
       showProjects().then(() => paintFreshness(), () => paintFreshness());
+      // Goals is drawn here since 2026-11-09 (the IA recommendations): the
+      // phone has always put the goals plate under "Your projects and goals".
+      // It keeps its own read (brain_goals), not this view's.
+      renderGoals();
       break;
     case "trust":
       renderContentRisk();
@@ -2678,32 +2693,17 @@ let learningCardSeen = false;
 
 /** The learning card left the queue: read the switch after the backend has
  *  had a moment to apply an approval. On: the line goes (renderLearning).
- *  Still off: it was denied or ran out of time, and that is said. */
+ *  Since 2026-11-09 this page raises no learning card of its own - the
+ *  switch lives in Settings, Learning - so there is no "our own ask" to
+ *  follow; the waiting line is simply the queue's answer. */
 onQueue((queue) => {
-  // A learning card raised elsewhere (the phone, or another window) came
-  // or went: the waiting line follows it, as History's does.
+  // A learning card raised elsewhere (the phone, or Settings) came or went:
+  // the waiting line follows it, as History's does.
   const waitingNow = learningCardWaiting(queue);
   if (waitingNow !== learningCardSeen) {
     learningCardSeen = waitingNow;
     if (state.view === "memory") renderLearning();
   }
-  const ask = state.learningAsk;
-  if (!ask || !ask.cardId || ask.gone) return;
-  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
-  if (items.some((item) => item && item.id === ask.cardId)) return;
-  ask.gone = true;
-  setTimeout(async () => {
-    if (state.learningAsk !== ask) return;
-    await refreshMemory();
-    if (state.learningAsk === ask) {
-      state.learningAsk = null;
-      const facts = state.data.memory_facts || {};
-      if (facts.learning !== true) {
-        toast("Background learning stays off: the card was denied or ran out of time.", "bad");
-      }
-      renderLearning();
-    }
-  }, MODEL_ASK_GRACE_MS);
 });
 
 onQueue((queue) => {
@@ -2757,6 +2757,113 @@ async function modelAction(action, reference) {
 }
 
 /**
+ * "Loaded now / Resources" (owner's ask, 2026-11-08): what is loaded into
+ * Jarvis right now - the model, its lane, its context size, its spill and the
+ * cards carrying it - plus each graphics card's free memory and Jarvis's own
+ * RAM/processor use. The words live in `model-resources.js` so they are proved
+ * without a browser; this function only draws them, and never invents a
+ * number: an unreachable lane or an unreadable process says so.
+ */
+function renderResources() {
+  const live = sectionState("model_resources");
+  const body = state.data.model_resources;
+  dom.resources.replaceChildren();
+  if (!body || body.available === false) {
+    const why = String((body && body.why) || "");
+    const reading = live.kind === "reading";
+    const node = el("p", "empty", reading ? "Reading…" : (why || "This PC has not said what is loaded right now."));
+    if (live.kind === "failed") node.append(" ", retryButton("model_resources"));
+    dom.resources.append(node);
+    return;
+  }
+  const plate = Resources.plateModel(body);
+  const dl = el("dl", "kv");
+  const add = (k, v) => {
+    if (v === undefined || v === null || v === "") return;
+    dl.append(el("dt", "", k), el("dd", "", String(v)));
+  };
+  const active = body.active_lane || {};
+  add("Chat lane", active.words || "");
+  if (plate.lanes.length) {
+    for (const lane of plate.lanes) {
+      if (lane.state === "loaded") add("Loaded on " + lane.title, lane.words);
+    }
+    const quiet = plate.lanes.filter((lane) => lane.state !== "loaded");
+    if (quiet.length) {
+      add("Other lanes", quiet.map((lane) => `${lane.title}: ${lane.words}`).join("; "));
+    }
+  }
+  if (!plate.lanes.some((lane) => lane.state === "loaded")) {
+    add("Loaded now", "Nothing is loaded into Jarvis right now.");
+  }
+  for (const line of plate.gpus) add("Card", line);
+  for (const line of plate.share) add("Jarvis's models", line);
+  add("Jarvis itself", plate.jarvis);
+  if (plate.readAt) add("Read at", `${plate.readAt} (this read)`);
+  if (dl.childElementCount) dom.resources.append(dl);
+  for (const warning of plate.warnings) {
+    dom.resources.append(el("p", "banner", warning));
+  }
+  dom.resources.append(
+    el("p", "note", "Read-only: this plate only looked. Nothing here loads, switches or starts a model.")
+  );
+}
+
+/**
+ * "Measured results" (2026-11-09): the benchmarks that are ALREADY stored on
+ * this PC - the speed runs and the five-suite scorecards - from the same two
+ * stores the chat answer reads (`jarvis_bench.BenchLog` and `ScoreLog`;
+ * docs/JARVIS-API.md section 205). The words live in `model-results.js` so they
+ * are proved without a browser; this function only draws them. Every number on
+ * screen is a stored field, and each row keeps the sentence the benchmark
+ * itself wrote when it measured it: a spilled run is never re-worded as a fast
+ * one here, and an empty list keeps the backend's own reason for being empty.
+ */
+function renderMeasured() {
+  const live = sectionState("model_measured");
+  const body = state.data.model_measured;
+  dom.measured.replaceChildren();
+  if (!body || body.available === false) {
+    const why = String((body && body.why) || "");
+    const reading = live.kind === "reading";
+    const node = el("p", "empty",
+      reading ? "Reading…" : (why || Results.NEVER_REPORTED));
+    if (live.kind === "failed") node.append(" ", retryButton("model_measured"));
+    dom.measured.append(node);
+    return;
+  }
+  const card = Results.measuredModel(body);
+  const part = (title, items, emptyLine, countLine) => {
+    const wrap = el("div", "measured-part");
+    wrap.append(el("h3", "subhead", title));
+    if (countLine) wrap.append(el("p", "note", countLine));
+    if (!items.length) {
+      wrap.append(el("p", "empty", emptyLine));
+      return wrap;
+    }
+    const dl = el("dl", "kv");
+    for (const item of items) {
+      const dt = el("dt", "", item.title);
+      if (item.meta) dt.append(el("span", "measured-meta", ` - ${item.meta}`));
+      dl.append(dt, el("dd", "", item.words));
+    }
+    wrap.append(dl);
+    return wrap;
+  };
+  dom.measured.append(part(
+    "Speed runs", card.runs, card.empty.runs,
+    Results.countWords("speed runs", card.shown.runs, card.counts.runs)
+  ));
+  dom.measured.append(part(
+    "Five-suite scorecards", card.scorecards, card.empty.scorecards,
+    Results.countWords("scorecards", card.shown.scorecards, card.counts.scorecards)
+  ));
+  if (card.note) dom.measured.append(el("p", "note", card.note));
+  if (card.readAt) dom.measured.append(el("p", "note", `Read at ${card.readAt}.`));
+  dom.measured.append(el("p", "note", card.source));
+}
+
+/**
  * The compute plan. Reads the keys `jarvis_compute.Plan.as_dict()` really
  * sends - text_model, text_on, vision_resident, tts_resident, simulated,
  * prefer, devices[], why, total_mb (backend/rebuilt/jarvis_compute.py) -
@@ -2786,43 +2893,75 @@ function renderCompute() {
     return on.replace(/cuda:(\d+)/g, "graphics card $1").replace(/\+/g, " + ");
   };
 
-  add("Model", body.text_model);
-  add("Runs on", where(body.text_on));
-  add("Picture model", yesNo(body.vision_resident));
-  add("Voice model", yesNo(body.tts_resident));
-  add("Aims for", body.prefer === "speed" ? "speed" : body.prefer === "capability"
-    ? "capability (spread over every card)" : body.prefer);
-  const devices = Array.isArray(body.devices) ? body.devices : [];
-  devices.forEach((d) => {
-    if (!d || typeof d !== "object") return;
-    const free = d.free_mb != null ? `${gb(d.free_mb)} free of ` : "";
-    add(`Card ${d.index ?? ""}`.trim(),
-      `${d.name || "graphics card"} - ${free}${d.total_mb != null ? gb(d.total_mb) : "?"}`);
-  });
-  if (!devices.length && Number(body.total_mb) > 0) add("Graphics memory", gb(body.total_mb));
-  add("Why", body.why);
-  if (body.simulated === true) {
-    add("Measured?", "No - no graphics card could be asked, so this is a guess");
+  // The truth first (2026-11-09). The owner saw "Runs on graphics card 2" while
+  // the Coding preset's pooled lane held the coder across all three cards: the
+  // plan's one `cuda:N` is a layout, never what is loaded now. When the PC's
+  // own resources read answers, IT names the loaded model, its context, its
+  // spill and the cards - and the plan's rows are labelled as the plan.
+  const truth = Resources.computeModel(state.data.model_resources);
+  if (truth.available && truth.loaded.length) {
+    for (const line of truth.loaded) {
+      add("Loaded now", `${line.model} on ${line.cards}`);
+      add("Context", line.context);
+      if (Number.isFinite(line.percent)) {
+        const spill = line.spill == null ? null : Number(line.spill);
+        add("Video memory", spill && spill > 0
+          ? `${line.percent}% on the cards; ${Math.round(spill / (1024 ** 2)).toLocaleString("en-US")} MiB spilled into system RAM`
+          : `${line.percent}% on the cards, nothing spilled into system RAM`);
+      }
+    }
+    for (const line of truth.gpus) add("Card", line);
+    for (const line of truth.share) add("Jarvis's models", line);
+    add("Jarvis itself", truth.jarvis);
+    add("Read at", truth.readAt ? `${truth.readAt} (this read)` : "");
+  } else if (truth.available) {
+    add("Loaded now", "Nothing is loaded into Jarvis right now.");
+    for (const line of truth.gpus) add("Card", line);
+    add("Read at", truth.readAt ? `${truth.readAt} (this read)` : "");
   }
 
-  // Older / other backends.
-  add("Plan", body.mode || body.strategy);
-  add("GPU", body.gpu || body.device);
-  add(
-    "VRAM",
-    body.vram_total_mb
+  // The plan's own rows. With no resources answer (an older backend) the plan
+  // is all there is, and it says so; with one, every plan row is labelled
+  // "Plan" so a layout can never be read as the loaded truth again.
+  const planPrefix = truth.available ? "Plan: " : "";
+  add(planPrefix + "model", body.text_model);
+  add(planPrefix + (truth.available ? "layout" : "Runs on"), where(body.text_on));
+  add(planPrefix + "picture model", yesNo(body.vision_resident));
+  add(planPrefix + "voice model", yesNo(body.tts_resident));
+  add(planPrefix + "aims for", body.prefer === "speed" ? "speed" : body.prefer === "capability"
+    ? "capability (spread over every card)" : body.prefer);
+  const devices = Array.isArray(body.devices) ? body.devices : [];
+  if (!truth.available) {
+    devices.forEach((d) => {
+      if (!d || typeof d !== "object") return;
+      const free = d.free_mb != null ? `${gb(d.free_mb)} free of ` : "";
+      add(`Card ${d.index ?? ""}`.trim(),
+        `${d.name || "graphics card"} - ${free}${d.total_mb != null ? gb(d.total_mb) : "?"}`);
+    });
+    if (!devices.length && Number(body.total_mb) > 0) add("Graphics memory", gb(body.total_mb));
+  }
+  add(planPrefix + "why", body.why);
+  if (body.simulated === true) {
+    add("Plan measured?", "No - no graphics card could be asked, so this is a guess");
+  }
+  if (!truth.available) {
+    add("Read at", state.readAt.compute ? asOfWords(state.readAt.compute) : "");
+    // Older / other backends: the old names stay readable, labelled as a plan.
+    add("Plan", body.mode || body.strategy);
+    add("GPU", body.gpu || body.device);
+    add("VRAM", body.vram_total_mb
       ? `${((body.vram_used_mb || 0) / 1024).toFixed(1)} / ${(body.vram_total_mb / 1024).toFixed(1)} GB`
-      : body.vram
-  );
-  add("Layers on GPU", body.gpu_layers ?? body.n_gpu_layers);
-  add("Context", body.context ?? body.n_ctx);
-  add("Note", body.note || body.reason);
+      : body.vram);
+    add("Layers on GPU", body.gpu_layers ?? body.n_gpu_layers);
+    add("Context", body.context ?? body.n_ctx);
+    add("Note", body.note || body.reason);
+  }
   if (!dl.childElementCount) {
     return dom.compute.append(el("p", "empty", "No compute plan reported."));
   }
   dom.compute.append(dl);
   const firstMb = Number(devices[0]?.total_mb ?? body.total_mb ?? 0);
-  if (firstMb >= 15360 && firstMb <= 35000) {
+  if (!truth.available && firstMb >= 15360 && firstMb <= 35000) {
     dom.compute.append(
       el("p", "note model-preset-suggestion", "Your card can hold the 14B at 32K — try the Smartest preset in Settings > Hardware and models.")
     );
@@ -2919,6 +3058,13 @@ function renderSkills() {
   if (why) return rows(dom.skills, [], null, whyNode("skills"));
   const list = Array.isArray(body.skills) ? body.skills : Array.isArray(body) ? body : [];
 
+  // Read-only since 2026-11-09 (Brain IA audit, recommendation 1). Settings,
+  // Skills is the ONE control page: it installs from a folder or a .zip,
+  // imports the Hermes skills, turns one off and back on, edits one and
+  // removes one, each behind the one card the PC raises. A Remove here was a
+  // second door to that same action, and the audit named it as one of the
+  // controls that made this window read as a second Settings. So this window
+  // lists what is installed and links; it writes nothing.
   rows(
     dom.skills,
     list,
@@ -2939,37 +3085,7 @@ function renderSkills() {
         state: /clean|ok|pass/i.test(verdict) ? "ok" : "warn",
         title: name,
         meta: [s.description || s.summary || "", s.path || "", ...notes],
-        actions: [
-          button(
-            "Remove",
-            async () => {
-              // Removal is not undoable from here: there is deliberately no
-              // route that installs a skill, because installing runs the
-              // scanner and the gate. So it asks, in those words.
-              if (
-                !confirm(
-                  `Remove the skill "${name}"?\n\n` +
-                    "This cannot be undone from the desktop. There is no route " +
-                    "that installs a skill — installing runs the scanner and " +
-                    "the gate, and a client that bypassed both would be the " +
-                    "whole attack. Putting it back means putting the file back " +
-                    "on the machine."
-                )
-              ) {
-                return;
-              }
-              try {
-                await invoke("brain_remove_skill", { name });
-                toast(`Removed ${name}.`, "ok");
-                await load(["skills"], { quiet: true });
-                render("faculties");
-              } catch (error) {
-                toast(String((error && error.message) || error), "bad");
-              }
-            },
-            { danger: true }
-          ),
-        ],
+        actions: [],
       });
     },
     ""
@@ -3320,7 +3436,6 @@ function renderLearning() {
     memoryAsOfRows = null;
   }
   const on = facts.learning === true;
-  if (on) state.learningAsk = null;    // the card was approved
   const setup = pending.setup || {};
   noteSleepOffer(setup);
 
@@ -3417,40 +3532,15 @@ function renderLearning() {
   }
   dom.memoryLearning.append(dl);
 
-  // Our own click, or a card raised elsewhere - the history switch's rule
-  // (`chats.ask || v.waiting`), read from the queue.
-  if (state.learningAsk || (!on && learningCardWaiting())) {
+  // A card raised elsewhere (the phone, or the Settings card) still shows
+  // here - the history switch's rule (`chats.ask || v.waiting`), read from the
+  // queue. This page raises no card of its own since 2026-11-09: the switch
+  // that does lives in Settings, Learning (Brain IA audit, recommendation 1).
+  if (!on && learningCardWaiting()) {
     dom.memoryLearning.append(el("p", "hint learning-waiting",
       `Waiting for your approval to turn background learning on. Approve it ${APPROVE_WHERE}.`));
   }
   const box = el("div", "row-actions");
-  box.append(
-    button(on ? "Pause background learning" : "Start background learning", async () => {
-      const waitingBefore = new Set(
-        (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
-      );
-      const out = await memoryWrite(
-        "brain_memory_learning",
-        { enabled: !on },
-        (out) =>
-          out && out.waiting
-            // Turning learning ON raises an approval card (learning-asks.patch):
-            // it is NOT on yet, and it is not "off" as a result of this either.
-            ? String(out.message || `Waiting for your approval. Approve it ${APPROVE_WHERE}.`)
-            : out && out.note
-              ? String(out.note)
-              : out && out.enabled
-                ? "Background learning is on."
-                : "Background learning is off. Nothing new will be proposed."
-      );
-      state.learningAsk = out && out.waiting ? { cardId: await findNewCard(waitingBefore) } : null;
-      renderLearning();
-    }, { title: on
-        ? "Stop reading conversations for facts. Nothing already proposed is lost. "
-          + "A message that starts “Remember:” still makes a card."
-        : "Read conversations for facts again. With “Learn automatically” on, facts in "
-          + "your own words are saved straight away; everything else waits for your yes." })
-  );
   box.append(
     button("Export everything", async () => {
       try {
@@ -5546,7 +5636,7 @@ const chats = {
   /** What the open chat taught (readChatFacts), or null while it is read or
    *  when this PC cannot say (the second chat audit, 2026-09-28, finding 9). */
   openFacts: null,
-  /** `{ cardId, gone }` while an ON card waits (like `learningAsk`). */
+  /** `{ cardId, gone }` while an ON card waits (like `modelAsk`). */
   ask: null,
   /**
    * "Search what was said" (JARVIS-API.md section 71). `query` is what is
@@ -7906,6 +7996,51 @@ function autoSwitchNode(which, v) {
   return box;
 }
 
+/**
+ * One learning switch this window no longer changes: its state, in that
+ * switch's own words, and nothing to press.
+ *
+ * WHY (2026-11-09, the Brain IA audit's recommendation 1). "Also remember
+ * sensitive topics automatically" and "Save facts even when Jarvis had to
+ * reword them" are in Settings, Learning as well as here, and two doors to
+ * one setting is how the Brain came to read as a second Settings. Settings,
+ * Learning is the control page; this page says what the setting is doing - on
+ * or off, a card waiting, how the last card ended - so the owner can read the
+ * state where the facts are without a second way to change it. "Learn
+ * automatically" stays a real switch (autoSwitchNode) because the Settings
+ * card deliberately does not hold its write, so it is not a duplicate.
+ */
+function autoStateNode(which, v) {
+  const sw = AUTO_SWITCHES[which];
+  const on = v[sw.field] === true;
+  // A card raised anywhere (the phone, Settings) is the PC's `*_waiting`, or
+  // the queue itself. Nothing here is ever withdrawn by this page.
+  const waiting = !on && Boolean(v[sw.waitingField] || autoCardWaiting(which));
+  const box = el("div", "auto-switch-box auto-state-box");
+  const state = el("p", "note auto-state");
+  state.id = `memory-${which}-state`;
+  state.append(el("strong", "auto-state-label", sw.label), " — ", on ? "on" : "off", ".");
+  const detail = el("p", "note history-switch-detail", sw.detail);
+  detail.id = `memory-${which}-detail`;
+  box.append(state, detail);
+  if (waiting) {
+    box.append(el("p", "hint learning-waiting auto-waiting", sw.waiting(APPROVE_WHERE)));
+  } else {
+    // How the newest card ended, in the PC's words (FIXLIST 2) - the same
+    // line the switch showed, now that the switch itself is in Settings.
+    const words = lastLineNow(which, v);
+    if (words) {
+      const line = el("p", "hint auto-last", words);
+      const last = v[sw.lastField];
+      if (last && last.why) line.title = last.why;
+      box.append(line);
+    }
+  }
+  // Both switches do nothing without the first (FIXLIST 3, 2026-11-02).
+  if (!v.auto) box.append(el("p", "hint auto-needs-auto", SENSITIVE_NEEDS_AUTO));
+  return box;
+}
+
 function paintAutoSettings() {
   const box = dom.memoryAuto;
   if (!box) return;
@@ -7925,8 +8060,14 @@ function paintAutoSettings() {
     box.append(el("p", "empty", v.why));
     return;
   }
-  box.append(autoSwitchNode("auto", v), autoSwitchNode("sensitive", v),
-    autoSwitchNode("paraphrase", v));
+  // "Learn automatically" stays here: it is the one learning switch the
+  // Settings card does not hold (its write is deliberately outside that
+  // card's narrow permission set), so it is not a duplicate - and it belongs
+  // beside the facts it saves. The other two ARE in Settings, Learning, and
+  // since 2026-11-09 this window only says what they are doing (Brain IA
+  // audit, recommendation 1: one control page).
+  box.append(autoSwitchNode("auto", v), autoStateNode("sensitive", v),
+    autoStateNode("paraphrase", v));
   // "Learn automatically" means something only while learning is on. The
   // learning route says; an older PC's answer is the facts list's flag.
   const facts = state.data.memory_facts || {};
@@ -9731,13 +9872,14 @@ async function loadComingUp() {
     await loadComingUp();
     return;
   }
-  if (state.view === "work") {
-    paintComingUp();
-    // A goal's weekly check-in lives on this very list (goals.js's own
-    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
-    // note stays in step with Coming up rather than needing its own read.
-    paintGoals();
-  }
+  if (state.view === "work") paintComingUp();
+  // A goal's weekly check-in lives on this very list (goals.js's own module
+  // doc says why) - repaint Goals too, so its "waiting"/"paused"/next note
+  // stays in step with Coming up rather than needing its own read. Goals is
+  // drawn on the Projects tab since 2026-11-09 (the IA recommendations), so
+  // the repaint follows where the card really is; `paintComingUp` above stays
+  // inside Work, where the list itself is drawn.
+  if (state.view === "projects") paintGoals();
 }
 
 async function scheduleAct(job, action, change) {
@@ -10419,6 +10561,11 @@ if (dom.standbyAdd) {
    Goals - a plan the owner edits, one card per acting step (the owner's
    "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
 
+   Drawn on the Projects tab since 2026-11-09 (the IA recommendations): the
+   phone has always put this plate under "Your projects and goals"
+   (BrainSections.kt, GoalsPlate.kt). The card's id and its menu id stay
+   `goals-card` / `brain.work.goals` - only the tab it is drawn on moved.
+
    Read through its own command (brain/goals.rs), not brain_read - the words
    are taken out while the private lists are hidden, same as Coming up. A new
    draft and marking a step raise no card; Stop tracking is one tap,
@@ -10466,7 +10613,7 @@ async function loadGoals() {
     await loadGoals();
     return;
   }
-  if (state.view === "work") paintGoals();
+  if (state.view === "projects") paintGoals();
 }
 
 /** The working copy of a draft's plan - made once, from what the PC sent,
@@ -10545,7 +10692,7 @@ async function loadMeasures() {
   } catch {
     gl.measures = [];
   }
-  if (state.view === "work") paintGoals();
+  if (state.view === "projects") paintGoals();
 }
 
 async function goalStep(goal, step, index, done, undoing = false) {
@@ -10847,6 +10994,11 @@ function paintGoals() {
 function renderGoals() {
   paintGoals();
   if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
+  // The check-in's own state is read from Coming up (see loadComingUp), and
+  // that list is drawn on the Work tab - so keep it fresh while Goals is on
+  // screen here on Projects. It repaints only Goals while this view is up;
+  // paintComingUp() stays inside Work.
+  if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
 }
 
 if (dom.goalsNewForm) {
@@ -12635,11 +12787,12 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
-  // Goals hides its words the same way (brain/goals.rs redact_goals).
+  // Goals hides its words the same way (brain/goals.rs redact_goals). It is
+  // drawn on Projects since 2026-11-09, so the re-read follows that tab.
   const rereadGoals = () => {
     gl.measuresAt = 0;
     gl.at = 0;
-    if (state.view === "work") loadGoals();
+    if (state.view === "projects") loadGoals();
   };
   TAURI.event.listen("security-changed", rereadGoals);
   TAURI.event.listen("private-hidden", rereadGoals);
@@ -16124,7 +16277,10 @@ onEvent((frame) => {
   }
   if (kind === "schedule") {
     upL.at = 0;
-    if (state.view === "work") loadComingUp();
+    // Projects too: Goals' weekly check-in is read from this same Coming up
+    // list, and Goals is drawn on Projects since 2026-11-09. loadComingUp()
+    // repaints only the card whose tab is showing.
+    if (state.view === "work" || state.view === "projects") loadComingUp();
     // A briefing went off or is ready (`{id, kind: "briefing", state}`):
     // read the briefing again, its lines by the authenticated route only.
     if (frame && frame.data && frame.data.kind === "briefing") {
@@ -16214,6 +16370,13 @@ async function showPlace(place) {
     // renamed out from under the palette by accident.
     await showView(place);
   } else if (Object.prototype.hasOwnProperty.call(VIEWS, place)) {
+    // One of the rail's own views. The HUD's "Galaxy" door lands on "galaxy",
+    // the memory map (2026-11-09) - and that view is one of the four behind
+    // "Advanced". Open the disclosure too, with the same press the owner makes
+    // by hand, or he would land on a view with no visible tab saying where he
+    // is. `advancedOpen` is this window's own, never stored, so nothing is
+    // remembered by it.
+    if (ADVANCED_VIEWS.includes(place) && !advancedOpen) dom.advancedToggle?.click();
     await showView(place);
   } else {
     return false;
@@ -16252,6 +16415,44 @@ $("open-settings")?.addEventListener("click", () => {
     window.location.href = "settings.html";
   }
 });
+
+/**
+ * Open Settings AT one card, from a "Change this in Settings" link.
+ *
+ * The Brain IA audit's recommendation 1 (2026-11-09): Settings is the one
+ * place that changes these, and the Brain says the state and links. The road
+ * is the rail's "Show or hide menus" road, reused rather than copied: the
+ * place travels in `jarvis.settings.place` (settings.js's goToPlace reads it,
+ * once and only while fresh) and `open_fix_place` opens the window - it
+ * accepts only the window names ("settings", "brain", "history"), never a
+ * card. A plain browser has no Tauri to ask, so it goes to the fragment the
+ * page already reads.
+ *
+ * App lock is NOT re-checked here and must not be: it lives in
+ * windows::show_settings (lock.rs may_open, Covered::Settings), which asks
+ * Windows Hello and opens the window once the owner confirms. One gate,
+ * every door through it - the same rule the top-bar Settings door follows.
+ *
+ * `place` is one lower-case element id on settings.html, never free text:
+ * "learning" and "skills-menu" are the two cards this window links to.
+ */
+function openSettingsAt(place) {
+  try {
+    localStorage.setItem("jarvis.settings.place",
+      JSON.stringify({ place, at: Date.now() }));
+  } catch {}
+  if (IS_TAURI) {
+    TAURI.core.invoke("open_fix_place", { place: "settings" });
+  } else {
+    window.location.href = `settings.html#${place}`;
+  }
+}
+
+// The two links the Brain IA audit (2026-11-09) put in place of the controls
+// this window used to duplicate. `skills-menu` is the Settings Skills card's
+// id; `learning` is the Learning card's.
+$("skills-open-settings")?.addEventListener("click", () => openSettingsAt("skills-menu"));
+$("learning-open-settings")?.addEventListener("click", () => openSettingsAt("learning"));
 
 $("btn-rail-hidden-menus")?.addEventListener("click", () => {
   // The place travels in storage, not in the call: open_fix_place opens the

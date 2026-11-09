@@ -91,7 +91,8 @@ class ForgetRangeTest {
         assertTrue(fresh.available)
         assertFalse(fresh.waiting)
         assertNull(fresh.undo)
-        assertEquals(200, fresh.maxItems)
+        assertEquals(200, fresh.largeWipeItems)
+        assertFalse(fresh.largeWipe)
         assertEquals(ForgetRange.PRESETS, fresh.presets)
         assertTrue(ForgetRange.parseStatus(body("status_waiting")).waiting)
         val undo = requireNotNull(ForgetRange.parseStatus(body("status_undo")).undo)
@@ -133,10 +134,16 @@ class ForgetRangeTest {
         assertEquals(listOf("conv-trip-00001"), sent["chats"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertEquals("Forget these (2)", ForgetRange.forgetLabel(2))
 
-        val many = ForgetRange.parsePreview(body("preview_too_many"))
-        assertTrue(many.tooMany)
-        assertTrue(many.facts.isEmpty())
+        // No item cap (owner's 2026-11-08 ruling): the whole selection is
+        // listed; `largeWipe` only says it is big and the words say a second
+        // yes will be asked for.
+        val many = ForgetRange.parsePreview(body("preview_large_wipe"))
+        assertTrue(many.largeWipe)
+        assertEquals(200, many.largeWipeItems)
         assertEquals(201, many.factsCount)
+        assertEquals(201, many.facts.size)
+        assertTrue(many.largeWords.contains("large wipe"))
+        assertTrue(many.largeWords.contains("second time"))
         assertTrue(ForgetRange.parsePreview(body("preview_empty")).empty)
         assertFalse(ForgetRange.parsePreview(null).available)
     }

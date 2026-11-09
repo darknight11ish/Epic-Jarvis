@@ -1427,6 +1427,147 @@ def t_a_full_export_with_a_multiline_cell_imports_cleanly():
           isinstance(parsed, dict) and parsed.get("status") == "Done", block)
 
 
+# ------------------------------------------- the 4 GB ceiling (TASK-53, PC door)
+
+def _declare_size(path: Path, member: str, size: int) -> bool:
+    """Rewrite ONE member's declared uncompressed size in a zip's central
+    directory, leaving its bytes alone. The stand-in for a real 276 MB export:
+    the members a small test can afford to write stay real, and the number the
+    guards read says 276 MB. See backend/test_documents.py for the same helper
+    with the full explanation - each suite here is a standalone script."""
+    raw = bytearray(path.read_bytes())
+    i = raw.find(b"PK\x01\x02")
+    while i >= 0:
+        name_len = int.from_bytes(raw[i + 28:i + 30], "little")
+        extra_len = int.from_bytes(raw[i + 30:i + 32], "little")
+        comment_len = int.from_bytes(raw[i + 32:i + 34], "little")
+        name = raw[i + 46:i + 46 + name_len].decode("utf-8", "replace")
+        end = i + 46 + name_len + extra_len + comment_len
+        if name == member:
+            raw[i + 24:i + 28] = int(size).to_bytes(4, "little")
+            path.write_bytes(bytes(raw))
+            return True
+        i = raw.find(b"PK\x01\x02", end)
+    return False
+
+
+def _declared_export(path: Path, declared: int, members: int = 1,
+                     payload: int = 0) -> None:
+    """A tiny export whose DIRECTORY declares `declared` bytes across `members`
+    skipped `.exe` members.
+
+    `payload` bytes of REAL incompressible data go in each forged member: the
+    ratio guard (100:1) is judged from the same directory, so a claim of 276 MB
+    packed into 2 bytes would be refused as the bomb it looks like - and the
+    archive under test has to pass that guard to reach the one being tested.
+    The over-cap case needs none, because the declared-total guard runs first.
+    """
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr(f"page {A32}.md", "# page\n")
+        z.writestr("pic.png", b"\x89PNG")
+        for i in range(members):
+            z.writestr(f"skip{i}.exe", os.urandom(payload) if payload else b"MZ")
+    for i in range(members):
+        assert _declare_size(path, f"skip{i}.exe", declared // members), "the forge failed"
+
+
+def t_the_unpacked_ceiling_is_4gb_and_the_room_is_checked():
+    """TASK-53 on the vault door: the declared-total ceiling is 4 GB (it was
+    500 MB), the sentence names real numbers, the ratio and member guards still
+    refuse, the target drive is measured before a byte is written, and the
+    extraction reports progress. The owner's own door is the folder import
+    (jarvis_documents); this one writes a whole vault, and the two must agree
+    about the same export rather than disagree by 250 MB."""
+    fresh()
+    check("the vault importer's declared ceiling is 4 GB, not 500 MB",
+          N.MAX_ZIP_UNCOMPRESSED == 4 * 1024 ** 3, N.MAX_ZIP_UNCOMPRESSED)
+    check("the counted cap moved with it, never tighter than the ceiling",
+          N.MAX_BYTES == 4 * 1024 ** 3 and N.MAX_BYTES >= N.MAX_ZIP_UNCOMPRESSED,
+          (N.MAX_BYTES, N.MAX_ZIP_UNCOMPRESSED))
+    check("every other guard is unchanged: 20,000 files, 200 MB a file, a 2 GB zip, "
+          "100:1",
+          (N.MAX_FILES, N.MAX_ONE, N.MAX_ZIP, N.MAX_ZIP_RATIO)
+          == (20_000, 200 * 1024 ** 2, 2 * 1024 ** 3, 100),
+          (N.MAX_FILES, N.MAX_ONE, N.MAX_ZIP, N.MAX_ZIP_RATIO))
+
+    # (a) A 276 MB-declared export plans (it was refused at 250 MB before).
+    # TWO members, each under the 200 MB per-file cap: this door judges each
+    # member's declared size first, so one 276 MB member would be refused by a
+    # guard that is working exactly as designed.
+    zp = TMP / "vault-276.zip"
+    _declared_export(zp, 276 * 1024 * 1024, members=2, payload=2_000_000)
+    p = N.plan_import(str(zp), str(VAULT), today="2026-11-09")
+    check("a 276 MB export plans on the vault door too",
+          p.notes == 1 and not p.refused, p.as_dict())
+    check("...and nothing it skipped was counted", p.attachments == 1, p.as_dict())
+
+    # (b) An over-cap declared size is refused, naming both real numbers. 22
+    # members at exactly the 200 MB per-file cap: each one passes the member
+    # guard, and their total is over 4 GB.
+    over = TMP / "vault-over.zip"
+    _declared_export(over, 22 * 200 * 1024 * 1024, members=22)
+    said = ""
+    try:
+        N.plan_import(str(over), str(VAULT), today="2026-11-10")
+    except Exception as exc:                              # noqa: BLE001
+        said = str(exc)
+    check("an over-cap declared size is still refused", bool(said), said)
+    check("...with the declared size and the ceiling in the sentence",
+          "4 GB" in said and "4.3 GB" in said and "zip-bomb" in said, said)
+    check("...and nothing was unpacked into the vault",
+          sorted(x.name for x in VAULT.iterdir()) == [".obsidian"],
+          sorted(x.name for x in VAULT.iterdir()))
+
+    # (c) The ratio guard still refuses a real, well-compressed archive: no
+    # monkeypatching, the 100:1 rule alone.
+    bomb = TMP / "vault-ratio.zip"
+    with zipfile.ZipFile(bomb, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr(f"page {A32}.md", "a" * (2 * 1024 * 1024))
+    said = ""
+    try:
+        N.plan_import(str(bomb), str(VAULT), today="2026-11-11")
+    except Exception as exc:                              # noqa: BLE001
+        said = str(exc)
+    check("a >100:1 archive is still refused as a zip bomb", "compressed" in said
+          or "zip bomb" in said, said)
+
+    # (d) The free-space preflight, measured on the DRIVE the vault is on.
+    real_free = N.docs._free_bytes
+    N.docs._free_bytes = lambda folder: 1024 * 1024       # a drive with 1 MB left
+    try:
+        room = TMP / "vault-room.zip"
+        with zipfile.ZipFile(room, "w", compression=zipfile.ZIP_STORED) as z:
+            z.writestr(f"page {A32}.md", "x" * (2 * 1024 * 1024))
+        said = ""
+        try:
+            N.plan_import(str(room), str(VAULT), today="2026-11-12")
+        except Exception as exc:                          # noqa: BLE001
+            said = str(exc)
+        check("a nearly full drive refuses before a byte is written, with the numbers",
+              "not enough free space" in said and "2 MB" in said and "2.4 MB" in said
+              and "1 MB" in said, said)
+        check("...and the vault is untouched by the refusal",
+              sorted(x.name for x in VAULT.iterdir()) == [".obsidian"],
+              sorted(x.name for x in VAULT.iterdir()))
+    finally:
+        N.docs._free_bytes = real_free
+    check("the real drive is measurable again", N.docs._free_bytes(str(VAULT)) > 0)
+
+    # (e) Progress: the counts grow, and the 'of N' half is the archive's own.
+    dest = TMP / "vault-progress"
+    dest.mkdir()
+    seen = []
+    N.extract(str(zp), str(dest), progress=lambda snap: seen.append(dict(snap)))
+    files = sorted(x.name for x in dest.rglob("*") if x.is_file())
+    check("extract reports progress as it writes", len(seen) >= 2
+          and seen[-1]["files"] >= 1 and seen[-1]["bytes"] > 0, seen)
+    check("...against the archive's declared totals",
+          seen[-1]["of_bytes"] > 250 * 1024 * 1024 and seen[-1]["of_files"] >= 2,
+          seen[-1])
+    check("...and the real members landed", "page " + A32 + ".md" in files, files)
+    fresh()
+
+
 def main():
     tests = (t_notions_ids_come_off_names,
              t_what_windows_and_obsidian_forbid_is_replaced,
@@ -1473,7 +1614,8 @@ def main():
              t_a_multiline_cell_is_valid_yaml_and_round_trips,
              t_ambiguous_values_are_quoted_and_safe,
              t_plain_values_are_unchanged_byte_for_byte,
-             t_a_full_export_with_a_multiline_cell_imports_cleanly)
+             t_a_full_export_with_a_multiline_cell_imports_cleanly,
+             t_the_unpacked_ceiling_is_4gb_and_the_room_is_checked)
     for fn in tests:
         print(f"\n--- {fn.__name__} ---")
         try:

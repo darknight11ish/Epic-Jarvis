@@ -103,7 +103,11 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
 All of them are READS for the apps' Brain screens, behind the pairing token
 and the origin check like every memory and history read. None is a tool: nomodel and no chat turn can call them (jarvis_agent.py offers nothing that
 reaches here), so what they return never reaches the AI model. None writes
-anything.
+anything. The one read here that is not personal is `GET /api/recent-changes`
+(Task-50, Wave 12): the Brain's "What's new in Jarvis" pane renders the
+generated `jarvis_recent_changes.py` module - the same bullets the chat's
+"what changed in your last update?" answer reads - so the screen quotes the
+project's own record and never invents a change or a version.
 "Widgets you describe" (2026-09-28; JARVIS-API section 86) rides on this
 module's install() too, so it needs no patch of its own: install() also
 calls jarvis_widgets.install(), which wraps do_GET and do_POST for the
@@ -147,9 +151,17 @@ SELECTION_PATH = "/api/selection"
 #: by clicking a person in the apps' "People and things" (LM-4). A GET; the
 #: module is the authority on the answer and on its own privacy rule.
 PEOPLE_DOSSIER_PATH = "/api/people/dossier"
+#: "What's new in Jarvis" (Task-50, Wave 12): the Brain's Tutorials tab renders
+#: the generated `jarvis_recent_changes.py` module - the same bullets the chat's
+#: "what changed in your last update?" answer reads. A READ: nothing is written,
+#: no card, no model. The module is the authority on the words; this route only
+#: carries them (and says so when there are none) rather than letting a screen
+#: invent a list. See `_recent_changes_answer`.
+RECENT_CHANGES_PATH = "/api/recent-changes"
 PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH,
          FACT_CHAT_PATH, COCKPIT_PATH, GUARDIAN_SNAPSHOTS_PATH,
-         GUARDIAN_DIFF_PATH, SELECTION_PATH, PEOPLE_DOSSIER_PATH)
+         GUARDIAN_DIFF_PATH, SELECTION_PATH, PEOPLE_DOSSIER_PATH,
+         RECENT_CHANGES_PATH)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
@@ -494,6 +506,58 @@ def handle_post(path: str, body, *, peer=None, local=None, gate=None) -> tuple:
         return 500, _restore_refusal("unreadable", "The version could not be put back.")
 
 
+#: How much of one change and of the module's own empty-record sentence this
+#: route carries. The generated module writes one sentence per change; these
+#: are bounds on a read, not a second editing of the record.
+MAX_RECENT_BULLET_CHARS = 400
+MAX_RECENT_BULLETS = 20
+
+#: The machine-readable name of the record this read carries, for the answer's
+#: `source` field (JARVIS-API section 206). Kept as its own constant rather than
+#: a literal beside the answer's plain words: it names a module, not something
+#: the owner reads.
+SOURCE_NAME = "jarvis_recent_changes.py"
+
+
+def _recent_changes_answer() -> tuple:
+    """(status, answer) for "What's new in Jarvis", from the module itself.
+
+    Never invents a list. Three honest answers:
+
+      * the module is here and has bullets -> 200, `available: true`, the
+        bullets in the record's own order (newest first);
+      * the module is here and is empty -> 200, `available: true`, an empty
+        `bullets`, and the module's OWN `NO_RECORD_WORDS` as `empty_words`; the
+        screen prints that sentence instead of a list;
+      * the module is not installed here -> 501, `available: false`, the same
+        "run apply-patches.ps1" sentence every other missing read uses.
+
+    `version()` is the VERSION beside the module, read by the module at answer
+    time - never a number this route or a screen keeps for itself.
+    """
+    try:
+        import jarvis_recent_changes as RC
+    except Exception:
+        return 501, {"ok": False, "available": False, "why": UPDATE,
+                     "version": "", "bullets": [], "empty_words": ""}
+    try:
+        version = str(RC.version() or "")[:80]
+        bullets = []
+        for item in RC.bullets(limit=MAX_RECENT_BULLETS) or ():
+            words = str(item or "").strip()
+            if words:
+                bullets.append(words[:MAX_RECENT_BULLET_CHARS])
+        empty = str(getattr(RC, "NO_RECORD_WORDS", "") or "").strip()
+    except Exception:
+        return 500, {"ok": False, "available": False,
+                     "why": "The changes could not be read, so nothing was returned.",
+                     "version": "", "bullets": [], "empty_words": ""}
+    return 200, {"ok": True, "available": True, "version": version,
+                 "bullets": bullets,
+                 "empty_words": empty[:MAX_RECENT_BULLET_CHARS],
+                 "source": SOURCE_NAME}
+
+
 def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
     """(http status, reply) for one of PATHS. Never raises.
 
@@ -504,6 +568,12 @@ def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
     `jarvis_owner_check.from_this_pc` answers for a request with no peer the
     way it always has.
     """
+    if path == RECENT_CHANGES_PATH:
+        # "What's new in Jarvis" (Task-50): the module's own bullets, or the
+        # module's own sentence for a record that carries none. Behind the
+        # token, because every read on this module is; nothing personal is in
+        # it (the changelog is already public).
+        return _recent_changes_answer()
     if path == PEOPLE_DOSSIER_PATH:
         # Owner-only FIRST, before the name is looked at or the module that
         # reads personal records is imported: another device learns nothing,
@@ -696,7 +766,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
             or handler_cls.__dict__.get("_jarvis_brain_reads_on")):
         return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
                 "the file guardian's history, its one gated restore, the "
-                "highlighted text and a person's dossier (already on)" + widgets + styles)
+                "highlighted text, a person's dossier and what's new in Jarvis "
+                "(already on)" + widgets + styles)
     get0 = handler_cls.do_GET
     post0 = getattr(handler_cls, "do_POST", None)
 

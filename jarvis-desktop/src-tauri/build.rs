@@ -470,6 +470,12 @@ fn main() {
             "get_tutorials",
             "mark_tutorial",
             "get_faq",
+            // "What's new in Jarvis" (Task-50, Wave 12): the generated
+            // recent-changes module's own bullets, read by the Brain's
+            // Tutorials tab. Without this line the command has no permission
+            // at all and the pane's read is refused at the ACL - the silent
+            // dead-control failure tools/check_command_acl.py exists for.
+            "get_recent_changes",
             // Settings' "Web search" (backend/web-search.patch): the six
             // providers and their "why" lines, ONE change at a time (turning
             // "Ask before every web search" off raises a card on the PC), a

@@ -525,6 +525,10 @@ export const HOTKEYS = [
 export const UPDATE_NONE = {
   current: "0.1.0", available: null, notes: null, date: null,
   error: null, supported: true, check_on_start: true,
+  // The four-state truth (Task-50, Wave 12): nothing has been checked in this
+  // window yet, so the answer is `unknown` and there is no checked time. A
+  // scenario passes `state`/`checked_at` itself to stand in for a real answer.
+  state: "unknown", checked_at: null,
 };
 
 /**
@@ -617,7 +621,7 @@ export const UPDATE_BOTH = {
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   altSpace, reclaimAltSpace, bigCoder, chatHistory,
-  tutorials, faq, hudLayout, advisor, versionSync }) {
+  tutorials, faq, hudLayout, advisor, versionSync, recentChanges }) {
   const listeners = {};
   window.__calls = [];
   // H3 (post-merge audit): the Settings picker reads/writes the one HUD layout
@@ -662,6 +666,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // (src/desktop-help.js) and draws either way.
   const tutorialsAnswer = tutorials || null;
   const faqAnswer = faq || null;
+  // "What's new in Jarvis" (Task-50, Wave 12): `get_recent_changes`'s answer.
+  // Unset, it is the shape Rust returns for a PC with no changes list - an
+  // honest `available: false` and the sentence to act on, never an empty list.
+  window.__recentChanges = recentChanges || null;
+  window.__recentChangesError = (recentChanges && recentChanges.throws) || null;
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
@@ -865,6 +874,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "get_faq":
             return faqAnswer || { ok: true, questions: [], count: 0,
                                   note: "Written from how Jarvis behaves today, in plain words." };
+          // "What's new in Jarvis" (Task-50, Wave 12). The shape is
+          // `jarvis_brain_reads._recent_changes_answer`'s: the generated
+          // module's own bullets, its VERSION beside the module, and its own
+          // sentence for an empty record. A scenario passes `recentChanges`.
+          case "get_recent_changes":
+            if (window.__recentChangesError) throw new Error(window.__recentChangesError);
+            return window.__recentChanges || {
+              available: false,
+              why: "This PC's Jarvis does not have the changes list yet. Update " +
+                   "the backend by running apply-patches.ps1, then open this again.",
+            };
           // "Match Windows light or dark mode" (commands.rs ThemePrefs). A
           // scenario sets window.__themePrefs; unset, the shell is treated as
           // not following, on the theme above.
@@ -1140,7 +1160,19 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "update_status": return window.__update;
           case "check_for_update":
             window.__calls.push(["__checked"]);
-            window.__update = { ...window.__update, ...(window.__found || {}) };
+            // The real `check_for_update` (update.rs `look`) answers a FINISHED
+            // status: the found version if any, the four-state `state`, and the
+            // wall-clock moment the check ended. The harness keeps that shape
+            // so a suite drives the page with what the PC really sends.
+            window.__update = {
+              ...window.__update,
+              ...(window.__found || {}),
+              state: window.__found && window.__found.available
+                ? "update_available" : (window.__update && window.__update.error
+                  ? "cannot_check" : "up_to_date"),
+              checked_at: window.__found && window.__found.checked_at
+                ? window.__found.checked_at : "2026-11-09 02:14",
+            };
             return window.__update;
           case "set_update_check_on_start":
             window.__update = { ...window.__update, check_on_start: args.enabled };
@@ -3521,6 +3553,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "remove_folder":
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
+            // `importDelayMs` lets a test watch the page WHILE the PC is still
+            // unzipping - the real command blocks for as long as the import
+            // takes, and the page polls get_folders for the live counts. When
+            // the import returns, the PC has cleared its live record
+            // (jarvis_documents.importing()), so the stub clears it too: a
+            // page that kept showing "unzipping" after the answer would be
+            // the bug this shape lets a test catch.
+            if (window.__folders && window.__folders.importDelayMs) {
+              await new Promise((r) => setTimeout(r, window.__folders.importDelayMs));
+              if (window.__folders.view) delete window.__folders.view.importing;
+            }
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
           // look.rs: the Watch with me session and the Never look at list.
           case "screen_status": {
@@ -3621,6 +3664,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true, waiting: true, http: 202 };
           }
+          // Navigation only (plain_errors.rs `open_fix_place`): the "What's
+          // new in Jarvis" pane's one button opens Settings at its Updates
+          // card. Recorded so a test proves it asked for THAT place, and that
+          // the pane acts on nothing else.
+          case "open_fix_place":
+            window.__calls.push(["__openedPlace", args.place]);
+            return null;
           default: return null;
         }
       },

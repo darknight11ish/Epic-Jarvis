@@ -152,11 +152,12 @@ await check("NOTHING on this pane acts on more than one fact", async () => {
   // world to add for convenience.
   const page = await memoryTab();
   const labels = await page.locator("#view-memory button").allInnerTexts();
-  // The automatic-learning switches (JARVIS-API.md section 19) are settings,
-  // by id, and nothing else here may be a checkbox. There are three of them
-  // since 2026-11-02's "Save facts even when Jarvis had to reword them", so the
-  // ids come from the module's own SWITCHES: a fourth switch is a setting and
-  // must not fail this pin, while a real bulk control still does.
+  // "Learn automatically" (JARVIS-API.md section 19) is a setting, by id, and
+  // nothing else here may be a checkbox. Since 2026-11-09 it is the ONLY
+  // switch left on this pane: the other two, and background learning itself,
+  // moved to Settings, Learning (Brain IA audit, recommendation 1), so their
+  // ids are still named here - a control that came back would be a setting
+  // and must not fail this pin, while a real bulk control still does.
   const settingsSwitches = Object.keys(SWITCHES)
     .map((which) => `:not(#memory-${which}-on)`).join("");
   const boxes = await page.locator(
@@ -245,37 +246,25 @@ await check("the filter box narrows the loaded list by its words, and asks the P
   assert.deepEqual(sent, []);
 });
 
-/* ── The switch renders the answer, not the request ──────────────────────── */
+/* ── The learning switch is Settings', the state is the Brain's ──────────── */
 
-await check("the learning switch reflects what the server said", async () => {
+await check("the Brain shows learning's state and one door to Settings - it no longer changes it", async () => {
+  // Brain IA audit, recommendation 1 (2026-11-09). The switch that turned
+  // background learning on and off lived here as well as in Settings, and two
+  // doors to one setting is the duplication the audit named. The write path
+  // did NOT go away - tests/auto-learn.mjs drives it on the Settings card,
+  // where the one control page is - so what this pins is the shape here:
+  // the state is readable, and the only way to change it is the link.
   const page = await memoryTab();
-  await page.getByRole("button", { name: "Pause background learning" }).click();
-  await page.waitForTimeout(300);
-  const sent = await writes(page);
+  const state = await page.locator("#memory-learning dl.kv").innerText();
+  const starts = await page.getByRole("button", { name: /background learning/i }).count();
+  const door = await page.locator("#learning-open-settings").innerText();
+  const link = await page.locator("#learning-open-settings").getAttribute("class");
   await page.close();
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].cmd, "brain_memory_learning");
-  assert.equal(sent[0].enabled, false);
-});
-
-await check("turning learning on waits for its approval card, and says so", async () => {
-  // learning-asks.patch: ON answers 202 {waiting: true, enabled: false}. The
-  // pane used to read any non-enabled answer as "Learning is off."
-  const brain = { ...K.BRAIN, memory_facts: { ...K.BRAIN.memory_facts, learning: false } };
-  const page = await memoryTab({ brain, learningWaits: true });
-  await page.getByRole("button", { name: "Start background learning" }).click();
-  await page.waitForTimeout(400);
-  const toast = await page.locator("#toast").innerText();
-  const line = await page.locator("#memory-learning .learning-waiting").innerText();
-  const still = await page.getByRole("button", { name: "Start background learning" }).count();
-  const sent = await writes(page);
-  await page.close();
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].enabled, true);
-  assert.match(toast, /Waiting for your approval/, `the toast said "${toast}"`);
-  assert.doesNotMatch(toast, /[Ll]earning is (on|off)/);
-  assert.match(line, /Waiting for your approval to turn background learning on/);
-  assert.equal(still, 1, "it is not on until the card is approved");
+  assert.match(state, /Background learning\s+(on|off)/i, `the pane said "${state}"`);
+  assert.equal(starts, 0, "the pane still changes background learning itself");
+  assert.equal(door, "Change these in Settings, Learning");
+  assert.match(link, /\bbtn\b/, "the door is not the window's own button");
 });
 
 await check("a learning card raised elsewhere (the phone) shows the waiting line too, and it goes with the card", async () => {
@@ -298,19 +287,6 @@ await check("a learning card raised elsewhere (the phone) shows the waiting line
   assert.equal(line.length, 1, "no waiting line for a card raised on the phone");
   assert.match(line[0], /^Waiting for your approval to turn background learning on\. Approve it /);
   assert.equal(other, 0, "the line stayed after the learning card left");
-});
-
-await check("when the environment overrides the switch, the toast says so", async () => {
-  // JARVIS_EXTRACT=0 is a floor the pane cannot lift. The server answers 200
-  // and still refuses, so a pane that rendered its own request would show
-  // "off" while the learner kept running.
-  const page = await memoryTab({ learningFloor: true });
-  await page.getByRole("button", { name: "Pause background learning" }).click();
-  await page.waitForTimeout(400);
-  const toast = await page.locator("#toast").innerText();
-  await page.close();
-  assert.match(toast, /JARVIS_EXTRACT/,
-    `the toast said "${toast}" instead of relaying the server's refusal`);
 });
 
 await check("a refused write surfaces rather than looking like success", async () => {

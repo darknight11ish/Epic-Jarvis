@@ -34,6 +34,48 @@ function text(v) {
   return typeof v === "string" ? v : "";
 }
 
+/** A count from the PC, or 0: never "NaN" in a sentence. */
+function num(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/** Thousands, the way the PC writes its own counts ("12,340"). */
+function count(n) {
+  return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/** Bytes in the words Windows uses: "276 MB", "4 GB", "1.5 GB". */
+function sizeWords(n) {
+  const bytes = num(n);
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) {
+    const v = Math.round(gb * 10) / 10;
+    return Number.isInteger(v) ? `${v} GB` : `${v.toFixed(1)} GB`;
+  }
+  return `${Math.round(bytes / (1024 ** 2))} MB`;
+}
+
+/**
+ * The line under the import while it runs, from the PC's REAL counts
+ * (`jarvis_documents.importing()`): "Unzipping the export: 4,231 of 12,340
+ * files, 1.2 GB of 3.4 GB so far." Empty when nothing is importing, so a page
+ * that never sees this key behaves exactly as before.
+ */
+export function importLine(importing) {
+  if (!importing || typeof importing !== "object") return "";
+  const files = num(importing.files);
+  const ofFiles = num(importing.ofFiles);
+  const bytes = num(importing.bytes);
+  const ofBytes = num(importing.ofBytes);
+  const parts = [];
+  if (files) parts.push(ofFiles ? `${count(files)} of ${count(ofFiles)} files`
+    : `${count(files)} files`);
+  if (bytes) parts.push(ofBytes ? `${sizeWords(bytes)} of ${sizeWords(ofBytes)}`
+    : `${sizeWords(bytes)}`);
+  if (!parts.length) return "Unzipping the export…";
+  return `Unzipping the export: ${parts.join(", ")} so far.`;
+}
+
 /** One listed folder, from the PC's answer. */
 function folder(f) {
   return {
@@ -55,6 +97,7 @@ export function readFolders(answer) {
   const docs = answer.documents && typeof answer.documents === "object" ? answer.documents : {};
   const notion = answer.notion && typeof answer.notion === "object" ? answer.notion : {};
   const last = answer.last && typeof answer.last === "object" ? answer.last : null;
+  const live = answer.importing && typeof answer.importing === "object" ? answer.importing : null;
   return {
     available: true,
     title: text(answer.title) || TITLE,
@@ -72,6 +115,12 @@ export function readFolders(answer) {
     notionTitle: text(notion.title),
     notionDetail: text(notion.detail),
     canImport: notion.can_import === true,
+    importing: live ? {
+      files: num(live.files),
+      ofFiles: num(live.of_files),
+      bytes: num(live.bytes),
+      ofBytes: num(live.of_bytes),
+    } : null,
     removeLabel: text(answer.remove_label) || REMOVE_LABEL,
     max: Number.isInteger(answer.max) ? answer.max : 20,
   };

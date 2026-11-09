@@ -47,6 +47,12 @@ const tray = read("src-tauri/src/tray.rs");
 const INERT = [
   "ID_STATUS_ACTIVITY",
   "ID_STATUS_POWER",
+  // The update REPORT row (Task-50, Wave 12): "Up to date · checked 14:32" /
+  // "Update available · checked 14:32" / "Not checked yet" /
+  // "Cannot check · …". It reports the four-state truth and must never be a
+  // clickable row that does nothing - the ACTION beside it is `ID_UPDATE`,
+  // which appears only while an update exists.
+  "ID_UPDATE_STATE",
 ];
 
 /* Rows that carry state and are re-labelled in place, so they must be held in
@@ -65,6 +71,9 @@ const STATEFUL = [
   "ID_WATCH",
   "ID_BACKEND",
   "ID_UPDATE",
+  // The report row's text moves with every check (`on_update_status`), so it is
+  // the same handle re-labelled in place, never a rebuilt row.
+  "ID_UPDATE_STATE",
   "ID_STOP_EVERYTHING",
   "ID_TOGGLE_SPOTLIGHT",
   "ID_TOGGLE_WIDGET",

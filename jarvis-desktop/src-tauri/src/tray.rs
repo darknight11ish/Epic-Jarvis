@@ -23,10 +23,23 @@
 //!         floating face · Floating face: bigger · Floating face: smaller ·
 //!         Chat history… · Faces… · Everything Jarvis can do…
 //!         Backend: not supervised · Reconnect the event stream · Run a status
-//!         check · Update Jarvis to <version>
+//!         check · Not checked yet · Update Jarvis to <version>
 //! ─────────────────────────────
 //! Quit Jarvis
 //! ```
+//!
+//! ## Two update rows: one acts, one reports
+//!
+//! `ID_UPDATE` is the ACTION and it exists only while a newer version is known
+//! (the owner, 2026-11-03 - see below). `ID_UPDATE_STATE` is the REPORT: a
+//! disabled row that is always in the menu and says one of four things -
+//! `Up to date · checked 14:32`, `Update available · checked 14:32`,
+//! `Not checked yet`, `Cannot check · <why>` - from `update.rs`'s own
+//! `Status::state` (Task-50, Wave 12). Before it, the absence of the action row
+//! meant "nothing known", "nothing newer" and "the check failed" all at once,
+//! so a menu could not tell the owner which one it was. The report row adds no
+//! state of its own: `update_state_row` reads the cached answer and the OS's
+//! local clock, and invents neither.
 //!
 //! Five groups and four separators, in the order the questions get asked: what
 //! is Jarvis, what wants me, Jarvis Live, where do I look, and the one row that
@@ -173,6 +186,11 @@ const ID_FLOATING_SMALLER: &str = "floating-smaller";
 const ID_RECONNECT: &str = "reconnect";
 const ID_SETTINGS: &str = "settings";
 const ID_UPDATE: &str = "update";
+/// The update REPORT row (Task-50, Wave 12): "Up to date · checked 14:32",
+/// "Update available · checked 14:32", "Not checked yet" or
+/// "Cannot check · <why>". Always in the menu, always disabled - it reports
+/// the four-state truth from `update.rs` and never acts.
+const ID_UPDATE_STATE: &str = "update-state";
 /// "Setup unfinished - 9 of 25" (Wave B, 2026-11-03): the "Personalize Jarvis"
 /// quiz is not finished. Like the update row it is ABSENT when there is
 /// nothing to do, and it is driven by `setup_offer`'s state - never fetched
@@ -208,6 +226,10 @@ struct Rows {
     backend: MenuItem<tauri::Wry>,
     /// Parented only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
+    /// The always-present update REPORT row (Task-50): "Up to date · checked
+    /// 14:32" / "Cannot check · …" / "Not checked yet". Disabled; it reports and
+    /// never acts, and it is re-labelled in place as the cached answer moves.
+    update_state: MenuItem<tauri::Wry>,
     /// "Setup unfinished - 9 of 25" (Wave B): parented only while the quiz is
     /// unfinished. Same change-of-parent rule as `update`.
     setup: MenuItem<tauri::Wry>,
@@ -275,6 +297,95 @@ fn update_row(available: Option<&str>) -> Option<String> {
         return Some("Update Jarvis".to_string());
     }
     Some(format!("Update Jarvis to {version}"))
+}
+
+/// The "checked ..." half of the update status row, or `None` when there is no
+/// time to show.
+///
+/// `checked_at` is `update.rs`'s `"YYYY-MM-DD HH:MM"` local stamp. Today's
+/// stamp is the bare time ("checked 14:32"); any older one keeps its date,
+/// because "checked 14:32" on a check from last week would read as today.
+/// `today` is the OS's own local date at drawing time - `None` when the clock
+/// cannot be read, in which case the full stamp is printed rather than a
+/// guessed "today".
+fn checked_words(checked_at: &str, today: Option<&str>) -> Option<String> {
+    let stamp = checked_at.trim();
+    if stamp.is_empty() {
+        return None;
+    }
+    let (day, time) = stamp.split_once(' ').unwrap_or(("", stamp));
+    if !day.is_empty() && Some(day) == today {
+        return Some(time.to_string());
+    }
+    Some(stamp.to_string())
+}
+
+/// Why a check could not answer, in a few words - the tray row is a glance, not
+/// the card. The full sentence is Settings -> Updates' (`Status::error`), and
+/// this never invents one: each arm names a failure `update.rs` really produces,
+/// and the fallback still says it failed.
+///
+/// A build with no update key is checked FIRST, from the status itself: it never
+/// asked anything, so its `error` may be empty and the reason is the build.
+fn cannot_check_why(status: &crate::update::Status) -> &'static str {
+    if !status.supported {
+        return "this build has no update key";
+    }
+    let error = status.error.as_deref().unwrap_or("");
+    let lower = error.to_lowercase();
+    if lower.contains("no update key") {
+        return "this build has no update key";
+    }
+    if lower.contains("no releases") || lower.contains("404") || lower.contains("not found") {
+        return "no releases are published yet";
+    }
+    if lower.contains("could not reach")
+        || lower.contains("connect")
+        || lower.contains("dns")
+        || lower.contains("timed out")
+    {
+        return "the release page could not be reached";
+    }
+    if lower.contains("signature") {
+        return "a release failed its signature check";
+    }
+    if lower.contains("updater could not start") {
+        return "the updater could not start";
+    }
+    "the check failed"
+}
+
+/// What the always-present update status row says, from `update.rs`'s
+/// four-state truth. Pure, so the whole rule is a test without an app.
+///
+/// `None` is the fresh-launch case: the tray is built before the startup check
+/// answers, and "Not checked yet" is the only thing true then. It is also what
+/// an unrecognised future state draws, because a state this build does not know
+/// is not a licence to say "up to date".
+fn update_state_row(status: Option<&crate::update::Status>, today: Option<&str>) -> String {
+    let Some(status) = status else {
+        return "Not checked yet".to_string();
+    };
+    let at = status
+        .checked_at
+        .as_deref()
+        .and_then(|stamp| checked_words(stamp, today));
+    let checked = |base: &str| match &at {
+        Some(at) => format!("{base} · checked {at}"),
+        None => base.to_string(),
+    };
+    match status.state.as_str() {
+        "update_available" => checked("Update available"),
+        "up_to_date" => checked("Up to date"),
+        "cannot_check" => {
+            let why = cannot_check_why(status);
+            match &at {
+                Some(at) => format!("Cannot check · {why} · checked {at}"),
+                None => format!("Cannot check · {why}"),
+            }
+        }
+        _ => "Not checked yet".to_string(),
+    }
 }
 
 /// Builds the tray icon, its menu and the event handlers.
@@ -486,6 +597,21 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    // The update REPORT row (Task-50, Wave 12). Built disabled on purpose: it
+    // reports, it does not act (`tray-rows.mjs` holds it to that). Its text is
+    // the four-state truth from the cache `update.rs` already keeps; at this
+    // point no check has run, so it says "Not checked yet" and the startup
+    // check re-labels it when it answers.
+    let update_state = MenuItem::with_id(
+        app,
+        ID_UPDATE_STATE,
+        update_state_row(
+            Some(&crate::update::last_status(app)),
+            crate::update::local_day().as_deref(),
+        ),
+        false,
+        None::<&str>,
+    )?;
     // The "Personalize Jarvis" row (Wave B, 2026-11-03). Built like any other
     // row and parented into "More…" only while the quiz is unfinished - at a
     // fresh launch the state has not been read yet, so it starts absent and
@@ -549,6 +675,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         &backend,
         &reconnect,
         &status_check,
+        // The update REPORT row sits beside the status check, before the rows
+        // that appear and disappear: it is always there, and what it says is
+        // the four-state truth about updates (Task-50).
+        &update_state,
     ];
     // The quiz row sits after the status check and before the update row: both
     // are "state moved, so the row appeared" rows that `on_*` appends when it
@@ -618,6 +748,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             watch,
             backend,
             update,
+            update_state,
             setup,
             more,
             stop_everything,
@@ -1534,19 +1665,28 @@ fn first_sentence(text: &str) -> String {
 // Wiring
 // ---------------------------------------------------------------------------
 
-/// Adds, re-labels or removes the update row. Called by `update.rs` when a check
-/// answers, and by nothing else.
+/// Re-labels the update REPORT row and adds, re-labels or removes the update
+/// ACTION row. Called by `update.rs` when a check answers, and by nothing else.
 ///
-/// The rule is [`update_row`]: no update means the row is not in the menu at
-/// all. It is added to "More…" (`append`, because it is that submenu's last row)
-/// and removed from it rather than disabled, because a greyed row saying
-/// "Jarvis Desktop 0.2.0" is the shape the owner asked to be rid of (2026-11-03).
+/// Two rows, two jobs:
 ///
-/// Pressing the row starts the SAME both-halves update the Settings Install press
-/// starts (`update::install_from_tray`); this function only decides whether the
-/// row exists and what it says.
-pub fn on_update_status(app: &AppHandle, available: Option<&str>) {
-    let label = update_row(available);
+/// * `ID_UPDATE_STATE` is the REPORT (Task-50, Wave 12). It is always in the
+///   menu and always disabled, and it says one of four things from
+///   `update.rs`'s own `Status::state` - [`update_state_row`] is that whole
+///   rule. It is re-labelled on every answer, so the time beside "up to date"
+///   is the check's own.
+/// * `ID_UPDATE` is the ACTION, and its rule is [`update_row`]: no update means
+///   the row is not in the menu at all. It is added to "More…" (`append`,
+///   because it is that submenu's last row) and removed from it rather than
+///   disabled, because a greyed row saying "Jarvis Desktop 0.2.0" is the shape
+///   the owner asked to be rid of (2026-11-03).
+///
+/// Pressing the action row starts the SAME both-halves update the Settings
+/// Install press starts (`update::install_from_tray`); this function only
+/// decides whether the row exists and what both rows say.
+pub fn on_update_status(app: &AppHandle, status: &crate::update::Status) {
+    let label = update_row(status.available.as_deref());
+    let state_label = update_state_row(Some(status), crate::update::local_day().as_deref());
     if let Some(rows) = app
         .state::<TrayHandles>()
         .inner
@@ -1554,6 +1694,11 @@ pub fn on_update_status(app: &AppHandle, available: Option<&str>) {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .as_ref()
     {
+        // The report row is always there, so it is only ever re-labelled - a
+        // failure here is said and nothing else changes.
+        if let Err(err) = rows.update_state.set_text(state_label) {
+            eprintln!("[jarvis] tray: could not re-label the update status row: {err}");
+        }
         match label {
             Some(label) => {
                 // Re-label even when the row is already there: the version moves
@@ -2751,6 +2896,149 @@ mod tests {
         // printing; the row still belongs in the menu, in plain words.
         assert_eq!(update_row(Some("")).as_deref(), Some("Update Jarvis"));
         assert_eq!(update_row(Some("   ")).as_deref(), Some("Update Jarvis"));
+    }
+
+    /// Task-50 (Wave 12): the report row's status, built the way `update.rs`
+    /// hands it over. Only the fields `update_state_row` reads are set.
+    fn update_status(state: &str, error: Option<&str>, at: Option<&str>) -> crate::update::Status {
+        crate::update::Status {
+            current: "0.2.320".to_string(),
+            state: state.to_string(),
+            error: error.map(str::to_string),
+            checked_at: at.map(str::to_string),
+            supported: true,
+            ..crate::update::Status::default()
+        }
+    }
+
+    /// The four states, in the owner's words: up to date, update available,
+    /// unknown and cannot check. Before this row there was ONE signal (the
+    /// action row appearing) and its absence meant three different things.
+    #[test]
+    fn the_update_status_row_is_the_four_state_truth() {
+        assert_eq!(
+            update_state_row(None, Some("2026-11-09")),
+            "Not checked yet",
+            "a fresh launch has no answer, so it must not look like one"
+        );
+        assert_eq!(
+            update_state_row(
+                Some(&update_status("unknown", None, None)),
+                Some("2026-11-09")
+            ),
+            "Not checked yet"
+        );
+        assert_eq!(
+            update_state_row(
+                Some(&update_status("up_to_date", None, Some("2026-11-09 14:32"))),
+                Some("2026-11-09")
+            ),
+            "Up to date · checked 14:32"
+        );
+        assert_eq!(
+            update_state_row(
+                Some(&update_status(
+                    "update_available",
+                    None,
+                    Some("2026-11-09 14:32")
+                )),
+                Some("2026-11-09")
+            ),
+            "Update available · checked 14:32"
+        );
+    }
+
+    /// The one rule this row exists to keep: no invented "up to date". A state
+    /// this build does not know, or one with no check behind it, is drawn as
+    /// unknown - never as the good state.
+    #[test]
+    fn the_update_status_row_never_claims_up_to_date_without_a_check() {
+        let unknown = update_status("unknown", None, None);
+        assert_eq!(update_state_row(Some(&unknown), None), "Not checked yet");
+        let empty = update_status("", None, None);
+        assert_eq!(update_state_row(Some(&empty), None), "Not checked yet");
+        let future = update_status("half_checked", None, None);
+        assert_eq!(update_state_row(Some(&future), None), "Not checked yet");
+    }
+
+    /// "Cannot check" carries WHY, in a few words, and the time if a check was
+    /// really attempted. Each reason is one `update.rs` really produces.
+    #[test]
+    fn a_cannot_check_row_says_why() {
+        let unreachable = update_status(
+            "cannot_check",
+            Some("Could not reach the release endpoint: connection refused"),
+            Some("2026-11-09 14:32"),
+        );
+        assert_eq!(
+            update_state_row(Some(&unreachable), Some("2026-11-09")),
+            "Cannot check · the release page could not be reached · checked 14:32"
+        );
+        let no_key = update_status(
+            "cannot_check",
+            Some("This build has no update key, so it cannot verify a download and will not try."),
+            None,
+        );
+        assert_eq!(
+            update_state_row(Some(&no_key), None),
+            "Cannot check · this build has no update key",
+            "a build that never asked must not carry a time either"
+        );
+        let no_releases = update_status(
+            "cannot_check",
+            Some("No releases published yet, so there is nothing to compare against."),
+            Some("2026-11-09 14:32"),
+        );
+        assert_eq!(
+            update_state_row(Some(&no_releases), Some("2026-11-09")),
+            "Cannot check · no releases are published yet · checked 14:32"
+        );
+    }
+
+    /// A build with no update key never asks anything, so its row must say that
+    /// at launch - "Not checked yet" would invite a Check the Settings card
+    /// disables. This is the fresh-launch shape `update::last_status` hands the
+    /// tray when no check has answered.
+    #[test]
+    fn a_build_that_cannot_check_says_so_at_launch() {
+        let keyless = crate::update::Status {
+            state: "cannot_check".to_string(),
+            supported: false,
+            ..crate::update::Status::default()
+        };
+        assert_eq!(
+            update_state_row(Some(&keyless), None),
+            "Cannot check · this build has no update key"
+        );
+    }
+
+    /// A check from an earlier day keeps its date: "checked 09:05" on a stale
+    /// answer would read as this morning, which is a made-up fact.
+    #[test]
+    fn an_old_check_keeps_its_date() {
+        let old = update_status("up_to_date", None, Some("2026-11-08 09:05"));
+        assert_eq!(
+            update_state_row(Some(&old), Some("2026-11-08")),
+            "Up to date · checked 09:05"
+        );
+        assert_eq!(
+            update_state_row(Some(&old), Some("2026-11-09")),
+            "Up to date · checked 2026-11-08 09:05"
+        );
+        assert_eq!(
+            update_state_row(Some(&old), None),
+            "Up to date · checked 2026-11-08 09:05",
+            "an unreadable clock must not be guessed into 'today'"
+        );
+    }
+
+    /// A blank stamp is no stamp. It must not leave a dangling "checked".
+    #[test]
+    fn a_blank_time_is_not_a_check_time() {
+        let blank = update_status("up_to_date", None, Some("   "));
+        assert_eq!(update_state_row(Some(&blank), None), "Up to date");
+        assert_eq!(checked_words("", None), None);
+        assert_eq!(checked_words("   ", Some("2026-11-09")), None);
     }
 
     /// Wave B (2026-11-03): the same absence rule for "Setup unfinished - 9 of

@@ -292,10 +292,13 @@ check("the menu is called Presets, and the PC's own lists come first", () => {
     "the My personalities section is not conditional on the PC listing any");
 });
 
-check("a model preset raises the PC's ONE card, and nothing is marked before the PC says so", () => {
+check("a local preset switches at once; Coding and Cloud still raise the PC's ONE card, and nothing is marked before the PC says so", () => {
   assert.match(PRESETS,
-    /Applying one asks the PC for ONE approval card - nothing is chosen until you answer it\./,
-    "the section does not say the card rule in words");
+    /Local presets switch at once when you pick one/,
+    "the section does not say the local-preset rule in words");
+  assert.match(PRESETS,
+    /Coding \(it pauses both other models first\) and Cloud \(it changes where your words go\) still ask for the PC's ONE approval card\./,
+    "the section does not say which rows still raise a card");
   assert.match(PRESETS, /await applyFocusPresetOnPc\(win, id, provider\);/,
     "a model-preset click does not go through the apply road");
   // The mark comes from the REFETCHED contract's chosen_preset - never from
