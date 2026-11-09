@@ -179,7 +179,7 @@ SUBSYSTEMS = (
         "modules": (
             "jarvis_model_knowledge", "jarvis_model_lanes",
             "jarvis_model_recommendations", "jarvis_model_resources",
-            "jarvis_presets", "jarvis_second_card",
+            "jarvis_presets", "jarvis_reversible_ui", "jarvis_second_card",
             "jarvis_big_model", "jarvis_big_coder", "jarvis_bench", "jarvis_bakeoff",
             "jarvis_model_recommender",
             "jarvis_speed", "jarvis_energy", "jarvis_hardware", "jarvis_profiles",

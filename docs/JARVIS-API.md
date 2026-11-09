@@ -26331,7 +26331,9 @@ also answers `receipt_id` (the `preset_apply` receipt naming the preset, model
 and lane it replaced) and the preset it replaced is one click away in the same
 menu. Coding (its pooled lane pauses both other models) and the Cloud row still
 raise their card exactly as this section describes. See section 209 for the
-rule and its boundary.
+preset's own rule, and section 210 for the whole manual-click allow-list it now
+belongs to (a model already installed and picked in either app's own model list
+switches without a card too).
 
 ### 145.1 The Coding preset's pooled both-card lane (2026-11-02, added)
 
@@ -37408,3 +37410,86 @@ Coding still goes through its pooled lane's asking start; Cloud still raises
 `change_own_config`; no request field can ask for the uncarded road; and the
 shipped `jarvis_models.switch_to` still asks. `backend/test_presets_apply.py`
 keeps the carded path's rollback and refusal checks.
+
+## 210. The manual-click rule: one allow-list, and the model path still asks (2026-11-09)
+
+The owner's words, again: *"if i manually choose anything in the jarvis app or
+deskstop program, and its something that i can easily click and change back
+right away, it shouldnt need a card"*. Section 209 covers the first click that
+took that road (a local focus preset). This section covers the rule itself: the
+ONE allow-list every such click must be on, the ONE signal that makes a request
+a screen rather than a model, the reversible choices wired today, the settings
+that already needed no card, and the list that must always ask.
+
+**The allow-list.** `backend/jarvis_reversible_ui.py` (shipped whole, twin in
+the base) holds `REVERSIBLE_UI_CHOICES`, an explicit mapping of action name to
+the plain-words reason it is reversible and the ONE model/chat path that still
+raises a card for it. Two entries today:
+
+* `apply_preset` - a local, non-heavy preset; the uncarded road is
+  `POST /api/work/apply` -> `jarvis_presets.install()` ->
+  `_apply_body(..., owner_ui=True)`; the model path (`apply_from_body`, the
+  spoken and Settings setters) still raises `switch_model`. Section 209 is this
+  row in full.
+* `switch_model` - a model already installed on this PC, picked in either app's
+  own model list. The uncarded road is `POST /api/models/switch` ->
+  `jarvis_reversible_ui.install()` ->
+  `jarvis_presets.switch_model_for_the_owner` (one model record and one
+  tripwire, no card). The model path is `jarvis_quick` ->
+  `jarvis_model_knowledge.switch_model` -> `jarvis_models.switch_to(ref,
+  why="chat")`, whose `switch_model` card is unchanged; the tier table still
+  says `switch_model = "ask"`.
+
+`is_reversible_ui_choice(name)` is the only test, and it fails closed: a
+non-string, an empty name or an unknown action is not reversible.
+
+**The trusted-UI signal is the route, never a field.** `install()` wraps ONE
+path on the HUD's own Handler, after the same origin check and pairing-token
+check the HUD's own branch makes, and copies its answer shape exactly (`400`
+with no ref, `200` on success, `409` on a refusal). Every other path is
+forwarded untouched to the handler that already owned it. The model never posts
+to its own HTTP routes - a chat tool call reaches the modules in-process - so a
+request that arrives here came from a paired app's own control. Only `ref` and
+`why` are read from the body; `owner_ui`, `ui_direct`, `no_card` or any other
+invented field is not looked at, and no header or query parameter is read.
+
+**The boundary, in one line each:** reversible means one click back, already
+installed, nothing downloaded/installed/deleted, no spend, and no privacy or
+security downgrade. `REVERSIBLE_UI_CHOICES` therefore never contains: deleting
+or erasing a memory, `forget_range`, deleting a skill or model, reverting files;
+installing or editing a skill, plugin or model (`download_model`), applying
+self-code patches, running updates; turning Lockdown off, changing App Lock /
+Windows Hello, revealing a private list, storing a credential, raising a spend
+or safety cap; `github_create_repo`, sending email or messages, importing an
+external archive. Those names are listed with their reasons in
+`EXCLUDED_UI_ACTIONS`, the allow-list refuses them, and this change intercepts
+no route that reaches them.
+
+**The everyday settings, audited 2026-11-09 - most needed no change.**
+Already cardless on both roads, so they are not on the allow-list (there is no
+fence to claim): read-aloud; the built-in voice picker; the theme/face; to-do
+carry-over; the six PC notification switches. Already cardless when turned OFF
+and still carded when turned ON, deliberately, because ON gives Jarvis more
+reach: the Wi-Fi auto-reconnect, the three learning switches, phone
+notifications, watch notifications, and a skill turned back on (its scanner's
+`modify_own_code` card). Not wired, and said so in the module: the morning
+briefing's hour, whose setter lives in the live HUD this repository does not
+ship.
+
+**Both apps.** The desktop's Brain -> Model list and the phone's Brain -> Models
+plate already post `/api/models/switch`; nothing in either app asks for the
+uncarded road, and neither app needed a change. `tools/check_parity.py` is
+unaffected.
+
+**Proved by:** `backend/test_reversible_ui_choices.py` - for both allow-listed
+actions the trusted-UI route runs with zero `jarvis_gate.check()` calls and
+writes its normal record (a `preset_apply` receipt; the model state plus one
+switch-log entry and the tripwire); the same actions through the model path
+raise exactly one card, with `switch_model` driven through the REAL shipped
+`jarvis-backend/jarvis_models.py`; the excluded set is refused and its real code
+still asks (a download, `forget_range`, Lockdown off; source pins for the
+live-only modules); a body naming `owner_ui`/`ui_direct` is ignored in both
+directions, and no query or header is read; the tier table still says
+`switch_model = "ask"`; the module is in both SHIPPED lists and the two copies
+are byte-equal. `backend/test_presets_owner_ui.py` keeps section 209's own
+proof.

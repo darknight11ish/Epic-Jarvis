@@ -1520,7 +1520,7 @@ def _discard_owner_receipt(receipt_id: str) -> None:
         pass
 
 
-def _switch_for_the_owner(ref: str) -> dict:
+def _switch_for_the_owner(ref: str, why: str = "a preset clicked in an app") -> dict:
     """Make `ref` the local lane's model with NO card - the owner's own click.
 
     The same model record `jarvis_models.switch_to` writes, and the same
@@ -1568,7 +1568,7 @@ def _switch_for_the_owner(ref: str) -> dict:
     st["previous"] = cur
     st["current"] = ref
     st["switched_at"] = now
-    st["why"] = "a preset clicked in an app"
+    st["why"] = str(why or "a preset clicked in an app")[:300]
     log = list(st.get("switches") or [])
     log.append({"from": cur, "to": ref, "at": now})
     st["switches"] = log[-int(getattr(M, "MAX_HISTORY", 20) or 20):]
@@ -1589,6 +1589,18 @@ def _switch_for_the_owner(ref: str) -> dict:
     except Exception as exc:
         out["tripwire"] = {"available": False, "reason": str(exc)}
     return out
+
+
+def switch_model_for_the_owner(ref: str, why: str = "") -> dict:
+    """The uncarded model switch, by the public name `jarvis_reversible_ui` uses.
+
+    Called by `jarvis_reversible_ui.install()` for a model picked in either
+    app's own model list - the manual-click rule (Gemini Q2, 2026-11-09). It is
+    the same body a preset click uses, so the two owner clicks share ONE
+    implementation and one model record; the `why` is the only difference.
+    Every model/chat path still reaches `jarvis_models.switch_to`, which asks.
+    """
+    return _switch_for_the_owner(ref, why=why or "a model picked in an app")
 
 
 def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
@@ -2003,6 +2015,21 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     cloud apply and the escalation switch raise their one change_own_config
     card. A LOCAL preset applied through this route is the owner's own click:
     it applies at once, writes a receipt, and the model path keeps its card."""
+    # THE MANUAL-CLICK RULE'S MODEL SWITCH (Gemini Q2, 2026-11-09). A model
+    # already on this PC, picked in either app's own model list, takes the same
+    # uncarded road a preset click takes. `jarvis_reversible_ui.py` is the
+    # allow-list and the route; this installer is already wired into the HUD by
+    # presets.patch, so the model picker needs no second patch. It intercepts
+    # ONE path, checks the same origin and token as this wrapper, and forwards
+    # every other path untouched. It is installed BEFORE `original` below is
+    # captured, so `original` is the switch's own forwarder.
+    try:
+        import jarvis_reversible_ui
+        print("  " + jarvis_reversible_ui.install(
+            Handler, origin_ok=origin_ok, token_ok=token_ok,
+            read_body=read_body))
+    except Exception as exc:                     # noqa: BLE001 - never blocks start-up
+        print(f"  reversible  not installed ({type(exc).__name__})")
     original_get = getattr(Handler, "do_GET", None)
 
     def do_GET(self):

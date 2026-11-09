@@ -1745,6 +1745,19 @@ SHIPPED = (
     # calm line. Route GET/POST /api/wifi-reconnect comes from its own
     # install(), loaded by plugins/ready/wifi-reconnect - no patch.
     "jarvis_wifi.py",
+    # The manual-click rule's ONE allow-list (jarvis_reversible_ui.py,
+    # 2026-11-09; Gemini's Q2 ruling on the owner's "if i manually choose
+    # anything in the jarvis app or deskstop program, and its something that i
+    # can easily click and change back right away, it shouldnt need a card").
+    # One explicit table of the choices that are one click back, the ONE route
+    # the two apps' own model list already uses (the trusted-UI signal is the
+    # route, never a body/header field), and the honest audit of the everyday
+    # settings that were already cardless. It decides nothing else: every
+    # model/chat path still asks, and the tier table is untouched. Standard
+    # library only, no card and no model at import. The same entry, in the same
+    # position, is in scripts/apply-patches.ps1's $SHIPPED - above
+    # jarvis_bench.py, which stays last.
+    "jarvis_reversible_ui.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

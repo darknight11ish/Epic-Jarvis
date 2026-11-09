@@ -1290,8 +1290,25 @@ deliberately NOT a tier change: `switch_model` stays `ask` in
 `[autonomy.tiers]`, and a chat/voice apply, the heavy Coding preset (its pooled
 lane unloads both other models) and the Cloud row (it changes where the owner's
 words go) all still raise their card; `install` and `download_model` are
-untouched. JARVIS-API section 206 has the full rule,
+untouched. JARVIS-API section 209 has the full preset rule,
 `backend/test_presets_owner_ui.py` proves both halves.
+
+**The same rule is ONE allow-list, not a second code path.** Since 2026-11-09
+`backend/jarvis_reversible_ui.py` holds the explicit allow-list
+(`REVERSIBLE_UI_CHOICES`) the owner's manual-click rule is allowed to use: a
+local preset, and a model already installed that is picked in either app's own
+model list. The trusted-UI signal is the ROUTE - `POST /api/models/switch`,
+wrapped by the module's own `install()` after the HUD's origin and pairing-token
+checks - never a header, query parameter or body field. A model already on this
+PC switches at once and writes the same model record and runs the same tripwire
+smoke test `switch_to` does, without the card; every model/chat path is
+unchanged and still raises its one `switch_model` card, `switch_model` stays
+`ask` in `[autonomy.tiers]`, and a download/install still asks. Destructive and
+boundary-changing actions (forget/`forget_range`, deletes, installs, Lockdown
+off, app lock, credentials, repo creation, sends, imports) are excluded by name
+and keep their card on both roads. JARVIS-API section 210 has the rule, the
+audit of the everyday settings, and the proof
+(`backend/test_reversible_ui_choices.py`).
 
 ---
 

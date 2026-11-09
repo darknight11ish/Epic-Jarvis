@@ -3150,6 +3150,15 @@ $SHIPPED = @(
     # attempt logged and reported. Its route is a drop-in plugin, so no patch.
     # The same entry, in the same position, is in backend/_where.py's SHIPPED.
     'jarvis_wifi.py'
+    # The manual-click rule's ONE allow-list (jarvis_reversible_ui.py,
+    # 2026-11-09; Gemini's Q2 ruling on the owner's "if i manually choose
+    # anything ... and its something that i can easily click and change back
+    # right away, it shouldnt need a card"). One explicit table of reversible
+    # choices, the ONE route the two apps' own model list already uses (the
+    # trusted-UI signal is the route, never a body/header field), and the
+    # honest audit of the everyday settings. Every model/chat path still asks.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED.
+    'jarvis_reversible_ui.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate
