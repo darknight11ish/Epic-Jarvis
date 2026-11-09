@@ -247,34 +247,40 @@ await check("every row is drawn inside the card its section names", async () => 
 /* ── 2c. The read-aloud feature names controls that really exist ─────────── */
 
 /**
- * The 2026-10-28 settings audit's G2: `features/features.json` told the owner
- * "Settings, Voice, \"Read aloud\"" - a switch that does not exist. Read-aloud
- * is on by default and no switch turns it off; the Voice card's real controls
- * are two choices ("Answers that use what Jarvis remembers" / "Answers that
- * use sensitive saved facts"), and the HUD card's "Read-aloud buttons on
- * answers" row adds a speaker to a finished answer WITHOUT turning read-aloud
- * on or off.
+ * The 2026-10-28 settings audit's G2: `features/features.json` once told the
+ * owner "Settings, Voice, \"Read aloud\"" - a switch that does not exist. The
+ * Wave-9/10 rewrites now describe the shipped switch: Settings, Voice,
+ * "Read replies out loud" is the real control; "stop/read your replies out
+ * loud" changes it from chat or Live; and the HUD card's "Read-aloud buttons on
+ * answers" row only adds the per-answer speaker - it is NOT the switch.
  *
- * So this holds the prose to the page, not to another sentence: every quoted
- * control the row names must exist in settings.html, and the row must say what
- * the HUD row is not. A future rewrite that points at a control nobody built
- * fails here.
+ * So this holds the prose to the page, not to another sentence: the two real
+ * Settings controls it names must exist in settings.html, and the description
+ * must keep saying which of the two is the switch. A future rewrite that points
+ * at a control nobody built, or that turns the speaker row back into "the
+ * switch", fails here.
  */
 await check("read-aloud names real Settings controls, and says what the HUD row is not", async () => {
   const FEATURES = JSON.parse(read("../features/features.json"));
   const row = FEATURES.find((f) => f.id === "read-aloud");
   assert.ok(row, "read-aloud is not in features/features.json");
-  assert.ok(/Read-aloud buttons on answers/.test(row.where),
+  // The real switch: a Settings control that exists on this page.
+  assert.ok(/"Read replies out loud"/.test(row.where),
+    'the real switch "Read replies out loud" is not named');
+  assert.ok(HTML.includes("Read replies out loud"),
+    'settings.html has no control called "Read replies out loud"');
+  // The HUD row is named too, and described as the per-answer speaker only.
+  assert.ok(/"Read-aloud buttons on answers"/.test(row.where),
     "the HUD row's own words are not named");
-  assert.ok(/does not turn read-aloud on or off/.test(row.where),
-    "the row no longer says the HUD buttons are not the switch");
+  assert.ok(HTML.includes("Read-aloud buttons on answers"),
+    'settings.html has no row called "Read-aloud buttons on answers"');
+  assert.ok(/"Read-aloud buttons on answers" adds those speakers/.test(row.where),
+    "the HUD row is no longer described as adding speakers, not switching read-aloud");
+  // The old, false claims must stay gone.
+  assert.ok(!/no switch turns that off/.test(row.where),
+    "the old 'no switch turns that off' claim is back");
   assert.ok(!/Settings, Voice, "Read aloud"/.test(row.where),
     "the old claim (a Voice switch called \"Read aloud\") is back");
-  const quoted = [...row.where.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(quoted.length >= 3, `only ${quoted.length} control(s) named: ${quoted}`);
-  for (const name of quoted) {
-    assert.ok(HTML.includes(name), `settings.html has no control called "${name}"`);
-  }
   // The HUD row is a real <input>, and it is not a read-aloud switch: its own
   // detail says it adds the speaker a finished answer can be read out from.
   assert.ok(HTML.includes('id="hud-read-aloud-icons"'), "the HUD read-aloud row is gone");

@@ -238,6 +238,11 @@ ENVIRONMENT_SKIPS = {
         "is not installed", "needs icacls", "is not nt",
         "this is not windows", "does not enforce it"),
     "backend/test_settings_tool.py": ("not importable in this environment",),
+    # The Wave-10 migration smoke opens a COPY of the owner's live feedback.db
+    # (JARVIS-API section 1071). No CI runner has that file: the suite prints
+    # "does not exist on this machine", runs its synthetic half and says so.
+    # A machine limit, not a missing guard - the same shape as test_data_backup.
+    "backend/test_feedback_migration.py": ("does not exist on this machine",),
 }
 
 #: The summary line a suite may print for itself - `N passed, M skipped,

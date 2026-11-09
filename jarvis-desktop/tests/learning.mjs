@@ -102,7 +102,14 @@ await check("CONTROL: the conversation id on a mark is checked the same way as e
   const fn = rust.slice(rust.indexOf("pub async fn mark_answer"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
   assert.match(body, /conversation_id: Option<String>/);
-  assert.match(body, /valid_conversation_id\(id\)/, "not checked with the shared validator");
+  // Wave 10 moved the mark body into ONE builder (`mark_answer_body`), so the
+  // shared validator has to live there; the pin follows the body, not the old
+  // inline code. Both halves are checked so the builder cannot stop validating.
+  assert.match(body, /mark_answer_body\(/, "the mark body is not built by the shared builder");
+  const builder = rust.slice(rust.indexOf("pub(crate) fn mark_answer_body"));
+  const builderBody = builder.slice(0, builder.indexOf("\n}\n"));
+  assert.match(builderBody, /conversation_id\.filter\(\|id\| valid_conversation_id\(id\)\)/,
+    "not checked with the shared validator");
 });
 
 const RETIRE = { id: 51, text: "Stop using this fact? It was part of 6 wrong answers and 1 right one.",
@@ -156,7 +163,9 @@ await check("review cards say what their buttons do", async () => {
   await both.locator("button", { hasText: "Both are true" }).click();
   await page.waitForTimeout(200);
   const writes = await page.evaluate(() => window.__memoryWrites);
-  assert.deepEqual(writes[0], { cmd: "brain_memory_keep_both", id: 53 });
+  // The correction card above already wrote once; this card's own decision is
+  // the LAST write, not the first.
+  assert.deepEqual(writes.at(-1), { cmd: "brain_memory_keep_both", id: 53 });
 
   // Accepting the retire card is the ordinary one-card decision.
   await retire.locator("button", { hasText: "Forget that fact" }).click();

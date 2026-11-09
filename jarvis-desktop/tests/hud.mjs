@@ -3575,6 +3575,7 @@ await check("Studio: the two host cards own full-width rows, and hidden stage ca
       const r = node.getBoundingClientRect();
       const cs = getComputedStyle(node);
       return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width),
+               h: Math.round(r.height),
                bottom: Math.round(r.bottom), display: cs.display,
                gridRow: cs.gridRow, gridColumn: cs.gridColumn };
     };
@@ -5658,6 +5659,7 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
     const toggle = document.getElementById("hud-edit-toggle");
     const bar = document.querySelector(".stage-bar");
     const rail = document.getElementById("rail-right");
+    const shell = document.getElementById("shell");
     const cards = [...document.querySelectorAll("[data-hud-card]")]
       .filter((c) => !c.hidden && c.getBoundingClientRect().height > 0);
     cards.sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y);
@@ -5680,6 +5682,10 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
       railShown: Boolean(rail && getComputedStyle(rail).display !== "none"
         && rail.getBoundingClientRect().width > 0),
       railTop: railBox ? railBox.y : null,
+      // The shell reserves a top band for the fixed safety strip while it is on
+      // screen (hud-link.css: `#shell{padding-top:var(--hud-safety-band)}`); the
+      // rail starts at the shell's own top, just below that reserved band.
+      safetyBand: shell ? Math.round(parseFloat(getComputedStyle(shell).paddingTop) || 0) : 0,
       barBottom: barBox ? barBox.y + barBox.h : null,
       vw: innerWidth,
     };
@@ -5695,12 +5701,15 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
   // The structural half, P0.6 (owner field test, 2026-10-23): in Edit HUD the
   // Studio rail is no longer a fixed overlay that must start BELOW the header
   // band - that overlay was the jumble the owner photographed. It is now a
-  // normal in-flow column beside the stage: it starts at the window's top and
-  // sits to the RIGHT of the stage, so it cannot cover anything in it.
+  // normal in-flow column beside the stage: it starts at the shell's top and
+  // sits to the RIGHT of the stage, so it cannot cover anything in it. The one
+  // exception is the shell's reserved safety band (Wave 10's H4 fix): while the
+  // fixed safety strip is on screen `#shell` carries a top padding, and the
+  // in-flow rail rightly starts below that band rather than under the strip.
   assert.equal(hit.railPosition, "static",
     `the Studio rail is still an out-of-flow overlay in Edit HUD (${hit.railPosition})`);
-  assert.ok(hit.railTop <= 1,
-    `the Studio rail starts at y=${hit.railTop} instead of the window's top`);
+  assert.ok(hit.railTop <= hit.safetyBand + 1,
+    `the Studio rail starts at y=${hit.railTop} instead of the shell's top (the safety band reserves ${hit.safetyBand}px)`);
   assert.ok(hit.stageBox && hit.railBox.x >= hit.stageBox.x + hit.stageBox.w - 1,
     `the Studio rail starts at x=${hit.railBox.x}, at or left of the stage's right edge ${hit.stageBox && hit.stageBox.x + hit.stageBox.w}`);
   assert.ok(hit.railBox.x + hit.railBox.w <= hit.vw + 1,
