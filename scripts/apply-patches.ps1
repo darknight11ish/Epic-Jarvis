@@ -2189,6 +2189,31 @@ $PATCHES = @(
     # which MUST stay the last entry of all (tools/check_plugins.py): it is a
     # core patch, and only drop-in folders follow the loader.
     'packs-tamper-on-load.patch'
+    # skill-scan-wiring.patch (2026-11-09) - THE DELIVERY ROUTE for the wave-12
+    # skill-scan work (DEF-049 and Gemini's Q3). Those two changes landed in the
+    # PUBLISHED BASE only - `jarvis-backend/jarvis_skills.py` - and in NO patch,
+    # so a correct deploy of wave 12 left the owner's live `jarvis_skills.py`
+    # exactly as it was: the four extra checks were defined and called by
+    # nothing, and `skills.lock` was a file no install ever wrote. Five hunks,
+    # all in jarvis_skills.py: the constants + `_hub_present()` +
+    # `_extra_findings()`, the `findings += _extra_findings(skill)` caller
+    # inside `vet()` (the ONE scan the menu, the install card, the pack door and
+    # a project skill all use), the report's `extra_checks` field,
+    # `_lock_after_install(skill, report)` after an approved install, the two
+    # helpers that write and forget a `skills.lock` row, and the
+    # `_unlock_after_remove(name)` call in `uninstall()`. Its `+` lines are the
+    # published base's own bytes, so the live file's regions come out the same
+    # as `jarvis-backend/jarvis_skills.py`; its context is the live file's
+    # bytes, so it applies to the owner's folder. It sits here because it is the
+    # LAST writer of jarvis_skills.py in this stack (skill-notes.patch,
+    # skill-install-note.patch and packs-tamper-on-load.patch all come earlier
+    # and their output is part of this patch's context). Deliberately BEFORE
+    # activity-turn-guard.patch rather than after it: that patch is the last
+    # core patch before plugin-loader.patch, which MUST stay the last entry of
+    # all, and `backend/test_reconcile_live_backend.py` pins it there. The two
+    # touch different files (jarvis_hud.py against jarvis_skills.py), so their
+    # order relative to each other changes no context.
+    'skill-scan-wiring.patch'
     # activity-turn-guard.patch (2026-11-06) - a finished chat turn can no
     # longer leave the event bus saying Jarvis is still "thinking". FOUR hunks,
     # all in jarvis_hud.py: the one wrapper do_POST every /api/chat request

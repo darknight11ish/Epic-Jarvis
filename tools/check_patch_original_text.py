@@ -193,9 +193,10 @@ must stay the LAST writer. Checked the other way by
 `backend/test_github_tools.py`, which reverses this patch out of the published
 base and applies it forward again, byte for byte.
 
-The thirtieth, added 2026-11-09, is `skill-scan-wiring.patch` at position 176
-(the LAST writer of `jarvis_skills.py`, immediately before
-`plugin-loader.patch`): FIVE hunks, and every one of them reads the owner's own
+The thirtieth, added 2026-11-09, is `skill-scan-wiring.patch`, the LAST writer
+of `jarvis_skills.py` (it sits immediately before `activity-turn-guard.patch`,
+which stays the last core patch before `plugin-loader.patch`): FIVE hunks, and
+every one of them reads the owner's own
 `jarvis_skills.py` - `is_bundled_script()`'s tail, `vet()`'s opening line and
 its report dict, `install()`'s return, `_pin_skill()`'s end and `uninstall()`'s
 index write. It is the F5 delivery route: the wave-12 skill-scan work (DEF-049's
@@ -624,7 +625,7 @@ PIN = {
     # above, which read the same file for the same reason. Pinned here at 5
     # hunks / 33 lines, and `backend/_stack.py`'s `jarvis_skills.py` RATCHET
     # moves 6 -> 11 with it.
-    "skill-scan-wiring.patch":                 (5, 33),     # position 176
+    "skill-scan-wiring.patch":                 (5, 33),     # position 175
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

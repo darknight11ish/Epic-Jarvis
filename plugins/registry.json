@@ -1430,13 +1430,13 @@
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "activity-turn-guard.patch",
+      "patch": "skill-scan-wiring.patch",
       "bucket": "core",
       "order": 175,
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "skill-scan-wiring.patch",
+      "patch": "activity-turn-guard.patch",
       "bucket": "core",
       "order": 176,
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"

@@ -332,6 +332,7 @@ text, and its `+` lines are the published base's own bytes. So after it applies,
 live file's five regions are byte-identical to `jarvis-backend/jarvis_skills.py`; what
 differs between the two files stays exactly what differed before. It is the last entry
 in the stack that writes `jarvis_skills.py`, and it sits immediately before
+`activity-turn-guard.patch`, which stays the last core patch before
 `plugin-loader.patch`.
 
 **The one thing to check after deploying.** On the live PC,

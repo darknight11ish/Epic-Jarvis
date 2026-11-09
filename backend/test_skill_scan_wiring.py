@@ -142,15 +142,20 @@ def t_the_patch_is_in_the_stack_at_the_right_position() -> None:
           "skill-scan-wiring.patch" in names)
     if "skill-scan-wiring.patch" not in names:
         return
-    check("it is LAST BUT ONE, so its context (everything that writes that file) is in",
-          names[-2] == "skill-scan-wiring.patch", names[-3:])
-    check("plugin-loader.patch is still the last entry of all",
-          names[-1] == "plugin-loader.patch", names[-3:])
     earlier = ("skill-notes.patch", "skill-install-note.patch",
                "packs-tamper-on-load.patch")
     for name in earlier:
         check(f"{name} still comes earlier, before this patch's context is fixed",
               name in names and names.index(name) < names.index("skill-scan-wiring.patch"))
+    check("it is the LAST writer of jarvis_skills.py - only other files follow it",
+          names.index("skill-scan-wiring.patch") + 1 < len(names)
+          and all(n in ("activity-turn-guard.patch", "plugin-loader.patch")
+                  for n in names[names.index("skill-scan-wiring.patch") + 1:]),
+          names[names.index("skill-scan-wiring.patch"):])
+    check("activity-turn-guard.patch is STILL the last core patch before the loader",
+          names[-2] == "activity-turn-guard.patch", names[-3:])
+    check("plugin-loader.patch is still the last entry of all",
+          names[-1] == "plugin-loader.patch", names[-3:])
 
 
 def t_git_can_read_it_and_it_touches_one_file() -> None:
@@ -213,14 +218,9 @@ def t_the_stack_walk_pins_what_it_measures() -> None:
     pin = _stack.RATCHET.get("jarvis_skills.py")
     check("_stack.RATCHET pins jarvis_skills.py at 11 hunks (6 before this patch + its 5)",
           pin == 11, pin)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "_patch_original_text", REPO / "tools" / "check_patch_original_text.py")
-    checker = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(checker)
+    pin_text = (REPO / "tools" / "check_patch_original_text.py").read_text(encoding="utf-8")
     check("tools/check_patch_original_text.py pins the same patch, at 5 hunks / 33 lines",
-          checker.PIN.get("skill-scan-wiring.patch") == (5, 33),
-          checker.PIN.get("skill-scan-wiring.patch"))
+          re.search(r'"skill-scan-wiring\.patch":\s*\(5, 33\)', pin_text) is not None)
 
 
 def main() -> int:
