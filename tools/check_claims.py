@@ -250,7 +250,7 @@ ENVIRONMENT_SKIPS = {
     # the suite still proves the one-file attachment path, the cap and the
     # refusals. Measured in the REQUIRED backend job's own environment on
     # 2026-11-09, where the optional package is absent.
-    "backend/test_attached_file.py": ("MarkItDown is not installed",),
+    "backend/test_attached_file.py": ("markitdown is not installed",),
 }
 
 #: The summary line a suite may print for itself - `N passed, M skipped,
