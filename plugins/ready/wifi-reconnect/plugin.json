@@ -3,5 +3,5 @@
   "summary": "the auto Wi-Fi reconnect: GET/POST /api/wifi-reconnect, ON by default, every 2 hours while this PC has no internet it asks Windows to connect to a saved password-protected Wi-Fi network it already knows - never open, never new, never a password, never while Jarvis is answering, and every attempt is reported in one calm line.",
   "module": "jarvis_wifi",
   "install": "handler",
-  "stack_order": 163
+  "stack_order": 189
 }

@@ -241,8 +241,11 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     # (handsfree, history-purge, product-check) on top of call-notes, and the
     # phone's upload door added a fourth (upload), so this pin moves with them -
     # the same one-line change every new drop-in makes here.
+    # Wave 11 (2026-11-08): a fifth arrived with the Wi-Fi reconnect (wifi-reconnect),
+    # which was born as a folder rather than a patch, so both figures in the pin
+    # below rise by one - the same one-line change every new drop-in makes here.
     check("the registry is not stale (the folder count rose, and more ready modules)",
-          registry.get("folder_count") == 27 and registry.get("ready_count") == 56,
+          registry.get("folder_count") == 28 and registry.get("ready_count") == 57,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)
