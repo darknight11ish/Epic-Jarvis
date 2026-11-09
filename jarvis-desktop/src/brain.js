@@ -2678,32 +2678,17 @@ let learningCardSeen = false;
 
 /** The learning card left the queue: read the switch after the backend has
  *  had a moment to apply an approval. On: the line goes (renderLearning).
- *  Still off: it was denied or ran out of time, and that is said. */
+ *  Since 2026-11-09 this page raises no learning card of its own - the
+ *  switch lives in Settings, Learning - so there is no "our own ask" to
+ *  follow; the waiting line is simply the queue's answer. */
 onQueue((queue) => {
-  // A learning card raised elsewhere (the phone, or another window) came
-  // or went: the waiting line follows it, as History's does.
+  // A learning card raised elsewhere (the phone, or Settings) came or went:
+  // the waiting line follows it, as History's does.
   const waitingNow = learningCardWaiting(queue);
   if (waitingNow !== learningCardSeen) {
     learningCardSeen = waitingNow;
     if (state.view === "memory") renderLearning();
   }
-  const ask = state.learningAsk;
-  if (!ask || !ask.cardId || ask.gone) return;
-  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
-  if (items.some((item) => item && item.id === ask.cardId)) return;
-  ask.gone = true;
-  setTimeout(async () => {
-    if (state.learningAsk !== ask) return;
-    await refreshMemory();
-    if (state.learningAsk === ask) {
-      state.learningAsk = null;
-      const facts = state.data.memory_facts || {};
-      if (facts.learning !== true) {
-        toast("Background learning stays off: the card was denied or ran out of time.", "bad");
-      }
-      renderLearning();
-    }
-  }, MODEL_ASK_GRACE_MS);
 });
 
 onQueue((queue) => {
@@ -2919,6 +2904,13 @@ function renderSkills() {
   if (why) return rows(dom.skills, [], null, whyNode("skills"));
   const list = Array.isArray(body.skills) ? body.skills : Array.isArray(body) ? body : [];
 
+  // Read-only since 2026-11-09 (Brain IA audit, recommendation 1). Settings,
+  // Skills is the ONE control page: it installs from a folder or a .zip,
+  // imports the Hermes skills, turns one off and back on, edits one and
+  // removes one, each behind the one card the PC raises. A Remove here was a
+  // second door to that same action, and the audit named it as one of the
+  // controls that made this window read as a second Settings. So this window
+  // lists what is installed and links; it writes nothing.
   rows(
     dom.skills,
     list,
@@ -2939,37 +2931,7 @@ function renderSkills() {
         state: /clean|ok|pass/i.test(verdict) ? "ok" : "warn",
         title: name,
         meta: [s.description || s.summary || "", s.path || "", ...notes],
-        actions: [
-          button(
-            "Remove",
-            async () => {
-              // Removal is not undoable from here: there is deliberately no
-              // route that installs a skill, because installing runs the
-              // scanner and the gate. So it asks, in those words.
-              if (
-                !confirm(
-                  `Remove the skill "${name}"?\n\n` +
-                    "This cannot be undone from the desktop. There is no route " +
-                    "that installs a skill — installing runs the scanner and " +
-                    "the gate, and a client that bypassed both would be the " +
-                    "whole attack. Putting it back means putting the file back " +
-                    "on the machine."
-                )
-              ) {
-                return;
-              }
-              try {
-                await invoke("brain_remove_skill", { name });
-                toast(`Removed ${name}.`, "ok");
-                await load(["skills"], { quiet: true });
-                render("faculties");
-              } catch (error) {
-                toast(String((error && error.message) || error), "bad");
-              }
-            },
-            { danger: true }
-          ),
-        ],
+        actions: [],
       });
     },
     ""
@@ -3320,7 +3282,6 @@ function renderLearning() {
     memoryAsOfRows = null;
   }
   const on = facts.learning === true;
-  if (on) state.learningAsk = null;    // the card was approved
   const setup = pending.setup || {};
   noteSleepOffer(setup);
 
@@ -3417,40 +3378,15 @@ function renderLearning() {
   }
   dom.memoryLearning.append(dl);
 
-  // Our own click, or a card raised elsewhere - the history switch's rule
-  // (`chats.ask || v.waiting`), read from the queue.
-  if (state.learningAsk || (!on && learningCardWaiting())) {
+  // A card raised elsewhere (the phone, or the Settings card) still shows
+  // here - the history switch's rule (`chats.ask || v.waiting`), read from the
+  // queue. This page raises no card of its own since 2026-11-09: the switch
+  // that does lives in Settings, Learning (Brain IA audit, recommendation 1).
+  if (!on && learningCardWaiting()) {
     dom.memoryLearning.append(el("p", "hint learning-waiting",
       `Waiting for your approval to turn background learning on. Approve it ${APPROVE_WHERE}.`));
   }
   const box = el("div", "row-actions");
-  box.append(
-    button(on ? "Pause background learning" : "Start background learning", async () => {
-      const waitingBefore = new Set(
-        (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
-      );
-      const out = await memoryWrite(
-        "brain_memory_learning",
-        { enabled: !on },
-        (out) =>
-          out && out.waiting
-            // Turning learning ON raises an approval card (learning-asks.patch):
-            // it is NOT on yet, and it is not "off" as a result of this either.
-            ? String(out.message || `Waiting for your approval. Approve it ${APPROVE_WHERE}.`)
-            : out && out.note
-              ? String(out.note)
-              : out && out.enabled
-                ? "Background learning is on."
-                : "Background learning is off. Nothing new will be proposed."
-      );
-      state.learningAsk = out && out.waiting ? { cardId: await findNewCard(waitingBefore) } : null;
-      renderLearning();
-    }, { title: on
-        ? "Stop reading conversations for facts. Nothing already proposed is lost. "
-          + "A message that starts “Remember:” still makes a card."
-        : "Read conversations for facts again. With “Learn automatically” on, facts in "
-          + "your own words are saved straight away; everything else waits for your yes." })
-  );
   box.append(
     button("Export everything", async () => {
       try {
@@ -5546,7 +5482,7 @@ const chats = {
   /** What the open chat taught (readChatFacts), or null while it is read or
    *  when this PC cannot say (the second chat audit, 2026-09-28, finding 9). */
   openFacts: null,
-  /** `{ cardId, gone }` while an ON card waits (like `learningAsk`). */
+  /** `{ cardId, gone }` while an ON card waits (like `modelAsk`). */
   ask: null,
   /**
    * "Search what was said" (JARVIS-API.md section 71). `query` is what is
@@ -7906,6 +7842,51 @@ function autoSwitchNode(which, v) {
   return box;
 }
 
+/**
+ * One learning switch this window no longer changes: its state, in that
+ * switch's own words, and nothing to press.
+ *
+ * WHY (2026-11-09, the Brain IA audit's recommendation 1). "Also remember
+ * sensitive topics automatically" and "Save facts even when Jarvis had to
+ * reword them" are in Settings, Learning as well as here, and two doors to
+ * one setting is how the Brain came to read as a second Settings. Settings,
+ * Learning is the control page; this page says what the setting is doing - on
+ * or off, a card waiting, how the last card ended - so the owner can read the
+ * state where the facts are without a second way to change it. "Learn
+ * automatically" stays a real switch (autoSwitchNode) because the Settings
+ * card deliberately does not hold its write, so it is not a duplicate.
+ */
+function autoStateNode(which, v) {
+  const sw = AUTO_SWITCHES[which];
+  const on = v[sw.field] === true;
+  // A card raised anywhere (the phone, Settings) is the PC's `*_waiting`, or
+  // the queue itself. Nothing here is ever withdrawn by this page.
+  const waiting = !on && Boolean(v[sw.waitingField] || autoCardWaiting(which));
+  const box = el("div", "auto-switch-box auto-state-box");
+  const state = el("p", "note auto-state");
+  state.id = `memory-${which}-state`;
+  state.append(el("strong", "auto-state-label", sw.label), " — ", on ? "on" : "off", ".");
+  const detail = el("p", "note history-switch-detail", sw.detail);
+  detail.id = `memory-${which}-detail`;
+  box.append(state, detail);
+  if (waiting) {
+    box.append(el("p", "hint learning-waiting auto-waiting", sw.waiting(APPROVE_WHERE)));
+  } else {
+    // How the newest card ended, in the PC's words (FIXLIST 2) - the same
+    // line the switch showed, now that the switch itself is in Settings.
+    const words = lastLineNow(which, v);
+    if (words) {
+      const line = el("p", "hint auto-last", words);
+      const last = v[sw.lastField];
+      if (last && last.why) line.title = last.why;
+      box.append(line);
+    }
+  }
+  // Both switches do nothing without the first (FIXLIST 3, 2026-11-02).
+  if (!v.auto) box.append(el("p", "hint auto-needs-auto", SENSITIVE_NEEDS_AUTO));
+  return box;
+}
+
 function paintAutoSettings() {
   const box = dom.memoryAuto;
   if (!box) return;
@@ -7925,8 +7906,14 @@ function paintAutoSettings() {
     box.append(el("p", "empty", v.why));
     return;
   }
-  box.append(autoSwitchNode("auto", v), autoSwitchNode("sensitive", v),
-    autoSwitchNode("paraphrase", v));
+  // "Learn automatically" stays here: it is the one learning switch the
+  // Settings card does not hold (its write is deliberately outside that
+  // card's narrow permission set), so it is not a duplicate - and it belongs
+  // beside the facts it saves. The other two ARE in Settings, Learning, and
+  // since 2026-11-09 this window only says what they are doing (Brain IA
+  // audit, recommendation 1: one control page).
+  box.append(autoSwitchNode("auto", v), autoStateNode("sensitive", v),
+    autoStateNode("paraphrase", v));
   // "Learn automatically" means something only while learning is on. The
   // learning route says; an older PC's answer is the facts list's flag.
   const facts = state.data.memory_facts || {};
@@ -16252,6 +16239,44 @@ $("open-settings")?.addEventListener("click", () => {
     window.location.href = "settings.html";
   }
 });
+
+/**
+ * Open Settings AT one card, from a "Change this in Settings" link.
+ *
+ * The Brain IA audit's recommendation 1 (2026-11-09): Settings is the one
+ * place that changes these, and the Brain says the state and links. The road
+ * is the rail's "Show or hide menus" road, reused rather than copied: the
+ * place travels in `jarvis.settings.place` (settings.js's goToPlace reads it,
+ * once and only while fresh) and `open_fix_place` opens the window - it
+ * accepts only the window names ("settings", "brain", "history"), never a
+ * card. A plain browser has no Tauri to ask, so it goes to the fragment the
+ * page already reads.
+ *
+ * App lock is NOT re-checked here and must not be: it lives in
+ * windows::show_settings (lock.rs may_open, Covered::Settings), which asks
+ * Windows Hello and opens the window once the owner confirms. One gate,
+ * every door through it - the same rule the top-bar Settings door follows.
+ *
+ * `place` is one lower-case element id on settings.html, never free text:
+ * "learning" and "skills-menu" are the two cards this window links to.
+ */
+function openSettingsAt(place) {
+  try {
+    localStorage.setItem("jarvis.settings.place",
+      JSON.stringify({ place, at: Date.now() }));
+  } catch {}
+  if (IS_TAURI) {
+    TAURI.core.invoke("open_fix_place", { place: "settings" });
+  } else {
+    window.location.href = `settings.html#${place}`;
+  }
+}
+
+// The two links the Brain IA audit (2026-11-09) put in place of the controls
+// this window used to duplicate. `skills-menu` is the Settings Skills card's
+// id; `learning` is the Learning card's.
+$("skills-open-settings")?.addEventListener("click", () => openSettingsAt("skills-menu"));
+$("learning-open-settings")?.addEventListener("click", () => openSettingsAt("learning"));
 
 $("btn-rail-hidden-menus")?.addEventListener("click", () => {
   // The place travels in storage, not in the call: open_fix_place opens the

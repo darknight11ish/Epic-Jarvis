@@ -246,6 +246,58 @@ def main():
     finally:
         K.prompt_line = saved
 
+    # --- 7. skills self-knowledge (2026-11-09, the owner's live finding) ----
+    # The live model answered "can you install hermes skills into yourself?"
+    # with "I can't install ... it requires specific procedures" and then
+    # described only the plug-in script. The PC ships a real Skills menu
+    # (2026-11-02), so the digest carries it and the owner's shapes answer
+    # from it without the model.
+    digest = A.LANE_SYSTEM
+    check("digest: names the real Skills menu beside the plug-in line",
+          "Settings, Skills" in digest and "Never say you cannot install skills" in digest)
+    check("digest: names the Hermes import folder",
+          "%USERPROFILE%\\.hermes\\skills" in digest)
+    check("digest: carries the ONE-card rule and the quarantine rule",
+          "ONE approval card" in digest and "quarantined and never carded" in digest)
+    check("digest: says nothing is downloaded or auto-installed",
+          "nothing is downloaded or auto-installed" in digest)
+    owner = ("can you install hermes skills into yourself? what about other "
+             "skills")
+    it = Q.match(owner)
+    check("skills: the owner's exact sentence is a deterministic quick intent",
+          it is not None and it.name == "skill_menu_info",
+          None if it is None else it.name)
+    shapes = ("can you install hermes skills", "what skills can you install",
+              "install a hermes skill", "how do I add a skill",
+              "how do I install a skill", "what skills do you have",
+              "what is in the skills menu")
+    check("skills: every shape is the same deterministic intent",
+          all((Q.match(text) or types.SimpleNamespace(name="")).name
+              == "skill_menu_info" for text in shapes))
+    saved_turn = A.run_local_turn
+    def _no_model(*a, **k):
+        raise AssertionError("a skills question reached the local model")
+    A.run_local_turn = _no_model
+    try:
+        r = ask(owner)
+        answers = [ask(text) for text in shapes]
+    finally:
+        A.run_local_turn = saved_turn
+    check("skills: the answer names the real doors and the ONE card",
+          r is not None and "Settings, Skills" in r.reply
+          and ".hermes" in r.reply and "ONE approval card" in r.reply
+          and "add-plugin.ps1" in r.reply, getattr(r, "reply", None))
+    check("skills: it never repeats the false denial",
+          r is not None and "cannot install skills" not in r.reply.lower()
+          and "can't install" not in r.reply.lower(), getattr(r, "reply", None))
+    check("skills: the plug-in system is named as separate, not the answer",
+          r is not None and "Plugins are separate" in r.reply)
+    check("skills: all shapes answer without the model",
+          all(a is not None and getattr(a, "reply", "") for a in answers))
+    check("skills: the intent is read-only and deterministic in a private chat",
+          "skill_menu_info" in Q.READ_ONLY_INTENTS
+          and "skill_menu_info" in Q._PRIVATE_DETERMINISTIC_READS)
+
     # --- 7. no approval path, and the twin is identical ---------------------
     src = (HERE / "jarvis_model_knowledge.py").read_text(encoding="utf-8")
     for banned in ("import jarvis_gate", "gate_check", ".decide(", "approve_pending"):

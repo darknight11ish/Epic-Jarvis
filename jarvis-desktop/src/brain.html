@@ -384,11 +384,16 @@
             <div class="card card-wide" id="skills-card" data-menu-id="brain.model.skills">
               <h2>Skills</h2>
               <p class="note">
-                Quarantined skills are not listed — the scanner withholds them
-                on the server. There is no route that installs one, because
-                installing runs the scanner and the gate inside the module.
+                What is installed, and nothing that changes it. Installing from
+                a folder or a .zip, importing Hermes skills, turning one off or
+                back on, editing one and removing one all happen in one place:
+                Settings, Skills. Quarantined skills are not listed — the
+                scanner withholds them on the server.
               </p>
               <div id="skills"></div>
+              <div class="row-actions">
+                <button class="btn ghost small" type="button" id="skills-open-settings">Change this in Settings, Skills</button>
+              </div>
             </div>
             <div class="card card-wide" id="faculties-memory-card" data-menu-id="brain.model.memory">
               <h2>Memory</h2>
@@ -423,8 +428,24 @@
                 at a time.
               </p>
               <div id="memory-learning"></div>
-              <!-- Automatic learning (auto-learn.js): its two switches. -->
+              <!-- Automatic learning (auto-learn.js): "Learn automatically" -
+                   the one learning switch with no Settings copy (the Settings
+                   card does not hold its write), so it stays beside the facts
+                   it saves. The two that ARE in Settings are drawn in this
+                   same container as state only. -->
               <div id="memory-auto"></div>
+              <!-- The one control page for the rest (Brain IA audit, 2026-11-09,
+                   recommendation 1): this window shows what learning is doing,
+                   Settings, Learning is where it is changed. -->
+              <p class="note">
+                Background learning, remembering sensitive topics automatically
+                and saving Jarvis's own words are changed in one place:
+                Settings, Learning. This page shows their state and the facts
+                saved automatically; Forget stays beside each fact.
+              </p>
+              <div class="row-actions">
+                <button class="btn ghost small" type="button" id="learning-open-settings">Change these in Settings, Learning</button>
+              </div>
             </div>
             <!-- "Bring in old chats" (history-import.js; JARVIS-API.md section
                  85): an export from ChatGPT, Claude, Gemini or DeepSeek, picked on this

@@ -27,9 +27,15 @@
  * "waiting", never that the switch is on.
  *
  * WHAT THIS CARD DOES NOT SHOW. No fact, no list, no count: the saved facts
- * and the "Learn automatically" switch live in the Brain, where the fact list
- * is (`auto-learn.js`, `brain.html`), and this page's module does not hold the
- * command that reads them. The card's own note says where they are.
+ * live in the Brain, where the fact list is (`auto-learn.js`, `brain.html`),
+ * and this page's module does not hold the command that reads them. The card's
+ * own note says where they are.
+ *
+ * SINCE 2026-11-09 it is also the ONLY place background learning and the two
+ * remembering switches are changed (Brain IA audit, recommendation 1). The
+ * Brain used to draw its own copies of all three; it now shows their state and
+ * links here. "Learn automatically" stays in the Brain: this card deliberately
+ * does not hold `brain_memory_learning_auto`, so that one has no duplicate.
  *
  * THE WORDS ARE THE BRAIN'S, word for word where the two surfaces show the
  * same switch (jarvis-desktop/src/auto-learn.js's SENSITIVE_LABEL/DETAIL and
@@ -303,7 +309,15 @@ async function setSwitch(which, on) {
       say((out && out.message) || WAITING_CARD, "warn");
     } else {
       asked = false;
-      const said = out && typeof out.message === "string" ? out.message : "";
+      // The PC's own words. `note` first: since 2026-11-09 this card is the
+      // ONE place background learning is switched (the Brain shows the state
+      // and links here), and the PC answers a floor it cannot lift - such as
+      // JARVIS_EXTRACT=0 in the environment - with `note`, not `message`. The
+      // Brain's own switch read `note` before it moved (brain.js memoryWrite);
+      // dropping it here would have turned "your environment forbids this"
+      // into a plain "Changed.".
+      const said = out && typeof out.note === "string" && out.note ? out.note
+        : out && typeof out.message === "string" ? out.message : "";
       say(said || (on ? "Changed." : "Off."), "ok");
     }
   } catch (error) {

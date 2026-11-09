@@ -1442,6 +1442,11 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _plugins_question(text)
     if got is not None:
         return got
+    # The Skills menu question (2026-11-09): before the reminder family, which
+    # used to answer "how do I add a skill" with the reminder how-to.
+    got = _skills_menu_question(text)
+    if got is not None:
+        return got
 
     # --- any of its own tools, in depth (2026-11-04) ------------------------
     # After the plug-ins (a plug-in question keeps its own answer), and before
@@ -8794,6 +8799,54 @@ def _plugins_question(raw) -> Optional[Intent]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   The Skills menu question (2026-11-09, owner's live finding)
+#
+# The owner asked "can you install hermes skills into yourself? what about other
+# skills" and the live model answered that it cannot install skills and then
+# described only the plug-in script. That is false: the PC ships a real Skills
+# menu (jarvis_skill_menu.py, 2026-11-02) that installs a SKILL.md from a folder
+# or a .zip, imports from %USERPROFILE%\.hermes\skills, turns one off/on and
+# edits one - each behind ONE modify_own_code card, with a scanner that
+# quarantines a risky skill before any card. The plug-in system is separate.
+#
+# Shapes only, not keywords: a skills question has to sound like install /
+# import / menu / what-skills. Anything with plug-in words keeps its own
+# `_plugins_question` answer. Read-only, no card, no state read: the runner
+# reads the menu module's own words.
+_SKILLS_MENU_Q = re.compile(
+    r"\b(?:can|could|do|does|would)\s+(?:you|jarvis)\s+"
+    r"(?:install|add|import|set\s+up|use)\s+"
+    r"(?:hermes\s+|other\s+|new\s+|more\s+|my\s+|the\s+)?skills?\b"
+    r"|\b(?:what|which)\s+skills?\s+(?:can|could|do|does)\s+(?:you|jarvis)\s+"
+    r"(?:install|add|import|have)\b"
+    r"|\bhow\s+(?:do|can|would|should)\s+(?:i|you)\s+"
+    r"(?:install|add|import|set\s+up)\s+(?:a\s+|an?\s+|hermes\s+|my\s+|the\s+)?skills?\b"
+    r"|\b(?:install|import)\s+(?:a\s+|one\s+|the\s+|my\s+)?(?:hermes\s+)?skills?\b"
+    r"|\bskills?\s+menu\b"
+    r"|\bwhat\s+(?:is|are)\s+(?:in\s+)?(?:your\s+|the\s+)?skills?\s+(?:menu|list)\b"
+    r"|\b(?:what|which)\s+skills?\s+(?:do\s+you\s+have|are\s+installed)\b", re.I)
+
+
+def _skills_menu_question(raw) -> Optional[Intent]:
+    """A question about installing/importing/seeing skills, or None.
+
+    The answer is `skill_menu_info`, which reads jarvis_skill_menu.py's own
+    words - so the reply cannot drift from the real menu. Plug-in sentences keep
+    `_plugins_question`'s answer: the two systems are separate, and saying so is
+    half of the owner's correction.
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if re.search(r"\b(?:plug-?ins?|plugin)\b", text):
+        return None
+    if not _SKILLS_MENU_Q.search(text):
+        return None
+    return Intent("skill_menu_info")
+
+
 def _run_plugins(name: str, f: dict, surface: str) -> "Result":
     installed = _plugin_installed_names(_plugin_entries())
     if name == "plugin_list":
@@ -8817,6 +8870,48 @@ def _run_plugins(name: str, f: dict, surface: str) -> "Result":
         return Result(_plugin_install_sentence(), "plugin_install")
     return Result(_plugin_list_sentence(installed), "plugin_list")
 
+
+
+#: The skills answers (2026-11-09). Fixed words built from
+#: jarvis_skill_menu.py's own `menu()` data (its note and its Hermes folder), so
+#: the chat answer and the Settings screen cannot describe different doors. Read
+#: only: no card, no install, no state written.
+_SKILL_INTENTS = frozenset({"skill_menu_info"})
+
+
+def _skill_menu_words() -> tuple:
+    """(the Hermes folder, the ONE-card note) from the menu module's own data."""
+    root = "%USERPROFILE%\\.hermes\\skills"
+    note = ("Installing, turning a skill on and editing one each raise exactly ONE "
+            "approval card you answer on this PC; turning one off, and removing one, "
+            "are immediate.")
+    try:
+        import jarvis_skill_menu as SM
+        got = SM.menu() or {}
+        hermes = got.get("hermes") if isinstance(got, dict) else {}
+        if isinstance(hermes, dict) and hermes.get("root"):
+            root = str(hermes["root"])
+        if isinstance(got, dict) and got.get("note"):
+            note = str(got["note"])
+    except Exception:                       # noqa: BLE001 - older PC
+        pass
+    return root, note
+
+
+def _run_skill_menu_info() -> Result:
+    """The real Skills menu, in the owner's words, beside the separate plugins."""
+    root, note = _skill_menu_words()
+    return Result(
+        "Yes - there is a real Skills menu on this PC: Settings, Skills. It installs "
+        "a SKILL.md from a folder or a .zip, imports Hermes skills from " + root +
+        " (a read-only scan of that folder; the scan copies and deletes nothing), "
+        "turns a skill off and back on, and edits one. " + note +
+        " A skill the scanner refuses is quarantined and never becomes a card: "
+        "nothing is downloaded from a store, and nothing installs automatically. "
+        "Plugins are separate: they are folders under jarvis_plugins beside "
+        "jarvis_hud.py, added with scripts/add-plugin.ps1 -Name <name> and a restart, "
+        "and the loader raises no card of its own. Nothing was changed by this answer.",
+        "skill_menu_info")
 
 # --------------------------------------------------------------------------
 # Its own tools, in depth (2026-11-04)
@@ -25277,6 +25372,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_adding_howto(n)
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
+    if n in _SKILL_INTENTS:
+        return _run_skill_menu_info()
     if n == "tool_profile":
         # Any of its own tools, in depth (2026-11-04): the dossier's own words
         # for this one question. Read-only, no card, no model - and None when
@@ -26307,6 +26404,9 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
     # Wave 9 (2026-11-07): the phone-connect trap's refusal and the cloud
+    # 2026-11-09: the Skills menu's own doors are fixed local words; a private
+    # chat must not answer them from a model that has no skills knowledge.
+    "skill_menu_info",
     # switch's read-only rule question are FIXED sentences that write nothing,
     # so a private chat answers them from this PC rather than the model - which
     # is what invented the change in the trap in the first place.
@@ -26387,6 +26487,7 @@ READ_ONLY_INTENTS = frozenset({
     "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    "skill_menu_info",
     # Any of its own tools, in depth (2026-11-04): it reads a fixed dossier in
     # this repository and calls nothing - the module has no setter, no card and
     # no network. So a private chat hands it to the model (the branch above),

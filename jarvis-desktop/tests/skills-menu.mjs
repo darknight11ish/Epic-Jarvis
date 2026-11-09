@@ -305,5 +305,25 @@ await check("the page says what it does NOT do, in the owner's words", () => {
   assert.ok(HTML.includes("Nothing here installs"));
 });
 
+await check("the Brain lists skills and links to this card - it is not a second remove door", () => {
+  // Brain IA audit, recommendation 1 (2026-11-09). Settings, Skills is the ONE
+  // control page: install from a folder or .zip, import the Hermes skills,
+  // turn one off/on, edit one, remove one. The Brain used to draw its own
+  // Remove, which is the second door the audit named - so it now lists what is
+  // installed and says where to change it.
+  const brainHtml = read("src/brain.html");
+  const brainJs = read("src/brain.js");
+  assert.ok(brainHtml.includes('id="skills-open-settings"'),
+    "the Brain has no door to Settings, Skills");
+  assert.ok(brainHtml.includes("Change this in Settings, Skills"),
+    "the Brain's door does not say where it goes");
+  assert.ok(!brainJs.includes('invoke("brain_remove_skill"'),
+    "the Brain still removes a skill");
+  // The card keeps its menu id: the feature list and the menu registry find it
+  // there (brain.model.skills), and ids are never renamed.
+  assert.ok(brainHtml.includes('id="skills-card" data-menu-id="brain.model.skills"'),
+    "the Brain's Skills card lost its menu id");
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
