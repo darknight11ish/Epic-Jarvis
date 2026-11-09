@@ -310,6 +310,61 @@
       "must_contain": [
         "chat history"
       ]
+    },
+    {
+      "id": "UN-1",
+      "family": "unknown-name",
+      "sentence": "what is the turbo setting set to",
+      "intent": "unknown_self_name",
+      "args": {},
+      "must_contain": [
+        "I don't have a setting or feature with that exact name",
+        "\"what can I change?\"",
+        "\"what do you have?\"",
+        "real list"
+      ]
+    },
+    {
+      "id": "UN-2",
+      "family": "unknown-name",
+      "sentence": "what is the flux capacitor set to",
+      "intent": "unknown_self_name",
+      "args": {},
+      "must_contain": [
+        "I don't have a setting or feature with that exact name",
+        "\"what can I change?\"",
+        "\"what do you have?\""
+      ]
+    },
+    {
+      "id": "UN-3",
+      "family": "unknown-name",
+      "sentence": "is the turbo setting on",
+      "intent": "unknown_self_name",
+      "args": {},
+      "must_contain": [
+        "I don't have a setting or feature with that exact name"
+      ]
+    },
+    {
+      "id": "UN-4",
+      "family": "unknown-name",
+      "sentence": "is the quantum flux option enabled",
+      "intent": "unknown_self_name",
+      "args": {},
+      "must_contain": [
+        "I don't have a setting or feature with that exact name"
+      ]
+    },
+    {
+      "id": "UN-5",
+      "family": "unknown-name",
+      "sentence": "is the turbo feature on",
+      "intent": "unknown_self_name",
+      "args": {},
+      "must_contain": [
+        "I don't have a setting or feature with that exact name"
+      ]
     }
   ]
 }

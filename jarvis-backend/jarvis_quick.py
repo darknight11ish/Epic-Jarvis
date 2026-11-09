@@ -2253,7 +2253,173 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _model_recommender_question(text)
     if got is not None:
         return got
+    # --- a self setting/capability question naming nothing installed ----------
+    # LAST of all (Q3.3): only a sentence every matcher above declined, so no
+    # existing door loses a word. Fixed honest words, never the model.
+    got = _unknown_self_name(s)
+    if got is not None:
+        return got
     return None
+
+
+# --------------------------------------------------------------------------
+#   A self-capability/setting question naming NOTHING this PC has (Q3.3,
+#   owner ruling 2026-11-08)
+#
+# THE MEASURED BUG (the ruling's Q3.3; the audit's preset-echo class). With the
+# CODING preset selected, "what is the turbo setting set to" and "is the turbo
+# feature on" matched nothing in the fast path, so the 30B coding model was the
+# only answer - and it improvised about Jarvis's own settings. The explicit
+# feature-question fallback (2026-11-08) already answers a "do you have a
+# feature that ..." shape that names no row; these two SETTING-NAME shapes had
+# no owner at all.
+#
+# WHAT IS CLAIMED, deliberately narrow: a whole sentence in one of exactly two
+# self-directed shapes, naming a name that is NOT a registry row, NOT a
+# catalogue feature and NOT a context word:
+#   * "what is <name> set to"                 (a setting read, nothing known)
+#   * "is the <name> setting/switch/option/  (a switch read, nothing known)
+#      preference/feature on|off|enabled..."
+# The answer is the ruling's own sentence. Everything else is left alone:
+#   * "turn on/off <name>" without the word "setting" keeps its old path - that
+#     is how the owner asks for an APP or a DEVICE ("turn on the kitchen
+#     light"), and only the explicit "... setting" form is a settings request
+#     (settings_unknown, 2026-10-13, already answers it);
+#   * "do you have a <name>" / "can you <name>" without a feature noun keeps its
+#     old path: "can you open spotify" and "do you have plans tomorrow" are
+#     ordinary requests/questions, not self-state;
+#   * a name that IS a known row, alias or feature is never claimed here - it
+#     had a better owner earlier in the chain, and the guide/registry gate below
+#     is a second check on that;
+#   * a context name ("what is it set to") keeps its old path: "it" depends on
+#     the last answer, which local code cannot read.
+# Read-only: fixed words, no file read, no card, no model, nothing written.
+# --------------------------------------------------------------------------
+
+#: The owner ruling's sentence, verbatim in meaning and near-verbatim in words.
+UNKNOWN_SELF_NAME_WORDS = (
+    "I don't have a setting or feature with that exact name - say "
+    "\"what can I change?\" or \"what do you have?\" to see the real list.")
+
+#: Names that make the sentence CONTEXT rather than a setting name. "What is it
+#: set to" and "what is that set to" depend on the last answer; the fast path
+#: cannot see it, so they keep the old path instead of answering about nothing.
+_UNKNOWN_CONTEXT_NAMES = frozenset({
+    "it", "this", "that", "these", "those", "them", "one", "that one",
+    "the one", "name", "time", "date", "day", "thing", "things", "stuff",
+    "something", "value", "question", "answer", "plan", "it all",
+})
+
+#: Words a DEVICE question uses. A sentence with one of them is a device
+#: question with the word "switch" in it, not a Jarvis setting ("is the kitchen
+#: light switch on") - the old path stays.
+_UNKNOWN_DEVICE_WORDS = frozenset({
+    "light", "lights", "lamp", "lamps", "fan", "fans", "oven", "tv",
+    "television", "thermostat", "heater", "garage", "door", "doors", "plug",
+    "socket", "blender", "kettle", "toaster", "speaker", "speakers", "screen",
+    "monitor", "camera", "mic", "microphone", "printer", "washer", "dryer",
+    "dishwasher", "vacuum", "boiler", "radiator",
+})
+
+#: "what is <name> set to" / "what's <name> configured to". Whole sentences.
+_UNKNOWN_SET_TO = re.compile(
+    r"what(?:'s|\s+is)\s+(?:the\s+|my\s+|your\s+|a\s+|an\s+)?"
+    r"(?P<name>[a-z0-9][a-z0-9' -]{0,60}?)\s+"
+    r"(?:set|configured|adjusted)\s+to\s*\??")
+
+#: "is the <name> setting on", "... switch switched off", "... feature enabled":
+#: the word setting/switch/option/preference/feature is REQUIRED, so a sentence
+#: without it is never captured.
+_UNKNOWN_SETTING_STATE = re.compile(
+    r"(?:is|are)\s+(?:the\s+|my\s+|your\s+|a\s+|an\s+)?"
+    r"(?P<name>[a-z0-9][a-z0-9' -]{0,60}?)\s+"
+    r"(?P<kind>setting|settings|option|preference|switch|feature)\s+"
+    r"(?P<state>on|off|enabled|disabled|turned\s+on|turned\s+off|"
+    r"switched\s+on|switched\s+off)\s*\??")
+
+
+def _unknown_name_is_known(name: str) -> bool:
+    """Does `name` already own a registry row, a catalogue feature or a group?
+
+    The second gate after the earlier matchers: if any of these resolves, the
+    sentence was not an unknown-name question and must keep whatever path it
+    had. A broken/absent module answers True (leave it alone) - fail CLOSED,
+    never claim a name this code cannot check.
+    """
+    text = " ".join(str(name or "").split()).strip(" ?.!,")
+    if not text:
+        return True
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - older PC: leave it
+        return True
+    for finder in (getattr(R, "find_bool_setting", None),
+                   getattr(R, "find_choice_setting", None),
+                   getattr(R, "find_number_setting", None),
+                   getattr(R, "find_bool_setting_words", None),
+                   getattr(R, "find_choice_setting_words", None),
+                   getattr(R, "find_number_setting_words", None)):
+        if finder is None:
+            continue
+        try:
+            if finder(text) is not None:
+                return True
+        except Exception:                   # noqa: BLE001 - a broken finder, not a no
+            return True
+    try:
+        import jarvis_feature_guide as FG
+        got = FG.find(text, loose=True)
+    except Exception:                       # noqa: BLE001 - older PC: leave it
+        return True
+    return str((got or {}).get("kind") or "") in ("feature", "group", "dataset")
+
+
+def _unknown_self_name_candidate(name: str) -> bool:
+    """Is `name` a plausible self-state name this code may say it does not have?
+
+    Rejects context words ("it", "that"), device nouns and over-long tails, and
+    accepts only names that resolve to no row/feature (the guide gate). One or
+    two words is the shape of a setting name; a whole clause is a different
+    sentence that some other owner should keep.
+    """
+    text = " ".join(str(name or "").split()).strip(" ?.!,")
+    words = text.split()
+    if not text or len(words) > 4 or len(text) > 48:
+        return False
+    if text in _UNKNOWN_CONTEXT_NAMES:
+        return False
+    if any(word in ("it", "this", "that", "those", "these", "you", "jarvis",
+                    "i", "me", "we") for word in words):
+        return False
+    # A self FACT with its own owner elsewhere: "what is my name set to" and
+    # "what is the time set to" are not setting names, so the fallback must not
+    # turn them into "no such setting". (The words themselves, not the whole
+    # name, so "what is the time machine setting set to" is still an unknown
+    # setting - a setting shape with a name nothing has.)
+    if any(word in ("name", "time", "date", "day", "birthday", "age")
+           for word in words):
+        return False
+    if any(word in _UNKNOWN_DEVICE_WORDS for word in words):
+        return False
+    return not _unknown_name_is_known(text)
+
+
+def _unknown_self_name(s: str) -> Optional[Intent]:
+    """Q3.3: a self setting/switch question naming nothing installed, or None.
+
+    Runs LAST in `_match`, immediately before the model fallback, so every
+    sentence another matcher owns keeps its owner. `s` is the normalised
+    sentence. Read-only; the runner is `_run_unknown_self_name`.
+    """
+    m = _UNKNOWN_SET_TO.fullmatch(s)
+    if m is None:
+        m = _UNKNOWN_SETTING_STATE.fullmatch(s)
+    if m is None:
+        return None
+    name = (m.groupdict().get("name") or "").strip(" ?.!,")
+    if not _unknown_self_name_candidate(name):
+        return None
+    return Intent("unknown_self_name", {"name": name})
 
 
 _VAGUE = r"(?:it|this|that|them|these|those|something|stuff|things)"
@@ -23584,6 +23750,15 @@ def _run_settings_unknown() -> Result:
         "settings_unknown")
 
 
+def _run_unknown_self_name() -> Result:
+    """Q3.3: the honest answer to a setting/feature name this PC does not have.
+
+    Fixed words, no file read, no model, no card, nothing written. It says what
+    is true (no such name) and points at the two deterministic lists that show
+    the real ones, so the coding preset can never improvise a setting again."""
+    return Result(UNKNOWN_SELF_NAME_WORDS, "unknown_self_name")
+
+
 def _run_settings_budget(f: dict, peer, local) -> Result:
     """"How much Jarvis may interrupt you", by asking (2026-10-08).
 
@@ -24649,6 +24824,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_not_by_asking(f)
     if n == "settings_unknown":
         return _run_settings_unknown()
+    if n == "unknown_self_name":
+        return _run_unknown_self_name()
     if n == "settings_budget":
         return _run_settings_budget(f, peer, local)
     if n == "settings_card_mode":
@@ -25428,6 +25605,10 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # None of them changes anything, so none may clear a "cancel that".
     "feature_state", "feature_state_setting", "setting_explain",
     "self_setting_state", "settings_explain_all",
+    # Q3.3 (2026-11-08): the honest "no such setting or feature" answer reads
+    # nothing but this PC's own lists and writes nothing, so a private chat gets
+    # it from local code too - the model has no list to read.
+    "unknown_self_name",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -25638,7 +25819,8 @@ READ_ONLY_INTENTS = frozenset({
     # nothing, so "cancel that" must not lose its record to it. Its change and
     # refusal intents are NOT here - they write or refuse, like every other one.
     "settings_antislop_state", "settings_antislop_bad",
-    "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
+    "settings_open", "settings_unknown", "unknown_self_name", "tellme_help",
+    "thinking_status", "thinking_when",
     "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
     "wellbeing_now", "where_put",
     # Updates in chat (2026-10-26): these two only read the public release
