@@ -3132,7 +3132,7 @@ $SHIPPED = @(
     # Read-only, no card, no model call; its chat hook is documented in its
     # docstring for jarvis_quick. The same entry, in the same position, is in
     # backend/_where.py's SHIPPED list.
-    'jarvis_model_recommender.py',
+    'jarvis_model_recommender.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

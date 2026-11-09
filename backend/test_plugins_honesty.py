@@ -48,7 +48,7 @@ def ask(text, surface="hud"):
 
 
 def test_catalogue_is_the_real_ready_list():
-    check("there are 55 ready plug-in folders", len(READY) == 55, str(len(READY)))
+    check("there are 56 ready plug-in folders", len(READY) == 56, str(len(READY)))
     check("the fast path's names are plugins/ready's folders",
           sorted(Q._plugin_names()) == READY, str(Q._plugin_names()[:5]) + " vs " + str(READY[:5]))
     check("every catalogue name is a real folder (no invented plug-in)",
@@ -99,7 +99,7 @@ def test_list_and_state_answers_from_a_fake_registry():
               r is not None and "add-plugin.ps1" in r.reply, r.reply[:250] if r else "model")
         r = ask("what plugins are available?")
         check("available state lists catalogue names",
-              r is not None and "android-builder" in r.reply and "55" in r.reply,
+              r is not None and "android-builder" in r.reply and "56" in r.reply,
               r.reply if r else "model")
         r = ask("is docker plugin installed?")
         check("a named installed plug-in says yes", r is not None and "Yes" in r.reply,
@@ -176,10 +176,10 @@ def test_system_prompt_line():
 
 def test_source_truth():
     readme = (ROOT / "plugins" / "README.md").read_text(encoding="utf-8")
-    check("plugins/README.md says 55 drop-in modules", "**55 drop-in modules**" in readme)
+    check("plugins/README.md says 56 drop-in modules", "**56 drop-in modules**" in readme)
     registry = json.loads((ROOT / "plugins" / "registry.json").read_text(encoding="utf-8"))
-    check("the generated registry agrees on 55 ready modules",
-          registry.get("ready_count") == 55, str(registry.get("ready_count")))
+    check("the generated registry agrees on 56 ready modules",
+          registry.get("ready_count") == 56, str(registry.get("ready_count")))
 
 
 def main():

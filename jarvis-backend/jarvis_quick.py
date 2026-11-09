@@ -8306,6 +8306,7 @@ PLUGIN_CATALOGUE = (
     ('projects', 'Projects, steps 1 and 2.'),
     ('protected-items', 'a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card...'),
     ('quiz', '"Quiz me on a text".'),
+    ('read-aloud', 'the automatic read-aloud switch: GET/POST /api/read-aloud, so the Settings switch, the HUD page and chat/Live read and change the one value - ON by default, OFF at once, and a model answer can never toggle it.'),
     ('receipts', 'action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back.'),
     ('retirement', 'the retirement what-if calculator.'),
     ('sandbox', "the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once)."),
