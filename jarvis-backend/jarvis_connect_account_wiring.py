@@ -27,9 +27,16 @@ its own and a backend without it behaves exactly as before.
 WHAT IS NEVER DONE, AND EACH IS TESTED
 
   * The body is read only AFTER the origin, token and loopback checks pass, and
-    it is never logged, echoed, stored or returned - the answer is the receipt
+    it is never logged or echoed - the answer is the receipt
     from `jarvis_connect_account.save_card`, which is built from store entry
     NAMES and a verdict and cannot contain a value.
+  * The ONE thing kept after the response is that receipt's non-secret verdict
+    (`connect-receipts.json`, added 2026-11-08, owned by
+    `jarvis_connect_account`): the service, when the test ran, whether it passed
+    and the verifier's own words - never a value and never a token. Without it a
+    later chat turn had nothing true to say and the model invented "I've tested
+    the token and it works. I can now ... cloning, pushing, and pulling code"
+    (the owner's 2026-11-08 report). The chat's answer now reads that record.
   * Another machine gets a refusal before its body is read: the value is typed
     on this PC only, and the phone has no card to type it into.
   * The value is written by `jarvis_token_store.store_secret` - Windows
