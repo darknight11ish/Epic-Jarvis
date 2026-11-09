@@ -766,6 +766,75 @@ def t_the_both_cards_server_is_the_one_this_mode_owns():
     check("and it may never reach the cloud", env.get("OLLAMA_NO_CLOUD") == "1")
 
 
+def t_a_direct_server_start_pauses_the_lanes_first():
+    """2026-11-08 live defect: a `server_start()` that bypassed the apply path
+    left a redundant copy of the 30B on the everyday lane (74% GPU / 26% CPU)
+    beside the pooled copy. The pause is part of STARTING now."""
+    real = (B.pause_lanes, B.ps, B.subprocess.Popen, B.time.sleep)
+    calls, popped = [], []
+    state = {"ps": 0}
+
+    class FakeProc:
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def fake_ps(url):
+        state["ps"] += 1
+        # first ask: no server yet; second: the child answers on /api/ps
+        return None if state["ps"] == 1 else []
+
+    def fake_pause(*, url_for=B._url):
+        calls.append("pause")
+        return {"ok": True, "why": "", "proof": ["both lanes proved gone"]}
+
+    def fake_popen(argv, **kw):
+        popped.append((list(argv), dict(kw)))
+        return FakeProc()
+
+    try:
+        B.pause_lanes = fake_pause
+        B.ps = fake_ps
+        B.subprocess.Popen = fake_popen
+        B.time.sleep = lambda _s: None
+        got = B.server_start()
+    finally:
+        (B.pause_lanes, B.ps, B.subprocess.Popen, B.time.sleep) = real
+    check("a direct server_start pauses the two lanes BEFORE it starts",
+          got.get("ok") is True and calls == ["pause"] and len(popped) == 1,
+          (got, calls, popped))
+    check("... and its own answer says what it paused",
+          (got.get("paused") or {}).get("ok") is True, got)
+    check("... the child is still the three-card one (no card pin)",
+          popped and "CUDA_VISIBLE_DEVICES" not in popped[0][1].get("env", {})
+          and popped[0][1].get("env", {}).get("OLLAMA_SCHED_SPREAD") == "1",
+          popped[0][1].get("env", {}) if popped else None)
+
+
+def t_a_start_that_cannot_pause_starts_nothing():
+    real = (B.pause_lanes, B.ps, B.subprocess.Popen)
+    started = []
+
+    def refuse(*, url_for=B._url):
+        return {"ok": False, "why": "qwen3.5:9b on port 11436 is still resident"}
+
+    def never_start(*a, **k):
+        started.append(a)
+        raise AssertionError("the three-card server was started beside a lane")
+
+    try:
+        B.pause_lanes = refuse
+        B.ps = lambda url: None
+        B.subprocess.Popen = never_start
+        got = B.server_start()
+    finally:
+        (B.pause_lanes, B.ps, B.subprocess.Popen) = real
+    check("a start that cannot pause the lanes starts NOTHING",
+          got.get("ok") is False and not started
+          and "would not pause" in got.get("why", ""), got)
+
+
 def t_the_card_count_is_read_and_said_plainly():
     """2026-11-07: three cards ARE the measured minimum now.
 
@@ -826,6 +895,8 @@ def main() -> int:
                t_the_patch_order_allow_lists_carry_it,
                t_the_patch_order_allow_lists_carry_the_newest_patch_too,
                t_the_card_count_is_read_and_said_plainly,
+               t_a_direct_server_start_pauses_the_lanes_first,
+               t_a_start_that_cannot_pause_starts_nothing,
                t_the_both_cards_server_is_the_one_this_mode_owns):
         fn()
     print()

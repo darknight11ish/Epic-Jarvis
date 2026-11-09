@@ -517,14 +517,45 @@ def _child_env(port: int) -> dict:
     return env
 
 
-def server_start(port: int = BIG_PORT) -> dict:
+def server_start(port: int = BIG_PORT, *, pause=None) -> dict:
     """Start the mode's own Ollama, or reuse one already answering there.
-    {"ok", "url", "owned", "why"}. Never raises. The lane servers are not
-    touched: this is a different port and a different process."""
+
+    {"ok", "url", "owned", "why", "paused"}. Never raises.
+
+    THE MODE'S OWN PREMISE, ENFORCED HERE (2026-11-08). The card and the docs
+    say this mode "pauses the two models running now" and never runs beside a
+    lane. That was only done by the higher apply/preset path - so a DIRECT
+    `server_start()` (a recovery, a fallback, a hand-run repair) started the
+    three-card server while a lane still held a copy of the same 30B. Measured
+    live tonight: 11436 held qwen3-coder at 10,679,610,244 B of 14,442,446,190 B
+    (74%, 26% CPU) while 11450 held the same model fully in video memory - two
+    copies of a 13.8 GB model on a 28 GB PC, and the HUD's spill warning. So the
+    pause is part of STARTING the server now, not of one caller's flow: the two
+    lane models are unloaded and PROVED gone first, and if either will not go,
+    NOTHING is started (the same refusal `start()` gives). `pause` is the
+    injectable seam for the suites; it never touches the owner's PC there.
+
+    A server already answering on the port is used as it is and NOT paused
+    around: it is a live process from an earlier start, and killing the owner's
+    cards by surprise at a read/recovery call would be worse than the duplicate
+    this function cannot see from here - the mode's stop path and the startup
+    reconcile repair that state.
+    """
     url = _url(port)
     if ps(url) is not None:
         return {"ok": True, "url": url, "owned": False,
                 "why": f"a server was already answering on port {port}, so it was used as it is"}
+    try:
+        paused = (pause or pause_lanes)()
+    except Exception as exc:                     # noqa: BLE001 - said, never swallowed
+        return {"ok": False, "url": url, "owned": False,
+                "why": (f"the two lane models could not be paused "
+                        f"({type(exc).__name__}), so the three-card server was NOT started")}
+    if not isinstance(paused, dict) or paused.get("ok") is not True:
+        why = (paused or {}).get("why") if isinstance(paused, dict) else ""
+        return {"ok": False, "url": url, "owned": False, "paused": paused,
+                "why": ("the two lane models would not pause, so the three-card "
+                        "server was NOT started: " + (why or "a lane is still resident"))}
     env = _child_env(port)
     try:
         proc = subprocess.Popen(["ollama", "serve"], env=env,
@@ -539,7 +570,8 @@ def server_start(port: int = BIG_PORT) -> dict:
             with _SERVER_LOCK:
                 _SERVER.clear()
                 _SERVER.update(proc=proc, url=url, port=int(port))
-            return {"ok": True, "url": url, "owned": True, "why": ""}
+            return {"ok": True, "url": url, "owned": True, "why": "",
+                    "paused": paused}
         if proc.poll() is not None:
             return {"ok": False, "url": url, "owned": False,
                     "why": "the three-card Ollama stopped as soon as it started"}
