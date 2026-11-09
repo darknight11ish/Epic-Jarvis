@@ -252,7 +252,6 @@ stack's order and cannot be moved into a folder.
 | `packs-tamper-on-load.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `skill-scan-wiring.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `activity-turn-guard.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
-| `skill-scan-wiring.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one
