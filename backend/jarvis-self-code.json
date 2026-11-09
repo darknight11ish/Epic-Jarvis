@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "0e19ed8e92e1514f496d485f575910ba7deced75",
- "built_at": "2026-11-08T19:03:42-08:00",
+ "ref": "cb48e2d6e5b5593bc1a61659cb4ced9c6d114a7f",
+ "built_at": "2026-11-08T20:24:35-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4527,6 +4527,10 @@
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
     "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
     "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
+    "changelog.d/2026-11-08-awareness-gate-why-blocked.md",
+    "changelog.d/2026-11-08-brain-hardware-truth.md",
+    "changelog.d/2026-11-08-hud-model-chip-in-use.md",
+    "changelog.d/2026-11-08-offload-reads-chat-lane.md",
     "changelog.d/2026-11-08-wave-10-honest-answers-and-wifi.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4665,8 +4669,11 @@
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
+    "decisions.d/2026-11-08-brain-hardware-truth.md",
     "decisions.d/2026-11-08-build-caches-and-atomic-twins.md",
     "decisions.d/2026-11-08-deterministic-self-state-answers.md",
+    "decisions.d/2026-11-08-hud-model-chip-in-use.md",
+    "decisions.d/2026-11-08-offload-reads-chat-lane.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
     "decisions.d/README.md",
@@ -5114,7 +5121,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 816,
+   "file_count": 823,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6181,6 +6188,41 @@
  ],
  "recent_commits": [
   {
+   "sha": "cb48e2d6e5b5593bc1a61659cb4ced9c6d114a7f",
+   "date": "2026-11-08",
+   "subject": "integration: the GPU-offload warning reads the chat lane"
+  },
+  {
+   "sha": "4ca3ea21e556cf53e5bd331071be1799d88a6ed0",
+   "date": "2026-11-08",
+   "subject": "fix(models): the GPU-offload warning reads the chat lane, not a stale address"
+  },
+  {
+   "sha": "90f95475a11ecb57553563ceec8c93bde2c3d6e5",
+   "date": "2026-11-08",
+   "subject": "integration: the HUD model chip says the model in use"
+  },
+  {
+   "sha": "d83836a56b2044738fcf94c6aeec1286d983bb1d",
+   "date": "2026-11-08",
+   "subject": "integration: the Brain model page tells the PC's hardware truth"
+  },
+  {
+   "sha": "492ab22270fee45b4059aefe1a4339c031b6c918",
+   "date": "2026-11-08",
+   "subject": "fix(hud): the model chip says the model IN USE, not the PC's default"
+  },
+  {
+   "sha": "ca6d8e6be99e755a942208c25d0b298ee011e6c2",
+   "date": "2026-11-08",
+   "subject": "fix(brain): the Model page describes this PC's hardware, says the tier once, and scopes estimate vs measurement (Wave 11)"
+  },
+  {
+   "sha": "794fa3856e6fa35445e1272a3f9eeec62da68d60",
+   "date": "2026-11-08",
+   "subject": "fix(awareness): the live gate says why a probe was blocked, not just \"no answer text\""
+  },
+  {
    "sha": "0e19ed8e92e1514f496d485f575910ba7deced75",
    "date": "2026-11-08",
    "subject": "feat(wave10): ruling Q7 badge uniformity, Q4 atomic map twins and one shared build cache"
@@ -6244,48 +6286,13 @@
    "sha": "e9c32cbceb973c5a64769d75b2d5c1ecd2eab733",
    "date": "2026-11-08",
    "subject": "Merge branch 'fix/wave10-source-pins-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "ae021729b923714d7327840d9bbbc03ad67cf287",
-   "date": "2026-11-08",
-   "subject": "fix(feature-guide): the auto Wi-Fi reconnect switch gets its state reader"
-  },
-  {
-   "sha": "112514e82b9da96b1c399579e12ecab236b61213",
-   "date": "2026-11-08",
-   "subject": "test(wave10): run the agent for real instead of pinning its source text"
-  },
-  {
-   "sha": "cf94ead2c81d5f6131cdcee39ef54fb03dcef188",
-   "date": "2026-11-08",
-   "subject": "docs(changelog): Wave 10 covers the rest of the batch - Q2 re-show and card labels, F2 mid-answer stop, Q3 preset independence, Q4 guardrails, F3 descriptions, Q7 subtitle"
-  },
-  {
-   "sha": "1942c00046cc4cd7dfbfd6570b3e2e9fe7daf7d0",
-   "date": "2026-11-08",
-   "subject": "Merge branch 'fix/wave10-catalogue-and-migration-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "6becb98cce721972e0860655f8b7d06be85a8f9a",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map for the migration smoke test"
-  },
-  {
-   "sha": "6918d544e6d8ebb860f5cf4e6c2381c0588e45e5",
-   "date": "2026-11-08",
-   "subject": "test(feedback): migration smoke on a copy of the live feedback.db (Q2)"
-  },
-  {
-   "sha": "d405ce4d8865c22b0ee6c3cee82fba600a9feb74",
-   "date": "2026-11-08",
-   "subject": "fix(features): the four stale read-aloud descriptions describe the shipped switch"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1396
+   "files": 1397
   },
   {
    "path": "jarvis-desktop/",
@@ -6315,7 +6322,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 225
+   "files": 229
   },
   {
    "path": "videos/",
@@ -6325,7 +6332,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 141
+   "files": 144
   },
   {
    "path": "plugins/",
@@ -6399,15 +6406,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5522,
-  "covered": 5056,
-  "excluded": 466,
+  "tracked_files": 5530,
+  "covered": 5063,
+  "excluded": 467,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 210,
+   "count": 211,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
