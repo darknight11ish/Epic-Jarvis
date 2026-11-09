@@ -251,8 +251,8 @@ of them are named `check_*.py` under `tools/` (`Get-ChildItem tools/check_*.py`
 The checkers that gate changes include:
 
 - `tools/check_claims.py` — *"one row per thing this project says about itself,
-  with a check a machine runs"* (`docs/CLAIMS.tsv`, 214 rows). On the tree this
-  page was written from it reports **214 claims: 201 built, 8 still open, 5 unverifiable** — *"and every `open` one is still a real gap."*
+  with a check a machine runs"* (`docs/CLAIMS.tsv`, 219 rows). On the tree this
+  page was written from it reports **219 claims: 206 built, 8 still open, 5 unverifiable** — *"and every `open` one is still a real gap."*
 - `tools/check_parity.py` — did a feature land in both apps, or is one side
   deliberately left out?
 - `tools/check_feature_list.py` — is `features/features.json` (the "Everything
