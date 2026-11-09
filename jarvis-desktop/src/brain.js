@@ -87,6 +87,7 @@ import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 import { showTutorials, TUTORIALS_PLACE } from "./tutorials.js";
 import { tellChatsGone } from "./chat-history.js";
 import * as Resources from "./model-resources.js";
+import * as Results from "./model-results.js";
 // Brain -> History -> "Forget a time frame": its own module too.
 import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
 import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
@@ -700,7 +701,8 @@ const VIEW_SECTIONS = {
   // The model advisor's last answer, for showing it when the view opens rather
   // than a blank panel: the GET is a read of what the PC last worked out, dated
   // by its own `checked_at`. A fresh check is the POST behind the one button.
-  faculties: ["models", "model_recommendations", "model_resources", "compute",
+  faculties: ["models", "model_recommendations", "model_resources",
+              "model_measured", "compute",
               "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
@@ -786,6 +788,7 @@ const dom = {
 
   models: $("models"),
   resources: $("resources"),
+  measured: $("measured"),
   compute: $("compute"),
   skills: $("skills"),
   memory: $("memory"),
@@ -1351,6 +1354,7 @@ function render(name) {
     case "faculties":
       renderModels();
       renderResources();
+      renderMeasured();
       renderCompute();
       renderSkills();
       renderMemory();
@@ -2803,6 +2807,60 @@ function renderResources() {
   dom.resources.append(
     el("p", "note", "Read-only: this plate only looked. Nothing here loads, switches or starts a model.")
   );
+}
+
+/**
+ * "Measured results" (2026-11-09): the benchmarks that are ALREADY stored on
+ * this PC - the speed runs and the five-suite scorecards - from the same two
+ * stores the chat answer reads (`jarvis_bench.BenchLog` and `ScoreLog`;
+ * docs/JARVIS-API.md section 205). The words live in `model-results.js` so they
+ * are proved without a browser; this function only draws them. Every number on
+ * screen is a stored field, and each row keeps the sentence the benchmark
+ * itself wrote when it measured it: a spilled run is never re-worded as a fast
+ * one here, and an empty list keeps the backend's own reason for being empty.
+ */
+function renderMeasured() {
+  const live = sectionState("model_measured");
+  const body = state.data.model_measured;
+  dom.measured.replaceChildren();
+  if (!body || body.available === false) {
+    const why = String((body && body.why) || "");
+    const reading = live.kind === "reading";
+    const node = el("p", "empty",
+      reading ? "Reading…" : (why || Results.NEVER_REPORTED));
+    if (live.kind === "failed") node.append(" ", retryButton("model_measured"));
+    dom.measured.append(node);
+    return;
+  }
+  const card = Results.measuredModel(body);
+  const part = (title, items, emptyLine, countLine) => {
+    const wrap = el("div", "measured-part");
+    wrap.append(el("h3", "subhead", title));
+    if (countLine) wrap.append(el("p", "note", countLine));
+    if (!items.length) {
+      wrap.append(el("p", "empty", emptyLine));
+      return wrap;
+    }
+    const dl = el("dl", "kv");
+    for (const item of items) {
+      const dt = el("dt", "", item.title);
+      if (item.meta) dt.append(el("span", "measured-meta", ` - ${item.meta}`));
+      dl.append(dt, el("dd", "", item.words));
+    }
+    wrap.append(dl);
+    return wrap;
+  };
+  dom.measured.append(part(
+    "Speed runs", card.runs, card.empty.runs,
+    Results.countWords("speed runs", card.shown.runs, card.counts.runs)
+  ));
+  dom.measured.append(part(
+    "Five-suite scorecards", card.scorecards, card.empty.scorecards,
+    Results.countWords("scorecards", card.shown.scorecards, card.counts.scorecards)
+  ));
+  if (card.note) dom.measured.append(el("p", "note", card.note));
+  if (card.readAt) dom.measured.append(el("p", "note", `Read at ${card.readAt}.`));
+  dom.measured.append(el("p", "note", card.source));
 }
 
 /**

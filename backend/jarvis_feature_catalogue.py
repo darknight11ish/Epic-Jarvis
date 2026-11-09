@@ -3,7 +3,7 @@
 The owner's feature list, as data: 181 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 6c182b71896922aabc7ce770f6fa95edb91d2a06395a401bd310fbd59173fc62); the apps' Features pages read their own
+`features/features.json` (sha256 ac81459fd3fd92814a57bbc3cd1b0fc456890dd0d986fb2b36cb3ccfde09411c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "6c182b71896922aabc7ce770f6fa95edb91d2a06395a401bd310fbd59173fc62"
+SOURCE_SHA256 = "ac81459fd3fd92814a57bbc3cd1b0fc456890dd0d986fb2b36cb3ccfde09411c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1439,7 +1439,7 @@ FEATURES = (
         "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it. A check raises no card and downloads nothing; benchmarking measures this PC and changes nothing; the preset advice is applied only through the PC's own preset card.",
         "limit": "On the PC the check shows a short list the PC chose from what fits your graphics cards - not a searchable catalogue, and nothing in it is called better until it has been measured on this PC. The phone still has no list at all: you type the model's name by hand, the same as at a terminal.",
         "surface": "both",
-        "covers": ["models", "model_recommendations", "brain.model.models", "brain.tab.faculties", "model-page"],
+        "covers": ["models", "model_recommendations", "brain.model.models", "brain.model.resources", "brain.model.measured", "model_resources", "model_measured", "brain.tab.faculties", "model-page"],
     },
     {
         "id": "compute",

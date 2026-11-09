@@ -15,6 +15,7 @@ So this module is the READING half of that, and only the reading half:
 
     GET  /api/models/recommendations          what is cached + what is measured
     GET  /api/models/resources               what is LOADED right now + cards + Jarvis
+    GET  /api/models/measured                the speed runs + suite scorecards already stored
     POST /api/models/check                    one click: look, cache, answer
     POST /api/models/benchmark   {"ref"}      measure an INSTALLED model here
     POST /api/presets/recommend  {}           changes justified by measurements
@@ -40,7 +41,7 @@ same thing asking it a question does - and that is said plainly in the answer.
 
 DESKTOP-ONLY, ON PURPOSE. The owner's standing rule is that the phone must not
 grow a model catalogue (CLAUDE.md; the install-from-phone amendment of
-2026-09-20 allows a TYPED ref and nothing to browse). All six routes here
+2026-09-20 allows a TYPED ref and nothing to browse). All seven routes here
 refuse another device with 403 before reading a body, using the project's ONE
 rule: `jarvis_owner_check.from_this_pc(peer, local)` - the same call
 `jarvis_brain_reads`, `jarvis_media_index` and the other PC-only routes wrap.
@@ -201,11 +202,17 @@ PATH_RECOMMENDATIONS = "/api/models/recommendations"
 #: routed through THIS module's already-installed PC-only wrapper so the plate
 #: needs no new permission, no new install call and no second HTTP stack.
 PATH_RESOURCES = "/api/models/resources"
+#: The Brain's "Measured results" card (2026-11-09): the speed runs and the
+#: five-suite scorecards ALREADY on this PC, copied from the two stores
+#: `jarvis_bench` writes (docs/JARVIS-API.md section 205). Served by
+#: `jarvis_model_resources.measured()` through the same PC-only wrapper; it
+#: reads and starts nothing, so no card and no benchmark is reachable from it.
+PATH_MEASURED = "/api/models/measured"
 PATH_CHECK = "/api/models/check"
 PATH_BENCHMARK = "/api/models/benchmark"
 PATH_PRESET_RECOMMEND = "/api/presets/recommend"
 PATH_OPINION = "/api/presets/recommend/opinion"
-GET_PATHS = (PATH_RECOMMENDATIONS, PATH_RESOURCES)
+GET_PATHS = (PATH_RECOMMENDATIONS, PATH_RESOURCES, PATH_MEASURED)
 POST_PATHS = (PATH_CHECK, PATH_BENCHMARK, PATH_PRESET_RECOMMEND, PATH_OPINION)
 
 #: The EXISTING carded routes recommendations point AT, never through. Named
@@ -217,8 +224,8 @@ APPLY_ROUTE = "/api/work/apply"           # the preset card (jarvis_presets.appl
 #: What another device is told. One plain sentence, the same shape as the other
 #: PC-only refusals (`jarvis_media_index.PC_ONLY_REFUSAL`, `jarvis_documents`).
 DESKTOP_ONLY_REFUSAL = (
-    "Model recommendations are a PC screen: the phone has no model catalogue, "
-    "so nothing was read or changed.")
+    "Model recommendations and measured results are a PC screen: the phone has "
+    "no model catalogue, so nothing was read or changed.")
 
 #: Card fit policy. These are POLICY, not measurements: a model within 85% of a
 #: measured card is called "fits" (room for the desktop and another lane), up to
@@ -1546,7 +1553,7 @@ def presets_only(*, path: Optional[Path] = None,
 
 
 # --------------------------------------------------------------------------
-#   Wiring: six routes, PC only, and nothing else touched
+#   Wiring: seven routes, PC only, and nothing else touched
 # --------------------------------------------------------------------------
 
 def _peer_local(handler) -> tuple:
@@ -1581,9 +1588,32 @@ def resources_view() -> dict:
     return answer
 
 
+def measured_view() -> dict:
+    """The Brain's "Measured results" card: the speed runs and the five-suite
+    scorecards ALREADY stored on this PC, newest first, each with the reason it
+    is empty when it is.
+
+    Read-only and clock-only. `jarvis_model_resources.measured()` owns the
+    selection and reads `jarvis_bench`'s two stores through that module's own
+    functions; this wrapper only answers `available: false` in words when the
+    module is missing, so a clone never takes the pane down. Nothing here
+    starts a benchmark, loads a model or writes a row.
+    """
+    try:
+        import jarvis_model_resources  # type: ignore
+        answer = jarvis_model_resources.measured()
+    except Exception as exc:  # noqa: BLE001 - a read never takes the pane down
+        return {"available": False,
+                "why": f"the measured-results read failed: {type(exc).__name__}"}
+    if not isinstance(answer, dict):
+        return {"available": False,
+                "why": "the measured-results read returned no answer"}
+    return answer
+
+
 def install(handler_cls, *, origin_ok, token_ok, read_body,
             from_this_pc=None) -> str:
-    """Wrap `handler_cls` with the six routes above, after the server's own
+    """Wrap `handler_cls` with the seven routes above, after the server's own
     origin and token checks. Every other request goes to the original handler
     untouched. Returns the banner line.
 
@@ -1599,7 +1629,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
     get0 = getattr(handler_cls, "do_GET", None)
     post0 = getattr(handler_cls, "do_POST", None)
     if getattr(post0, "_jarvis_model_recommendations", False):
-        return "  models     recommendations already on (six PC-only routes)"
+        return "  models     recommendations already on (seven PC-only routes)"
 
     def _pc(handler) -> bool:
         check = from_this_pc
@@ -1641,6 +1671,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
         try:
             if route == PATH_RESOURCES:
                 return self._send(200, resources_view())
+            if route == PATH_MEASURED:
+                return self._send(200, measured_view())
             return self._send(200, recommendations_view())
         except Exception as exc:
             return self._send(503, {"ok": False, "error": type(exc).__name__})
@@ -1683,5 +1715,5 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
     do_POST._jarvis_model_recommendations = True
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
-    return ("  models     recommendations ready at /api/models/recommendations "
-            "and /api/models/resources (PC only)")
+    return ("  models     recommendations ready at /api/models/recommendations, "
+            "/api/models/resources and /api/models/measured (PC only)")

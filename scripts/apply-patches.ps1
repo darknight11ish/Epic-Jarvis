@@ -2845,7 +2845,7 @@ $SHIPPED = @(
 'jarvis_product_capture.py'
 # Model/preset recommendations (2026-10-28, the owner's request): one cached
 # check of the public model catalogues, a bounded benchmark of an INSTALLED
-# model on this PC, and preset changes justified only by measured numbers. Six
+# model on this PC, and preset changes justified only by measured numbers. Seven
 # PC-only routes; approves, downloads and applies nothing (the existing
 # /api/models/install and /api/work/apply cards remain the only ways to act).
 # backend/_where.py's SHIPPED list has the same entry, at the end too.
@@ -2855,7 +2855,10 @@ $SHIPPED = @(
 # it, every card's free memory, and Jarvis's own RAM/CPU. A READ served by the
 # recommendation module's already-installed PC-only wrapper at
 # GET /api/models/resources; it loads nothing, switches nothing and writes
-# nothing. Same position as its entry in backend/_where.py's SHIPPED.
+# nothing. It also serves the Brain's "Measured results" card at
+# GET /api/models/measured, reading the speed runs and five-suite scorecards
+# `jarvis_bench` already stored and starting no run. Same position as its entry
+# in backend/_where.py's SHIPPED.
 'jarvis_model_resources.py'
 # A real two-way Google Calendar (2026-10-28, the owner chose "both at once"):
 # the private iCal link (read-only) or a Google sign-in over a LOOPBACK redirect

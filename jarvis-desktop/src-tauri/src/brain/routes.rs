@@ -37,6 +37,11 @@ const READ_ROUTES: &[(&str, &str)] = &[
     // A READ of the PC's own lanes and nvidia-smi: it loads nothing,
     // switches nothing and raises no card.
     ("model_resources", "/api/models/resources"),
+    // The Brain Model pane's "Measured results" card (2026-11-09): the speed
+    // runs and five-suite scorecards ALREADY stored by the benchmark (the two
+    // stores docs/JARVIS-API.md section 205 uses). A READ of the stored rows:
+    // it measures nothing, loads nothing and starts no run.
+    ("model_measured", "/api/models/measured"),
     ("compute", "/api/compute"),
     ("skills", "/api/skills"),
     ("jobs", "/api/jobs"),

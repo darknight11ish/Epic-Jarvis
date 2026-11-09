@@ -26,6 +26,13 @@ WHAT EACH BLOCK PROVES
     `GET /api/models/resources` as a READ, PC-only, with the same origin/token
     checks as its neighbour, and a broken resources read answers
     `available: false` instead of failing the route.
+  * the "Measured results" card's read (`GET /api/models/measured`): only the
+    stored rows of `jarvis_bench`'s TWO stores are returned - a repeat row is
+    not a run, a failed run keeps its own reason, a skipped suite says skipped
+    and has no score, a prompt handed in by mistake never reaches the card - and
+    an empty store says WHICH file is missing and which door starts a run. The
+    real `jarvis_bench` stores are used, so the selection is proved against the
+    code that writes them, never against a second copy of the shape.
   * this module cannot write, load, switch or apply anything: it contains no
     write call, no model load, no `/api/pull`, no requests/post and no subprocess
     at import time (the one subprocess call is the read-only nvidia-smi/netstat
@@ -33,6 +40,7 @@ WHAT EACH BLOCK PROVES
 """
 import ast
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -126,6 +134,15 @@ def process_stats(pid):
 
 
 def run_collect(**overrides):
+    # THE OWNER'S LIVE PRESET CHOICE MUST NOT DECIDE THIS SUITE'S ANSWER.
+    # `collect()` asks `jarvis_presets.choice()` for the last applied preset,
+    # and that module reads `OPENJARVIS_CONFIG_DIR` (or ~/.openjarvis) whatever
+    # this test passes as `config_dir`. On 2026-11-09 the desk run went red only
+    # because the owner's own machine had "general_uncensored" chosen while the
+    # fixture says "coding" - a suite that reads the live config is a suite that
+    # fails for a reason that has nothing to do with the code. The variable is
+    # pointed at this run's temp folder for the call, so the fixture is the
+    # only answer and the previous value is put back afterwards.
     kwargs = dict(config_dir=TMP, preset_rows=preset_rows(), lanes=LANES,
                   active_lane={"url": "http://127.0.0.1:11450",
                                "source": "presets-active-lane.json",
@@ -135,7 +152,15 @@ def run_collect(**overrides):
                   process_stats=process_stats, now=1_760_000_000.0,
                   jarvis_pid=999)
     kwargs.update(overrides)
-    return R.collect(**kwargs)
+    saved = os.environ.get("OPENJARVIS_CONFIG_DIR")
+    os.environ["OPENJARVIS_CONFIG_DIR"] = str(TMP)
+    try:
+        return R.collect(**kwargs)
+    finally:
+        if saved is None:
+            os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
+        else:
+            os.environ["OPENJARVIS_CONFIG_DIR"] = saved
 
 
 # --------------------------------------------------------------------------
@@ -396,6 +421,191 @@ def t_the_resources_route_is_wired_read_only_and_pc_only():
 
 
 # --------------------------------------------------------------------------
+#   "Measured results": the two stores jarvis_bench writes, read only
+# --------------------------------------------------------------------------
+def t_the_measured_route_is_wired_read_only_and_pc_only():
+    check("the measured route is on the module's GET list and not its POST list",
+          M.PATH_MEASURED == "/api/models/measured"
+          and M.PATH_MEASURED in M.GET_PATHS
+          and M.PATH_MEASURED not in M.POST_PATHS,
+          (M.GET_PATHS, M.POST_PATHS))
+
+    class FakeHandler:
+        def __init__(self, path, peer="127.0.0.1", local="127.0.0.1"):
+            self.path = path
+            self.client_address = (peer, 5555)
+            from types import SimpleNamespace
+            self.connection = SimpleNamespace(getsockname=lambda: (local, 8765))
+            self.sent = []
+
+        def _send(self, code, payload):
+            self.sent.append((code, payload))
+            return code
+
+        def do_GET(self):
+            return -4
+
+        def do_POST(self):
+            return -5
+
+    cls = type("H", (FakeHandler,), {})
+    M.install(cls, origin_ok=lambda h: True, token_ok=lambda h: True,
+              read_body=lambda h: b"{}", from_this_pc=lambda p, l: p == "127.0.0.1")
+    saved = R.measured
+    try:
+        R.measured = lambda **kw: {"available": True, "read_at_words": "21:52:03",
+                                   "probe": "called"}
+        h = cls("/api/models/measured")
+        h.do_GET()
+        check("GET /api/models/measured answers from the measured read",
+              h.sent and h.sent[0][0] == 200
+              and h.sent[0][1].get("probe") == "called", h.sent)
+        phone = cls("/api/models/measured", peer="100.64.0.9")
+        phone.do_GET()
+        check("... and a phone is refused before the read",
+              phone.sent and phone.sent[0][0] == 403, phone.sent)
+
+        def boom(**kw):
+            raise RuntimeError("bench store exploded")
+        R.measured = boom
+        h = cls("/api/models/measured")
+        h.do_GET()
+        check("a broken measured read answers available:false, not a 500",
+              h.sent and h.sent[0][0] == 200
+              and h.sent[0][1].get("available") is False
+              and "why" in h.sent[0][1], h.sent)
+    finally:
+        R.measured = saved
+
+
+def t_measured_reads_only_stored_rows_and_says_why_it_is_empty():
+    import time
+    import jarvis_bench as B
+    log = B.BenchLog(TMP / "bench.jsonl")
+    scores = B.ScoreLog(TMP / "bench-scores.jsonl")
+
+    empty = R.measured(bench_log=log, score_log=scores, now=1_760_000_000)
+    check("an empty card is still an answer, not a failure",
+          empty["available"] is True, empty)
+    check("... with no invented row and both counts at zero",
+          empty["runs"] == [] and empty["scorecards"] == []
+          and empty["counts"] == {"runs": 0, "scorecards": 0}, empty)
+    check("... and the empty state names the missing speed-run file",
+          "no speed run is on file yet" in empty["empty"]["runs"].lower()
+          and "bench.jsonl" in empty["empty"]["runs"]
+          and "benchmark on this pc" in empty["empty"]["runs"].lower(),
+          empty["empty"]["runs"])
+    check("... and the missing scorecard file, with the door that fills it",
+          "no five-suite scorecard is on file yet" in empty["empty"]["scorecards"].lower()
+          and "bench-scores.jsonl" in empty["empty"]["scorecards"]
+          and "start the benchmark suites" in
+          empty["empty"]["scorecards"].lower(),
+          empty["empty"]["scorecards"])
+    check("... and the stores' own names and presence are reported",
+          empty["stores"]["speed"] == {"name": "bench.jsonl", "exists": False}
+          and empty["stores"]["scores"] == {"name": "bench-scores.jsonl",
+                                            "exists": False},
+          empty["stores"])
+
+    check("a real speed run is written by the real store",
+          log.append({"kind": "bench-run", "model": "qwen3:8b",
+                      "lane": "everyday", "preset": "general", "at": 1000,
+                      "gen_median": 41.2, "prefill_median": 900.5, "ok": True,
+                      "spilled": False,
+                      "words": "qwen3:8b on the everyday lane: 41.2 tokens a second."}))
+    # A REPEAT row is not a run: the card must not read one as the other.
+    log.append({"kind": "bench", "model": "qwen3:8b", "at": 1500,
+                "gen_tokens_per_s": 40.0})
+    log.append({"kind": "bench-run", "model": "qwen3:4b", "lane": "main",
+                "at": 2000, "ok": False, "why": "no repeat produced a number",
+                "words": "Nothing was measured: no repeat produced a number."})
+    scores.append({"kind": "bench-suite", "model": "qwen3:8b", "suite": "coding",
+                   "at": 3000, "score_pct": 83.33, "items": 6, "items_passed": 5,
+                   "decode_tps": 41.2, "ctx": 8192, "passed": True,
+                   "skipped": False, "quant": "Q4_K_M",
+                   "words": "5 of 6 coding tasks passed."})
+    scores.append({"kind": "bench-suite", "model": "qwen3:8b",
+                   "suite": "vision_ocr", "at": 4000, "skipped": True,
+                   "words": "Vision / OCR: not run - the model does not report vision."})
+    # A field no store may carry must never reach the card, even if handed in.
+    log.append({"kind": "bench-run", "model": "qwen3:1b", "lane": "coding",
+                "at": 5000, "ok": False, "prompt": "the owner's secret words"})
+
+    out = R.measured(bench_log=log, score_log=scores)
+    check("only stored RUN rows are read: a repeat row is not a run",
+          out["counts"]["runs"] == 3 and len(out["runs"]) == 3, out["counts"])
+    check("the newest run is first", out["runs"][0]["model"] == "qwen3:1b",
+          [r.get("model") for r in out["runs"]])
+    check("a failed run is shown with its own reason, not hidden or scored",
+          out["runs"][1].get("ok") is False
+          and out["runs"][1].get("why") == "no repeat produced a number"
+          and "gen_median" not in out["runs"][1], out["runs"][1])
+    good = out["runs"][2]
+    check("a measured run carries the stored numbers, never a re-rounding",
+          good.get("gen_median") == 41.2 and good.get("prefill_median") == 900.5,
+          good)
+    check("... and the sentence the benchmark itself wrote",
+          good.get("words") == "qwen3:8b on the everyday lane: 41.2 tokens a second.",
+          good.get("words"))
+    check("... dated on this PC's own clock",
+          good.get("day") == time.strftime("%Y-%m-%d", time.localtime(1000)),
+          (good.get("at"), good.get("day")))
+    check("no prompt or answer text reaches the card",
+          "secret" not in json.dumps(out).lower(), json.dumps(out)[:200])
+    check("the newest scorecard is first", out["scorecards"][0]["suite"] == "vision_ocr",
+          [s.get("suite") for s in out["scorecards"]])
+    check("a suite the model could not run says skipped, with no score",
+          out["scorecards"][0].get("skipped") is True
+          and "score_pct" not in out["scorecards"][0], out["scorecards"][0])
+    coding = out["scorecards"][1]
+    check("a measured scorecard carries its score, items and the store's sentence",
+          coding.get("score_pct") == 83.33 and coding.get("items") == 6
+          and coding.get("items_passed") == 5 and coding.get("decode_tps") == 41.2
+          and coding.get("ctx") == 8192 and coding.get("quant") == "Q4_K_M"
+          and coding.get("words") == "5 of 6 coding tasks passed.", coding)
+    check("the suite label comes from jarvis_bench's own SUITES table",
+          coding.get("suite_label") == "Coding"
+          and out["scorecards"][0].get("suite_label") == "Vision / OCR",
+          [s.get("suite_label") for s in out["scorecards"]])
+    check("the empty reasons are blank when the rows are there",
+          out["empty"] == {"runs": "", "scorecards": ""}, out["empty"])
+    check("the headline says the numbers were measured on this PC",
+          any("measured on this pc" in w.lower() for w in out["words"]), out["words"])
+
+    limited = R.measured(bench_log=log, score_log=scores, limit_runs=1,
+                         limit_scores=1)
+    check("the shown rows are limited but the counts are everything stored",
+          len(limited["runs"]) == 1 and len(limited["scorecards"]) == 1
+          and limited["counts"] == {"runs": 3, "scorecards": 2},
+          (limited["counts"], len(limited["runs"]), len(limited["scorecards"])))
+
+    saved = sys.modules.get("jarvis_bench")
+    sys.modules["jarvis_bench"] = None
+    try:
+        gone = R.measured(bench_log=log, score_log=scores)
+    finally:
+        if saved is not None:
+            sys.modules["jarvis_bench"] = saved
+        else:
+            sys.modules.pop("jarvis_bench", None)
+    check("no benchmark module says so and invents nothing",
+          gone["available"] is False and gone["runs"] == []
+          and gone["scorecards"] == []
+          and "will not invent one" in gone["why"], gone)
+
+    src = (HERE / "jarvis_model_resources.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    measured_fn = next((n for n in ast.walk(tree)
+                        if isinstance(n, ast.FunctionDef) and n.name == "measured"),
+                       None)
+    calls = {getattr(n.func, "attr", "") for n in ast.walk(measured_fn or ast.Module(
+        body=[], type_ignores=[])) if isinstance(n, ast.Call)}
+    check("the read goes through jarvis_bench's own readers, not a file of its own",
+          measured_fn is not None and {"runs", "score_history"} <= calls
+          and not ({"open", "read_text", "write_text"} & calls), sorted(calls))
+
+
+# --------------------------------------------------------------------------
 #   The module cannot act
 # --------------------------------------------------------------------------
 def t_the_module_cannot_write_load_or_apply():
@@ -464,6 +674,8 @@ def main():
         t_the_product_file_fallback_is_used_and_named,
         t_the_active_lane_file_rule_is_the_products,
         t_the_resources_route_is_wired_read_only_and_pc_only,
+        t_the_measured_route_is_wired_read_only_and_pc_only,
+        t_measured_reads_only_stored_rows_and_says_why_it_is_empty,
         t_the_module_cannot_write_load_or_apply,
         t_the_route_contract_still_names_the_existing_cards,
         t_ps_parsing_keeps_a_missing_context_as_unknown,

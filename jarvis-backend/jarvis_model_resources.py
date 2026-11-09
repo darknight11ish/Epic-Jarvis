@@ -30,6 +30,17 @@ handler for `GET /api/models/recommendations`; that wrapper serves this module's
 answer at `GET /api/models/resources` (additive, same token/origin checks, and
 the same DESKTOP-ONLY rule as its neighbour - the phone is deliberately not
 given the graphics-card/process read; ARCHITECTURE.md section 8 says why).
+
+WHAT ELSE IT READS (2026-11-09, the "Measured results" card). `measured()` serves
+`GET /api/models/measured`, and it reads the TWO stores `jarvis_bench.py` writes -
+the same stores docs/JARVIS-API.md section 205 answers "what has been measured"
+from: `BenchLog` (speed runs, `bench.jsonl`) and `ScoreLog` (the five-suite
+scorecards, `bench-scores.jsonl`). Every row and every number is copied from the
+store; the one sentence describing a result is the store's OWN `words` field,
+built by `jarvis_bench` when it measured it, so no screen can word one
+measurement two different ways. An empty store is said in words WITH the reason
+(no file yet, or a file with no readable row), and a missing benchmark module
+answers `available: false` - it never invents a row or a score.
 """
 from __future__ import annotations
 
@@ -781,5 +792,229 @@ def _consistency_warnings(active: dict, lanes, gpus) -> list:
     return warnings
 
 
-__all__ = ["collect", "cards_words", "context_words", "gb_words", "gib_words",
-           "mib_words", "spill_words", "ACTIVE_LANE_FILE", "CHOICE_FILE"]
+# --------------------------------------------------------------------------
+#   What has been measured: the two benchmark stores, read-only
+# --------------------------------------------------------------------------
+# THE STORES ARE `jarvis_bench`'s, NOT OURS. docs/JARVIS-API.md section 205
+# answers "what has been measured" from `BenchLog` (speed runs: model, lane,
+# decode rate, spill, pass/fail, date) and `ScoreLog` (one row per suite per
+# model/quant/context/digest, with score, items passed, decode rate and date).
+# This module only READS them through `jarvis_bench`'s own functions, so the
+# card, the chat answer and the benchmark that wrote the row cannot disagree
+# about the file, the shape or the sentence. The row sentence (`words`) is
+# written by `jarvis_bench` at measurement time and shown verbatim: a screen
+# that re-worded it could say a spilled run was fast.
+
+#: How many rows the card shows from each store. The counts of everything
+#: stored travel with them, so "3 shown" can never read as "3 measured".
+MEASURED_RUNS_SHOWN = 3
+MEASURED_SCORES_SHOWN = 5
+
+
+def _day_words(at) -> str:
+    """An epoch -> `YYYY-MM-DD` on THIS PC's own clock, or "" for no stamp."""
+    try:
+        stamp = float(at)
+    except (TypeError, ValueError):
+        return ""
+    if not (stamp > 0) or stamp != stamp or stamp == float("inf"):
+        return ""
+    return time.strftime("%Y-%m-%d", time.localtime(stamp))
+
+
+def _stored_number(row: dict, key: str):
+    """The stored number under `key`, or None. A missing number is never a 0."""
+    value = (row or {}).get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or value in (float("inf"), float("-inf")):
+        return None
+    return value
+
+
+def _run_brief(row: dict) -> dict:
+    """One stored speed run, as the card reads it - only what the row holds."""
+    out = {
+        "kind": "speed run",
+        "model": str(row.get("model") or "")[:120],
+        "lane": str(row.get("lane") or "")[:40],
+        "preset": str(row.get("preset") or "")[:40],
+        "spilled": bool(row.get("spilled")),
+        "words": str(row.get("words") or "")[:400],
+        "at": _stored_number(row, "at"),
+        "day": _day_words(row.get("at")),
+    }
+    if isinstance(row.get("ok"), bool):
+        out["ok"] = row["ok"]
+    for key in ("gen_median", "prefill_median"):
+        value = _stored_number(row, key)
+        if value is not None:
+            out[key] = value
+    why = str(row.get("why") or "")[:200]
+    if why:
+        out["why"] = why
+    return out
+
+
+def _score_brief(row: dict, labels: dict) -> dict:
+    """One stored suite scorecard, as the card reads it - only stored fields."""
+    suite = str(row.get("suite") or "")[:40]
+    out = {
+        "kind": "scorecard",
+        "model": str(row.get("model") or "")[:120],
+        "suite": suite,
+        # The label comes from `jarvis_bench.SUITES`, the same table the runner
+        # uses; an unknown id is made readable, never guessed at as another suite.
+        "suite_label": (labels.get(suite)
+                        or suite.replace("_", " ").capitalize() or "a suite"),
+        "skipped": bool(row.get("skipped")),
+        "words": str(row.get("words") or "")[:400],
+        "at": _stored_number(row, "at"),
+        "day": _day_words(row.get("at")),
+    }
+    if isinstance(row.get("passed"), bool):
+        out["passed"] = row["passed"]
+    for key in ("score_pct", "items", "items_passed", "decode_tps", "ctx"):
+        value = _stored_number(row, key)
+        if value is not None:
+            out[key] = value
+    quant = str(row.get("quant") or "")[:40]
+    if quant:
+        out["quant"] = quant
+    why = str(row.get("why") or "")[:200]
+    if why:
+        out["why"] = why
+    return out
+
+
+def _store_state(path, fallback: str = "the benchmark store") -> dict:
+    """`{name, exists}` for one store file - the name only, never the full path."""
+    name = ""
+    exists = False
+    try:
+        if path is not None:
+            name = Path(path).name
+            exists = Path(path).is_file()
+    except (OSError, TypeError, ValueError):
+        exists = False
+    return {"name": name or fallback, "exists": exists}
+
+
+def _empty_reason(what: str, store: dict, rows: int, read_failed: bool,
+                  start: str) -> str:
+    """Why a list is empty - THE point of the card's empty state. Three
+    different silences (never measured, a file with no readable row, a read
+    that failed) must not read as one."""
+    if read_failed:
+        return (f"The {what} store could not be read this time, so nothing "
+                "measured is shown - rather than a number that was not read.")
+    if rows:
+        return ""
+    if not store.get("exists"):
+        return (f"No {what} is on file yet: there is no {store['name']} beside "
+                f"Jarvis's saved files. {start}")
+    return (f"{store['name']} exists, but it holds no readable {what} yet, so "
+            "there is nothing measured to show.")
+
+
+def measured(*, limit_runs: int = MEASURED_RUNS_SHOWN,
+             limit_scores: int = MEASURED_SCORES_SHOWN,
+             now: Optional[float] = None,
+             bench_log=None, score_log=None) -> dict:
+    """The Brain's "Measured results" card: the stored speed runs and suite
+    scorecards, newest first, with an honest reason when either is empty.
+
+    READ-ONLY, and the numbers are never invented: a row is copied from the
+    store's own allowlisted fields, every missing number is absent rather than
+    0, and the sentence describing a result is the stored `words` field the
+    benchmark itself wrote. No clock, no network and no model call reaches a
+    row; `now` only dates the read.
+
+    `bench_log`/`score_log` are injectable so a suite can drive both empty and
+    populated stores without the owner's real `bench.jsonl`. Never raises.
+    """
+    read_at = float(now if now is not None else time.time())
+    answer = {
+        "available": True,
+        "read_at": read_at,
+        "read_at_words": time.strftime("%H:%M:%S", time.localtime(read_at)),
+        "runs": [],
+        "scorecards": [],
+        "counts": {"runs": 0, "scorecards": 0},
+        "stores": {"speed": {"name": "the speed-run store", "exists": False},
+                   "scores": {"name": "the scorecard store", "exists": False}},
+        "empty": {"runs": "", "scorecards": ""},
+        "notes": ["Read-only: this answer only read the two benchmark stores. "
+                  "Nothing was measured, loaded, switched or started."],
+        "words": [],
+    }
+    try:
+        import jarvis_bench as bench  # type: ignore
+    except Exception:  # noqa: BLE001 - a clone or an older PC
+        why = ("This backend has no benchmark module (jarvis_bench.py), so it "
+               "cannot read measured results - and it will not invent one.")
+        answer["available"] = False
+        answer["why"] = why
+        answer["empty"] = {"runs": why, "scorecards": why}
+        answer["words"] = [why]
+        return answer
+
+    log = bench_log if bench_log is not None else bench.BenchLog()
+    scores = score_log if score_log is not None else bench.ScoreLog()
+    answer["stores"]["speed"] = _store_state(getattr(log, "path", None),
+                                             "the speed-run store")
+    answer["stores"]["scores"] = _store_state(getattr(scores, "path", None),
+                                              "the scorecard store")
+    labels = {str(s.get("id")): str(s.get("label") or s.get("id") or "")
+              for s in (getattr(bench, "SUITES", ()) or ())
+              if isinstance(s, dict) and s.get("id")}
+
+    run_rows, runs_failed = [], False
+    try:
+        # `limit=0` is the store's own "all rows" (newest first), so the count
+        # below is of everything stored, not of the few the card shows.
+        run_rows = list(log.runs(limit=0))
+    except Exception:  # noqa: BLE001 - a damaged store reads as a clear note
+        runs_failed = True
+    score_rows, scores_failed = [], False
+    try:
+        score_rows = list(bench.score_history(limit=100000, store=scores))
+    except Exception:  # noqa: BLE001 - same rule for the scorecards
+        scores_failed = True
+
+    answer["counts"] = {"runs": len(run_rows), "scorecards": len(score_rows)}
+    shown_runs = max(0, int(limit_runs)) if limit_runs is not None else 0
+    shown_scores = max(0, int(limit_scores)) if limit_scores is not None else 0
+    answer["runs"] = [_run_brief(row) for row in run_rows[:shown_runs]]
+    answer["scorecards"] = [_score_brief(row, labels)
+                            for row in score_rows[:shown_scores]]
+    answer["empty"]["runs"] = _empty_reason(
+        "speed run", answer["stores"]["speed"], len(run_rows), runs_failed,
+        'A speed run is started by "Benchmark on this PC" on a model, or by '
+        "asking Jarvis to start a benchmark.")
+    answer["empty"]["scorecards"] = _empty_reason(
+        "five-suite scorecard", answer["stores"]["scores"], len(score_rows),
+        scores_failed,
+        'Ask Jarvis to "start the benchmark suites" to measure all five.')
+
+    words = []
+    newest_run = answer["runs"][0] if answer["runs"] else None
+    if newest_run and newest_run.get("words"):
+        words.append("Newest speed run: " + str(newest_run["words"]).rstrip(".") + ".")
+    newest_score = answer["scorecards"][0] if answer["scorecards"] else None
+    if newest_score and newest_score.get("words"):
+        words.append("Newest scorecard (" + str(newest_score.get("suite_label"))
+                     + "): " + str(newest_score["words"]).rstrip(".") + ".")
+    for key in ("runs", "scorecards"):
+        if answer["empty"][key]:
+            words.append(answer["empty"][key])
+    if answer["runs"] or answer["scorecards"]:
+        words.append("Every number above was measured on this PC and copied "
+                     "from its benchmark store.")
+    answer["words"] = [w for w in words if w]
+    return answer
+
+
+__all__ = ["collect", "measured", "cards_words", "context_words", "gb_words",
+           "gib_words", "mib_words", "spill_words", "ACTIVE_LANE_FILE",
+           "CHOICE_FILE", "MEASURED_RUNS_SHOWN", "MEASURED_SCORES_SHOWN"]

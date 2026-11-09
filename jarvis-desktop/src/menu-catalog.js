@@ -2126,6 +2126,46 @@ export const MENUS = [
     ]
   },
   {
+    "id": "brain.model.resources",
+    "title": "Loaded now / Resources",
+    "about": "What is loaded into Jarvis right now, on which graphics card, at which context, and what Jarvis itself is using.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "brain",
+    "view": "faculties",
+    "kind": "card",
+    "group": null,
+    "parent": "brain.tab.faculties",
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "loaded now",
+      "resources"
+    ]
+  },
+  {
+    "id": "brain.model.measured",
+    "title": "Measured results",
+    "about": "What benchmarks have already measured on this PC: the speed runs and the five-suite scorecards.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "brain",
+    "view": "faculties",
+    "kind": "card",
+    "group": null,
+    "parent": "brain.tab.faculties",
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "measured results",
+      "benchmark results"
+    ]
+  },
+  {
     "id": "brain.model.compute",
     "title": "Compute",
     "about": "The graphics card plan.",
@@ -3013,6 +3053,7 @@ export const ALIASES = {
   "background work": "brain.work.jobs",
   "backup settings": "settings.backup",
   "backups": "settings.backup",
+  "benchmark results": "brain.model.measured",
   "between us": "brain.memory.between-us",
   "big hud window": "settings.hud-window",
   "big jarvis window": "settings.hud-window",
@@ -3135,10 +3176,13 @@ export const ALIASES = {
   "limits and frequencies": "settings.limits",
   "limits and frequency": "settings.limits",
   "little window over other apps": "settings.pip-mode",
+  "loaded now": "brain.model.resources",
+  "loaded now / resources": "brain.model.resources",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
   "making pictures": "settings.pictures",
   "manner": "settings.manner",
+  "measured results": "brain.model.measured",
   "media index": "settings.media-index",
   "memory": "brain.tab.memory",
   "memory (model view)": "brain.model.memory",
@@ -3196,6 +3240,7 @@ export const ALIASES = {
   "referee suggestions (second card switch)": "settings.second-card.referee",
   "referee switch": "settings.second-card.referee",
   "refresh rate": "settings.screen-rate",
+  "resources": "brain.model.resources",
   "retirement": "brain.work.retirement",
   "retirement what-if": "brain.work.retirement",
   "review decks": "brain.work.decks",

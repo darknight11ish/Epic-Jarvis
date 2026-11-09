@@ -29456,6 +29456,86 @@ The route is PC-only and `GET`-only: a phone is refused 403 before the read
 (same rule and sentence as its neighbours), and nothing here is on the phone's
 radar - see `docs/ARCHITECTURE.md` §8 for that one-sided decision and why.
 
+### 160.2 Measured results: `GET /api/models/measured` (added 2026-11-09)
+
+**What it is.** The Brain Model pane's "Measured results" card: the benchmark
+results that are ALREADY stored on this PC, in the two plain stores section 205
+above answers "what has been measured" from - `jarvis_bench.BenchLog` (speed
+runs: model, lane, decode rate, spill, pass/fail, date, `bench.jsonl`) and
+`jarvis_bench.ScoreLog` (one row per suite per model/quant/context/digest, with
+score, items passed, decode rate and date, `bench-scores.jsonl`). Section 205's
+answer tells the owner the results are "kept in Brain, Model, Models"; this is
+that card, and it is the same two stores, read through `jarvis_bench`'s own
+readers (`BenchLog.runs()`, `score_history()`) so the card, the chat answer and
+the benchmark that wrote the row cannot disagree about the file or the shape.
+
+**Read-only, and nothing invents a number.** `jarvis_model_resources.measured()`
+copies each row's allowlisted fields: a number the row does not hold is ABSENT
+rather than 0, and the sentence describing a result is the row's own `words`
+field, written by `jarvis_bench` when it measured it - a failed run, a spilled
+run and a skipped suite therefore keep their own words on the card instead of
+being re-worded by a screen. The newest three speed runs and newest five
+scorecards are shown, and `counts` carries how many rows are stored, so the card
+says "showing the newest 3 of 12" rather than making three look like everything.
+An empty list carries its OWN reason (`empty.runs`/`empty.scorecards`): no such
+file yet, a file with no readable row, or a read that failed - three different
+silences, said differently. A backend without `jarvis_bench.py` answers
+`available: false` with a sentence and still invents no row.
+
+```json
+{"available": true, "read_at": 1762750000, "read_at_words": "21:52:03",
+ "runs": [{"kind": "speed run", "model": "qwen3.5:9b", "lane": "everyday",
+           "preset": "general", "ok": true, "spilled": false,
+           "gen_median": 41.2, "prefill_median": 900.5,
+           "at": 1762750000, "day": "2026-11-08",
+           "words": "qwen3.5:9b on the everyday lane at 16,384 tokens: 41.2 tokens a second decode, ..."}],
+ "scorecards": [{"kind": "scorecard", "model": "qwen3.5:9b", "suite": "coding",
+                 "suite_label": "Coding", "skipped": false, "passed": true,
+                 "score_pct": 83.33, "items": 6, "items_passed": 5,
+                 "decode_tps": 41.2, "ctx": 8192, "quant": "Q4_K_M",
+                 "at": 1762750000, "day": "2026-11-08",
+                 "words": "5 of 6 coding tasks passed, each checked by running its own test."}],
+ "counts": {"runs": 12, "scorecards": 7},
+ "stores": {"speed": {"name": "bench.jsonl", "exists": true},
+            "scores": {"name": "bench-scores.jsonl", "exists": true}},
+ "empty": {"runs": "", "scorecards": ""},
+ "notes": ["Read-only: this answer only read the two benchmark stores. ..."],
+ "words": ["Newest speed run: ..."]}
+```
+
+Field rules, each proved by `backend/test_model_resources.py` against the real
+stores (a temporary `BenchLog`/`ScoreLog`, never a second copy of the shape):
+
+- **Only stored rows.** `BenchLog.runs()` returns the `bench-run` aggregate rows
+  (a repeat row is not a run), newest first; `score_history()` returns the
+  scorecards, newest first. Nothing is synthesised, averaged or rounded again.
+- **A failed run is shown, not hidden.** It keeps `ok: false` and its stored
+  `why`; it has no `gen_median` key at all rather than a 0 tokens a second.
+- **A skipped suite is shown as skipped**, with no `score_pct`.
+- **The label is the module's own.** `suite_label` comes from
+  `jarvis_bench.SUITES`, the table the suite runner uses, so "Vision / OCR" is
+  not retyped by a screen.
+- **`at` is the stored epoch and `day` is that epoch on this PC's own clock**
+  (`YYYY-MM-DD`); a row with no stamp has `at: null` and `day: ""`, never today.
+- **No prompt, answer or owner word can reach it**: both stores' writers use
+  allowlists, and this read copies a fixed field list from the cleaned rows.
+- **`stores`** names each store file and whether it exists, so the empty state
+  can be specific about which one is missing.
+- **`words`** is a plain-sentence fallback for a screen that cannot draw the
+  rows; the Brain pane draws the structured rows through
+  `model-results.js`, whose wording is proved by
+  `jarvis-desktop/tests/model-results.mjs`.
+
+**What it never does.** It starts no benchmark, loads no model, writes no row,
+raises no card and calls no model. Starting a run is the existing machinery
+described in section 205 (`jarvis_bench.start` / `start_suites`) or the
+"Benchmark on this PC" button, and the results appear here after the run.
+
+The route is PC-only and `GET`-only: a phone is refused 403 before the read
+(the same sentence as its neighbours), and `docs/ARCHITECTURE.md` §8 records
+that one-sided decision and why. `tools/check_parity.py` classifies the route
+`deliberate` with that reason.
+
 ## 161. Google Calendar, both ways: a private iCal link or a real Google sign-in over loopback (added 2026-10-28)
 
 **What this is.** The owner's decision of 2026-10-28 ("Both at once"): Jarvis may

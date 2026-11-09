@@ -2534,6 +2534,10 @@
       "models",
       "model_recommendations",
       "brain.model.models",
+      "brain.model.resources",
+      "brain.model.measured",
+      "model_resources",
+      "model_measured",
       "brain.tab.faculties",
       "model-page"
     ],

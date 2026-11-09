@@ -1393,7 +1393,7 @@ SHIPPED = (
     # Model/preset recommendations (2026-10-28, the owner's request): one cached
     # check of the public model catalogues, a bounded benchmark of an INSTALLED
     # model on this PC, and preset changes justified only by measured numbers.
-    # Six PC-only routes; approves, downloads and applies nothing (the existing
+    # Seven PC-only routes; approves, downloads and applies nothing (the existing
     # /api/models/install and /api/work/apply cards remain the only ways to act).
     # model-recommendations.patch adds the ONE install block; no gate row, no
     # tier line, no timer. The same entry is at the end of the script's $SHIPPED.
@@ -1403,8 +1403,11 @@ SHIPPED = (
     # carrying it, every card's free memory, and Jarvis's own RAM/CPU. A READ
     # served by the recommendation module's already-installed PC-only wrapper at
     # GET /api/models/resources - no new permission, no new install call, and
-    # nothing here loads, switches, applies or writes. The same entry follows
-    # the recommendations one in the script's $SHIPPED.
+    # nothing here loads, switches, applies or writes. It also serves the
+    # Brain's "Measured results" card at GET /api/models/measured: the speed
+    # runs and five-suite scorecards ALREADY in `jarvis_bench`'s two stores, read
+    # and never written (docs/JARVIS-API.md section 160.2). The same entry
+    # follows the recommendations one in the script's $SHIPPED.
     "jarvis_model_resources.py",
     # A real two-way Google Calendar (2026-10-28, the owner chose "both at
     # once"): the private iCal link (read-only) or a Google sign-in over a

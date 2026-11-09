@@ -206,7 +206,7 @@ ok("the Rust Brain allowlist maps the section to the one route",
   routes.includes('("model_resources", "/api/models/resources")'));
 ok("the backend serves it as a GET on the already-installed PC-only wrapper",
   recModule.includes('PATH_RESOURCES = "/api/models/resources"')
-  && /GET_PATHS\s*=\s*\(PATH_RECOMMENDATIONS,\s*PATH_RESOURCES\)/.test(recModule));
+  && /GET_PATHS\s*=\s*\(PATH_RECOMMENDATIONS,\s*PATH_RESOURCES[^)]*\)/.test(recModule));
 ok("the backend read is the read-only collector, not a second HTTP stack",
   rec.includes("def collect(") && !rec.includes("/api/pull")
   && !rec.includes("requests."));

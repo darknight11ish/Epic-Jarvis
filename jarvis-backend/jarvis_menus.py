@@ -747,6 +747,19 @@ MENUS: tuple = (
     # ---- Brain: Model --------------------------------------------------
     _m("brain.model.models", "Models", "The models Jarvis can use.",
        area="brain", view="faculties", names=("models list", "model list")),
+    # The two cards the owner asked for on 2026-11-08 (JARVIS-API sections
+    # 160.1 and 160.2). Both answer from THIS PC's own reads, so both are the
+    # desktop's alone - the same one-sided rule as `brain.model.memory`.
+    _m("brain.model.resources", "Loaded now / Resources",
+       "What is loaded into Jarvis right now, on which graphics card, at which "
+       "context, and what Jarvis itself is using.",
+       (DESKTOP,), area="brain", view="faculties",
+       names=("loaded now", "resources")),
+    _m("brain.model.measured", "Measured results",
+       "What benchmarks have already measured on this PC: the speed runs and "
+       "the five-suite scorecards.",
+       (DESKTOP,), area="brain", view="faculties",
+       names=("measured results", "benchmark results")),
     _m("brain.model.compute", "Compute", "The graphics card plan.",
        area="brain", view="faculties", names=("compute",)),
     _m("brain.model.skills", "Skills", "Installed skills with scan verdicts.",
