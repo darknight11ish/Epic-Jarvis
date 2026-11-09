@@ -19,6 +19,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+# This file IS a suite run. `backend/_where.py` sets this for every suite that
+# imports it, but this one imports only the lane modules, and a BARE
+# `python backend/test_pooled_lane.py` - exactly what `tools/check_claims.py`
+# runs for its `test:` rows - must still prove that the live-file guard in
+# `jarvis_presets.reconcile_after_restart` refuses it. Sibling suites set the
+# same marker the same way (`test_cloud_escalate_setting.py`).
+os.environ["JARVIS_SUITE_RUNNING"] = "1"
+
 FAILED, PASSED = [], []
 TMP = tempfile.mkdtemp(prefix="pooled-lane-")
 os.environ["OPENJARVIS_CONFIG_DIR"] = TMP

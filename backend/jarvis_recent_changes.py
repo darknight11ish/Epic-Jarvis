@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'Wave 11: the model screens tell the truth, the coding lane cannot die silently, and Jarvis can talk about its own models',
     'Wave 10: one honest answer menu, a real receipt for the GitHub token, HUD layouts that apply at once, deterministic feature answers and a default-ON Wi-Fi reconnect',
     "Wave 9: the read-aloud switch, the five-suite benchmark, the Brain's model filters and the hardware-aware recommender",
     'Wave 8.2: full self-awareness, and a journal of what changes',
     'Wave 8.1: the repo-watch answer, the `One sentence.` shape and the audit job',
-    'The Coding preset now uses all three graphics cards',
 )
 
 
