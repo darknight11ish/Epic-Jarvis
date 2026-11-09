@@ -4101,6 +4101,10 @@ async function fileFromBar(target, text) {
  * reads the file, under its existing read-files gate.
  */
 let attachFile = null;
+// Which read is the current one. A drop replaces the file already waiting, so
+// a big file's read can finish AFTER a later, smaller drop's: without this the
+// older read would win and the chip would name the file the owner replaced.
+let attachRead = 0;
 
 const ATTACH_MAX_BYTES = 2500000;
 const ATTACH_KINDS = [".pdf", ".docx", ".xlsx", ".pptx", ".md", ".markdown", ".txt", ".csv"];
@@ -4191,8 +4195,14 @@ function attachTake(file, extra){
     return;
   }
   const reader = new FileReader();
-  reader.onerror = () => { attachClear(); attachShow(ATTACH_UNREADABLE + attachNone(others + 1), true); };
+  const read = ++attachRead;
+  reader.onerror = () => {
+    if(read !== attachRead) return;
+    attachClear();
+    attachShow(ATTACH_UNREADABLE + attachNone(others + 1), true);
+  };
   reader.onload = () => {
+    if(read !== attachRead) return;
     const url = String(reader.result || "");
     const comma = url.indexOf(",");
     if(comma < 0){ attachClear(); attachShow(ATTACH_UNREADABLE + attachNone(others + 1), true); return; }

@@ -96,12 +96,16 @@ function fakePage() {
       contains(c) { return this.on.has(c); },
     },
   });
+  const pendingReads = [];
   class FakeReader {
     // Synchronous on purpose: the rule is what is under test here, and a
-    // deterministic sandbox keeps every check a plain assertion.
+    // deterministic sandbox keeps every check a plain assertion. A file with
+    // `__defer` stands for a big read that finishes after a later, smaller
+    // drop - the race a second drop creates.
     readAsDataURL(file) {
-      const b64 = Buffer.from(String(file.__bytes || "hello"), "utf8").toString("base64");
-      this.result = `data:${file.type || "application/octet-stream"};base64,${b64}`;
+      this.result = `data:${file.type || "application/octet-stream"};base64,${
+        Buffer.from(String(file.__bytes || "hello"), "utf8").toString("base64")}`;
+      if (file.__defer) { pendingReads.push(this); return; }
       if (this.onload) this.onload();
     }
   }
@@ -123,7 +127,12 @@ function fakePage() {
   };
   vm.createContext(sandbox);
   vm.runInContext(attachCode(), sandbox);
-  return { sandbox, node, listeners };
+  return {
+    sandbox, node,
+    // Finish every deferred read, oldest first - the order a slow big file
+    // and a quick small one can really arrive in.
+    flushDeferred: () => pendingReads.splice(0).forEach((r) => r.onload && r.onload()),
+  };
 }
 
 const read = (file, name) => {
@@ -255,6 +264,19 @@ check("a second drop REPLACES the file, in the HUD's one-file words", () => {
   // Still exactly one file: there is nowhere for a second to live.
   assert.equal(typeof held, "object");
   assert.deepEqual(Object.keys(held).sort(), ["data", "mime", "name", "size"]);
+});
+
+check("a slower earlier read cannot overwrite a file dropped after it", () => {
+  const { sandbox, node, flushDeferred } = fakePage();
+  // The first file is 2 MB, so its read is still going when the small one
+  // lands: the small one is the file the owner chose last and must win.
+  sandbox.attachTake({ name: "big.pdf", size: 2000000, __bytes: "one", __defer: true });
+  sandbox.attachTake({ name: "quick.txt", size: 20, __bytes: "two" });
+  assert.equal(sandbox.__attach().name, "quick.txt");
+  flushDeferred();
+  assert.equal(sandbox.__attach().name, "quick.txt",
+    "the older, slower read replaced the newer file");
+  assert.equal(node("attach-chip-name").textContent, "quick.txt");
 });
 
 check("a drop of several files takes the first one Jarvis can read and names the rest", () => {
