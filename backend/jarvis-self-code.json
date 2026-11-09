@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "056f2a52b5ef0b0c2015a5af6cdb1c523fb246f0",
- "built_at": "2026-11-08T17:33:17-08:00",
+ "ref": "e7f289959813840327eaabfdc6c5e70a0bc73df4",
+ "built_at": "2026-11-08T18:17:59-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6180,6 +6180,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "e7f289959813840327eaabfdc6c5e70a0bc73df4",
+   "date": "2026-11-08",
+   "subject": "fix(wave10): close the three required-job reds the verifier found"
+  },
+  {
+   "sha": "1cbab1c463a9b0d88a6fe2056fd4d9976166c6ec",
+   "date": "2026-11-08",
+   "subject": "Merge remote-tracking branch 'origin/main' into integration/wave10-2026-11-08"
+  },
+  {
+   "sha": "31cab5fd503d093bbf50c6c3f55b79fe8ebcd16d",
+   "date": "2026-11-08",
+   "subject": "Merge pull request #1214 from darknight11ish/integration/wave9-2026-11-07"
+  },
+  {
+   "sha": "098aac5eebabe5afb85137be52e7d93e0e239d29",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map for the Q3 decision fragment"
+  },
+  {
    "sha": "056f2a52b5ef0b0c2015a5af6cdb1c523fb246f0",
    "date": "2026-11-08",
    "subject": "docs(records): the Q3 deterministic-answers decision, and C120 points at it"
@@ -6258,26 +6278,6 @@
    "sha": "daba2475338b584d77f3b675b7b1219f450fed2d",
    "date": "2026-11-08",
    "subject": "merge: bring fix/wave10-preset-independence up to integration head (wifi guardrails + desktop/phone alignment + records + map)"
-  },
-  {
-   "sha": "342d3f98d40dda48587d2b9f6e16c8e9f82ca3b7",
-   "date": "2026-11-08",
-   "subject": "feat(determinism): Q3 preset-independence suite + the Q3.3 unknown-name fallback"
-  },
-  {
-   "sha": "ebc589eb1202a3f7d3ae1848440eb2703a6bd973",
-   "date": "2026-11-08",
-   "subject": "docs(records): Wave-10 decision fragments - the Q4 Wi-Fi exception and the Q2 wrong-answer contract"
-  },
-  {
-   "sha": "083daea4fad0010eb2f4102bf1052f200f81b19a",
-   "date": "2026-11-08",
-   "subject": "Merge branch 'fix/wave10-wifi-guardrails-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "04c42da846b1253bc1f5beb3be5fdf25c192576f",
-   "date": "2026-11-08",
-   "subject": "Merge branch 'fix/wave10-desktop-align-2026-11-08' into integration/wave10-2026-11-08"
   }
  ],
  "top_level": [
