@@ -18658,6 +18658,21 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("preset_models")
     if _K_PRESET_BEST_ALL.fullmatch(s):
         return Intent("preset_best_all")
+    # Advice for one named preset runs BEFORE the one-preset "what model does
+    # <name> use" ask, because "which model is better for the coding preset"
+    # fits that ask too - it read "better for the coding" as a preset name and
+    # answered "There is no preset called ..." on the live 0.2.441 install
+    # (measured in the wave-11 acceptance, 2026-11-09). A name that is not a
+    # preset falls through to both roads below.
+    m = _K_PRESET_BEST.fullmatch(s)
+    if m is not None:
+        name = next((g for g in m.groupdict().values() if g), "")
+        name = re.sub(r"^(?:the|my|your)\s+", "", str(name or "").strip())
+        name = re.sub(r"\s+preset$", "", name).strip(" ?.!,")
+        if _preset_lookup_words(name) is not None:
+            return Intent("preset_best", {"name": name})
+        # Not a preset: "which model should i use for writing" keeps the older
+        # task recommendation below, which is advice about a preset's fit.
     # FIRST, deliberately: "what model are you using in the coding preset"
     # also fits _K_MODEL_CURRENT's "are you using" prefix, and the preset
     # question must win - it is the one with a fact to quote. The owner's own
@@ -18670,17 +18685,6 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("preset_model", {"name": name})
     if _K_BOTH_CARDS.fullmatch(s):
         return Intent("both_cards")
-    # Advice for one named preset, and the model history (2026-11-08). A
-    # name that is not a preset falls through to the older recommendation.
-    m = _K_PRESET_BEST.fullmatch(s)
-    if m is not None:
-        name = next((g for g in m.groupdict().values() if g), "")
-        name = re.sub(r"^(?:the|my|your)\s+", "", str(name or "").strip())
-        name = re.sub(r"\s+preset$", "", name).strip(" ?.!,")
-        if _preset_lookup_words(name) is not None:
-            return Intent("preset_best", {"name": name})
-        # Not a preset: "which model should i use for writing" keeps the older
-        # task recommendation below, which is advice about a preset's fit.
     if _K_MODEL_BEFORE.fullmatch(s):
         return Intent("model_before")
     for rx, intent_name in ((_K_MODEL_CURRENT, "model_current"),

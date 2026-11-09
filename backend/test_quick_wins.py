@@ -1358,6 +1358,31 @@ def t_quick_dispatch_sets_are_disjoint_and_reachable():
 
 
 
+def t_advice_about_one_preset_wins_over_the_one_preset_model_ask():
+    """The live 0.2.441 acceptance row (2026-11-09): "which model is better for
+    the Coding preset?" was answered 'There is no preset called "better for the
+    Coding"' - the one-preset "what model does <name> use" ask read the whole
+    phrase as a preset name. The advice for one named preset must run first,
+    and the older ask must still answer its own sentence."""
+    sent = "which model is better for the Coding preset?"
+    ask = Q._model_chat(sent)
+    check("'which model is better for <preset>' classifies as preset_best",
+          ask is not None and ask.name == "preset_best"
+          and str((ask.f or {}).get("name") or "").lower() == "coding",
+          None if ask is None else (ask.name, ask.f))
+    row = Q._preset_lookup_words("coding") or {}
+    model = str(row.get("model") or "")
+    answer = Q._run_preset_best(ask.f) if ask is not None else None
+    check("... and its answer names the Coding preset's real model",
+          answer is not None and bool(model) and model in answer.reply,
+          (model, getattr(answer, "reply", "")))
+    older = Q._model_chat("what model does the coding preset use")
+    check("the older 'what model does <preset> use' question still classifies as preset_model",
+          older is not None and older.name == "preset_model"
+          and str((older.f or {}).get("name") or "").lower() == "coding",
+          None if older is None else (older.name, older.f))
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:
