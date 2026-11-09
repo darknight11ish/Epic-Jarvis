@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1c209ac527386c9dc4be7ac906600e0a14d49e83",
- "built_at": "2026-11-09T15:28:53-08:00",
+ "ref": "d9ce7da77cf4aa2875b0a33aa78cb06c3fb18244",
+ "built_at": "2026-11-09T15:51:11-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6234,6 +6234,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "d9ce7da77cf4aa2875b0a33aa78cb06c3fb18244",
+   "date": "2026-11-09",
+   "subject": "test(p1a): pin the self portrait's registered tool count at 67"
+  },
+  {
+   "sha": "12e36c901d71684f5c069a5a1ad867eaf719342e",
+   "date": "2026-11-09",
+   "subject": "chore: regenerate the self-code map after the dry rebase"
+  },
+  {
    "sha": "1c209ac527386c9dc4be7ac906600e0a14d49e83",
    "date": "2026-11-09",
    "subject": "chore(p1a): regenerate the saved tool copies the rebased tool list moved"
@@ -6322,16 +6332,6 @@
    "sha": "6ae96767ea8e75390f1fac3fe24e081d6d8d8880",
    "date": "2026-11-09",
    "subject": "fix(skills): give the wave-12 skill scan a route to a live install (F5)"
-  },
-  {
-   "sha": "714d215e9940014a8dd23c7a2335d6c6f592b490",
-   "date": "2026-11-09",
-   "subject": "records(wave13): F5's live-delivery route gets its sentence in the one changelog and one decision bullet, claim C153, the About totals (251/238) and field-test row 7"
-  },
-  {
-   "sha": "b33f1fdadcbbf6688e0de2e3ca9e0ddb36215ad3",
-   "date": "2026-11-09",
-   "subject": "merge(wave13): the skills caller fix gets a live-delivery route (F5)"
   }
  ],
  "top_level": [
