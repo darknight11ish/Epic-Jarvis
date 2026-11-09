@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "804895b04d979dfefcce53317837d13846bf0146",
- "built_at": "2026-11-08T20:39:17-08:00",
+ "ref": "9a72242f75d90f67d1353e2265b717e694f1d87d",
+ "built_at": "2026-11-08T20:40:13-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6193,6 +6193,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "9a72242f75d90f67d1353e2265b717e694f1d87d",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map after the model-conversation lane merged"
+  },
+  {
    "sha": "804895b04d979dfefcce53317837d13846bf0146",
    "date": "2026-11-08",
    "subject": "integration: Jarvis can talk about its local models in chat and Live"
@@ -6286,11 +6291,6 @@
    "sha": "492ab22270fee45b4059aefe1a4339c031b6c918",
    "date": "2026-11-08",
    "subject": "fix(hud): the model chip says the model IN USE, not the PC's default"
-  },
-  {
-   "sha": "ca6d8e6be99e755a942208c25d0b298ee011e6c2",
-   "date": "2026-11-08",
-   "subject": "fix(brain): the Model page describes this PC's hardware, says the tier once, and scopes estimate vs measurement (Wave 11)"
   }
  ],
  "top_level": [
