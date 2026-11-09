@@ -3404,8 +3404,11 @@ pub fn stop_everything_now(app: &AppHandle) {
     // `stop_push_to_talk`).
     crate::voice::stop_push_to_talk(app);
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
-    // The HUD window is the backend's own page and speaks through the
-    // browser's speech engine; a fixed line, no payload.
+    // The HUD window's read-aloud is AUDIO it plays itself (the PC's own voice,
+    // `speak_reply`; TASK-51, 2026-11-09), and that page stops it on the same
+    // `stop-everything` event emitted just above. This eval is the other half:
+    // any speech the browser's own engine might still be making in that window
+    // is silenced too, so no path is left talking.
     if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
         if let Err(err) = hud
             .eval("try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}")

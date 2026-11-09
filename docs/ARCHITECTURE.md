@@ -2535,17 +2535,7 @@ holds one command for it, `hud-approvals` -> `allow-decide-approval`, so
 Windows Hello, the stale-link refusal, the cut-off refusal and the App-lock
 rule apply there unchanged. What that page's own `fetch` still cannot do is
 post a decision itself: `hud_bootstrap.js`'s shim refuses `/api/approve` and
-`/api/deny` whatever the link is doing. **The same file also keeps a private
-answer on screen there** (2026-10-16, the owner's decision *"Gate it - keep
-sensitive answers on screen in the HUD too"*): that page is the one surface
-which reads a TYPED answer aloud, and its `speechSynthesis.speak` is now
-refused for an answer whose route says `injected_sensitive` above 0 or
-`gate: "private"`, with the bar's own line ("It's on your screen.") drawn
-under the answer instead - the rule of `docs/JARVIS-API.md` §16 step 3, read
-off the route the page already has. It is a decision, not an oversight: the
-step-3 exception that a typed question may be read aloud is removed in that
-one window and nowhere else. No window may `emit` events to the
-others either (M1).
+`/api/deny` whatever the link is doing. **The same file also keeps a private answer on screen there** (2026-10-16, the owner's decision *"Gate it - keep sensitive answers on screen in the HUD too"*): that page is the one surface which reads a TYPED answer aloud, and an answer whose route says `injected_sensitive` above 0 or `gate: "private"` is refused, with the bar's own line ("It's on your screen.") drawn under the answer instead - the rule of `docs/JARVIS-API.md` §16 step 3, read off the route the page already has. It is a decision, not an oversight: the step-3 exception that a typed question may be read aloud is removed in that one window and nowhere else. **The refusal is now the page's own, asked before a tap can start anything** (`private-speech.js` through `mayReadAloud`, failing closed); the shell's `speechSynthesis.speak` wrapper and its kept-on-screen line stay as the guard for any speech-synthesis path that might return to that page. **And since TASK-51 (2026-11-09, the owner's decision of 2026-11-08) that page no longer speaks with the webview's voice at all**: a tapped answer is played as audio the PC made in the configured Jarvis voice, through the bar's own `speak_reply` command (`POST /api/voice/say`, granted to the HUD as one narrow `hud-speech` set), with Pause / Resume beside Read out loud and a Stop that resets the player; a voice the PC cannot make is said in words and never replaced by a Windows one (JARVIS-API §206). No window may `emit` events to the others either (M1).
 
 **The HUD page draws only while it is being looked at** (2026-10-23, the
 idle-power review). Its Galaxy map has one drawing loop, and it runs only while
@@ -4988,6 +4978,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
   a module that is missing, empty or unreadable answers with a sentence saying
   so, never with a list.
 
+
+- **Read-aloud in Jarvis's own voice, with Pause and Stop, is the desktop's - one-sided on purpose (2026-11-09, TASK-51; the owner's decision of 2026-11-08 and Gemini's Q7).** The desktop HUD is the one surface that reads a TYPED answer aloud, and it used to do that with WebView2's speech engine, hand-picking a British voice and falling back to the first English voice in the list - which the owner's report of 2026-11-08 names on his PC as Windows' index-0 `Microsoft David`, a man, while his configured voice is Kokoro's (default `af_heart`, a woman). Since this slice the HUD plays AUDIO the PC made through the bar's own `speak_reply` (`POST /api/voice/say` -> `jarvis_speech.say()` -> `jarvis_voices.speaker()`, or the owner's custom voice), so the voice is the same one a spoken answer and Jarvis Live use; when that voice cannot be made the page says so in one line and speaks nothing else. It also gains an inline Pause / Resume beside Read out loud and a Stop that fully resets the player, and it stops on Stop everything and on the PC's `read_aloud {enabled: false}` event (JARVIS-API §206). **Nothing of this is ported to the phone, and nothing of the phone's voice path is touched:** the phone's tap-only Read out loud already speaks with Android's own on-device synthesiser under its own lock rules and its own voice, there is no WebView2-style voice list on Android to fall back through, and the PC's Kokoro voice cannot be shipped to it - so a phone port would be a second, different voice, which is the bug this slice removes. **The phone's voice-print / speaker-verification path is deliberately untouched by this work**: `jarvis_voice.py`, the enrolment routes and `voiceprint`-class commands are unchanged on both apps; the new desktop grant is ONE speech command (`hud-speech` = `allow-speak-reply`), with no microphone command, no recording command and no route added, so the owner check that guards what Jarvis acts on is exactly where it was. `tools/check_parity.py` has nothing new to classify: `/api/voice/say` was already there and already used by both apps' read-aloud.
 
 ## 9. Where the backend lives
 

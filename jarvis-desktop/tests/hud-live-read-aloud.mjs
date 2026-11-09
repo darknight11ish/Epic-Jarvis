@@ -372,16 +372,33 @@ async function openHud(browser, scenario = {}) {
     }
   });
   // The voice list and the recorder go in BEFORE the bootstrap, as the real
-  // objects do - the bootstrap wraps whatever `speak` it finds.
+  // objects do - the bootstrap wraps whatever `speak` it finds. Since TASK-51
+  // (2026-11-09) the page's read-aloud no longer goes through this engine at
+  // all: it asks the PC for audio in Jarvis's configured voice (`speak_reply`)
+  // and plays it with `new Audio`. Both halves are stubbed here, and kept
+  // apart: `__asked` is what the page asked the PC to say, `__synth` is what
+  // the shell let through its speech engine (which must stay empty for an
+  // answer that has to stay on screen).
   await page.addInitScript(({ on }) => {
-    window.__spoken = [];
+    window.__asked = [];
+    window.__synth = [];
+    window.__clips = [];
     window.SpeechSynthesisUtterance = class {
       constructor(text) { this.text = text; this.voice = null; }
     };
     const synth = window.speechSynthesis;
     synth.getVoices = () => [{ name: "Daniel", lang: "en-GB", localService: true, default: true }];
-    synth.speak = (u) => { window.__spoken.push(u.text); };
+    synth.speak = (u) => { window.__synth.push(u.text); };
     synth.cancel = () => {};
+    // A clip element that plays instantly and never ends by itself, so the
+    // page's own player state (playing / paused / idle) can be driven.
+    window.Audio = class {
+      constructor(uri) { this.src = uri; this.paused = false; this.onended = null; this.onerror = null; window.__clips.push(this); }
+      play() { this.paused = false; return Promise.resolve(); }
+      pause() { this.paused = true; }
+      removeAttribute(name) { if (name === "src") this.src = ""; }
+      load() {}
+    };
     if (on) { try { localStorage.setItem("jarvis.hud.readAloudIcons", "true"); } catch (e) {} }
   }, { on: Boolean(scenario.iconsOn) });
   if (!scenario.noShell) {
@@ -391,6 +408,12 @@ async function openHud(browser, scenario = {}) {
       const queue = replies.slice();
       let live = { on: false };
       const liveListeners = [];
+      // TASK-51: the page stops a tapped read on the shell's own
+      // `stop-everything` event, which Rust emits before it asks the PC to
+      // stop anything (commands.rs `stop_everything_now`). Delivered here the
+      // way Rust's emit reaches a window's listener.
+      const stopListeners = [];
+      window.__stopEmit = (payload) => stopListeners.forEach((fn) => fn({ payload }));
       window.__invokes = [];
       window.__liveEmit = (payload) => liveListeners.forEach((fn) => fn({ payload }));
       class Channel { constructor() { this.onmessage = null; } }
@@ -442,6 +465,13 @@ async function openHud(browser, scenario = {}) {
               }
               case "hud_chat_cancel":
                 return null;
+              // TASK-51: the HUD's read-aloud asks the PC for the answer's
+              // sound in Jarvis's configured voice, through the bar's own
+              // command (`voice.rs` `speak_reply` -> POST /api/voice/say).
+              // The grant is `hud-speech` in capabilities/hud.json.
+              case "speak_reply":
+                window.__asked.push(args && args.text);
+                return "data:audio/wav;base64,UklGRg==";
               default:
                 throw new Error(`Command ${cmd} not allowed by ACL`);
             }
@@ -450,6 +480,7 @@ async function openHud(browser, scenario = {}) {
         event: {
           listen: async (name, fn) => {
             if (name === "live-status") liveListeners.push(fn);
+            if (name === "stop-everything") stopListeners.push(fn);
             return () => {};
           },
         },
@@ -515,7 +546,7 @@ async function send(page, text, expectCount) {
       invokes: (window.__invokes || []).map((c) => c[0]),
       log: (document.getElementById("log") || {}).textContent || "",
       online: Boolean(window.S && window.S.online),
-      said: window.__spoken ? window.__spoken.slice() : null,
+      said: window.__asked ? window.__asked.slice() : null,
     })).catch(() => ({}));
     throw new Error(`${e.message}\n      diagnostics: ${JSON.stringify(diag)}`);
   }
@@ -637,10 +668,10 @@ if (K) {
         null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
-        spoken: window.__spoken.slice(),
+        asked: window.__asked.slice(),
       }));
       assert.equal(state.speakers, 0, "a speaker was drawn with the switch off");
-      assert.deepEqual(state.spoken, [],
+      assert.deepEqual(state.asked, [],
         "a typed answer was read aloud automatically, which the owner asked against");
       await page.close();
     } finally {
@@ -686,17 +717,141 @@ if (K) {
       assert.equal(counts.user, 0, "the owner's own message was given a speaker");
       // Clear what the automatic read-aloud said, so the click is the only
       // thing that can be in the record.
-      await page.evaluate(() => { window.__spoken = []; });
+      await page.evaluate(() => { window.__asked = []; window.__synth = []; });
       // The FIRST answer's speaker, not the last: the words must be its own.
       // Clicked by its own index in the answer list, so a change in how many
       // elements the log holds cannot silently point this at another bubble.
       await page.evaluate(() => {
         document.querySelectorAll("#log .msg.jarvis .speak-answer")[0].click();
       });
-      await page.waitForFunction(() => window.__spoken.length > 0, null, { timeout: 5000 });
-      const spoken = await page.evaluate(() => window.__spoken.slice());
+      await page.waitForFunction(() => window.__asked.length > 0, null, { timeout: 5000 });
+      const spoken = await page.evaluate(() => window.__asked.slice());
       assert.deepEqual(spoken, ["First answer: the kettle is on."],
         "clicking a speaker did not read THAT answer's words out loud");
+      await page.close();
+    } finally {
+      await browser.close();
+    }
+  });
+
+  /* ── B3b. Pause / Resume beside Read out loud, and Stop that really stops ── */
+
+  await check("B: Pause / Resume beside Read out loud, and the PC's read_aloud OFF stops it", async () => {
+    const browser = await K.launch();
+    try {
+      const { page } = await openHud(browser, {
+        iconsOn: true,
+        // A turn id lets the shell's answer menu attach to this answer (it is
+        // drawn from the chat header's X-Jarvis-Route).
+        replies: [{ text: "The kettle is on, and here is a longer answer about it.",
+                   route: { turn_id: "0123456789abcdef0123456789abcdef" } }],
+      });
+      await send(page, "a question", 1);
+      await page.waitForFunction(
+        () => document.querySelectorAll("#log .msg.jarvis .speak-answer").length === 1,
+        null, { timeout: 8000 });
+      await page.evaluate(() => document.querySelector("#log .msg.jarvis .speak-answer").click());
+      // The page asked THIS PC for the answer's sound, in the configured
+      // voice, and is playing it.
+      await page.waitForFunction(() => window.__jarvisSpeech
+        && window.__jarvisSpeech.state() === "playing", null, { timeout: 5000 });
+      assert.deepEqual(await page.evaluate(() => window.__asked.slice()),
+        ["The kettle is on, and here is a longer answer about it."],
+        "the speaker did not ask the PC to read THAT answer's words");
+      assert.deepEqual(await page.evaluate(() => window.__synth.slice()), [],
+        "the answer still reached the webview's own speech engine");
+
+      // The menu beside the answer carries Pause and Stop reading while it is
+      // being read.
+      await page.evaluate(() => document.querySelector("#log .msg.jarvis .jarvis-answer-caret").click());
+      await page.waitForFunction(
+        () => !document.querySelector(".jarvis-answer-menu").hidden,
+        null, { timeout: 5000 });
+      const labels = () => page.evaluate(() => [...document.querySelectorAll(".jarvis-answer-item")]
+        .map((b) => `${b.hidden ? "(hidden) " : ""}${b.textContent}`));
+      let items = await labels();
+      assert.ok(items.includes("Pause"), `no Pause item in the answer menu: ${items.join(" | ")}`);
+      assert.ok(items.includes("Stop reading"),
+        `no Stop reading item in the answer menu: ${items.join(" | ")}`);
+
+      // Pause, then Resume: the label says what the next tap will do.
+      await page.evaluate(() => [...document.querySelectorAll(".jarvis-answer-item")]
+        .find((b) => b.textContent === "Pause").click());
+      await page.waitForFunction(() => window.__jarvisSpeech.state() === "paused",
+        null, { timeout: 5000 });
+      items = await labels();
+      assert.ok(items.includes("Resume"), `Pause did not become Resume: ${items.join(" | ")}`);
+      await page.evaluate(() => [...document.querySelectorAll(".jarvis-answer-item")]
+        .find((b) => b.textContent === "Resume").click());
+      await page.waitForFunction(() => window.__jarvisSpeech.state() === "playing",
+        null, { timeout: 5000 });
+
+      // The PC's automatic read-aloud switch went OFF: the backend publishes
+      // `read_aloud {"enabled": false}`, the shell hands it to the page, and
+      // the clip stops where it is (TASK-51c).
+      await page.evaluate(() => window.__jarvisFeed("event", { kind: "read_aloud", data: { enabled: false } }));
+      await page.waitForFunction(() => window.__jarvisSpeech.state() === "idle",
+        null, { timeout: 5000 });
+      const after = await page.evaluate(() => ({
+        paused: window.__clips.length > 0 && window.__clips.every((c) => c.paused),
+        items: [...document.querySelectorAll(".jarvis-answer-item")].map((b) => `${b.hidden ? "(hidden) " : ""}${b.textContent}`),
+      }));
+      assert.equal(after.paused, true, "read_aloud OFF did not stop the clip playing");
+      assert.ok(after.items.includes("(hidden) Pause"),
+        `Pause is still offered after the read stopped: ${after.items.join(" | ")}`);
+
+      // ...and Stop everything stops it too, through the shell's own event.
+      // Start the answer again, then deliver the event Rust emits before it
+      // asks the PC to stop anything.
+      await page.evaluate(() => document.querySelector("#log .msg.jarvis .speak-answer").click());
+      await page.waitForFunction(() => window.__jarvisSpeech.state() === "playing",
+        null, { timeout: 5000 });
+      await page.evaluate(() => window.__stopEmit());
+      await page.waitForFunction(() => window.__jarvisSpeech.state() === "idle",
+        null, { timeout: 5000 });
+      const stopped = await page.evaluate(() => ({
+        paused: window.__clips.every((c) => c.paused),
+        line: document.querySelectorAll(".jarvis-read-failed").length,
+        asked: window.__asked.length,
+      }));
+      assert.equal(stopped.paused, true, "Stop everything did not stop the clip");
+      assert.equal(stopped.line, 0, "Stop everything left an explanation under the answer");
+      assert.equal(stopped.asked, 2, "Stop everything did not renew the read cleanly");
+      await page.close();
+    } finally {
+      await browser.close();
+    }
+  });
+
+  /* ── B3c. The page's own CSP must let the PC's data: clip through ───────── */
+
+  await check("B: the page's own CSP allows the player's data: clip (TASK-51)", async () => {
+    // The player asks the PC for a `data:audio/wav` clip, and the page's own
+    // <meta> CSP is enforced in addition to the shell's header. With
+    // `media-src 'self' blob:` alone Chromium refuses the clip with
+    // NotSupportedError and a `media-src data` violation - the feature would
+    // silently fall back to "could not read this aloud". A real media ELEMENT
+    // is used, not `new Audio` (the harness stubs that), so this measures the
+    // policy the packaged app really enforces.
+    const browser = await K.launch();
+    try {
+      const { page } = await openHud(browser, { iconsOn: true });
+      const out = await page.evaluate(async () => {
+        const violations = [];
+        document.addEventListener("securitypolicyviolation", (e) => {
+          violations.push(`${e.violatedDirective} ${e.blockedURI}`);
+        });
+        const clip = document.createElement("audio");
+        clip.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YQAAAAA=";
+        document.body.appendChild(clip);
+        try { await clip.play(); } catch (err) { /* autoplay may refuse; CSP is what this measures */ }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        clip.remove();
+        return { violations };
+      });
+      const media = out.violations.filter((v) => v.startsWith("media-src"));
+      assert.deepEqual(media, [],
+        `the page's own CSP refuses the PC's data: clip: ${media.join(" | ")}`);
       await page.close();
     } finally {
       await browser.close();
@@ -723,11 +878,11 @@ if (K) {
         null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
-        spoken: window.__spoken.slice(),
+        asked: window.__asked.slice(),
       }));
       assert.equal(state.speakers, 0,
         "a speaker was offered on an answer that has to stay on screen");
-      assert.deepEqual(state.spoken, [],
+      assert.deepEqual(state.asked, [],
         "an answer that has to stay on screen reached the room");
       // And there is no side door: a click can only reach voice.speak, which is
       // the shell's wrapped speechSynthesis.speak - so ask it directly with the
@@ -735,7 +890,7 @@ if (K) {
       await page.evaluate((words) => {
         window.speechSynthesis.speak(new window.SpeechSynthesisUtterance(words));
       }, "Your test results came back, and here they are.");
-      const after = await page.evaluate(() => window.__spoken.slice());
+      const after = await page.evaluate(() => window.__synth.slice());
       assert.deepEqual(after, [],
         "the shell spoke a kept-on-screen answer when it was asked directly");
       await page.close();
@@ -762,11 +917,11 @@ if (K) {
         null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
-        spoken: window.__spoken.slice(),
+        asked: window.__asked.slice(),
       }));
       assert.equal(state.speakers, 0,
         "a speaker was offered on an answer that used a sensitive saved fact");
-      assert.deepEqual(state.spoken, [],
+      assert.deepEqual(state.asked, [],
         "an answer that used a sensitive saved fact reached the room");
       await page.close();
     } finally {
@@ -796,14 +951,14 @@ if (K) {
       await page.waitForFunction(
         () => document.querySelectorAll("#log .msg.jarvis .speak-answer").length === 0,
         null, { timeout: 5000 });
-      await page.evaluate(() => { window.__spoken = []; });
+      await page.evaluate(() => { window.__asked = []; window.__synth = []; });
       // ...and the switch being off is not a way to speak it: there is nothing
       // to click any more.
       await page.evaluate(() => {
         const b = document.querySelector("#log .msg.jarvis");
         if (b) b.click();
       });
-      assert.deepEqual(await page.evaluate(() => window.__spoken.slice()), [],
+      assert.deepEqual(await page.evaluate(() => window.__asked.slice()), [],
         "clicking a switched-off answer spoke it anyway");
       await page.close();
     } finally {

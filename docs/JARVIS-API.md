@@ -233,7 +233,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions). `done` makes the animals' orb glow once - "a long answer is ready" (`face-moments.js`); the robot, which has no orb, brightens its eyes and fins once instead | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`); `done` makes the animal's orb glow once, the robot's eyes and fins (`face/AnimalNow.kt`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
-| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
+| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201). The HUD page reads the same frame from its own stream and, on `false`, stops a tapped "Read out loud" where it is (section 206) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
 
 `devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
 a device was paired or removed, or the old shared key was retired or
@@ -4190,13 +4190,23 @@ every memory answer on screen.
 It was the one surface that read a **typed** answer aloud - the HUD has no
 voice input of its own; its page's own chat box is typed, and its mic button
 opens the Jarvis bar - and it did so with none of the rules above.
-`jarvis-desktop/src-tauri/src/hud_bootstrap.js` (section 2e) now wraps that
-page's `speechSynthesis.speak` and refuses an answer whose route says
-`injected_sensitive` above 0, or `gate: "private"`; instead it draws the
+`jarvis-desktop/src-tauri/src/hud_bootstrap.js` (section 2e) wrapped that
+page's `speechSynthesis.speak` and refused an answer whose route said
+`injected_sensitive` above 0, or `gate: "private"`; instead it drew the
 bar's own one line, **"It's on your screen."** (`private-speech.js`
-`PRIVATE_LINE`), under the answer. It reads the same `X-Jarvis-Route` the
-page already draws the lane and the gate from, so it is this rule, not a
-second one - and read the scope honestly: the rule above was written for a
+`PRIVATE_LINE`), under the answer. That wrapper still stands as the guard for
+any speech-synthesis path that might return to that page, and its
+local-voices-only rule is still in front of the same call (an "Online
+(Natural)" voice would send the text to Microsoft). **Since TASK-51
+(2026-11-09) the page's own read-aloud no longer goes through a browser
+voice at all**, so the refusal it must survive is its own: the speaker beside
+an answer and the answer menu's "Read out loud" both ask
+`private-speech.js`'s `mayReadAloud` for THAT answer's own route first, and
+failing closed if the module cannot be loaded (§206) - a refused answer is
+never handed to the player, and the receipt is the rule's own line. The
+route is the same `X-Jarvis-Route` the page already draws the lane and the
+gate from, so it is this rule, not a second one - and read the scope
+honestly: the rule above was written for a
 **voice** answer, and a typed question is otherwise allowed to be read aloud
 (`jarvis_voice.may_speak(private, origin="typed")`). **That exception is
 removed in that one window, on his instruction** - *"Gate it - keep
@@ -4205,12 +4215,12 @@ and the widget are unchanged, and the phone did not read typed answers then.
 The phone gained its own tap-only typed read-aloud on 2026-10-27 under a
 stricter gate than this one (it refuses when the route header is missing and
 checks the real tool and screen facts) - a new, narrower decision, not this
-one reaching the phone. `tests/hud.mjs` drives the real HUD
-window once per route and holds the gate against `usedSensitiveFact` here,
-so the two cannot drift; the local-voices-only rule that was already in that
-wrapper (an "Online (Natural)" voice would send the text to Microsoft) still
-stands in front of the same call. A route the window does not have - an
-older PC, a chat that failed - gates nothing, which is how the bar reads a
+one reaching the phone. `tests/hud.mjs` drives the real HUD window's wrapper
+directly (its local-voices rule and its kept-on-screen refusal), and
+`tests/hud-live-read-aloud.mjs` drives the page's own gate: a speaker is
+offered only for an answer the rule allows, and a refused answer reaches
+neither the PC's voice nor the browser's. A route the window does not have -
+an older PC, a chat that failed - gates nothing, which is how the bar reads a
 missing route too.
 
 **Known gap, said plainly:** the server cannot yet label a finished answer
@@ -36551,19 +36561,22 @@ OFF from Settings, chat or Live silences the answer already being spoken. (Befor
 this it was read at the start of each voice turn, so one OFF stopped only the
 next answer.) It is **PC-only**
 (`tools/check_parity.py` classifies it `deliberate`; ARCHITECTURE section 8):
-the route controls the desktop HUD's speakers for voice-turn answers, while the
+the route controls the desktop's speakers for voice-turn answers, while the
 phone has its own on-device remembered-answer switch and its own per-answer
 Read out loud, and never calls this route.
 
-What the two apps do with it: the desktop HUD speaks a **voice-turn** answer
-when the switch is ON; a **typed** answer is never spoken automatically on
-either app (the phone already worked this way). Every finished answer on the
+What the two apps do with it: the desktop's Jarvis bar speaks a **voice-turn**
+answer when the switch is ON; a **typed** answer is never spoken automatically
+on either app (the phone already worked this way). Every finished answer on the
 desktop keeps a "Read out loud" item in its own answer menu beside Right/Wrong,
-with a receipt; the phone has the same item in its message menu, reading that
+with a receipt; since TASK-51 (2026-11-09) that item - and the speaker beside
+an answer - reads in Jarvis's configured voice, with Pause / Resume beside it
+and a Stop that resets the player, and it stops at once on the OFF frame above
+(§206). The phone has the same item in its message menu, reading that
 answer through `/api/voice/say` under the existing lock rules. The
 `private-speech` rule still wins over the switch: a sensitive saved fact, a
-private tool and an answer about the owner's screen are never read aloud by the
-automatic path.
+private tool and an answer about the owner's screen are never read aloud by
+the automatic path.
 
 Chat and Jarvis Live own sentences (deterministic; no model, no card):
 "stop reading your replies out loud", "read your replies out loud",
@@ -36779,6 +36792,7 @@ the tests and no live lane is contacted.
 
 
 
+
 ## 206. What's new in Jarvis: the Brain's Tutorials tab shows the recent-changes record (Task-50, Wave 12)
 
 One read, no card, no write: `GET /api/recent-changes` carries the generated
@@ -36939,4 +36953,108 @@ key, and `backend/test_documents.py` checks they match the backend.
 owner's file itself is the field test; and the desktop's progress line is
 proved by the JavaScript suite against a stubbed bridge, not by watching a
 real import in the packaged app.
+
+## 208. Read out loud in Jarvis's own voice, with Pause / Resume and a real Stop (2026-11-09)
+
+**The bug, as it stood, with the evidence.** The desktop HUD
+(`jarvis-desktop/src/jarvis_hud.html`) is the one window that reads a TYPED
+answer aloud. Its `voice.speak` did that with the webview's own speech engine:
+`speechSynthesis.speak(new SpeechSynthesisUtterance(...))` after selecting a
+voice by hand - `/en-GB/` plus a male name first, then any English voice, then
+`null` (the file's own comment said *"Match the Kokoro bm_george choice:
+British, male if one exists"*). That was never the voice Jarvis speaks in: the
+owner's configured voice is Kokoro's (`jarvis_voices.speaker()`; the shipped
+default is `af_heart`, a woman), the same voice a spoken answer and Jarvis Live
+use. WebView2 cannot produce a Kokoro voice at all - its list is Windows'
+SAPI voices - so the "any English voice" step was the first voice in that
+list, and the owner's report of 2026-11-08 names what it was on his PC: index
+0, `Microsoft David`, a man. The shell's own local-voices wrapper
+(`hud_bootstrap.js` section 2e) then chose `english[0] || mine[0]` when the page
+left the voice empty, which is the same first-in-list fallback a second time.
+Both code paths were read in the source; the NAME of the voice that came out
+is the owner's observation, not a measurement made here.
+
+**What it does now.** A tap on an answer's speaker, or "Read out loud" in its
+answer menu, plays **audio this PC made in the configured voice**, through the
+SAME Rust command a spoken answer uses: `speak_reply` -> `POST /api/voice/say`
+-> `jarvis_speech.say()` -> `jarvis_voices.speaker()` (or the owner's custom
+voice). The page never touches `speechSynthesis`, `SpeechSynthesisUtterance` or
+`getVoices`, so there is no index-0 and no male substitute to fall back to. A
+long answer is cut into pieces of at most 500 characters (`speechPieces`, the
+page's own pure function) and asked for one piece at a time, so it also fits the
+command's 30-second fetch budget; `speak_reply` caps one request at 4,000
+characters in CODE (`SAY_MAX_CHARS`), because the HUD is now a caller. Inside
+the shell the command holds the token; in a plain browser (the backend still
+serves this page at "/") the page asks the same route directly, so the voice is
+the same one either way - and the sound arrives as a `data:audio/wav` URI, never
+a blob or object URL (the HUD holds no file/blob road). **One thing had to
+change in the page's own policy for that to work, and it was found by
+measuring:** the page's `<meta>` CSP said `media-src 'self' blob:`, which
+refused every `data:` clip with `NotSupportedError` and a `media-src data`
+violation even though the shell's header CSP already allowed it; it now says
+`media-src 'self' data: blob:`, and `tests/hud-live-read-aloud.mjs` drives a
+real `data:` clip through both policies so this cannot silently come back.
+
+**Pause, Resume, Stop.** `pauseSpeechPlayback()` pauses the clip playing now
+where it is; `resumeSpeechPlayback()` carries on from there. Both are the page's
+own functions, reached through one window object (`window.__jarvisSpeech`), and
+their state is the player's (`idle | loading | playing | paused`).
+`stopSpeechPlayback()` is the full reset: it bumps the token (so a request or a
+clip still in flight is dropped instead of played), empties the queue, pauses
+and detaches the audio element, clears the line under the answer and settles the
+meter. It is called by the answer menu's **Stop reading**, by Stop everything
+(the page listens for the shell's `stop-everything` event, which
+`commands.rs::stop_everything_now` emits before it asks the PC to stop anything)
+and by the PC's **`read_aloud {enabled: false}`** frame - so the automatic
+switch's OFF is literal for a tapped read too, exactly as it is for the bar's
+queue (§201). The answer menu draws **Pause / Resume and Stop reading beside
+Read out loud**, only while THAT answer is the one being read, and Pause's label
+says what the next tap will do.
+
+**When the voice is unavailable, it is said - never substituted.** If the PC
+cannot make the sound (no Kokoro or custom voice, a 503, the command refused),
+the player stops and the page draws one fixed plain line under the answer:
+"Jarvis's voice could not read this aloud, so nothing was spoken." Nothing else
+is played: there is no browser-voice fallback anywhere in this path. That is the
+owner's 2026-11-08 rule, and it is pinned by a test.
+
+**The privacy rule is unchanged and still comes first.** The speaker is drawn
+only for an answer `private-speech.js`'s `mayReadAloud` allows, and both tap
+paths (`window.__jarvisReadAnswer` for the menu, the speaker's own click) ask
+the same rule for THAT answer's route before anything is requested - failing
+closed if the module cannot load. The shell's `speechSynthesis.speak` wrapper
+and its "It's on your screen." line stay as the guard for any speech-synthesis
+path that might return to that page.
+
+**One new permission, as narrow as it can be.** `capabilities/hud.json` pulls
+in ONE new set, `hud-speech`, which grants exactly `allow-speak-reply` - the
+voice command the Jarvis bar already holds. There is no microphone command, no
+recording command, no new route and no approval card in it, and
+`tools/check_invoke_grants.py` holds the page's one `speak_reply` call to that
+set (it fails if the grant is removed). The `voice` set stays the bar's.
+
+**What was NOT touched.** The phone. Its tap-only Read out loud already speaks
+with Android's own on-device synthesiser under its own lock rules; there is no
+WebView2 voice list to fall back through, and the PC's Kokoro voice cannot be
+shipped to it. In particular **the phone's voice-print / speaker-verification
+path is untouched**: `jarvis_voice.py`, the enrolment routes and every
+`voiceprint`-class command are exactly as they were on both apps, and no
+microphone, recording or verification code was edited for this slice. ARCHITECTURE
+section 8 records why this is desktop-only on purpose.
+
+**How it is held.** `jarvis-desktop/tests/hud-read-aloud-voice.mjs` (pure node,
+no browser) checks that the page has no browser-voice code left, that its one
+source of sound is the PC's voice route, that Pause/Resume/Stop exist and Stop
+resets everything, that the failure is said in one plain line, that Stop
+everything and `read_aloud OFF` both call the reset, that the privacy rule comes
+first, that the grant is the narrow set, and it lifts the real `speechPieces`
+out and runs it. `tests/hud-live-read-aloud.mjs` drives the real page: a speaker
+asks the PC for THAT answer's words (and never the browser engine), Pause becomes
+Resume and carries on, and the PC's `read_aloud {"enabled": false}` frame stops
+the clip and takes the items away. `voice.rs`'s `speech_text_tests` proves the
+4,000-character bound in characters. **NOT-TESTABLE here, said plainly:** the
+real WebView2 voice list, the real Kokoro audio coming out of the owner's
+speakers, and how a long answer sounds in his configured voice. Those need the
+owner at his PC; what is proved here is that the page cannot reach a browser
+voice and that the one path it does use is the one a spoken answer uses.
 

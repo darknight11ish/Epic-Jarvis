@@ -3236,14 +3236,47 @@ mod wake_tests {
 // Speech
 // ---------------------------------------------------------------------------
 
+/// The longest text one spoken request may carry. The bar sends one sentence
+/// or phrase at a time (`speech-pieces.js`), and the HUD's read-aloud cuts an
+/// answer into pieces of at most 500 characters, so this is far above either
+/// caller's own limit - it is here because `speak_reply` is now also granted to
+/// the HUD page (TASK-51, 2026-11-09; `hud-speech` in surfaces.toml), and a
+/// page-controlled string must not be able to ask the PC to synthesise
+/// something unbounded. The PC's route has its own caps; this one is the desk.
+pub(crate) const SAY_MAX_CHARS: usize = 4000;
+
+/// What a request over [`SAY_MAX_CHARS`] is told. Plain words, like every
+/// other refusal this command gives.
+pub(crate) const SAY_TOO_LONG: &str = "that is too long to read aloud in one go";
+
+/// Why `text` may not be spoken, or None when it may. Counted in CHARACTERS,
+/// not bytes: an answer in a language with multi-byte letters is limited by
+/// what a speaker would read, not by the transport.
+fn say_length_problem(text: &str) -> Option<&'static str> {
+    if text.chars().count() > SAY_MAX_CHARS {
+        Some(SAY_TOO_LONG)
+    } else {
+        None
+    }
+}
+
 /// Asks the backend to speak `text` and returns it as a `data:audio/wav`
 /// URI - the same base64-data-URI shape `capture_screen` already returns
 /// images in, so the frontend needs no new binary-transfer plumbing.
+///
+/// THE ONE VOICE PATH for a spoken answer and for the HUD's read-aloud
+/// (TASK-51, 2026-11-09): both call this command, so both hear the voice the
+/// PC is configured to speak in - Kokoro's chosen speaker, or the owner's
+/// custom voice (`/api/voice/say` -> `jarvis_speech.say()` -> `jarvis_voices`).
+/// The HUD page may invoke it (`hud-speech`); it never touches speechSynthesis.
 #[tauri::command]
 pub async fn speak_reply(app: AppHandle, text: String) -> Result<String, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("nothing to speak".to_string());
+    }
+    if let Some(problem) = say_length_problem(text) {
+        return Err(problem.to_string());
     }
 
     let response = jarvis_client(Some(SAY_TIMEOUT))?
@@ -3277,6 +3310,25 @@ pub async fn speak_reply(app: AppHandle, text: String) -> Result<String, String>
         return Err("the server sent an empty reply".to_string());
     }
     Ok(format!("data:audio/wav;base64,{}", BASE64.encode(&bytes)))
+}
+
+#[cfg(test)]
+mod speech_text_tests {
+    use super::{say_length_problem, SAY_MAX_CHARS, SAY_TOO_LONG};
+
+    /// The HUD page may now call this command (`hud-speech`, TASK-51), so the
+    /// length it may ask for is bounded here - in characters, so a letter that
+    /// takes two bytes is not refused early.
+    #[test]
+    fn a_read_at_the_limit_is_allowed_and_one_character_over_is_refused() {
+        assert_eq!(say_length_problem(&"a".repeat(SAY_MAX_CHARS)), None);
+        assert_eq!(
+            say_length_problem(&"a".repeat(SAY_MAX_CHARS + 1)),
+            Some(SAY_TOO_LONG)
+        );
+        assert_eq!(say_length_problem(&"é".repeat(SAY_MAX_CHARS)), None);
+        assert_eq!(say_length_problem(""), None);
+    }
 }
 
 #[cfg(test)]
