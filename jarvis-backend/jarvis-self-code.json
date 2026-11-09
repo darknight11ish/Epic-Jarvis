@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "cb48e2d6e5b5593bc1a61659cb4ced9c6d114a7f",
- "built_at": "2026-11-08T20:24:35-08:00",
+ "ref": "eadec803a747850679773bba0e859f50d0bff2ca",
+ "built_at": "2026-11-08T20:27:57-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6188,6 +6188,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "eadec803a747850679773bba0e859f50d0bff2ca",
+   "date": "2026-11-08",
+   "subject": "integration: offload reads the chat lane (patch history included)"
+  },
+  {
+   "sha": "b0e629f3134f414eaca7af59e9d77da6619577e6",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map for the Wave-11 integration tree"
+  },
+  {
+   "sha": "5f81a2b56115ec7e497a7dc867b8f3e4899c959e",
+   "date": "2026-11-08",
+   "subject": "fix(models): the GPU-offload warning reads the chat lane, not a stale address"
+  },
+  {
    "sha": "cb48e2d6e5b5593bc1a61659cb4ced9c6d114a7f",
    "date": "2026-11-08",
    "subject": "integration: the GPU-offload warning reads the chat lane"
@@ -6271,21 +6286,6 @@
    "sha": "2f9b922ad6145442f1121025cdf900baccb7d0d0",
    "date": "2026-11-08",
    "subject": "Merge branch 'fix/wave10-preset-independence-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "752e70703bc865beec086199eb6a74c2d239c9e6",
-   "date": "2026-11-08",
-   "subject": "fix(determinism): keep self-fact nouns out of the Q3.3 unknown-name fallback"
-  },
-  {
-   "sha": "3f209a93538d0022bffe9e7a9fb2dffae1049842",
-   "date": "2026-11-08",
-   "subject": "docs(records): Wave-10 claims - Q2 app alignment, F2 mid-answer stop, Q3 preset independence, Q4 guardrails, feedback.db migration"
-  },
-  {
-   "sha": "e9c32cbceb973c5a64769d75b2d5c1ecd2eab733",
-   "date": "2026-11-08",
-   "subject": "Merge branch 'fix/wave10-source-pins-2026-11-08' into integration/wave10-2026-11-08"
   }
  ],
  "top_level": [
