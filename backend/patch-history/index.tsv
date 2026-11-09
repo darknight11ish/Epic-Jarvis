@@ -133,6 +133,7 @@ plugin-loader.patch	plugin-loader/e8d837d.patch	e8d837d609c8bcb522dd83afd56d7155
 plugin-loader.patch	plugin-loader/ff4ee28.patch	ff4ee2880fa1880279aadfc4cd34f02f276ee8c2	2026-10-11T13:51:26-07:00	#266: re-anchor plugin-loader.patch on pictures.patch, and regenerate the plug-in catalogue
 plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder
+presets.patch	presets/fa071ce.patch	fa071ce64b25635eb2a77e9bc82972410f432a1a	2026-11-03T16:08:13-08:00	fix(backend): re-anchor presets.patch's URL hunk on the text ollama-direct now writes
 presets.patch	presets/aac88d6.patch	aac88d6a69734b65f69cfe717b949b7669f463e8	2026-10-19T16:06:15-07:00	fix(presets): re-anchor the patch on the applied HUD shape
 presets.patch	presets/41c9069.patch	41c906981c399944d236123b1bdd3e5f7a2786e9	2026-10-19T13:45:56-07:00	feat(presets): lane-aware single-approval apply with rollback
 product-check.patch	product-check/96b1f1d.patch	96b1f1d306e7654712c3b44d90818687f4d79a1a	2026-11-04T17:32:48-08:00	feat(product): wire the existing product check - one card, one read-only page, one report
