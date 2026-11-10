@@ -5231,8 +5231,9 @@ TOOLS: dict = {
         "The pull request cockpit: list the open pull requests on one repository and "
         "say, for each one, whether it can be merged - merge-ready, blocked, "
         "conflicted, running or draft - and which required check is holding it. It "
-        "prints each pull request's full 40-character head commit and base branch, "
-        "so that commit can be passed straight to github_merge_pr. "
+        "prints each pull request's full 40-character head commit, its title and its "
+        "base branch, so that commit, title and base branch can be passed straight "
+        "to github_merge_pr. "
         "Read-only: nothing on GitHub changes. It asks you before every read, and it "
         "never merges anything itself; merging is a separate carded tool. "
         + GITHUB_CAPABILITIES_WORDS,
@@ -5250,11 +5251,12 @@ TOOLS: dict = {
     "github_merge_pr": Tool(
         "github_merge_pr",
         "Merge ONE pull request with a MERGE COMMIT, pinned to the exact "
-        "40-character head commit you pass. That commit is the one github_pr_scan "
-        "printed: copy it from there, because a different or short commit is "
-        "refused. One card names it and that commit. It "
-        "refuses, sending nothing, if the pull request is a draft, cannot merge "
-        "cleanly, has a check running, a required check failed, or it moved. It can "
+        "40-character head commit you pass. Copy the commit, the title and the "
+        "base branch from github_pr_scan, exactly as it printed them, because a "
+        "different or short commit is refused. One card names the commit, the "
+        "title and the target branch. It refuses, sending nothing, if the pull "
+        "request is a draft, cannot merge cleanly, has a check running, a required "
+        "check failed, moved, or was retargeted to another base branch. It can "
         "never squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
         "required check. " + GITHUB_CAPABILITIES_WORDS,
         {"type": "object", "properties": {
@@ -5262,8 +5264,13 @@ TOOLS: dict = {
             "number": {"type": "string", "description": "the pull request number"},
             "head_sha": {"type": "string",
                          "description": "its full 40-character head commit, exactly as "
-                                        "github_pr_scan printed it"}},
-         "required": ["repo", "number", "head_sha"]},
+                                        "github_pr_scan printed it"},
+            "title": {"type": "string",
+                      "description": "its title, exactly as github_pr_scan printed it"},
+            "base_ref": {"type": "string",
+                         "description": "the branch it merges into, exactly as "
+                                        "github_pr_scan printed it after \"base\""}},
+         "required": ["repo", "number", "head_sha", "title", "base_ref"]},
         _prepare_github_merge_pr, _run_github,
         instead={"github_pr_scan": "To see which pull requests are ready first, use "
                                    "github_pr_scan.",

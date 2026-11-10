@@ -102,11 +102,18 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    #       40-hex head commit, and github_merge_pr's `head_sha` must
                    #       say that number comes from github_pr_scan - without which
                    #       the merge tool's one required argument is unreachable.
-                   # 960 leaves 11 tokens of headroom on the largest. The cost is
-                   # paid ONLY when the `github` group is opened, never on every
-                   # turn (they are group members, not core tools), and it buys one
-                   # inventory with one home instead of a second copy that drifts.
-                   "github_pr_scan": 960, "github_merge_pr": 960,
+                   #   (c) 2026-11-10 desk fix: the merge card must name the pull
+                   #       request's title and its target branch, so the tool takes
+                   #       them as two more required arguments (`title`, `base_ref`)
+                   #       and its description says a retarget refuses the merge.
+                   #       Measured 1,063 by this module's own rule; 1,080 leaves
+                   #       17 tokens of headroom, the same shape as `my_files`.
+                   # github_pr_scan and github_fix_and_push stay at 960 (measured
+                   # 905 and 902). The cost is paid ONLY when the `github` group is
+                   # opened, never on every turn (they are group members, not core
+                   # tools), and it buys one inventory with one home instead of a
+                   # second copy that drifts.
+                   "github_pr_scan": 960, "github_merge_pr": 1080,
                    "github_fix_and_push": 960,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six

@@ -142,6 +142,7 @@ import base64
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import urllib.error
@@ -188,6 +189,12 @@ USER_AGENT = "jarvis-github"
 #: with plain words rather than sent and refused by GitHub, because the card
 #: must be able to show the whole thing.
 MAX_DESCRIPTION = 350
+
+#: The merge card names the pull request's title, which is fetched text copied
+#: from the cockpit's answer. GitHub refuses a title over 256 characters, so this
+#: bound is never reached by a real title; it stops a long one pushing the rest
+#: of the card off, and the sanitizer marks where it cut.
+MAX_TITLE_CHARS = 300
 
 #: The gate actions this module works under. These names are also the
 #: `[autonomy.tiers]` keys and the `_RISK` rows in `jarvis_gate.py`
@@ -352,8 +359,8 @@ CAPABILITIES = (
     {"tool": "github_pr_scan", "kind": "read", "gate": ACTION_INSPECT,
      "words": "read every open pull request and say which are merge-ready, "
               "blocked, conflicted, running or draft, which required check is "
-              "holding each one, and each one's full 40-character head commit "
-              "and base branch so a merge can be asked for from that answer",
+              "holding each one, and each one's full 40-character head commit, "
+              "title and base branch so a merge can be asked for from that answer",
      "card_fields": ("the repository", "at most 10 pull requests"),
      "limit": "read-only by construction: no body, no method but GET",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
@@ -388,15 +395,18 @@ CAPABILITIES = (
      "words": "merge ONE pull request with a MERGE COMMIT, pinned to the exact "
               "40-character head commit the card showed",
      "card_fields": ("the repository", "the pull request number",
+                     "the pull request's title",
                      "the pull request's address on github.com",
+                     "the target branch",
                      "the exact head commit",
                      "the seven required checks that must have passed",
                      "the method: one merge commit and nothing else",
                      "GitHub is told: merge, and only merge, at this exact commit"),
      "limit": "merge commit only; refused if the pull request is a draft, "
               "already merged or closed, conflicts or is blocked, has a check "
-              "still running, has a required check that did not pass, or its "
-              "head commit moved since the card was shown",
+              "still running, has a required check that did not pass, its head "
+              "commit moved or it was retargeted to another base branch since "
+              "the card was shown",
      "default_state": "off",
      "absolute_bans": ("squash_merge", "rebase_merge", "admin_bypass",
                        "auto_merge", "bypass_required_checks", "approve_pr"),
@@ -596,10 +606,13 @@ def _clean_github_text(text, *, limit: int = 0, wrap: bool = True) -> str:
     after the strip (and before the delimiters), so a huge file or log cannot
     push the closing delimiter out of the answer.
 
-    Fetched text only ever becomes a tool RESULT here. No planner takes a fetched
-    string as an argument, so no fetched text can set a field on an approval
-    card - `backend/test_github_parity.py` drives a prompt-injection payload
-    through every read that shows fetched text and pins that.
+    Fetched text only ever becomes a tool RESULT here, with ONE deliberate
+    exception: `plan_merge_pr` takes the pull request's title (copied from the
+    `github_pr_scan` answer) so the merge card can name what is being merged. It
+    is cleaned by this same function, which strips hidden text and collapses the
+    title to one line, so it cannot forge a line of the card.
+    `backend/test_github_parity.py` drives a prompt-injection payload through
+    that argument and pins that it cannot do so.
     """
     cleaned = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
     cleaned = _HIDDEN_GITHUB_TEXT.sub("", cleaned)
@@ -645,15 +658,19 @@ class Step:
 class Request:
     """What a person is being asked about, worked out with no socket open.
 
-    The last six fields exist for the two 2026-11-10 flows. Every one of them is
-    copied from the arguments the planner already validated, never from a later
-    live answer - which is the whole point: `run()` compares the live pull
-    request against these values and refuses when they disagree.
+    The merge and fix-and-push fields exist for the two 2026-11-10 flows. Every
+    one of them is copied from the arguments the planner already validated, never
+    from a later live answer - which is the whole point: `run()` compares the live
+    pull request against these values and refuses when they disagree.
 
       `cockpit`       True for the read-only PR cockpit. `run()` reads each open
                       pull request and its checks instead of one plain list.
       `expected_sha`  The 40-character head commit the merge card showed. The
                       merge is refused unless the live head is still this one.
+      `base_ref`      The branch the merge card showed as the target - the branch
+                      the pull request is merged INTO, as `github_pr_scan` printed
+                      it. The merge is refused if the pull request was retargeted
+                      to another base branch since the card was shown.
       `fix_stage`     "prepare" or "push" for `github_fix_and_push`: which half
                       of the flow this request is.
       `repo`/`number` The pull request's own coordinates, kept so the run stage
@@ -673,6 +690,7 @@ class Request:
     touches: str = ""             # one plain sentence: what changes on GitHub
     cockpit: bool = False
     expected_sha: str = ""
+    base_ref: str = ""
     fix_stage: str = ""
     repo: str = ""
     number: str = ""
@@ -690,8 +708,9 @@ MERGE_TOUCHES = (
     "and a merge cannot be undone by Jarvis. It is a merge commit and nothing "
     "else - Jarvis cannot squash, rebase, use an admin bypass, turn on "
     "auto-merge or bypass a required check. It is refused unless the pull "
-    "request is still exactly at the head commit above, is not a draft, can be "
-    "merged cleanly, and every required check passed.")
+    "request is still exactly at the head commit above, is still set to merge "
+    "into the base branch above, is not a draft, can be merged cleanly, and "
+    "every required check passed.")
 
 #: What a fix-and-push card says. The push is to the pull request's own branch,
 #: it is one ordinary push (never a force), and the commits already exist.
@@ -1408,28 +1427,47 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
     cannot choose a different method, add a field, or leave the pin out.
 
     The card is plain words for a beginner (2026-11-10 ruling Q1 item 2): where
-    to LOOK at the pull request on github.com, the exact commit it will be merged
-    at, that the method is one merge commit and nothing else, the full refusal
-    list in one sentence, and the seven required checks by name. It does NOT print
-    the raw JSON request body any more - "GitHub is told: merge, and only merge,
-    at this exact commit" says the same thing in words the owner can check.
+    to LOOK at the pull request on github.com, its number AND TITLE, the TARGET
+    BRANCH it is merged into, the exact commit it will be merged at, that the
+    method is one merge commit and nothing else, the full refusal list in one
+    sentence, and the seven required checks by name. The title and the base ref
+    are copied from the `github_pr_scan` answer; the title goes through the one
+    fetched-text sanitizer and the base ref is validated as a branch name. It
+    does NOT print the raw JSON request body any more - "GitHub is told: merge,
+    and only merge, at this exact commit" says the same thing in words the owner
+    can check.
     """
     args = args or {}
     repo = _check_repo(args.get("repo"))
     number = _check_number(args.get("number"), "pull request")
     sha = _check_sha(args.get("head_sha"))
+    title = _clean_github_text(args.get("title"), limit=MAX_TITLE_CHARS,
+                               wrap=False)
+    if not title:
+        raise GitHubError(
+            "Jarvis needs the pull request's title, exactly as github_pr_scan "
+            "printed it, so the card can name what is being merged.")
+    base_ref = str(args.get("base_ref") or "").strip()
+    if not base_ref or not _REF.match(base_ref) or ".." in base_ref:
+        raise GitHubError(
+            'Jarvis needs the branch this pull request is merged INTO, exactly as '
+            'github_pr_scan printed it after "base", so the card can name the '
+            "target branch.")
     payload = {"merge_method": MERGE_METHOD, "sha": sha}
     checks = ", ".join(REQUIRED_CHECKS)
     shows = "\n".join([
         f"Repository: {repo}",
         f"Pull request: #{number}",
+        f"Title: {title}",
+        f"Target branch: {base_ref}",
         f"Open it to see what you are approving: https://github.com/{repo}/pull/{number}",
         f"It will be merged at this exact commit: {sha}",
         "Method: one merge commit. Nothing else - no squash, no rebase, no admin "
         "bypass, no auto-merge.",
         "Before it sends anything Jarvis reads the pull request again and stops "
         "if it is a draft, is closed or already merged, has moved to a different "
-        "commit, conflicts with its base, has a check still running, or has any of "
+        "commit, was retargeted to another base branch, conflicts with its base, "
+        "has a check still running, or has any of "
         f"these required checks not passed: {checks}",
         "GitHub is told: merge, and only merge, at this exact commit.",
     ])
@@ -1441,6 +1479,7 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
         shows=shows,
         touches=MERGE_TOUCHES,
         expected_sha=sha,
+        base_ref=base_ref,
         repo=repo,
         number=number,
     )
@@ -2121,8 +2160,10 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
 def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
     """Re-read the pull request, refuse unless it is still exactly as carded, merge.
 
-    Every refusal happens BEFORE the one PUT, so a refused merge sends nothing at
-    all - not even the request GitHub would ignore.
+    "Exactly as carded" means the live head commit AND the live base branch are
+    the two the card named: a retargeted pull request is a different merge from
+    the one the owner approved. Every refusal happens BEFORE the one PUT, so a
+    refused merge sends nothing at all - not even the request GitHub would ignore.
     """
     def no(why: str) -> dict:
         return {"ok": False, "error": why + " Nothing was merged."}
@@ -2148,6 +2189,15 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
         return no("The pull request moved since you looked - its head commit is "
                   "no longer the one on the card. Look again (github_pr_scan), "
                   "then ask for the merge of the commit it shows now.")
+    live_base = str((doc.get("base") or {}).get("ref") or "").strip()
+    if live_base != r.base_ref:
+        # The card named a target branch; a pull request retargeted to another
+        # base is a different merge from the one the owner approved.
+        now = _clean_github_text(live_base, wrap=False) or "no branch GitHub named"
+        return no("The pull request was retargeted since you looked - it now "
+                  f'merges into "{now}" instead of "{r.base_ref}". Look again '
+                  "(github_pr_scan), then ask for the merge of the base branch it "
+                  "shows now.")
     state = str(doc.get("mergeable_state") or "")
     if doc.get("mergeable") is not True:
         if state in ("", "unknown") or doc.get("mergeable") is None:
@@ -2276,11 +2326,14 @@ def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
                       sha: str, *, log: Optional[Callable] = None) -> tuple:
     """(list of failing checks with evidence, error).
 
-    Each item is `{"name", "conclusion", "annotations", "log"}`. Annotations are
-    read for every failing check (bounded to `MAX_ANNOTATION_CHARS`); the job log
-    is read only when the check's own `details_url` names a job, and it is
-    bounded to the last `MAX_LOG_CHARS` characters. A check still running is not
-    a failure and is not listed here.
+    Each item is `{"name", "conclusion", "annotations", "log", "log_error"}`.
+    Annotations are read for every failing check (bounded to
+    `MAX_ANNOTATION_CHARS`); the job log is read only when the check's own
+    `details_url` names a job, and it is bounded to the last `MAX_LOG_CHARS`
+    characters. A check still running is not a failure and is not listed here.
+
+    A log that could not be read goes in `log_error`, NOT in `log`: an error
+    sentence in the log field would render as if it were the end of the job log.
     """
     runs, err = _check_runs(fetch, headers, token, repo, sha)
     if err:
@@ -2293,7 +2346,7 @@ def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
         if conclusion in ("success", "neutral", "skipped", ""):
             continue
         item = {"name": _check_name(run_doc), "conclusion": conclusion,
-                "annotations": "", "log": ""}
+                "annotations": "", "log": "", "log_error": ""}
         check_id = str(run_doc.get("id") or "").strip()
         if check_id.isdigit():
             doc, why = _read(fetch, f"{_repo_path(repo)}/check-runs/{check_id}"
@@ -2317,7 +2370,7 @@ def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
                                  f"{found.group(1)}/logs", token, open_url=log)
             item["log"] = "" if why else body
             if why:
-                item["log"] = f"({why})"
+                item["log_error"] = why
         out.append(item)
     return out, ""
 
@@ -2335,10 +2388,12 @@ def _cut_text(text: str, limit: int) -> str:
 def _evidence_words(checks: list) -> str:
     """The failing-check half of the prepare stage's answer, in plain words.
 
-    Two of the three things shown here are FETCHED GitHub text - the annotations
-    and the end of the job log - so both go through the one sanitizer and are
-    wrapped in its data delimiters. A completed fix diff, a changed PR or an
-    issue body is never an instruction to this model, and the delimiters say so.
+    The annotations and the end of the job log are FETCHED GitHub text, so both
+    go through the one sanitizer and are wrapped in its data delimiters. A job
+    log that could not be read is said in plain words INSTEAD of a log tail: an
+    error sentence shown under "The end of its log" would claim evidence the
+    answer does not have. A completed fix diff, a changed PR or an issue body is
+    never an instruction to this model, and the delimiters say so.
     """
     if not checks:
         return "There are no failing checks on that commit."
@@ -2350,6 +2405,14 @@ def _evidence_words(checks: list) -> str:
         if notes:
             lines.append("    GitHub's annotation:")
             lines.extend("      " + line for line in notes.splitlines())
+        log_error = _clean_github_text(item.get("log_error"), limit=MAX_LOG_CHARS,
+                                       wrap=False)
+        if log_error:
+            # A READ failure is not a log tail, and the words must not pretend
+            # it is: the owner asked for evidence, and this says why there is
+            # none rather than showing an error sentence as the end of a log.
+            lines.append("    GitHub's job log could not be read:")
+            lines.append("      " + log_error)
         tail = _clean_github_text(item.get("log"), limit=MAX_LOG_CHARS)
         if tail:
             lines.append("    The end of its log:")
@@ -2359,7 +2422,12 @@ def _evidence_words(checks: list) -> str:
 
 def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
                  git: Callable, log: Optional[Callable]) -> dict:
-    """Read the pull request, copy it into a scratch folder, gather the evidence."""
+    """Read the pull request, copy it into a scratch folder, gather the evidence.
+
+    The folder is created only once the target is known not to exist, and every
+    failure after that removes it again, so a failed prepare never leaves a
+    folder that blocks the next one.
+    """
     doc, err = _read(fetch, f"{_repo_path(r.repo)}/pulls/{r.number}",
                      headers, token)
     if err:
@@ -2392,20 +2460,38 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
             f"master, release/* or hotfix/*, so nothing was copied.")}
 
     target = os.path.join(scratch_root(), scratch_folder_name(r.repo, r.number))
-    try:
-        os.makedirs(scratch_root(), exist_ok=True)
-        os.makedirs(target, exist_ok=True)
-    except OSError as exc:
-        return {"ok": False, "error": (
-            f"Jarvis could not make its scratch folder ({type(exc).__name__}), "
-            f"so nothing was copied.")}
-    if os.path.isdir(os.path.join(target, ".git")):
-        # A folder from an earlier prepare: the owner's edits in it are not
-        # touched, and the answer says exactly which folder to remove.
+    if os.path.lexists(target):
+        # Refused BEFORE anything is created. The folder may hold last time's
+        # work, or be all a failed prepare left behind; either way it is not this
+        # call's to delete, and cloning into a non-empty folder is the confusing
+        # git failure this refusal replaces.
         return {"ok": False, "error": (
             f"A scratch folder for this pull request already exists at {target}, "
             f"and it may hold work from last time. Remove or rename that folder, "
             f"then prepare again. Nothing was copied.")}
+    try:
+        os.makedirs(scratch_root(), exist_ok=True)
+        os.makedirs(target)
+    except OSError as exc:
+        return {"ok": False, "error": (
+            f"Jarvis could not make its scratch folder ({type(exc).__name__}), "
+            f"so nothing was copied.")}
+
+    def failed(error: str) -> dict:
+        """Refuse, and take the half-made folder this call created with it.
+
+        `target` did not exist when this call started, so it is this call's to
+        remove. Leaving it behind is what made the NEXT prepare clone into a
+        non-empty folder - a git error that named neither the folder nor the
+        earlier failure. If the removal does not work the answer says so and
+        names the folder, rather than claiming it is gone.
+        """
+        shutil.rmtree(target, ignore_errors=True)
+        if os.path.lexists(target):
+            error += (f" Jarvis could not remove its half-made scratch folder at "
+                      f"{target}; remove that folder by hand before preparing "
+                      f"again.")
+        return {"ok": False, "error": error}
 
     clone = ["clone", "--no-checkout", f"https://github.com/{r.repo}.git", target]
     # The token travels in git's own ENVIRONMENT configuration, exactly like the
@@ -2415,19 +2501,19 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
     env = _git_auth_env(token)
     code, out, err_text = _git(git, clone, env=env)
     if code != 0:
-        return {"ok": False, "error": _git_words("Copying the pull request",
-                                                 err_text or out, token)}
+        return failed(_git_words("Copying the pull request",
+                                 err_text or out, token))
     local = f"fix-pr-{r.number}"
     code, out, err_text = _git(git, ["fetch", "origin",
                                      f"pull/{r.number}/head:refs/heads/{local}"],
                                cwd=target)
     if code != 0:
-        return {"ok": False, "error": _git_words("Fetching the pull request",
-                                                 err_text or out, token)}
+        return failed(_git_words("Fetching the pull request",
+                                 err_text or out, token))
     code, out, err_text = _git(git, ["checkout", local], cwd=target)
     if code != 0:
-        return {"ok": False, "error": _git_words("Checking the pull request out",
-                                                 err_text or out, token)}
+        return failed(_git_words("Checking the pull request out",
+                                 err_text or out, token))
     if head_ref != local:
         # The checked-out branch is renamed to the pull request's own branch
         # name, so "the branch this folder is on" and "the branch the card says
@@ -2435,8 +2521,8 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
         code, out, err_text = _git(git, ["branch", "-m", local, head_ref],
                                    cwd=target)
         if code != 0:
-            return {"ok": False, "error": _git_words("Naming the local branch",
-                                                     err_text or out, token)}
+            return failed(_git_words("Naming the local branch",
+                                     err_text or out, token))
 
     checks, why = _failing_evidence(fetch, headers, token, r.repo, head_sha,
                                     log=log)
@@ -2446,7 +2532,7 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
                                for c in checks]}
     bad = _write_marker(target, note)
     if bad:
-        return {"ok": False, "error": bad}
+        return failed(bad)
 
     said = [
         f'Pull request #{r.number} "{title}" in {r.repo}, head commit {head_sha}.',

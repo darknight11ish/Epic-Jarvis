@@ -33,10 +33,11 @@ NO network and NO real token anywhere, and NO real git process:
   4. No token, no card. The ten planners answer "connect GitHub" in plain
      words and `_one_call` returns before the gate.
   5. Each action is ONE card that names exactly what it will do - and the merge
-     card names the exact 40-hex head commit, the pull request's github.com
-     address to look at, that the method is one merge commit, the seven required
-     checks and that squash/rebase/admin/auto-merge are impossible. The PUT body
-     is still pinned by its own test to exactly {"merge_method", "sha"}.
+     card names the pull request's number, TITLE and TARGET BRANCH, the exact
+     40-hex head commit, its github.com address to look at, that the method is
+     one merge commit, the seven required checks and that
+     squash/rebase/admin/auto-merge are impossible. The PUT body is still pinned
+     by its own test to exactly {"merge_method", "sha"}.
   6. Failures are plain sentences. A refused token, a rate limit, a moved head
      commit, a 409 (moved/conflict), a 405 (not mergeable now), a required merge
      queue and a missing repository are said in words, with no HTTP code.
@@ -138,7 +139,8 @@ ARGS = {
                            "description": "A band that counts steps.",
                            "private": True},
     "github_merge_pr": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
-                        "head_sha": HEAD_SHA},
+                        "head_sha": HEAD_SHA, "title": "Fix the tray icon",
+                        "base_ref": "main"},
     "github_fix_and_push": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116"},
 }
 
@@ -154,6 +156,7 @@ MUST_NAME = {
                            "A band that counts steps."),
     "github_merge_pr": ("darknight11ish/Epic-Jarvis", "1116", HEAD_SHA,
                         "https://github.com/darknight11ish/Epic-Jarvis/pull/1116",
+                        "Fix the tray icon", "Target branch: main",
                         "It will be merged at this exact commit",
                         "one merge commit", "squash", "rebase", "admin",
                         "auto-merge",
@@ -324,7 +327,8 @@ def _pr_doc(**over):
     doc = {"number": 1116, "title": "Fix the tray icon", "draft": False,
            "state": "open", "mergeable": True, "mergeable_state": "clean",
            "head": {"sha": HEAD_SHA, "ref": "feature/tray-icon",
-                    "repo": {"full_name": "darknight11ish/Epic-Jarvis"}}}
+                    "repo": {"full_name": "darknight11ish/Epic-Jarvis"}},
+           "base": {"ref": "main"}}
     doc.update(over)
     return json.dumps(doc)
 
@@ -421,7 +425,8 @@ def t_only_api_github_com():
     made.extend(GH.plan_create_repo({"name": "Fitness-Band"}).urls())
     made.extend(GH.plan_scan_prs({"repo": "o/r"}).urls())
     made.extend(GH.plan_merge_pr({"repo": "o/r", "number": "7",
-                                  "head_sha": "a" * 40}).urls())
+                                  "head_sha": "a" * 40, "title": "One fix",
+                                  "base_ref": "main"}).urls())
     made.extend(GH.plan_fix_and_push({"repo": "o/r", "number": "7"}).urls())
     check("the planners built some addresses at all", len(made) >= 8, len(made))
     bad = [u for u in made if not u.startswith(host + "/")]
@@ -442,6 +447,7 @@ def t_only_api_github_com():
     # The merge cannot be pointed at another host or another method either: its
     # one step is a PUT to the pull request's own fixed path.
     r = GH.plan_merge_pr({"repo": "o/r", "number": "7", "head_sha": "a" * 40,
+                          "title": "One fix", "base_ref": "main",
                           "url": "https://evil.example/x", "merge_method": "squash"})
     check("a merge ignores a `url` and a `merge_method` the model adds",
           r.urls() == (host + "/repos/o/r/pulls/7/merge",)
@@ -847,7 +853,8 @@ def t_no_squash_rebase_admin_or_force_path_exists():
           not [a for a in GH.ACTIONS
                if re.search(r"squash|rebase|admin|force", a)]
           and not [s.path for r in (GH.plan_merge_pr(
-              {"repo": "o/r", "number": "1", "head_sha": "a" * 40}),)
+              {"repo": "o/r", "number": "1", "head_sha": "a" * 40,
+               "title": "One fix", "base_ref": "main"}),)
               for s in r.steps if re.search(r"squash|rebase|admin|force", s.path)],
           GH.ACTIONS)
     check("the banned git flags are the exact set the owner named",
@@ -857,6 +864,7 @@ def t_no_squash_rebase_admin_or_force_path_exists():
     # A merge request that carries squash/rebase fields cannot smuggle them in:
     # the body is built field by field from the planner's own two values.
     r = GH.plan_merge_pr({"repo": "o/r", "number": "1", "head_sha": "a" * 40,
+                          "title": "One fix", "base_ref": "main",
                           "body": {"merge_method": "squash"},
                           "commit_title": "x", "commit_message": "y"})
     check("a model's own merge body or commit title is ignored entirely",
@@ -874,7 +882,8 @@ def t_no_squash_rebase_admin_or_force_path_exists():
     check("a head sha that is not 40 hex characters is refused", True)
     check("an upper-case sha is accepted only by folding it to lower case",
           GH.plan_merge_pr({"repo": "o/r", "number": "1",
-                            "head_sha": "A" * 40}).expected_sha == "a" * 40)
+                            "head_sha": "A" * 40, "title": "One fix",
+                            "base_ref": "main"}).expected_sha == "a" * 40)
 
 
 # --------------------------------------------------------------------------
@@ -1456,6 +1465,10 @@ def t_the_merge_card_names_the_pinned_commit_and_the_exact_body():
     r, text = _card("github_merge_pr")
     check("the merge card names the pull request and the repository",
           "darknight11ish/Epic-Jarvis" in text and "#1116" in text, text[:300])
+    check("... and the pull request's TITLE, on its own line",
+          "Title: Fix the tray icon" in text, text[:400])
+    check("... and the TARGET BRANCH it is merged into, on its own line",
+          "Target branch: main" in text, text[:400])
     check("... and the EXACT 40-hex head commit it is pinned to",
           HEAD_SHA in text, text[:400])
     check("... and the pull request's real address on github.com, so the owner "
@@ -1516,6 +1529,7 @@ def t_merge_refuses_everything_but_a_clean_unmoved_green_pull_request():
          "failing or still running"),
         ("already merged", {"merged": True}, "already merged"),
         ("closed", {"state": "closed"}, "closed"),
+        ("retargeted", {"base": {"ref": "release/1.2"}}, "retargeted"),
     ]
     for name, over, needle in cases:
         fake = Routed([("/pulls/1116", (200, _pr_doc(**over)))])
@@ -1540,6 +1554,20 @@ def t_merge_refuses_everything_but_a_clean_unmoved_green_pull_request():
     check("... and says the pull request moved, and to look again",
           "moved since you looked" in moved_words
           and "look again" in moved_words, out.get("error"))
+    check("... and sends nothing", fake.writes() == [], fake.writes())
+
+    # The same head commit, but RETARGETED to another base branch: the card named
+    # "main", so this is a different merge from the one the owner approved.
+    retargeted = _pr_doc(base={"ref": "release/1.2"})
+    fake = Routed([("/pulls/1116", (200, retargeted))])
+    out = _run_request(r, fake)
+    check("a pull request retargeted to another base branch is refused",
+          out.get("ok") is False, out)
+    retarget_words = out.get("error", "").lower()
+    check("... and names both branches, and says to look again",
+          "retargeted" in retarget_words and "release/1.2" in retarget_words
+          and "main" in retarget_words and "look again" in retarget_words,
+          out.get("error"))
     check("... and sends nothing", fake.writes() == [], fake.writes())
 
     # A check still running.
@@ -1852,6 +1880,64 @@ def t_fix_prepare_refuses_a_fork_and_a_protected_branch():
               and git.calls == [], (out, git.commands()))
 
 
+def t_a_failed_prepare_removes_its_folder_and_the_next_prepare_works():
+    """A failed copy must not leave a folder that blocks every later prepare.
+
+    The failure the owner hit: the clone failed, and the folder it had just made
+    stayed behind with no `.git` - so the old `.git`-only refusal did not fire,
+    and the next prepare ran `git clone` into a non-empty folder. That is a git
+    error that names neither the folder nor the earlier failure, and it never
+    clears itself.
+    """
+    routes = [("/pulls/1116", (200, _pr_doc())),
+              ("/check-runs", (200, json.dumps({"check_runs": []})))]
+    with _Scratch() as box:
+        target = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        broken = FakeGit([("clone", (128, "",
+                                     "fatal: could not read from remote"))])
+        out = _run_request(r, Routed(routes), git=broken)
+        check("a failed clone refuses the prepare", out.get("ok") is False, out)
+        check("... and the half-made scratch folder is GONE", not target.exists(),
+              str(target))
+        # The SAME request, with a git that works: the failure is not sticky.
+        again = _run_request(r, Routed(routes), git=FakeGit())
+        check("preparing again on the same request works", again.get("ok") is True,
+              again)
+        check("... and that prepare made the folder and its note",
+              target.is_dir() and (target / ".git" / GH.MARKER_NAME).is_file(),
+              str(target))
+
+
+def t_a_pre_existing_scratch_folder_is_refused_and_never_deleted():
+    """Any content at the target is refused, and it is not this call's to delete.
+
+    The old guard only looked for `.git`, so the folder a failed clone leaves
+    (content, no `.git`) passed the guard and the clone ran into it. A folder
+    that holds last time's work must survive the refusal untouched.
+    """
+    routes = [("/pulls/1116", (200, _pr_doc())),
+              ("/check-runs", (200, json.dumps({"check_runs": []})))]
+    with _Scratch() as box:
+        target = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        target.mkdir(parents=True)
+        kept = target / "README.md"
+        kept.write_text("the owner's own work from last time", encoding="utf-8")
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        git = FakeGit()
+        out = _run_request(r, Routed(routes), git=git)
+        check("a folder with content but no .git is refused", out.get("ok") is False,
+              out)
+        check("... and says the folder already exists", "already exists" in
+              out.get("error", "").lower(), out.get("error"))
+        check("... and nothing was cloned into it", git.commands() == [],
+              git.commands())
+        check("... and the folder and its file are still there",
+              target.is_dir() and kept.is_file()
+              and kept.read_text(encoding="utf-8")
+              == "the owner's own work from last time", str(target))
+
+
 def t_the_job_log_redirect_is_allowlisted_and_strips_the_token():
     url = GH.GITHUB_API + "/repos/o/r/actions/jobs/77/logs"
     good = FakeLog(location="https://objects.githubusercontent.com/signed?x=1")
@@ -1886,6 +1972,34 @@ def t_the_job_log_redirect_is_allowlisted_and_strips_the_token():
           and not GH._log_url_allowed("https://evil.example/x")
           and not GH._log_url_allowed(""),
           "allowlist")
+
+
+def t_a_job_log_read_error_is_not_shown_as_a_log_tail():
+    """A log Jarvis could not read is said as a READ error, never as its tail.
+
+    `_failing_evidence` used to put the error sentence in the log field, and the
+    renderer printed it under "The end of its log:" - words that claim evidence
+    the answer does not have. The two are separate fields now.
+    """
+    routes = [("/pulls/1116", (200, _pr_doc())),
+              ("/check-runs/55/annotations", (200, "[]")),
+              ("/check-runs", (200, json.dumps({"check_runs": [
+                  {"id": 55, "name": "rust", "status": "completed",
+                   "conclusion": "failure",
+                   "details_url": "https://github.com/o/r/actions/runs/9/job/77"}]})))]
+    with _Scratch():
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        out = _run_request(r, Routed(routes), git=FakeGit(),
+                           log=FakeLog(location="https://evil.example/log"))
+        text = out.get("text", "")
+        check("prepare still succeeds when the job log cannot be read",
+              out.get("ok") is True, out)
+        check("... and says GitHub's job log could not be read",
+              "GitHub's job log could not be read:" in text, text)
+        check("... and does NOT print the error under 'The end of its log:'",
+              "The end of its log:" not in text, text)
+        check("... while still naming the failing check", "rust: failure" in text,
+              text)
 
 
 # --------------------------------------------------------------------------
@@ -2190,7 +2304,10 @@ if __name__ == "__main__":
                    t_a_refused_merge_is_refused_in_the_words_its_cause_deserves,
                    t_fix_prepare_copies_the_pr_into_its_own_scratch_folder,
                    t_fix_prepare_refuses_a_fork_and_a_protected_branch,
+                   t_a_failed_prepare_removes_its_folder_and_the_next_prepare_works,
+                   t_a_pre_existing_scratch_folder_is_refused_and_never_deleted,
                    t_the_job_log_redirect_is_allowlisted_and_strips_the_token,
+                   t_a_job_log_read_error_is_not_shown_as_a_log_tail,
                    t_the_push_card_shows_the_commits_files_and_exact_command,
                    t_the_push_plan_refuses_every_unsafe_folder,
                    t_the_push_run_rechecks_everything_then_pushes_once,
