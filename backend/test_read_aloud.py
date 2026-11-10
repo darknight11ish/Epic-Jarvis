@@ -344,7 +344,7 @@ def t_the_live_answers_report_the_real_preset_count():
     chg = _ran("what can you change?")
     check("'what can you change?' reports the real count, never 0",
           chg is not None and f"between {real} presets" in chg.reply
-          and "0 presets" not in chg.reply,
+          and "between 0 presets" not in chg.reply,
           None if chg is None else chg.reply[:200])
     inv = _ran("what do you have?")
     check("'what do you have?' reports the real count too (same bug family)",

@@ -764,7 +764,7 @@ def t_zz_the_whole_registry_is_covered_by_this_suite():
 # -------------------------------------------------- separate module surfaces
 
 def t_presets_and_search_providers_are_the_same_in_both_doors():
-    """The 9 presets and 6 search providers are their own fast-path surfaces.
+    """The 10 presets and 6 search providers are their own fast-path surfaces.
 
     They are not rows in the settings registry (their writers live in
     jarvis_presets.py and jarvis_search.py), so they are covered here by
