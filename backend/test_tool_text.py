@@ -63,6 +63,9 @@ MEASURED = ("calculator", "memory_search", "file_read", "shell_exec", "control_c
 #: 1550/380 pins are unchanged by this and still pass.
 MEASURED_BUDGET = 2970
 PER_TOOL = 300
+#: Tools whose description deliberately carries the GitHub whole-surface sentence
+#: (2026-11-10). Named once, so a fourth one has to be looked at here too.
+WHOLE_SURFACE_TOOLS = {"github_pr_scan", "github_merge_pr", "github_fix_and_push"}
 #: browser_control drives a page with seven kinds of step; its parameters
 #: alone are most of this.
 #: control_phone is here for the same reason as of 2026-11-01: three app
@@ -80,6 +83,22 @@ PER_TOOL = 300
 #: yes). 2000 leaves 47 tokens of room.
 PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    "rea_investigate": 2000,
+                   # The three GitHub tools of the owner's 2026-11-10 "Everything
+                   # at once" decision (github_pr_scan, the carded merge and the
+                   # carded fix-and-push). Each carries the ONE whole-surface
+                   # sentence, `GITHUB_CAPABILITIES_WORDS` ==
+                   # `jarvis_github.capabilities_line()` - the same words the
+                   # spoken answer gives - because
+                   # `backend/test_github_parity.py` pins that the model reads it.
+                   # Measured on this tree with this module's own 3-chars-a-token
+                   # rule: 759, 813 and 815 tokens, where the 300 rule would
+                   # allow 900 characters and the sentence alone is about 1,100.
+                   # The cost is paid ONLY when the `github` group is opened,
+                   # never on every turn (they are group members, not core
+                   # tools), and it buys one inventory with one home instead of a
+                   # second copy that drifts. 850 leaves each ~35 tokens of room.
+                   "github_pr_scan": 850, "github_merge_pr": 850,
+                   "github_fix_and_push": 850,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six
                    # format names and two "use that" lines. Measured 329 with
@@ -170,6 +189,15 @@ def t_a_use_that_line_only_names_a_tool_the_turn_has():
     for name, tool in AG.TOOLS.items():
         for other in tool.instead:
             check(f"{name}'s 'use that' line names a real tool ({other})", other in AG.TOOLS)
+            if name in WHOLE_SURFACE_TOOLS:
+                # The three GitHub tools of 2026-11-10 carry the ONE whole-surface
+                # sentence deliberately (see PER_TOOL_EXCEPT): it names every
+                # GitHub tool because it is an inventory, not a "call that one"
+                # hint, and it is the same sentence the owner hears. So this rule
+                # - a hint may not name a tool the turn does not have - is not
+                # the question it asks; the line is checked word for word against
+                # `jarvis_github.capabilities_line()` in test_github_parity.py.
+                continue
             alone = tool.schema([name])["function"]["description"]
             check(f"{name} alone does not mention {other}", other not in alone, alone)
     check("with nothing said about the turn (the tool test), every line is in",

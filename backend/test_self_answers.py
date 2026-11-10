@@ -161,25 +161,27 @@ def all_four_are_read_only():
 
 
 def tools_answer_is_the_registry_and_the_live_file():
-    # 65, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
+    # 70, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
     # GitHub "Read + actions") are in jarvis_agent.TOOLS and ship switched OFF,
     # hands-free then added send_text_message (on by default), the product check
     # added product_check (off), the four pack tools (2026-11-05) ship ON, and the
     # cloud-escalation door (2026-11-06) rides with change_setting instead of a
     # switch of its own; wave 13's one CREATE (2026-11-09, the carded
-    # github_create_repo) joined after it, and project_read - the read half of
-    # "Jarvis takes over dev work" - ships OFF like file_read; so the registered
-    # count is 67 and enabled stays 19. The
-    # answer is still read from the registry and the settings file, never typed.
+    # github_create_repo) joined after it, project_read - the read half of
+    # "Jarvis takes over dev work" - ships OFF like file_read, and wave 16's three
+    # GitHub tools (2026-11-10: the PR cockpit, the carded merge and the carded
+    # fix-and-push) also ship OFF; so the registered count is 70 and enabled
+    # stays 19. The answer is still read from the registry and the settings file,
+    # never typed.
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 67,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 70,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
           inv["enabled"] == 19, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "67 tools" in reply, reply[:120])
+    check("it names the registered count", "70 tools" in reply, reply[:120])
     check("it names the switched-on count", "19 of them are switched on" in reply,
           reply[:160])
     # The list is capped at about fourteen names plus "and N more", so the
@@ -215,8 +217,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 66 are not switched on",
-              bool(reply) and "other 66 are built in but not switched on" in reply,
+        check("... and says the other 69 are not switched on",
+              bool(reply) and "other 69 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:
@@ -403,9 +405,13 @@ def the_two_settings_numbers_reconcile():
 GITHUB_SELF_CASES = (
     ("what is your GitHub repository?", "github_self", "darknight11ish/Epic-Jarvis"),
     ("where does your code live?", "github_self", "darknight11ish/Epic-Jarvis"),
-    ("can you merge a pull request?", "github_self", "no merge card"),
-    ("did you merge that PR?", "github_self", "cannot merge"),
-    ("what can't you do on GitHub?", "github_self", "cannot merge"),
+    # 2026-11-10: merging IS built now, behind one card per merge and merge
+    # commit only. The old needles ("no merge card", "cannot merge") pinned the
+    # read/comment-only boundary this decision replaced; the honest answers name
+    # the card, the merge commit and the bans that remain.
+    ("can you merge a pull request?", "github_self", "one approval card"),
+    ("did you merge that PR?", "github_self", "merge commit"),
+    ("what can't you do on GitHub?", "github_self", "force-push"),
     ("what do you need before you can read my repos?", "github_self",
      "personal access token"),
     ("what GitHub tools do you have?", "github_self", "github_rerun_workflow"),
@@ -423,9 +429,10 @@ def the_github_questions_read_their_modules():
     """The 2026-11-07 audit's false answers are deterministic, from the modules.
 
     The merge one is the measured inversion this holds: the model answered
-    "no" and then offered "the system's card for it" - a card that does not
-    exist. The fixed answer comes from `jarvis_github.NEVER_WORDS` and says the
-    absence out loud.
+    "no" and then offered "the system's card for it" - a card that did not exist.
+    Since 2026-11-10 the card DOES exist for a merge and for a PR-branch push, so
+    the fixed answers name the card, say merge commit only, and say the bans that
+    remain (`jarvis_github.NEVER_WORDS`).
     """
     for question, intent_name, needle in GITHUB_SELF_CASES:
         got = Q.match(question)
@@ -442,9 +449,11 @@ def the_github_questions_read_their_modules():
         check(f"{question!r} names {needle!r}", needle.lower() in reply.lower(),
               reply[:300])
         if "merge" in question.lower():
-            check(f"{question!r} invents no merge card or proposal",
+            check(f"{question!r} names the ONE card and merge-commit-only, and "
+                  f"never proposes a merge",
                   "propose the merge" not in reply.lower()
-                  and "no merge card" in reply.lower(), reply)
+                  and "one approval card" in reply.lower()
+                  and "merge commit" in reply.lower(), reply)
     check("the two new GitHub intents are read-only",
           {"github_self", "accounts_answer"} <= set(Q.READ_ONLY_INTENTS))
 
