@@ -34,6 +34,20 @@
  * so Rust and the tests can read the same data; the test compares the two and
  * fails if they drift.
  *
+ * WAVE 15 (2026-11-09): every preset now carries the COMPOSITION the redesign
+ * spec's section 1.2 table asks for - which cards are the hero, which support
+ * it, and which are gone - and the two capped layouts are capped in DATA, not
+ * in a screenshot: Cockpit's right column is 2 (one card plus the page's own
+ * today panel) and Command Center's is 3. "Gone" means `visible: false` on a
+ * card the document still NAMES, never a dropped card, because hud-edit.js
+ * re-adds a card a document does not name at its visible default. `visibleCards`
+ * and `rightColumn` are the two readers of that data, shared by the page and
+ * the tests. Two things are PAGE hooks rather than model data, and are declared
+ * here so the page and this module cannot disagree about their spelling:
+ * `PRESET_ATTR` (the active layout id as an attribute on <html>/<body>, so page
+ * CSS can speak about one layout) and `RETURN_PILL` (the always-on way back
+ * from Face Only / Mini View).
+ *
  * @module hud-layout
  */
 
@@ -91,6 +105,88 @@ export const PROTECTED_IDS = Object.freeze([
   "voice_controls",
   "bar_launcher",
 ]);
+
+/**
+ * THE ONE PAGE PANEL THAT IS NOT A CARD (Wave 15, 2026-11-09, spec section
+ * 1.2/5.2). The reminders/today panel (`#rail-reminders` on the page) is drawn
+ * by the page itself and is not in `CARD_REGISTRY`, so no layout can move it or
+ * name it. In the shells whose right column is a STATIC column (the page's
+ * `three-column` and `two-column-right`) it always fills one slot there, and
+ * the spec's caps count it: "right column max 2" for `cockpit` is one layout
+ * card (Waiting for You) plus this panel, and "exactly 3" for `second_brain` is
+ * two layout cards (Waiting for You, Second Brain Counts) plus this panel.
+ * `rightColumn()` below is the one place that adds them up, and it counts this
+ * panel ONLY for those two shells - see `STATIC_RIGHT_RAIL_SHELLS` for why a
+ * drawer or a zero-width column does not count it.
+ *
+ * The right rail also carries the page's transient `#setup-offer`; it is not
+ * listed here because it appears only while the setup quiz is unfinished and is
+ * not one of the layout's cards.
+ *
+ * To make it a real card, the page owner adds it to the model: a
+ * `today` registry row here, `CARD_DOM.today = ["#rail-reminders"]` and
+ * `today` in `MOVABLE_IDS` in hud-edit.js (and the page's `placeReminders()`
+ * must stop moving that node between the rail and the stage, which
+ * `hud-edit.js` would otherwise yank out of its own shell). Until then it is
+ * declared here as a FIXED slot rather than quietly ignored.
+ *
+ * WHICH SPEC CARD IT IS: the spec names the second card of the right column
+ * "Next Up Today" in Cockpit and "Today & Reminders" in Command Center. Both
+ * are this one panel - Cockpit's column is `waiting` + this panel (2), Command
+ * Center's is `waiting` + `brain_stats` + this panel (3). The owner's Calendar
+ * card (`calendar`, the next seven days) is OFF in both, because a third
+ * surface of the same "what is coming up" would break the cap the spec sets.
+ */
+export const FIXED_RAIL_PANELS = Object.freeze([
+  Object.freeze({
+    id: "rail-reminders",
+    label: "Today & Reminders",
+    region: "right_rail",
+    order: 1,
+  }),
+]);
+
+/**
+ * The attribute the page writes on `<html>` and `<body>` to name the ACTIVE
+ * layout id, so page CSS can speak about one layout at a time (Wave 15). The
+ * model already carries the id; without this attribute the page can only see
+ * the shell template, and `cockpit` and `second_brain` share none of their
+ * shape with `studio`/`telemetry` in the stylesheet's vocabulary. The page is
+ * the intended writer (it is the only side that knows the store answered);
+ * nothing in this tree writes it yet, so this module only names the attribute
+ * for the page and pins the spelling so a later page edit cannot rename it.
+ */
+export const PRESET_ATTR = "data-hud-preset";
+
+/**
+ * THE RETURN PILL (Wave 15, spec section 1.2). `ambient` ("Face Only") and
+ * `minimal` ("Mini View") show almost nothing, so each must carry one always-on
+ * control back to the owner's everyday layout - `[ ⤢ Back to Command Center ]`
+ * - at the top right. The pill is page markup: this declares its id, class,
+ * words, glyph and destination so the page, the presets menu and the tests share
+ * one spelling (and so a renamed pill fails a test instead of vanishing).
+ */
+export const RETURN_PILL = Object.freeze({
+  id: "hud-return-pill",
+  class: "hud-return-pill",
+  label: "Back to Command Center",
+  glyph: "\u2922",
+  target_preset: "second_brain",
+});
+
+/** The layouts whose whole stage is the face, and so must show the pill. */
+export const RETURN_PILL_LAYOUTS = Object.freeze(["ambient", "minimal"]);
+
+/**
+ * The shells that draw the right column as a STATIC column on the glass (the
+ * page's own CSS). Only there does the page-owned `#rail-reminders` panel fill
+ * a slot in it, which is why `rightColumn()` counts that panel for these shells
+ * and for no others: `split-stage` gives the column no width except on its
+ * inspector tabs (where it is a fixed overlay), and `two-column-left`,
+ * `center-core` and `single-stage-bento` open the right rail as a slide-over
+ * drawer, so a closed drawer's panel is not on the glass.
+ */
+const STATIC_RIGHT_RAIL_SHELLS = Object.freeze(["three-column", "two-column-right"]);
 
 /**
  * The card registry: one entry per card the HUD can show. `region`, `order`,
@@ -405,8 +501,9 @@ const PRESET_NOTE = {
     label: "Cockpit",
     glyph: "\u229e",
     blurb:
-      "The default three-column deck: navigation on the left, conversation in "
-      + "the middle, and the waiting cards, telemetry and memory on the right.",
+      "The everyday deck: the conversation and the ask box at the centre, "
+      + "with the waiting count and today's reminders in one narrow column - "
+      + "the calendar, telemetry and the other system cards folded away.",
   },
   studio: {
     label: "Studio",
@@ -425,21 +522,23 @@ const PRESET_NOTE = {
   quiet: {
     label: "Quiet",
     glyph: "\u25a2",
-    blurb: "Quiet chat: the conversation and the waiting cards, nothing else.",
+    blurb:
+      "Quiet chat: one centred column for reading and writing, with approvals "
+      + "above it and no side cards.",
   },
   telemetry: {
     label: "Telemetry & Ops",
     glyph: "\u25a4",
     blurb:
-      "The engineering view: live telemetry, tools, budget and voice readiness "
-      + "beside the conversation.",
+      "The engineering view: the speed and GPU board in the right column, "
+      + "beside a compact conversation and no second approval card.",
   },
   second_brain: {
     label: "Second Brain & Planner",
     glyph: "\u25c8",
     blurb:
-      "Knowledge and planning: the Galaxy and Memory stage prominent, with "
-      + "Reminders and the memory counts close by.",
+      "Command center: the conversation and the Galaxy in the middle, with "
+      + "three cards beside it - waiting, today's reminders, memory counts.",
   },
   minimal: {
     label: "Minimal",
@@ -448,6 +547,42 @@ const PRESET_NOTE = {
   },
 };
 
+/**
+ * EACH PRESET'S COMPOSITION (Wave 15, 2026-11-09). The first/second/gone
+ * columns of the redesign spec's section 1.2 table, as data:
+ *
+ *   cockpit      Just Talk - the conversation and the ask box at the centre;
+ *                the right column holds the waiting count and the page's today
+ *                panel (2). The calendar, last-turn telemetry, abilities,
+ *                budget, memory counts and voice meter are OFF. The left
+ *                rail's three cards stay ON for now: the rail ITSELF, its icon
+ *                toolbar and the Galaxy-options door are page markup (spec
+ *                section 2.1's nav/banner slice) and hiding the cards would
+ *                leave an empty column with the page's icons still in it - see
+ *                PRESET_FACTS.
+ *   second_brain Command Center (the owner's layout) - Talk + Galaxy on the
+ *                stage; the right column is capped at three: waiting,
+ *                second-brain counts and the page's today panel. Last-turn
+ *                telemetry, abilities, budget, voice meter and the calendar
+ *                are OFF.
+ *   quiet        Quiet Desk - one centred column; every side-rail card is OFF,
+ *                including the waiting count.
+ *   telemetry    System Monitor - the speed/GPU board is the only right-rail
+ *                card, and the duplicate right-rail approval card, abilities,
+ *                budget, memory counts and voice meter are OFF.
+ *   studio       Custom Grid - nothing is forced OFF: every card is present
+ *                and visible, in the default three-column order, so the owner's
+ *                own arrangement is the only thing that hides anything.
+ *   ambient      Face Only and minimal Mini View - every ordinary card is OFF;
+ *                only the protected cards (and the face/composer the shell
+ *                draws) remain, plus the page's return pill.
+ *
+ * EVERY MOVABLE CARD IS NAMED IN EVERY PRESET, even when it is off, on
+ * purpose: a card a document does not name is re-added at its registry
+ * defaults (visible) by hud-edit.js's `withRegistryCards`, so an omitted card
+ * would quietly come back on the glass. `visible: false` is the only honest
+ * way to say "this layout does not show it".
+ */
 function cardsFor(presetId) {
   const rows = {
     cockpit: [
@@ -460,13 +595,13 @@ function cardsFor(presetId) {
       ["voice_controls", {}],
       ["conversation", {}],
       ["composer", {}],
-      ["calendar", {}],
-      ["waiting", {}],
-      ["telemetry", {}],
-      ["tools", {}],
-      ["brain_stats", {}],
-      ["budget", {}],
-      ["voice_stats", {}],
+      ["calendar", { visible: false }],
+      ["waiting", { order: 0 }],
+      ["telemetry", { visible: false }],
+      ["tools", { visible: false }],
+      ["brain_stats", { visible: false }],
+      ["budget", { visible: false }],
+      ["voice_stats", { visible: false }],
     ],
     studio: [
       ["emergency_stop", {}],
@@ -515,7 +650,7 @@ function cardsFor(presetId) {
       ["conversation", { col_span: 12, row_span: 4 }],
       ["composer", {}],
       ["calendar", { visible: false }],
-      ["waiting", {}],
+      ["waiting", { visible: false }],
       ["nav", { visible: false }],
       ["lanes", { visible: false }],
       ["systems", { visible: false }],
@@ -535,13 +670,13 @@ function cardsFor(presetId) {
       ["voice_controls", {}],
       ["conversation", {}],
       ["composer", {}],
-      ["calendar", {}],
-      ["waiting", {}],
-      ["telemetry", { col_span: 12, row_span: 4 }],
-      ["tools", {}],
-      ["budget", {}],
-      ["voice_stats", {}],
-      ["brain_stats", {}],
+      ["calendar", { visible: false }],
+      ["waiting", { visible: false }],
+      ["telemetry", { order: 0, col_span: 12, row_span: 4 }],
+      ["tools", { visible: false }],
+      ["budget", { visible: false }],
+      ["voice_stats", { visible: false }],
+      ["brain_stats", { visible: false }],
     ],
     second_brain: [
       ["emergency_stop", {}],
@@ -556,13 +691,13 @@ function cardsFor(presetId) {
       ["galaxy", { visible: true, col_span: 12, row_span: 4 }],
       ["reminders", { visible: true, col_span: 6, row_span: 4 }],
       ["memory", { visible: true, col_span: 6, row_span: 4 }],
-      ["calendar", {}],
-      ["waiting", {}],
-      ["brain_stats", { col_span: 12, row_span: 4 }],
-      ["telemetry", {}],
-      ["tools", {}],
-      ["budget", {}],
-      ["voice_stats", {}],
+      ["calendar", { visible: false }],
+      ["waiting", { order: 0 }],
+      ["brain_stats", { order: 1, col_span: 12, row_span: 2 }],
+      ["telemetry", { visible: false }],
+      ["tools", { visible: false }],
+      ["budget", { visible: false }],
+      ["voice_stats", { visible: false }],
     ],
     minimal: [
       ["emergency_stop", {}],
@@ -587,6 +722,17 @@ function cardsFor(presetId) {
 }
 
 const PRESET_FACTS = {
+  // `cockpit` KEEPS the three-column shell on purpose (Wave 15). The spec's
+  // "remove the left sidebar" is a page-side change, not a card-visibility
+  // one: the rail's own chrome (`#rail-toolbar`: presets, faces, history, the
+  // 18 icons) and the Talk/Brain modes in `#rail-nav` are page markup the
+  // layout model cannot move, and hiding those cards alone would leave an
+  // empty 220px column on screen with the page's icons still in it. The shell
+  // that has no left column is `two-column-right` (see hud-shell.mjs) - switch
+  // this value to it when the page's new header carries the doors (spec
+  // section 2.1, the nav/banner owner's slice) and hide the nav/lanes/systems
+  // cards below in the same change. `second_brain` is the owner's current
+  // layout and stays three-column for the same reason.
   cockpit: { shell_template: "three-column", density: "comfortable", default_stage_tab: "talk" },
   studio: { shell_template: "split-stage", density: "comfortable", default_stage_tab: "talk" },
   ambient: { shell_template: "center-core", density: "spacious", default_stage_tab: "talk" },
@@ -851,6 +997,55 @@ export function effectiveCollapsed(card, pendingCount = 0) {
   if (!card || typeof card !== "object") return false;
   if (card.id === "approvals" && Number(pendingCount) > 0) return false;
   return Boolean(card.collapsed);
+}
+
+/**
+ * The card ids a layout actually draws in one region, in the order the rail
+ * paints them. The page and the tests read the SAME answer here, so "the right
+ * column is capped at three" is one number from one place (Wave 15).
+ */
+export function visibleCards(layout, region) {
+  const doc = normalizeLayout(layout);
+  return doc.cards
+    .filter((card) => card.region === region && card.visible)
+    .map((card) => card.id);
+}
+
+/**
+ * The right column as a count: the layout cards on the glass plus the one
+ * page-owned panel (`FIXED_RAIL_PANELS`) that fills a slot there when the
+ * layout's shell draws the column statically. This is the number the redesign
+ * spec's caps are about - `cockpit` 2, `second_brain` 3 - so the page and the
+ * tests can assert the SAME arithmetic rather than counting two different
+ * things. A drawer shell (or `split-stage`, whose rail is a zero-width overlay)
+ * counts no fixed panel, because none of it is on the glass.
+ */
+export function rightColumn(layout) {
+  const doc = normalizeLayout(layout);
+  const cards = doc.cards
+    .filter((card) => card.region === "right_rail" && card.visible)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map((card) => card.id);
+  const staticRail = STATIC_RIGHT_RAIL_SHELLS.includes(doc.shell_template);
+  const fixed = staticRail ? FIXED_RAIL_PANELS.map((panel) => panel.id) : [];
+  return Object.freeze({
+    cards: Object.freeze(cards),
+    fixed: Object.freeze(fixed),
+    total: cards.length + fixed.length,
+  });
+}
+
+/**
+ * The return pill a layout must show, or null. `base_preset` is what counts, so
+ * the owner's own saved copy of Face Only keeps its way back; every other
+ * layout (and every unknown document, which normalizes to the default) answers
+ * null. The page draws `RETURN_PILL`'s markup while this answers non-null and
+ * chooses `target_preset` when it is clicked.
+ */
+export function returnPillFor(layout) {
+  const doc = normalizeLayout(layout);
+  if (!RETURN_PILL_LAYOUTS.includes(doc.base_preset)) return null;
+  return { ...RETURN_PILL };
 }
 
 /** One line saying which preset a layout came from, for the Settings card. */

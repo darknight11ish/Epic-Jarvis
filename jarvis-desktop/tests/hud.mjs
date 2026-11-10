@@ -2754,7 +2754,14 @@ await check("the Memory tab lists the cards with their own kind words; Keep is o
     title: "Tidy up today's memories?", what: "Jarvis can sort today's new facts overnight.",
     pro: ["keeps long-term memory tidy"], con: ["it is a slower answer while it runs"], how: "It asks first." } };
   const { page, problems, memoryReads, memoryWrites } = await openHud(browser,
-    { jarvis: false, ollama: true, proxy: false, memory, memorySetup });
+    // Wave 15 (2026-11-09): the pending-card list lives in the right rail's
+    // "Second brain & vault" card, and Cockpit's right column is now capped at
+    // two (the waiting count plus the page's own today panel), so that card is
+    // off there. This check is about the Studio Memory tab, so it runs in the
+    // Studio layout - where the card is drawn - and `setHudLook` still proves
+    // the Studio shell.
+    { jarvis: false, ollama: true, proxy: false, memory, memorySetup,
+      hudLayout: presetLayout("studio") });
   await setHudLook(page, "studio");
   await page.waitForTimeout(250);
   await page.click('#studio-dock [data-hud-tab-choice="memory"]');
@@ -2834,7 +2841,12 @@ await check("a refused Keep keeps the row and the button, and says the PC's own 
     { id: 41, text: "I like oat milk", source: "conversation", replaces: null, replaces_id: null },
   ];
   const { page, problems, memoryWrites } = await openHud(browser,
-    { jarvis: false, ollama: true, proxy: false, memory, memoryRefusal: 41 });
+    // Same Wave 15 reason as the check above: the Keep button is in the right
+    // rail's "Second brain & vault" card, which Cockpit's capped column no
+    // longer draws; the Studio layout (and the Studio dock tab clicked below)
+    // is where this card lives.
+    { jarvis: false, ollama: true, proxy: false, memory, memoryRefusal: 41,
+      hudLayout: presetLayout("studio") });
   await setHudLook(page, "studio");
   await page.waitForTimeout(250);
   await page.click('#studio-dock [data-hud-tab-choice="memory"]');
@@ -4298,8 +4310,13 @@ await check("Cockpit: the Bento inspector mirrors the cards and the turn", async
   assert.deepEqual(problems, []);
 });
 
-await check("Cockpit: the second-brain tiles open the Galaxy map", async () => {
-  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+await check("Command Center: the second-brain tiles open the Galaxy map", async () => {
+  // Wave 15 (2026-11-09): this check used to run in Cockpit, but Cockpit's right
+  // column is now capped at two cards (Waiting for You and today's reminders),
+  // so the Second Brain Counts card lives in Command Center. The tiles are the
+  // same DOM nodes either way; the card's own layout is what shows them.
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, hudLayout: presetLayout("second_brain") });
   const tiles = await page.evaluate(() => {
     const ids = ["r-facts", "r-docs", "r-ents", "r-tools"];
     return ids.map((id) => {
