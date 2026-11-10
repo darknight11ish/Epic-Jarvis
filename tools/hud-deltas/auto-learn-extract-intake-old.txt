@@ -1,0 +1,3 @@
+        return _intake_annotate([dict(r) for r in c.execute(
+            "SELECT id,text,replaces,replaces_id,replaces_text,confidence,source,created"
+            " FROM proposals WHERE state='pending' ORDER BY created")])

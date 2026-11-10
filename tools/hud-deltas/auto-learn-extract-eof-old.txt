@@ -1,0 +1,2 @@
+    cid = got[0] if got else None
+    return cid if isinstance(cid, str) and cid else None

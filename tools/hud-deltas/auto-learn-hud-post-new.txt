@@ -1,0 +1,2 @@
+        if route in ("/api/memory/learning/auto", "/api/memory/learning/sensitive",
+                     "/api/memory/learning/paraphrase", "/api/memory/fault/retry"):

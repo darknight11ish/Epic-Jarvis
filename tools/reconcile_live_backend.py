@@ -794,6 +794,34 @@ ACTIVITY_TURN_GUARD_PROBES = (
     "_ev.reset_activity()",
 )
 
+#: auto-learn.patch (2026-11-09, wave 13) - the fault banner's two dispatch lines and
+#: the intake read that hides the cards a fault parked. THE MEASURED DEFECT: wave 13
+#: grew the patch 23,159 -> 25,589 B, but the live HUD/extract were the OLD post-image
+#: and the patch had no entry here, so the fallback rule saw 129 of its 144 distinctive
+#: HUD lines and answered ALREADY_PRESENT - the run finished clean and never carried the
+#: missing hunks (measured read-only: the live HUD holds 0 `/api/memory/fault` matches
+#: and both routes 404'd).
+#:
+#: `hunks: True` is WRONG for this patch, and it is measured rather than preferred:
+#: hunk 8's six-line pre-image still appears exactly once after the already-live
+#: dispatch block, so replaying the hunks inserts a SECOND copy in front of the old one
+#: (bench.patch's comment records the same failure, 2026-11-04). The five region pairs
+#: are the gate-touches shape: each OLD block is the live pre-wave-13 text (exactly
+#: once, measured 2026-11-09) and each NEW block is the patch's own `+` lines at
+#: `32ba251d9`. The EOF hunk is the one exception to "the patch's own bytes": its first
+#: 85 added lines are already live and only its last 16 (`_intake_fault_visible`) are
+#: missing, so that pair keeps the live last two lines and appends those 16.
+AUTOLEARN_HUD_GET_OLD_FILE = "auto-learn-hud-get-old.txt"
+AUTOLEARN_HUD_GET_NEW_FILE = "auto-learn-hud-get-new.txt"
+AUTOLEARN_HUD_POST_OLD_FILE = "auto-learn-hud-post-old.txt"
+AUTOLEARN_HUD_POST_NEW_FILE = "auto-learn-hud-post-new.txt"
+AUTOLEARN_HUD_POSTCALL_OLD_FILE = "auto-learn-hud-postcall-old.txt"
+AUTOLEARN_HUD_POSTCALL_NEW_FILE = "auto-learn-hud-postcall-new.txt"
+AUTOLEARN_EXTRACT_INTAKE_OLD_FILE = "auto-learn-extract-intake-old.txt"
+AUTOLEARN_EXTRACT_INTAKE_NEW_FILE = "auto-learn-extract-intake-new.txt"
+AUTOLEARN_EXTRACT_EOF_OLD_FILE = "auto-learn-extract-eof-old.txt"
+AUTOLEARN_EXTRACT_EOF_NEW_FILE = "auto-learn-extract-eof-new.txt"
+
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
 #:   or_probes: a second set that proves presence when a LATER patch in the stack
@@ -1607,6 +1635,41 @@ DELTA_TABLE = {
         "jarvis_skills.py": {
             "probes": SKILL_SCAN_WIRING_PROBES,
             "hunks": True,
+        },
+    },
+    # auto-learn.patch (2026-11-09, wave 13): the fault banner's two dispatch lines and the intake
+    # read that hides the cards a fault parked. The patch was live WITHOUT them, so the loose rule
+    # said ALREADY_PRESENT (129/144 distinctive HUD lines) and never carried them.
+    "auto-learn.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                '                    "/api/memory/fault"):',
+                '                     "/api/memory/learning/paraphrase", "/api/memory/fault/retry"):',
+                '                code, out = jarvis_auto_learn.handle_post(',
+                '                    model=_extract_model(), ollama=getattr(jarvis_extract, "OLLAMA", None))',
+            ),
+            "regions": (
+                {"file": AUTOLEARN_HUD_GET_NEW_FILE, "replace_file": AUTOLEARN_HUD_GET_OLD_FILE,
+                 "probes": ('                    "/api/memory/fault"):',)},
+                {"file": AUTOLEARN_HUD_POST_NEW_FILE, "replace_file": AUTOLEARN_HUD_POST_OLD_FILE,
+                 "probes": ('                     "/api/memory/learning/paraphrase", "/api/memory/fault/retry"):',)},
+                {"file": AUTOLEARN_HUD_POSTCALL_NEW_FILE, "replace_file": AUTOLEARN_HUD_POSTCALL_OLD_FILE,
+                 "probes": ('                    model=_extract_model(), ollama=getattr(jarvis_extract, "OLLAMA", None))',)},
+            ),
+        },
+        "jarvis_extract.py": {
+            "probes": (
+                "        return _intake_fault_visible(_rows)",
+                "def _intake_fault_visible(rows: list) -> list:",
+            ),
+            "regions": (
+                {"file": AUTOLEARN_EXTRACT_INTAKE_NEW_FILE,
+                 "replace_file": AUTOLEARN_EXTRACT_INTAKE_OLD_FILE,
+                 "probes": ("        return _intake_fault_visible(_rows)",)},
+                {"file": AUTOLEARN_EXTRACT_EOF_NEW_FILE,
+                 "replace_file": AUTOLEARN_EXTRACT_EOF_OLD_FILE,
+                 "probes": ("def _intake_fault_visible(rows: list) -> list:",)},
+            ),
         },
     },
 }
