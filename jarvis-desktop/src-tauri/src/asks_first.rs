@@ -79,9 +79,10 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 62 at
-/// 2026-11-09 (60 at 2026-11-05; Wave 13 added the carded repository create,
-/// wave 14 the cardless `project_read`)
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 65 at
+/// 2026-11-10 (62 at 2026-11-09; Wave 13 added the carded repository create,
+/// wave 14 the cardless `project_read`; Wave 16 added the read-only PR
+/// cockpit, the carded merge and the carded fix-and-push)
 /// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
 /// pack-manager tools that ship ON, hands-free's send_text_message and the
 /// approval-policy tool's own row): the
@@ -90,7 +91,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 62] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 65] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -163,6 +164,12 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 62] = [
     // The carded repository create (2026-11-09, Wave 13): one tool, one
     // github_create_repo card before any network call.
     "github_create_repo",
+    // Wave 16 (2026-11-10): the read-only PR cockpit, the carded merge-commit
+    // merge and the carded fix-and-push each get their own row, so the Tools
+    // page can offer them and the PC accepts them when switched on.
+    "github_pr_scan",
+    "github_merge_pr",
+    "github_fix_and_push",
     "approval_policy",
 ];
 
