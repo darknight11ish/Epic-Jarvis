@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "70b925ebbbcc5e7980a5a38e5bf20580fe149b07",
- "built_at": "2026-11-09T21:11:07-08:00",
+ "ref": "47e0ff1f5490e172a26b9cd659170cc3525a755d",
+ "built_at": "2026-11-09T21:33:17-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -527,19 +527,20 @@
    "id": "files",
    "title": "Files, documents and storage",
    "group": "runtime",
-   "purpose": "Finding and reading the owner's files and documents, bringing one in from the phone, sending one out, and keeping a backup of what Jarvis changes.",
+   "purpose": "Finding and reading the owner's files and documents, reading one code file inside a folder he listed, bringing one in from the phone, sending one out, and keeping a backup of what Jarvis changes.",
    "files": [
     "backend/jarvis_attached_file.py",
     "backend/jarvis_backup.py",
     "backend/jarvis_data_health.py",
     "backend/jarvis_documents.py",
     "backend/jarvis_file_guardian.py",
+    "backend/jarvis_project_read.py",
     "backend/jarvis_send_file.py",
     "backend/jarvis_storage.py",
     "backend/jarvis_storage_health.py",
     "backend/jarvis_upload.py"
    ],
-   "file_count": 9,
+   "file_count": 10,
    "key_modules": [
     {
      "path": "backend/jarvis_documents.py",
@@ -563,7 +564,8 @@
     "backend/test_upload.py",
     "backend/test_file_guardian.py",
     "backend/test_backup.py",
-    "backend/test_documents_honesty.py"
+    "backend/test_documents_honesty.py",
+    "backend/test_project_read.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -4072,6 +4074,7 @@
     "backend/test_product_research.py",
     "backend/test_profiles.py",
     "backend/test_progress.py",
+    "backend/test_project_read.py",
     "backend/test_projects.py",
     "backend/test_promise_guards.py",
     "backend/test_prompt_coach.py",
@@ -4248,6 +4251,7 @@
     "backend/test_vacuous_checks.py",
     "backend/test_vault.py",
     "backend/test_vault_organizer.py",
+    "backend/test_vault_organizer_switch.py",
     "backend/test_vendored_three.py",
     "backend/test_version.py",
     "backend/test_vetted_skills.py",
@@ -4297,7 +4301,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 680,
+   "file_count": 682,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4571,6 +4575,8 @@
     "changelog.d/2026-11-08-wave-11-model-and-lane-truth.md",
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/2026-11-09-wave-13.md",
+    "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
+    "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4715,6 +4721,8 @@
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
     "decisions.d/2026-11-09-wave-12-owner-clicks-and-truth.md",
     "decisions.d/2026-11-09-wave-13-reminders-github-creator.md",
+    "decisions.d/2026-11-09-wave14-project-read-presets-hud.md",
+    "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5162,7 +5170,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 824,
+   "file_count": 828,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5565,6 +5573,16 @@
     "tools/gen_work_cases.py",
     "tools/gen_work_presets.py",
     "tools/gen_youtube_cases.py",
+    "tools/hud-deltas/auto-learn-extract-eof-new.txt",
+    "tools/hud-deltas/auto-learn-extract-eof-old.txt",
+    "tools/hud-deltas/auto-learn-extract-intake-new.txt",
+    "tools/hud-deltas/auto-learn-extract-intake-old.txt",
+    "tools/hud-deltas/auto-learn-hud-get-new.txt",
+    "tools/hud-deltas/auto-learn-hud-get-old.txt",
+    "tools/hud-deltas/auto-learn-hud-post-new.txt",
+    "tools/hud-deltas/auto-learn-hud-post-old.txt",
+    "tools/hud-deltas/auto-learn-hud-postcall-new.txt",
+    "tools/hud-deltas/auto-learn-hud-postcall-old.txt",
     "tools/hud-deltas/gate-card-helpers.txt",
     "tools/hud-deltas/gate-card-pending.txt",
     "tools/hud-deltas/gate-digest-init-new.txt",
@@ -5683,7 +5701,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 497,
+   "file_count": 507,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6082,6 +6100,7 @@
     "jarvis-backend/jarvis_product_research.py",
     "jarvis-backend/jarvis_profiles.py",
     "jarvis-backend/jarvis_progress.py",
+    "jarvis-backend/jarvis_project_read.py",
     "jarvis-backend/jarvis_projects.py",
     "jarvis-backend/jarvis_prompt_coach.py",
     "jarvis-backend/jarvis_protection.py",
@@ -6203,7 +6222,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 338,
+   "file_count": 339,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6233,111 +6252,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "70b925ebbbcc5e7980a5a38e5bf20580fe149b07",
+   "sha": "47e0ff1f5490e172a26b9cd659170cc3525a755d",
    "date": "2026-11-09",
-   "subject": "fix(hud): the two-column Just Talk waits for its test adaptation (Q6 part three)"
+   "subject": "fix(hud): the Presets note names Medical, and the memory door keeps its own Keep (DEF-063, DEF-064)"
   },
   {
-   "sha": "aad65a0090557a16848e60fa5dd61b4b4433a070",
+   "sha": "f2e321a82e7fb240b91f6da8a3fca47157ac38db",
    "date": "2026-11-09",
-   "subject": "chore(hud): the self code map is regenerated for the Q5/Q6 tree"
+   "subject": "feat(hud): the way back from Face Only / Mini View, and ONE stage header (Q5/Q6)"
   },
   {
-   "sha": "d821a8c7fa12434c99d60dbc5c9307a7f41292ff",
-   "date": "2026-11-09",
-   "subject": "feat(hud): the way back from Face Only / Mini View, and the two-column Just Talk (Q5/Q6)"
-  },
-  {
-   "sha": "40257515d83ef450e6e8169889e788561cd0c29e",
+   "sha": "132e45330147f34399c2e67448770c6a869b2433",
    "date": "2026-11-09",
    "subject": "chore(hud): the self code map is regenerated for the folded tree"
   },
   {
-   "sha": "9e622a160f4ab10465a433959e15a72fb0934d19",
+   "sha": "0ea3b77b846c33f1ea5f7ea1081fa5123633c0dd",
    "date": "2026-11-09",
    "subject": "fix(hud-edit): the field and toggle tests learn the wave-15 Cockpit composition"
   },
   {
-   "sha": "92f0eacf4a4d4bd45f92fd244d927cf55139daf0",
+   "sha": "fc92fea2332e2b0cc08e95b8ef83cb97988156ef",
    "date": "2026-11-09",
    "subject": "fix(hud): the two telemetry headings wear the redesign's plain words (Q9)"
   },
   {
-   "sha": "e94a025b24bce565cac5567412c6ee448f07f642",
+   "sha": "bea8ab421652401efa8bf36225d4a33525b232d2",
    "date": "2026-11-09",
    "subject": "feat(wave15-brain): Q13 - one chosen shape, plain empty states, Model pane switches"
   },
   {
-   "sha": "5562f895f745136c2b9099764e77fd4087ecd2c0",
+   "sha": "3412236b98fdae6a9fdc1499292acd2499291e69",
    "date": "2026-11-09",
    "subject": "feat(hud): the seven layouts carry the redesign's compositions (spec 1.2, Q2, Q10)"
   },
   {
-   "sha": "f4c5a796d9551b9ef060c3b21136310d30efde1f",
+   "sha": "9c61c23059aa4a9a340b306464237e46f5cbe7f5",
    "date": "2026-11-09",
    "subject": "feat(hud): the seven screen layouts wear plain words in the one Presets menu (spec §1.2, Q2-Q3, Q9)"
   },
   {
-   "sha": "afc92483e0315de4505dc5c0a7e5a3f3a13a7ad2",
+   "sha": "ded92c020ebcd225d5d0855d922d007263457922",
    "date": "2026-11-09",
    "subject": "feat(hud-edit): dock Edit HUD as a top ribbon with one plain-words inspector (spec Q6-Q9)"
   },
   {
-   "sha": "6ec10ca487d5d2c3c21427a082015b3fdb925464",
+   "sha": "c4259640f85c921b0f50b08f72578e5a11fe7a8a",
    "date": "2026-11-09",
    "subject": "chore(hud): the AI Mode name follows the PC's chosen preset, and the self code map is regenerated"
   },
   {
-   "sha": "d228980f9b37fc98bc8a989958ed5dd2aba94313",
+   "sha": "2ec7410db0fb01f521edaaea2fdf7b4f87bc80d1",
    "date": "2026-11-09",
    "subject": "feat(hud): one navigation, one pill bar, one approval card (spec 2.1/2.2/4.1/4.2/5.2)"
   },
   {
-   "sha": "3655e00dcb4cfbc67eed4ca26152c3248afe8ec9",
+   "sha": "4a4864712d46ea780a2a39491565b2d31bd583c5",
    "date": "2026-11-09",
-   "subject": "fix(hud): the capability-list pin learns the memory Keep"
+   "subject": "Merge pull request #1219 from darknight11ish/integration/wave14-2026-11-09"
   },
   {
-   "sha": "1d7e53c97dcabcc1055f6b3548f59351391cd86a",
+   "sha": "24a3fc9b1da913556b7ee1585d46538830cb0b80",
    "date": "2026-11-09",
-   "subject": "feat(wave14): the HUD's Memory tab keeps ONE plain new fact, through the Brain's own command"
+   "subject": "fix(ci): the served hud-edit copy and its base copy follow the editor comment"
   },
   {
-   "sha": "6ada2545f3f575a195a1b25ce23fdf658210a2ec",
+   "sha": "2dc899fdbd23cffce498449858b1eb7d3c153c0b",
    "date": "2026-11-09",
-   "subject": "fix(wave14): Edit HUD click selects the card, never runs it"
+   "subject": "fix(ci): the claim tables classify project_read, and the editor comment leaves the face pin alone"
   },
   {
-   "sha": "85e9e85005d175a9a5217ff1a3650cc51947cb20",
+   "sha": "1f30ac0246a9007aa252d9777b1d6d3d80bcc5ae",
    "date": "2026-11-09",
-   "subject": "Merge pull request #1218 from darknight11ish/integration/wave13-2026-11-09"
+   "subject": "fix(ci): the switch-row pin learns project_read, and the recent-changes module is regenerated"
   },
   {
-   "sha": "32ba251d935d04c22bb83c9e0a6005e08d40b500",
+   "sha": "507b666c6b006c8610f93719b68ffce98fd1cde4",
    "date": "2026-11-09",
-   "subject": "test(wave13): the four stale catalogue/patch pins the Ubuntu backend job would hit"
+   "subject": "records: the owner approved the Medical preset and kept the two spare names"
   },
   {
-   "sha": "b3b3000349e1b779b08981b6b517e4d421aa28ec",
+   "sha": "aecdfda4337c6423fec9e6fdb6081c49f89fca19",
    "date": "2026-11-09",
-   "subject": "test(wave13): the three stale tool pins the required Windows job caught"
+   "subject": "chore: regenerate the self-code maps after wave 14"
   },
   {
-   "sha": "7d892e277a42efe9a7b6d86a5b9623d65eff45fd",
+   "sha": "d73f6919103d1aafc98ab4bf704abd1059cf2d2d",
    "date": "2026-11-09",
-   "subject": "docs(wave13): the audit's record corrections - creator numbering, stale counts, DEF-049 live-delivery gap"
+   "subject": "test(hud): both heavy rows carry their measured cost sentence in the Presets menu"
   },
   {
-   "sha": "6f00bd58d324f11a07059c4139d0d84499e23d8a",
+   "sha": "acce70a309a026743a9c96a3444e4ef1c577eaaf",
    "date": "2026-11-09",
-   "subject": "fix(wave13): the owner's own \"can you create a repository?\" reaches the carded answer"
+   "subject": "fix(agent): the diet hints and the catalogue pin learn project_read"
+  },
+  {
+   "sha": "367bfc3eaea657d79934fe0d34c0e2107e1e26c9",
+   "date": "2026-11-09",
+   "subject": "fix(desktop): the asks-first tool list learns the cardless project_read"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1420
+   "files": 1423
   },
   {
    "path": "jarvis-desktop/",
@@ -6357,17 +6376,17 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 350
+   "files": 351
   },
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 254
+   "files": 264
   },
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 228
+   "files": 230
   },
   {
    "path": "videos/",
@@ -6377,7 +6396,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 144
+   "files": 146
   },
   {
    "path": "plugins/",
@@ -6451,8 +6470,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5576,
-  "covered": 5105,
+  "tracked_files": 5594,
+  "covered": 5123,
   "excluded": 471,
   "subsystems": 27
  },
