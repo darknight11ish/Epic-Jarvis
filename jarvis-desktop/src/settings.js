@@ -641,7 +641,16 @@ function paintThemeRows(current) {
     const id = row.dataset.choice;
     // Daylight is never "the theme for dark mode".
     row.hidden = following && !THEME_INFO[id].dark;
-    row.querySelector("input").checked = id === chosen;
+    const picked = id === chosen;
+    row.querySelector("input").checked = picked;
+    // The chosen row wears the shared `.is-chosen` rectangle and says
+    // aria-current (Q13, 2026-11-09). One class for one state in Settings, the
+    // Brain and the HUD - the label itself never grows "(current)"/"Applied".
+    // The rule is in settings.css, never built at run time: the packaged CSP
+    // refuses a run-time stylesheet (tests/csp.mjs).
+    row.classList.toggle("is-chosen", picked);
+    if (picked) row.setAttribute("aria-current", "true");
+    else row.removeAttribute("aria-current");
   }
   if (followSystem) followSystem.checked = following;
   if (followDetail) {
