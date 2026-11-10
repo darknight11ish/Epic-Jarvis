@@ -247,6 +247,61 @@ def the_warm_never_loads_the_pooled_model_on_the_everyday_lane() -> None:
     LANE_FILE.unlink(missing_ok=True)
 
 
+# ===========================================================================
+#   Q7 (owner's 2026-11-10 10:40 PT ruling) - the everyday lane's model guard
+# ===========================================================================
+
+#: The heavy families the ruling names: the pooled 30B coder (which really was
+#: found loaded on 11436 at n_ctx 8192, spilling into system RAM) and the 27B
+#: medical model, each with and without Ollama's own ":latest" tag.
+HEAVY = ("qwen3-coder-30b-a3b-ud-q3-k-xl",
+         "qwen3-coder-30b-a3b-ud-q3-k-xl:latest",
+         "medgemma:27b", "medgemma:27b:latest", "another-30b-model")
+
+
+def _one_real_turn(model: str, url: str):
+    """One turn through the REAL run_local_turn: (requests sent, what the app
+    was told). The same shape test_security_pc.py uses for its H1 checks."""
+    from test_agent import NoRealIO, scripted_post
+    post, calls = scripted_post([{"choices": [{"message": {"role": "assistant",
+                                                           "content": "hello"}}]}])
+    streamed = []
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], model,
+                          ollama_url=url, stream_out=streamed.append, post=post,
+                          record_chain=lambda s: None, on_step=lambda s: None,
+                          enabled_tools=set(),
+                          request={"messages": [{"role": "user", "content": "hi",
+                                                 "provenance": "typed"}]})
+    return calls, b"".join(streamed).decode("utf-8", "replace")
+
+
+def the_heavy_pooled_models_never_reach_the_everyday_lane() -> None:
+    # The guard is the ONE refusal every request path already asks before it
+    # sends anything (run_local_turn, the Live turn, choose_lane, the warm-up).
+    for model in HEAVY:
+        said = AG.local_model_refusal(EVERYDAY, model)
+        check(f"Q7: {model!r} is refused on the everyday lane",
+              bool(said) and "pooled" in said.lower() and "11450" in said, said)
+    said = AG.local_model_refusal(EVERYDAY, POOLED_MODEL + ":latest")
+    check("Q7: ... and the refusal says which lane it was NOT sent to", "11436" in said,
+          said)
+    # CONTROLS: the two lanes that may hold it, and the everyday model.
+    check("CONTROL: the pooled model is allowed on the pooled lane (11450)",
+          AG.local_model_refusal(POOLED, POOLED_MODEL) == "",
+          AG.local_model_refusal(POOLED, POOLED_MODEL))
+    check("CONTROL: the daily model is still allowed on the everyday lane",
+          AG.local_model_refusal(EVERYDAY, EVERYDAY_MODEL) == "",
+          AG.local_model_refusal(EVERYDAY, EVERYDAY_MODEL))
+    # BEHAVIOUR, not just a predicate: ONE real chat turn, and NOT ONE request
+    # leaves. The old code sent the 30B tag to 11436 and Ollama loaded it there.
+    calls, said = _one_real_turn(POOLED_MODEL + ":latest", EVERYDAY)
+    check("Q7: a real chat turn naming the 30B on 11436 sends NO request",
+          calls == [], calls)
+    check("Q7: ... and the owner is told why, in the words that name the pooled lane",
+          "pooled" in said.lower() and "11450" in said, said[:400])
+
+
 def main() -> int:
     print("-- Q4 --")
     the_dead_pooled_pointer_is_repaired_in_the_getter()
@@ -254,6 +309,8 @@ def main() -> int:
     the_pooled_chat_request_names_its_window()
     print("\n-- Q6 --")
     the_warm_never_loads_the_pooled_model_on_the_everyday_lane()
+    print("\n-- Q7 --")
+    the_heavy_pooled_models_never_reach_the_everyday_lane()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
