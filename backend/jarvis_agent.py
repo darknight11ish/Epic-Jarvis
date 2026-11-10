@@ -796,25 +796,74 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
 #: open pull requests, issues, CI status, one file) and take a few small ACTIONS
 #: (comment, open an issue, re-run a workflow - plus, since 2026-11-09, create one
-#: new empty repository) - each action behind its own approval card - and it may
-#: never merge, push, commit, delete or close.
+#: new empty repository).
 #:
-#: ALL SEVEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
+#: The owner's decision of 2026-11-10 (Gemini ruling Q1, "Everything at once")
+#: added the last three: a read-only PR cockpit (`github_pr_scan`), a
+#: card-gated merge-commit-only merge pinned to the head sha the card showed
+#: (`github_merge_pr`), and a card-gated fix-and-push in an isolated scratch
+#: worktree (`github_fix_and_push`). Each mutating one raises its OWN one-shot
+#: card; neither can be auto-approved.
+#:
+#: ALL TEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
 #: a fixed-endpoint read still sends the owner's own GitHub token to
 #: api.github.com, so it is egress with a credential attached. `github_read` is
 #: the action a "tell me when" GitHub watch already uses, and it MUST stay
 #: `"auto"` in the shipped config (a look every 30 minutes cannot raise a card
 #: every 30 minutes), which is exactly why these tools do NOT reuse that name.
-#: Their own action is `github_inspect`, shipped as `"ask"`; being in
-#: NEEDS_A_PERSON as well means an owner who loosens that line still cannot make
-#: a GitHub read run with nobody asked.
-GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status")
+#: Their own actions are `github_inspect`, `github_merge_pr` and
+#: `github_fix_and_push`, all shipped as `"ask"`; being in NEEDS_A_PERSON as
+#: well means an owner who loosens that line still cannot make a GitHub read,
+#: a merge or a push run with nobody asked.
+GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status",
+                     # 2026-11-10: the read-only PR cockpit - every open pull
+                     # request, whether it can merge, and which required check
+                     # is holding it. Reads only.
+                     "github_pr_scan")
 GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow",
                        # 2026-11-09: one new, empty repository on the owner's own
                        # account - the owner's "create a repository called
                        # Fitness Band" ask. Its own action at "ask".
-                       "github_create_repo")
+                       "github_create_repo",
+                       # 2026-11-10: merge ONE pull request with a merge commit,
+                       # pinned to the head sha the card named. Never squash,
+                       # rebase, admin, auto-merge or past a required check.
+                       "github_merge_pr",
+                       # 2026-11-10: fix a failing pull request in its own scratch
+                       # folder, then push to that pull request's own branch on a
+                       # SEPARATE card. Never main/master/release/*, never force.
+                       "github_fix_and_push")
 GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
+
+
+def _github_capabilities_words() -> str:
+    """The GitHub inventory from its ONE home, `jarvis_github.CAPABILITIES`.
+
+    Wrapped because this module must import on a PC whose backend predates the
+    capability list: an empty answer then leaves the tool descriptions below
+    exactly as they were. The string is the same text `jarvis_quick.py` answers
+    a spoken question with, so what the model reads and what the owner hears
+    cannot drift apart.
+    """
+    try:
+        import jarvis_github as GH
+        return str(GH.capabilities_line() or "")
+    except Exception:                        # noqa: BLE001 - older backend is a state
+        return ""
+
+
+#: The full GitHub surface in one breath - reads, the six carded writes, the
+#: token handling, default-off and the never list. It is the SAME string
+#: `jarvis_github.capabilities_line()` gives the spoken answer, kept here so a
+#: caller can put the inventory beside a tool without writing a second copy.
+#:
+#: It IS appended to the three new tool descriptions (2026-11-10), so the model
+#: reads the same whole-surface sentence the owner hears; the parity suite
+#: (`backend/test_github_parity.py`) pins that. Those three tools are in the
+#: `github` group, so their schemas are sent only when that group is opened, not
+#: on every turn; the three are the documented exception to the 300-token
+#: per-tool rule in `backend/test_tool_text.py` (PER_TOOL_EXCEPT, measured 700).
+GITHUB_CAPABILITIES_WORDS = _github_capabilities_words()
 
 
 class _GitHubNoToken:
@@ -876,6 +925,24 @@ def _prepare_github_rerun_workflow(args: dict):
 def _prepare_github_create_repo(args: dict):
     import jarvis_github as GH
     return _github_plan(GH.plan_create_repo, args)
+
+
+def _prepare_github_pr_scan(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_scan_prs, args)
+
+
+def _prepare_github_merge_pr(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_merge_pr, args)
+
+
+def _prepare_github_fix_and_push(args: dict):
+    import jarvis_github as GH
+    # The push stage reads the LOCAL folder only (no socket): its own git state,
+    # and the note the prepare stage left there. The planner is called with the
+    # real git executor here; tests pass a fake to `plan_fix_and_push` directly.
+    return _github_plan(GH.plan_fix_and_push, args)
 
 
 def _run_github(args: dict, plan_obj, **_) -> dict:
@@ -5049,12 +5116,12 @@ TOOLS: dict = {
         # which action name (and therefore which tier) governs THIS call.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
-    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03: "Read + actions", and the one CREATE of
-    # 2026-11-09). Every one of the seven asks a person: `github_inspect`'s tier
-    # is "ask" in the shipped config, and all seven are in NEEDS_A_PERSON, so a
-    # loosened tier still cannot run one with nobody asked (the reason is on
-    # GITHUB_READ_TOOLS above).
+    # GitHub reads and the small GitHub actions (jarvis_github.py, the owner's
+    # decision of 2026-11-03: "Read + actions", the one CREATE of 2026-11-09, and
+    # the cockpit / merge / fix-and-push of 2026-11-10). Every one of the ten asks
+    # a person: `github_inspect`'s tier is "ask" in the shipped config, and all ten
+    # are in NEEDS_A_PERSON, so a loosened tier still cannot run one with nobody
+    # asked (the reason is on GITHUB_READ_TOOLS above).
     #
     # The lookup names are the TOOL names: github-tools.patch registers each one
     # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
@@ -5156,6 +5223,70 @@ TOOLS: dict = {
                         "description": "true for a private repository; default false"}},
          "required": ["name"]},
         _prepare_github_create_repo, _run_github),
+    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): one
+    # card, then every open pull request with its merge state and required checks.
+    # It reads - and it asks, because a read still spends the GitHub token.
+    "github_pr_scan": Tool(
+        "github_pr_scan",
+        "The pull request cockpit: list the open pull requests on one repository and "
+        "say, for each one, whether it can be merged - merge-ready, blocked, "
+        "conflicted, running or draft - and which required check is holding it. "
+        "Read-only: nothing on GitHub changes. It asks you before every read, and it "
+        "never merges anything itself; merging is a separate carded tool. "
+        + GITHUB_CAPABILITIES_WORDS,
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'}},
+         "required": ["repo"]},
+        _prepare_github_pr_scan, _run_github,
+        instead={"github_list": "For the plain list of open pull requests, use "
+                                "github_list with scope \"pulls\".",
+                 "github_ci_status": "For one branch's or pull request's newest run, "
+                                     "use github_ci_status."}),
+    # Merging ONE pull request (2026-11-10). Merge commit only, pinned to the head
+    # sha the card shows; squash, rebase, admin bypass, auto-merge and bypassing a
+    # required check are impossible - the request body is built by the planner.
+    "github_merge_pr": Tool(
+        "github_merge_pr",
+        "Merge ONE pull request with a MERGE COMMIT, pinned to the exact "
+        "40-character head commit you pass. One card names it and that commit. It "
+        "refuses, sending nothing, if the pull request is a draft, cannot merge "
+        "cleanly, has a check running, a required check failed, or it moved. It can "
+        "never squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
+        "required check. " + GITHUB_CAPABILITIES_WORDS,
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the pull request number"},
+            "head_sha": {"type": "string",
+                         "description": "its full 40-character head commit"}},
+         "required": ["repo", "number", "head_sha"]},
+        _prepare_github_merge_pr, _run_github,
+        instead={"github_pr_scan": "To see which pull requests are ready first, use "
+                                   "github_pr_scan.",
+                 "github_ci_status": "To read CI without merging, use "
+                                     "github_ci_status."}),
+    # Fix-and-push (2026-11-10): TWO cards, one per stage. Prepare copies the pull
+    # request into its own scratch folder and shows the failing checks; push shows
+    # the exact commits, files and command on a SECOND card and only then pushes
+    # to the pull request's own branch.
+    "github_fix_and_push": Tool(
+        "github_fix_and_push",
+        "Fix a failing pull request in a scratch folder, then push it to its own "
+        "branch. \"prepare\" reads the failing checks and copies it there; \"push\" "
+        "shows its commits and command on a second card. It never force-pushes, "
+        "deletes a branch or pushes to a protected branch, and refuses a folder "
+        "outside the scratch root or a credential file. "
+        + GITHUB_CAPABILITIES_WORDS,
+        {"type": "object", "properties": {
+            "stage": {"type": "string", "enum": ["prepare", "push"],
+                      "description": "prepare or push"},
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the pull request number"},
+            "worktree": {"type": "string",
+                         "description": "the scratch folder"}},
+         "required": ["repo", "number"]},
+        _prepare_github_fix_and_push, _run_github,
+        instead={"github_pr_scan": "To see what is failing, use github_pr_scan.",
+                 "github_merge_pr": "To merge a ready one, use github_merge_pr."}),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -6284,6 +6415,16 @@ NEEDS_A_PERSON = {
                              "the checks again",
     "github_create_repo": "creates a new repository on GitHub in the owner's name, which "
                           "Jarvis cannot delete afterwards",
+    # The read-only PR cockpit (2026-11-10): a read, and in this set for the same
+    # reason the other GitHub reads are - it sends the owner's token out.
+    "github_pr_scan": "sends the owner's GitHub token to api.github.com to read the open "
+                      "pull requests and their checks",
+    # The two mutating tools of 2026-11-10. Each raises its OWN card, and each is
+    # in this set so a loosened tier line cannot run one with nobody asked.
+    "github_merge_pr": "merges one pull request on GitHub in the owner's name, which "
+                       "cannot be undone and cannot pass a required check",
+    "github_fix_and_push": "pushes commits to a pull request's own branch on GitHub in the "
+                           "owner's name, which cannot be taken back",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -10251,15 +10392,19 @@ TOOL_GROUPS = (
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
     ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
     # GitHub: searching it for a library, and (2026-11-03) reading the owner's
-    # own and taking the small actions. The seven joined this group rather
+    # own and taking the small actions; the cockpit, merge and fix-and-push of
+    # 2026-11-10 joined the same group. All ten joined this group rather
     # than starting new ones for the reason the propose_plan note below gives: a
     # NEW group name costs tokens in more_tools' own description on every turn,
     # and a group's MEMBERS cost nothing extra there. They belong together
-    # anyway - every one of them is about GitHub, and all seven ship switched off.
-    ("github", "search GitHub for a library, or read your own GitHub and act on it",
+    # anyway - every one of them is about GitHub, and all ten ship switched off.
+    ("github", "search GitHub for a library, or read and act on your own GitHub: "
+               "four reads and six carded writes, all off by default, never a "
+               "force-push or a merge past a required check",
      ("github_search", "github_list", "github_read_file", "github_ci_status",
       "github_comment", "github_open_issue", "github_rerun_workflow",
-      "github_create_repo")),
+      "github_create_repo", "github_pr_scan", "github_merge_pr",
+      "github_fix_and_push")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single

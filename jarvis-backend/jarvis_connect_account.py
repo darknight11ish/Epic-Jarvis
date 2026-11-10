@@ -236,9 +236,13 @@ SERVICES: "collections.OrderedDict[str, Service]" = collections.OrderedDict([
         ),),
         summary=("Jarvis uses this token for GitHub searches, private repositories and "
                  "CI watches - and, when the GitHub tools are switched on, to read your "
-                 "repositories, pull requests, issues, CI and a file, comment, open an "
-                 "issue, re-run a workflow and create one new empty repository, each on "
-                 "its own card. It is sent to api.github.com and nowhere else."),
+                 "repositories, pull requests, issues, CI and a file, scan the pull "
+                 "requests that can be merged, comment, open an issue, re-run a "
+                 "workflow, create one new empty repository, merge one pull request "
+                 "with a merge commit pinned to the commit on its card, and push a fix "
+                 "to one pull request's own branch from a scratch folder - each on its "
+                 "own card. It never squash-merges, force-pushes, pushes to main or "
+                 "deletes anything. It is sent to api.github.com and nowhere else."),
         note=("The token is handled like a password: typed here, on this PC, and kept "
               "in Windows Credential Manager - never in the chat."),
         how="Say \"connect GitHub\" and one card appears for a personal access token.",

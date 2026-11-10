@@ -867,17 +867,19 @@ def t_offering_a_tool_is_a_different_thing_from_loosening():
     # the core values of jarvis that have already been established,
     # particularly reverse engineer anything among other things". The ON half of
     # the 2026-10-31 tiered ruling is gone - EVERY tool the AI model can be
-    # offered is switchable from the Tools page now, 62 of them since the four
-    # pack tools (2026-11-05) joined the six on-demand GitHub tools and
-    # hands-free's send_text_message (48 at 2026-11-04), plus wave 13's carded
-    # github_create_repo and project_read, and the only ones that
-    # are not are the ones whose own switch (or another tool) decides them.
-    check("every tool the model can be offered is switchable in-app, 62 since 2026-11-09",
+    # offered is switchable from the Tools page now, 65 of them since wave 16's
+    # three GitHub tools (2026-11-10: the PR cockpit, the carded merge and the
+    # carded fix-and-push) joined the 62 - the four pack tools (2026-11-05),
+    # the six on-demand GitHub tools, hands-free's send_text_message (48 at
+    # 2026-11-04), wave 13's carded github_create_repo and project_read. The
+    # only ones that are not are the ones whose own switch (or another tool)
+    # decides them.
+    check("every tool the model can be offered is switchable in-app, 65 since 2026-11-10",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 62 and "calendar_read" in AF.TIER_A)
+          and len(AF.TOOLS_SWITCHABLE) == 65 and "calendar_read" in AF.TIER_A)
     check("the tier lists plus the exceptions ARE the model's own tool list",
           set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH) == set(AG.TOOLS),
           sorted(set(AG.TOOLS) ^ (set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH))))
@@ -1081,14 +1083,15 @@ def t_the_tools_status_and_the_page():
         # AF.SWITCHABLE_GROUPS, not AF.TOOL_GROUPS: jarvis_storage_health.py
         # (PR #1117) appends a row of tools that raise cards but are never
         # switchable from an app, so the SWITCH list is the switchable subset.
-        # The storage row adds none of them, so the items are the 62 now that
+        # The storage row adds none of them, so the items are the 65 now that
         # the six on-demand GitHub tools have their own rows, hands-free's
         # send_text_message joined them, the four pack tools did too, wave 13's
-        # carded github_create_repo made it 61, and project_read's own row (the
-        # read half of "Jarvis takes over dev work") makes it 62.
-        check("the label, the 62 grouped items, the vault row and the four exceptions",
+        # carded github_create_repo made it 61, project_read's own row made it
+        # 62, and wave 16's PR cockpit, carded merge and carded fix-and-push
+        # (2026-11-10) make it 65.
+        check("the label, the 65 grouped items, the vault row and the four exceptions",
               st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
-              and len(st["items"]) == 62
+              and len(st["items"]) == 65
               and [g["title"] for g in st["groups"]]
               == [title for title, _tools in AF.SWITCHABLE_GROUPS]
               and st["items"][0]["group"] == AF.SWITCHABLE_GROUPS[0][0]

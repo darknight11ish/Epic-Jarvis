@@ -156,7 +156,7 @@ PACKS             = "backend/jarvis_packs.py"
 #: model can be offered has its own switch on Settings, "What asks first",
 #: under "Let the AI use this" (jarvis_asks_first.tools_status); turning one ON
 #: is the PC only and asks one card plus Windows Hello, OFF is instant from
-#: either app. One shared sentence, so the six cannot drift.
+#: either app. One shared sentence, so the ten cannot drift.
 GITHUB_TOOL_ENABLE_HINT = (
     'Turn on its own switch in Settings, "What asks first", under "Let the AI '
     'use this" ("Jarvis\'s own tools" holds one switch per GitHub tool): ON asks '
@@ -713,13 +713,14 @@ PROFILES: dict = {
         "sources": [AGENT, RESEARCH, ASKS_FIRST, REBUILT_FRAMEWORK],
     },
 
-    # The six on-demand GitHub tools (2026-11-03, the owner's "Read + actions"
-    # decision). They are ONE family of six, not six entries in other families,
-    # because together they are "your own GitHub": three reads that ask every
-    # time (a read still sends the owner's token to api.github.com) and three
-    # actions that each raise their own card. The tier is `switchable`: every
-    # one is in `jarvis_asks_first.TOOLS_SWITCHABLE` and none is in the
-    # shipped `[tools].enabled` list.
+    # The ten on-demand GitHub tools (2026-11-03's "Read + actions", 2026-11-09's
+    # one carded create, and 2026-11-10's cockpit, carded merge and carded
+    # fix-and-push). They are ONE family, not ten entries in other families,
+    # because together they are "your own GitHub": four reads that ask every time
+    # (a read still sends the owner's token to api.github.com) and six actions
+    # that each raise their own card. The tier is `switchable`: every one is in
+    # `jarvis_asks_first.TOOLS_SWITCHABLE` and none is in the shipped
+    # `[tools].enabled` list.
     "github_list": {
         "id": "github_list",
         "title": "List your own GitHub: repositories, pull requests, issues or runs",
@@ -915,6 +916,111 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once").
+    "github_pr_scan": {
+        "id": "github_pr_scan",
+        "title": "The pull request cockpit: what can be merged, and what is holding it",
+        "what": "Reads the open pull requests on one repository - at most ten - then "
+                "each one's merge state and its checks, and says for each whether it "
+                "is merge-ready, blocked, conflicted, still running or a draft. It "
+                "also names the required check that is holding a blocked one. It "
+                "reads only: nothing on GitHub changes.",
+        "gives": [
+            "See which open pull requests could be merged right now",
+            "See which required check is failing or still running",
+            "Get the exact head commit a merge would then be pinned to",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Reads only - it never merges anything itself: that is the separate "
+            "github_merge_pr tool, on its own card",
+            "At most ten open pull requests per call",
+            "It reads each pull request again after the list, because the list "
+            "answer does not say whether one can be merged",
+            "A read sends your GitHub token to api.github.com, so it asks every time",
+        ],
+        "combines": {
+            "github_merge_pr": "github_pr_scan says what can merge and shows the "
+                               "head commit; github_merge_pr merges that exact "
+                               "commit on its own card.",
+            "github_ci_status": "github_pr_scan covers every open pull request; "
+                                "github_ci_status answers for one branch or one "
+                                "pull request.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    # Merging one pull request (2026-11-10): merge commit only, pinned to the
+    # exact head commit the card names.
+    "github_merge_pr": {
+        "id": "github_merge_pr",
+        "title": "Merge one pull request with a merge commit, pinned to one commit",
+        "what": "Merges ONE pull request with a merge commit, pinned to the exact "
+                "40-character head commit the card shows. Immediately before the "
+                "merge it reads the pull request again and refuses - sending "
+                "nothing - if it is a draft, cannot merge cleanly, has a check "
+                "still running, has a required check that did not pass, or has "
+                "moved to a different head commit.",
+        "gives": [
+            "Merge a pull request from chat, with one card naming it and its commit",
+            "Know the merge is refused rather than guessed at when anything changed",
+            "See the real merge commit GitHub reports back",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Merge commit only: never squash, rebase, admin bypass or auto-merge",
+            "Never merges past a required check, and never merges a draft",
+            "The head commit must still be the one on the card, or nothing is sent",
+            "A merge cannot be undone by Jarvis, and it never pushes to a branch",
+        ],
+        "combines": {
+            "github_pr_scan": "github_pr_scan says which pull request is ready and "
+                              "shows its head commit; github_merge_pr merges it.",
+            "github_fix_and_push": "When a pull request is failing, "
+                                   "github_fix_and_push fixes and pushes it; once "
+                                   "it is green, github_merge_pr merges it.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    # Fix-a-failing-pull-request and push it (2026-11-10): two stages, two cards.
+    "github_fix_and_push": {
+        "id": "github_fix_and_push",
+        "title": "Fix a failing pull request in a scratch folder, then push it",
+        "what": "Copies one failing pull request into its own scratch folder on this "
+                "PC and shows the failing checks with GitHub's own annotations and "
+                "the end of the job log. After the fix is committed there, a SECOND "
+                "card shows the exact commits, changed files and command, and only "
+                "then does it push to the pull request's own branch.",
+        "gives": [
+            "See why a pull request is failing without leaving chat",
+            "Edit and commit in an isolated folder, never the live checkout",
+            "Approve the exact push command on its own card before anything leaves",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Pushes only to the pull request's OWN branch - never main, master, "
+            "release/* or hotfix/*, and never a force-push or a delete",
+            "Refuses a folder outside Jarvis's scratch root, a dirty folder, a "
+            "branch mismatch and a changed file that looks like a credential",
+            "Jarvis only pushes commits: it never commits for you",
+            "A pushed commit cannot be taken back by Jarvis",
+        ],
+        "combines": {
+            "github_pr_scan": "github_pr_scan shows which pull request is failing; "
+                              "github_fix_and_push diagnoses and pushes the fix.",
+            "github_merge_pr": "Once the fix is pushed and green, "
+                               "github_merge_pr merges the pull request.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
     },
 
     "web_search": {
@@ -2542,8 +2648,9 @@ FAMILIES: dict = {
                 "capture or database.",
         "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate",
                   "github_list", "github_read_file", "github_ci_status",
-                  "github_comment", "github_open_issue", "github_rerun_workflow",
-                  "github_create_repo"],
+                  "github_pr_scan", "github_comment", "github_open_issue",
+                  "github_rerun_workflow", "github_create_repo",
+                  "github_merge_pr", "github_fix_and_push"],
         "impact": "This is the family the owner uses to actually build things with "
                   "Jarvis: it answers \"has someone already built this?\" with a "
                   "graded verdict, runs the installer or the build, and can inspect "
@@ -2552,13 +2659,19 @@ FAMILIES: dict = {
                   "separate clicks. It also reads your own GitHub on demand - "
                   "repositories, pull requests, issues, CI and one file - and can "
                   "post one comment, open one issue, re-run one workflow or create "
-                  "one new empty repository, each behind its own card; it can never "
-                  "merge, push or delete.",
+                  "one new empty repository, each behind its own card. Since "
+                  "2026-11-10 it can also merge ONE pull request with a merge "
+                  "commit pinned to the commit the card showed, and push a fix to "
+                  "a pull request's own branch from an isolated scratch folder - "
+                  "each on its own card, never a squash, rebase, force-push, "
+                  "delete or a push to main.",
         "limits": ["Every way out of the PC here is carded: shell commands always "
                    "ask, GitHub research needs an approved plan, a look at your "
-                   "own GitHub asks every time, each of its four actions has its "
-                   "own card, and a repository it creates is empty and cannot be "
-                   "deleted by Jarvis",
+                   "own GitHub asks every time, each of its six actions has its "
+                   "own card, a repository it creates is empty and cannot be "
+                   "deleted by Jarvis, a merge is merge-commit only and pinned to "
+                   "one commit, and a push goes only to a pull request's own "
+                   "branch from a scratch folder",
                    "REA refuses live process capture, device changes and debugger "
                    "sessions by name, and the plan module ships off until a "
                    "measured evaluation passes",

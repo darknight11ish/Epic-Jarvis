@@ -5117,6 +5117,21 @@ what is missing is only the Settings screen agreeing about who turned it off.
   than merely unported, and `tools/check_parity.py` classifies both
   `deliberate`.
 
+- **The GitHub merge and fix-and-push cards have no phone screen, and that is
+  one-sided on purpose** (2026-11-10, the owner's "Everything at once";
+  `docs/JARVIS-API.md` §190.9-§190.10). The ABILITY is not one-sided: the
+  ten GitHub tools run on this PC's backend and either app's chat is the same
+  turn, so a merge or a push can be asked for and approved from the phone's
+  chat exactly as from the desktop's - each raises its own card, and the card is
+  answered on whichever app shows it. What is one-sided is the two things that
+  physically live here: the token (Windows Credential Manager, written by the
+  PC-only "connect GitHub" card) and the fix-and-push scratch folder
+  (`%LOCALAPPDATA%\Jarvis\github-fix`), so `stage="prepare"` copies and
+  diagnoses the pull request on this PC and the fix is edited and committed
+  there. Neither app gained a GitHub screen, and `tools/check_parity.py` is
+  unchanged because no route was added: a GitHub screen would be deep
+  configuration, which the standing rule keeps off the phone.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

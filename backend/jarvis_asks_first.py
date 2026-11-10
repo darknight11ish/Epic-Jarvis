@@ -484,6 +484,10 @@ TIER_EXTRA = (
     # repository called Fitness Band"). In this group because it is the AI
     # model's own GitHub tool: its own switch here, and its own action card.
     "github_create_repo",
+    # The cockpit and the two carded writes of 2026-11-10 (the owner's
+    # "Everything at once"). Same group and same reason: the model's own GitHub
+    # tools, each with its own switch, each still raising its own card.
+    "github_pr_scan", "github_merge_pr", "github_fix_and_push",
     # Changing what needs a card, a second yes or Windows Hello by talking to
     # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). A
     # switch here offers the ability to the model at all; it never changes a
@@ -863,6 +867,12 @@ GROUPS = (
                       # repository on his own account, one card each. Its own
                       # action, so it has its own row here.
                       "github_create_repo",
+                      # The two carded writes of 2026-11-10 (the owner's
+                      # "Everything at once"): a merge and a PR-branch push both
+                      # raise a card, so both are rows on this page. The cockpit
+                      # (github_pr_scan) is a READ and shares github_inspect
+                      # above, so it has no row of its own here.
+                      "github_merge_pr", "github_fix_and_push",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the

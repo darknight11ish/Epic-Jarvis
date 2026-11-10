@@ -168,6 +168,10 @@ READ_ONLY_TOOLS = frozenset({
     # ACTIONS are in ACTING_TOOLS below, because "I posted the comment" must be
     # corrected when only the card was raised or the POST failed.
     "github_list", "github_read_file", "github_ci_status",
+    # The PR cockpit (2026-11-10): it reads the open pull requests, their merge
+    # state and their checks, and changes nothing. The MERGE it suggests is a
+    # separate tool in ACTING_TOOLS, so "I merged it" is still corrected.
+    "github_pr_scan",
     # "plugin_list" (2026-11-02): it lists the drop-in plugin folder - names,
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
@@ -269,6 +273,11 @@ ACTING_TOOLS = frozenset({
     # is in this set. The three GitHub READS are in READ_ONLY_TOOLS above.
     "github_comment", "github_open_issue", "github_rerun_workflow",
     "github_create_repo",
+    # The two carded writes of 2026-11-10 (the owner's "Everything at once"): a
+    # merge and a PR-branch push both CHANGE GitHub, so "I merged it" or "I
+    # pushed the fix" must be corrected when only the card was raised or the
+    # request failed.
+    "github_merge_pr", "github_fix_and_push",
     # "rea_investigate" (2026-11-04, the owner's decision to ship the full
     # REA toolbox): it left READ_ONLY_TOOLS for the reason written there - the
     # full toolbox patches a local file, writes an exported bundle or a pulled

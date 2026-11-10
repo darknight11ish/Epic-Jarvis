@@ -199,8 +199,16 @@
       "title": "Jarvis wants to create a new repository on your GitHub"
     },
     {
+      "action": "github_fix_and_push",
+      "title": "Jarvis wants to push a fix to a pull request's own branch"
+    },
+    {
       "action": "github_inspect",
       "title": "Jarvis wants to read your GitHub"
+    },
+    {
+      "action": "github_merge_pr",
+      "title": "Jarvis wants to merge a pull request with a merge commit"
     },
     {
       "action": "github_open_issue",
@@ -1113,12 +1121,36 @@
       }
     },
     {
+      "action": "github_fix_and_push",
+      "notice": {
+        "title": "Jarvis wants to push a fix to a pull request's own branch",
+        "summary": "Jarvis wants to push a fix to a pull request.",
+        "full": "copies a pull request into an isolated scratch folder on this PC and pushes your commits to that pull request's own branch in your name; never a force-push, never main/master/release/hotfix, never a delete, refuses a changed file that looks like a credential before anything is pushed, and a pushed commit cannot be taken back. nothing has happened yet.",
+        "body": "copies a pull request into an isolated scratch folder on this PC and pushes your commits to that pull request's own branch in your name; never a force-push, never main/master/release/hotfix, never a delete, refuses a changed file that looks like a credential before anything is pushed, and a pushed commit cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_inspect",
       "notice": {
         "title": "Jarvis wants to read your GitHub",
         "summary": "Jarvis wants to read your GitHub.",
         "full": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
         "body": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_merge_pr",
+      "notice": {
+        "title": "Jarvis wants to merge a pull request with a merge commit",
+        "summary": "Jarvis wants to merge a pull request (merge commit only).",
+        "full": "merges one pull request with a merge commit, pinned to the exact head commit the card showed; refused with nothing sent if that commit has moved, it is a draft, it conflicts or is blocked, a check is still running or a required check did not pass; Jarvis cannot squash, rebase, force, use an admin bypass or bypass a required check, and a merge cannot be undone. nothing has happened yet.",
+        "body": "merges one pull request with a merge commit, pinned to the exact head commit the card showed; refused with nothing sent if that commit has moved, it is a draft, it conflicts or is blocked, a check is still running or a required check did not pass; Jarvis cannot squash, rebase, force, use an admin bypass or bypass a required check, and a merge cannot be undone. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
