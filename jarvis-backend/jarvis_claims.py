@@ -195,6 +195,12 @@ READ_ONLY_TOOLS = frozenset({
     # click or typing. Read-only for the claim check: a sentence saying
     # something was changed after it must still be corrected.
     "product_check",
+    # "project_read" (2026-11-09): it reads ONE bounded file of code, config or
+    # text inside a folder the owner listed, and changes nothing - no card, no
+    # write, and credential files are refused (jarvis_project_read.py). It was
+    # left in NEITHER set at first, which backend/test_smarter_answers.py caught
+    # on 2026-11-09 ("every tool jarvis_agent offers is read-only or an action").
+    "project_read",
 })
 
 #: The other half of the same classification (audit H4): every tool that can
