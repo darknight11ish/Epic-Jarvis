@@ -46,10 +46,11 @@
  *
  *   * A LOCAL MODEL PRESET IS THE OWNER'S OWN CLICK (2026-11-09). Applying one
  *     starts its lane and switches the model AT ONCE: the PC keeps its ONE
- *     `switch_model` card for the model/chat path and for the two presets that
- *     are not a quick, reversible switch - Coding (its pooled lane pauses both
- *     other models) and Cloud (it changes where the owner's words go, and its
- *     card is `change_own_config`). The chosen mark still comes from a REFETCH
+ *     `switch_model` card for the model/chat path and for the rows that are
+ *     not a quick, reversible switch - the two heavy presets (Coding first,
+ *     Medical second; each pauses both other models as one pooled lane) and
+ *     Cloud (it changes where the owner's words go, and its card is
+ *     `change_own_config`). The chosen mark still comes from a REFETCH
  *     of the PC's own `chosen_preset`, never from this click, so the menu can
  *     never mark a preset the PC did not record.
  *   * A PERSONALITY IS WORDING ONLY. The PC says it plainly ("Nothing here
@@ -920,10 +921,10 @@ export function mountHudPresets(options = {}) {
   /** ONE model-preset click. A LOCAL preset is the owner's own reversible
    *  click (2026-11-09), so it switches at once and the refetched contract
    *  decides the mark. The PC still raises its ONE `switch_model` card for the
-   *  two rows that are not a quick switch - Coding (its pooled lane pauses
-   *  both other models) and the Cloud row (`change_own_config`) - so this says
-   *  what to expect from the row that was pressed, and never marks anything
-   *  from the click itself.
+   *  rows that are not a quick switch - the two heavy presets (Coding first,
+   *  Medical second; each pauses both other models as one pooled lane) and the
+   *  Cloud row (`change_own_config`) - so this says what to expect from the row
+   *  that was pressed, and never marks anything from the click itself.
    *
    *  `provider` is only ever given by the Cloud section: picking a service is
    *  the SAME apply with one more field (2026-10-27). */
@@ -937,7 +938,7 @@ export function mountHudPresets(options = {}) {
     announce(wantsCard
       ? (provider
         ? `Asked the PC to use ${title || id} for the cloud. Nothing changes until you answer its approval card.`
-        : `Asked the PC to apply ${title || id}. Its coding lane pauses both other models first, so nothing changes until you answer its approval card.`)
+        : `Asked the PC to apply ${title || id}. It pauses both other models first, so nothing changes until you answer its approval card.`)
       : `Applying ${title || id} on the PC. It switches at once - press another preset to switch straight back.`);
     try {
       await applyFocusPresetOnPc(win, id, provider);
@@ -1176,7 +1177,7 @@ export function mountHudPresets(options = {}) {
       group.appendChild(note("The PC listed no presets."));
       return group;
     }
-    group.appendChild(note("Local presets switch at once when you pick one - pick another to switch straight back. Coding (it pauses both other models first) and Cloud (it changes where your words go) still ask for the PC's ONE approval card."));
+    group.appendChild(note("Local presets switch at once when you pick one - pick another to switch straight back. Coding and Medical (they pause both other models first) and Cloud (it changes where your words go) still ask for the PC's ONE approval card."));
     for (const row of rows) {
       const asking = pcBusy.preset === row.id;
       const button = menuItem(
