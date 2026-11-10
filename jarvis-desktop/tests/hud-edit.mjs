@@ -134,7 +134,11 @@ function sample() {
   // 2026-10-28 (the owner's field test): the Hide control is a real toggle, and
   // this is the call it makes - no `visible` value, so the card's own state is
   // flipped. A hidden card's saved document must be able to come back.
-  const toggledOff = applyAction(start, { type: "setVisible", id: "tools" });
+  // Wave 15 (2026-11-09): the layouts slice's Cockpit composition ships
+  // "Abilities used" hidden, so the precondition is stated here instead of
+  // being read from the composition - the reducer's toggle is what this pins.
+  const toolsShown = applyAction(start, { type: "setVisible", id: "tools", visible: true });
+  const toggledOff = applyAction(toolsShown.layout, { type: "setVisible", id: "tools" });
   check("a bare setVisible toggles a shown card to hidden",
     toggledOff.changed && cardOf(toggledOff.layout, "tools").visible === false, toggledOff.note);
   const toggledOn = applyAction(toggledOff.layout, { type: "setVisible", id: "tools" });

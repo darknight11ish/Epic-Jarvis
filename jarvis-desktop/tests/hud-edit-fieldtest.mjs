@@ -407,6 +407,17 @@ async function changeEverything(page, before) {
   // 5. every card that may be hidden, hidden - last, so every card is still on
   //    screen at its final size for the measurement above. A hidden card is a
   //    ghost in Edit HUD since the 2026-10-28 fix, so its controls stay usable.
+  //    Wave 15 (2026-11-09): the layouts slice's Cockpit composition ships six
+  //    right-rail cards hidden, and Hide is a real toggle - so a hidden card's
+  //    control is pressed once to show it, then the loop below hides every one.
+  //    This keeps the composition and still proves that Hide hides.
+  for (const card of hideable) {
+    const now = cardOf(await adopted(page), card.id);
+    if (now && now.visible === false) {
+      await press(page, `[data-hud-edit-command="hide"][data-hud-edit-card="${card.id}"]`);
+      await settle(page);
+    }
+  }
   for (const card of hideable) {
     await press(page, `[data-hud-edit-command="hide"][data-hud-edit-card="${card.id}"]`);
     await settle(page);
