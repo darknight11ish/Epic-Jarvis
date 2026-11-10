@@ -170,6 +170,17 @@ SWITCH_ON_WORDS = ("The vault organizer is ON. Ask it for a plan; nothing is "
                    "changed until you approve a plan.")
 SWITCH_OFF_WORDS = "The vault organizer is OFF. A plan can wait."
 SWITCH_ALREADY_WORDS = "The vault organizer is already on."
+#: DEF-061's REMAINING WORDING (2026-11-10). The 202 that RAISES the card used
+#: to answer SWITCH_ON_WORDS, and the desktop Settings line prints exactly that
+#: `message` (jarvis-desktop/src/asks-first-settings.js, `changeVault`) - so the
+#: owner was told the organizer was ON while the card was still waiting and
+#: nothing was enabled. The two sibling switches answer their card branches with
+#: their own SWITCH_WAITING_WORDS (jarvis_media_index.py, jarvis_sandbox_exec.py);
+#: this one now does the same, and BOTH 202 branches say it: a card that is
+#: already waiting leaves the switch exactly as OFF as the one just raised.
+SWITCH_WAITING_WORDS = ("Waiting for your approval. The vault organizer is "
+                        "still OFF; nothing is changed until you approve the "
+                        "card.")
 SWITCH_LAST_WORDS = {"enabled": "the vault organizer is on",
                      "denied": "you said no, so it stays off",
                      "timed_out": "the card timed out, so it stays off",
@@ -418,7 +429,7 @@ def request_enabled(on, *, gate: Optional[Callable] = None,
             if _PENDING.get("id"):
                 return 202, {"ok": True, "enabled": False, "waiting": True,
                              "pending": dict(_PENDING),
-                             "message": "one card is already waiting"}
+                             "message": SWITCH_WAITING_WORDS}
             pid = "vc" + hashlib.sha256(
                 f"{time.time()}:{os.getpid()}".encode("utf-8")).hexdigest()[:12]
             _PENDING.clear()
@@ -430,7 +441,7 @@ def request_enabled(on, *, gate: Optional[Callable] = None,
                               f"the approval card could not be shown "
                               f"({type(exc).__name__}), so nothing changed")
     return 202, {"ok": True, "enabled": False, "waiting": True,
-                 "pending_id": pid, "message": SWITCH_ON_WORDS}
+                 "pending_id": pid, "message": SWITCH_WAITING_WORDS}
 
 
 def _finish_result(pid: str, code: int, why: str) -> tuple:

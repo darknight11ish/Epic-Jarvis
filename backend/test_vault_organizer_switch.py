@@ -40,6 +40,15 @@ and the module is loaded by path, never from the live backend folder unless
 EVERY CHECK CAN FAIL. The first one is the regression: with the old
 placeholder marker, check 2 sees zero cards and the "one card is already
 waiting" sentence, and the suite exits 1.
+
+THE SECOND REGRESSION PIN (DEF-062, 2026-11-10). The 202 that raises the card
+used to answer `SWITCH_ON_WORDS` - "The vault organizer is ON" - while nothing
+was enabled and the card was still waiting; the desktop Settings line prints
+exactly that `message` (jarvis-desktop/src/asks-first-settings.js,
+`changeVault`), so the owner was told it was on. The reply must answer
+`SWITCH_WAITING_WORDS` and must never claim ON while `enabled` is false and the
+card waits. `SWITCH_ON_WORDS` is still used where it is true - `set_enabled(True)`
+after the card is approved - and nowhere in a 202.
 """
 import json
 import os
@@ -256,7 +265,14 @@ def one() -> int:
           isinstance(on1.get("pending_id"), str)
           and bool(_PID.match(on1["pending_id"]))
           and on1.get("waiting") is True and on1.get("pending") is None
-          and on1.get("message") == V.SWITCH_ON_WORDS,
+          and on1.get("message") == V.SWITCH_WAITING_WORDS,
+          on1)
+    check("... and NEVER claims the organizer is ON while the card is waiting",
+          "vault organizer is ON" not in str(on1.get("message"))
+          and on1.get("message") == V.SWITCH_WAITING_WORDS
+          and on1.get("enabled") is False and on1.get("waiting") is True
+          and r.get("cards_after_on1") == 1
+          and V.SWITCH_WAITING_WORDS != V.SWITCH_ON_WORDS,
           on1)
     check("switch_status() then reports waiting WITH that same pending id",
           waiting.get("waiting") is True
@@ -266,8 +282,10 @@ def one() -> int:
     check("a SECOND ON while one card waits raises nothing new",
           on2.get("code") == 202 and r.get("cards_after_on2") == 1
           and r.get("gate_calls_after_on2") == 0, (on2, r.get("cards_after_on2")))
-    check("... it answers 'one card is already waiting', with no new pending id",
-          on2.get("message") == "one card is already waiting"
+    check("... it answers the waiting words, with no new pending id",
+          on2.get("message") == V.SWITCH_WAITING_WORDS
+          and "vault organizer is ON" not in str(on2.get("message"))
+          and on2.get("enabled") is False
           and on2.get("pending_id") is None
           and isinstance(on2.get("pending"), dict)
           and on2["pending"].get("id") == on1.get("pending_id"),
@@ -287,7 +305,7 @@ def one() -> int:
           on3.get("code") == 202 and r.get("cards_after_on3") == 2
           and isinstance(on3.get("pending_id"), str)
           and bool(_PID.match(on3["pending_id"]))
-          and on3.get("message") == V.SWITCH_ON_WORDS,
+          and on3.get("message") == V.SWITCH_WAITING_WORDS,
           (on3, r.get("cards_after_on3")))
     print(f"      fresh child marker before any request: "
           f"{r.get('initial_pending')} (truthy: {r.get('initial_pending_truthy')})")

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "c00ebf63e310952e337eb1abc831d170adffe2f4",
- "built_at": "2026-11-09T21:47:26-08:00",
+ "ref": "7b04937d3910ed6b8a5ab8faaa1bf64407e19bea",
+ "built_at": "2026-11-09T21:13:18-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -2847,7 +2847,6 @@
     "jarvis-desktop/tests/blockers.mjs",
     "jarvis-desktop/tests/brain-producers.mjs",
     "jarvis-desktop/tests/brain-settings-door.mjs",
-    "jarvis-desktop/tests/brain-settings-q13.mjs",
     "jarvis-desktop/tests/briefing.mjs",
     "jarvis-desktop/tests/browser-engine.mjs",
     "jarvis-desktop/tests/card-resolution-sync.mjs",
@@ -2989,7 +2988,6 @@
     "jarvis-desktop/tests/hud-calendar.mjs",
     "jarvis-desktop/tests/hud-connect.mjs",
     "jarvis-desktop/tests/hud-current-models.mjs",
-    "jarvis-desktop/tests/hud-edit-click-to-edit.mjs",
     "jarvis-desktop/tests/hud-edit-fieldtest.mjs",
     "jarvis-desktop/tests/hud-edit-geometry.mjs",
     "jarvis-desktop/tests/hud-edit-select.mjs",
@@ -3004,9 +3002,7 @@
     "jarvis-desktop/tests/hud-live-read-aloud.mjs",
     "jarvis-desktop/tests/hud-memory-door.mjs",
     "jarvis-desktop/tests/hud-nav.mjs",
-    "jarvis-desktop/tests/hud-page-redesign.mjs",
     "jarvis-desktop/tests/hud-presets-chosen.mjs",
-    "jarvis-desktop/tests/hud-presets-names.mjs",
     "jarvis-desktop/tests/hud-presets.mjs",
     "jarvis-desktop/tests/hud-prompt-window.mjs",
     "jarvis-desktop/tests/hud-rail-tools.mjs",
@@ -3164,7 +3160,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1250,
+   "file_count": 1246,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -4021,6 +4017,7 @@
     "backend/test_parking.py",
     "backend/test_past_time_zones.py",
     "backend/test_paste_guard.py",
+    "backend/test_patch_delta_coverage.py",
     "backend/test_patch_history.py",
     "backend/test_patch_original_text.py",
     "backend/test_patch_wellformed.py",
@@ -4301,7 +4298,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 682,
+   "file_count": 683,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4576,7 +4573,7 @@
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
-    "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
+    "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4719,10 +4716,10 @@
     "decisions.d/2026-11-08-wave-11-model-and-lane-truth.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
+    "decisions.d/2026-11-09-delta-coverage-rule.md",
     "decisions.d/2026-11-09-wave-12-owner-clicks-and-truth.md",
     "decisions.d/2026-11-09-wave-13-reminders-github-creator.md",
     "decisions.d/2026-11-09-wave14-project-read-presets-hud.md",
-    "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -6252,74 +6249,29 @@
  ],
  "recent_commits": [
   {
-   "sha": "c00ebf63e310952e337eb1abc831d170adffe2f4",
+   "sha": "7b04937d3910ed6b8a5ab8faaa1bf64407e19bea",
    "date": "2026-11-09",
-   "subject": "fix(hud): the live-read-aloud stage slice covers wave 15 taller stage, where the refused-start popup lives"
+   "subject": "fix(feedback): run the C121 migration smoke on a pre-v2 fixture copy (Q9)"
   },
   {
-   "sha": "9d45c2f4dbf6a41fcb653515f94623f364944929",
+   "sha": "384388e54314a2696cc459bb3cc4402c195fa3a1",
    "date": "2026-11-09",
-   "subject": "records: the wave-15 changelog and decision fragments, and the self-code map regenerated last"
+   "subject": "test(backend): require a delta-table rule or exact-hunk coverage per shipped patch"
   },
   {
-   "sha": "47e0ff1f5490e172a26b9cd659170cc3525a755d",
+   "sha": "3210b793e352af02897b583b83301a0f4a4fdead",
    "date": "2026-11-09",
-   "subject": "fix(hud): the Presets note names Medical, and the memory door keeps its own Keep (DEF-063, DEF-064)"
+   "subject": "records: the wave-14 switchable count is 61 to 62, and the About defect totals follow the register"
   },
   {
-   "sha": "f2e321a82e7fb240b91f6da8a3fca47157ac38db",
+   "sha": "bb1bf9f72585eeed475b0bb4270368527c5fa3ee",
    "date": "2026-11-09",
-   "subject": "feat(hud): the way back from Face Only / Mini View, and ONE stage header (Q5/Q6)"
+   "subject": "docs(records): close DEF-062 and open DEF-063 and DEF-064 with the waiting-words fragment"
   },
   {
-   "sha": "132e45330147f34399c2e67448770c6a869b2433",
+   "sha": "2ad6dba263391b7df4b510c5a566e524df05a5fd",
    "date": "2026-11-09",
-   "subject": "chore(hud): the self code map is regenerated for the folded tree"
-  },
-  {
-   "sha": "0ea3b77b846c33f1ea5f7ea1081fa5123633c0dd",
-   "date": "2026-11-09",
-   "subject": "fix(hud-edit): the field and toggle tests learn the wave-15 Cockpit composition"
-  },
-  {
-   "sha": "fc92fea2332e2b0cc08e95b8ef83cb97988156ef",
-   "date": "2026-11-09",
-   "subject": "fix(hud): the two telemetry headings wear the redesign's plain words (Q9)"
-  },
-  {
-   "sha": "bea8ab421652401efa8bf36225d4a33525b232d2",
-   "date": "2026-11-09",
-   "subject": "feat(wave15-brain): Q13 - one chosen shape, plain empty states, Model pane switches"
-  },
-  {
-   "sha": "3412236b98fdae6a9fdc1499292acd2499291e69",
-   "date": "2026-11-09",
-   "subject": "feat(hud): the seven layouts carry the redesign's compositions (spec 1.2, Q2, Q10)"
-  },
-  {
-   "sha": "9c61c23059aa4a9a340b306464237e46f5cbe7f5",
-   "date": "2026-11-09",
-   "subject": "feat(hud): the seven screen layouts wear plain words in the one Presets menu (spec §1.2, Q2-Q3, Q9)"
-  },
-  {
-   "sha": "ded92c020ebcd225d5d0855d922d007263457922",
-   "date": "2026-11-09",
-   "subject": "feat(hud-edit): dock Edit HUD as a top ribbon with one plain-words inspector (spec Q6-Q9)"
-  },
-  {
-   "sha": "c4259640f85c921b0f50b08f72578e5a11fe7a8a",
-   "date": "2026-11-09",
-   "subject": "chore(hud): the AI Mode name follows the PC's chosen preset, and the self code map is regenerated"
-  },
-  {
-   "sha": "2ec7410db0fb01f521edaaea2fdf7b4f87bc80d1",
-   "date": "2026-11-09",
-   "subject": "feat(hud): one navigation, one pill bar, one approval card (spec 2.1/2.2/4.1/4.2/5.2)"
-  },
-  {
-   "sha": "4a4864712d46ea780a2a39491565b2d31bd583c5",
-   "date": "2026-11-09",
-   "subject": "Merge pull request #1219 from darknight11ish/integration/wave14-2026-11-09"
+   "subject": "fix(vault): the switch's waiting reply says the card is waiting, not that it is on"
   },
   {
    "sha": "24a3fc9b1da913556b7ee1585d46538830cb0b80",
@@ -6350,18 +6302,63 @@
    "sha": "d73f6919103d1aafc98ab4bf704abd1059cf2d2d",
    "date": "2026-11-09",
    "subject": "test(hud): both heavy rows carry their measured cost sentence in the Presets menu"
+  },
+  {
+   "sha": "acce70a309a026743a9c96a3444e4ef1c577eaaf",
+   "date": "2026-11-09",
+   "subject": "fix(agent): the diet hints and the catalogue pin learn project_read"
+  },
+  {
+   "sha": "367bfc3eaea657d79934fe0d34c0e2107e1e26c9",
+   "date": "2026-11-09",
+   "subject": "fix(desktop): the asks-first tool list learns the cardless project_read"
+  },
+  {
+   "sha": "cf00d31cb3f271f9239e483ecb0e30877f5c9635",
+   "date": "2026-11-09",
+   "subject": "presets: both heavy rows keep a card, and no card only for the rows that are not heavy"
+  },
+  {
+   "sha": "a69d55426c31f3771b367ec9474c73bc9b4dea34",
+   "date": "2026-11-09",
+   "subject": "fix(reconcile): carry wave 13's auto-learn fault routes"
+  },
+  {
+   "sha": "db0fd53ce384b317f8f1cc322a9b9b862b79054e",
+   "date": "2026-11-09",
+   "subject": "records(wave14): one changelog and one decisions fragment, claims C155-C157, About totals, DEF-061"
+  },
+  {
+   "sha": "38518548d0d1ded0cfc3712395fb4b62439bc0d6",
+   "date": "2026-11-09",
+   "subject": "fix(vault): no card waiting is an empty marker, not a truthy placeholder"
+  },
+  {
+   "sha": "42af90aba56f5533caf7120cd2d2e65943eaf18d",
+   "date": "2026-11-09",
+   "subject": "presets: the prose says ten focus presets, and the card boundary names Medical"
+  },
+  {
+   "sha": "85afb3badc0b7f1a78a9f034b43b3ee048093705",
+   "date": "2026-11-09",
+   "subject": "chore: regenerate the self-code map after the last gate fix"
+  },
+  {
+   "sha": "4bfafa278c9cd4d6d70614d721b4f45963a2e878",
+   "date": "2026-11-09",
+   "subject": "test(p1a): pin the self portrait's registered tool count at 67"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1423
+   "files": 1424
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1258
+   "files": 1254
   },
   {
    "path": "jarvis-client/",
@@ -6470,8 +6467,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5594,
-  "covered": 5123,
+  "tracked_files": 5591,
+  "covered": 5120,
   "excluded": 471,
   "subsystems": 27
  },

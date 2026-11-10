@@ -238,11 +238,12 @@ ENVIRONMENT_SKIPS = {
         "is not installed", "needs icacls", "is not nt",
         "this is not windows", "does not enforce it"),
     "backend/test_settings_tool.py": ("not importable in this environment",),
-    # The Wave-10 migration smoke opens a COPY of the owner's live feedback.db
-    # (JARVIS-API section 1071). No CI runner has that file: the suite prints
-    # "does not exist on this machine", runs its synthetic half and says so.
-    # A machine limit, not a missing guard - the same shape as test_data_backup.
-    "backend/test_feedback_migration.py": ("does not exist on this machine",),
+    # `backend/test_feedback_migration.py` used to need an entry here: it
+    # copied the owner's live feedback.db and, on a CI runner with no such
+    # file, printed "does not exist on this machine". Owner ruling Q9
+    # (2026-11-09) replaced that with an explicit pre-v2 fixture built in
+    # scratch, so the suite now runs in full everywhere and skips nothing -
+    # there is no environmental skip left to allow.
     # The drag-and-drop suite (Wave 12, 2026-11-09) drives the REAL MarkItDown
     # converter in a child process when it can, and says so plainly when the
     # Python running the claims check has no MarkItDown installed. That is a
