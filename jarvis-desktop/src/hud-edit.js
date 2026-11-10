@@ -29,11 +29,31 @@
  * whose DOM is a self-contained section - the six Bento inspector cards, the
  * three left-rail panels, the approvals queue and (when the shell creates it)
  * the Jarvis-bar button - can move between three regions (left rail, stage
- * top, right rail), resize S/M/L/Tall, collapse and (except protected) hide.
+ * top, right rail), resize Compact/Normal/Wide/Tall, collapse and (except
+ * protected) hide.
  * The MAIN STAGE (conversation, the Galaxy view, the composer and the stage
  * tabs) is the stage: its registry rows still round-trip, but H2 does not
  * reparent the live stage, so its toolbar explains that instead of pretending
  * a move happened. Stage-card editing is H3/H4 territory.
+ *
+ * 2026-11-09, THE OWNER'S UI REVIEW (Q6-Q8 of the HUD redesign spec): the
+ * editor stopped looking like scaffolding. Three things changed and nothing
+ * else:
+ *   1. `Edit HUD` is a DOCKED RIBBON at the top of the window grid
+ *      (`#shell > #hud-edit-bar`, row 1, full width) instead of a panel that
+ *      floated over the middle of the canvas it edits. It pushes the stage
+ *      down, so 0px of the layout is covered while editing.
+ *   2. every per-card control row is HIDDEN unless Edit HUD is on - normal use
+ *      has clean cards - and while editing, a card's row speaks plain words:
+ *      `Move:` `[< Left Column] [^ Move Up] [v Move Down] [Right Column >]`,
+ *      `Size:` `( Compact | Normal | Wide | Tall )`, `Visibility:`
+ *      `[ Hide this card ]` (or a locked badge for a safety surface).
+ *   3. the `Panels` and `Advanced` tabs are RETIRED (Q7): the Cards drawer
+ *      now carries the hidden/always-visible information as plain state chips.
+ * Every DOM hook the old row had - `data-hud-edit-command`, `data-hud-edit-size`,
+ * `data-hud-edit-region`, `data-hud-edit-card` - is still there, and every
+ * mutation still goes through `applyAction`, so drag/keyboard/button/undo
+ * remain ONE door.
  */
 
 import {
@@ -768,10 +788,13 @@ export function describeHomeCards(doc) {
   return `Main screen: ${words.join(", ")}.`;
 }
 
-/** The size buttons, as the ruling asks: Small / Medium / Wide / Tall. */
+/** The size buttons, in the owner's plain words (Q9 of the 2026-11-09 review).
+ *  The KEYS are untouched - `S` `M` `L` `T` are what a saved layout stores and
+ *  what every suite drives - only the words on the buttons changed: `S M L T`
+ *  read as engineering, `Compact Normal Wide Tall` read as a choice. */
 export const SIZES = Object.freeze([
-  { key: "S", label: "Small", short: "S", col_span: 4, row_span: 1 },
-  { key: "M", label: "Medium", short: "M", col_span: 6, row_span: 1 },
+  { key: "S", label: "Compact", short: "S", col_span: 4, row_span: 1 },
+  { key: "M", label: "Normal", short: "M", col_span: 6, row_span: 1 },
   { key: "L", label: "Wide", short: "L", col_span: 12, row_span: 1 },
   { key: "T", label: "Tall", short: "T", col_span: 12, row_span: 2 },
 ]);
@@ -1053,9 +1076,9 @@ export function mountHudEditor(options = {}) {
   let statusEl = null;
   let barEl = null;
   let badgeEl = null;
-  let editTab = "cards";       // the tab the bar opens on (owner's request)
-  let selectedCard = null;     // the ONE card whose controls the Cards tab shows
-  let movedTools = null;       // { el, id } while a card's toolbar sits in the bar
+  let editTab = "cards";       // the drawer the bar names (Cards by default)
+  let drawerOpen = null;       // which drawer is actually unfolded, or none
+  let selectedCard = null;     // the ONE card the canvas outlines as picked
   let homeDoc = null;      // the main screen's feature cards
   let homeStrip = null;    // the strip they are drawn in
 
@@ -1135,6 +1158,15 @@ export function mountHudEditor(options = {}) {
     title.className = "hud-card-title";
     title.textContent = labelOf(id);
     head.appendChild(title);
+    // The hover hint (Q6, 2026-11-09): while Edit HUD is on, every editable
+    // card says what a click on it does. It is drawn on hover only, so the
+    // canvas is not a wall of labels, and it is never a control of its own -
+    // the card itself is the control (`onMainScreenClick` selects it).
+    const pill = doc.createElement("span");
+    pill.className = "hud-card-edit-pill";
+    pill.setAttribute("aria-hidden", "true");
+    pill.textContent = "Click to edit";
+    head.appendChild(pill);
     // Shown only while the card is hidden and Edit HUD is on: the ghost needs
     // to say what state the card is in, not just look dimmer.
     const word = doc.createElement("span");
@@ -1178,14 +1210,39 @@ export function mountHudEditor(options = {}) {
       if (extra.reason) b.setAttribute("title", `${title}\n${extra.reason}`);
       return b;
     };
+    // The three words that turn a row of glyphs into three plain choices
+    // (Q6/Q9, 2026-11-09). They are decoration for the eye only: every button
+    // keeps its own aria-label, so a screen reader hears the control.
+    const word = (text) => {
+      const span = doc.createElement("span");
+      span.className = "hud-tool-word";
+      span.setAttribute("aria-hidden", "true");
+      span.textContent = text;
+      return span;
+    };
     const protectedCard = PROTECTED_SET.has(id);
     const fixed = !MOVABLE_SET.has(id);
-    wrap.appendChild(button("up", "\u2191", `Move ${labelOf(id)} up`, { disabled: fixed }));
-    wrap.appendChild(button("down", "\u2193", `Move ${labelOf(id)} down`, { disabled: fixed }));
-    // The direct region selector (ruling 27): a single-pointer alternative to
-    // dragging across regions, and the words say which region is which.
+
+    // ---- Move: -----------------------------------------------------------
+    // Four buttons, in the order the owner reads them: the two columns either
+    // side, and up/down inside the column it is in now. The column buttons are
+    // the ruling-27 single-pointer alternative to dragging across regions, and
+    // they move the card on screen at once (doAction -> render).
+    wrap.appendChild(word("Move:"));
+    wrap.appendChild(button("left", "\u25c0 Left Column",
+      `Move ${labelOf(id)} to the column on its left`,
+      { disabled: fixed || protectedCard }));
+    wrap.appendChild(button("up", "\u25b2 Move Up", `Move ${labelOf(id)} up`, { disabled: fixed }));
+    wrap.appendChild(button("down", "\u25bc Move Down", `Move ${labelOf(id)} down`, { disabled: fixed }));
+    wrap.appendChild(button("right", "Right Column \u25b6",
+      `Move ${labelOf(id)} to the column on its right`,
+      { disabled: fixed || protectedCard }));
+    // The same direct region selector the toolbar always had, KEPT IN THE DOM
+    // and driven by hud.mjs and the field test (they set its value and fire
+    // `change`), but not drawn: the two column buttons above are its visible
+    // form now. Hiding it keeps one handler (`onRegionChange`) for both.
     const regionWrap = doc.createElement("label");
-    regionWrap.className = "hud-tool-select";
+    regionWrap.className = "hud-tool-select hud-tool-under";
     regionWrap.textContent = "Move to";
     const select = doc.createElement("select");
     select.setAttribute("data-hud-edit-region", id);
@@ -1201,22 +1258,42 @@ export function mountHudEditor(options = {}) {
     if (fixed) select.title = FIXED_IDS[id] || FIXED_REASON;
     regionWrap.appendChild(select);
     wrap.appendChild(regionWrap);
-    // Size buttons S / M / L / T, each a real pressed button.
+
+    // ---- Size: -----------------------------------------------------------
+    // The four names are the same four keys the document stores (S/M/L/T), so
+    // a saved layout cannot tell the difference between the old and the new
+    // buttons; a radio pill says which one the card is on right now.
+    wrap.appendChild(word("Size:"));
     const sizeWrap = doc.createElement("div");
     sizeWrap.className = "hud-tool-sizes";
-    sizeWrap.setAttribute("role", "group");
+    sizeWrap.setAttribute("role", "radiogroup");
     sizeWrap.setAttribute("aria-label", `${labelOf(id)} size`);
     for (const size of SIZES) {
-      const b = button("size", size.short, `${labelOf(id)}: ${size.label}`, { disabled: fixed });
+      const b = button("size", size.label, `${labelOf(id)}: ${size.label}`, { disabled: fixed });
       b.setAttribute("data-hud-edit-size", size.key);
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-pressed", "false");
       sizeWrap.appendChild(b);
     }
     wrap.appendChild(sizeWrap);
-    wrap.appendChild(button("collapse", "\u25be", `Fold ${labelOf(id)}`));
-    const hide = button("hide", "\u2715", `Hide ${labelOf(id)}`, { disabled: fixed || protectedCard });
-    if (protectedCard) hide.setAttribute("aria-description", `${labelOf(id)} can never be hidden.`);
+
+    // ---- Visibility: -----------------------------------------------------
+    // One control, both directions (the 2026-10-28 field-test fix), in plain
+    // words. A protected surface never shows a hide button that could work:
+    // its control IS the locked badge, and it is disabled (hud.mjs reads that
+    // and the reason in its title).
+    wrap.appendChild(word("Visibility:"));
+    const hide = button("hide", "Hide this card", `Hide ${labelOf(id)}`,
+      { disabled: fixed || protectedCard });
+    if (protectedCard) {
+      hide.setAttribute("aria-description", `${labelOf(id)} can never be hidden.`);
+    }
     if (fixed) hide.setAttribute("title", `${FIXED_IDS[id] || FIXED_REASON}`);
     wrap.appendChild(hide);
+    // Fold is not in the review's three groups, but it is an edit-mode
+    // behaviour the field test and hud.mjs both drive, so it stays - quietly,
+    // after Visibility, in the same plain register.
+    wrap.appendChild(button("collapse", "Fold", `Fold ${labelOf(id)}`));
     return wrap;
   }
 
@@ -1269,10 +1346,32 @@ export function mountHudEditor(options = {}) {
       );
       const hiddenWord = shell.querySelector(".hud-card-hidden-word");
       if (hiddenWord) hiddenWord.hidden = card.visible;
+      // The Size radio pills say which size the card is on RIGHT NOW, and the
+      // two column buttons are disabled at the column the card already
+      // occupies - so a refusal is visible before it is pressed rather than a
+      // sentence in the status line afterwards.
+      const sizeNow = sizeKeyFor(card);
+      for (const pill of shell.querySelectorAll("[data-hud-edit-size]")) {
+        pill.setAttribute("aria-pressed",
+          String(pill.getAttribute("data-hud-edit-size") === sizeNow));
+      }
+      const regionAt = EDIT_REGIONS.indexOf(card.region);
+      const leftBtn = shell.querySelector('[data-hud-edit-command="left"]');
+      const rightBtn = shell.querySelector('[data-hud-edit-command="right"]');
+      if (leftBtn && !PROTECTED_SET.has(card.id) && MOVABLE_SET.has(card.id)) {
+        leftBtn.disabled = regionAt <= 0;
+        leftBtn.setAttribute("aria-disabled", String(regionAt <= 0));
+      }
+      if (rightBtn && !PROTECTED_SET.has(card.id) && MOVABLE_SET.has(card.id)) {
+        rightBtn.disabled = regionAt < 0 || regionAt >= EDIT_REGIONS.length - 1;
+        rightBtn.setAttribute("aria-disabled",
+          String(regionAt < 0 || regionAt >= EDIT_REGIONS.length - 1));
+      }
       const collapseBtn = shell.querySelector('[data-hud-edit-command="collapse"]');
       if (collapseBtn) {
         const folded = effectiveCollapsed(card, pending);
         collapseBtn.setAttribute("aria-pressed", folded ? "true" : "false");
+        collapseBtn.textContent = folded ? "Open" : "Fold";
         collapseBtn.title = `${folded ? "Open" : "Fold"} ${labelOf(card.id)}`;
         collapseBtn.setAttribute("aria-label", collapseBtn.title);
       }
@@ -1281,11 +1380,19 @@ export function mountHudEditor(options = {}) {
         // The same pattern as Fold above: the words name the action the press
         // takes, and aria-pressed says what the card is now. One control, both
         // directions - the field test found the old one could only hide.
+        // A protected surface's control is the locked badge Q6 asks for: it is
+        // disabled by `buildToolbar`, and its title still names the card so the
+        // refusal is explained (`hud.mjs` reads both).
         const hidden = !card.visible;
+        const locked = PROTECTED_SET.has(card.id);
         hideBtn.setAttribute("aria-pressed", hidden ? "true" : "false");
-        hideBtn.textContent = hidden ? "\u25cb" : "\u2715";
+        hideBtn.textContent = locked
+          ? "\uD83D\uDD12 Always visible for safety"
+          : (hidden ? "Show this card" : "Hide this card");
         hideBtn.title = `${hidden ? "Show" : "Hide"} ${labelOf(card.id)}`;
-        hideBtn.setAttribute("aria-label", hideBtn.title);
+        hideBtn.setAttribute("aria-label", locked
+          ? `${labelOf(card.id)} is always visible for safety`
+          : hideBtn.title);
       }
     }
     for (const [region, cards] of byRegion) {
@@ -1302,9 +1409,57 @@ export function mountHudEditor(options = {}) {
     if (editing) renderPanes();
     renderHomeStrip();
     updateBadge();
+    updateRibbon();
+    syncEditBand();
     if (options.onRender) {
       try { options.onRender(layout, { editing }); } catch { /* never break the page */ }
     }
+  }
+
+  /* THE RIBBON'S TWO LIVE PIECES (Q8): the layout's name and the number of
+   * cards this layout is keeping hidden. Both are read from the document, so
+   * they cannot drift from what the canvas shows. */
+  function updateRibbon() {
+    if (!barEl || !layout) return;
+    const name = barEl.querySelector("#hud-edit-layout-name");
+    if (name) name.textContent = currentLayoutName();
+    const hidden = layout.cards.filter((card) => MOVABLE_SET.has(card.id) && !card.visible).length;
+    const cardsButton = byId("hud-edit-add-cards");
+    if (cardsButton) {
+      cardsButton.textContent = hidden
+        ? `+ Add / Show Cards (${hidden} hidden)`
+        : "+ Add / Show Cards";
+      cardsButton.title = hidden
+        ? `Show, hide or pick a card. ${hidden} card${hidden === 1 ? " is" : "s are"} hidden in this layout.`
+        : "Show, hide or pick a card in this layout";
+    }
+  }
+
+  /* THE SAFETY STRIP OWNS THE TOP OF THE WINDOW (Q14). `#hud-safety` is
+   * `position: fixed` at the top centre and only the Studio shell reserves room
+   * for it (hud-link.css); the ribbon is docked at the very top of the window
+   * grid, so in every other shell it would be painted under that strip. This
+   * measures the overlap once per render while editing and pushes the ribbon's
+   * own content down by exactly that much - no fixed guess, no second band, and
+   * nothing about the strip's own rules changes. */
+  function syncEditBand() {
+    if (!doc.body) return;
+    const shell = byId("shell");
+    const strip = byId("hud-safety");
+    let band = 0;
+    if (editing && shell && strip) {
+      try {
+        const shown = doc.defaultView ? doc.defaultView.getComputedStyle(strip).display : "none";
+        if (shown && shown !== "none") {
+          const style = doc.defaultView.getComputedStyle(shell);
+          const already = parseFloat(style.paddingTop) || 0;
+          const contentTop = shell.getBoundingClientRect().top + already;
+          const stripBottom = strip.getBoundingClientRect().bottom;
+          band = Math.max(0, Math.round(stripBottom - contentTop));
+        }
+      } catch { band = 0; }
+    }
+    doc.body.style.setProperty("--hud-edit-band", `${band}px`);
   }
 
   // -------------------------------------------------------------- save/undo
@@ -1415,12 +1570,13 @@ export function mountHudEditor(options = {}) {
     if (editing) {
       entrySnapshot = layout;
       undoStack.length = 0;
-      editTab = "cards";          // the owner's default: Cards, no rows expanded
+      editTab = "cards";          // the owner's default: Cards, no drawer open
+      drawerOpen = null;
       selectedCard = null;
       if (doc.body) doc.body.setAttribute("data-hud-edit-tab", editTab);
       announce("");
     } else {
-      detachMovedTools();
+      drawerOpen = null;
       selectedCard = null;
       if (saveTimer) flushSave();
     }
@@ -1460,7 +1616,20 @@ export function mountHudEditor(options = {}) {
     if (!editing) return;
     if (command === "up") doAction({ type: "reorderCard", id, delta: -1 });
     else if (command === "down") doAction({ type: "reorderCard", id, delta: 1 });
-    else if (command === "size") {
+    else if (command === "left" || command === "right") {
+      // The two plain-words column buttons (Q6, 2026-11-09): one region per
+      // press, the SAME `moveCard` action the old `Move to` select sent, so the
+      // document a click produces is identical to the one a select produces.
+      const card = layout.cards.find((entry) => entry.id === id);
+      if (!card) { announce(FIXED_REASON); return; }
+      const at = EDIT_REGIONS.indexOf(card.region);
+      const next = command === "left" ? at - 1 : at + 1;
+      if (next < 0 || next >= EDIT_REGIONS.length) {
+        announce(`${labelOf(id)} is already in ${REGION_LABEL[card.region]}.`);
+        return;
+      }
+      doAction({ type: "moveCard", id, region: EDIT_REGIONS[next], index: 0 });
+    } else if (command === "size") {
       doAction({ type: "resizeCard", id, size: button.getAttribute("data-hud-edit-size") });
     } else if (command === "collapse") doAction({ type: "toggleCollapsed", id });
     else if (command === "hide") {
@@ -1585,52 +1754,72 @@ export function mountHudEditor(options = {}) {
   }
 
   // --------------------------------------------------------------------- bar
-  /* THE EDIT HUD, SIMPLIFIED (owner's request, 2026-10-31: "the edit hud needs
-   * to be way more simplified with the options under menu tabs instead of
-   * everything all at once").
+  /* THE EDIT HUD, SIMPLIFIED TWICE.
    *
-   * The bar keeps the four whole-edit controls it always had (Undo, Reset to
-   * preset, Discard changes, Done) and adds FOUR TABS. Nothing is dropped: the
-   * per-card controls are MOVED, not rewritten, into the ONE selected-card
-   * editor in the Cards tab - the same `.hud-card-tools` element with the same
-   * buttons, disabled states, titles and handlers, so the drag/resize/fold/hide
-   * behaviour and the keyboard routes are exactly as before. The canvas keeps
-   * the cards themselves (drag-to-place is untouched); only their always-open
-   * control rows are hidden there. */
+   * 2026-10-31 (owner: "the edit hud needs to be way more simplified with the
+   * options under menu tabs instead of everything all at once"): the bar kept
+   * the four whole-edit controls and added four tabs.
+   *
+   * 2026-11-09 (owner's UI review, Q6-Q8): it is a DOCKED RIBBON now, on two
+   * drawers instead of four tabs. `Panels` and `Advanced` are GONE (Q7 - the
+   * Advanced tab had no controls at all, and the Panels tab duplicated the
+   * column buttons each card already has): what they said is folded into the
+   * Cards drawer as plain state chips (`Shown`, `Hidden`,
+   * `\uD83D\uDD12 Required for Safety`). The four whole-edit controls keep their
+   * ids and their handlers, and only their words and their place changed:
+   * Undo, Reset to Default, Cancel (the old "Discard changes"), Done. */
   const EDIT_TABS = Object.freeze([
     ["cards", "Cards"], ["presets", "Presets"],
-    ["panels", "Panels"], ["advanced", "Advanced"],
   ]);
+  // The retired tab ids, kept as a one-way alias so a stale id (an old saved
+  // session attribute, a script, a back-compat test) answers with the drawer
+  // that replaced it instead of doing nothing at all.
+  const RETIRED_TABS = Object.freeze([["panels", "cards"], ["advanced", "cards"]]);
 
   function paneFor(name) {
     return barEl ? barEl.querySelector(`[data-hud-edit-pane="${name}"]`) : null;
   }
 
   function setEditTab(name) {
-    if (!EDIT_TABS.some(([id]) => id === name)) return;
-    editTab = name;
-    if (doc.body) doc.body.setAttribute("data-hud-edit-tab", name);
+    const retired = RETIRED_TABS.find(([id]) => id === name);
+    const wanted = retired ? retired[1] : name;
+    if (!EDIT_TABS.some(([id]) => id === wanted)) return;
+    editTab = wanted;
+    if (doc.body) doc.body.setAttribute("data-hud-edit-tab", wanted);
     renderPanes();
   }
 
-  /** Select ONE card (the controls it owns move into the bar), or none. */
+  /** The drawer a button opens, or `null` when it is already open (a toggle). */
+  function toggleDrawer(name) {
+    const wanted = editTab === name && drawerOpen === name ? null : name;
+    drawerOpen = wanted;
+    if (wanted) {
+      editTab = wanted;
+      if (doc.body) doc.body.setAttribute("data-hud-edit-tab", wanted);
+    }
+    renderPanes();
+  }
+
+  /** Select ONE card (the outline on the canvas says which one), or none. */
   function selectEditCard(id) {
     if (id && !MOVABLE_SET.has(id)) return;
     selectedCard = id || null;
-    // The controls live in the Cards tab. A selection therefore opens that tab,
-    // so picking a card while another tab is showing still answers with its
-    // options rather than with nothing visible.
-    if (selectedCard) editTab = "cards";
+    // Picking a card answers in the Cards drawer: it is where that card's
+    // state is written, so the drawer is the surface that must be right - but
+    // it is NOT opened by a pick, because a drawer sliding open over the stage
+    // for every click is exactly the "everything at once" the owner objected
+    // to. Only the body attribute moves, so the page's stylesheet can follow.
+    if (selectedCard) {
+      editTab = "cards";
+      if (doc.body) doc.body.setAttribute("data-hud-edit-tab", editTab);
+      // The canvas scrolls the picked card into view, so a pick from the drawer
+      // is answered on the card itself and not off screen.
+      const shell = cardShells.get(selectedCard);
+      if (shell && shell.scrollIntoView) {
+        try { shell.scrollIntoView({ block: "nearest" }); } catch { /* an old engine */ }
+      }
+    }
     renderPanes();
-  }
-
-  /** Put a card's toolbar back on the card before rebuilding the bar. */
-  function detachMovedTools() {
-    if (!movedTools) return;
-    const shell = cardShells.get(movedTools.id);
-    const head = shell ? shell.querySelector(".hud-card-head") : null;
-    if (head && movedTools.el.parentElement !== head) head.appendChild(movedTools.el);
-    movedTools = null;
   }
 
   function paneWords(text, className) {
@@ -1652,11 +1841,10 @@ export function mountHudEditor(options = {}) {
   function renderCardsPane() {
     const pane = paneFor("cards");
     if (!pane) return;
-    detachMovedTools();
     pane.textContent = "";
     pane.appendChild(paneWords(
-      "Select a card on the canvas, or one below. Its controls open here - " +
-      "nothing else is drawn on the cards while you edit."));
+      "Pick a card to outline it on the canvas, or switch one off and on here. " +
+      "The controls for the card itself sit on the card, in plain words."));
     const cards = layout.cards.filter((card) => MOVABLE_SET.has(card.id))
       .sort((a, b) => EDIT_REGIONS.indexOf(a.region) - EDIT_REGIONS.indexOf(b.region)
         || a.order - b.order || a.id.localeCompare(b.id));
@@ -1685,30 +1873,34 @@ export function mountHudEditor(options = {}) {
         pick.appendChild(tag);
       }
       row.appendChild(pick);
+      // THE STATE CHIP (Q7, 2026-11-09). What the retired Panels/Advanced tabs
+      // used to answer - "which cards are hidden?" and "which can never be
+      // hidden?" - is one plain word beside the card's name, and for a card
+      // that MAY be hidden it is also the switch that changes it. The switch
+      // sends the same `setVisible` action the card's own control sends.
+      if (PROTECTED_SET.has(card.id)) {
+        const chip = doc.createElement("span");
+        chip.className = "hud-edit-card-chip is-locked";
+        chip.textContent = "\uD83D\uDD12 Required for Safety";
+        chip.title = `${labelOf(card.id)} can never be hidden.`;
+        row.appendChild(chip);
+      } else {
+        const chip = paneButton(card.visible ? "Shown \u2713" : "Hidden", {
+          className: "hud-edit-card-chip" + (card.visible ? " is-shown" : " is-hidden"),
+          attrs: {
+            "data-hud-edit-visible": card.id,
+            "aria-pressed": String(!card.visible),
+            "aria-label": card.visible
+              ? `Hide ${labelOf(card.id)}`
+              : `Show ${labelOf(card.id)}`,
+            title: card.visible ? `Hide ${labelOf(card.id)}` : `Show ${labelOf(card.id)}`,
+          },
+        });
+        row.appendChild(chip);
+      }
       list.appendChild(row);
     }
     pane.appendChild(list);
-    const editor = doc.createElement("div");
-    editor.id = "hud-edit-card-controls";
-    editor.className = "hud-edit-card-controls";
-    editor.setAttribute("aria-live", "polite");
-    if (!selectedCard) {
-      editor.appendChild(paneWords("No card selected yet."));
-    } else {
-      editor.appendChild(paneWords(`Options for ${labelOf(selectedCard)}`));
-      const shell = cardShells.get(selectedCard);
-      const tools = shell ? shell.querySelector(".hud-card-tools") : null;
-      if (tools) {
-        // The SAME element, with the same buttons and listeners, moved here.
-        editor.appendChild(tools);
-        movedTools = { el: tools, id: selectedCard };
-      }
-      if (PROTECTED_SET.has(selectedCard)) {
-        editor.appendChild(paneWords(
-          `${labelOf(selectedCard)} is always visible; it can never be hidden.`));
-      }
-    }
-    pane.appendChild(editor);
   }
 
   function renderPresetsPane() {
@@ -1725,109 +1917,40 @@ export function mountHudEditor(options = {}) {
       const row = doc.createElement("div");
       row.className = "hud-edit-card-row";
       const name = doc.createElement("span");
+      // Q9 (2026-11-09): the shared `is-chosen` highlighted rectangle is the ONE
+      // way a chosen row is drawn across Settings, Brain and the HUD - and the
+      // state is spelled once, as "Current". The old row named the same state
+      // twice, so its button now says Current and is not a button at all (the
+      // wave-13 personality fix made the same change).
       name.className = "hud-edit-preset-name" + (chosen ? " is-chosen" : "");
       name.textContent = info.label;
       row.appendChild(name);
-      if (chosen) row.appendChild(paneWords("chosen", "hud-edit-pane-tag"));
-      row.appendChild(paneButton(chosen ? "Applied" : "Apply", {
-        className: "ghost hud-edit-apply",
-        attrs: { "data-hud-edit-preset": preset.id },
-      }));
+      if (chosen) {
+        row.appendChild(paneWords("Current", "hud-edit-pane-tag"));
+      } else {
+        row.appendChild(paneButton("Apply", {
+          className: "ghost hud-edit-apply",
+          attrs: { "data-hud-edit-preset": preset.id },
+        }));
+      }
       list.appendChild(row);
     }
     pane.appendChild(list);
-  }
-
-  function renderPanelsPane() {
-    const pane = paneFor("panels");
-    if (!pane) return;
-    pane.textContent = "";
-    pane.appendChild(paneWords("Where each card lives, and the order it sits in."));
-    for (const region of EDIT_REGIONS) {
-      const box = doc.createElement("div");
-      box.className = "hud-edit-panel-group";
-      const head = doc.createElement("h3");
-      head.className = "hud-edit-pane-head";
-      head.textContent = REGION_LABEL[region];
-      box.appendChild(head);
-      const cards = layout.cards
-        .filter((card) => MOVABLE_SET.has(card.id) && card.region === region)
-        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
-      if (!cards.length) {
-        box.appendChild(paneWords("No cards here."));
-      }
-      for (const card of cards) {
-        const row = doc.createElement("div");
-        row.className = "hud-edit-card-row";
-        const name = doc.createElement("span");
-        name.className = "hud-edit-pane-name";
-        name.textContent = labelOf(card.id);
-        row.appendChild(name);
-        for (const [command, glyph, word] of [["up", "\u2191", "Move up"], ["down", "\u2193", "Move down"]]) {
-          row.appendChild(paneButton(glyph, {
-            className: "hud-tool",
-            attrs: {
-              "data-hud-edit-command": command,
-              "data-hud-edit-card": card.id,
-              title: `${word} ${labelOf(card.id)}`,
-              "aria-label": `${word} ${labelOf(card.id)}`,
-            },
-          }));
-        }
-        box.appendChild(row);
-      }
-      pane.appendChild(box);
-    }
-  }
-
-  function renderAdvancedPane() {
-    const pane = paneFor("advanced");
-    if (!pane) return;
-    pane.textContent = "";
-    pane.appendChild(paneWords(
-      "Rare options: cards that are hidden, cards that are folded, and cards that can never be hidden."));
-    const cards = layout.cards.filter((card) => MOVABLE_SET.has(card.id));
-    const hidden = cards.filter((card) => !card.visible);
-    pane.appendChild(paneWords(hidden.length
-      ? "Hidden cards - Show brings one back:" : "No cards are hidden."));
-    for (const card of hidden) {
-      const row = doc.createElement("div");
-      row.className = "hud-edit-card-row";
-      row.appendChild(paneWords(labelOf(card.id), "hud-edit-pane-name"));
-      row.appendChild(paneButton("Show", {
-        className: "ghost hud-edit-pane-btn",
-        attrs: { "data-hud-edit-advanced": "show", "data-hud-edit-card": card.id },
-      }));
-      pane.appendChild(row);
-    }
-    const pending = pendingCount();
-    const folded = cards.filter((card) => effectiveCollapsed(card, pending));
-    pane.appendChild(paneWords(folded.length
-      ? "Folded cards - Expand opens one:" : "No cards are folded."));
-    for (const card of folded) {
-      const row = doc.createElement("div");
-      row.className = "hud-edit-card-row";
-      row.appendChild(paneWords(labelOf(card.id), "hud-edit-pane-name"));
-      row.appendChild(paneButton("Expand", {
-        className: "ghost hud-edit-pane-btn",
-        attrs: { "data-hud-edit-advanced": "expand", "data-hud-edit-card": card.id },
-      }));
-      pane.appendChild(row);
-    }
-    const always = cards.filter((card) => PROTECTED_SET.has(card.id));
-    pane.appendChild(paneWords(always.length
-      ? "Always visible (no Hide control):" : "Every card can be hidden."));
-    for (const card of always) pane.appendChild(paneWords(labelOf(card.id), "hud-edit-pane-name"));
   }
 
   function renderPanes() {
     if (!barEl || !editing || !layout) return;
     if (doc.body) doc.body.setAttribute("data-hud-edit-tab", editTab);
     for (const [name] of EDIT_TABS) {
-      const tab = barEl.querySelector(`[data-hud-edit-tab="${name}"]`);
-      if (tab) tab.setAttribute("aria-selected", String(name === editTab));
+      // A DRAWER, not a tab strip: the ribbon's own button says whether its
+      // drawer is unfolded, and only one drawer is ever open (Q8).
+      const button = barEl.querySelector(`[data-hud-edit-drawer="${name}"]`);
+      if (button) {
+        button.setAttribute("aria-expanded", String(drawerOpen === name));
+        button.setAttribute("aria-controls", `hud-edit-pane-${name}`);
+      }
       const pane = paneFor(name);
-      if (pane) pane.hidden = name !== editTab;
+      if (pane) pane.hidden = drawerOpen !== name;
     }
     for (const shell of cardShells.values()) {
       const id = shell.getAttribute("data-hud-card");
@@ -1836,8 +1959,6 @@ export function mountHudEditor(options = {}) {
     }
     renderCardsPane();
     renderPresetsPane();
-    renderPanelsPane();
-    renderAdvancedPane();
   }
 
   /** A plain click on a card selects it (its options move into the bar), while
@@ -1906,56 +2027,76 @@ export function mountHudEditor(options = {}) {
     }
   }
 
+  /* THE DOCKED RIBBON (Q8 of the owner's 2026-11-09 review).
+   *
+   * It is a child of `#shell`, not of `#stage`: `#shell` is the window's grid,
+   * so `grid-row: 1; grid-column: 1 / -1` makes this a full-width band UNDER
+   * the window header and ABOVE the three columns, and the columns simply move
+   * down. Nothing is covered: the old bar floated over the middle of the very
+   * canvas it edited (Fig 8 of the review).
+   *
+   * Its hierarchy is the review's, left to right: what you are editing, the
+   * two drawers, the quiet whole-edit buttons, and ONE loud way out.
+   *   `Editing Layout: <name>` | `[+ Add / Show Cards (N hidden)]`
+   *   `[Switch Layout Preset v]` | .......... | Undo | Reset to Default |
+   *   Cancel | [v Done]
+   * Every id the four whole-edit controls ever had is unchanged
+   * (`hud-edit-undo`, `hud-edit-reset`, `hud-edit-discard`, `hud-edit-done`):
+   * only the words and the order are new, and the handlers are the same ones.
+   */
   function ensureBar() {
-    const stage = byId("stage");
-    if (!stage) return;
+    const shell = byId("shell");
+    if (!shell) return;
     barEl = doc.createElement("div");
     barEl.className = "hud-edit-bar hud-edit-banner";
     barEl.id = "hud-edit-bar";
     barEl.hidden = true;
     barEl.setAttribute("role", "region");
-    barEl.setAttribute("aria-label", "HUD editing controls");
+    barEl.setAttribute("aria-label", "Editing this layout");
     // Built node by node: this page has an HTML-sink rule (tests/html-sinks.mjs)
     // and a capture bar has no dynamic text needing markup.
-    const title = doc.createElement("strong");
-    title.className = "hud-edit-title";
-    title.textContent = "Edit HUD";
+    const heading = doc.createElement("strong");
+    heading.className = "hud-edit-title";
+    heading.textContent = "Editing Layout: ";
+    const layoutName = doc.createElement("span");
+    layoutName.className = "hud-edit-layout-name";
+    layoutName.id = "hud-edit-layout-name";
+    heading.appendChild(layoutName);
     const words = doc.createElement("span");
     words.className = "hud-edit-words";
     words.textContent = "Drag a card, or open its options.";
+    const left = doc.createElement("div");
+    left.className = "hud-edit-left";
+    left.append(heading, words);
+    // The Cards drawer's button is also the "what is hidden?" answer (Q7): the
+    // count is in its own words, so a hidden card cannot be forgotten.
+    const cardsButton = barButton("hud-edit-add-cards", "cards", "+ Add / Show Cards");
+    const presetsButton = barButton("hud-edit-switch-preset", "presets", "Switch Layout Preset \u25be");
+    left.append(cardsButton, presetsButton);
     const status = doc.createElement("span");
     status.className = "hud-edit-status";
     status.id = "hud-edit-status";
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
-    barEl.append(title, words, status);
-    for (const [what, text] of [["undo", "Undo"], ["reset", "Reset to preset"],
-      ["discard", "Discard changes"], ["done", "Done"]]) {
+    const right = doc.createElement("div");
+    right.className = "hud-edit-right";
+    right.appendChild(status);
+    barEl.append(left);
+    for (const [what, text, extra] of [
+      ["undo", "Undo", "hud-edit-quiet"],
+      ["reset", "Reset to Default", "hud-edit-quiet"],
+      ["discard", "Cancel", "hud-edit-quiet"],
+      ["done", "\u2713 Done", "hud-edit-done"],
+    ]) {
       const button = doc.createElement("button");
       button.type = "button";
-      button.className = "ghost";
+      button.className = `ghost ${extra}`;
       button.id = `hud-edit-${what}`;
       button.setAttribute("data-hud-edit-global", what);
       button.textContent = text;
-      barEl.appendChild(button);
+      right.appendChild(button);
     }
-    const tabs = doc.createElement("div");
-    tabs.className = "hud-edit-tabs";
-    tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "Edit HUD options");
-    for (const [name, label] of EDIT_TABS) {
-      const button = doc.createElement("button");
-      button.type = "button";
-      button.className = "hud-edit-tab";
-      button.id = `hud-edit-tab-${name}`;
-      button.setAttribute("role", "tab");
-      button.setAttribute("data-hud-edit-tab", name);
-      button.setAttribute("aria-controls", `hud-edit-pane-${name}`);
-      button.setAttribute("aria-selected", "false");
-      button.textContent = label;
-      tabs.appendChild(button);
-    }
-    barEl.appendChild(tabs);
+    barEl.appendChild(right);
     const panes = doc.createElement("div");
     panes.className = "hud-edit-panes";
     for (const [name] of EDIT_TABS) {
@@ -1963,41 +2104,37 @@ export function mountHudEditor(options = {}) {
       pane.className = "hud-edit-pane";
       pane.id = `hud-edit-pane-${name}`;
       pane.hidden = true;
-      pane.setAttribute("role", "tabpanel");
+      pane.setAttribute("role", "region");
       pane.setAttribute("data-hud-edit-pane", name);
-      pane.setAttribute("aria-labelledby", `hud-edit-tab-${name}`);
+      pane.setAttribute("aria-label", `${name === "cards" ? "Cards" : "Layout presets"} in this layout`);
       panes.appendChild(pane);
     }
     barEl.appendChild(panes);
-    stage.insertBefore(barEl, byId("banner") || stage.firstChild);
+    // `grid-row: 1; grid-column: 1 / -1` is the page's stylesheet; the DOM is
+    // what makes that possible - the FIRST child of the window grid.
+    shell.insertBefore(barEl, shell.firstChild);
     statusEl = doc.getElementById("hud-edit-status");
     barEl.addEventListener("click", (event) => {
       const target = event.target && event.target.closest ? event.target : null;
       if (!target) return;
-      // The active tab is ALSO on <body> as `data-hud-edit-tab` (for the page's
-      // stylesheet). The tab branch must therefore match a real tab BUTTON, not
-      // any ancestor carrying the attribute: `closest("[data-hud-edit-tab]")`
-      // matched <body> for every click in the bar, so Done/Reset/Discard were
-      // swallowed as "switch to the Cards tab" and edit mode never closed.
-      const tab = target.closest('[data-hud-edit-tab][role="tab"]');
-      if (tab) { setEditTab(tab.getAttribute("data-hud-edit-tab")); return; }
+      const drawer = target.closest("[data-hud-edit-drawer]");
+      if (drawer) { toggleDrawer(drawer.getAttribute("data-hud-edit-drawer")); return; }
       const pick = target.closest("[data-hud-edit-card-pick]");
       if (pick) {
         const id = pick.getAttribute("data-hud-edit-card-pick");
         selectEditCard(id === selectedCard ? null : id);
         return;
       }
+      // The Cards drawer's own Shown/Hidden switch (Q7): the same `setVisible`
+      // action every other visibility control sends.
+      const stateChip = target.closest("[data-hud-edit-visible]");
+      if (stateChip && !stateChip.disabled) {
+        doAction({ type: "setVisible", id: stateChip.getAttribute("data-hud-edit-visible") });
+        return;
+      }
       const preset = target.closest("[data-hud-edit-preset]");
       if (preset) {
         doAction({ type: "resetToPreset", id: preset.getAttribute("data-hud-edit-preset") });
-        return;
-      }
-      const advanced = target.closest("[data-hud-edit-advanced]");
-      if (advanced) {
-        const id = advanced.getAttribute("data-hud-edit-card");
-        const what = advanced.getAttribute("data-hud-edit-advanced");
-        if (what === "show") doAction({ type: "setVisible", id });
-        else if (what === "expand") doAction({ type: "toggleCollapsed", id });
         return;
       }
       const button = target.closest("[data-hud-edit-global]");
@@ -2012,9 +2149,23 @@ export function mountHudEditor(options = {}) {
         setEditing(false);
         render();
         scheduleSave();
-        announce("Changes discarded.");
+        announce("Changes cancelled.");
       }
     });
+  }
+
+  /** One ribbon button that opens a drawer. `data-hud-edit-drawer` is what the
+   *  bar's own click handler and renderPanes talk to. */
+  function barButton(id, drawer, text) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "ghost hud-edit-drawer-btn";
+    button.id = id;
+    button.setAttribute("data-hud-edit-drawer", drawer);
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", `hud-edit-pane-${drawer}`);
+    button.textContent = text;
+    return button;
   }
 
   function currentLayoutName() {

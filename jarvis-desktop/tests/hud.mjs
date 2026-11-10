@@ -5770,6 +5770,14 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
       .filter((c) => !c.hidden && c.getBoundingClientRect().height > 0);
     cards.sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y);
     const top = cards[0] || null;
+    // Q6 (the owner's UI review, 2026-11-09): a card's inspector appears only
+    // after that card is clicked - every other card keeps just its outline and
+    // its "Click to edit" pill. Click the top card the way the owner does,
+    // then measure the toolbar that appeared on it.
+    if (top) {
+      const title = top.querySelector(".hud-card-title");
+      if (title) title.click(); else top.click();
+    }
     const tool = top
       ? (top.querySelector('[data-hud-edit-size="S"]')
         || top.querySelector("[data-hud-card-handle]")
@@ -5779,18 +5787,21 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
     const barBox = box(bar);
     const railBox = box(rail);
     const stageBox = box(document.getElementById("stage"));
+    // Q8 (2026-11-09): the editing ribbon is the window grid's first row, so the
+    // columns start below it. It is the thing the rail now follows.
+    const ribbonBox = box(document.querySelector("#shell > #hud-edit-bar"));
     return {
       toggle: atCentre(toggle),
       top: top ? top.getAttribute("data-hud-card") : null,
       tool: atCentre(tool),
-      toggleBox, barBox, railBox, stageBox,
+      toggleBox, barBox, railBox, stageBox, ribbonBox,
       railPosition: rail ? getComputedStyle(rail).position : null,
       railShown: Boolean(rail && getComputedStyle(rail).display !== "none"
         && rail.getBoundingClientRect().width > 0),
       railTop: railBox ? railBox.y : null,
       // The shell reserves a top band for the fixed safety strip while it is on
       // screen (hud-link.css: `#shell{padding-top:var(--hud-safety-band)}`); the
-      // rail starts at the shell's own top, just below that reserved band.
+      // ribbon and the rail start below that reserved band.
       safetyBand: shell ? Math.round(parseFloat(getComputedStyle(shell).paddingTop) || 0) : 0,
       barBottom: barBox ? barBox.y + barBox.h : null,
       vw: innerWidth,
@@ -5807,15 +5818,18 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
   // The structural half, P0.6 (owner field test, 2026-10-23): in Edit HUD the
   // Studio rail is no longer a fixed overlay that must start BELOW the header
   // band - that overlay was the jumble the owner photographed. It is now a
-  // normal in-flow column beside the stage: it starts at the shell's top and
-  // sits to the RIGHT of the stage, so it cannot cover anything in it. The one
-  // exception is the shell's reserved safety band (Wave 10's H4 fix): while the
-  // fixed safety strip is on screen `#shell` carries a top padding, and the
-  // in-flow rail rightly starts below that band rather than under the strip.
+  // normal in-flow column beside the stage: it starts at the window grid's
+  // second row and sits to the RIGHT of the stage, so it cannot cover anything
+  // in it. Two bands are above it and neither may be crossed: the shell's
+  // reserved safety band (Wave 10's H4 fix, while the fixed strip is on screen)
+  // and, since Q8 (2026-11-09), the full-width editing ribbon itself.
   assert.equal(hit.railPosition, "static",
     `the Studio rail is still an out-of-flow overlay in Edit HUD (${hit.railPosition})`);
-  assert.ok(hit.railTop <= hit.safetyBand + 1,
-    `the Studio rail starts at y=${hit.railTop} instead of the shell's top (the safety band reserves ${hit.safetyBand}px)`);
+  assert.ok(hit.railTop >= hit.safetyBand - 1,
+    `the Studio rail starts at y=${hit.railTop}, under the reserved safety band (${hit.safetyBand}px)`);
+  assert.ok(hit.ribbonBox, "the editing ribbon is not the window grid's first row");
+  assert.ok(Math.abs(hit.railTop - (hit.ribbonBox.y + hit.ribbonBox.h)) <= 2,
+    `the Studio rail starts at y=${hit.railTop}, not at the ribbon's bottom (${hit.ribbonBox.y + hit.ribbonBox.h})`);
   assert.ok(hit.stageBox && hit.railBox.x >= hit.stageBox.x + hit.stageBox.w - 1,
     `the Studio rail starts at x=${hit.railBox.x}, at or left of the stage's right edge ${hit.stageBox && hit.stageBox.x + hit.stageBox.w}`);
   assert.ok(hit.railBox.x + hit.railBox.w <= hit.vw + 1,

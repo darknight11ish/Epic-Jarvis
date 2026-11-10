@@ -370,10 +370,81 @@ function allCards() {
     /closest\("\.rail\.left"\) && selectedCard !== "nav"[\s\S]*?selectEditCard\("nav"\);/
       .test(EDIT),
     "the left column's non-card icons (Presets, Live, Faces, Calendar, Brain, Galaxy, dock) are not mapped to Navigation");
-  check("...a selection opens the Cards tab, so its options are visible",
-    /if \(selectedCard\) editTab = "cards";/.test(EDIT),
-    "selectEditCard no longer opens the Cards tab");
+  check("...a selection names the Cards surface on the body, so its list is the one open",
+    /if \(selectedCard\) \{\s*\n\s*editTab = "cards";/.test(EDIT),
+    "selectEditCard no longer puts the Cards surface on the body");
   ok("Edit HUD click: capture-phase selection, editor controls exempt, left column maps to Navigation");
+}
+
+/* ------- 12. The owner's UI review of 2026-11-09 (Q6-Q9) ---------------- */
+{
+  // The review's numbers: "Every Card Carries a 7-Button Engineering Toolbar"
+  // and "Edit HUD Floats Over the Middle of the Canvas It Edits". These pins
+  // are the source half of what tests/hud-edit-tabs.mjs drives for real.
+  check("normal use draws NO per-card toolbar (Q6's first half)",
+    /body:not\(\[data-hud-edit="on"\]\) \.hud-card \.hud-card-tools\{display:none;\}/.test(PAGE),
+    "jarvis_hud.html has no rule hiding the card toolbars outside Edit HUD");
+  check("...and the shells' headers stay hidden outside Edit HUD",
+    /\.hud-card-head\{display:none;\}/.test(PAGE));
+  check("Edit HUD's canvas draws ONE inspector, on the card that was clicked (Q6)",
+    /body\[data-hud-edit="on"\] \.hud-card \.hud-card-tools\{display:none;\}/.test(PAGE)
+    && /body\[data-hud-edit="on"\] \.hud-card\[data-hud-edit-selected="true"\] \.hud-card-tools\{display:flex;\}/.test(PAGE)
+    && /shell\.setAttribute\("data-hud-edit-selected",/.test(EDIT),
+    "every card still draws its toolbar in Edit HUD instead of only the picked one");
+  check("...every editable card keeps the dashed outline and the Click to edit pill",
+    /body\[data-hud-edit="on"\] \.hud-card\{[\s\S]*?border:1px dashed/.test(PAGE)
+    && /pill\.textContent = "Click to edit";/.test(EDIT),
+    "the click-to-edit affordance on every card is gone");
+  check("Edit HUD is a DOCKED RIBBON: the first child of the window grid (Q8)",
+    /shell\.insertBefore\(barEl, shell\.firstChild\)/.test(EDIT),
+    "hud-edit.js still inserts the bar into the stage");
+  check("...parked in row 1 of #shell across every column, so the stage moves down",
+    /\.hud-edit-bar\{\s*\n\s*grid-row:1; grid-column:1 \/ -1;/.test(PAGE),
+    "the ribbon is not `grid-row:1; grid-column:1 / -1` in the page's stylesheet");
+  check("...and the edit-mode shell has a row for it, with the columns below",
+    /grid-template-rows:auto minmax\(0, 1fr\)/.test(PAGE)
+    && /html body\[data-hud-edit="on"\] #stage\{grid-column:2; grid-row:2; min-width:0;\}/.test(PAGE),
+    "the edit-mode grid was not given the ribbon row");
+  check("the four controls are the review's: left column, up, down, right column",
+    ["left", "up", "down", "right"].every((command) => EDIT.includes(`button("${command}",`)),
+    "the Move group is not the review's four buttons");
+  check("...and each column press is the SAME moveCard action the select sends",
+    /command === "left" \|\| command === "right"/.test(EDIT)
+    && /doAction\(\{ type: "moveCard", id, region: EDIT_REGIONS\[next\], index: 0 \}\)/.test(EDIT),
+    "the column buttons do not go through moveCard");
+  check("the sizes are plain words while the stored keys are unchanged (Q9)",
+    SIZES.map((size) => size.label).join(",") === "Compact,Normal,Wide,Tall"
+    && SIZES.map((size) => size.key).join(",") === "S,M,L,T",
+    SIZES.map((size) => `${size.key}=${size.label}`).join(" "));
+  check("...and the inspector says `Size:` beside them (three labelled groups)",
+    ["Move:", "Size:", "Visibility:"].every((word) => EDIT.includes(`word("${word}")`)),
+    "the three plain-word group labels are missing");
+  check("the Presets drawer names the current preset with ONE word (Q9)",
+    /paneWords\("Current", "hud-edit-pane-tag"\)/.test(EDIT)
+    && !/"Applied"/.test(EDIT)
+    && !/paneWords\("chosen"/.test(EDIT),
+    "the chosen preset still wears two words for one state");
+  check("a protected surface shows the locked badge instead of a working hide (Q6)",
+    /const locked = PROTECTED_SET\.has\(card\.id\);/.test(EDIT)
+    && /\\uD83D\\uDD12 Always visible for safety/.test(EDIT),
+    "the protected card does not explain why it cannot be hidden");
+  check("...and its Hide control is still in the DOM, disabled, with its reason",
+    /hideBtn\.title = `\$\{hidden \? "Show" : "Hide"\} \$\{labelOf\(card\.id\)\}`;/.test(EDIT),
+    "the disabled Hide control lost its reason again");
+  check("the Panels and Advanced panes are gone (Q7)", !/function renderPanelsPane\(/.test(EDIT)
+    && !/function renderAdvancedPane\(/.test(EDIT)
+    && !/data-hud-edit-advanced/.test(EDIT),
+    "a retired pane is still built");
+  check("...their state folded into the Cards list as Shown / Hidden / Required for Safety",
+    /"Shown \\u2713" : "Hidden"/.test(EDIT)
+    && /Required for Safety/.test(EDIT)
+    && /data-hud-edit-visible/.test(EDIT),
+    "the Cards drawer carries no state chips");
+  check("a stale Panels/Advanced id is answered with Cards, never silence",
+    /const RETIRED_TABS = Object\.freeze\(\[\["panels", "cards"\], \["advanced", "cards"\]\]\)/.test(EDIT)
+    && /RETIRED_TABS\.find/.test(EDIT),
+    "the retired tab ids are not aliased");
+  ok("the 2026-11-09 review: no toolbars in normal use, a docked ribbon, plain-words controls, Panels/Advanced gone");
 }
 
 console.log(`\n${passed} passed, ${fails.length} failed`);

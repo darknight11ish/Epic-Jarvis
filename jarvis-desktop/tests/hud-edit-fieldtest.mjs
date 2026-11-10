@@ -314,13 +314,16 @@ async function changeEverything(page, before) {
   const movables = before.cards.filter((card) => MOVABLE.has(card.id));
   const hideable = movables.filter((card) => !PROTECTED.has(card.id));
 
-  // 1. every card that may move, moved to another region (the "Move to" select)
+  // 1. every card that may move, moved to another region. Since 2026-11-09 the
+  //    control is the inspector's own plain-words column button (Q6): one press
+  //    per column, and the direction that is enabled depends on where the card
+  //    is now. It sends the SAME `moveCard` action the old "Move to" select did.
   for (const card of hideable) {
     const at = EDIT_REGIONS.indexOf(card.region);
     const target = EDIT_REGIONS[(at + 1) % EDIT_REGIONS.length];
     assert.notEqual(target, card.region, `no other region to move ${card.id} to`);
-    await page.selectOption(`[data-hud-edit-region="${card.id}"]`, target);
-    await settle(page);
+    assert.equal(await chooseRegion(page, card.id, target), true,
+      `${card.id} did not reach ${target} through its own column buttons`);
   }
   const afterMoves = await adopted(page);
 
@@ -416,35 +419,37 @@ async function changeEverything(page, before) {
 /* ── the owner's "revert back", the two real paths ────────────────────────── */
 
 /**
- * Choose a region in a card's own "Move to" select. A card that is on screen is
- * driven with the real pointer action; a card that is not (a layout can hide a
- * card without Edit HUD painting it, e.g. outside edit mode) is driven by setting
- * the select and firing the `change` event the same control sends. Since the
- * 2026-10-28 fix a hidden card is a ghost in Edit HUD, so the fallback should not
- * be needed there - the revert counts how many needed it, and reports it.
+ * Walk a card into another region with its own inspector controls.
+ *
+ * Since 2026-11-09 (Q6) the control is the plain-words pair of column buttons
+ * on the card itself: `◀ Left Column` one column left, `Right Column ▶` one
+ * column right. They are on screen for every card - including a hidden card's
+ * ghost, which is the 2026-10-28 fix - so the old "set the select and fire
+ * `change`" fallback is gone. The walk is one press per column, because that is
+ * what a user does; `mustBeReachable` still insists the control was on screen
+ * before it was pressed, so a card whose controls cannot be reached is reported
+ * instead of quietly driven.
  */
 async function chooseRegion(page, id, region, { mustBeReachable = false } = {}) {
-  // The 2026-10-31 simplification puts a card's controls in the Cards tab's
-  // selected-card editor; select the card first so its own "Move to" select is
-  // the visible one, then drive it exactly as the owner does.
-  await page.evaluate((cardId) => {
-    const pick = document.querySelector(`[data-hud-edit-card-pick="${cardId}"]`);
-    if (pick && pick.getAttribute("aria-pressed") !== "true") pick.click();
-  }, id);
-  await page.waitForTimeout(40);
-  const visible = await page.locator(`[data-hud-edit-region="${id}"]`).isVisible();
-  if (mustBeReachable) assert.equal(visible, true, `the "Move to" select for ${id} is not on screen`);
-  if (visible) {
-    await page.selectOption(`[data-hud-edit-region="${id}"]`, region);
-    return true;
+  const selector = (dir) => `[data-hud-edit-command="${dir}"][data-hud-edit-card="${id}"]`;
+  const onScreen = (await page.locator(selector("left")).isVisible())
+    || (await page.locator(selector("right")).isVisible());
+  if (mustBeReachable) {
+    assert.equal(onScreen, true, `the column buttons for ${id} are not on screen`);
   }
-  await page.evaluate(([cardId, want]) => {
-    const select = document.querySelector(`[data-hud-edit-region="${cardId}"]`);
-    if (!select) throw new Error(`no region select for ${cardId}`);
-    select.value = want;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  }, [id, region]);
-  return false;
+  const target = EDIT_REGIONS.indexOf(region);
+  for (let guard = 0; guard < EDIT_REGIONS.length + 1; guard += 1) {
+    const now = cardOf(await adopted(page), id);
+    if (!now) return false;
+    if (now.region === region) return true;
+    const at = EDIT_REGIONS.indexOf(now.region);
+    const dir = at > target ? "left" : "right";
+    const button = page.locator(selector(dir));
+    if (!(await button.isEnabled())) return false;
+    await press(page, selector(dir));
+    await settle(page);
+  }
+  return cardOf(await adopted(page), id).region === region;
 }
 
 /** A: the edit bar's own "Reset to preset". */
@@ -708,7 +713,13 @@ async function fieldTest(label, original, revert) {
       assert.match(ghost.label, /^Show /,
         `${target.id}'s control does not offer Show: "${ghost.label}"`);
 
-      // The road a user has: a real pointer click on the control on screen.
+      // The road a user has: click the ghost card first - Q6 (2026-11-09) draws
+      // a card's inspector only on the card that was clicked - and then a real
+      // pointer click on the Show control it just revealed.
+      await page.locator(`${shell} .hud-card-title`).click({ timeout: 15000 });
+      await settle(page);
+      assert.equal(await page.locator(control).isVisible(), true,
+        `${target.id}'s Show control is not on screen after clicking its card`);
       await page.locator(control).click({ timeout: 15000 });
       await settle(page);
       assert.equal(cardOf(await adopted(page), target.id).visible, true,
@@ -946,7 +957,8 @@ if (fails.length) {
  * WHAT THIS SUITE DOES AND DOES NOT PROVE.
  *
  * IT DOES prove, against the real page and the real editor module, that:
- *   - every region move, place move, resize, fold and hide an owner can make in
+ *   - every region move (the plain-words column buttons, Q6 of 2026-11-09),
+ *     place move, resize, fold and hide an owner can make in
  *     Edit HUD is written to the saved document and comes back after a reload -
  *     in the document AND on the page - for a fresh install and for an owner
  *     who already has a saved layout of their own;
