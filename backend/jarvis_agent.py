@@ -10449,6 +10449,12 @@ TOOL_HINTS = {
                       r"\bdog\b", r"\bfavou?rite\b", r"\bpreference\b", r"\bagain\b"),
     "file_read": (r"\bfile\b", r"\.txt\b", r"\bpath\b", r"\bdocument\b", r"\breadme\b",
                   r"\bfolder\b"),
+    # The read half of taking over dev work (2026-11-09): one file of code,
+    # config or text inside a listed folder or a registered project. The hint
+    # words are deliberately source-code words, so a plain "read this note"
+    # still lands on file_read/my_files first.
+    "project_read": (r"\bproject\b", r"\bcode\b", r"\bsource\b", r"\bmodule\b",
+                     r"\bfunction\b", r"\bclass\b", r"\bscript\b"),
     "run_data_script": (r"\bscript\b", r"\bpython\b", r"\bcsv\b", r"\bchart\b", r"\bdata\b",
                         r"add up", r"\bpercentage\b", r"\baverage\b"),
     "shell_exec": (r"\bshell\b", r"\bcommand\b", r"\bterminal\b", r"\bipconfig\b",
