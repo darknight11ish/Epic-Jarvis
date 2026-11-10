@@ -345,6 +345,30 @@ def _run_file_read(args: dict) -> dict:
         return {"ok": False, "error": (
             "Jarvis does not open this file: it is in a place that holds keys, "
             "saved passwords, browser data or Jarvis's own private data.")}
+    # THE ONE CREDENTIAL LIST, SHARED WITH project_read (owner's 2026-11-10
+    # 00:05 PT ruling, Q3). The very same helper `jarvis_project_read` uses -
+    # `credential_path` - is asked here, never a second copy of the list, so
+    # neither read tool can open a credential file and the two can never drift
+    # apart. Asked of the path the model gave AND of the resolved path, so a
+    # link with an ordinary name that points at `secrets.json` is refused too.
+    # `git_store=False` keeps this tool's own, older `.git` rules (it may read
+    # a repository's `.git/HEAD`, a public half, and its own list refuses
+    # `.git/config`); `.git/credentials` is still refused by NAME.
+    try:
+        import jarvis_project_read as _shared_path_check
+    except Exception:                                        # noqa: BLE001
+        # A backend without the shipped module is already an invalid install
+        # (`_where.SHIPPED` lists it); the older list above still runs.
+        _shared_path_check = None
+    if _shared_path_check is not None:
+        try:
+            _is_credential = _shared_path_check.credential_path
+        except AttributeError:
+            _is_credential = None
+        if _is_credential is not None and (
+                _is_credential(path, git_store=False)
+                or _is_credential(real, git_store=False)):
+            return {"ok": False, "error": _shared_path_check.CREDENTIAL}
     # Protected from Jarvis (2026-10-31): a blocked file is never opened,
     # and a read-only one may be read (this tool only reads).
     _P = _protection()
@@ -12063,6 +12087,94 @@ CLOUD_MODEL_ADVICE = ("Switch the everyday model to one that runs on this PC "
                       "where Jarvis asks you before each question.")
 
 
+#: Q7 (owner's 2026-11-10 10:40 PT ruling): the pooled three-card models - the
+#: 30B coder and the 27B medical model - cannot fit ONE card. They were found
+#: loaded on the everyday lane (port 11436, the 12 GB RTX 2060) at n_ctx 8192,
+#: spilling ~3.76 GB into system RAM while the pooled lane at 11450 sat idle and
+#: starved the memory-learning passes. Every request to a local model goes
+#: through `local_model_refusal` before it is sent (run_local_turn, the Live
+#: turn, choose_lane, warm_everyday), so the guard lives there: one of these
+#: names may only be given to the pooled lane, or to the coding lane when the
+#: owner has configured that one for it. Anything else is REFUSED in words -
+#: never silently redirected, because pointing chat at a lane without starting
+#: its server is how the "local model is not running" outage happened.
+POOLED_MODEL_REFUSAL = (
+    'Jarvis did not answer: "{model}" is a pooled three-card model (the 30B/27B '
+    'class), and it cannot run on the one-card lane at {port} - it would be '
+    'spilled into system RAM and slow everything else down. Nothing was sent '
+    'there. It belongs on the pooled lane at port {pooled} (the Coding or '
+    'Medical preset starts it); pick that preset, or pick a model that fits one '
+    'card.')
+
+
+def _lane_port(ollama_url) -> Optional[int]:
+    """The port an Ollama URL names, or None when it cannot be read."""
+    try:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(str(ollama_url or ""))
+        if parsed.port:
+            return int(parsed.port)
+        return 443 if (parsed.scheme or "").lower() == "https" else 80
+    except Exception:
+        return None
+
+
+def _heavy_model_lane_ports() -> tuple:
+    """The lanes a pooled three-card model MAY be named on: the pooled lane's
+    own port, plus the coding lane's port (the ruling's "or 11435 if
+    configured"). Both numbers are read from the lane module that owns them,
+    never repeated here."""
+    ports = {11450}
+    try:
+        import jarvis_model_lanes as lanes
+        ports.add(int(getattr(lanes, "POOLED_PORT", 11450)))
+        coding = lanes.lane_by_key("coding")
+        if coding is not None:
+            ports.add(int(coding.port))
+    except Exception:
+        pass
+    return tuple(sorted(ports))
+
+
+def _pooled_model_name(model) -> bool:
+    """Is this one of the models only the pooled lane can run?
+
+    `jarvis_presets.is_pooled_model` is the ONE hand-written predicate for that
+    question (it already strips Ollama's ":latest" tag and knows the 30B coder
+    and medgemma:27b); this asks it rather than keeping a second list of names.
+    The ruling also names the SIZE FAMILIES themselves - `30b`, `27b` - because
+    any model of that class cannot fit one card, so a size token is refused too
+    even when it is a model this repository has never seen.
+    """
+    try:
+        import jarvis_presets as presets
+        if presets.is_pooled_model(model):
+            return True
+    except Exception:
+        pass
+    low = str(model or "").strip().lower()
+    if not low:
+        return False
+    if low.endswith(":latest"):
+        low = low[:-7]
+    return re.search(r"(?:^|[\W_])(30b|27b)(?:[\W_]|$)", low) is not None
+
+
+def _pooled_model_on_the_wrong_lane(ollama_url, model) -> str:
+    """The refusal sentence when `model` is a pooled model and `ollama_url` is
+    not one of the lanes that may hold it; "" otherwise. A URL whose port
+    cannot be read is refused too - fail closed, never load it where unknown."""
+    if not _pooled_model_name(model):
+        return ""
+    port = _lane_port(ollama_url)
+    allowed = _heavy_model_lane_ports()
+    if port is not None and port in allowed:
+        return ""
+    return POOLED_MODEL_REFUSAL.format(
+        model=model, port=port if port is not None else str(ollama_url),
+        pooled=allowed[0] if 11450 not in allowed else 11450)
+
+
 def local_model_refusal(ollama_url, model) -> str:
     """"" when `model` at `ollama_url` really answers on this PC, else the
     plain sentence the owner is shown instead of an answer."""
@@ -12076,6 +12188,12 @@ def local_model_refusal(ollama_url, model) -> str:
                 "this PC, and this chat can carry your emails, files and saved facts, "
                 "which stay on this PC. Set OLLAMA_URL to http://127.0.0.1:11434 and "
                 "restart Jarvis.")
+    # Q7 (2026-11-10): a heavy pooled model must never be requested against a
+    # one-card lane - the everyday lane in particular (11436). Refused in words
+    # before anything is sent.
+    wrong_lane = _pooled_model_on_the_wrong_lane(ollama_url, model)
+    if wrong_lane:
+        return wrong_lane
     return ""
 
 

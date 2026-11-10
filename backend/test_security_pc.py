@@ -670,6 +670,93 @@ def t_file_read_never_opens_keys_passwords_or_jarvis_data():
                 os.environ[key] = val
 
 
+# -------------------- the 2026-11-10 Q3 credential list, shared by both tools
+
+#: Every name the owner's 2026-11-10 00:05 PT ruling (Q3) lists for the ONE
+#: shared denylist, paired with the example file this test makes for it.
+CREDENTIAL_LIST_2026_11_10 = (
+    ("secrets.json", "secrets.json"),
+    (".envrc", ".envrc"),
+    (".htpasswd", ".htpasswd"),
+    (".netrc", ".netrc"),
+    (".npmrc", ".npmrc"),
+    (".pypirc", ".pypirc"),
+    ("api_keys.py", "api_keys.py"),
+    ("*.token", "refresh.token"),
+    ("*.pfx", "client.pfx"),
+    ("*.p12", "client.p12"),
+    ("*credentials*.json", "aws_credentials.json"),
+    (".git/credentials", ".git/credentials"),
+)
+
+
+def t_file_read_refuses_the_credential_list_shared_with_project_read():
+    """The 2026-11-10 Q3 ruling: BOTH read tools refuse every listed name.
+
+    `file_read` (this suite's tool) must refuse each name the ruling lists, and
+    it must do it by asking `jarvis_project_read.credential_path` - the EXACT
+    same helper `project_read` uses - rather than keeping a second copy of the
+    list that could drift. The spy below is what proves the wiring: on the old
+    code every listed name reads back and the spy is never called.
+    """
+    home = Path(tempfile.mkdtemp())
+    real_home = os.environ.get("HOME"), os.environ.get("USERPROFILE")
+    os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
+    try:
+        import jarvis_project_read as PR
+        for what, rel in CREDENTIAL_LIST_2026_11_10:
+            f = home / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("SECRET = 'never comes back'", encoding="utf-8")
+            r = AG._run_file_read({"path": str(f)})
+            check(f"file_read refuses {what} - Q3's shared list",
+                  r.get("ok") is False and "never comes back" not in json.dumps(r), r)
+        # THE SAME HELPER, ASKED. A spy on jarvis_project_read.credential_path
+        # must be called; a copy of the list inside jarvis_agent would leave
+        # this empty and fail.
+        asked = []
+        original = getattr(PR, "credential_path", None)
+
+        def spy(name, *args, **kwargs):
+            asked.append(str(name))
+            return bool(original(name, *args, **kwargs)) if original else False
+
+        PR.credential_path = spy
+        try:
+            ordinary = home / "Documents" / "notes.txt"
+            ordinary.parent.mkdir(parents=True, exist_ok=True)
+            ordinary.write_text("shopping list", encoding="utf-8")
+            r = AG._run_file_read({"path": str(ordinary)})
+        finally:
+            if original is None:
+                del PR.credential_path
+            else:
+                PR.credential_path = original
+        check("CONTROL: an ordinary file still reads while the shared helper is asked",
+              r.get("ok") is True and "shopping list" in json.dumps(r), r)
+        check("file_read asks jarvis_project_read.credential_path - the ONE helper "
+              "project_read asks, never a second copy",
+              any(str(ordinary) in name for name in asked), asked)
+        # CONTROLS: the near misses the ruling must leave readable.
+        for rel in ("keys.py", "tokens.md", "credentials_migration.py",
+                    "notes.token.md", "api_keys.py.txt"):
+            f = home / rel
+            f.write_text("ordinary words", encoding="utf-8")
+            r = AG._run_file_read({"path": str(f)})
+            check(f"CONTROL: file_read still reads {rel}", r.get("ok") is True, r)
+        # The published one-argument form (what the GitHub lane calls before it
+        # hands a changed file on): a path or a bare name, True/False.
+        check("the published is_credential_path(name) answers for every Q3 name",
+              all(PR.is_credential_path(name) is True
+                  for _, name in CREDENTIAL_LIST_2026_11_10), None)
+    finally:
+        for key, val in zip(("HOME", "USERPROFILE"), real_home):
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+
+
 def t_file_read_opens_the_path_it_checked():
     home = Path(tempfile.mkdtemp())
     real_home = os.environ.get("HOME"), os.environ.get("USERPROFILE")

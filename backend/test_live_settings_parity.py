@@ -117,6 +117,102 @@ import jarvis_asks_first as AF  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
 import jarvis_settings_registry as R  # noqa: E402
 
+# --------------------------------------------------------------------------
+#   Q2 (the owner's 2026-11-10 00:05 PT ruling): cache the repeated STATIC
+#   reads this suite drives hundreds of times
+# --------------------------------------------------------------------------
+# WHY. This suite is green in substance - 935 checks, 0 failed - but it took
+# 606.6 s at the desk, 6.6 s past check_claims.py's old 600 s cap, because it
+# drives ~500 REAL chat turns and Jarvis has grown to 62 switchable tools and
+# 180+ features. Measured here (not guessed), per turn, the cost is TWO
+# repeated STATIC reads and nothing else:
+#
+#   1. `jarvis_framework.load_framework()` - the shipped framework TOML. It
+#      already caches the TOML PARSE but returns `copy.deepcopy(_CACHE)` on
+#      every call (its docstring explains why: a caller may mutate what it is
+#      handed). One turn reaches it ~870 times, and deep-copying a 145 KB
+#      nested dict ~870 times is ~0.5-0.9 s of the turn. The file does not
+#      change between those calls.
+#   2. `jarvis_compute._run_smi(...)` - nvidia-smi's hardware table. One turn
+#      runs it 4 times (jarvis_second_card's "which card is the model on" and
+#      `jarvis_voices.status`), ~0.6 s of subprocess time. The graphics cards
+#      do not change during a test run.
+#
+# Neither read is what this suite tests: it tests that a setting changed by
+# TYPING changes the same way through Jarvis Live, door for door. So the two
+# static reads are cached for the process, and ONE check at the end
+# (`t_zzz_the_static_read_cache_is_behaviour_preserving`) proves the cache
+# changed speed and nothing else: every hardware answer is checked for the real
+# table's shape and for being served from the cache, and the cached framework
+# dict is compared with a fresh `load_framework()` - which fails if any of the
+# ~500 turns MUTATED it, the one way returning a cached dict could leak state
+# between turns. Measured on the owner's PC, 2026-11-10: 606.6 s -> 90 s. The
+# cap itself was raised 600 -> 900 s in tools/check_claims.py by the same
+# ruling - the ruling explicitly forbids splitting claim row C101 or inventing
+# an "environment-dependent" category.
+_STATIC_CACHE_COUNTS = {"framework": 0, "smi": 0}
+
+# --- 1. the framework TOML: keyed on the file's own stat, so a real edit ----
+# (the tool-switch checks in this suite DO edit [tools].enabled) is re-read.
+import jarvis_framework as _framework  # noqa: E402
+
+_real_load_framework = _framework.load_framework
+
+#: The one framework file this run uses, resolved ONCE. `config_path()` itself
+#: is not cheap - it resolves this module's own path and stats four candidates -
+#: and it is called ~890 times per turn through `load_framework`, so asking it
+#: per call costs more than the read it guards. The suite sets
+#: JARVIS_FRAMEWORK_TOML at import and never moves the file, so this cannot
+#: change under it; the per-call part is only the stat the cache is keyed on.
+_FRAMEWORK_PATH = _framework.config_path()
+
+
+def _framework_key():
+    if _FRAMEWORK_PATH is None:
+        return None
+    try:
+        st = _FRAMEWORK_PATH.stat()
+    except OSError:
+        return (str(_FRAMEWORK_PATH), None, None)
+    return (str(_FRAMEWORK_PATH), st.st_mtime_ns, st.st_size)
+
+
+_FRAMEWORK_CACHE = {"key": (_framework_key(),), "value": None}
+
+
+def _cached_load_framework(*args, **kwargs):
+    key = _framework_key()
+    if _FRAMEWORK_CACHE["value"] is None or key != _FRAMEWORK_CACHE["key"]:
+        _FRAMEWORK_CACHE["value"] = _real_load_framework(*args, **kwargs)
+        _FRAMEWORK_CACHE["key"] = key
+    else:
+        _STATIC_CACHE_COUNTS["framework"] += 1
+    return _FRAMEWORK_CACHE["value"]
+
+
+_framework.load_framework = _cached_load_framework
+
+# --- 2. nvidia-smi: the hardware table, keyed on the exact query ------------
+import jarvis_compute as _compute  # noqa: E402
+
+_real_run_smi = _compute._run_smi
+
+#: {(query arguments): the one nvidia-smi answer}. A dict (not lru_cache) so the
+#: closing check can ask every cached query again and compare the answers.
+_SMI_CACHE: dict = {}
+
+
+def _run_smi_cached(args):
+    key = tuple(args or ())
+    if key in _SMI_CACHE:
+        _STATIC_CACHE_COUNTS["smi"] += 1
+        return _SMI_CACHE[key]
+    _SMI_CACHE[key] = _real_run_smi(list(key))
+    return _SMI_CACHE[key]
+
+
+_compute._run_smi = _run_smi_cached
+
 PASSED, FAILED, SKIPPED = [], [], []
 COVERED_KEYS: set = set()
 
@@ -815,6 +911,53 @@ def t_presets_and_search_providers_are_the_same_in_both_doors():
               typed is not None and live is not None and typed.reply == live.reply,
               (None if typed is None else typed.reply,
                None if live is None else live.reply))
+
+
+# ------------------------------------------------- Q2: the cache is speed only
+
+def t_zzz_the_static_read_cache_is_behaviour_preserving():
+    """Q2 (2026-11-10 00:05 PT ruling): the cache must change SPEED only.
+
+    This is the check that lets the two caches at the top of this file be
+    trusted: it proves each cached answer is the SAME answer the real read
+    gives, and that none of the ~500 real turns MUTATED the shared framework
+    dict (the one way handing back a cached dict instead of a fresh deep copy
+    could leak state between turns - `jarvis_framework.load_framework`'s own
+    docstring exists because a caller may mutate what it is handed).
+    """
+    check("Q2: the framework read was really served from the cache (hundreds of times)",
+          _STATIC_CACHE_COUNTS["framework"] > 100, _STATIC_CACHE_COUNTS)
+    check("Q2: the hardware probe was asked more than once and cached",
+          _STATIC_CACHE_COUNTS["smi"] > 10 and len(_SMI_CACHE) >= 2,
+          (_STATIC_CACHE_COUNTS, sorted(_SMI_CACHE)))
+    # A FRESH read of the TOML as it is NOW (the tool switches in this suite
+    # legitimately edit it, which is why the cache keys on its mtime/size): if
+    # any turn had mutated the cached dict, these two would differ.
+    fresh = _real_load_framework()
+    check("Q2: no turn mutated the cached framework config (cached == a fresh read)",
+          _FRAMEWORK_CACHE["value"] == fresh,
+          "the cached framework dict differs from a fresh load_framework()")
+    # The hardware table is a LIVE reading (another program can load a model and
+    # move `memory.free`/the process list between two calls), so the honest
+    # check is not "the numbers are identical for ever" - it is: every cached
+    # answer still has the shape the query asked for, and asking again returns
+    # the SAME object, i.e. the cache answered instead of re-running nvidia-smi.
+    bad_shape = {}
+    for key, value in _SMI_CACHE.items():
+        if value is None:                    # "nvidia-smi absent/refused" is a
+            continue                         # real answer; nothing to shape-check
+        rows = [[p.strip() for p in ln.split(",")]
+                for ln in str(value).splitlines() if ln.strip()]
+        # Every query this backend sends starts with an integer id (the GPU
+        # index, or a process pid); a cached answer must still look like that.
+        if not rows or not all(row and row[0].isdigit() for row in rows):
+            bad_shape[key] = str(value)[:200]
+    check("Q2: every cached hardware answer is the hardware table's real shape",
+          bad_shape == {}, bad_shape)
+    asked_again = {key: _run_smi_cached(list(key)) for key in _SMI_CACHE}
+    check("Q2: asking again returns the cached object itself (no re-run)",
+          all(asked_again[key] is value for key, value in _SMI_CACHE.items()),
+          [key for key, value in _SMI_CACHE.items() if asked_again[key] is not value])
 
 
 if __name__ == "__main__":

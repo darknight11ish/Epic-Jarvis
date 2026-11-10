@@ -819,9 +819,16 @@ def t_12_a_credential_file_is_refused_by_name():
                "id_rsa", "id_rsa.pub", "id_ed25519", "id_ecdsa", "id_dsa",
                "secrets.pem", "server.key", "cert.pfx", "cert.p12",
                "vault.kdbx", "store.jks",
-               "pkg/.git/config", "pkg/.git/HEAD"]
+               "pkg/.git/config", "pkg/.git/HEAD",
+               # The owner's 2026-11-10 00:05 PT ruling (Q3) extended the list:
+               # these were NOT refused before this wave.
+               "secrets.json", ".envrc", ".htpasswd", ".pypirc", "api_keys.py",
+               "refresh.token", "aws_credentials.json",
+               "gcp-credentials-old.json", "pkg/.git/credentials"]
     allowed = ["key.py", "keys.py", "env.py", "credentials_migration.py",
-               "notes.txt", "app/server.py"]
+               "notes.txt", "app/server.py",
+               # ... and the near misses the ruling must NOT swallow.
+               "tokens.md", "notes.token.md", "credentials_notes.md"]
     for rel in refused + allowed:
         _write(root / rel, "SECRET = 'this must never come back'\n")
     _write(root / ".notes.txt", "ordinary words, hidden by its name only\n")
@@ -846,10 +853,16 @@ def t_12_a_credential_file_is_refused_by_name():
            ".git-credentials", ".npmrc", "credentials", "credentials.json",
            "CREDENTIALS.JSON", "id_rsa", "id_rsa.pub", "id_ed25519", "id_ecdsa",
            "id_dsa", "id_dsa.pub", "secrets.pem", "x.key", "x.pfx", "x.p12",
-           "x.kdbx", "x.jks", "pkg/.git/config", "a/b/.git/HEAD"]
+           "x.kdbx", "x.jks", "pkg/.git/config", "a/b/.git/HEAD",
+           # The 2026-11-10 Q3 additions, each in the shape the ruling names.
+           "secrets.json", ".envrc", ".htpasswd", ".pypirc", "api_keys.py",
+           "x.token", "X.TOKEN", "aws_credentials.json",
+           "GCP-CREDENTIALS-OLD.JSON", "pkg/.git/credentials"]
     no = ["key.py", "keys.py", "env.py", "credentials_migration.py", "notes.txt",
           "my.env", "server.pem.txt", "credentials.md", "my.git/config",
-          "key", "keys.json"]
+          "key", "keys.json",
+          # The near misses the extended list must leave readable.
+          "tokens.md", "notes.token.md", "secrets.json.md", "api_keys.py.txt"]
     check("12. the checker's own predicate: every credential NAME is refused",
           all(PR._credential(n) for n in yes),
           [n for n in yes if not PR._credential(n)])
@@ -859,6 +872,15 @@ def t_12_a_credential_file_is_refused_by_name():
     check("12. `.git` as a FOLDER is refused anywhere in the path, not as a name",
           PR._credential("a/.git/config") and PR._credential("a/b/.git/HEAD")
           and not PR._credential("a/.git"), "")
+    # THE PUBLIC, ONE-ARGUMENT NAME (2026-11-10 Q3): every other module that
+    # reads or hands on a file asks THIS, and it is the public form of the ONE
+    # helper's list - one list, never a copy that can drift.
+    check("12. `is_credential_path` is the PUBLIC one-argument form of the ONE helper",
+          callable(getattr(PR, "is_credential_path", None))
+          and getattr(PR, "credential_path", None) is PR._credential, None)
+    check("12. ... it takes a path or a bare filename and answers True/False",
+          all(PR.is_credential_path(n) is True for n in yes)
+          and not any(PR.is_credential_path(n) is True for n in no), None)
 
     # It never reads the file first: a credential file full of NUL bytes is
     # refused as a CREDENTIAL FILE, not as a binary one.

@@ -2956,16 +2956,29 @@ class MemoryStore:
                 continue
         return done
 
-    def backfill_embeddings(self, batch: int = 64) -> int:
-        """Embed anything that was stored while no model was available."""
+    def backfill_embeddings(self, batch: int = 64, limit: Optional[int] = None) -> int:
+        """Embed anything that was stored while no model was available.
+
+        `limit` bounds ONE call to at most that many rows - the learning pass
+        asks for a small number on every pass (owner's 2026-11-10 10:40 PT
+        ruling, Q6 Bug 6A: this method existed with no caller at all, so a
+        fact saved while the embedding model was down stayed keyword-only for
+        ever, and `status()` honestly reported `unembedded: 4`). The default
+        None keeps the original "until nothing more can be embedded" behaviour
+        every existing caller and test relies on.
+        """
+        cap = None if limit is None else max(0, int(limit))
         done = 0
         while True:
+            take = batch if cap is None else min(batch, cap - done)
+            if take <= 0:
+                break
             with _LOCK, closing(self._connect()) as c:
                 # Never an erased fact: its text is only the marker, and a
                 # vector of "[erased]" would be a search hit for nothing.
                 rows = c.execute("SELECT id, text FROM facts WHERE embedded=0"
                                  " AND erased_at IS NULL LIMIT ?",
-                                 (batch,)).fetchall()
+                                 (take,)).fetchall()
                 if not rows:
                     break
                 wrote = self._embed_rows(c, [(r["id"], r["text"]) for r in rows])

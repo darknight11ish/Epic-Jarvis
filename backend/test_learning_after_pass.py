@@ -38,11 +38,13 @@ it, and the learning counters pointed at this suite's own folder.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
 import sys
 import tempfile
+import time
 import traceback
 import types
 from contextlib import closing
@@ -350,6 +352,149 @@ def t_the_card_reason_survives_a_later_read():
               bool(notes.get(q["id"], {}).get("auto_reason")), notes)
     finally:
         st._connect = real_connect
+        _done(keep_store, keep_stats)
+
+
+# =========================================== 5. Q6 Bug 6B: failures are VISIBLE
+
+def t_a_raised_pass_records_its_actual_reason_and_time():
+    """Q6 Bug 6B (owner's 2026-11-10 10:40 PT ruling). A pass that RAISED always
+    wrote `last_error`/`last_error_at`, but nothing wrote the explicit
+    `last_pass_error`/`last_pass_error_at` pair the status read is meant to
+    show. The old code has no such field at all, so this fails on it."""
+    st, keep_store, keep_stats = _world("raised")
+    real = A.check_settings
+    try:
+        def boom(*_a, **_k):
+            raise RuntimeError("test failure inside the pass")
+        A.check_settings = boom
+        q = _queue(st)
+        started = time.time()
+        try:
+            res = A.after_pass([q], [{"role": "user", "content": "I live in York"}],
+                               conversation_id=None, model=MODEL, ollama=LOCAL,
+                               learning_on=True, extract=_CannotSave(),
+                               publish=lambda ids: None)
+        finally:
+            A.check_settings = real
+        d = A.stats()
+        check("Q6B: a raised pass still reports its error, as before",
+              res.get("error") == "RuntimeError" and d.get("last_error")
+              == "after_pass: RuntimeError", (res, d))
+        check("Q6B: ... and it records the ACTUAL reason in last_pass_error too",
+              d.get("last_pass_error") == "after_pass: RuntimeError", d)
+        check("Q6B: ... with a real timestamp, not None",
+              isinstance(d.get("last_pass_error_at"), float)
+              and started <= d["last_pass_error_at"] <= time.time() + 1, d)
+        check("Q6B: ... and last_error_at says the same moment",
+              d.get("last_error_at") == d.get("last_pass_error_at"), d)
+    finally:
+        _done(keep_store, keep_stats)
+
+
+def t_a_model_lane_failure_replaces_a_month_old_last_error():
+    """THE LIVE SYMPTOM. The HUD showed `last_error: "after_pass:
+    OperationalError"` from 2026-10-10 while 8 of 17 passes failed - last
+    night's model-lane HTTP 500s only touched `last_model_error`, which the
+    read's "last error" line does not show. Q6B: a model failure must update
+    last_error/last_error_at too, so an old error cannot mask a current one."""
+    p = _TMP / "stats-model-failure.json"
+    p.write_text(json.dumps({"passes": 17, "failed": 8, "saved": 1, "carded": 22,
+                             "last_error": "after_pass: OperationalError",
+                             "last_error_at": 1791687798.5,
+                             "last_model_error": None}), encoding="utf-8")
+    saved = A.stats_path
+    try:
+        A.stats_path = lambda: p
+        at = 1800000000.0            # a time AFTER the October error
+        A.note_model_failure({"kind": "http", "status": 500, "seconds": 2.1}, at=at)
+        d = A.stats()
+        check("Q6B: the month-old error is replaced by the real, current reason",
+              "HTTP 500" in (d.get("last_error") or "")
+              and d.get("last_error") != "after_pass: OperationalError", d.get("last_error"))
+        check("Q6B: ... and last_error_at is the failure's own time",
+              d.get("last_error_at") == at, d.get("last_error_at"))
+        check("Q6B: ... and the explicit pass fields carry the same reason",
+              "HTTP 500" in (d.get("last_pass_error") or "")
+              and d.get("last_pass_error_at") == at, d)
+        check("Q6B: ... and the old model-failure counter still works",
+              d.get("model_failures") == 1 and "HTTP 500" in (d.get("last_model_error") or ""),
+              (d.get("model_failures"), d.get("last_model_error")))
+        check("Q6B: the human note names the CURRENT failure, not the October one",
+              "HTTP 500" in (d.get("note") or "")
+              and "OperationalError" not in (d.get("note") or ""), d.get("note"))
+    finally:
+        A.stats_path = saved
+
+
+def t_a_batch_fault_records_the_reason_the_pass_stopped_for():
+    """A pass stopped by a batch FAULT (the intake/model/settings check failed)
+    saved nothing because something is broken - not because the owner turned
+    learning off. Q6B records that actual reason and time as the pass's
+    failure; before this wave `last_error` stayed untouched on this path."""
+    st, keep_store, keep_stats = _world("fault")
+    real_intake = A.check_intake
+    try:
+        A.check_intake = lambda: "the learner's intake check failed (test)"
+        q = _queue(st)
+        started = time.time()
+        res = _pass(st, q)
+        d = A.stats()
+        check("Q6B: the fault-stopped pass still cards its proposal",
+              bool(res.get("cards")), res)
+        check("Q6B: ... and last_pass_error is the ACTUAL fault reason",
+              d.get("last_pass_error") == "the learner's intake check failed (test)",
+              d.get("last_pass_error"))
+        check("Q6B: ... last_error says the same thing",
+              d.get("last_error") == d.get("last_pass_error"), d)
+        check("Q6B: ... with the pass's own timestamp",
+              isinstance(d.get("last_pass_error_at"), float)
+              and started <= d["last_pass_error_at"] <= time.time() + 1, d)
+        check("Q6B: ... and the human note names it",
+              "intake check failed" in (d.get("note") or ""), d.get("note"))
+    finally:
+        A.check_intake = real_intake
+        A.clear_fault()
+        _done(keep_store, keep_stats)
+
+
+# ============================================ 6. Q6 Bug 6A: facts get embedded
+
+def t_a_learning_pass_backfills_facts_saved_with_no_embedder():
+    """THE LIVE SYMPTOM. `GET /api/memory/status` reported 5 current facts with
+    `unembedded: 4` while `semantic: true`. `MemoryStore.backfill_embeddings()`
+    existed but NO shipped caller ever ran it, so a fact saved while the
+    embedding model was unavailable stayed keyword-only for ever. Q6A: the
+    learning pass repairs a bounded batch on every pass - including one with
+    nothing to learn (the early return this check drives)."""
+    st, keep_store, keep_stats = _world("backfill")
+    try:
+        ids = [st.add(f"fact number {i} about the owner") for i in range(3)]
+        with closing(st._connect()) as c:
+            c.execute("UPDATE facts SET embedded=0")
+            c.execute("DELETE FROM facts_vec")
+            c.commit()
+        before = st.status()
+        check("Q6A: the store really is holding unembedded facts (the live shape)",
+              before.get("unembedded") == 3 and before.get("facts") >= 3, before)
+        # A pass with NOTHING to learn: it used to return before doing anything.
+        res = A.after_pass([], [], conversation_id=None, model=MODEL, ollama=LOCAL,
+                           learning_on=True, extract=_CannotSave(),
+                           publish=lambda ids: None)
+        after = st.status()
+        check("Q6A: the pass reports how many facts it repaired",
+              res.get("embedded") == 3, res.get("embedded"))
+        check("Q6A: ... and none of them is left unembedded", after.get("unembedded") == 0,
+              after)
+        check("Q6A: ... and their vectors are really in the index, not just flags",
+              all(st.get(fid) is not None for fid in ids), ids)
+        # A second pass has nothing to repair and says so (it must not spin).
+        res2 = A.after_pass([], [], conversation_id=None, model=MODEL, ollama=LOCAL,
+                            learning_on=True, extract=_CannotSave(),
+                            publish=lambda ids: None)
+        check("Q6A: a pass with nothing left to repair returns 0 and finishes",
+              res2.get("embedded") == 0, res2.get("embedded"))
+    finally:
         _done(keep_store, keep_stats)
 
 
