@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5ca89aeea55117fea570c9fa6bc154dbf362934b3a8a57d0af900d696aafd0cc); the apps' Features pages read their own
+`features/features.json` (sha256 101c6aafc5ebf2bd97d6398acad9da826f0d88b6eb87d2235da17aaa0beb79ca); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5ca89aeea55117fea570c9fa6bc154dbf362934b3a8a57d0af900d696aafd0cc"
+SOURCE_SHA256 = "101c6aafc5ebf2bd97d6398acad9da826f0d88b6eb87d2235da17aaa0beb79ca"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1537,10 +1537,10 @@ FEATURES = (
         "id": "focus-presets",
         "group": "The PC itself",
         "title": "Focus presets",
-        "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
+        "what": "Ten presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
         "asks": "Opening the list changes nothing. A local preset picked in either app's own list switches at once - it is your own click and picking another switches straight back - and writes a receipt naming the preset it replaced. The Coding and Cloud rows still raise one approval card before anything changes.",
-        "limit": "An apply of a local preset starts its lane and switches the model at once, with no card (2026-11-09); a switch that fails rolls the lane and the saved preset back. The Coding preset is the one heavy row: its pooled all-three-card lane exists and really starts, raising that one card before it pauses the other two models, so a declined card there changes nothing. It runs at the 32,768-token window measured on this PC on 2026-11-03 - the largest rung that loads, at 323.5 MiB spilled into system RAM, which this one window allows up to a 352 MiB cap and nothing larger, while 16,384 stays the largest rung with no spill. A 15-minute real coding session after deployment is the next test: the measurement configured the window, it did not fill it. The Cloud row beside these nine is a separate cloud service choice, described in its own row, and it still asks.",
+        "limit": "An apply of a local preset starts its lane and switches the model at once, with no card (2026-11-09); a switch that fails rolls the lane and the saved preset back. The Coding preset is the one heavy row: its pooled all-three-card lane exists and really starts, raising that one card before it pauses the other two models, so a declined card there changes nothing. It runs at the 32,768-token window measured on this PC on 2026-11-03 - the largest rung that loads, at 323.5 MiB spilled into system RAM, which this one window allows up to a 352 MiB cap and nothing larger, while 16,384 stays the largest rung with no spill. A 15-minute real coding session after deployment is the next test: the measurement configured the window, it did not fill it. The Cloud row beside these ten is a separate cloud service choice, described in its own row, and it still asks.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],

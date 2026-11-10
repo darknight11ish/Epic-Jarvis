@@ -37542,7 +37542,7 @@ the request is a paired app's screen, the change is one model switch on a lane
 that already exists, the preset it replaced is one click away in the same menu,
 and nothing is downloaded, installed, deleted or spent. Under that rule:
 
-* the nine local presets, except Coding, apply with no card;
+* the ten local presets, except the two heavy ones (Coding and Medical), apply with no card;
 * **Coding keeps its card.** Its pooled three-card lane unloads both other lane
   models and loads a 14.8 GB model for about half a minute; that is not a quick
   click back, and the card is the warning before the first unload
