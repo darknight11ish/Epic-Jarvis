@@ -26415,8 +26415,8 @@ model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
 coder, and since 2026-11-09 Medical on `medgemma:27b` at 32,768) means the
 preset's model needs ALL THREE cards as ONE pooled lane; since
 2026-11-02 that lane exists and the row is applicable like every other one,
-with `heavy_words` carrying the PC's own plain-words cost (both cards, and the
-other two models paused while it runs). Both fields are additive: a reader that
+with `heavy_words` carrying the PC's own plain-words cost (all three cards, and
+the other two models paused while it runs). Both fields are additive: a reader that
 ignores them behaves exactly as before. `chosen` is the id last applied;
 `active_lane` is the lane chat is pointed at now.
 
@@ -26664,8 +26664,8 @@ Two new top-level keys on `GET /api/work` / `GET /api/presets`:
                              "key_where"}],
               "escalate": {"on": false, "why": "not turned on for this PC"}}
 
-* `cloud_preset` is a TENTH row in the same shape as a preset, and it is
-  deliberately **not** in `presets[]` - both apps' nine-row list stays nine
+* `cloud_preset` is an ELEVENTH row in the same shape as a preset, and it is
+  deliberately **not** in `presets[]` - both apps' ten-row list stays ten
   rows. Its `apply` block says the two things that make it different: it is a
   cloud row (`cloud: true`) and it needs a provider (`needs_provider: true`);
   it starts no lane and switches no model (`lane_start: false`).
@@ -26685,7 +26685,7 @@ Two new top-level keys on `GET /api/work` / `GET /api/presets`:
 
 **`POST /api/work/apply` gains ONE optional field.** `{"preset": "cloud",
 "provider": "deepseek_api"}` uses that service. `provider` is read only for the
-cloud preset and ignored for the local nine, so **a body with no `provider` is
+cloud preset and ignored for the local ten, so **a body with no `provider` is
 the same request it always was, byte for byte**. The cloud apply:
 
 1. refuses `400` for no provider or an id this PC does not know, naming the six;

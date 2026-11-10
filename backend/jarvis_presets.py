@@ -581,7 +581,7 @@ CLOUD_ESCALATE_PATH = "/api/work/cloud-escalate"
 CLOUD_LANE = "jarvis-escalate"
 #: The card action every loosening in this program uses.
 CLOUD_ACTION = "change_own_config"
-#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' nine-preset
+#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' ten-preset
 #: list is unchanged and the phone keeps ignoring a key it does not know.
 CLOUD_PRESET_ID = "cloud"
 
@@ -746,7 +746,7 @@ def cloud_view() -> dict:
 
     `provider` is the service in use ("" when none is), `providers` every
     connected service (see cloud_providers), `escalate` the PC's own standing
-    switch. Additive: the nine presets are untouched, `version` stays 1, and
+    switch. Additive: the ten presets are untouched, `version` stays 1, and
     every reader that does not know this key ignores it.
     """
     return {"provider": cloud_chosen(),
@@ -858,7 +858,7 @@ def cloud_preset_view() -> dict:
     """The Cloud row itself, in the SAME shape as a `Preset.view()`.
 
     Its id is "cloud", it is deliberately absent from `PRESETS`/`PRESET_IDS`
-    (both apps' nine-row list stays nine rows), and its `apply` block says the
+    (both apps' ten-row list stays ten rows), and its `apply` block says the
     two things that make it different: it is a cloud row, and it needs a
     provider before it can be applied.
     """
@@ -1431,7 +1431,7 @@ def _active_lane_key() -> Optional[str]:
 
 
 def live_status() -> dict:
-    """GET /api/work's and GET /api/presets' answer: the nine local presets,
+    """GET /api/work's and GET /api/presets' answer: the ten local presets,
     the Cloud row, the cloud provider list and the PC's own escalation switch,
     the detected cards, the questionnaire, the 1/2/3-GPU recommendations, the
     chosen preset and the active lane.
@@ -1459,9 +1459,9 @@ def live_status() -> dict:
     return {
         "found": f"{len(PRESETS)} focus presets",
         "presets": [p.view() for p in PRESETS],
-        # The Cloud row: a TENTH row in the same shape (nine presets + this
-        # one), deliberately not in `presets` - both apps' nine-row list stays
-        # nine rows (the owner's decision of 2026-10-27: additive keys only, so
+        # The Cloud row: an ELEVENTH row in the same shape (ten presets + this
+        # one), deliberately not in `presets` - both apps' ten-row list stays
+        # ten rows (the owner's decision of 2026-10-27: additive keys only, so
         # the phone needs no change at all to keep working).
         "cloud_preset": cloud_preset_view(),
         # The provider in use, the services to choose from, and the PC's own

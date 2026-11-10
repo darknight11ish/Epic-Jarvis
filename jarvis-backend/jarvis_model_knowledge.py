@@ -79,7 +79,7 @@ def _presets():
 
 
 def presets() -> list:
-    """The nine shared preset rows, as the two apps render them."""
+    """The ten shared preset rows, as the two apps render them."""
     return [p.view() for p in _presets()]
 
 
