@@ -148,7 +148,10 @@ await check("A: the HUD is granted status/start/stop and nothing else of Live", 
 
 /* ── A3. Refused: READABLE in the stage, not tucked into the rail ────────── */
 
-const STAGE = between(HUD, '<main id="stage">', "</main>", 24000);
+// Wave 15 (2026-11-10) made the stage taller (one stage header, the plain-words
+// tabs and the new stage markup), so the window is 40,000 now; `between()` still
+// stops at the stage's own closing tag, so it covers the stage and never the rail.
+const STAGE = between(HUD, '<main id="stage">', "</main>", 40000);
 const LEFT_RAIL = between(HUD, 'id="rail-left"', "</aside>", 30000);
 
 await check("A: a refused start shows a readable popup in the stage", () => {
