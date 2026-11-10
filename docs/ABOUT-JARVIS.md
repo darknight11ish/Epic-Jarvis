@@ -527,10 +527,12 @@ goes with it.
 ### Still open, at the time of writing
 
 The register is not a museum: on the tree this page was written from,
-`docs/defect-register.tsv` holds **63 rows, 39 closed and 24 open** — the newest ones
+`docs/defect-register.tsv` holds **63 rows, 41 closed and 22 open** — the newest ones
 were filed while preparing the wave-14 follow-up: DEF-062 (the vault switch's reply claimed
-the organizer was ON while its approval card was still waiting; fixed) and DEF-063/DEF-064
-(two stale HUD lines, open and recorded). And 8 of the 255 claims in `docs/CLAIMS.tsv` are still marked open.
+the organizer was ON while its approval card was still waiting) and DEF-063/DEF-064 (two
+stale HUD lines: the Presets note named only Coding, not Medical, and the memory door sent
+every card to the Brain window while it drew its own Keep) — all three are fixed, on the
+wave-15 tree. And 8 of the 255 claims in `docs/CLAIMS.tsv` are still marked open.
 
 ---
 
@@ -553,7 +555,7 @@ estimates, and they change — re-run the command rather than trusting the numbe
 | Documents | **403** markdown files, about 10.5 MB | `Get-ChildItem docs -Recurse -Filter *.md`; `docs/README.md` carries the live copy, and `tools/check_docs_map.py` checks it |
 | Checkers named `check_*` | **39** | `Get-ChildItem tools/check_*.py` |
 | Claims about itself, each with a machine check | **255 rows**, 242 built / 8 open / 5 unverifiable | `python -B tools/check_claims.py` |
-| Defect register | **63 rows**, 39 closed / 24 open | `docs/defect-register.tsv` |
+| Defect register | **63 rows**, 41 closed / 22 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
 **What runs when a change is pushed.** Ten jobs are declared in
