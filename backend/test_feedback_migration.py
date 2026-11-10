@@ -1,36 +1,38 @@
-"""test_feedback_migration.py - the copy-of-live migration smoke test (Q2).
+"""test_feedback_migration.py - the pre-v2 fixture migration smoke test (Q2/Q9).
 
     python3 backend/test_feedback_migration.py
 
 WHY THIS EXISTS. The Wave-10 "Mark + why + save my correction" work adds two
 columns to `feedback.db`'s `marks` table (`reason`, `correction`) and a new
 `notes` table. The owner's live PC already has a `feedback.db` written by the
-OLD backend, so the migration has to be proved against a copy of that real
-file - not only against a fresh temp database - and the real file must not be
-touched at all. Owner ruling Q2 (2026-11-08, 15:45 PT), bullet "Also run the
-migration smoke test against a copy of the live `feedback.db` before Wave-10
-deploy."
+OLD backend, so the migration has to be proved against a real pre-v2 file -
+one written by the old schema - and the real file must not be touched at all.
+Owner ruling Q2 (2026-11-08, 15:45 PT) asked for that proof against a copy of
+the live `feedback.db`; Q9 (2026-11-09) replaced the live copy with the fixture
+described below, because the owner's file has since migrated to v2.
 
-THE LIVE HALF, AND ITS HONEST SKIP. The live file is
-`C:\\Users\\pcadmin\\.openjarvis\\feedback.db` (or `$JARVIS_LIVE_FEEDBACK_DB`).
-This suite:
-  * reads the live file only as BYTES - sha256 before and after, a directory
-    listing before and after, and one `shutil.copy2` into a temp dir. It never
-    opens the live file with sqlite3, so not even a `-shm`/`-wal` sidecar is
-    created by this run;
-  * proves everything on the COPY with the real `jarvis_feedback` code, and
-    prints the copy's real row counts and both hashes.
-On a CI runner there is no live file: the live half prints a line beginning
-`SKIPPED` saying it did NOT run and did NOT pass, and the suite continues with
-the synthetic half - it never passes silently, and it never fails CI for the
-missing owner file.
+WHY A FIXTURE, AND NOT THE LIVE FILE (owner ruling Q9, 2026-11-09). This suite
+used to copy the owner's live `feedback.db`
+(`C:\\Users\\pcadmin\\.openjarvis\\feedback.db`) and assert the copy was still
+pre-v2. On the owner's PC that file has since migrated to v2, so the copy half
+failed at the desk every time, while CI - which has no live file - skipped it.
+Q9's ruling: run the migration against an EXPLICIT pre-v2 FIXTURE COPY in
+scratch instead of probing the live file.
 
-THE SYNTHETIC HALF (always runs, so CI covers the logic). A pre-v2 database is
-built in a temp dir from the OLD schema (turns, turn_items, marks with four
-columns, retire_cards - no notes table), filled with marks, fact ids and skill
-note ids, then run through the SAME proof as the live copy.
+THE FIXTURE (no binary blob in the repository). `_make_old_db` writes the OLD
+schema in code - turns, turn_items, marks with four columns, retire_cards, no
+notes table - and fills it with a fixed set of turns, fact ids, skill-note ids,
+marks and one retire card. The same schema and the same rows on every machine
+and every run, so the proof is deterministic and needs no owner file.
 
-WHAT THE PROOF IS, per database (synthetic and live copy alike):
+THE TWO HALVES, both always run:
+  * synthetic - build the pre-v2 fixture, migrate it IN PLACE;
+  * fixture copy - build the same pre-v2 fixture, take a byte copy with
+    `shutil.copy2`, migrate the COPY, and prove the fixture itself is
+    byte-for-byte untouched (sha256, size, mtime, no new file beside it). The
+    fixture is only hashed, stat'd and copied - never opened with sqlite3.
+
+WHAT THE PROOF IS, per database (both halves alike):
   1. BEFORE: record the schema, every table's row count, every old mark row,
      every turn/turn_item/retire_cards row, and the OLD-BODY counts derived
      independently from those rows (current mark = newest mark row per answer;
@@ -54,8 +56,13 @@ WHAT THE PROOF IS, per database (synthetic and live copy alike):
   6. A new mark written the OLD way (no reason, no correction) still works and
      stores NULL in both new columns.
 
-No network, no model, no live install: real sqlite files in a temp dir, and the
-live file only hashed and copied.
+NO LIVE FILE, NO LIVE INSTALL. `JARVIS_FEEDBACK_DB` is pointed at the scratch
+database before any `jarvis_feedback` call, so the module's own fallback
+(`~/.openjarvis/feedback.db`) cannot be reached; the guard below points it at a
+non-existent scratch path even before the first proof. The suite never reads,
+copies or writes the owner's real `feedback.db`, and does not need
+`JARVIS_BACKEND` - it imports `jarvis_feedback` from this checkout's own
+`backend/` folder. No network, no model: real sqlite files in a temp dir.
 """
 from __future__ import annotations
 
@@ -88,23 +95,17 @@ os.environ.setdefault("OPENJARVIS_CONFIG_DIR", str(fw.CONFIG_DIR))
 import jarvis_feedback as F  # noqa: E402
 
 PASSED, FAILED = [], []
-SKIPPED = []
 
-#: The live database a copy is taken from. The env override exists so the Lead
-#: can point the smoke at a different real file without editing this suite.
-LIVE_DB = Path(os.environ.get("JARVIS_LIVE_FEEDBACK_DB")
-               or (Path.home() / ".openjarvis" / "feedback.db"))
+#: A scratch path, set BEFORE any `jarvis_feedback` call, so the module's own
+#: fallback (`~/.openjarvis/feedback.db`) is never reached even if a future
+#: edit calls it early. `_prove` repoints it at the database under test.
+os.environ["JARVIS_FEEDBACK_DB"] = str(_TMP / "never-the-live-file.db")
 
 
 def check(name: str, cond, detail="") -> None:
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
-
-
-def skip(why: str) -> None:
-    SKIPPED.append(why)
-    print(f"SKIPPED {why}")
 
 
 class NoNetwork:
@@ -140,8 +141,8 @@ def _raw(db: Path):
         c.close()
 
 
-#: The pre-v2 schema the live 0.2.439 backend writes (from jarvis_feedback's
-#: own history: turns, turn_items, marks - four columns, retire_cards - and no
+#: The pre-v2 schema the old backend writes (from jarvis_feedback's own
+#: history: turns, turn_items, marks - four columns, retire_cards - and no
 #: notes table).
 _OLD_SCHEMA = (
     """CREATE TABLE turns (
@@ -286,7 +287,12 @@ def _make_old_db(path: Path) -> dict:
         c.commit()
     finally:
         c.close()
-    return {"turns": turns, "note_a": note_a, "note_b": note_b}
+    return {"turns": turns, "note_a": note_a, "note_b": note_b,
+            "expected_counts": {
+                "turns": len(turns),
+                "turn_items": sum(len(v) for v in items.values()),
+                "marks": len(marks),
+                "retire_cards": 1}}
 
 
 def _prove(db: Path, label: str, *, old_turn: str = "") -> dict:
@@ -445,66 +451,66 @@ def t_the_synthetic_pre_v2_fixture_migrates():
 
 
 # --------------------------------------------------------------------------
-#   The live half - a real copy, or an honest skip with a printed line
+#   The fixture-copy half - an explicit pre-v2 fixture, copied, then migrated
 # --------------------------------------------------------------------------
-def t_the_live_copy_migrates():
-    live = LIVE_DB
-    if not live.is_file():
-        skip(f"live-DB migration smoke: {live} does not exist on this machine, "
-             "so the copy half did NOT run and did NOT pass (the synthetic "
-             "half above covers the migration logic)")
-        return
-    try:
-        before_hash = sha256(live)
-        before_size = live.stat().st_size
-        before_mtime = live.stat().st_mtime
-        before_names = sorted(p.name for p in live.parent.iterdir()
-                              if p.name.startswith(live.name))
-    except OSError as exc:
-        skip(f"live-DB migration smoke: {live} is not readable ({exc}), so the "
-             "copy half did NOT run and did NOT pass")
-        return
+def t_the_pre_v2_fixture_copy_migrates():
+    """A byte copy of the explicit pre-v2 fixture migrates; the fixture does not.
 
-    d = Path(tempfile.mkdtemp(prefix="live-copy-", dir=_TMP))
-    copy = d / "feedback.db"
-    shutil.copy2(live, copy)
-    wal = live.with_name(live.name + "-wal")
-    copied_wal = False
-    if wal.is_file() and wal.stat().st_size > 0:
-        # A non-empty WAL is part of the live database's committed state; copy
-        # it beside the copy so the copy is the whole file. (This live file's
-        # WAL is empty today, so the main file is the whole database.)
-        shutil.copy2(wal, copy.with_name(copy.name + "-wal"))
-        copied_wal = True
+    Q9's replacement for the old live-copy half: the same proof and the same
+    copy shape, but the source is the deterministic fixture `_make_old_db`
+    writes in scratch. The fixture is only hashed, stat'd and copied - never
+    opened with sqlite3 - so "the source was not touched" is proved by bytes,
+    not by a read-only connection.
+    """
+    fixture_dir = Path(tempfile.mkdtemp(prefix="fixture-", dir=_TMP))
+    fixture = fixture_dir / "pre-v2-feedback.db"
+    made = _make_old_db(fixture)
+    before_hash = sha256(fixture)
+    before_size = fixture.stat().st_size
+    before_mtime = fixture.stat().st_mtime
+    before_names = sorted(p.name for p in fixture_dir.iterdir())
+
+    copy_dir = Path(tempfile.mkdtemp(prefix="fixture-copy-", dir=_TMP))
+    copy = copy_dir / "feedback.db"
+    shutil.copy2(fixture, copy)
     copy_hash = sha256(copy)
-    check("live: the copy is byte-identical to the live file",
+    check("fixture copy: the copy is byte-identical to the fixture",
           copy_hash == before_hash, (copy_hash, before_hash))
 
-    report = _prove(copy, "live copy")
-    check("live: the copy's row counts are the real ones",
-          all(report["pre"]["counts"].get(t) is not None for t in USER_TABLES),
-          report["pre"]["counts"])
+    report = _prove(copy, "fixture copy", old_turn=made["turns"][1])
+    check("fixture copy: it started from the old 4-column marks table and no notes",
+          "reason" not in report["pre"]["cols"].get("marks", ())
+          and "notes" not in report["pre"]["counts"],
+          report["pre"]["cols"].get("marks"))
+    check("fixture copy: the copy's pre-migration rows are the fixture's rows",
+          {t: report["pre"]["counts"].get(t) for t in USER_TABLES}
+          == made["expected_counts"],
+          (report["pre"]["counts"], made["expected_counts"]))
+    # The old live-copy half could only assert this on a machine with a pre-v2
+    # live file, and the owner's already-migrated file made it fail forever.
+    # On the fixture it is deterministic.
+    check("fixture copy: the copy started as a pre-v2 file",
+          report["had_v2"] is False, report["had_v2"])
 
-    # The live file must be untouched: same bytes, same size, same mtime, and
-    # no sidecar file created by this run.
-    after_hash = sha256(live)
-    after_names = sorted(p.name for p in live.parent.iterdir()
-                         if p.name.startswith(live.name))
-    check("live: the live file's sha256 is unchanged",
+    # The fixture must be untouched: same bytes, same size, same mtime, and no
+    # sidecar file created beside it.
+    after_hash = sha256(fixture)
+    after_names = sorted(p.name for p in fixture_dir.iterdir())
+    check("fixture: the fixture's sha256 is unchanged",
           after_hash == before_hash, (before_hash, after_hash))
-    check("live: the live file's size and mtime are unchanged",
-          live.stat().st_size == before_size
-          and live.stat().st_mtime == before_mtime,
-          (before_size, live.stat().st_size))
-    check("live: this run created no new file beside the live database",
+    check("fixture: the fixture's size and mtime are unchanged",
+          fixture.stat().st_size == before_size
+          and fixture.stat().st_mtime == before_mtime,
+          (before_size, fixture.stat().st_size))
+    check("fixture: this run created no new file beside the fixture",
           after_names == before_names, (before_names, after_names))
-    check("live: the live file itself was never opened (the copy was)",
-          copy.resolve() != live.resolve())
+    check("fixture: jarvis_feedback ran against the copy, not the fixture",
+          F.db_path().resolve() == copy.resolve(), F.db_path())
 
     # The numbers the Lead asked for, printed so they are in the log:
-    print("\n--- live feedback.db copy: measured ---")
-    print(f"    live sha256 (before == after): {before_hash}")
-    print(f"    copy sha256:                   {copy_hash}")
+    print("\n--- pre-v2 fixture copy: measured ---")
+    print(f"    fixture sha256 (before == after): {before_hash}")
+    print(f"    copy sha256:                      {copy_hash}")
     print(f"    pre-migration schema: marks columns "
           f"{report['pre']['cols'].get('marks')}, tables {report['pre']['tables']}")
     print(f"    pre-migration row counts: {report['pre']['counts']}")
@@ -514,28 +520,27 @@ def t_the_live_copy_migrates():
           f"answers_marked={report['counts']['answers_marked']}, "
           f"retire_cards={report['counts']['retire_cards_raised']}")
     print(f"    v2 notes after the new marks: {report['final_notes']}")
-    print(f"    WAL copied beside the copy: {copied_wal}")
-    # A live file that was ALREADY migrated is still a pass for "reads back",
-    # but it cannot prove the column-adding step; on this PC the installed
-    # backend is 0.2.439 (pre-v2), so the honest expectation is a pre-v2 file.
-    check("live: the copy started as a pre-v2 file (the installed backend's schema)",
-          report["had_v2"] is False, report["had_v2"])
 
 
 def main():
-    for fn in (t_the_synthetic_pre_v2_fixture_migrates, t_the_live_copy_migrates):
-        print(f"\n--- {fn.__name__} ---")
-        try:
-            fn()
-        except Exception:
-            FAILED.append(fn.__name__)
-            traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed, {len(SKIPPED)} skipped")
-    if SKIPPED:
-        print("did NOT run and did NOT pass: " + "; ".join(SKIPPED))
-    if FAILED:
-        print("failed: " + ", ".join(FAILED))
-    return 1 if FAILED else 0
+    try:
+        for fn in (t_the_synthetic_pre_v2_fixture_migrates,
+                   t_the_pre_v2_fixture_copy_migrates):
+            print(f"\n--- {fn.__name__} ---")
+            try:
+                fn()
+            except Exception:
+                FAILED.append(fn.__name__)
+                traceback.print_exc()
+        print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+        if FAILED:
+            print("failed: " + ", ".join(FAILED))
+        return 1 if FAILED else 0
+    finally:
+        # Everything this suite writes lives under this one scratch root.
+        # Remove it so a second run starts from nothing - and so no scratch
+        # file is left anywhere for a later reader to mistake for a live one.
+        shutil.rmtree(_TMP, ignore_errors=True)
 
 
 if __name__ == "__main__":
