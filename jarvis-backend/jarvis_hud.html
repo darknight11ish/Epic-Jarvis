@@ -11165,6 +11165,16 @@ subscribe();
       });
       window.addEventListener("jarvis:hud-shell", paintHudAiMode);
       window.addEventListener("focus", paintHudAiMode);
+      // The presets arrive from the PC's contract after this script runs, so
+      // the name is re-read when the page's own list is (re)drawn - one
+      // observer on the group renderPresets owns, no polling and no new read.
+      var group = $("presets");
+      if (group && typeof window.MutationObserver === "function") {
+        try {
+          new window.MutationObserver(paintHudAiMode)
+            .observe(group, { childList: true, subtree: true });
+        } catch (e) { /* an engine without MutationObserver keeps the last name */ }
+      }
     }
     var brain = $("hud-open-brain-door");
     if (brain) {
