@@ -536,17 +536,31 @@ await check("§1.2 Q5: the return pill is markup + CSS + one handler, and only F
     "the pill does not hand the new shell to the page's own applyShell()");
 });
 
-await check("§1.2 Q6: the five-tab stage header is the ONE navigation, and #stage-tabs is retired", async () => {
+await check("§1.2 Q6: the two-column Cockpit is one preset's CSS through PRESET_ATTR, and #stage-tabs is retired", async () => {
   // ONE navigation: the legacy strip is gone (the five plain-word tabs of
-  // §2.1 Zone A are the only stage header, in every shell that has one).
+  // §2.1 Zone A are the only stage header).
   assert.equal(HUD.includes('id="stage-tabs"'), false,
     "#stage-tabs is back - the retired Galaxy/Approvals/Reminders/Memory/Telemetry " +
     "strip is a second navigation");
+  // TWO COLUMNS for `cockpit` only, and the left rail as that layout's drawer.
+  assert.match(HUD,
+    /html\[data-hud-preset="cockpit"\] body:not\(\[data-hud-edit="on"\]\) #shell\{\s*\n\s*grid-template-columns:minmax\(0,1fr\) 248px;/,
+    "the cockpit layout does not draw two columns");
+  assert.match(HUD,
+    /html\[data-hud-preset="cockpit"\] body:not\(\[data-hud-edit="on"\]\) \.rail\.left\{[\s\S]{0,400}transform:translateX\(-100%\)/,
+    "the cockpit layout does not keep the left rail as its off-canvas drawer");
+  assert.match(HUD,
+    /html\[data-hud-preset="cockpit"\] body:not\(\[data-hud-edit="on"\]\) \.left-toggle\{display:flex;\}/,
+    "the cockpit layout has no way to open its drawer");
+  // ...and the edit-mode exception, so Edit HUD still shows the real shape.
+  assert.equal(/html\[data-hud-preset="cockpit"\] #shell\{/.test(HUD), false,
+    "a cockpit rule without the edit-mode exception would hide a column while editing");
+  // ONE navigation (Wave 15, spec §2.1): the old Inspector stage tablist is
+  // retired, and the left rail is NOT a wall of unlabelled symbols - the Studio
+  // dock's six shortcuts draw icon + plain words, and the five stage tabs carry
+  // the design's own words.
   assert.equal(HUD.includes('aria-label="Inspector stage"'), false,
     "the old Inspector stage tablist is still declared somewhere");
-  // The left rail is NOT a wall of unlabelled symbols: the Studio dock's six
-  // shortcuts draw icon + plain words (spec §2.1), and the five stage tabs
-  // carry the design's own words.
   const dockAt = HUD.indexOf('id="studio-dock"');
   const dock = HUD.slice(dockAt, HUD.indexOf("</nav>", dockAt));
   const labelled = [...dock.matchAll(/<span class="dock-label">([^<]+)<\/span>/g)].map((m) => m[1]);
@@ -557,16 +571,13 @@ await check("§1.2 Q6: the five-tab stage header is the ONE navigation, and #sta
     assert.ok(HUD.includes(">" + plain) || HUD.includes(plain),
       `the stage header does not say "${plain}"`);
   }
-  // The active layout's id is WRITTEN (hud-layout.js's PRESET_ATTR) - the
-  // documented left-under. The two-column cockpit rule set that would consume
-  // it is designed and deferred (see the page's own note): the HUD's default
-  // layout is cockpit, so hiding the left column changes the default
-  // navigation for suites that click the rail's presets.
+  // PRESET_ATTR has a writer now (it was the documented left-under).
   assert.match(HUD, /setAttribute\(PRESET_ATTR, id\)/,
-    "nothing writes the active layout id");
-  assert.equal(HUD.includes('html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) #shell{'),
-    false, "a half-landed two-column cockpit rule is in the page without its test adaptation");
+    "nothing writes the active layout id, so the cockpit CSS can never apply");
+  assert.match(HUD, /on click|addEventListener\("click", function \(event\) \{[\s\S]{0,200}hudReturnPill|choosePreset/,
+    "the pill's click handler is gone");
 });
+
 await check("the safety strip is untouched", async () => {
   const safety = await page.evaluate(() => ({
     html: document.getElementById("hud-safety").outerHTML,
@@ -669,6 +680,56 @@ await check("Q5: one click on the pill lands in Command Center, through the page
   assert.deepEqual(after.writes, ["second_brain"],
     `the click wrote ${JSON.stringify(after.writes)} through set_hud_layout`);
   assert.equal(after.pillHidden, true, "the pill stayed on screen after returning");
+});
+
+await check("Q6: the Cockpit layout draws two columns, and the left rail is its drawer", async () => {
+  const read = () => page.evaluate(() => {
+    const shell = document.getElementById("shell");
+    const rail = document.getElementById("rail-left");
+    const box = rail.getBoundingClientRect();
+    const toggle = document.getElementById("left-toggle");
+    return {
+      preset: document.documentElement.getAttribute("data-hud-preset") || "",
+      columns: getComputedStyle(shell).gridTemplateColumns.split(" ").filter(Boolean).length,
+      railX: Math.round(box.x), railW: Math.round(box.width),
+      railFixed: getComputedStyle(rail).position === "fixed",
+      toggleShown: getComputedStyle(toggle).display !== "none",
+      edit: document.body.getAttribute("data-hud-edit") || "",
+    };
+  });
+  // Command Center: the same three-column shell KEEPS its sidebar (control).
+  await shellFacts({ shell_template: "three-column", density: "comfortable",
+    default_stage_tab: "talk", base_preset: "second_brain" });
+  const command = await read();
+  assert.equal(command.preset, "second_brain", "the layout id is not on <html>");
+  assert.equal(command.columns, 3, "Command Center lost a column");
+  assert.ok(command.railX >= 0, "Command Center's left rail is not on the glass");
+  // Cockpit: two columns, and the SAME rail as an off-canvas drawer.
+  await shellFacts({ shell_template: "three-column", density: "comfortable",
+    default_stage_tab: "talk", base_preset: "cockpit" });
+  const cockpit = await read();
+  assert.equal(cockpit.preset, "cockpit", "the cockpit layout id is not on <html>");
+  assert.equal(cockpit.columns, 2, `the cockpit layout draws ${cockpit.columns} columns, not 2`);
+  assert.equal(cockpit.railFixed, true, "the cockpit's left rail is not the drawer");
+  assert.ok(cockpit.railX < -100, `the cockpit's left rail is on the glass (x ${cockpit.railX})`);
+  assert.equal(cockpit.toggleShown, true, "the cockpit has no Controls toggle to reach the rail");
+  // ...and it really opens, then Escape really closes it.
+  await page.click("#left-toggle");
+  await page.waitForTimeout(350);
+  const opened = await read();
+  assert.ok(opened.railX >= -1 && opened.railW > 200,
+    `the cockpit drawer did not open (x ${opened.railX}, w ${opened.railW})`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(350);
+  assert.ok((await read()).railX < -100, "Escape did not close the cockpit drawer");
+  // EDIT MODE is the exception: the real three-column document is drawn.
+  await page.evaluate(() => { document.body.setAttribute("data-hud-edit", "on"); });
+  await page.waitForTimeout(200);
+  const editing = await read();
+  assert.equal(editing.columns, 3, "Edit HUD hides a column while the owner is editing");
+  assert.ok(editing.railFixed === false, "Edit HUD keeps the rail as a drawer");
+  await page.evaluate(() => { document.body.removeAttribute("data-hud-edit"); });
+  await page.waitForTimeout(150);
 });
 
 await page.close();
