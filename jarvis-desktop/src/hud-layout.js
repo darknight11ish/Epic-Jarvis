@@ -372,7 +372,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "telemetry",
-    label: "Last turn telemetry",
+    label: "Last Answer Speed",
     region: "right_rail",
     order: 2,
     col_span: 12,
@@ -408,7 +408,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "budget",
-    label: "Free-tier budget",
+    label: "Daily Cloud Limit",
     region: "right_rail",
     order: 5,
     col_span: 12,

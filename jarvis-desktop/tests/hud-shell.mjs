@@ -153,10 +153,10 @@ await check("F8: every registry label that has a page heading matches that headi
     lanes: "Focus presets",
     systems: "Systems",
     waiting: "Cards waiting",
-    telemetry: "Last turn telemetry",
+    telemetry: "Last Answer Speed",
     tools: "Abilities used",
     brain_stats: "Second brain & vault",
-    budget: "Free-tier budget",
+    budget: "Daily Cloud Limit",
     voice_stats: "Voice",
     reminders: "Reminders",
   };
