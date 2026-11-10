@@ -1483,10 +1483,15 @@ def t_no_write_is_sent_without_a_person_saying_yes():
               fake.calls)
     # The approval check happens before the token is even read: a module that
     # can reach the network is not one call away from acting by accident.
+    # Found structurally - `run()`'s own body, then the order of the two lines -
+    # so adding an unrelated line above cannot make this pass or fail for the
+    # wrong reason (tools/check_position_pins.py: no source-position indexing).
     src = (HERE / "jarvis_github.py").read_text(encoding="utf-8")
-    body = src.split("def run(", 1)[1].split("def ", 1)[0]
+    run_body = re.search(r"\ndef run\([\s\S]*?(?=\ndef |\Z)", src)
+    body_text = run_body.group(0) if run_body else ""
+    ordered = re.search(r"if not approved[\s\S]*?_need_token", body_text)
     check("run() refuses an unapproved request before it builds the token",
-          body.find("if not approved") < body.find("_need_token"), body[:400])
+          ordered is not None, body_text[:400])
 
 
 def t_a_stale_event_stream_holds_the_yes():
