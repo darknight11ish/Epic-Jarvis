@@ -95,7 +95,7 @@ FAILED, PASSED, SKIPPED = [], [], []
 #: an entry stops being true (stale exemption).
 EXEMPT = {
     "appearance.patch":
-        "not in the published base (later stack rewrites it) and its hunks read "
+        "the published base cannot prove it (later stack rewrites it) and its hunks read "
         "the owner's own HUD, so no probe may be chosen without a live read",
     "attention-settings.patch":
         "not in the published base; its hunks read the owner's own HUD dispatch "
