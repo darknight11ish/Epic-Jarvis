@@ -540,6 +540,7 @@ def _child_env(port: int) -> dict:
     # 18.07 GiB, both with zero spill, so the window fits either way - q8_0 is
     # chosen because it leaves 1.9 GiB more room on the 8 GB cards.
     env["OLLAMA_KV_CACHE_TYPE"] = "q8_0"
+    env["LLAMA_ARG_CACHE_RAM"] = "3072"   # Q3 2026-11-09: 3 GB host-RAM prompt cache
     return env
 
 

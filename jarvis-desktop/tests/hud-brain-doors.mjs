@@ -114,12 +114,18 @@ check("the top menu bar carries a Brain word beside Presets, outside the tablist
     "it is a door, not a tab - a tab would promise a panel on this page");
 });
 
-check("the five stage tabs are untouched and none of them became the Brain door", () => {
-  const tabs = between(HUD, 'id="stage-tabs"', "</div>", 4000);
-  const choices = [...tabs.matchAll(/data-hud-tab-choice="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(choices, ["galaxy", "today", "reminders", "memory", "telemetry"],
+check("the five stage tabs are the new plain-word header and none of them became the Brain door", () => {
+  // Wave 15 (2026-11-10): the legacy #stage-tabs strip is retired; the ONE
+  // stage header is #hud-stage-nav, five plain-word tabs (spec section 2.1).
+  const navAt = HUD.indexOf('id="hud-stage-nav"');
+  assert.ok(navAt > -1, "#hud-stage-nav is gone - the stage has no switcher");
+  const tabs = HUD.slice(navAt, HUD.indexOf("</nav>", navAt));
+  const choices = [...tabs.matchAll(/data-hud-nav="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(choices, ["talk", "galaxy", "today", "reminders", "telemetry"],
     "the stage's five tabs changed");
-  assert.doesNotMatch(tabs, /brain-window/, "the Brain door was put inside the tablist");
+  assert.equal(HUD.includes('id="stage-tabs"'), false,
+    "the retired #stage-tabs strip is back - the design keeps ONE navigation");
+  assert.doesNotMatch(tabs, /brain-window/, "the Brain door was put inside the tab header");
 });
 
 /* ── 3. Both doors, one opener ───────────────────────────────────────────── */

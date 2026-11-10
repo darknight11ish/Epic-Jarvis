@@ -29,14 +29,28 @@
  *     (`GET /api/manner`), with the PC's own `personality` marking the current
  *     one.
  *
+ * THE SCREEN LAYOUTS SAY WHAT THEY ARE FOR (2026-11-09, Gemini's UI review
+ * §1.2). The seven built-in layouts keep their internal ids exactly as they
+ * are - `cockpit`, `second_brain`, `quiet`, `telemetry`, `studio`, `ambient`,
+ * `minimal` are the layout contract (`contract/hud-presets.json`,
+ * `hud_layout.rs`, every saved document) - and only the WORDS a person reads
+ * change: "Cockpit" is "Just Talk", "Second Brain & Planner" is "Command
+ * Center", and so on, each with one short line saying what the layout is for.
+ * The table is `LAYOUT_CHOICES` below and `layoutDisplayName()` is the one
+ * function the menu asks, so an internal id can never be drawn next to its
+ * own display name as if they were two different layouts. There is still ONE
+ * Presets menu and ONE layout write: no second picker, no second way to
+ * switch a lane.
+ *
  * TWO KINDS, TWO RULES, and the second one is why this file now fetches:
  *
  *   * A LOCAL MODEL PRESET IS THE OWNER'S OWN CLICK (2026-11-09). Applying one
  *     starts its lane and switches the model AT ONCE: the PC keeps its ONE
- *     `switch_model` card for the model/chat path and for the two presets that
- *     are not a quick, reversible switch - Coding (its pooled lane pauses both
- *     other models) and Cloud (it changes where the owner's words go, and its
- *     card is `change_own_config`). The chosen mark still comes from a REFETCH
+ *     `switch_model` card for the model/chat path and for the rows that are
+ *     not a quick, reversible switch - the two heavy presets (Coding first,
+ *     Medical second; each pauses both other models as one pooled lane) and
+ *     Cloud (it changes where the owner's words go, and its card is
+ *     `change_own_config`). The chosen mark still comes from a REFETCH
  *     of the PC's own `chosen_preset`, never from this click, so the menu can
  *     never mark a preset the PC did not record.
  *   * A PERSONALITY IS WORDING ONLY. The PC says it plainly ("Nothing here
@@ -115,6 +129,79 @@ import { saveLayout } from "./hud-layout-store.js";
 import { call } from "./invoke-budget.js";
 
 /* ── 1. Pure library helpers (node-tested) ───────────────────────────────── */
+
+/**
+ * THE SEVEN LAYOUTS IN PLAIN WORDS (2026-11-09, Gemini's UI review §1.2).
+ *
+ * The internal ids do NOT move: they are the layout contract, every saved
+ * document and what `hud-layout.js` builds, so only the words change. `name`
+ * is what the picker's row says, and `subtitle` is the one line under it that
+ * says what the layout is FOR before it is clicked.
+ *
+ * WHY THE NAMES LIVE HERE. `hud-layout.js` still owns what a layout IS (its
+ * cards, its shell, its density) and keeps its own internal `label`; the
+ * plain-words name a PERSON reads is the menu's copy, and this module draws
+ * the menu. `layoutDisplayName()` is the one function that answers it, so
+ * "Cockpit" can never be drawn next to "Just Talk" as if they were two
+ * layouts.
+ */
+export const LAYOUT_CHOICES = Object.freeze([
+  { id: "cockpit", name: "Just Talk",
+    subtitle: "Chat and voice front and center." },
+  { id: "second_brain", name: "Command Center",
+    subtitle: "Chat, your memory map, and today's plan." },
+  { id: "quiet", name: "Quiet Desk",
+    subtitle: "Clean reading and writing with no side panels." },
+  { id: "telemetry", name: "System Monitor",
+    subtitle: "Graphics cards, model speed, and PC health." },
+  { id: "studio", name: "Custom Grid",
+    subtitle: "Three columns you can arrange freely." },
+  { id: "ambient", name: "Face Only",
+    subtitle: "Just Jarvis's face while you work." },
+  { id: "minimal", name: "Mini View",
+    subtitle: "Compact view with a 1-click return button." },
+]);
+
+const LAYOUT_CHOICE_BY_ID = new Map(LAYOUT_CHOICES.map((row) => [row.id, row]));
+
+/** One built-in layout's plain-words row, or null for an id that is not one of
+ *  the seven built-ins (the owner's saved copy of a layout is not one). */
+export function layoutChoice(id) {
+  return LAYOUT_CHOICE_BY_ID.get(String(id || "")) || null;
+}
+
+/**
+ * THE ONE NAME FOR A LAYOUT ON SCREEN. A built-in gets its plain-words name
+ * ("Command Center", never "Second Brain & Planner"); the owner's own saved
+ * copy keeps the name they gave it, which is the only name it has; an unknown
+ * id falls back to `hud-layout.js`'s own label and then to the id itself, so a
+ * future layout is never drawn blank or as "undefined".
+ */
+export function layoutDisplayName(layout) {
+  if (typeof layout === "string") {
+    const choice = layoutChoice(layout);
+    if (choice) return choice.name;
+    const info = presetInfo(layout);
+    return info ? info.label : layout;
+  }
+  if (!layout || typeof layout !== "object") {
+    return LAYOUT_CHOICE_BY_ID.get(DEFAULT_PRESET_ID).name;
+  }
+  if (isUserLayout(layout)) return layout.name || "Saved layout";
+  const base = layout.base_preset || layout.id || DEFAULT_PRESET_ID;
+  const choice = layoutChoice(base);
+  if (choice) return choice.name;
+  // A saved copy whose library entry is not in this document still has its own
+  // name; only an id with no name at all falls through to hud-layout.js's label.
+  if (typeof layout.name === "string" && layout.name.trim()) return layout.name.trim();
+  return layoutDisplayName(base);
+}
+
+/** One built-in layout's one-line purpose, or "" for an id that is not one. */
+export function layoutSubtitle(id) {
+  const choice = layoutChoice(id);
+  return choice ? choice.subtitle : "";
+}
 
 const BUILT_IN_IDS = new Set(PRESETS.map((preset) => preset.id));
 
@@ -834,10 +921,10 @@ export function mountHudPresets(options = {}) {
   /** ONE model-preset click. A LOCAL preset is the owner's own reversible
    *  click (2026-11-09), so it switches at once and the refetched contract
    *  decides the mark. The PC still raises its ONE `switch_model` card for the
-   *  two rows that are not a quick switch - Coding (its pooled lane pauses
-   *  both other models) and the Cloud row (`change_own_config`) - so this says
-   *  what to expect from the row that was pressed, and never marks anything
-   *  from the click itself.
+   *  rows that are not a quick switch - the two heavy presets (Coding first,
+   *  Medical second; each pauses both other models as one pooled lane) and the
+   *  Cloud row (`change_own_config`) - so this says what to expect from the row
+   *  that was pressed, and never marks anything from the click itself.
    *
    *  `provider` is only ever given by the Cloud section: picking a service is
    *  the SAME apply with one more field (2026-10-27). */
@@ -851,7 +938,7 @@ export function mountHudPresets(options = {}) {
     announce(wantsCard
       ? (provider
         ? `Asked the PC to use ${title || id} for the cloud. Nothing changes until you answer its approval card.`
-        : `Asked the PC to apply ${title || id}. Its coding lane pauses both other models first, so nothing changes until you answer its approval card.`)
+        : `Asked the PC to apply ${title || id}. It pauses both other models first, so nothing changes until you answer its approval card.`)
       : `Applying ${title || id} on the PC. It switches at once - press another preset to switch straight back.`);
     try {
       await applyFocusPresetOnPc(win, id, provider);
@@ -1090,7 +1177,7 @@ export function mountHudPresets(options = {}) {
       group.appendChild(note("The PC listed no presets."));
       return group;
     }
-    group.appendChild(note("Local presets switch at once when you pick one - pick another to switch straight back. Coding (it pauses both other models first) and Cloud (it changes where your words go) still ask for the PC's ONE approval card."));
+    group.appendChild(note("Local presets switch at once when you pick one - pick another to switch straight back. Coding and Medical (they pause both other models first) and Cloud (it changes where your words go) still ask for the PC's ONE approval card."));
     for (const row of rows) {
       const asking = pcBusy.preset === row.id;
       const button = menuItem(
@@ -1355,15 +1442,25 @@ export function mountHudPresets(options = {}) {
     const builtIns = section("Built-in layouts");
     for (const preset of PRESETS) {
       const info = presetInfo(preset.id);
+      // PLAIN WORDS ONLY (2026-11-09, §1.2). The row's visible label and what
+      // its click says are the display name; the internal id stays in
+      // `data-layout-id` and in the saved document, never on screen. The
+      // subtitle is the row's hint, so the quiet line still says what the
+      // layout is for. `layoutDisplayName` falls back to the old label for a
+      // layout this table does not know, so a new built-in is never blank.
+      const name = layoutDisplayName(preset.id);
+      const hint = layoutSubtitle(preset.id) || (info ? info.blurb : "");
       const current = layout.id === preset.id;
-      builtIns.appendChild(menuItem(
-        `${info ? info.label : preset.id}${current ? " (current)" : ""}`,
-        info ? info.blurb : "",
+      const row = menuItem(
+        `${name}${current ? " (current)" : ""}`,
+        hint,
         () => { closeMenu(false); commit(normalizeLayout({
           ...presetLayout(preset.id),
           user_presets: userLayouts(layout),
-        }), `Layout: ${info ? info.label : preset.id}.`); },
-      ));
+        }), `Layout: ${name}.`); },
+      );
+      row.dataset.layoutId = preset.id;
+      builtIns.appendChild(row);
     }
     scroll.appendChild(builtIns);
 
@@ -1404,7 +1501,7 @@ export function mountHudPresets(options = {}) {
     const actions = section("This layout");
     actions.appendChild(menuItem("Duplicate to My layouts", "Keep this arrangement as your own copy",
       () => { closeMenu(false); duplicateActive(); }));
-    actions.appendChild(menuItem(`Reset to ${(presetInfo(layout.base_preset) || { label: "the shipped layout" }).label}`,
+    actions.appendChild(menuItem(`Reset to ${layoutDisplayName(layout.base_preset || DEFAULT_PRESET_ID)}`,
       "Put back the shipped layout, keeping your saved layouts",
       () => { closeMenu(false); resetActive(); }));
     actions.appendChild(menuItem("Export / Import JSON…", "Move a layout by copy and paste",
@@ -1545,6 +1642,10 @@ export function mountHudPresets(options = {}) {
     if (!badge) badge = doc.getElementById("hud-layout-badge");
     if (!railDoor) railDoor = doc.getElementById("rail-presets");
     if (!stageDoor) stageDoor = doc.getElementById("stage-presets");
+    // §2.1 (2026-11-09): one popover at a time. Opening the Presets menu shuts
+    // the Current Models and Faces panels (and the page's Galaxy Options), so
+    // no second panel is ever left painted beside this one.
+    closeHudPopovers(MENU_ID);
     ensureMenu();
     // A reopen is a new intent: whatever was in flight last time does not get
     // to leave the rows disabled (P2-3).
@@ -1748,7 +1849,7 @@ export function mountHudPresets(options = {}) {
   async function resetActive() {
     const base = presetLayout(layout.base_preset);
     await commit(normalizeLayout({ ...base, user_presets: userLayouts(layout) }),
-      `Reset to ${(presetInfo(layout.base_preset) || { label: "the shipped layout" }).label}.`);
+      `Reset to ${layoutDisplayName(layout.base_preset || DEFAULT_PRESET_ID)}.`);
   }
 
   /* ── mount ───────────────────────────────────────────────────────────── */
@@ -1823,6 +1924,14 @@ export function mountHudPresets(options = {}) {
         }));
       });
     }
+    // §2.1 (2026-11-09): this menu is one of the popovers that must shut when
+    // any other opens. Registered here so `closeHudPopovers` can reach it from
+    // anywhere (the Current Models panel, the Faces panel, the page, a test).
+    registerPopover(MENU_ID, () => {
+      if (!menu || menu.hidden) return false;
+      closeMenu(false);
+      return true;
+    });
     const controller = {
       get layout() { return layout; },
       open: openMenu,
@@ -1838,6 +1947,71 @@ export function mountHudPresets(options = {}) {
   }
 
   return start();
+}
+
+/* ── 4b. ONE popover at a time (2026-11-09, Gemini UI review §2.1) ───────── */
+
+/** The page's own Galaxy Options panel's doors. The review's Fig 14 caught
+ *  that panel painted over the layout buttons; shutting it needs its four
+ *  doors to drop `aria-expanded` too, or a door says "open" over a hidden
+ *  panel. This module only closes it - the page still owns opening it. */
+const GALAXY_DOOR_IDS = Object.freeze([
+  "rail-galaxy-options", "dock-galaxy-options",
+  "stage-galaxy-options", "stage-bar-galaxy-options",
+]);
+
+/** Every popover this module owns, by id, so ONE call can shut them all. */
+const POPOVER_CLOSERS = new Map();
+
+/** Register one of this module's popovers. Returns a function that forgets it. */
+function registerPopover(id, closer) {
+  POPOVER_CLOSERS.set(String(id), closer);
+  return () => POPOVER_CLOSERS.delete(String(id));
+}
+
+/**
+ * §2.1's MUTUAL-EXCLUSION RULE, as one helper any caller may use: opening any
+ * menu or popover first closes any other one that is open (the Fig 14
+ * collision - a panel painted over the control it was opened from).
+ *
+ * It shuts every popover THIS module owns (the Presets menu, the Current
+ * Models panel and the Faces panel), the page's own Galaxy Options panel by
+ * its id, and then says so on the window as `jarvis:hud-close-popovers` with
+ * `{ except, closed }` - the hook the page's remaining popovers can listen
+ * for. `except` names the popover that is opening and must stay open.
+ *
+ * Returns the ids it actually closed. It never throws: a node test may call
+ * it with no document at all, and a page without one of these popovers simply
+ * has nothing to close.
+ */
+export function closeHudPopovers(except) {
+  const keep = typeof except === "string" ? except : "";
+  const closed = [];
+  for (const [id, close] of [...POPOVER_CLOSERS]) {
+    if (id === keep) continue;
+    try {
+      if (close() === true) closed.push(id);
+    } catch { /* a fake document in a node test */ }
+  }
+  try {
+    const doc = globalThis.document;
+    const panel = doc && keep !== "galaxy-options" ? doc.getElementById("galaxy-options") : null;
+    if (panel && !panel.hidden) {
+      panel.hidden = true;
+      panel.setAttribute("aria-hidden", "true");
+      for (const id of GALAXY_DOOR_IDS) {
+        const door = doc.getElementById(id);
+        if (door) door.setAttribute("aria-expanded", "false");
+      }
+      closed.push("galaxy-options");
+    }
+  } catch { /* no page */ }
+  try {
+    globalThis.dispatchEvent(new CustomEvent("jarvis:hud-close-popovers", {
+      detail: { except: keep, closed: closed.slice() },
+    }));
+  } catch { /* a window without CustomEvent */ }
+  return closed;
 }
 
 /* ── 5. The Current Models panel (the owner's ask, 2026-10-26) ───────────── */
@@ -2242,6 +2416,8 @@ export function mountCurrentModels(options = {}) {
   }
 
   function open(from) {
+    // §2.1 (2026-11-09): one popover at a time, whichever opened.
+    closeHudPopovers(PANEL_ID);
     ensurePanel();
     openedFrom = from || openedFrom || doors[0];
     render();
@@ -2284,6 +2460,12 @@ export function mountCurrentModels(options = {}) {
     });
   }
 
+  // §2.1: this panel joins the same one-popover-at-a-time rule.
+  registerPopover(PANEL_ID, () => {
+    if (!panel || panel.hidden) return false;
+    close(false);
+    return true;
+  });
   const controller = {
     open,
     close: () => close(false),
@@ -2665,6 +2847,8 @@ export function mountFacePicker(options = {}) {
   }
 
   function open() {
+    // §2.1 (2026-11-09): one popover at a time, whichever opened.
+    closeHudPopovers(FACE_PANEL_ID);
     ensurePanel();
     readSpec();
     render();
@@ -2704,6 +2888,12 @@ export function mountFacePicker(options = {}) {
     });
   }
 
+  // §2.1: the face panel joins the same one-popover-at-a-time rule.
+  registerPopover(FACE_PANEL_ID, () => {
+    if (!panel || panel.hidden) return false;
+    close(false);
+    return true;
+  });
   const controller = {
     open,
     close: () => close(false),

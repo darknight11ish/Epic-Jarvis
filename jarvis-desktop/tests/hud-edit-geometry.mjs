@@ -10,6 +10,9 @@
  * screenshots:
  *
  *   - #shell is exactly three in-flow columns: 300px | the stage | 370px;
+ *   - the editing ribbon is the window grid's own first row, full width, and
+ *     the three columns start below it - 0px of the layout is covered (Q8 of
+ *     the owner's 2026-11-09 review; the panel used to float over the stage);
  *   - neither rail is fixed/absolute and neither is transformed off-screen;
  *   - left rail / stage / right rail do not overlap, and the right rail ends at
  *     the window's right edge;
@@ -99,9 +102,16 @@ const measure = (page) => page.evaluate(() => {
   return {
     vw: innerWidth,
     shellCols: getComputedStyle(document.getElementById("shell")).gridTemplateColumns,
+    shellRows: getComputedStyle(document.getElementById("shell")).gridTemplateRows,
     left: rect(".rail.left"), stage: rect("#stage"), right: rect("#rail-right"),
     bar: rect("#stage > .stage-bar"),
-    banner: rect("#stage > .hud-edit-banner"),
+    // Q8 (2026-11-09): the editor is a docked ribbon - the window grid's first
+    // row, full width - instead of a panel inside the stage it edits.
+    ribbon: rect("#shell > #hud-edit-bar"),
+    ribbonParent: (() => {
+      const el = document.getElementById("hud-edit-bar");
+      return el && el.parentElement ? (el.parentElement.id || el.parentElement.className) : null;
+    })(),
     stageTop: rect('#stage > [data-hud-region="stage_top"]'),
     cards,
   };
@@ -160,11 +170,34 @@ for (const [label, size] of [
         `the stage overlaps the right rail (${m.stage.right} > ${m.right.x})`);
       assert.ok(m.stage.w >= 600, `the stage is squeezed to ${m.stage.w}px`);
 
-      assert.ok(m.bar && m.banner && m.stageTop, "the stage bar, editor banner or Stage-top region is missing");
-      assert.ok(m.bar.bottom <= m.banner.y + 2,
-        `the stage bar and the editor banner overlap (${m.bar.bottom} > ${m.banner.y})`);
-      assert.ok(m.banner.bottom <= m.stageTop.y + 2,
-        `the editor banner and the Stage-top cards overlap (${m.banner.bottom} > ${m.stageTop.y})`);
+      // Q8 (the owner's UI review, 2026-11-09): the editor is a FULL-WIDTH
+      // RIBBON in the window grid's first row, directly under the window
+      // header, and the three columns start below it. So it cannot cover a
+      // single pixel of the layout: every column's top edge is at or below the
+      // ribbon's bottom edge.
+      assert.ok(m.ribbon, "the editing ribbon is not in the window grid (#shell > #hud-edit-bar)");
+      assert.equal(m.ribbonParent, "shell",
+        `the ribbon is not a child of the window grid: ${m.ribbonParent}`);
+      assert.equal(m.ribbon.display, "flex", "the ribbon is not drawn as a bar");
+      assert.ok(near(m.ribbon.x, 0) && near(m.ribbon.w, m.vw, 2),
+        `the ribbon is not full width: x=${m.ribbon.x} w=${m.ribbon.w} of ${m.vw}`);
+      const rows = m.shellRows.split(/\s+/).map((value) => parseFloat(value));
+      assert.equal(rows.length, 2,
+        `the window grid is not two rows (ribbon + columns): ${m.shellRows}`);
+      assert.ok(rows[0] >= m.ribbon.h - 1,
+        `the ribbon overflows the row it is given (${m.ribbon.h}px in ${rows[0]}px)`);
+      for (const column of [m.left, m.stage, m.right]) {
+        assert.ok(column.y >= m.ribbon.bottom - 1,
+          `a column starts at y=${column.y}, under the ribbon (its bottom is ${m.ribbon.bottom})`);
+      }
+      assert.ok(m.ribbon.bottom <= m.stage.y + 1,
+        `the ribbon covers the stage (${m.ribbon.bottom} > ${m.stage.y})`);
+      // The stage's own bar is the first thing in the stage, below the ribbon.
+      assert.ok(m.bar && m.stageTop, "the stage bar or the Stage-top region is missing");
+      assert.ok(m.bar.y >= m.ribbon.bottom - 1,
+        `the stage bar paints under the ribbon (${m.bar.y} < ${m.ribbon.bottom})`);
+      assert.ok(m.bar.bottom <= m.stageTop.y + 2,
+        `the stage bar and the Stage-top cards overlap (${m.bar.bottom} > ${m.stageTop.y})`);
       assert.ok(m.stageTop.y >= m.bar.bottom - 1,
         `the Stage-top cards paint over the stage bar (${m.stageTop.y} < ${m.bar.bottom})`);
 

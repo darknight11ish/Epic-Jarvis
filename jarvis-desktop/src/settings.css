@@ -503,6 +503,28 @@ input:focus-visible, textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* The chosen state is a HIGHLIGHTED RECTANGLE, never a word bolted onto the
+   label: no "(current)", no "Applied" (Q13, 2026-11-09). One `.is-chosen`
+   class carries that state in Settings, the Brain and the HUD; the class name
+   is the contract, so it stays `is-chosen` in all three. These three
+   declarations are the HUD's `.hud-presets-item.is-chosen` rule with its
+   `--ice` alias resolved to `--accent`, so "the same rectangle" is literal.
+   They live here, in the page's own stylesheet: a run-time <style> has no
+   nonce and the packaged CSP refuses it (tests/csp.mjs). */
+.is-chosen {
+  border-color: var(--accent);
+  background: rgb(var(--accent-rgb) / .10);
+  color: var(--accent);
+}
+
+/* `#theme-list` out-specifies the `.theme-row:has(input:checked)` rule above,
+   which painted the chosen row before this one existed. The tick beside the
+   row stays as the non-colour sign (the colour-alone audit asked for it). */
+#theme-list .theme-row.is-chosen {
+  border-color: var(--accent);
+  background: rgb(var(--accent-rgb) / .10);
+}
+
 .theme-row input { accent-color: var(--cyan); margin: 0; }
 
 .swatch {

@@ -664,6 +664,15 @@ body {
   background: var(--surface-sunken);
 }
 
+/* The same chosen rectangle as the model row and Settings (Q13, 2026-11-09).
+   aria-pressed stays, so a toggle still reads as a toggle to a screen reader;
+   this is what makes the chosen one LOOK chosen, in the one shared shape. */
+.preset-chip.is-chosen {
+  border-color: var(--accent);
+  background: rgb(var(--accent-rgb) / .10);
+  color: var(--accent);
+}
+
 .preset-chip:disabled {
   /* Disabled, not removed: the five rich presets are planned, and "not built
      yet" is the honest word for them (a hidden button would read as "never
@@ -969,6 +978,28 @@ body {
 
 .row-item:first-child {
   border-top: none;
+}
+
+/* The chosen state is a HIGHLIGHTED RECTANGLE, never a word bolted onto the
+   label: no "(chosen)", no "(current)", no "Applied" (Q13, 2026-11-09). One
+   `.is-chosen` class carries that state in Settings, this window and the HUD;
+   the class name is the contract, so it stays `is-chosen` in all three. These
+   three declarations are the HUD's `.hud-presets-item.is-chosen` rule with its
+   `--ice` alias resolved to `--accent`, so "the same rectangle" is literal.
+   They live here, in the page's own stylesheet: a run-time <style> has no
+   nonce and the packaged CSP refuses it (tests/csp.mjs). */
+.is-chosen {
+  border-color: var(--accent);
+  background: rgb(var(--accent-rgb) / .10);
+  color: var(--accent);
+}
+
+/* The model running now is the one chosen row (row() in brain.js). A full
+   border, because a row otherwise carries only its top hairline. */
+.row-item.is-chosen {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .row-tag {

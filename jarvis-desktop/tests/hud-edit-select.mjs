@@ -80,10 +80,15 @@ const selectedCard = (page) => page.evaluate(() => {
   return shell ? shell.getAttribute("data-hud-card") : null;
 });
 
-/** The Cards tab's options line for the selected card. */
-const optionsWords = (page) => page.evaluate(() => {
-  const pane = document.getElementById("hud-edit-card-controls");
-  return pane ? pane.textContent : "";
+/**
+ * The Cards drawer's own answer to "which card is selected?": the row that is
+ * pressed. Since 2026-11-09 the card's controls sit ON the card (Q6), so the
+ * drawer names the pick and the canvas carries the outline - the tab's old
+ * "Options for <card>" editor is retired with the tabs themselves.
+ */
+const selectedName = (page) => page.evaluate(() => {
+  const pick = document.querySelector('[data-hud-edit-card-pick][aria-pressed="true"]');
+  return pick ? pick.textContent.trim() : "";
 });
 
 const viewState = (page) => page.evaluate(() => ({
@@ -103,8 +108,8 @@ await check("(a) in Edit HUD a left-rail icon selects the Navigation card and do
   await page.click('#rail-nav [data-view="brain"]');
   await page.waitForTimeout(200);
   assert.equal(await selectedCard(page), "nav", "the Navigation card was not selected");
-  assert.match(await optionsWords(page), /Options for Navigation/,
-    `the options rail does not name the selected card: ${await optionsWords(page)}`);
+  assert.equal(await selectedName(page), "Navigation",
+    `the Cards drawer does not name the selected card: ${await selectedName(page)}`);
   assert.equal(await page.evaluate(() => document.body.getAttribute("data-hud-edit-tab")),
     "cards", "the Cards tab did not open for the selection");
   const after = await viewState(page);
@@ -121,8 +126,8 @@ await check("(c) the left column's own Presets icon selects Navigation and opens
   await page.click("#rail-presets");
   await page.waitForTimeout(200);
   assert.equal(await selectedCard(page), "nav", "the Presets icon did not select Navigation");
-  assert.match(await optionsWords(page), /Options for Navigation/,
-    `the options rail does not name Navigation: ${await optionsWords(page)}`);
+  assert.equal(await selectedName(page), "Navigation",
+    `the Cards drawer does not name Navigation: ${await selectedName(page)}`);
   assert.equal(await page.evaluate(
     () => Boolean(document.getElementById("hud-presets-menu"))), false,
   "the Presets menu opened in Edit HUD instead of selecting a card");
@@ -143,8 +148,8 @@ await check("(b) a button inside another card selects it and does not press it",
   await page.click("#preset-cloud");
   await page.waitForTimeout(200);
   assert.equal(await selectedCard(page), "lanes", "the Focus presets card was not selected");
-  assert.match(await optionsWords(page), /Options for Focus presets/,
-    `the options rail does not name the selected card: ${await optionsWords(page)}`);
+  assert.equal(await selectedName(page), "Focus presets",
+    `the Cards drawer does not name the selected card: ${await selectedName(page)}`);
   assert.equal(await page.locator("#preset-cloud").getAttribute("aria-pressed"), "false",
     "the Cloud button still performed its own action in Edit HUD");
   assert.deepEqual(page.__pageErrors, [], `the page threw: ${page.__pageErrors}`);
@@ -160,8 +165,9 @@ await check("(d) the card toolbar and Undo still work, and Done makes the icon a
   const sized = await page.evaluate(() => window.__jarvisHudEdit.layout.cards
     .find((card) => card.id === "nav"));
   assert.notEqual(sized.col_span, SMALL.col_span, "the card already had the size under test");
-  // The selected card's toolbar is moved into the bar; the S button is real.
-  await page.click('#hud-edit-card-controls [data-hud-edit-size="S"]');
+  // Q6 (2026-11-09): the card's own row is on the card, in plain words, and
+  // the `S` key under the "Compact" pill is still the same size.
+  await page.click('[data-hud-card="nav"] [data-hud-edit-size="S"]');
   await page.waitForTimeout(200);
   assert.equal(await page.evaluate(() => window.__jarvisHudEdit.layout.cards
     .find((card) => card.id === "nav").col_span), SMALL.col_span,
@@ -270,8 +276,8 @@ await check("(f) every visible left-column icon selects Navigation and opens not
     const after = await iconState(page);
     assert.equal(await selectedCard(page), "nav",
       `${icon.id} did not select the Navigation card`);
-    assert.match(await optionsWords(page), /Options for Navigation/,
-      `${icon.id} did not open Navigation's options`);
+    assert.equal(await selectedName(page), "Navigation",
+      `${icon.id} did not pick Navigation`);
     assert.deepEqual(after, before, `${icon.id} performed its own action in Edit HUD`);
     const own = await page.evaluate((selector) => {
       const button = document.querySelector(selector);

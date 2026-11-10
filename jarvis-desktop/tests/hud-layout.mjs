@@ -16,6 +16,13 @@
  *      each one is a fixed point of normalizeLayout (so "save then load" can
  *      never rewrite a preset), uses only registry cards, and keeps every
  *      protected card visible;
+ *   2b. each layout draws the composition the redesign spec asks for (Wave 15,
+ *      2026-11-09): the right column is capped at two cards in Cockpit and
+ *      exactly three in Command Center (counting the page's own reminders
+ *      panel only where the shell draws the column statically), the
+ *      remove-lists are absent, Quiet puts nothing in either side rail, Studio
+ *      forces nothing off, and Face Only / Mini View declare the mandatory
+ *      return pill;
  *   3. `contract/hud-presets.json` is byte-for-byte the same data, so Rust and
  *      the tests cannot read a stale copy;
  *   4. a hostile or just-wrong document is made safe: unknown cards/regions/
@@ -144,6 +151,12 @@ await check("each preset uses only registry cards, once each, and keeps every pr
 
 await check("the presets differ where the ruling says they do", () => {
   const byId = Object.fromEntries(L.PRESETS.map((preset) => [preset.id, preset]));
+  // Wave 15 (2026-11-10): Cockpit ("Just Talk") keeps the three-column shell
+  // in the MODEL, because Command Center (second_brain) is the same shell and
+  // keeps its sidebar. Cockpit's "remove the left sidebar" (spec section 1.2)
+  // is drawn by the PAGE: it writes `PRESET_ATTR` and its stylesheet gives
+  // `cockpit` two columns (stage + right rail, left rail as a drawer). The
+  // pure-model pin below is therefore unchanged on purpose.
   assert.equal(byId.cockpit.shell_template, "three-column");
   assert.equal(byId.studio.shell_template, "split-stage");
   assert.equal(byId.ambient.shell_template, "center-core");
@@ -159,6 +172,181 @@ await check("the presets differ where the ruling says they do", () => {
   // Telemetry & Ops puts the telemetry high and compact.
   assert.ok(byId.telemetry.cards.find((card) => card.id === "telemetry").row_span >= 2,
     "Telemetry preset gives telemetry no height");
+});
+
+/* ── 2b. The per-layout compositions (Wave 15, spec section 1.2) ─────────── */
+
+/** Every card id a layout really draws, region by region. */
+function onTheGlass(id) {
+  const preset = L.presetLayout(id);
+  return preset.cards.filter((card) => card.visible).map((card) => card.id);
+}
+
+/** A layout card is named in the document and is off, or it is not named. */
+function isGone(id, cardId) {
+  const preset = L.presetLayout(id);
+  const card = preset.cards.find((entry) => entry.id === cardId);
+  return !card || card.visible === false;
+}
+
+await check("cockpit (Just Talk) is conversation + ask box, and its column is capped at 2", () => {
+  const cockpit = L.presetLayout("cockpit");
+  // The hero: the conversation and its ask box, both on the glass.
+  assert.equal(onTheGlass("cockpit").includes("conversation"), true);
+  assert.equal(onTheGlass("cockpit").includes("composer"), true);
+  const rail = L.rightColumn(cockpit);
+  // One layout card (Waiting for You) plus the page's own Today & Reminders
+  // panel - the spec's "Right Column (Max 2 Cards)".
+  assert.deepEqual([...rail.cards], ["waiting"], `cockpit rail: ${JSON.stringify(rail.cards)}`);
+  assert.equal(rail.fixed.length, 1, "the page's today panel is not counted");
+  assert.equal(rail.total, 2, `cockpit right column has ${rail.total} cards, not 2`);
+  // The remove-list from the spec, card by card. The left rail's three cards are
+  // NOT on it: the rail itself (its icon toolbar, its Galaxy-options door and
+  // the Talk/Brain modes) is page markup, so "remove the left sidebar" is the
+  // page's change (spec section 2.1) and this layout only says what it can.
+  for (const id of ["calendar", "telemetry", "tools", "brain_stats", "budget",
+    "voice_stats"]) {
+    assert.ok(isGone("cockpit", id), `cockpit still shows ${id}`);
+  }
+  for (const id of ["nav", "lanes", "systems"]) {
+    assert.equal(cockpit.cards.find((card) => card.id === id).visible, true,
+      `cockpit dropped the ${id} card, which the page still draws in its rail`);
+  }
+});
+
+await check("second_brain (Command Center) is Talk + Galaxy, and its column is exactly 3", () => {
+  const doc = L.presetLayout("second_brain");
+  // The centre stage: the conversation, the ask box and the Galaxy map.
+  for (const id of ["conversation", "composer", "galaxy"]) {
+    assert.equal(onTheGlass("second_brain").includes(id), true, `second_brain lost ${id}`);
+  }
+  const rail = L.rightColumn(doc);
+  assert.deepEqual([...rail.cards], ["waiting", "brain_stats"],
+    `second_brain rail: ${JSON.stringify(rail.cards)}`);
+  assert.equal(rail.total, 3, `second_brain right column has ${rail.total} cards, not 3`);
+  // The cards the spec cuts from this rail, none of them on the glass.
+  for (const id of ["telemetry", "tools", "budget", "voice_stats", "calendar"]) {
+    assert.ok(isGone("second_brain", id), `second_brain still shows ${id}`);
+  }
+  // The two it keeps are named and visible, and the memory counts are compact.
+  const counts = doc.cards.find((card) => card.id === "brain_stats");
+  assert.equal(counts.visible, true);
+  assert.ok(counts.row_span <= 2, `the counts card still takes ${counts.row_span} rows`);
+  // The navigation cards are still there (the page owns the left sidebar's door
+  // grid; the model does not hide the modes behind it).
+  for (const id of ["nav", "lanes", "systems"]) {
+    assert.equal(doc.cards.find((card) => card.id === id).visible, true,
+      `second_brain lost the ${id} card from its left rail`);
+  }
+});
+
+await check("quiet (Quiet Desk) puts nothing in either side rail", () => {
+  const rail = L.rightColumn(L.presetLayout("quiet"));
+  assert.deepEqual([...rail.cards], [], `quiet rail: ${JSON.stringify(rail.cards)}`);
+  // Quiet's shell (two-column-left) opens the right rail as a drawer, so the
+  // page's own reminders panel is not a slot on the glass and must not be
+  // counted - otherwise the one layout that promises no side panels would
+  // report one.
+  assert.deepEqual([...rail.fixed], [],
+    "quiet's hidden right rail still counts the page's reminders panel");
+  assert.equal(rail.total, 0, `quiet's right column is ${rail.total}, not 0`);
+  assert.equal(L.visibleCards(L.presetLayout("quiet"), "left_rail").join(","),
+    "bar_launcher", "quiet draws more than the protected Jarvis bar in the left rail");
+  for (const id of ["telemetry", "tools", "budget", "voice_stats", "brain_stats"]) {
+    assert.ok(isGone("quiet", id), `quiet still shows ${id}`);
+  }
+});
+
+await check("telemetry (System Monitor) is the board alone, with no duplicate approval card", () => {
+  const doc = L.presetLayout("telemetry");
+  const rail = L.rightColumn(doc);
+  assert.deepEqual([...rail.cards], ["telemetry"],
+    `telemetry rail: ${JSON.stringify(rail.cards)}`);
+  // The duplicate approval card the spec names (the right rail's own copy).
+  assert.ok(isGone("telemetry", "waiting"), "telemetry still repeats the approval card");
+  for (const id of ["tools", "budget", "voice_stats", "brain_stats", "calendar"]) {
+    assert.ok(isGone("telemetry", id), `telemetry still shows ${id}`);
+  }
+  const board = doc.cards.find((card) => card.id === "telemetry");
+  assert.equal(board.visible, true);
+  assert.equal(board.order, 0, "the board is not the first card in its column");
+  assert.equal(board.col_span, 12, "the board does not use the column's full width");
+});
+
+await check("studio (Custom Grid) forces nothing off: every card is there and visible", () => {
+  const doc = L.presetLayout("studio");
+  const named = new Set(doc.cards.map((card) => card.id));
+  assert.deepEqual([...named].sort(), L.CARD_REGISTRY.map((card) => card.id).sort(),
+    "studio does not carry every registry card, so Edit HUD could not arrange them all");
+  for (const card of doc.cards) {
+    assert.equal(card.visible, true, `studio forces ${card.id} off`);
+  }
+  // The rail wall and the per-card toolbars are hidden by hud-edit.js/the page,
+  // never by this layout: nothing here may claim to do it.
+  for (const id of ["nav", "telemetry", "tools", "budget", "voice_stats"]) {
+    assert.equal(doc.cards.find((card) => card.id === id).visible, true);
+  }
+});
+
+await check("ambient and minimal need the return pill; no other layout does", () => {
+  for (const id of L.RETURN_PILL_LAYOUTS) {
+    const pill = L.returnPillFor(L.presetLayout(id));
+    assert.ok(pill, `${id} has no return pill`);
+    assert.equal(pill.id, "hud-return-pill");
+    assert.equal(pill.class, "hud-return-pill");
+    assert.equal(pill.label, "Back to Command Center");
+    assert.equal(pill.glyph, "\u2922");
+    assert.equal(pill.target_preset, "second_brain",
+      "the return pill does not lead back to Command Center");
+  }
+  for (const id of ["cockpit", "second_brain", "quiet", "telemetry", "studio"]) {
+    assert.equal(L.returnPillFor(L.presetLayout(id)), null, `${id} claims a return pill`);
+  }
+  // It follows the BASE layout, so the owner's saved copy of Face Only keeps it.
+  const copy = L.normalizeLayout({
+    ...L.presetLayout("ambient"), id: "custom-face-1", name: "My Face",
+    user_presets: [{
+      id: "custom-face-1", name: "My Face", base_preset: "ambient",
+      shell_template: L.presetLayout("ambient").shell_template,
+      density: "spacious", default_stage_tab: "talk",
+      cards: L.presetLayout("ambient").cards,
+    }],
+  });
+  assert.equal(copy.base_preset, "ambient");
+  assert.ok(L.returnPillFor(copy), "a saved Face Only copy lost its way back");
+  // A nonsense document is the default layout, not a pill.
+  assert.equal(L.returnPillFor(null), null);
+  assert.equal(L.PRESET_ATTR, "data-hud-preset",
+    "the page hook for naming the active layout was renamed");
+});
+
+await check("the page's reminders panel is a slot only where the right column is static", () => {
+  const page = readFileSync(join(HERE, "..", "src", "jarvis_hud.html"), "utf8");
+  assert.equal(L.FIXED_RAIL_PANELS.length, 1,
+    "more than one fixed right-rail panel is declared");
+  const panel = L.FIXED_RAIL_PANELS[0];
+  assert.equal(panel.id, "rail-reminders");
+  assert.equal(panel.region, "right_rail");
+  assert.equal(L.CARD_REGISTRY.some((card) => card.id === panel.id), false,
+    "the fixed panel is also a layout card, so a layout could count it twice");
+  assert.ok(page.includes(`id="${panel.id}"`), "the fixed panel is not on the HUD page");
+  // The spec's caps count it, because a static column shows the layout cards
+  // AND the page's own reminders panel: 1+1 in Cockpit, 2+1 in Command Center.
+  for (const [id, total] of Object.entries({ cockpit: 2, second_brain: 3, telemetry: 2 })) {
+    const rail = L.rightColumn(L.presetLayout(id));
+    assert.equal(rail.fixed.length, 1, `${id} does not count the page's reminders panel`);
+    assert.equal(rail.total, total, `${id} right column is ${rail.total}, not ${total}`);
+  }
+  // A saved copy in the other static-column shell keeps the slot...
+  const twoColumn = { ...L.presetLayout("cockpit"), shell_template: "two-column-right" };
+  assert.equal(L.rightColumn(twoColumn).fixed.length, 1,
+    "a two-column-right copy lost the page's reminders panel");
+  // ...but a drawer shell, and split-stage's zero-width overlay, do not put it
+  // on the glass, so counting it there would invent a card nobody can see.
+  for (const id of ["quiet", "studio", "ambient", "minimal"]) {
+    assert.deepEqual([...L.rightColumn(L.presetLayout(id)).fixed], [],
+      `${id}'s shell hides or overlays its right rail, so the page panel is not a slot`);
+  }
 });
 
 await check("F7: Focus is renamed Quiet, and an old saved 'focus' still means Quiet", () => {
@@ -181,10 +369,10 @@ await check("F8: every registry label with a page heading matches that heading",
     lanes: "Focus presets",
     systems: "Systems",
     waiting: "Cards waiting",
-    telemetry: "Last turn telemetry",
+    telemetry: "Last Answer Speed",
     tools: "Abilities used",
     brain_stats: "Second brain &amp; vault".replace("&amp;", "&"),
-    budget: "Free-tier budget",
+    budget: "Daily Cloud Limit",
     voice_stats: "Voice",
     reminders: "Reminders",
   };

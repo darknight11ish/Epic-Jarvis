@@ -1051,9 +1051,23 @@ function rows(container, items, render, emptyText) {
   container.append(list);
 }
 
-/** A row: a tag, a title with meta beneath it, and optional actions. */
-function row({ tag, state: tagState, title, meta, actions }) {
+/**
+ * A row: a tag, a title with meta beneath it, and optional actions.
+ *
+ * `chosen: true` marks the ONE row that is the current choice (the model
+ * running now). The state is the `.is-chosen` rectangle plus `aria-current`,
+ * the same convention Settings and the HUD use (Q13, 2026-11-09); the row's
+ * own tag stays the non-colour sign a reader needs, in the one word "current".
+ * The class name is the contract between the three windows, and its rule is
+ * in brain.css - never built at run time, which the packaged CSP refuses
+ * (tests/csp.mjs).
+ */
+function row({ tag, state: tagState, title, meta, actions, chosen }) {
   const item = el("div", "row-item");
+  if (chosen) {
+    item.classList.add("is-chosen");
+    item.setAttribute("aria-current", "true");
+  }
   const t = el("span", "row-tag", tag || "");
   if (tagState) t.dataset.state = tagState;
   item.append(t);
@@ -1645,9 +1659,13 @@ function renderModels() {
           })
         );
       }
+      // The model running now is the chosen row: the one `.is-chosen`
+      // rectangle (never a suffix on its name), with the tag word "current" as
+      // the non-colour sign - the plain word Q13 puts on this state.
       return row({
-        tag: showAsLiveCurrent ? "active" : "installed",
+        tag: showAsLiveCurrent ? "current" : "installed",
         state: showAsLiveCurrent ? "present" : "",
+        chosen: showAsLiveCurrent,
         title: ref || "(unnamed)",
         meta: [
           m.size ? bytes(m.size) : "",
@@ -14597,7 +14615,10 @@ function graphEmptyWith(words, action = null) {
   dom.graphEmpty.hidden = false;
   dom.graphEmptyText.textContent = words;
   dom.graphEmptyActions?.replaceChildren(...(action ? [action] : []));
-  dom.graphStat.textContent = "—";
+  // A plain count, never the raw em dash an empty canvas used to print
+  // (Q13, 2026-11-09: no raw "—" as an empty state). Zero names is the truth
+  // here - every empty reason above says WHY there are none.
+  dom.graphStat.textContent = "0 names";
   dom.legend.replaceChildren();
   dom.inspector.hidden = true;
   galaxyPanel.clear();
@@ -15726,8 +15747,12 @@ function syncPresetMenu() {
     galaxyPreset.id !== DEFAULT_PRESET);
   for (const chip of dom.galaxyPresets.querySelectorAll("button[data-preset]")) {
     if (chip.disabled) continue;
-    chip.setAttribute("aria-pressed",
-      String(chip.getAttribute("data-preset") === galaxyPreset.id));
+    const pressed = chip.getAttribute("data-preset") === galaxyPreset.id;
+    chip.setAttribute("aria-pressed", String(pressed));
+    // The same `.is-chosen` rectangle as the model row and Settings (Q13,
+    // 2026-11-09). aria-pressed stays, so a toggle still reads as a toggle to
+    // a screen reader; the class is what makes the chosen one LOOK chosen.
+    chip.classList.toggle("is-chosen", pressed);
   }
 }
 

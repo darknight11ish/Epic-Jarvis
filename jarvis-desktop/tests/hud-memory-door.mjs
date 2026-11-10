@@ -40,6 +40,20 @@ check("the Memory panel has its own list, refusal line, empty sentence and hidde
   assert.match(HUD, /id="memory-door-where"/);
 });
 
+check("the Memory panel's own line tells the truth about the Keep it draws", () => {
+  // DEF-064 (2026-11-10): the old line sent the owner to the Brain window to
+  // decide every card, while this very plate draws the ONE Keep for a plain
+  // new fact (memoryDoorKeepable) and posts that decision from here. The line
+  // and the button must not contradict each other.
+  const line = (HUD.match(/id="memory-door-where">([^<]*)</) || [])[1] || "";
+  assert.match(line, /Keep a plain new fact here/,
+    "the Memory panel's line does not say its Keep lives here");
+  assert.match(line, /anything else is decided in the Memory tab in the Brain window/,
+    "the Memory panel's line does not say where the other cards are decided");
+  assert.doesNotMatch(line, /decide each card there/,
+    "the Memory panel's line still sends every card away");
+});
+
 check("the list reads the phone's own queue read and refreshes on the banner's beat", () => {
   assert.match(DOOR, /"\/api\/memory\/pending\?retire_cards=1&sleep_offer=1"/);
   assert.match(DOOR, /"\/api\/memory\/pending\?retire_cards=1"/);
