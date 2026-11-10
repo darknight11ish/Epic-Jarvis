@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "47e0ff1f5490e172a26b9cd659170cc3525a755d",
- "built_at": "2026-11-09T21:33:17-08:00",
+ "ref": "c00ebf63e310952e337eb1abc831d170adffe2f4",
+ "built_at": "2026-11-09T21:47:26-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6252,6 +6252,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "c00ebf63e310952e337eb1abc831d170adffe2f4",
+   "date": "2026-11-09",
+   "subject": "fix(hud): the live-read-aloud stage slice covers wave 15 taller stage, where the refused-start popup lives"
+  },
+  {
+   "sha": "9d45c2f4dbf6a41fcb653515f94623f364944929",
+   "date": "2026-11-09",
+   "subject": "records: the wave-15 changelog and decision fragments, and the self-code map regenerated last"
+  },
+  {
    "sha": "47e0ff1f5490e172a26b9cd659170cc3525a755d",
    "date": "2026-11-09",
    "subject": "fix(hud): the Presets note names Medical, and the memory door keeps its own Keep (DEF-063, DEF-064)"
@@ -6340,16 +6350,6 @@
    "sha": "d73f6919103d1aafc98ab4bf704abd1059cf2d2d",
    "date": "2026-11-09",
    "subject": "test(hud): both heavy rows carry their measured cost sentence in the Presets menu"
-  },
-  {
-   "sha": "acce70a309a026743a9c96a3444e4ef1c577eaaf",
-   "date": "2026-11-09",
-   "subject": "fix(agent): the diet hints and the catalogue pin learn project_read"
-  },
-  {
-   "sha": "367bfc3eaea657d79934fe0d34c0e2107e1e26c9",
-   "date": "2026-11-09",
-   "subject": "fix(desktop): the asks-first tool list learns the cardless project_read"
   }
  ],
  "top_level": [
