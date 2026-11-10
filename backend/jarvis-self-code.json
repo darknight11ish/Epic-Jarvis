@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "24831b6b75fd2762f73393bf382924dad204f0bf",
- "built_at": "2026-11-09T16:04:27-08:00",
+ "ref": "9e622a160f4ab10465a433959e15a72fb0934d19",
+ "built_at": "2026-11-09T17:23:57-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -2845,6 +2845,7 @@
     "jarvis-desktop/tests/blockers.mjs",
     "jarvis-desktop/tests/brain-producers.mjs",
     "jarvis-desktop/tests/brain-settings-door.mjs",
+    "jarvis-desktop/tests/brain-settings-q13.mjs",
     "jarvis-desktop/tests/briefing.mjs",
     "jarvis-desktop/tests/browser-engine.mjs",
     "jarvis-desktop/tests/card-resolution-sync.mjs",
@@ -2986,6 +2987,7 @@
     "jarvis-desktop/tests/hud-calendar.mjs",
     "jarvis-desktop/tests/hud-connect.mjs",
     "jarvis-desktop/tests/hud-current-models.mjs",
+    "jarvis-desktop/tests/hud-edit-click-to-edit.mjs",
     "jarvis-desktop/tests/hud-edit-fieldtest.mjs",
     "jarvis-desktop/tests/hud-edit-geometry.mjs",
     "jarvis-desktop/tests/hud-edit-select.mjs",
@@ -3002,6 +3004,7 @@
     "jarvis-desktop/tests/hud-nav.mjs",
     "jarvis-desktop/tests/hud-page-redesign.mjs",
     "jarvis-desktop/tests/hud-presets-chosen.mjs",
+    "jarvis-desktop/tests/hud-presets-names.mjs",
     "jarvis-desktop/tests/hud-presets.mjs",
     "jarvis-desktop/tests/hud-prompt-window.mjs",
     "jarvis-desktop/tests/hud-rail-tools.mjs",
@@ -3159,7 +3162,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1247,
+   "file_count": 1250,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -6230,24 +6233,69 @@
  ],
  "recent_commits": [
   {
-   "sha": "24831b6b75fd2762f73393bf382924dad204f0bf",
+   "sha": "9e622a160f4ab10465a433959e15a72fb0934d19",
+   "date": "2026-11-09",
+   "subject": "fix(hud-edit): the field and toggle tests learn the wave-15 Cockpit composition"
+  },
+  {
+   "sha": "92f0eacf4a4d4bd45f92fd244d927cf55139daf0",
+   "date": "2026-11-09",
+   "subject": "fix(hud): the two telemetry headings wear the redesign's plain words (Q9)"
+  },
+  {
+   "sha": "e94a025b24bce565cac5567412c6ee448f07f642",
+   "date": "2026-11-09",
+   "subject": "feat(wave15-brain): Q13 - one chosen shape, plain empty states, Model pane switches"
+  },
+  {
+   "sha": "5562f895f745136c2b9099764e77fd4087ecd2c0",
+   "date": "2026-11-09",
+   "subject": "feat(hud): the seven layouts carry the redesign's compositions (spec 1.2, Q2, Q10)"
+  },
+  {
+   "sha": "f4c5a796d9551b9ef060c3b21136310d30efde1f",
+   "date": "2026-11-09",
+   "subject": "feat(hud): the seven screen layouts wear plain words in the one Presets menu (spec §1.2, Q2-Q3, Q9)"
+  },
+  {
+   "sha": "afc92483e0315de4505dc5c0a7e5a3f3a13a7ad2",
+   "date": "2026-11-09",
+   "subject": "feat(hud-edit): dock Edit HUD as a top ribbon with one plain-words inspector (spec Q6-Q9)"
+  },
+  {
+   "sha": "6ec10ca487d5d2c3c21427a082015b3fdb925464",
+   "date": "2026-11-09",
+   "subject": "chore(hud): the AI Mode name follows the PC's chosen preset, and the self code map is regenerated"
+  },
+  {
+   "sha": "d228980f9b37fc98bc8a989958ed5dd2aba94313",
    "date": "2026-11-09",
    "subject": "feat(hud): one navigation, one pill bar, one approval card (spec 2.1/2.2/4.1/4.2/5.2)"
   },
   {
-   "sha": "caa1f6f95f05803a4f45e66d184f165a314b985b",
+   "sha": "3655e00dcb4cfbc67eed4ca26152c3248afe8ec9",
    "date": "2026-11-09",
    "subject": "fix(hud): the capability-list pin learns the memory Keep"
   },
   {
-   "sha": "56ba99b3acbbd9da41f4ca116a666a4fd20731c9",
+   "sha": "1d7e53c97dcabcc1055f6b3548f59351391cd86a",
    "date": "2026-11-09",
    "subject": "feat(wave14): the HUD's Memory tab keeps ONE plain new fact, through the Brain's own command"
   },
   {
-   "sha": "b9748bd77006164754b9906e7dd6b839feeb1f45",
+   "sha": "6ada2545f3f575a195a1b25ce23fdf658210a2ec",
    "date": "2026-11-09",
    "subject": "fix(wave14): Edit HUD click selects the card, never runs it"
+  },
+  {
+   "sha": "85e9e85005d175a9a5217ff1a3650cc51947cb20",
+   "date": "2026-11-09",
+   "subject": "Merge pull request #1218 from darknight11ish/integration/wave13-2026-11-09"
+  },
+  {
+   "sha": "32ba251d935d04c22bb83c9e0a6005e08d40b500",
+   "date": "2026-11-09",
+   "subject": "test(wave13): the four stale catalogue/patch pins the Ubuntu backend job would hit"
   },
   {
    "sha": "b3b3000349e1b779b08981b6b517e4d421aa28ec",
@@ -6283,51 +6331,6 @@
    "sha": "c36fd472de28cab552a9160ad6fe9b8e13c741b9",
    "date": "2026-11-09",
    "subject": "chore(wave13): the self-code map covers the corrected F5 delivery route (both twins, written LAST)"
-  },
-  {
-   "sha": "589f12f78cc832bf1cd490932a185c9bff15fa14",
-   "date": "2026-11-09",
-   "subject": "test(wave13): allowlist the F5 patch after gate-touches, and read the patch-original-text pin at runtime (no source-text pin)"
-  },
-  {
-   "sha": "3feaca4c71d70c422d137e3ef93a0e53c15bbedd",
-   "date": "2026-11-09",
-   "subject": "fix(merge): take the corrected F5 commit's files whole (patch position before activity-turn-guard) and regenerate the patch catalogue"
-  },
-  {
-   "sha": "b44935d04a3353eb174f0a741a867593daeb7582",
-   "date": "2026-11-09",
-   "subject": "merge(wave13): fold the corrected F5 route (patch before activity-turn-guard, 28-check test) (Gemini F5)"
-  },
-  {
-   "sha": "90d1ee42424e8c2a8bf642673ee15e574cdf031e",
-   "date": "2026-11-09",
-   "subject": "chore(wave13): the self-code map covers the memory-fault banner, the F2 preload seam and the F5 delivery test (both twins, written LAST)"
-  },
-  {
-   "sha": "497081e583dc422d82a7c824c5ad6cf8fecaa6da",
-   "date": "2026-11-09",
-   "subject": "test(skills): read the patch-original-text pin from the checker's own table, not from its source text (no new source pin)"
-  },
-  {
-   "sha": "6ae96767ea8e75390f1fac3fe24e081d6d8d8880",
-   "date": "2026-11-09",
-   "subject": "fix(skills): give the wave-12 skill scan a route to a live install (F5)"
-  },
-  {
-   "sha": "714d215e9940014a8dd23c7a2335d6c6f592b490",
-   "date": "2026-11-09",
-   "subject": "records(wave13): F5's live-delivery route gets its sentence in the one changelog and one decision bullet, claim C153, the About totals (251/238) and field-test row 7"
-  },
-  {
-   "sha": "b33f1fdadcbbf6688e0de2e3ca9e0ddb36215ad3",
-   "date": "2026-11-09",
-   "subject": "merge(wave13): the skills caller fix gets a live-delivery route (F5)"
-  },
-  {
-   "sha": "1d5b512a56d9874408b0bb31e293aae86ca7af59",
-   "date": "2026-11-09",
-   "subject": "fix(skills): give the wave-12 skill scan a route to a live install (F5)"
   }
  ],
  "top_level": [
@@ -6339,7 +6342,7 @@
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1255
+   "files": 1258
   },
   {
    "path": "jarvis-client/",
@@ -6448,8 +6451,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5573,
-  "covered": 5102,
+  "tracked_files": 5576,
+  "covered": 5105,
   "excluded": 471,
   "subsystems": 27
  },
