@@ -133,12 +133,20 @@ check("the dock's new icon is the left-column door, after the five sections", ()
     "the icon became a sixth section tab - it opens a menu, not a panel");
 });
 
-check("the stage words read Galaxy, Approvals, Reminders, Memory, Telemetry, Galaxy options, Presets, Brain", () => {
-  const tabs = between(HUD, 'id="stage-tabs"', "</div>", 3000);
-  const tabWords = [...tabs.matchAll(/data-hud-tab-choice="([a-z]+)"[^>]*>([^<]+)<\/button>/g)]
-    .map((m) => m[2].trim());
-  assert.deepEqual(tabWords, ["Galaxy", "Approvals", "Reminders", "Memory", "Telemetry"],
-    "the five section tabs changed");
+check("the stage header reads the five plain words, and the words row still ends Galaxy options, Presets, Brain", () => {
+  // Wave 15 (2026-11-10): #stage-tabs is retired. The stage header is the five
+  // plain-word tabs of spec section 2.1; the menu words that used to sit beside
+  // the legacy five are still in #stage-words, in their own order.
+  const navAt = HUD.indexOf('id="hud-stage-nav"');
+  assert.ok(navAt > -1, "#hud-stage-nav is gone - the stage has no header");
+  const nav = HUD.slice(navAt, HUD.indexOf("</nav>", navAt));
+  const navWords = [...nav.matchAll(/data-hud-nav="([a-z]+)"[\s\S]*?<\/button>/g)]
+    .map((m) => m[0].replace(/^[^>]*>/, "")
+      .replace(/<span class="hud-nav-count"[\s\S]*?<\/span>/g, "")
+      .replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim());
+  assert.deepEqual(navWords,
+    ["Talk", "Memory Map", "Waiting for You", "Today & Reminders", "Speed & GPUs"],
+    "the five plain-word stage tabs changed");
   const words = between(HUD, 'id="stage-words"', "</div>", 1200);
   const wordsList = [...words.matchAll(/<button\b[^>]*>([^<]+)<\/button>/g)]
     .map((m) => m[1].trim());
@@ -147,7 +155,7 @@ check("the stage words read Galaxy, Approvals, Reminders, Memory, Telemetry, Gal
   // after the five tabs' words and the two Galaxy words.
   assert.deepEqual(wordsList, ["Galaxy options", "Presets", "Brain"],
     "the words row does not end with Galaxy options, Presets, Brain, in that order");
-  assert.ok(HUD.indexOf('id="stage-words"') > HUD.indexOf('data-hud-tab-choice="telemetry"'),
+  assert.ok(HUD.indexOf('id="stage-words"') > HUD.indexOf('data-hud-nav="telemetry"'),
     "the words do not sit after the Telemetry tab");
   assert.match(words, /id="stage-galaxy-options"/, "the Galaxy options word is gone");
   assert.match(words, /id="stage-presets"/, "the Presets word is gone");

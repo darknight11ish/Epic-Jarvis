@@ -22,6 +22,11 @@
  *      They are pinned to each other here, in both directions: reorder one and
  *      this fails until the other follows, and a dock icon whose own title no
  *      longer names the word above it fails too.
+ *      WAVE 15 (2026-11-10): #stage-tabs was RETIRED (one authoritative
+ *      navigation, spec section 2.1). The dock's order is now pinned to the
+ *      page's own `var TABS`, its plain-words labels to the design's words, and
+ *      the header to the five plain-word stage tabs (#hud-stage-nav) - the tests
+ *      still fail if any of the three drifts alone.
  *   3. The owner's same-day Galaxy options work: "i would to simplify all the
  *      galaxy options ... to have it under Galaxy options", "have that as a new
  *      icon on the left column of the jarvis hud", "and an option next to the
@@ -93,25 +98,42 @@ function choicesIn(html, id, closeTag) {
   return [...html.slice(at, end).matchAll(/data-hud-tab-choice="([a-z]+)"/g)].map((m) => m[1]);
 }
 
-/** The stage tabs as `{ id, word }`, in the order written. */
-function stageTabs(html) {
-  const at = html.indexOf('id="stage-tabs"');
-  assert.ok(at > -1, "jarvis_hud.html has no #stage-tabs");
-  const end = html.indexOf("</div>", at);
+/** The ONE stage header's five plain-word tabs as `{ id, word }`, in order.
+ *  Wave 15 (2026-11-10): the legacy `#stage-tabs` strip was RETIRED, so this
+ *  reads the authoritative switcher (`#hud-stage-nav`, spec §2.1 Zone A). The
+ *  words are the button's own text with the icon span and the count badge
+ *  stripped out - the (N) badge is a number, not part of the tab's name. */
+function navTabs(html) {
+  const at = html.indexOf('id="hud-stage-nav"');
+  assert.ok(at > -1, "jarvis_hud.html has no #hud-stage-nav");
+  const end = html.indexOf("</nav>", at);
+  assert.ok(end > at, "#hud-stage-nav has no closing </nav>");
   return [...html.slice(at, end).matchAll(
-    /data-hud-tab-choice="([a-z]+)"[^>]*>([^<]+)<\/button>/g)]
-    .map((m) => ({ id: m[1], word: m[2].trim() }));
+    /<button\b[^>]*?data-hud-nav="([a-z]+)"[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((m) => ({
+      id: m[1],
+      word: m[2]
+        .replace(/<span class="hud-nav-count"[\s\S]*?<\/span>/g, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ").trim(),
+    }));
 }
 
-/** The dock buttons as `{ id, title }`, in the order written. */
+/** The dock buttons as `{ id, title, label }`, in the order written. */
 function dockIcons(html) {
   const at = html.indexOf('id="studio-dock"');
   assert.ok(at > -1, "jarvis_hud.html has no #studio-dock");
   const end = html.indexOf("</nav>", at);
   const block = html.slice(at, end);
   return [...block.matchAll(
-    /<button\b[^>]*?data-hud-tab-choice="([a-z]+)"[^>]*?title="([^"]*)"/g)]
-    .map((m) => ({ id: m[1], title: m[2] }));
+    /<button\b[^>]*?data-hud-tab-choice="([a-z]+)"[^>]*?title="([^"]*)"([\s\S]*?)<\/button>/g)]
+    .map((m) => ({
+      id: m[1],
+      title: m[2],
+      label: ((m[3].match(/<span class="dock-label">([^<]+)<\/span>/) || [])[1] || "")
+        .replace(/&amp;/g, "&"),
+    }));
 }
 
 /** The stage words row as plain words, in the order written. These are the
@@ -133,10 +155,31 @@ function scriptTabs(html) {
   return [...m[1].matchAll(/"([a-z]+)"/g)].map((x) => x[1]);
 }
 
-/* ── 1. the dock's icons and the stage's words are one order ────────────── */
+/* ── 1. the one stage header, and the dock's own order ───────────────────── */
 
 const DOCK = dockIcons(HUD);
-const TABS = stageTabs(HUD);
+const NAV = navTabs(HUD);
+
+/** The five plain-word tabs the stage header must read, in order (spec §2.1
+ *  Zone A). These words are the design's, not the dock's: "Memory Map" is the
+ *  Galaxy and "Waiting for You" is the approvals queue. */
+const WANT_NAV = [
+  ["talk", "Talk"],
+  ["galaxy", "Memory Map"],
+  ["today", "Waiting for You"],
+  ["reminders", "Today & Reminders"],
+  ["telemetry", "Speed & GPUs"],
+];
+
+/** The dock's plain-words labels, by section id (spec §2.1: "if a rail is
+ *  shown, every item must render [ Icon + Plain Label ]"). */
+const WANT_DOCK_LABEL = {
+  galaxy: "Memory Map",
+  today: "Waiting for You",
+  reminders: "Today & Reminders",
+  memory: "Memory",
+  telemetry: "Speed & GPUs",
+};
 
 await check("the three copies of the HUD page are byte-identical", async () => {
   const first = sha(HUD);
@@ -147,33 +190,46 @@ await check("the three copies of the HUD page are byte-identical", async () => {
   }
 });
 
-await check("the left column's icons are in the stage's own word order", async () => {
-  assert.ok(TABS.length >= 5, `only ${TABS.length} stage tabs were read`);
-  assert.deepEqual(DOCK.map((b) => b.id), TABS.map((t) => t.id),
-    `the dock draws ${DOCK.map((b) => b.id).join(" > ")} but the words above it read ` +
-    `${TABS.map((t) => t.id).join(" > ")} - the owner's complaint of 2026-10-27 ` +
-    '("reminder is out of place for example") is exactly this mismatch');
+await check("the dock's icons are in the layout script's own tab order", async () => {
+  assert.ok(DOCK.length >= 5, `only ${DOCK.length} dock icons were read`);
+  assert.deepEqual(DOCK.map((b) => b.id), scriptTabs(HUD),
+    `the dock draws ${DOCK.map((b) => b.id).join(" > ")} but the layout script's TABS list ` +
+    `reads ${scriptTabs(HUD).join(" > ")} - the dock and the shell would choose different panes`);
 });
 
-await check("every dock icon says the word the stage tab says", async () => {
-  DOCK.forEach((button, index) => {
-    const word = TABS[index].word.toLowerCase();
-    assert.ok(button.title.toLowerCase().startsWith(word),
-      `the ${index + 1}th icon is titled "${button.title}", which does not start with ` +
-      `"${TABS[index].word}" - the icon and the word above it now describe different things`);
-  });
+await check("the five plain-word stage tabs are the design's five, in order, each with an icon", async () => {
+  assert.deepEqual(NAV, WANT_NAV.map(([id, word]) => ({ id, word })),
+    "the stage header no longer reads Talk / Memory Map / Waiting for You / " +
+    "Today & Reminders / Speed & GPUs, in that order");
+  const navAt = HUD.indexOf('id="hud-stage-nav"');
+  const navBlock = HUD.slice(navAt, HUD.indexOf("</nav>", navAt));
+  assert.equal((navBlock.match(/class="hud-nav-icon"/g) || []).length,
+    WANT_NAV.length, "every plain-word tab must carry the page's own inline icon");
+  assert.equal((navBlock.match(/data-hud-nav=/g) || []).length, WANT_NAV.length,
+    "the header carries a sixth tab - the design's Zone A holds five");
+  // The (N) badge is a real count and is not part of the tab's name.
+  assert.match(navBlock, /id="hud-nav-waiting-count"/,
+    "the Waiting for You tab lost its count badge");
 });
 
-await check("the layout script's tab list is the same order too", async () => {
-  assert.deepEqual(scriptTabs(HUD), TABS.map((t) => t.id),
-    "the layout script's TABS list disagrees with the stage tab bar it selects by");
-});
-
-await check("the reorder kept every id, data attribute and the Jarvis bar button", async () => {
+await check("the retired #stage-tabs strip is gone: one navigation, not two", async () => {
+  assert.equal(HUD.includes('id="stage-tabs"'), false,
+    "#stage-tabs is back - the legacy Galaxy/Approvals/Reminders/Memory/Telemetry " +
+    "strip is the second navigation spec section 2.1 retires");
+  assert.equal(HUD.includes('aria-label="Inspector stage"'), false,
+    "the old Inspector stage tablist is still declared somewhere");
   const ids = DOCK.map((b) => b.id);
   assert.equal(new Set(ids).size, ids.length, "a tab choice is named twice in the dock");
-  assert.deepEqual([...ids].sort(), TABS.map((t) => t.id).sort(),
-    "the dock and the tab bar no longer offer the same set of sections");
+});
+
+await check("every dock icon draws icon + plain words, and the Jarvis bar button is kept", async () => {
+  for (const button of DOCK) {
+    assert.equal(button.label, WANT_DOCK_LABEL[button.id] || button.label,
+      `the ${button.id} dock icon reads "${button.label}" - the design's plain word is ` +
+      `"${WANT_DOCK_LABEL[button.id]}"`);
+    assert.ok(button.label, `the ${button.id} dock icon is a bare symbol with no plain words`);
+    assert.ok(button.label.length > 3, `the ${button.id} dock icon's label is not a plain word`);
+  }
   assert.match(HUD, /id="dock-quickbar"/, "the dock's Jarvis bar button was lost");
   // The icons themselves are the page's own glyphs, not new ones.
   for (const glyph of ["&#10022;", "&#10003;", "&#9200;&#xFE0E;", "&#9672;", "&#9637;"]) {
@@ -184,20 +240,17 @@ await check("the reorder kept every id, data attribute and the Jarvis bar button
 /* ── 1b. The owner's Galaxy options surface and the two new words ───────── */
 
 await check("the stage words read Galaxy options, then Presets, after the five tabs", async () => {
-  assert.deepEqual(TABS.map((t) => t.word),
-    ["Galaxy", "Approvals", "Reminders", "Memory", "Telemetry"],
-    "the five section tabs changed order or lost a word");
   // "Brain" is the Wave-9 owner-asked menu word (2026-11-07, Q5: the Brain
 // window reachable from BOTH the stage words and the left column); it is a
 // window door, not a sixth stage tab, so it sits after the five tabs' words.
 assert.deepEqual(stageWords(HUD), ["Galaxy options", "Presets", "Brain"],
     "the menu words are missing or out of order - the owner asked for Presets " +
     "\"in the right order next to the galaxy, approvals, reminders and other menu options\"");
-  // The words come AFTER Telemetry in the source, which is the owner's one
-  // placement rule: "an option next to the word telemetry".
-  const tabsAt = HUD.indexOf('id="stage-tabs"');
+  // The words come AFTER the stage header's telemetry tab in the source, which
+  // is the owner's one placement rule: "an option next to the word telemetry".
+  const tabsAt = HUD.indexOf('id="hud-stage-nav"');
   const wordsAt = HUD.indexOf('id="stage-words"');
-  const telemetryAt = HUD.indexOf('data-hud-tab-choice="telemetry"');
+  const telemetryAt = HUD.indexOf('data-hud-nav="telemetry"');
   assert.ok(tabsAt > -1 && wordsAt > tabsAt && telemetryAt > -1 && telemetryAt < wordsAt,
     "the menu words do not sit after the five tabs, beside Telemetry");
   // They are NOT tabs: a tablist holds only tabs, and clicking one opens a

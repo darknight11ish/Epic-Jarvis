@@ -151,10 +151,12 @@ await check("each preset uses only registry cards, once each, and keeps every pr
 
 await check("the presets differ where the ruling says they do", () => {
   const byId = Object.fromEntries(L.PRESETS.map((preset) => [preset.id, preset]));
-  // Wave 15 (2026-11-09): Cockpit ("Just Talk") keeps the three-column shell.
-  // Its "remove the left sidebar" is a PAGE change (the rail's own icon toolbar
-  // and its Galaxy-options door are markup, not cards), so the shell switch to
-  // `two-column-right` waits for the header doors of spec section 2.1.
+  // Wave 15 (2026-11-10): Cockpit ("Just Talk") keeps the three-column shell
+  // in the MODEL, because Command Center (second_brain) is the same shell and
+  // keeps its sidebar. Cockpit's "remove the left sidebar" (spec section 1.2)
+  // is drawn by the PAGE: it writes `PRESET_ATTR` and its stylesheet gives
+  // `cockpit` two columns (stage + right rail, left rail as a drawer). The
+  // pure-model pin below is therefore unchanged on purpose.
   assert.equal(byId.cockpit.shell_template, "three-column");
   assert.equal(byId.studio.shell_template, "split-stage");
   assert.equal(byId.ambient.shell_template, "center-core");

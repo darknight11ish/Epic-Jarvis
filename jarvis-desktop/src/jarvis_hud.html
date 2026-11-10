@@ -1343,14 +1343,16 @@ html.hud-window-hidden *::after{
 .ambient-view:hover{color:var(--text); border-color:var(--line-hot);}
 .ambient-view[aria-pressed="true"]{border-color:var(--ice); color:var(--ice);}
 
-/* The Studio stage's words. #stage-tabs is the inspector's own tablist; the
-   two menu words beside it (#stage-words) are the owner's "an option next to
-   the word telemetry" and "add presets as a word in the right order next to
-   the galaxy, approvals, reminders and other menu options" (2026-10-27). They
-   are NOT tabs - each opens a menu, so they sit OUTSIDE the tablist, in the
-   same row and the same type, and `#stage-menu` is the one row both share. */
+/* The Studio stage's words. #stage-tabs was the inspector's own tablist and
+   was RETIRED in Wave 15 (2026-11-10, spec section 2.1 - one authoritative
+   navigation); the two rules that named it are gone with it. The menu words
+   (#stage-words) are the owner's "an option next to the word telemetry" and
+   "add presets as a word in the right order next to the galaxy, approvals,
+   reminders and other menu options" (2026-10-27); they are NOT tabs - each
+   opens a menu, so they sit in the same row and the same type, and
+   `#stage-menu` is the one row both share. `.stage-tab` stays: it is those
+   menu words' own type. */
 #stage-menu{display:none;}
-#stage-tabs{display:none;}
 .stage-tab{
   padding:8px 13px; font-family:var(--f-mono); font-size:11px; letter-spacing:.07em;
   color:var(--dim); border-bottom:2px solid transparent; text-transform:uppercase;
@@ -1664,7 +1666,8 @@ html[data-hud-shell="split-stage"] #stage-menu{
   display:flex; align-items:center; grid-column:1 / -1; grid-row:2;
   padding:0 16px; border-bottom:1px solid var(--line);
 }
-html[data-hud-shell="split-stage"] #stage-tabs{display:flex; gap:2px;}
+/* #stage-tabs was here until Wave 15 (2026-11-10): the retired legacy strip.
+   The row's only tabs are #hud-stage-nav's five plain words now. */
 html[data-hud-shell="split-stage"] #approvals{
   grid-column:1 / -1; grid-row:3; margin:10px 16px 0;
 }
@@ -3199,6 +3202,65 @@ html[data-hud-shell="single-stage-bento"] #stage-menu{display:none;}
  * navigation any more. */
 #stage-words{display:none !important;}
 
+/* ---- §1.2 THE RETURN PILL: the way back from Face Only / Mini View --- *
+ * One control at the right end of the window header bar, in the only two
+ * shells that hide every other door. It is `hidden` in the markup and the
+ * page's module sets/clears that from hud-layout.js's returnPillFor(layout) -
+ * `base_preset` counts, so the owner's own saved copy of Face Only keeps its
+ * way back. The two shell selectors are the second gate: an `ambient`/
+ * `minimal` layout is the ONLY thing that can put it on the glass, even if a
+ * future script forgot to hide it.
+ *
+ * It sits IN the bar (not as a fixed overlay) because in both shells the bar's
+ * right end is the window's top-right corner, and an overlay there covered
+ * [Edit HUD] - the owner's one way out of a layout chosen by mistake. In the
+ * bar it cannot cover any other control. `order:9` is what makes it the LAST
+ * item in the row: hud-edit.js appends [Layout: <name>] and [Edit HUD] to this
+ * same bar at mount time, so DOM order alone would leave the pill in the
+ * middle; the flex order puts it hard against the right edge, after them. */
+#hud-return-pill{
+  display:none; align-items:center; gap:8px; min-height:30px; flex-shrink:0;
+  order:9; margin-left:auto; padding:5px 13px; border-radius:15px; cursor:pointer;
+  border:1px solid rgb(var(--accent-rgb) / .55);
+  background:rgb(var(--accent-rgb) / .16); color:var(--text);
+  font:600 12px/1.2 "IBM Plex Sans",sans-serif; letter-spacing:.01em;
+  white-space:nowrap; font-variant-emoji:text;
+}
+#hud-return-pill[hidden]{display:none !important;}
+html[data-hud-shell="center-core"] #hud-return-pill:not([hidden]),
+html[data-hud-shell="single-stage-bento"] #hud-return-pill:not([hidden]){display:inline-flex;}
+#hud-return-pill:hover{background:rgb(var(--accent-rgb) / .28);
+  border-color:rgb(var(--accent-rgb) / .8);}
+#hud-return-pill:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+#hud-return-pill .hud-return-glyph{font-size:14px; color:var(--ice);}
+#hud-return-pill-status:empty{display:none;}
+
+/* ---- §1.2 THE TWO-COLUMN COCKPIT: DESIGNED, NOT SHIPPED (2026-11-10) -- *
+ * The design's Just Talk row (spec §1.2) asks for the stage and the right
+ * rail and NO left column, with the rail as the off-canvas drawer this page
+ * already knows how to open. That is what was built and measured first: a
+ * `html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"])` rule set
+ * (two grid columns, the rail fixed off-canvas, `#left-toggle` shown, Edit
+ * HUD exempt) passed its own browser checks - two columns, the drawer really
+ * opening, Escape really closing it, three columns back in edit mode.
+ *
+ * IT IS NOT IN THIS TREE because the HUD's DEFAULT layout is `cockpit`: a
+ * first run with no saved layout migrates to it (hud-layout-store.js
+ * `loadLayout`), so the rail would be off the glass for every HUD window that
+ * has not chosen Command Center. Eleven checks in tests/hud-presets.mjs alone
+ * click a focus preset or the Cloud row inside that rail, and every one of
+ * them then fails with Playwright's "element is outside of the viewport" -
+ * the page is right and the tests describe the previous default. Shipping the
+ * shape without adapting those suites (and the others that reach
+ * `#presets`, `#lanes`, `#rail-faces`, `#rail-calendar-open`) would leave
+ * required suites red, which this branch must not do.
+ *
+ * WHAT IS LEFT FOR WHOEVER TAKES IT: re-add the rule set (it is one block),
+ * then give each affected suite a two-line helper that opens the drawer when
+ * the rail is off-canvas - the same shape tests/hud.mjs already uses for its
+ * drawer shells (`neededDrawer`) - and run them all. `PRESET_ATTR` is already
+ * written by this page, so no other page work is needed.
+ */
 /* ---- §2.1 ZONE B: the window header's own actions ------------------- */
 .hud-head-door{display:inline-flex; align-items:center; gap:6px; flex-shrink:0;}
 .hud-head-door[hidden]{display:none !important;}
@@ -3874,6 +3936,36 @@ html[data-hud-shell="split-stage"] .dock-label{
               title="Show the galaxy again (this device only)">Show the galaxy</button>
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
+      <!-- THE WAY BACK from the two layouts that hide every other door (Wave
+           15, spec §1.2, owner ruling Q5). Face Only (`ambient`, shell
+           center-core) and Mini View (`minimal`, shell single-stage-bento) draw
+           the face and almost nothing else, so each carries ONE unmistakable
+           control at the right end of the window's own header bar:
+           [ ⤢ Back to Command Center ]. It is a real <button>, so Enter and
+           Space work with no extra key handling, and it is in the stage bar -
+           outside every card, region and the saved layout document - so no
+           layout, import or edit-mode action can hide or move it.
+
+           WHY THE HEADER BAR AND NOT A FIXED CORNER: the bar's right end IS
+           the window's top-right corner in both shells (in Face Only the bar
+           itself floats at top:14px right:16px), and a fixed overlay over that
+           corner covered [Edit HUD] - the one control a person needs to get
+           out of a layout they did not mean to choose (caught by hud.mjs's two
+           edit-mode checks, 2026-11-10). Sitting in the bar, the pill cannot
+           cover anything.
+
+           It is declared once in hud-layout.js (`RETURN_PILL`: id, class,
+           words, glyph and target preset) and shown only while
+           `returnPillFor(layout)` answers non-null - which is what keeps a
+           SAVED copy of Face Only/Mini View (base_preset, not the id) working.
+           The page's module block at the foot of this file paints and wires it;
+           the CSS gate below means no other shell can show it even if a script
+           forgot to hide it. -->
+      <button type="button" id="hud-return-pill" class="hud-return-pill" hidden
+              title="Back to Command Center: chat, your memory map and today's plan">
+        <span class="hud-return-glyph" aria-hidden="true">&#10530;</span>Back to Command Center
+      </button>
+      <span id="hud-return-pill-status" class="sr-only" role="status" aria-live="polite"></span>
       <!-- Fixed, outside every card/region/layout document. Same command as
            Alt+Shift+X / the tray / the widget; never held on a stale link or
            App lock, and it raises no approval card. -->
@@ -3935,13 +4027,23 @@ html[data-hud-shell="split-stage"] .dock-label{
           Speed &amp; GPUs
         </button>
       </nav>
-      <div id="stage-tabs" role="tablist" aria-label="Inspector stage">
-        <button type="button" class="stage-tab" data-hud-tab-choice="galaxy" role="tab" aria-selected="true">Galaxy</button>
-        <button type="button" class="stage-tab" data-hud-tab-choice="today" role="tab" aria-selected="false">Approvals</button>
-        <button type="button" class="stage-tab" data-hud-tab-choice="reminders" role="tab" aria-selected="false">Reminders</button>
-        <button type="button" class="stage-tab" data-hud-tab-choice="memory" role="tab" aria-selected="false">Memory</button>
-        <button type="button" class="stage-tab" data-hud-tab-choice="telemetry" role="tab" aria-selected="false">Telemetry</button>
-      </div>
+      <!-- RETIRED (Wave 15, 2026-11-09, spec §2.1 "ONE authoritative
+           navigation"). The legacy #stage-tabs strip - Galaxy / Approvals /
+           Reminders / Memory / Telemetry, written here since the Studio
+           shell's first day - is GONE. It was a second navigation beside the
+           five plain-word tabs above: in Studio the window drew both rows and
+           they named the same five panes, while the header's switcher was the
+           only one the shell's F6 navigation and the rest of the page agreed
+           with. Nothing is lost with it:
+             * the five sections are still chosen by #hud-stage-nav's tabs
+               (data-hud-nav), which route through the SAME setView()/setTab();
+             * the Studio dock (#studio-dock) still carries the same five ids
+               with icon + plain words, and the dock's order is still the
+               layout script's `var TABS` order;
+             * the Memory pane still opens from the memories pill (§2.2) and
+               from the dock's Memory icon;
+             * the .stage-tab CSS stays: #stage-words' menu words use it.
+           Do not re-add a second tablist beside #hud-stage-nav. -->
       <!-- The owner's two MENU words (2026-10-27), in the stage's own order:
            "and an option next to the word telemetry" and "also add presets as
            a word in the right order next to the galaxy, approvals, reminders
@@ -14885,6 +14987,14 @@ import { mountFacePicker } from "./hud-presets.js";
  * line. Nothing but the look id is passed, and the command proves it. */
 import { setGalaxyLookOnPc } from "./hud-presets.js";
 window.__jarvisGalaxyLook = setGalaxyLookOnPc;
+/* Wave 15, spec §1.2 / owner ruling Q5: the way back from Face Only and Mini
+ * View. The ONE declaration of the pill (its id, class, words, glyph and
+ * target preset) is hud-layout.js's `RETURN_PILL`; the ONE layout write is
+ * hud-layout-store.js's `choosePreset` (the same `set_hud_layout` command the
+ * Presets menu and the Settings picker use - no second write, no new route).
+ * Imported on their own lines so the pins on the lines above stay true. */
+import { RETURN_PILL, RETURN_PILL_LAYOUTS, returnPillFor, PRESET_ATTR } from "./hud-layout.js";
+import { choosePreset } from "./hud-layout-store.js";
 /* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
  * hud-layout-store.js) instead of the host PC's store, so the editor and the
  * Layouts menu are offered there too. The store still uses Tauri IPC when
@@ -14918,6 +15028,146 @@ mountCurrentModels();
  * In a plain browser the mount hides its door: there is no shell command to
  * send, and a menu whose every row would fail is worse than no icon. */
 mountFacePicker();
+
+/* ── THE RETURN PILL (Wave 15, spec §1.2; owner ruling Q5) ─────────────────
+ *
+ * Face Only (`ambient`, shell center-core) and Mini View (`minimal`, shell
+ * single-stage-bento) are two clicks from a locked-out window if there is no
+ * way back: both hide the left rail, the right rail, the stage header and the
+ * Presets badge. This mounts the ONE control that fixes that - the
+ * `[ ⤢ Back to Command Center ]` pill declared in hud-layout.js's
+ * `RETURN_PILL`.
+ *
+ * WHAT IT READS. `returnPillFor(layout)` is the page-and-tests-shared rule:
+ * `base_preset` is what counts, so the owner's own SAVED copy of Face Only or
+ * Mini View keeps its way back, and every other layout (and an unknown
+ * document, which normalizes to the default) answers null. The layout
+ * document is `window.__jarvisHudLayout`, the same object the shell bootstrap
+ * and hud-presets.js publish; when it has not arrived yet the pill falls back
+ * to the `base_preset` the shell's own `jarvis:hud-shell` facts carry. No new
+ * read, no new store, no second layout key.
+ *
+ * WHAT IT WRITES. `choosePreset(RETURN_PILL.target_preset, current)` - the
+ * SAME one write the Presets menu and the Settings picker use (set_hud_layout
+ * on the desktop, this browser's own document in web mode). The page does not
+ * invent a write and does not keep a second copy of the layout.
+ *
+ * HOW THE WINDOW FOLLOWS. It dispatches the two events the page and its
+ * modules already listen for: `jarvis:hud-layout` (the document, for the
+ * editor/Layout badge) and `jarvis:hud-shell` (the shell facts, which the
+ * page's own applyShell() renders - the exact event the bootstrap sends). A
+ * refused save is said out loud in the pill's status mirror, never hidden.
+ */
+(function mountHudReturnPill() {
+  "use strict";
+  var pill = document.getElementById(RETURN_PILL.id);
+  if (!pill) return;
+  var status = document.getElementById("hud-return-pill-status");
+
+  function layoutDoc() {
+    var doc = window.__jarvisHudLayout;
+    return doc && typeof doc === "object" ? doc : null;
+  }
+
+  function currentPill() {
+    // A full document answers through the shared rule (so a SAVED copy of the
+    // layout keeps its pill: `base_preset` is what counts). Before the store's
+    // answer lands, the shell event's own `base_preset` is enough - and the
+    // list of layouts that wear the pill is the model's, not a second spelling.
+    var doc = layoutDoc();
+    if (doc) return returnPillFor(doc);
+    var base = pill.dataset.basePreset;
+    return base && RETURN_PILL_LAYOUTS.indexOf(base) >= 0 ? RETURN_PILL : null;
+  }
+
+  function say(text) {
+    if (status) status.textContent = text || "";
+    pill.setAttribute("title", text || "Back to Command Center: chat, your memory map and today's plan");
+  }
+
+  function paint() {
+    var info = currentPill();
+    pill.hidden = !info;
+    pill.setAttribute("aria-hidden", info ? "false" : "true");
+    if (!info) say("");
+  }
+
+  window.addEventListener("jarvis:hud-shell", function (event) {
+    var detail = event && event.detail;
+    if (detail && detail.base_preset) pill.dataset.basePreset = String(detail.base_preset);
+    paint();
+  });
+  window.addEventListener("jarvis:hud-layout", paint);
+
+  pill.addEventListener("click", function (event) {
+    event.preventDefault();
+    var info = currentPill();
+    var target = (info && info.target_preset) || RETURN_PILL.target_preset;
+    Promise.resolve(choosePreset(target, layoutDoc())).then(function (answer) {
+      var saved = answer && answer.layout ? answer.layout : null;
+      if (!saved) {
+        say((answer && answer.error) || "That did not work - the layout was not saved.");
+        return;
+      }
+      window.__jarvisHudLayout = saved;
+      window.dispatchEvent(new CustomEvent("jarvis:hud-layout", { detail: saved }));
+      window.dispatchEvent(new CustomEvent("jarvis:hud-shell", {
+        detail: {
+          shell_template: saved.shell_template,
+          density: saved.density,
+          default_stage_tab: saved.default_stage_tab,
+          base_preset: saved.base_preset,
+          name: saved.name,
+        },
+      }));
+      say("Back in " + (saved.name || "Command Center") + ".");
+      paint();
+    }).catch(function (error) {
+      say("That did not work: " + String(error && error.message ? error.message : error));
+    });
+  });
+
+  paint();
+}());
+
+/* ── THE ACTIVE LAYOUT'S ID, ON THE PAGE (Wave 15) ─────────────────────────
+ *
+ * hud-layout.js declares `PRESET_ATTR` ("data-hud-preset") as the one
+ * attribute the page writes on <html> and <body> so the STYLESHEET can speak
+ * about ONE layout, not only one shell - `cockpit` ("Just Talk") and
+ * `second_brain` ("Command Center") share the `three-column` shell but must
+ * not share a shape (spec §1.2: Just Talk has no left sidebar, Command Center
+ * keeps it). Until now the attribute was declared and pinned and never
+ * written; this is its writer, and it is why the two-column cockpit rules in
+ * the style above can exist without a new shell.
+ *
+ * WHAT IT WRITES: `base_preset` - the layout a document is based on - not the
+ * id, so the owner's own SAVED copy of Just Talk keeps the two-column shape
+ * and a saved copy of Command Center keeps three. The value comes from the
+ * SAME two sources the return pill reads: the layout document the bootstrap
+ * publishes (`window.__jarvisHudLayout`, also announced as `jarvis:hud-layout`)
+ * and the `base_preset` in its `jarvis:hud-shell` facts. No new read, no new
+ * store. An unknown document leaves the attribute off, which is the default
+ * and therefore the ordinary three-column shape. */
+(function mountHudPresetAttr() {
+  "use strict";
+  function write(basePreset) {
+    var id = String(basePreset || "");
+    if (!id) {
+      var doc = window.__jarvisHudLayout;
+      if (doc && typeof doc === "object" && doc.base_preset) id = String(doc.base_preset);
+    }
+    if (!id) return;
+    document.documentElement.setAttribute(PRESET_ATTR, id);
+    document.body.setAttribute(PRESET_ATTR, id);
+  }
+  window.addEventListener("jarvis:hud-layout", function () { write(""); });
+  window.addEventListener("jarvis:hud-shell", function (event) {
+    var detail = event && event.detail;
+    if (detail && detail.base_preset) write(detail.base_preset);
+  });
+  write("");
+}());
 
 /* ── Jarvis Live, from the left rail (the owner's ask of 2026-10-27:
  *    "a live mode button in the left column of the Jarvis HUD") ────────────

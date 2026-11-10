@@ -554,12 +554,11 @@ const PRESET_NOTE = {
  *   cockpit      Just Talk - the conversation and the ask box at the centre;
  *                the right column holds the waiting count and the page's today
  *                panel (2). The calendar, last-turn telemetry, abilities,
- *                budget, memory counts and voice meter are OFF. The left
- *                rail's three cards stay ON for now: the rail ITSELF, its icon
- *                toolbar and the Galaxy-options door are page markup (spec
- *                section 2.1's nav/banner slice) and hiding the cards would
- *                leave an empty column with the page's icons still in it - see
- *                PRESET_FACTS.
+ *                budget, memory counts and voice meter are OFF. Its left rail
+ *                is NOT on the glass - the page draws `cockpit` as two
+ *                columns from PRESET_ATTR - but the rail's three cards stay
+ *                present and visible so its drawer is not empty; they are no
+ *                one's DEFAULT navigation any more.
  *   second_brain Command Center (the owner's layout) - Talk + Galaxy on the
  *                stage; the right column is capped at three: waiting,
  *                second-brain counts and the page's today panel. Last-turn
@@ -722,17 +721,27 @@ function cardsFor(presetId) {
 }
 
 const PRESET_FACTS = {
-  // `cockpit` KEEPS the three-column shell on purpose (Wave 15). The spec's
-  // "remove the left sidebar" is a page-side change, not a card-visibility
-  // one: the rail's own chrome (`#rail-toolbar`: presets, faces, history, the
-  // 18 icons) and the Talk/Brain modes in `#rail-nav` are page markup the
-  // layout model cannot move, and hiding those cards alone would leave an
-  // empty 220px column on screen with the page's icons still in it. The shell
-  // that has no left column is `two-column-right` (see hud-shell.mjs) - switch
-  // this value to it when the page's new header carries the doors (spec
-  // section 2.1, the nav/banner owner's slice) and hide the nav/lanes/systems
-  // cards below in the same change. `second_brain` is the owner's current
-  // layout and stays three-column for the same reason.
+  // TWO-COLUMN COCKPIT (Wave 15, spec §1.2 "Just Talk": "Remove Left
+  // Sidebar"). The shell stays `three-column` because Command Center
+  // (`second_brain`) is the SAME shell and keeps its sidebar: the two layouts
+  // are told apart by PAGE CSS through `PRESET_ATTR` (the attribute below),
+  // which the page now writes. For `cockpit` the page draws #shell as two
+  // columns - stage + the 248px right rail - and the left rail is its
+  // off-canvas drawer, opened by the header's "☰ Controls" toggle (the same
+  // drawer, the same Escape, that `center-core`/`single-stage-bento` use).
+  // So the wall of rail symbols is not DEFAULT navigation any more, while
+  // every door it holds (Presets, Faces, Calendar, Live, Brain, Galaxy
+  // options) is still one click away. In Edit HUD the two-column rule is
+  // switched OFF (`body:not([data-hud-edit="on"])`), so editing still shows
+  // the real three-column arrangement the document describes.
+  //
+  // The alternative - changing this value to `two-column-right` - would give
+  // the same two columns but would take the whole shell machinery with it
+  // (the shell-keyed #reactor sizes, the drawer logic and every
+  // `data-hud-shell` pin), and it would draw the rail as a drawer whether or
+  // not the page's preset attribute exists. The page's shape is the page's
+  // business: the model says what the layout IS, PRESET_ATTR lets the
+  // stylesheet speak about one layout.
   cockpit: { shell_template: "three-column", density: "comfortable", default_stage_tab: "talk" },
   studio: { shell_template: "split-stage", density: "comfortable", default_stage_tab: "talk" },
   ambient: { shell_template: "center-core", density: "spacious", default_stage_tab: "talk" },

@@ -503,6 +503,70 @@ await check("§4.1 the Memory tab's cards carry the hierarchy, at runtime", asyn
   assert.match(count.words, /3 cards waiting for you/);
 });
 
+await check("§1.2 Q5: the return pill is markup + CSS + one handler, and only Face Only / Mini View may show it", async () => {
+  // THE MARKUP: one real <button>, outside #shell (so no layout/card/drag can
+  // move it), declared with the words and the glyph the design asks for.
+  const pillAt = HUD.indexOf('id="hud-return-pill"');
+  assert.ok(pillAt > -1, "the page has no #hud-return-pill");
+  const pill = HUD.slice(HUD.lastIndexOf("<button", pillAt), HUD.indexOf("</button>", pillAt));
+  assert.match(pill, /type="button"/, "the return pill is not a real button");
+  assert.match(pill, /\shidden(\s|>)/,
+    "the pill is not hidden by default - a browser with no layout would draw it");
+  assert.match(pill, /class="hud-return-pill"/, "the pill does not wear hud-layout.js's class");
+  assert.match(pill, /Back to Command Center/, "the pill's words are not the design's");
+  assert.match(pill, /&#10530;/, "the pill lost its \u2922 glyph");
+  assert.ok(pillAt > HUD.indexOf('class="stage-bar"') && pillAt < HUD.indexOf('id="hud-stop"'),
+    "the pill is not in the window header bar (it must sit at the bar's right end, " +
+    "outside every card/region, and never as a fixed overlay over [Edit HUD])");
+  // THE SECOND GATE: only the two face-only shells can ever draw it.
+  assert.match(HUD,
+    /html\[data-hud-shell="center-core"\] #hud-return-pill:not\(\[hidden\]\),\s*\n\s*html\[data-hud-shell="single-stage-bento"\] #hud-return-pill:not\(\[hidden\]\)\{display:inline-flex;\}/,
+    "the pill is not gated to Face Only (center-core) and Mini View (single-stage-bento)");
+  // THE ONE HANDLER AND THE ONE WRITE: returnPillFor decides, choosePreset
+  // saves - the same write the Presets menu uses. No second layout key.
+  assert.match(HUD, /import \{ RETURN_PILL, RETURN_PILL_LAYOUTS, returnPillFor, PRESET_ATTR \} from "\.\/hud-layout\.js";/,
+    "the page does not import the pill's one declaration");
+  assert.match(HUD, /import \{ choosePreset \} from "\.\/hud-layout-store\.js";/,
+    "the page does not import the one layout write");
+  assert.match(HUD, /RETURN_PILL_LAYOUTS\.indexOf\(base\) >= 0 \? RETURN_PILL : null/,
+    "a saved copy of Face Only would lose its way back (base_preset is not honoured)");
+  assert.match(HUD, /choosePreset\(target, layoutDoc\(\)\)/,
+    "the pill does not save through the page's one layout write");
+  assert.match(HUD, /new CustomEvent\("jarvis:hud-shell"/,
+    "the pill does not hand the new shell to the page's own applyShell()");
+});
+
+await check("§1.2 Q6: the five-tab stage header is the ONE navigation, and #stage-tabs is retired", async () => {
+  // ONE navigation: the legacy strip is gone (the five plain-word tabs of
+  // §2.1 Zone A are the only stage header, in every shell that has one).
+  assert.equal(HUD.includes('id="stage-tabs"'), false,
+    "#stage-tabs is back - the retired Galaxy/Approvals/Reminders/Memory/Telemetry " +
+    "strip is a second navigation");
+  assert.equal(HUD.includes('aria-label="Inspector stage"'), false,
+    "the old Inspector stage tablist is still declared somewhere");
+  // The left rail is NOT a wall of unlabelled symbols: the Studio dock's six
+  // shortcuts draw icon + plain words (spec §2.1), and the five stage tabs
+  // carry the design's own words.
+  const dockAt = HUD.indexOf('id="studio-dock"');
+  const dock = HUD.slice(dockAt, HUD.indexOf("</nav>", dockAt));
+  const labelled = [...dock.matchAll(/<span class="dock-label">([^<]+)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(labelled,
+    ["Memory Map", "Waiting for You", "Today &amp; Reminders", "Memory", "Speed &amp; GPUs"],
+    `the dock's plain-words labels are ${JSON.stringify(labelled)}`);
+  for (const plain of ["Talk", "Memory Map", "Waiting for You", "Today &amp; Reminders", "Speed &amp; GPUs"]) {
+    assert.ok(HUD.includes(">" + plain) || HUD.includes(plain),
+      `the stage header does not say "${plain}"`);
+  }
+  // The active layout's id is WRITTEN (hud-layout.js's PRESET_ATTR) - the
+  // documented left-under. The two-column cockpit rule set that would consume
+  // it is designed and deferred (see the page's own note): the HUD's default
+  // layout is cockpit, so hiding the left column changes the default
+  // navigation for suites that click the rail's presets.
+  assert.match(HUD, /setAttribute\(PRESET_ATTR, id\)/,
+    "nothing writes the active layout id");
+  assert.equal(HUD.includes('html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) #shell{'),
+    false, "a half-landed two-column cockpit rule is in the page without its test adaptation");
+});
 await check("the safety strip is untouched", async () => {
   const safety = await page.evaluate(() => ({
     html: document.getElementById("hud-safety").outerHTML,
@@ -513,6 +577,98 @@ await check("the safety strip is untouched", async () => {
     "the non-hideable safety strip lost its own sentence");
   assert.equal(safety.hidden, true,
     "the safety strip is drawn with no latch on (it only shows what is active)");
+});
+
+/* ── §1.2 Q5/Q6: the return pill and the two-column cockpit, on the page ── */
+
+/** Put the page in one layout the way the shell bootstrap does: the event it
+ *  sends carries the shell facts AND the base preset (the return pill and the
+ *  PRESET_ATTR writer both read that one event). */
+async function shellFacts(facts) {
+  await page.evaluate((detail) => window.dispatchEvent(
+    new CustomEvent("jarvis:hud-shell", { detail })), facts);
+  await page.waitForTimeout(250);
+}
+
+const pillState = () => page.evaluate(() => {
+  const el = document.getElementById("hud-return-pill");
+  const bar = el.closest(".stage-bar");
+  const box = el.getBoundingClientRect();
+  const barBox = bar ? bar.getBoundingClientRect() : null;
+  const style = getComputedStyle(el);
+  return {
+    hidden: el.hidden,
+    shown: !el.hidden && style.display !== "none" && box.width > 1 && box.height > 1,
+    words: el.textContent.replace(/\s+/g, " ").trim(),
+    right: Math.round(box.right), barRight: barBox ? Math.round(barBox.right) : 0,
+    top: Math.round(box.top), barTop: barBox ? Math.round(barBox.top) : 0,
+    barBottom: barBox ? Math.round(barBox.bottom) : 0,
+    preset: document.documentElement.getAttribute("data-hud-preset") || "",
+  };
+});
+
+await check("Q5: the pill is drawn in Face Only and Mini View, and nowhere else", async () => {
+  // The layout write needs the page's browser/desktop store; in this harness
+  // the browser-web store is the honest one (no Tauri IPC here).
+  await page.evaluate(() => { window.__JARVIS_WEB_MODE = true; });
+  for (const [preset, shell] of [["ambient", "center-core"], ["minimal", "single-stage-bento"]]) {
+    await shellFacts({ shell_template: shell, density: "comfortable",
+      default_stage_tab: "talk", base_preset: preset });
+    const state = await pillState();
+    assert.equal(state.hidden, false, `${preset}: the way back is hidden`);
+    assert.equal(state.shown, true,
+      `${preset}: the pill is in the DOM but not on the glass`);
+    assert.match(state.words, /Back to Command Center/, `${preset}: the pill's words changed`);
+    // At the RIGHT END of the window header bar, which is the top-right
+    // corner in both shells - and inside the bar, so it can never cover
+    // [Edit HUD] (a fixed overlay here did, caught 2026-11-10).
+    assert.ok(state.right <= state.barRight + 1 && state.right >= state.barRight - 20,
+      `${preset}: the pill is not at the right end of the header bar ` +
+      `(pill right ${state.right}, bar right ${state.barRight})`);
+    assert.ok(state.top >= state.barTop && state.top <= state.barBottom,
+      `${preset}: the pill is outside the header bar's own box (top ${state.top}, ` +
+      `bar ${state.barTop}..${state.barBottom})`);
+  }
+  // A SAVED copy of Mini View keeps its way back: `base_preset` is what counts.
+  await shellFacts({ shell_template: "single-stage-bento", density: "compact",
+    default_stage_tab: "talk", base_preset: "minimal", name: "My mini" });
+  assert.equal((await pillState()).shown, true,
+    "the owner's saved copy of Mini View has no way back");
+  // Every ordinary layout hides it.
+  for (const [preset, shell] of [["second_brain", "three-column"], ["studio", "split-stage"],
+    ["cockpit", "three-column"]]) {
+    await shellFacts({ shell_template: shell, density: "comfortable",
+      default_stage_tab: "talk", base_preset: preset });
+    assert.equal((await pillState()).shown, false,
+      `${preset}: the return pill is drawn outside Face Only / Mini View`);
+  }
+});
+
+await check("Q5: one click on the pill lands in Command Center, through the page's one layout write", async () => {
+  await page.evaluate(() => {
+    window.__jarvisHudLayout = null;
+    window.__hudLayoutWrites.length = 0;
+  });
+  await shellFacts({ shell_template: "center-core", density: "spacious",
+    default_stage_tab: "talk", base_preset: "ambient" });
+  assert.equal((await pillState()).shown, true, "Face Only has no way back to click");
+  await page.click("#hud-return-pill");
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => ({
+    shell: document.body.dataset.hudShell,
+    htmlShell: document.documentElement.getAttribute("data-hud-shell"),
+    preset: document.documentElement.getAttribute("data-hud-preset"),
+    pillHidden: document.getElementById("hud-return-pill").hidden,
+    writes: window.__hudLayoutWrites.map((doc) => doc && doc.base_preset),
+  }));
+  assert.equal(after.shell, "three-column", "the click did not return to the three-column shell");
+  assert.equal(after.htmlShell, "three-column", "the html shell and the body shell disagree");
+  assert.equal(after.preset, "second_brain", "the page is not in Command Center after the click");
+  // The ONE write: set_hud_layout, once, with Command Center - not a second
+  // store, not a private key.
+  assert.deepEqual(after.writes, ["second_brain"],
+    `the click wrote ${JSON.stringify(after.writes)} through set_hud_layout`);
+  assert.equal(after.pillHidden, true, "the pill stayed on screen after returning");
 });
 
 await page.close();

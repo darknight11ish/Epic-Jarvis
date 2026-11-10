@@ -1510,7 +1510,7 @@ await check("the freed column is the Studio Galaxy tab's alone - tabs and shells
   // ANOTHER TAB in Studio, with the galaxy still hidden: same again.
   await setHudLook(page, "studio");
   await tabIs("galaxy");
-  await page.click('#stage-tabs [data-hud-tab-choice="today"]');
+  await page.click('#hud-stage-nav [data-hud-nav="today"]');
   await tabIs("today");
   await page.waitForTimeout(150);
   const otherTab = await read();
@@ -1521,7 +1521,7 @@ await check("the freed column is the Studio Galaxy tab's alone - tabs and shells
     `the face kept the freed column on another stage tab (${otherTab.face.w}px vs ${studioShown.face.w}px)`);
 
   // ...and back on the Galaxy tab the space is the face's again.
-  await page.click('#stage-tabs [data-hud-tab-choice="galaxy"]');
+  await page.click('#hud-stage-nav [data-hud-nav="galaxy"]');
   await tabIs("galaxy");
   await page.waitForTimeout(150);
   const backOnGalaxy = await read();
@@ -3944,7 +3944,7 @@ const KEPT_IDS = [
   "banner", "model-warn", "rail-right", "r-model", "r-latency", "r-tokens",
   "r-gate", "r-complexity", "r-meter", "r-why", "tools-used", "r-facts",
   "r-docs", "r-ents", "r-tools", "r-mem", "r-rpm", "r-rpd", "r-stt", "r-tts",
-  "r-level", "hud-layout-badge", "stage-tabs", "history-toggle", "core-expand",
+  "r-level", "hud-layout-badge", "hud-stage-nav", "history-toggle", "core-expand",
   "rail-quickbar", "chip-model-door", "chip-model-door-ambient", "appr-badge",
   "ambient-status", "studio-dock",
   // The owner's two rail controls (2026-10-26). `hud-settings` is the shell's,
@@ -4354,7 +4354,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
     return {
       talk: shown("talk"), brain: shown("brain"),
       sideBySide: brainBox.left >= talkBox.right - 2,
-      tabsShown: shown("stage-tabs"),
+      tabsShown: shown("hud-stage-nav"),
       dockShown: shown("studio-dock"),
       railHidden: getComputedStyle(document.getElementById("rail-right")).display === "none",
       modelsShown: shown("chip-model-door"),
@@ -4397,7 +4397,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
   assert.equal(split.talk, true, "Studio hides the conversation");
   assert.equal(split.brain, true, "Studio's Galaxy stage is not showing");
   assert.equal(split.sideBySide, true, "the conversation and the stage are stacked, not side by side");
-  assert.equal(split.tabsShown, true, "the Inspector Stage tabs are not drawn");
+  assert.equal(split.tabsShown, true, "the five-tab stage header is not drawn");
   assert.equal(split.dockShown, true, "the Studio icon dock is not drawn");
   assert.equal(split.railHidden, true, "the full telemetry rail is drawn in the split view");
   assert.equal(split.modelsShown, true, "Studio does not show the model-name door");
@@ -5237,18 +5237,18 @@ const openReminders = async (schedule, extra = {}) => {
   await setHudLook(opened.page, "studio");
   await opened.page.waitForTimeout(150);
   await opened.page.evaluate((n) => document.querySelector(
-    `#stage-tabs [data-hud-tab-choice="${n}"]`).click(), "reminders");
+    `#hud-stage-nav [data-hud-nav="${n}"]`).click(), "reminders");
   await opened.page.waitForTimeout(250);
   return opened;
 };
 
-await check("the Reminders tab is in the stage tab bar and the dock, and shows its own panel", async () => {
+await check("the Reminders tab is in the five-tab stage header and the dock, and shows its own panel", async () => {
   const { page, problems } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false, schedule: REMINDERS_SCHEDULE });
   await setHudLook(page, "studio");
   await page.waitForTimeout(200);
   const before = await page.evaluate(() => {
-    const tab = document.querySelector('#stage-tabs [data-hud-tab-choice="reminders"]');
+    const tab = document.querySelector('#hud-stage-nav [data-hud-nav="reminders"]');
     const dock = document.querySelector('#studio-dock [data-hud-tab-choice="reminders"]');
     return { tab: Boolean(tab), dock: Boolean(dock),
              tabShown: Boolean(tab && tab.getBoundingClientRect().width > 0),
@@ -5256,19 +5256,19 @@ await check("the Reminders tab is in the stage tab bar and the dock, and shows i
              keyboard: (() => { tab.focus(); return document.activeElement === tab; })() };
   });
   await page.evaluate(() => document.querySelector(
-    '#stage-tabs [data-hud-tab-choice="reminders"]').focus());
+    '#hud-stage-nav [data-hud-nav="reminders"]').focus());
   await page.keyboard.press("Enter");
   await page.waitForTimeout(250);
   const after = await page.evaluate(() => ({
     tab: document.body.dataset.hudTab,
-    selected: document.querySelector('#stage-tabs [data-hud-tab-choice="reminders"]')
-      .getAttribute("aria-selected"),
+    selected: document.querySelector('#hud-stage-nav [data-hud-nav="reminders"]')
+      .getAttribute("aria-pressed"),
     dockPressed: document.querySelector('#studio-dock [data-hud-tab-choice="reminders"]')
       .getAttribute("aria-pressed"),
   }));
   const panel = await remindersPanel(page);
   await page.close();
-  assert.equal(before.tab, true, "the Reminders stage tab is not in the tab bar");
+  assert.equal(before.tab, true, "the Reminders stage tab is not in the five-tab header");
   assert.equal(before.dock, true, "the Reminders dock icon is not in the studio dock");
   assert.equal(before.tabShown, true, "the Reminders tab is not drawn in Studio");
   assert.equal(before.dockShown, true, "the Reminders dock icon is not drawn in Studio");
@@ -5607,7 +5607,7 @@ await check("FT-3/L3: the Studio Reminders tab is a full-stage screen with the r
   // Leaving the tab puts the ONE panel back in the right rail - it is moved,
   // never copied (no second list, no second polling loop).
   await page.evaluate(() => document.querySelector(
-    '#stage-tabs [data-hud-tab-choice="galaxy"]').click());
+    '#hud-stage-nav [data-hud-nav="galaxy"]').click());
   await page.waitForTimeout(250);
   const back = await page.evaluate(() => {
     const rem = document.getElementById("rail-reminders");
@@ -5762,7 +5762,7 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
   // Open the Studio right rail (the Telemetry tab is one of the drawer states)
   // and then enter edit mode, which is exactly the state the field test hit.
   await page.evaluate(() => document.querySelector(
-    '#stage-tabs [data-hud-tab-choice="telemetry"]').click());
+    '#hud-stage-nav [data-hud-nav="telemetry"]').click());
   await page.waitForTimeout(250);
   await page.click("#hud-edit-toggle");
   await page.waitForTimeout(350);
@@ -6099,6 +6099,8 @@ await check("H3: the Import dialog adds to My layouts and keeps the owner's exis
  * ========================================================================= */
 
 const H3_PRESETS = {
+  // Wave 15 (2026-11-10): Just Talk keeps the three-column shell in the model
+  // (the page draws its two columns from PRESET_ATTR - see hud-layout.js).
   cockpit: { shell: "three-column", density: "comfortable", tab: "", view: "talk" },
   studio: { shell: "split-stage", density: "comfortable", tab: "galaxy", view: "talk" },
   ambient: { shell: "center-core", density: "spacious", tab: "", view: "talk" },

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9e622a160f4ab10465a433959e15a72fb0934d19",
- "built_at": "2026-11-09T17:23:57-08:00",
+ "ref": "70b925ebbbcc5e7980a5a38e5bf20580fe149b07",
+ "built_at": "2026-11-09T21:11:07-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6233,6 +6233,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "70b925ebbbcc5e7980a5a38e5bf20580fe149b07",
+   "date": "2026-11-09",
+   "subject": "fix(hud): the two-column Just Talk waits for its test adaptation (Q6 part three)"
+  },
+  {
+   "sha": "aad65a0090557a16848e60fa5dd61b4b4433a070",
+   "date": "2026-11-09",
+   "subject": "chore(hud): the self code map is regenerated for the Q5/Q6 tree"
+  },
+  {
+   "sha": "d821a8c7fa12434c99d60dbc5c9307a7f41292ff",
+   "date": "2026-11-09",
+   "subject": "feat(hud): the way back from Face Only / Mini View, and the two-column Just Talk (Q5/Q6)"
+  },
+  {
+   "sha": "40257515d83ef450e6e8169889e788561cd0c29e",
+   "date": "2026-11-09",
+   "subject": "chore(hud): the self code map is regenerated for the folded tree"
+  },
+  {
    "sha": "9e622a160f4ab10465a433959e15a72fb0934d19",
    "date": "2026-11-09",
    "subject": "fix(hud-edit): the field and toggle tests learn the wave-15 Cockpit composition"
@@ -6311,26 +6331,6 @@
    "sha": "6f00bd58d324f11a07059c4139d0d84499e23d8a",
    "date": "2026-11-09",
    "subject": "fix(wave13): the owner's own \"can you create a repository?\" reaches the carded answer"
-  },
-  {
-   "sha": "43b925f6239b8625982920abbf0eb57ade6394c5",
-   "date": "2026-11-09",
-   "subject": "fix(wave13): the COMPUTE panel names the card each loaded lane is on (F6)"
-  },
-  {
-   "sha": "03034f43214503849899be56357565bc22d91daf",
-   "date": "2026-11-09",
-   "subject": "test(wave13): the Tools page draws 61 switch rows - the carded github_create_repo row the older cutoff still counted as 60"
-  },
-  {
-   "sha": "ad296598aaa566a68bdbf7b88a407b5104a9a4e8",
-   "date": "2026-11-09",
-   "subject": "test(wave13): the four same-rule stack-order allowlists name the F5 patch, with its hunks (jarvis_skills.py only) stated"
-  },
-  {
-   "sha": "c36fd472de28cab552a9160ad6fe9b8e13c741b9",
-   "date": "2026-11-09",
-   "subject": "chore(wave13): the self-code map covers the corrected F5 delivery route (both twins, written LAST)"
   }
  ],
  "top_level": [
