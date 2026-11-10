@@ -220,7 +220,11 @@ def t_the_patch_and_the_base():
              # It touches jarvis_gate.py only (one _TOOL_ACTIONS line, its own
              # action's _RISK row at the end of the file, and a
              # _NO_RULE_FROM_DENIAL union) - no line this patch wrote.
-             "product-check.patch"}
+             "product-check.patch",
+             # skill-scan-wiring.patch (2026-11-09, F5): five hunks, ALL in
+             # jarvis_skills.py, and no hunk in jarvis_hud.py at all - it
+             # rewrites nothing this patch wrote and does not move the anchor.
+             "skill-scan-wiring.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

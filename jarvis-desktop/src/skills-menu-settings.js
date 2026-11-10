@@ -44,6 +44,8 @@ import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link
 import {
   answerWords,
   CHOOSING,
+  CREATOR_MISSING,
+  creatorView,
   importView,
   menuView,
   MISSING,
@@ -78,6 +80,11 @@ const el = {
   pickFindingsNone: $("sk-pick-findings-none"),
   pickGo: $("sk-pick-go"),
   pickCancel: $("sk-pick-cancel"),
+  creator: $("sk-creator"),
+  creatorFolder: $("sk-creator-folder"),
+  creatorList: $("sk-creator-list"),
+  creatorNote: $("sk-creator-note"),
+  creatorRefresh: $("sk-creator-refresh"),
   editTitle: $("sk-edit-title"),
   editText: $("sk-edit-text"),
   editNote: $("sk-edit-note"),
@@ -88,6 +95,7 @@ const el = {
 };
 
 let view = null;
+let creator = null; // the waiting folder's own read; see loadCreator()
 let busy = false;
 let pending = null; // the scanned source, waiting for "Install it"
 let editing = null; // the skill whose text is in the editor
@@ -205,6 +213,11 @@ function offRow(skill) {
 }
 
 function paint() {
+  paintSkills();
+  paintCreator();
+}
+
+function paintSkills() {
   if (!el.section) return;
   if (!view) return;
   if (!view.available) {
@@ -234,6 +247,112 @@ function paint() {
   // The three doors that raise a card need a live event stream (rule 4); say
   // so before a press rather than after one fails.
   if (!live() && !el.status.textContent) say(WAITING_LINK);
+}
+
+/* ── Creator mode: things waiting in one folder on this PC ──────────────── */
+
+/**
+ * One waiting item. The PC says what it is, what the scanner found and whether
+ * it may be installed; the page only draws that. A row the PC refuses never
+ * gets a button, because the PC would not draw a card for it.
+ */
+function creatorItemRow(item) {
+  const li = node("li", "sc-gpu");
+  li.dataset.skill = `creator:${item.name}`;
+  li.append(node("span", "sc-gpu-name", `${item.name} - ${item.kindWords} - ${item.verdict}`));
+  line(li, item.summary);
+  if (item.installed) line(li, item.sentence || "Already installed, and turned off.");
+  for (const found of item.blocking.slice(0, 3)) line(li, `Refused: ${found.message}`);
+  for (const found of item.warnings.slice(0, 3)) line(li, `Warning: ${found.message}`);
+  if (item.canInstall) {
+    const go = node(
+      "button",
+      "btn small",
+      item.installed ? "Install it again…" : "Install it…",
+    );
+    go.type = "button";
+    go.disabled = busy;
+    go.addEventListener("click", () => installCreator(item));
+    li.append(go);
+  }
+  return li;
+}
+
+function paintCreator() {
+  if (!el.creator) return;
+  el.creatorRefresh.disabled = busy;
+  if (!creator) {
+    el.creatorList.replaceChildren();
+    el.creatorNote.hidden = true;
+    return;
+  }
+  el.creatorFolder.textContent = creator.folder ? `Waiting folder: ${creator.folder}` : "";
+  el.creatorFolder.hidden = !el.creatorFolder.textContent;
+  if (!creator.available) {
+    el.creatorList.replaceChildren();
+    el.creatorNote.textContent = creator.why || CREATOR_MISSING;
+    el.creatorNote.hidden = false;
+    return;
+  }
+  el.creatorList.replaceChildren(...creator.items.map(creatorItemRow));
+  const counts = creator.counts || {};
+  const ready = Number.isFinite(Number(counts.ready)) ? Number(counts.ready) : 0;
+  const note = creator.note || "";
+  el.creatorNote.textContent = creator.items.length
+    ? `${creator.items.length} item(s) waiting; ${ready} can be installed. ${note}`.trim()
+    : "Nothing is waiting in the folder yet.";
+  el.creatorNote.hidden = !el.creatorNote.textContent;
+}
+
+/**
+ * Read the waiting folder and scan it. OWNER-TRIGGERED ONLY: this runs when
+ * the card is first opened, when the page becomes visible again, and when
+ * "Look again" is pressed - never on a timer, never on an event stream, and it
+ * installs nothing.
+ */
+async function loadCreator() {
+  if (!el.creator || !IS_TAURI) return;
+  try {
+    creator = creatorView(await ask("creator_read"));
+  } catch (error) {
+    creator = {
+      available: false,
+      why: problemWords(error),
+      folder: "",
+      items: [],
+      counts: {},
+      note: "",
+    };
+  }
+  paintCreator();
+}
+
+async function installCreator(item) {
+  if (!live()) {
+    say(WAITING_LINK, "bad");
+    return;
+  }
+  if (item.needsWarnings) {
+    const go = globalThis.confirm
+      ? globalThis.confirm(
+          `This skill has warnings:\n\n${item.warnings.map((w) => w.message).join("\n")}\n\n` +
+            "Read it before you say yes. Install it anyway?",
+        )
+      : true;
+    if (!go) return;
+  }
+  const out = await working("Waiting for your answer on the PC…", () =>
+    ask("creator_install", {
+      name: item.name,
+      acceptWarnings: item.needsWarnings,
+    }),
+  );
+  if (!out) return;
+  const words = answerWords(out);
+  say(words || "Done.", out.ok === false ? "bad" : "ok");
+  if (words) announce(words);
+  await load();
+  await loadCreator();
 }
 
 function clearPick() {
@@ -516,6 +635,7 @@ if (el.section) {
     closeEditor();
     say("");
   });
+  el.creatorRefresh?.addEventListener("click", loadCreator);
   clearPick();
   closeEditor();
 }
@@ -523,6 +643,13 @@ onLink(() => paint());
 // A card answered (or expired): the list may have changed. onQueue also
 // delivers the current queue at once - the first read.
 onQueue(() => load());
+// Creator mode is a scan of a folder, so it is read when the card is opened
+// and when the page comes back into view - never on a timer and never on every
+// event, which would turn "look at what is waiting" into a watcher.
+if (el.creator) loadCreator();
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) load();
+  if (!document.hidden) {
+    load();
+    if (el.creator) loadCreator();
+  }
 });

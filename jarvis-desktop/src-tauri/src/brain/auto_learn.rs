@@ -20,6 +20,10 @@
 //! * [`brain_memory_learning_paraphrase`] - `POST
 //!   /api/memory/learning/paraphrase`, "Save facts even when Jarvis had to
 //!   reword them" (2026-11-02, off by default).
+//! * [`brain_memory_fault_retry`] - `POST /api/memory/fault/retry`, the one
+//!   button on the one learning-fault banner (2026-11-09). It re-runs the
+//!   PC's own batch check: it approves nothing, saves nothing and decides no
+//!   proposal, so it is the ONE write here that is not held on a stale link.
 //!
 //! Turning any switch ON only raises an approval card (tier `ask`) and is
 //! held while the event stream is stale (rule 4), exactly like the learning
@@ -339,6 +343,68 @@ pub async fn brain_memory_learning_paraphrase(
     set(&app, Switch::Paraphrase, enabled).await
 }
 
+// ---------------------------------------------------------------------------
+// The ONE learning-fault banner (2026-11-09, the memory-card research)
+// ---------------------------------------------------------------------------
+//
+// When one of automatic learning's batch checks fails - a damaged
+// auto-learning.json, no local model, a cloud model name, a missing
+// jarvis_intake.py - the PC records ONE fault (`GET /api/memory/fault`, the
+// `memory_fault` read in brain/routes.rs) and leaves the cards it parked out
+// of the pending read. Both apps draw the PC's own sentence with one button,
+// "Retry now". This command is that button.
+//
+// IT IS NOT HELD ON A STALE LINK, deliberately. It approves nothing, saves
+// nothing, decides no proposal and raises no approval card - it asks the PC
+// to re-run its own check and answers what that check says now. A retry
+// refused because the event stream is catching up would be the one thing the
+// owner cannot do exactly when something is wrong.
+
+/// `POST /api/memory/fault/retry`.
+pub(crate) const FAULT_RETRY_PATH: &str = "/api/memory/fault/retry";
+
+/// [`brain_memory_fault_retry`]'s reading of the answer.
+///
+/// * 2xx with a `fault` object - passed on as it is: `{ok, cleared, fault,
+///   outcome}`. `outcome` is the PC's own sentence to show; `cleared` says
+///   only that the fault record is gone, never that a fact moved.
+/// * 404 - an older PC, with the same "run apply-patches.ps1" words the rest
+///   of this file uses.
+/// * anything else - the backend's own sentence, or a plain line.
+pub(crate) fn fault_retry_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| v.get("fault").is_some_and(|f| f.is_object()))
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 {
+        return Err(
+            "Your PC's Jarvis does not have the learning-fault check yet. \
+                    Run apply-patches.ps1 on the PC."
+                .to_string(),
+        );
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
+/// "Retry now" on the one learning-fault banner: re-run the PC's own batch
+/// check. It never approves, saves or decides anything, so it is not held on
+/// a stale link; the PC's own `outcome` is what both apps show.
+#[tauri::command]
+pub async fn brain_memory_fault_retry(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = commands::jarvis_base(&app);
+    let response = commands::jarvis_client(Some(WRITE_TIMEOUT))?
+        .post(format!("{base}{FAULT_RETRY_PATH}"))
+        .headers(commands::jarvis_headers(&app)?)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| commands::backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    fault_retry_answer(status, &text)
+}
+
 /// The ids of facts saved automatically that the owner has not looked at
 /// yet, including any saved while the Brain was closed: `{"ids": [...]}`.
 /// `seen: true` - the owner opened the list - forgets them. Never a fact's
@@ -464,6 +530,40 @@ mod tests {
         assert_eq!(
             list_answer(500, r#"{"error": "the memory store is locked"}"#).unwrap_err(),
             "The memory store is locked"
+        );
+    }
+
+    #[test]
+    fn the_fault_retry_passes_on_the_pcs_own_answer_and_an_older_pc_says_so() {
+        // The PC's own words: `outcome` is what both apps show.
+        let body = r#"{"ok": true, "cleared": true,
+            "fault": {"active": false, "reason": "", "count": 0},
+            "outcome": "The check works again, so the warning is cleared."}"#;
+        let got = fault_retry_answer(200, body).unwrap();
+        assert_eq!(got["cleared"], true);
+        assert_eq!(got["fault"]["active"], false);
+        assert!(got["outcome"]
+            .as_str()
+            .unwrap_or("")
+            .contains("works again"));
+        // A retry that still fails is still a 200 with a fault to keep.
+        let still = fault_retry_answer(
+            200,
+            r#"{"ok": true, "cleared": false,
+                "fault": {"active": true, "reason": "the learning model is not on this PC"},
+                "outcome": "The check still fails: the learning model is not on this PC."}"#,
+        )
+        .unwrap();
+        assert_eq!(still["fault"]["active"], true);
+        assert!(fault_retry_answer(404, "")
+            .unwrap_err()
+            .contains("apply-patches"));
+        assert!(fault_retry_answer(200, r#"{"ok": true}"#).is_err());
+        assert!(fault_retry_answer(200, "not json").is_err());
+        assert_eq!(
+            fault_retry_answer(500, r#"{"error": "the learning pass is not importable"}"#)
+                .unwrap_err(),
+            "The learning pass is not importable"
         );
     }
 

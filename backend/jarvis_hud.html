@@ -8192,6 +8192,14 @@ async function loadPresets(){
     S.presetWords = "";
     renderPresets();
     paintCloud();
+    // The 30-second safety poll runs this read too; paint the chip from the
+    // PC's own answer so a preset changed OUTSIDE this window (the Settings
+    // window, or a benchmark run on the PC) cannot leave a stale model in the
+    // top chip (the owner's report, 2026-11-09: the chip still said the coding
+    // model while the PC was on General Uncensored). A read that did not land
+    // never reaches here - the catch below only blanks the stored value and
+    // says so, and it does not repaint the chip.
+    if (S.lane === "auto") paintModelInUse();
   }catch(e){
     S.presets = [];
     S.presetChosen = null;

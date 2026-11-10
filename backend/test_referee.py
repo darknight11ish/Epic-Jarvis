@@ -967,7 +967,11 @@ def t_the_patch_and_the_lists():
              "gate-tool-actions-gap.patch",
 # github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
 # everything these patches wrote, so it rewrites none of their lines.
-             "github-tools.patch"}
+             "github-tools.patch",
+             # skill-scan-wiring.patch (2026-11-09, F5): five hunks, ALL in
+             # jarvis_skills.py, and no hunk in jarvis_hud.py or jarvis_gate.py,
+             # so it rewrites nothing this patch wrote.
+             "skill-scan-wiring.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

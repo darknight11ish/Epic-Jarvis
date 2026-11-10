@@ -94,11 +94,20 @@ import re
 
 #: The tool test's pattern (it was behaviour_cases._CLAIMS_DONE), plus the
 #: eight verbs from "called" on.
+#:
+#: "updated" was MISSING until 2026-11-09, and that is the owner's Wave-13
+#: "Grandma" bug in one word: Jarvis said "I've updated it" on a turn whose own
+#: footer said no action ran - and the footer only appeared because some other
+#: sentence in the same answer was caught. "I've updated it." on its own was
+#: read as no claim at all. It is the verb a reminder CHANGE is confirmed with,
+#: so it belongs here; the narrower choice is deliberate, because a false
+#: correction is worse than a missed one (see H2 below) and "changed" would
+#: also catch an owner's own "I've changed my mind".
 CLAIMS_DONE = re.compile(
     r"\b(i'?ve|i have|i just|i went ahead and|done[,.!]? i|i('ve)? (now )?)\s*"
     r"(turned|switched|set|sent|added|saved|created|scheduled|started|locked|emailed|"
     r"written|wrote|called|contacted|notified|booked|deleted|cancelled|paid|ordered|"
-    r"noted)\b"
+    r"updated|noted)\b"
     r"|^\s*done\b", re.I | re.M)
 
 #: The SAME claim with no "I" in front, or with the job first - the shape an
@@ -246,13 +255,14 @@ ACTING_TOOLS = frozenset({
     # after ONE card, and remove deletes exactly the files its ledger recorded -
     # both change this PC, so "nothing was done" after one must be corrected.
     "pack_install", "pack_remove",
-    # The three GitHub ACTIONS (2026-11-03): each one changes something on
-    # GitHub in the owner's name, and none of it can be taken back by Jarvis.
-    # "I posted the comment" / "I opened the issue" / "I re-ran it" must be
-    # corrected when only the card was raised or the POST failed - exactly the
-    # reason `send_email` is in this set. The three GitHub READS are in
-    # READ_ONLY_TOOLS above.
+    # The three GitHub ACTIONS (2026-11-03) plus the one CREATE (2026-11-09):
+    # each one changes something on GitHub in the owner's name, and none of it
+    # can be taken back by Jarvis. "I posted the comment" / "I opened the issue"
+    # / "I re-ran it" / "I created the repository" must be corrected when only
+    # the card was raised or the POST failed - exactly the reason `send_email`
+    # is in this set. The three GitHub READS are in READ_ONLY_TOOLS above.
     "github_comment", "github_open_issue", "github_rerun_workflow",
+    "github_create_repo",
     # "rea_investigate" (2026-11-04, the owner's decision to ship the full
     # REA toolbox): it left READ_ONLY_TOOLS for the reason written there - the
     # full toolbox patches a local file, writes an exported bundle or a pulled

@@ -1223,6 +1223,9 @@ pub fn run() {
             brain::auto_learn::brain_memory_learning_auto,
             brain::auto_learn::brain_memory_learning_sensitive,
             brain::auto_learn::brain_memory_learning_paraphrase,
+            // 2026-11-09: the ONE learning-fault banner's "Retry now". It
+            // re-runs the PC's own batch check; it approves and saves nothing.
+            brain::auto_learn::brain_memory_fault_retry,
             brain::auto_learn::brain_memory_saved_unseen,
             brain::profile::brain_memory_profile,
             brain::profile::brain_memory_pin,

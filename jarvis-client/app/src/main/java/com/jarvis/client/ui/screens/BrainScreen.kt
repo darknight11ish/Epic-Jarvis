@@ -54,6 +54,7 @@ import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCardView
 import com.jarvis.client.net.MemoryCards
+import com.jarvis.client.net.MemoryFault
 import com.jarvis.client.net.ModelChat
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.ModelsView
@@ -658,6 +659,9 @@ fun BrainScreen(
             data = brain.memory,
             read = brain.memoryRead,
             onRetry = retry,
+            // 2026-11-09: the ONE learning-fault banner (JARVIS-API.md
+            // section 213). A read of its own; no fact's words in it.
+            faultPayload = brain.memoryFault,
             canAct = canAct,
             busyId = memoryDecideBusyId,
             onKeep = { id -> onDecideMemory(id, true) },
@@ -2589,6 +2593,8 @@ private fun MemoryQueue(
     data: JsonObject?,
     read: SectionRead,
     onRetry: (() -> Unit)?,
+    /** `GET /api/memory/fault`'s body - the ONE learning-fault banner. */
+    faultPayload: JsonObject?,
     /** False on a dead or stale link: every write here dims, as on ModelsPlate. */
     canAct: Boolean,
     busyId: Long?,
@@ -2601,6 +2607,55 @@ private fun MemoryQueue(
     onDismissSleepOffer: () -> Unit,
 ) {
     val chrome = LocalChrome.current
+    // The ONE learning-fault banner (2026-11-09, JARVIS-API.md section 213):
+    // the PC's own sentence and one "Retry now", instead of the up-to-200
+    // per-fact cards a broken check used to make. The phone adds no word of
+    // its own and decides nothing; the PC's own `outcome` is shown after a
+    // retry. A `null` payload is a read that did not answer, so the last word
+    // is kept rather than the banner vanishing on a failed re-read.
+    val scope = rememberCoroutineScope()
+    var faultShown by remember { mutableStateOf<MemoryFault.Fault?>(null) }
+    var faultLive by remember { mutableStateOf(false) }
+    var faultBusy by remember { mutableStateOf(false) }
+    var faultSaid by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(faultPayload) {
+        val body = faultPayload ?: return@LaunchedEffect
+        val live = MemoryFault.read(body)
+        faultLive = live != null
+        if (live != null) {
+            // A new fault: no stale outcome from the last one underneath it.
+            if (live.reason != faultShown?.reason) faultSaid = null
+            faultShown = live
+        }
+    }
+    // Re-runs the PC's own batch check. It approves nothing and saves
+    // nothing, so it is deliberately not held on a stale link: a retry that
+    // refused while the stream caught up would be the one thing the owner
+    // cannot do exactly when something is wrong.
+    fun retryFault() {
+        if (faultBusy) return
+        faultBusy = true
+        faultSaid = null
+        scope.launch {
+            try {
+                val reply = JarvisRuntime.retryMemoryFault()
+                faultSaid = reply.outcome
+                when (reply.active) {
+                    true -> {
+                        faultLive = true
+                        reply.fault?.let { faultShown = it }
+                    }
+                    false -> faultLive = false
+                    null -> Unit          // could not be asked: leave it as it was
+                }
+            } finally {
+                faultBusy = false
+            }
+            // Read the queue and the fault again: a cleared fault brings the
+            // cards it parked back, and the PC is the only one that says so.
+            onRetry?.invoke()
+        }
+    }
     // Two allocating passes (a cast-filter and a new list) over the pending array,
     // previously redone on every recomposition of an unskippable screen — i.e. on
     // every server event, including the many that have nothing to do with memory.
@@ -2626,11 +2681,21 @@ private fun MemoryQueue(
             Gap(10)
         }
         Plate {
+            if (faultLive || faultSaid != null) {
+                LearningFaultBanner(
+                    fault = faultShown,
+                    live = faultLive,
+                    busy = faultBusy,
+                    said = faultSaid,
+                    onRetry = { retryFault() },
+                )
+                Gap(10)
+            }
             if (data == null) {
                 SectionUnread(read, "Proposed facts", onRetry)
                 return@Plate
             }
-            if (items.isEmpty()) {
+            if (items.isEmpty() && !faultLive && faultSaid == null) {
                 Text(
                     "Nothing is waiting. Either Jarvis has not heard anything " +
                         "worth keeping, or background learning is off.",
@@ -2660,6 +2725,43 @@ private fun MemoryQueue(
                 Text(note, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
             }
         }
+    }
+}
+
+/**
+ * The ONE learning-fault banner ([MemoryFault], JARVIS-API.md section 213):
+ * the PC's own sentence for a failed batch check, one "Retry now", and the
+ * PC's own outcome once it has been pressed. There is deliberately nothing
+ * else here - no card, no list, no bulk control - and no wording of the
+ * phone's own: [MemoryFault.Fault.headline] and the retry's `outcome` are the
+ * PC's text. After a retry clears the fault the same banner stays with the
+ * PC's sentence and no button, so the answer is not a silent disappearance.
+ */
+@Composable
+private fun LearningFaultBanner(
+    fault: MemoryFault.Fault?,
+    live: Boolean,
+    busy: Boolean,
+    said: String?,
+    onRetry: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    if (live && fault != null) {
+        Text(fault.headline, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
+        Gap(6)
+        Quiet(
+            if (busy) "Retrying…" else MemoryFault.RETRY_LABEL,
+            enabled = !busy,
+            onClick = onRetry,
+        )
+        said?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                modifier = Modifier.liveStatus())
+        }
+    } else if (said != null) {
+        Text(said, style = MaterialTheme.typography.bodyMedium, color = chrome.textMid,
+            modifier = Modifier.liveStatus())
     }
 }
 

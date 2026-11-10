@@ -108,6 +108,9 @@ def _github_family():
 # --------------------------------------------------------------------------
 SIX_TOOLS = ("github_list", "github_read_file", "github_ci_status",
              "github_comment", "github_open_issue", "github_rerun_workflow")
+#: 2026-11-09: the owner's "create a repository called Fitness Band" added ONE
+#: carded create to the surface, so the real surface is now seven tools.
+SEVEN_TOOLS = SIX_TOOLS + ("github_create_repo",)
 
 
 def t_the_catalogue_has_the_connected_github_row():
@@ -117,23 +120,23 @@ def t_the_catalogue_has_the_connected_github_row():
         return
     blob = " ".join(str(row.get(k) or "") for k in
                     ("title", "what", "where", "asks", "limit")).lower()
-    check("it names the six real tools",
-          all(tool in blob for tool in SIX_TOOLS), blob)
+    check("it names the seven real tools",
+          all(tool in blob for tool in SEVEN_TOOLS), blob)
     check("it names github_search and the scheduled watch_github job",
           "github_search" in blob and "watch_github" in blob, blob)
-    check("it names the three carded actions",
-          all(w in blob for w in ("comment", "open an issue", "re-run a workflow")
-              if w in ("comment", "re-run a workflow"))
-          and ("open an issue" in blob), blob)
+    check("it names the four carded actions",
+          all(w in blob for w in ("comment", "open an issue", "re-run a workflow",
+                                  "create one new, empty repository")), blob)
     check("it says it can never merge a pull request (the never-list)",
           "never merge a pull request" in blob
           and all(w in blob for w in ("push", "commit", "close")), blob)
     check("it says not-connected is a state that offers the connect card",
           "not connected" in blob and "connect my github" in blob, blob)
-    check("its gate rows are the four real card actions",
+    check("its gate rows are the five real card actions",
           set(row.get("gate") or []) == {"github_inspect", "github_comment",
                                          "github_open_issue",
-                                         "github_rerun_workflow"},
+                                         "github_rerun_workflow",
+                                         "github_create_repo"},
           row.get("gate"))
     check("the generated catalogue carries the row",
           any(r.get("id") == "connected-github" for r in CAT.FEATURES),
@@ -175,10 +178,11 @@ def t_the_accounts_row_is_the_real_surface():
     check("jarvis_accounts still has a GitHub family", family is not None)
     if family is None:
         return
-    check("its abilities are the six real actions",
+    check("its abilities are the seven real actions",
           set(family.abilities) == {"github_inspect", "github_comment",
                                     "github_open_issue", "github_rerun_workflow",
-                                    "github_read", "research_authenticated"},
+                                    "github_create_repo", "github_read",
+                                    "research_authenticated"},
           family.abilities)
     row = ACC.state_of("github")
     check("the row no longer says 'Read-only: private repositories and CI status'",
@@ -196,8 +200,8 @@ def t_the_accounts_row_is_the_real_surface():
           and "comment" in str(row.get("can") or "").lower(), row.get("can"))
     view = ACC.accounts_view(probe=False)
     fam = next((f for f in view["families"] if f.get("id") == "github"), None)
-    check("/api/accounts shows the same six abilities", fam is not None
-          and len(fam.get("abilities") or []) == 6,
+    check("/api/accounts shows the same seven abilities", fam is not None
+          and len(fam.get("abilities") or []) == 7,
           (fam or {}).get("abilities"))
 
 
@@ -274,12 +278,12 @@ def t_the_eight_recorded_questions_route_deterministically():
                                          "close"),
         "what do you need before you can read my repos?":
             ("personal access token", "let the ai use this"),
-        "what GitHub tools do you have?": SIX_TOOLS + ("github_search",
-                                                       "watch_github"),
+        "what GitHub tools do you have?": SEVEN_TOOLS + ("github_search",
+                                                         "watch_github"),
         "can you comment on an issue?": ("approval card",),
         "what's your CI status?": ("GitHub Actions", "darknight11ish/Epic-Jarvis"),
         "what asks before GitHub acts?": ("ask you first every time",),
-        "do you have a feature that reads my GitHub?": SIX_TOOLS,
+        "do you have a feature that reads my GitHub?": SEVEN_TOOLS,
     }
     for question, needles in wanted.items():
         intent, name, reply = _reply(question)
@@ -336,10 +340,10 @@ def t_no_merge_push_commit_close_surface_exists():
     check("jarvis_agent.TOOLS has no merge/push/commit/close tool",
           not [n for n in AG.TOOLS
                if re.search(r"merge|push|commit|close", n)], sorted(AG.TOOLS))
-    check("the six GitHub tools are the only github_* tools registered for the "
+    check("the seven GitHub tools are the only github_* tools registered for the "
           "owner's own GitHub (github_search is the separate research tool)",
           sorted(n for n in AG.TOOLS if n.startswith("github_")) ==
-          sorted(list(SIX_TOOLS) + ["github_search"]),
+          sorted(list(SEVEN_TOOLS) + ["github_search"]),
           sorted(n for n in AG.TOOLS if n.startswith("github_")))
     # The "What asks first" page cannot offer a merge card either. `app_merge_change`
     # is the desktop app's own update approval, not a GitHub action.
@@ -362,7 +366,7 @@ def t_no_merge_push_commit_close_surface_exists():
         encoding="utf-8")
     block = toml.split("[autonomy.tiers]", 1)[1]
     for action in ("github_inspect", "github_comment", "github_open_issue",
-                   "github_rerun_workflow"):
+                   "github_rerun_workflow", "github_create_repo"):
         check(f"shipped tier says {action} = \"ask\"",
               re.search(rf'(?m)^{action}\s*=\s*"ask"', block) is not None)
     check("the shipped tiers name no merge action",
@@ -372,9 +376,9 @@ def t_no_merge_push_commit_close_surface_exists():
 # --------------------------------------------------------------------------
 #   8. the four smaller fixes this branch carries
 # --------------------------------------------------------------------------
-def t_the_six_tool_hints_name_the_real_control():
+def t_the_seven_tool_hints_name_the_real_control():
     check("one shared hint constant exists", bool(TP.GITHUB_TOOL_ENABLE_HINT))
-    for tool in SIX_TOOLS:
+    for tool in SEVEN_TOOLS:
         hint = str(TP.PROFILES[tool]["enable_hint"])
         check(f"{tool}: the hint names 'Let the AI use this'",
               "Let the AI use this" in hint, hint)
@@ -450,7 +454,7 @@ def main() -> int:
         t_the_eight_recorded_questions_route_deterministically()
         t_the_connected_state_is_read_not_guessed()
         t_no_merge_push_commit_close_surface_exists()
-        t_the_six_tool_hints_name_the_real_control()
+        t_the_seven_tool_hints_name_the_real_control()
         t_the_connect_card_summary_is_current()
         t_your_latest_release_is_the_same_question()
         t_the_guide_no_longer_says_no_switch_beside_switch_it_on()

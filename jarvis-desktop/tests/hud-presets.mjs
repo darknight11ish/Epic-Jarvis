@@ -983,9 +983,23 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
   assert.deepEqual(menu.people.map((r) => r.personality),
     PERSONALITIES.personalities.map((p) => p.id),
     "the menu does not list the PC's ten personalities in its order");
-  assert.deepEqual(menu.people.map((r) => r.text.replace(/ \(current\)$/, "")),
+  assert.deepEqual(menu.people.map((r) => r.text),
     PERSONALITIES.personalities.map((p) => p.title),
     "the personalities' titles are not the PC's own");
+  // The chosen personality wears the SAME rectangle a chosen preset does, and
+  // its visible label never spells the state in words (owner's ask,
+  // 2026-11-09: "instead of being highlighted like the preset, the current
+  // personality choice shows current in writing").
+  assert.deepEqual(menu.people.filter((r) => r.chosen).map((r) => r.personality),
+    [PERSONALITIES.default],
+    "the chosen personality is not the PC's own `personality`");
+  const peopleMarked = menu.people.filter((r) => r.chosen);
+  assert.equal(peopleMarked[0].chosenClass, true,
+    "the chosen personality has no is-chosen rectangle");
+  assert.match(peopleMarked[0].label, /\(chosen\)/,
+    `the chosen personality's accessible name lost the word chosen: ${peopleMarked[0].label}`);
+  assert.ok(!menu.people.some((r) => /\(current\)|\(chosen\)/.test(r.text)),
+    "a personality's visible label still spells the chosen state in words");
   assert.equal(menu.mine.length, 0, "a My personalities section appeared with no saved ones");
   const modelRule = (menu.groups.find((g) => g.heading === "Focus presets") || { notes: [] }).notes.join(" ");
   assert.match(modelRule, /at once/i,

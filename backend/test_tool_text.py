@@ -93,7 +93,19 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # default, so this cost is paid on a turn only while the
                    # owner leaves it in `[tools].enabled`. 340 keeps 11 tokens
                    # of headroom, the same shape as the exceptions above.
-                   "my_files": 340}
+                   "my_files": 340,
+                   # set_reminder (2026-11-09, wave 13): the parameter text now
+                   # carries the rule that fixed the owner's live bug - the
+                   # whole sentence became the reminder's title - so it says the
+                   # ACTION only, gives one example and names the two shapes not
+                   # to copy. Measured 309 with this module's own rule, against
+                   # 268 on origin/main (d6df4022). A trim of the second example
+                   # would fit 300; the wording is the live fix and is kept
+                   # whole, so this is a deliberate decision with 11 tokens of
+                   # headroom, the same shape as my_files above.
+                   # test_short_tool_list.py's own pin moved with it (1,615 ->
+                   # 1,656, its whole growth).
+                   "set_reminder": 320}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),

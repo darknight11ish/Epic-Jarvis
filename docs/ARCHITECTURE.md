@@ -2106,6 +2106,25 @@ lock would ask again (talking does not count as being at the PC), or, the
 looser choice, only when Windows itself locks - that one raises an approval
 card; going back is immediate (owner, 2026-09-28).
 
+**A failed check is a fault, not a decision (2026-11-09).** When one of the
+three batch checks fails - a damaged or unreadable `auto-learning.json`, a
+learning model that is not on this PC, or a missing `jarvis_intake.py` -
+`after_pass` used to write the same reason onto every proposal in the pass, so
+one broken check could read as up to 200 facts waiting for a decision.
+`jarvis_auto_learn.py` now records ONE fault (`memory-fault.json`, beside the
+learning state, written atomically; the reason is one of the checks' own
+sentences, plus times and a count - never a fact's words), and
+`jarvis_extract.pending()` leaves the cards it parked out of the review queue
+while it is active. A per-fact card - sensitive, a correction, not in the
+owner's words - keeps its own reason and is never hidden, and the owner's own
+"automatic learning is off" is his choice, not a fault, so those cards stay.
+Both apps show the PC's own sentence and ONE button, "Retry now"
+(`GET /api/memory/fault`, `POST /api/memory/fault/retry`, docs/JARVIS-API.md
+§213); the retry re-runs the three checks through the same functions and
+in-process handles the learner uses, and approves, saves and decides nothing,
+so a fault that clears brings the parked cards back undecided. A record that
+cannot be written hides nothing: the cards are shown instead.
+
 **Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
 the last sentence of a spoken answer the owner cut off (`interrupted` on the
 next question, JARVIS-API §17 part 7). It is not learned from: the PC tells
@@ -2443,9 +2462,11 @@ the verification step and the second-card analysis are in
 [MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md). Two things belong here because they
 are architectural rather than configuration:
 
-- **`num_ctx` cannot be set from the HUD.** It posts to an OpenAI-compatible
-  endpoint, which has no field for it. Context length lives on the model or in
-  the environment. Left alone, Ollama picks 4096.
+- **`num_ctx` cannot be set from the HUD's own request.** It posts to an
+  OpenAI-compatible endpoint, which has no field for it. Context length lives on
+  the model or in the environment; left alone, Ollama picks 4096. The chat path
+  now warms the pooled lane natively with `options.num_ctx` before a cold turn
+  (wave 13), so the window it asks for is the window the runner loads.
 - **The recalled-facts block goes late, never at index 0.** At index 0 it
   invalidates the KV prefix cache for the whole conversation every turn, *and*
   suppresses the Modelfile's `SYSTEM` block — which is where the persona
@@ -3142,20 +3163,30 @@ backend routes, in both directions; the rest are listed here only.
 - **Your own GitHub is read and acted on by chat, and neither app has a screen
   for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
   tools = Read + actions"*; JARVIS-API §190). The ABILITY is on both apps'
-  chats, because the six model tools (`github_list`, `github_read_file`,
+  chats, because the seven model tools (`github_list`, `github_read_file`,
   `github_ci_status`, `github_comment`, `github_open_issue`,
-  `github_rerun_workflow`) run on this PC and either app's chat is the same
-  turn. What is deliberately one-sided is a screen: neither app lists repos,
-  pull requests or runs, and neither opens a comment box. A repository list, a
-  diff and a comment editor are deep configuration and a second door onto the
-  owner's own code; the chat tool is the door, and the card is the decision. No
-  route was added, so `tools/check_parity.py` is unchanged and clean. What asks
-  first is four gate actions, every one `ask`: `github_inspect` (the three
-  reads - they ask too, because a read still sends the saved GitHub token out)
-  and the three actions. They are NOT the existing `github_read`, which is the
+  `github_rerun_workflow`, and since 2026-11-09 `github_create_repo`) run on
+  this PC and either app's chat is the same turn. What is deliberately
+  one-sided is a screen: neither app lists repos, pull requests or runs, and
+  neither opens a comment box, a repository-name box or a "create" button. A
+  repository list, a diff and a comment editor are deep configuration and a
+  second door onto the owner's own code; the chat tool is the door, and the
+  card is the decision. **The one CREATE is the same decision, and the phone
+  deliberately gets no screen for it either:** `github_create_repo` is a model
+  tool, so the typed sentence works identically in both apps' chats, and
+  building a name-and-private-flag form on the phone would be a second door
+  onto a write that cannot be undone - exactly what the 2026-11-03 ruling
+  avoids. The card itself is answerable on the phone (the gate's own card
+  surface), which is where the owner's yes actually happens. No route was
+  added, so `tools/check_parity.py` is unchanged and clean. What asks first is
+  five gate actions, every one `ask`: `github_inspect` (the three reads - they
+  ask too, because a read still sends the saved GitHub token out),
+  `github_comment`, `github_open_issue`, `github_rerun_workflow` and
+  `github_create_repo`. They are NOT the existing `github_read`, which is the
   scheduled look a "tell me when" watch makes and must stay `auto`; the reason
-  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close.
-  `backend/test_github_tools.py` holds the whole of it.
+  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close;
+  the one thing it can make is a new, empty repository, and it cannot delete
+  that. `backend/test_github_tools.py` holds the whole of it.
 
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
@@ -5055,6 +5086,26 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 
 - **Read-aloud in Jarvis's own voice, with Pause and Stop, is the desktop's - one-sided on purpose (2026-11-09, TASK-51; the owner's decision of 2026-11-08 and Gemini's Q7).** The desktop HUD is the one surface that reads a TYPED answer aloud, and it used to do that with WebView2's speech engine, hand-picking a British voice and falling back to the first English voice in the list - which the owner's report of 2026-11-08 names on his PC as Windows' index-0 `Microsoft David`, a man, while his configured voice is Kokoro's (default `af_heart`, a woman). Since this slice the HUD plays AUDIO the PC made through the bar's own `speak_reply` (`POST /api/voice/say` -> `jarvis_speech.say()` -> `jarvis_voices.speaker()`, or the owner's custom voice), so the voice is the same one a spoken answer and Jarvis Live use; when that voice cannot be made the page says so in one line and speaks nothing else. It also gains an inline Pause / Resume beside Read out loud and a Stop that fully resets the player, and it stops on Stop everything and on the PC's `read_aloud {enabled: false}` event (JARVIS-API §206). **Nothing of this is ported to the phone, and nothing of the phone's voice path is touched:** the phone's tap-only Read out loud already speaks with Android's own on-device synthesiser under its own lock rules and its own voice, there is no WebView2-style voice list on Android to fall back through, and the PC's Kokoro voice cannot be shipped to it - so a phone port would be a second, different voice, which is the bug this slice removes. **The phone's voice-print / speaker-verification path is deliberately untouched by this work**: `jarvis_voice.py`, the enrolment routes and `voiceprint`-class commands are unchanged on both apps; the new desktop grant is ONE speech command (`hud-speech` = `allow-speak-reply`), with no microphone command, no recording command and no route added, so the owner check that guards what Jarvis acts on is exactly where it was. `tools/check_parity.py` has nothing new to classify: `/api/voice/say` was already there and already used by both apps' read-aloud.
+
+- **Creator mode is the PC's, and that is one-sided on purpose** (2026-11-09,
+  Wave 13; the owner's ruling that its scope is "Plug-ins and skills";
+  JARVIS-API section 211, `backend/jarvis_creator.py`,
+  `plugins/ready/creator-mode/`). A creator puts a skill folder (a `SKILL.md`)
+  or a plug-in folder (a `plugin.json`) in ONE waiting folder on this PC, opens
+  Settings -> Skills, and installs ONE item behind ONE card; a skill lands
+  TURNED OFF, and a plug-in is refused in this slice in the pack manager's own
+  words. **The phone has no part in it, and none is wanted:** a skill is
+  instructions the model follows and a plug-in is code that runs beside it, so
+  the screen that puts one in belongs where the folder is - this PC - and the
+  ONE card it raises is answered here. The phone keeps reading the plain list of
+  what is already installed (`GET /api/skills`, unchanged), so it can still see
+  the result without gaining a door that could stage or install anything. No
+  phone screen is a gap left for later: staging a folder is choosing among
+  folders on this PC's disk, and the phone has no picker and no deep
+  configuration editing (the standing rule). Both routes are PC-only in the
+  module itself (`jarvis_owner_check.from_this_pc`), so this is enforced rather
+  than merely unported, and `tools/check_parity.py` classifies both
+  `deliberate`.
 
 ## 9. Where the backend lives
 

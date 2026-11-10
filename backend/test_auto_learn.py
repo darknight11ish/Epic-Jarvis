@@ -1753,15 +1753,17 @@ def t_the_chat_route_records_before_it_learns():
 def t_the_routes_and_the_gate_and_the_prompt():
     hud = _stack.stand_in("jarvis_hud.py")[0]
     gate = _stack.stand_in("jarvis_gate.py")[0]
-    get_i = hud.find('if path in ("/api/memory/learning", "/api/memory/auto"):')
+    get_i = hud.find('if path in ("/api/memory/learning", "/api/memory/auto",')
     # 2026-11-02: the third switch's route joined this block, so the literal
-    # now runs over three lines - the test looks for its first line.
+    # now runs over three lines - the test looks for its first line. Since
+    # 2026-11-09 the fault banner's read joined it too, adding a second line.
     post_i = hud.find('if route in ("/api/memory/learning/auto", '
                       '"/api/memory/learning/sensitive",')
-    check("GET /api/memory/learning and /api/memory/auto are routed", get_i >= 0)
+    check("GET /api/memory/learning, /api/memory/auto and /api/memory/fault are routed",
+          get_i >= 0)
     check("POST /api/memory/learning/auto, /sensitive and /paraphrase are routed", post_i >= 0)
     for name, at, call in (("GET", get_i, "jarvis_auto_learn.handle_get("),
-                           ("POST", post_i, "jarvis_auto_learn.handle_post(route, body)")):
+                           ("POST", post_i, "jarvis_auto_learn.handle_post(")):
         block = hud[hud.rfind("\n", 0, at) + 1:hud.find("\n\n", at)]
         try:
             compile("def f(self, path, route):\n" + block, "<patched block>", "exec")

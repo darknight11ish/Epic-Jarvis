@@ -597,6 +597,33 @@
  {
   "type": "function",
   "function": {
+   "name": "github_create_repo",
+   "description": "Create ONE new, EMPTY repository on the owner's own GitHub account, with a name and optional description. The owner sees the exact name and whether it is private on an approval card first, and nothing is created without their yes. Nothing is pushed into it, no code or files are sent, no organization is created, and it never merges, pushes, commits, closes or deletes anything.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "the new repository's name, e.g. \"Fitness-Band\" (letters, numbers, dot, dash and underscore; no spaces)"
+     },
+     "description": {
+      "type": "string",
+      "description": "a short description; may be left out"
+     },
+     "private": {
+      "type": "boolean",
+      "description": "true for a private repository; default false"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "web_search",
    "description": "Search the public web for current or outside information. Returns up to 5 results: title, link, snippet. Use a few plain search words; never put private details in them. For what Jarvis knows about the owner, use memory_search. For the owner's own notes, use notes_search. To grade GitHub libraries for a coding idea, use github_search.",
    "parameters": {
@@ -1262,7 +1289,7 @@
     "properties": {
      "text": {
       "type": "string",
-      "description": "what to remind the owner of, in their words"
+      "description": "the ACTION only, in the owner's words - e.g. \"Call Grandma\" or \"take my pills\"; never the whole request (\"remind me to call Grandma in 4 days\") and never the time"
      },
      "when": {
       "type": "string"

@@ -90,7 +90,9 @@ TOMLS = (HERE / "rebuilt" / "jarvis-framework.toml",
 TOKEN = "ghp_TESTONLYnotarealtoken0000000000000000"
 
 READ_TOOLS = ("github_list", "github_read_file", "github_ci_status")
-ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow")
+ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow",
+                # 2026-11-09: one new, empty repository on the owner's own account.
+                "github_create_repo")
 ALL_TOOLS = READ_TOOLS + ACTION_TOOLS
 
 #: The arguments each tool needs, so one table drives every test below.
@@ -104,6 +106,9 @@ ARGS = {
                           "title": "The tray icon stays after a restart",
                           "body": "Seen twice on 2026-11-03."},
     "github_rerun_workflow": {"repo": "darknight11ish/Epic-Jarvis", "run_id": "123456"},
+    "github_create_repo": {"name": "Fitness-Band",
+                           "description": "A band that counts steps.",
+                           "private": True},
 }
 
 #: What each ACTION's card must name, and nothing else has to.
@@ -114,6 +119,8 @@ MUST_NAME = {
                           "The tray icon stays after a restart",
                           "Seen twice on 2026-11-03."),
     "github_rerun_workflow": ("darknight11ish/Epic-Jarvis", "123456"),
+    "github_create_repo": ("Fitness-Band", "Private: yes",
+                           "A band that counts steps."),
 }
 
 PASSED, FAILED, SKIPPED = [], [], []
@@ -251,6 +258,7 @@ def t_only_api_github_com():
     made.extend(GH.plan_ci({"repo": "o/r", "pr": "7"}).urls())
     made.extend(GH.plan_read_file({"repo": "o/r", "path": "a/b.md"}).urls())
     made.extend(GH.plan_list({"scope": "repos"}).urls())
+    made.extend(GH.plan_create_repo({"name": "Fitness-Band"}).urls())
     check("the planners built some addresses at all", len(made) >= 8, len(made))
     bad = [u for u in made if not u.startswith(host + "/")]
     check("every address any planner can build is under api.github.com", not bad, bad)
@@ -686,7 +694,7 @@ def t_the_patch_applies_and_reverses_byte_for_byte():
           order[-1] == "plugin-loader.patch", order[-2:])
 
 
-def t_the_gate_knows_the_six_tools_and_four_actions():
+def t_the_gate_knows_the_seven_tools_and_five_actions():
     if not GATE_BASE.is_file():
         skip("the gate tables need jarvis-backend/jarvis_gate.py")
         return
@@ -701,19 +709,21 @@ def t_the_gate_knows_the_six_tools_and_four_actions():
                          ("github_ci_status", GH.ACTION_INSPECT),
                          ("github_comment", GH.ACTION_COMMENT),
                          ("github_open_issue", GH.ACTION_OPEN_ISSUE),
-                         ("github_rerun_workflow", GH.ACTION_RERUN)):
+                         ("github_rerun_workflow", GH.ACTION_RERUN),
+                         ("github_create_repo", GH.ACTION_CREATE_REPO)):
         check(f"the gate maps {tool} to {action}",
               actions.get(tool) == action, actions.get(tool))
 
     for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN):
+                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO):
         row = risk.get(action)
         check(f"{action} is classified, so its card is not 'unknown'",
               isinstance(row, tuple) and len(row) == 3, row)
     check("the read is reversible and outbound, like every other read of a page",
           risk.get(GH.ACTION_INSPECT, ("",))[0:2] == ("yes", "outbound"),
           risk.get(GH.ACTION_INSPECT))
-    for action in (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN):
+    for action in (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN,
+                   GH.ACTION_CREATE_REPO):
         check(f"{action} cannot be undone, and is advertised as such",
               risk.get(action, ("",))[0] == "no", risk.get(action))
 
@@ -725,7 +735,7 @@ def t_the_gate_knows_the_six_tools_and_four_actions():
               bool(re.search(r'^\+\s*"%s":\s*"[a-z_]+",?\s*$' % tool, ptext, re.M)),
               tool)
     for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN):
+                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO):
         check(f"the patch's own + line carries the {action} risk row",
               bool(re.search(r'^\+\s*"%s":\s*\(' % action, ptext, re.M)), action)
 
@@ -739,14 +749,14 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
             import tomli as tomllib          # type: ignore
         tiers = tomllib.loads(text)["autonomy"]["tiers"]
         for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                       GH.ACTION_RERUN):
+                       GH.ACTION_RERUN, GH.ACTION_CREATE_REPO):
             check(f"{toml_path.parent.name}/{toml_path.name}: {action} ships as ask",
                   tiers.get(action) == "ask", tiers.get(action))
         check(f"{toml_path.name}: github_read stayed 'auto' (the watch needs it)",
               tiers.get("github_read") == "auto", tiers.get("github_read"))
 
     for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN):
+                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO):
         check(f"the card has plain words for {action}", action in CW.TITLES,
               sorted(CW.TITLES))
         check(f"... and they read as an action, not a code name",
@@ -766,13 +776,14 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
     import jarvis_asks_first as AF
     names = {n for _title, members in AF.GROUPS for n in members}
     for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN):
+                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO):
         check(f"the 'What asks first' page has a row for {action}",
               action in names, sorted(names - {action})[:5])
 
     import jarvis_owner_check as OC
     check("a GitHub read is a SMALL card on this PC", GH.ACTION_INSPECT in OC.SMALL_ACTIONS)
-    for action in (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN):
+    for action in (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN,
+                   GH.ACTION_CREATE_REPO):
         check(f"{action} is NOT a small card - it needs the owner's own check",
               action not in OC.SMALL_ACTIONS,
               sorted(OC.SMALL_ACTIONS))
@@ -834,6 +845,206 @@ def t_the_answer_is_bounded_and_unapproved_runs_send_nothing():
               (out, fake.calls))
 
 
+# --------------------------------------------------------------------------
+#   10. github_create_repo (2026-11-09): ONE card before any network call, and
+#       only what GitHub really answered afterwards
+# --------------------------------------------------------------------------
+#
+# The owner's ask: "create a repository called Fitness Band". The card is the
+# permission, so these checks drive the SAME seam the other tools use - prepare()
+# builds the Request with no fetch at all, run() only works after approved=True -
+# and they prove the body is the fixed shape, the token never leaves a card, a
+# receipt or an error, and a 201 reports GitHub's own full name and address.
+
+
+def t_create_repo_is_one_carded_call_before_any_network():
+    fake = Fake(201, json.dumps({
+        "full_name": "owner/Fitness-Band",
+        "html_url": "https://github.com/owner/Fitness-Band", "private": True}))
+    with _Token():
+        r, text = AG.TOOLS["github_create_repo"].prepare(
+            dict(ARGS["github_create_repo"]))
+    check("prepare() builds ONE Request with no fetch in sight",
+          isinstance(r, GH.Request) and len(r.steps) == 1, type(r))
+    check("... one POST to the fixed user/repos address",
+          r.steps[0].method == "POST" and r.urls()
+          == (GH.GITHUB_API + "/user/repos",), r.urls())
+    check("... the card names the exact new name", "Fitness-Band" in text, text[:300])
+    check("... and whether it is private", "Private: yes" in text, text[:300])
+    check("... and the description that will be sent",
+          "A band that counts steps." in text, text[:400])
+    check("... and says it stays empty and cannot be deleted",
+          "EMPTY" in text and "delete" in text, text[-300:])
+    check("... under its own action, never a read or an issue",
+          r.action == GH.ACTION_CREATE_REPO and r.action in GH.ACTIONS, r.action)
+    check("... and a person must say yes every time (NEEDS_A_PERSON)",
+          "github_create_repo" in AG.NEEDS_A_PERSON)
+
+    # THE DENIAL: no yes, no socket. The fake would record the call if it ran.
+    out = GH.run(r, fetch=fake, approved=False)
+    check("without a person's yes nothing is sent at all",
+          out.get("ok") is False and fake.calls == [], (out, fake.calls))
+    check("... and the answer says nothing was sent",
+          "not approved" in out.get("error", ""), out)
+    # And with the yes it is still exactly one request.
+    _r, out = _run("github_create_repo", fake)
+    check("with a person's yes it is exactly one request", len(fake.calls) == 1,
+          fake.calls)
+
+
+def t_create_repo_body_is_exactly_what_the_card_showed():
+    r, text = _card("github_create_repo")
+    check("the body carries the name, the private flag and the description",
+          r.body == {"name": "Fitness-Band", "private": True,
+                     "description": "A band that counts steps."}, r.body)
+    check("... and nothing else - no team, org, template or branch field",
+          set(r.body) == {"name", "private", "description"}, sorted(r.body))
+    check("... and there is no organization endpoint anywhere",
+          r.urls() == (GH.GITHUB_API + "/user/repos",), r.urls())
+
+    r = GH.plan_create_repo({"name": "One"})
+    check("the private flag defaults to a public repository",
+          r.body == {"name": "One", "private": False}, r.body)
+    r = GH.plan_create_repo({"name": "One", "description": "  "})
+    check("an empty description is left out, never sent as blank",
+          "description" not in r.body, r.body)
+
+    # A model cannot widen the call: extra arguments are ignored, and there is no
+    # list anywhere in the schema or the planner.
+    r = GH.plan_create_repo({"name": "One", "private": False, "team_id": 7,
+                             "org": "somebody-else", "names": ["a", "b"],
+                             "auto_init": True})
+    check("extra arguments cannot add a field or a second repository",
+          r.body == {"name": "One", "private": False} and len(r.steps) == 1,
+          (r.body, r.steps))
+    props = AG.TOOLS["github_create_repo"].parameters["properties"]
+    check("the tool takes ONE name, not a list", props["name"]["type"] == "string",
+          props["name"])
+    check("... and no argument can name an organization, a team or a second repo",
+          set(props) == {"name", "description", "private"}, sorted(props))
+
+    # GitHub's own name rule, refused with words that say what to type instead -
+    # never silently rewritten into a different repository name.
+    for bad in ("Fitness Band", "", ".", "..", "a/b", "a?b", "x" * 101):
+        try:
+            GH.plan_create_repo({"name": bad})
+        except GH.GitHubError as exc:
+            continue
+        check(f"a name GitHub would refuse is refused here too: {bad!r}", False)
+        return
+    check("a name GitHub would refuse is refused here too", True)
+    try:
+        GH.plan_create_repo({"name": "Fitness Band"})
+    except GH.GitHubError as exc:
+        check("... and the refusal names the real fix (a dash, not a space)",
+              "Fitness-Band" in str(exc) and "space" in str(exc).lower(), str(exc))
+    try:
+        GH.plan_create_repo({"name": "One", "private": "maybe"})
+    except GH.GitHubError:
+        check("a private flag that is not true/false is refused", True)
+    else:
+        check("a private flag that is not true/false is refused", False)
+
+
+def t_create_repo_never_prints_the_token():
+    fake = Fake(201, json.dumps({
+        "full_name": "owner/Fitness-Band",
+        "html_url": "https://github.com/owner/Fitness-Band"}))
+    r, text = _card("github_create_repo")
+    _r, out = _run("github_create_repo", fake)
+    shown = "\n".join([text, json.dumps(r.body), str(r.urls()), json.dumps(out)])
+    check("the token is in none of the card, body, address or receipt",
+          TOKEN not in shown, [s for s in (text, str(r.body), str(out)) if TOKEN in s])
+    sent = [c for c in fake.calls
+            if c["headers"].get("Authorization") == f"Bearer {TOKEN}"]
+    check("CONTROL: it was sent, in the Authorization header",
+          len(sent) == len(fake.calls) == 1, (len(sent), len(fake.calls)))
+
+    # A server that echoes the token in its own error message must not get it
+    # onto the answer either.
+    echo = Fake(422, json.dumps({"message": "bad request for " + TOKEN}))
+    _r, out = _run("github_create_repo", echo)
+    check("a server that echoes the token back is scrubbed before it is shown",
+          TOKEN not in json.dumps(out), json.dumps(out)[:300])
+
+
+def t_create_repo_201_reports_only_what_github_answered():
+    _r, out = _run("github_create_repo", Fake(201, json.dumps({
+        "full_name": "owner/Fitness-Band",
+        "html_url": "https://github.com/owner/Fitness-Band", "private": True})))
+    said = out.get("text", "")
+    check("201 says the repository was created", out.get("ok") is True
+          and "created" in said, said)
+    check("... with the REAL full name GitHub sent",
+          "owner/Fitness-Band" in said, said)
+    check("... and the REAL address GitHub sent",
+          "https://github.com/owner/Fitness-Band" in said, said)
+    check("... and never a guessed or made-up address",
+          said.count("github.com") == 1, said)
+
+    # 201 but no repository in the answer: say so, never invent a name or a URL.
+    _r, out = _run("github_create_repo", Fake(201, "{}"))
+    said = out.get("text", "")
+    check("a 201 with no repository in it invents no name and no address",
+          out.get("ok") is True and "Fitness-Band" not in said
+          and "https://github.com/" not in said, said)
+    check("... it says GitHub did not send the repository back",
+          "did not send" in said, said)
+
+
+def t_create_repo_failures_are_githubs_own_words_without_the_token():
+    cases = (
+        (401, {"message": "Bad credentials"}, "Bad credentials"),
+        (422, {"message": "Repository creation failed.",
+               "errors": [{"resource": "Repository", "field": "name",
+                           "code": "custom",
+                           "message": "name already exists on this account"}]},
+         "name already exists on this account"),
+    )
+    for status, payload, needle in cases:
+        _r, out = _run("github_create_repo", Fake(status, json.dumps(payload)))
+        err = out.get("error", "")
+        check(f"{status}: nothing is claimed created",
+              out.get("ok") is False and "Nothing was created" in err, err)
+        check(f"{status}: GitHub's OWN message is quoted", needle in err, err)
+        check(f"{status}: the token is not in the failure", TOKEN not in err, err)
+        check(f"{status}: no HTTP code reaches the owner's answer",
+              not re.search(r"\b401\b|\b422\b", err), err)
+    _r, out = _run("github_create_repo", Fake(401, "{}"))
+    check("a refusal with no message still says the token needs replacing",
+          "connect GitHub" in out.get("error", ""), out.get("error"))
+    _r, out = _run("github_create_repo", Fake(500, "oops"))
+    check("a server error with no message is a plain sentence",
+          "problem on its own side" in out.get("error", ""), out.get("error"))
+
+
+def t_create_repo_has_no_auto_approve_or_bulk_path():
+    for toml_path in TOMLS:
+        try:
+            import tomllib
+        except ImportError:                  # Python < 3.11
+            import tomli as tomllib          # type: ignore
+        tiers = tomllib.loads(toml_path.read_text(encoding="utf-8"))["autonomy"]["tiers"]
+        check(f"{toml_path.name}: github_create_repo ships as ask",
+              tiers.get(GH.ACTION_CREATE_REPO) == "ask",
+              tiers.get(GH.ACTION_CREATE_REPO))
+    check("it is in the never-loosened set, so a loosened tier still asks",
+          "github_create_repo" in AG.NEEDS_A_PERSON)
+    check("run() refuses a request that was never approved",
+          GH.run(GH.plan_create_repo({"name": "One"}), approved=False)
+          .get("error") == "not approved; nothing was sent")
+    # There is exactly ONE create planner, and no bulk/org sibling.
+    creators = [n for n in dir(GH) if n.startswith("plan_")
+                and ("create" in n or "repo" in n)]
+    check("there is exactly ONE create planner, and it makes one repository",
+          creators == ["plan_create_repo"], creators)
+    check("the module's never-list still names every irreversible verb",
+          {"merge", "push", "commit", "delete", "close"} <= GH.NEVER, sorted(GH.NEVER))
+    check("... and the refusal sentence no longer claims create is impossible",
+          "create" in GH.never_words() and "cannot create" not in GH.never_words(),
+          GH.never_words())
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {GATE_BASE}")
@@ -850,10 +1061,16 @@ if __name__ == "__main__":
                    t_nothing_private_is_ever_sent,
                    t_there_is_no_merging_pushing_committing_or_deleting_tool,
                    t_the_patch_applies_and_reverses_byte_for_byte,
-                   t_the_gate_knows_the_six_tools_and_four_actions,
+                   t_the_gate_knows_the_seven_tools_and_five_actions,
                    t_every_tier_is_ask_and_the_tables_are_joined,
                    t_a_file_read_shows_the_files_text_not_the_envelope,
-                   t_the_answer_is_bounded_and_unapproved_runs_send_nothing):
+                   t_the_answer_is_bounded_and_unapproved_runs_send_nothing,
+                   t_create_repo_is_one_carded_call_before_any_network,
+                   t_create_repo_body_is_exactly_what_the_card_showed,
+                   t_create_repo_never_prints_the_token,
+                   t_create_repo_201_reports_only_what_github_answered,
+                   t_create_repo_failures_are_githubs_own_words_without_the_token,
+                   t_create_repo_has_no_auto_approve_or_bulk_path):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

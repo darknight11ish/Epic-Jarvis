@@ -195,6 +195,10 @@
       "title": "Jarvis wants to post a comment on GitHub"
     },
     {
+      "action": "github_create_repo",
+      "title": "Jarvis wants to create a new repository on your GitHub"
+    },
+    {
       "action": "github_inspect",
       "title": "Jarvis wants to read your GitHub"
     },
@@ -1091,6 +1095,18 @@
         "summary": "Jarvis wants to post a GitHub comment.",
         "full": "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards. nothing has happened yet.",
         "body": "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_create_repo",
+      "notice": {
+        "title": "Jarvis wants to create a new repository on your GitHub",
+        "summary": "Jarvis wants to create a repository.",
+        "full": "creates a new empty repository on your own GitHub account in your name; Jarvis cannot delete it afterwards and nothing is pushed into it. nothing has happened yet.",
+        "body": "creates a new empty repository on your own GitHub account in your name; Jarvis cannot delete it afterwards and nothing is pushed into it. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

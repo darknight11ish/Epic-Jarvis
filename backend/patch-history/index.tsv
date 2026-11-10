@@ -14,6 +14,7 @@ apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d4
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42Z	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37Z	Backend: repeats without a card, lights setting, "What asks first"
 attention-settings.patch	attention-settings/e572cf8.patch	e572cf8fe152b88903569f193d5cbbaf4ed82475	2026-10-09T00:29:50-07:00	the route that makes the budget changeable, and the patch that exposes it
+auto-learn.patch	auto-learn/9ee5c8b.patch	9ee5c8b31b709fd1d59df761c67c267504b1035f	2026-11-02T18:56:24-08:00	feat(memory): one named switch for facts in Jarvis's own words, and three free repairs (C1 + C2) (#1096)
 auto-learn.patch	auto-learn/52b7570.patch	52b7570daf75fa54a03cd17d0ef1d9e76e15c184	2026-10-06T08:41:12-07:00	learning: a failed pass is visible, and the counters are on the status route
 auto-learn.patch	auto-learn/5a32e3a.patch	5a32e3abb26e30582e729295c455be850cb7e241	2026-09-29T00:11:03Z	Backend: continued chats re-register their own words, games stay games, hand-accepted facts keep their chat
 auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08Z	Memory review, backend half: bugs B1-B15 and B17, improvements measured
@@ -92,6 +93,7 @@ gate-touches.patch	gate-touches/f550503.patch	f550503a69e992885eeab1b8fb2f2d47c1
 gate-touches.patch	gate-touches/50dfe75.patch	50dfe75109ebaf94d0bd729a4c314b25b36e39d1	2026-10-12T16:57:47-07:00	fix(gate): the gate reads the whole tool arguments, not the first 1500 (DEF-003) (#345)
 gate-touches.patch	gate-touches/81e1128.patch	81e1128ad5beab8198943aaec2fd994c81683328	2026-10-11T01:19:53-07:00	fix(gate): read the arguments of a cut tool-call line
 gate-touches.patch	gate-touches/0f244f7.patch	0f244f7b04ecbea8640b5440943242991113a7af	2026-10-11T00:19:59-07:00	the gate reads what an action touches, not the words on its card (#249)
+github-tools.patch	github-tools/9d2ad3c.patch	9d2ad3c7a774cbcbe3379045e6c6f30c530f159a	2026-11-03T22:30:05-08:00	fix(gate): rehome github-tools.patch so it stops breaking the patch stack
 github-tools.patch	github-tools/72f6847.patch	72f68473885ee7844bca1eb43855a5dcb4050000	2026-11-03T16:39:39-08:00	feat(github): read your own GitHub, and three small actions on it - one card each, never merge or push
 goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50Z	Backend: Goals - a plan the owner edits, one card per acting step
 gpu-offload.patch	gpu-offload/b2f5a08.patch	b2f5a083305955bca736934c0fb9e8d89c39c623	2026-09-15T04:08:06Z	The three daily annoyances: a log file, autostart, and a CPU warning

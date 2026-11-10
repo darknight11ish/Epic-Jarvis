@@ -129,7 +129,7 @@ chunk loop - and no earlier patch writes any of them. Its other two hunks (the
 patches already wrote and cost nothing. Honest rather than drift: the owner's
 file is the only place those four blocks exist, and the patch is what stops a
 finished chat turn leaving the benchmark refusing for hours. The pin
-below records all TWENTY-NINE - those thirteen, plus private-chat.patch at position 152, added
+below records all THIRTY - those thirteen, plus private-chat.patch at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -192,6 +192,23 @@ post-image contiguous and ending at EOF), and `unknown-risk-approvable.patch`
 must stay the LAST writer. Checked the other way by
 `backend/test_github_tools.py`, which reverses this patch out of the published
 base and applies it forward again, byte for byte.
+
+The thirtieth, added 2026-11-09, is `skill-scan-wiring.patch`, the LAST writer
+of `jarvis_skills.py` (it sits immediately before `activity-turn-guard.patch`,
+which stays the last core patch before `plugin-loader.patch`): FIVE hunks, and
+every one of them reads the owner's own
+`jarvis_skills.py` - `is_bundled_script()`'s tail, `vet()`'s opening line and
+its report dict, `install()`'s return, `_pin_skill()`'s end and `uninstall()`'s
+index write. It is the F5 delivery route: the wave-12 skill-scan work (DEF-049's
+four extra checks and Gemini's Q3 `skills.lock` row) landed in the PUBLISHED
+BASE only and in no `.patch`, and `jarvis_skills.py` is one of the five files
+`tools/reconcile_live_backend.py` never copies - so a correct deploy left the
+live `vet()` judging with `_RULES` alone. Its `+` lines are the base's own
+bytes, so applying it makes the live file's five regions match
+`jarvis-backend/jarvis_skills.py` exactly; its context is the live file's own
+text, which is why the walk must invent all five pre-images. Honest rather than
+drift, for the same reason `skill-install-note.patch` (three hunks, 22 lines) and
+`packs-tamper-on-load.patch` (one hunk, 6 lines) already sit in this pin.
 
 THE PIN
 
@@ -596,6 +613,19 @@ PIN = {
     # backend/test_github_tools.py: reverse it out of the published base, then
     # apply it forward again, byte for byte.
     "github-tools.patch":                      (1, 6),      # position 165
+    # skill-scan-wiring.patch (2026-11-09) is the F5 delivery route: the wave-12
+    # skill-scan work lived in the published base and in NO patch, so a correct
+    # deploy never carried it to a live install. Its five hunks are cut against
+    # the OWNER'S OWN jarvis_skills.py - `is_bundled_script()`'s tail, `vet()`'s
+    # first line and its report dict, `install()`'s return, `_pin_skill()`'s end
+    # and `uninstall()`'s index write - and that file is one of the five the
+    # patcher edits, so the walk has no stand-in for any of those lines and no
+    # earlier patch could have supplied them. Honest rather than drift: it is the
+    # same shape as `skill-install-note.patch` and `packs-tamper-on-load.patch`
+    # above, which read the same file for the same reason. Pinned here at 5
+    # hunks / 33 lines, and `backend/_stack.py`'s `jarvis_skills.py` RATCHET
+    # moves 6 -> 11 with it.
+    "skill-scan-wiring.patch":                 (5, 33),     # position 175
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

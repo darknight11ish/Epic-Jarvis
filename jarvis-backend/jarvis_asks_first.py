@@ -474,6 +474,10 @@ TIER_EXTRA = (
     # (github_inspect for the three reads) stays the "ask" tier.
     "github_list", "github_read_file", "github_ci_status",
     "github_comment", "github_open_issue", "github_rerun_workflow",
+    # Creating one new, empty repository (2026-11-09, the owner's "create a
+    # repository called Fitness Band"). In this group because it is the AI
+    # model's own GitHub tool: its own switch here, and its own action card.
+    "github_create_repo",
     # Changing what needs a card, a second yes or Windows Hello by talking to
     # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). A
     # switch here offers the ability to the model at all; it never changes a
@@ -507,7 +511,7 @@ NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: ones above. 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: ones above. 61 at 2026-11-09 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
 #: GitHub tools the tool list had grown without a row of their own, plus
 #: hands-free's send_text_message, plus the approval-policy tool's own row,
 #: plus the four pack tools; the product check is the fourth exception
@@ -846,6 +850,11 @@ GROUPS = (
                       # page should say so instead of implying a read is free.
                       "github_inspect", "github_comment", "github_open_issue",
                       "github_rerun_workflow",
+                      # The one CREATE (2026-11-09, the owner's "create a
+                      # repository called Fitness Band"): one new, empty
+                      # repository on his own account, one card each. Its own
+                      # action, so it has its own row here.
+                      "github_create_repo",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -2799,6 +2808,10 @@ LOCKDOWN_ACTIONS = frozenset({
     # "notify" one day still asks while Lockdown is on, like every other way
     # out of this PC on this list.
     "github_inspect", "github_comment", "github_open_issue", "github_rerun_workflow",
+    # The one CREATE (2026-11-09): it makes a new repository on GitHub in the
+    # owner's name, and Jarvis cannot delete it afterwards. It ships as "ask";
+    # it is here so a line loosened one day still asks while Lockdown is on.
+    "github_create_repo",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

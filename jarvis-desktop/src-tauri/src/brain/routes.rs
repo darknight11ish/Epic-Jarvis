@@ -93,6 +93,12 @@ const READ_ROUTES: &[(&str, &str)] = &[
     // (memory-entities.patch). A read; hidden with the other memory lists
     // (lock/rules.rs PRIVATE_LISTS).
     ("memory_entities", "/api/memory/entities"),
+    // The ONE learning-fault banner (2026-11-09, the memory-card research):
+    // the PC's own reason, its own sentence for the banner, the count of
+    // cards it parked and the times - never a fact's words, and never a
+    // memory list, so it is not hidden with them (the privacy test below
+    // says why). A read: "Retry now" is its own command, in auto_learn.rs.
+    ("memory_fault", "/api/memory/fault"),
     ("initiative", "/api/initiative"),
     ("attention", "/api/attention"),
     ("digest", "/api/digest"),
@@ -220,7 +226,13 @@ mod tests {
             .iter()
             .all(|(_, p)| !p.starts_with("/api/graph")));
         // The counts ("memory" -> /api/memory/status) are numbers, not memory.
-        const NOT_A_LIST: &[&str] = &["/api/memory/status"];
+        // `memory_fault` (2026-11-09) is the learning-fault banner: the PC's
+        // own reason and its own sentence about a broken CHECK, a count of
+        // cards it parked and times. It holds no fact, no name and no count
+        // of what Jarvis knows - the same kind of thing as the learning
+        // switches, which are drawn while the lists are hidden too - so it is
+        // deliberately not on PRIVATE_LISTS.
+        const NOT_A_LIST: &[&str] = &["/api/memory/status", "/api/memory/fault"];
         // Each memory route answers with its OWN list (facts, pending or
         // entities), so each is given only that one - a body carrying all
         // three would make the pending route "leak" facts it never sends.

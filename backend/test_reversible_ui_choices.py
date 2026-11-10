@@ -20,8 +20,10 @@ What this suite proves, in both directions:
     app lock, credentials, github_create_repo, email/message sends, imports)
     is refused by the allow-list, and its real gate-bearing code still asks.
     Where the owner's module is not shipped in this repository (a live-only
-    file, or an action Wave 13 has not built yet) this suite says so and pins
-    the source instead of pretending to drive it;
+    file) this suite says so and pins the source instead of pretending to
+    drive it. `github_create_repo` was the one action still unbuilt when the
+    rule was written; Wave 13 shipped it, so that half now pins the shipped
+    module and the allow-list's continued refusal;
   * no request body field, header or query parameter can ask for the uncarded
     road. The path decides before the body is parsed, and only `ref` and `why`
     are read;
@@ -558,16 +560,17 @@ def t_the_excluded_code_still_says_ask():
           "PC_ONLY_ACTIONS" in assigned)
 
 
-def t_github_create_repo_is_not_built_but_is_already_refused():
-    """Wave 13 builds it. Until then the allow-list must already say no."""
+def t_github_create_repo_is_shipped_and_still_refused_by_the_allow_list():
+    """Wave 13 shipped it (2026-11-09). A create is still never a reversible UI choice."""
     hits = []
     for path in sorted((HERE).glob("*.py")):
         if path.name.startswith("test_") or path.name == "jarvis_reversible_ui.py":
             continue
         if "github_create_repo" in path.read_text(encoding="utf-8", errors="ignore"):
             hits.append(path.name)
-    check("github_create_repo is not shipped yet (Wave 13 builds it)", hits == [], hits)
-    check("... and the allow-list already refuses the name",
+    check("github_create_repo is shipped now (Wave 13), so the GitHub module names it",
+          "jarvis_github.py" in hits, hits)
+    check("... and the allow-list still refuses the name: a create is not a reversible click",
           V.is_reversible_ui_choice("github_create_repo") is False
           and V.is_excluded("github_create_repo") is True)
 
@@ -664,7 +667,7 @@ def main() -> int:
                t_forget_range_still_asks_its_card,
                t_lockdown_off_still_asks_its_card,
                t_the_excluded_code_still_says_ask,
-               t_github_create_repo_is_not_built_but_is_already_refused,
+               t_github_create_repo_is_shipped_and_still_refused_by_the_allow_list,
                t_the_setting_audit_is_honest_and_complete,
                t_the_tier_table_still_says_ask,
                t_the_module_is_shipped_and_its_twins_match):

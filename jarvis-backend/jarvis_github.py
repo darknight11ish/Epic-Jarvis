@@ -1,12 +1,13 @@
-"""jarvis_github.py - read the owner's GitHub, and take three small actions on it.
+"""jarvis_github.py - read the owner's GitHub, and take a few small actions on it.
 
 WHAT IT IS FOR
 
 The owner's decision of 2026-11-03: Jarvis may READ his GitHub (his repos, open
 pull requests, issues, CI status, and a file in a repo) and may take a few
-ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow),
-each action behind its own approval card - and it may never merge, push, commit,
-delete or close anything.
+ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow,
+and - since the owner's ask of 2026-11-09 about "Fitness Band" - create ONE new
+empty repository on his own account), each action behind its own approval card -
+and it may never merge, push, commit, delete or close anything.
 
 `jarvis_connect_account.py` already gets the token: "connect GitHub" raises one
 card for a personal access token, checks it with `GET /user`, and stores it in
@@ -65,6 +66,15 @@ There is no planner, no endpoint and no tool for any of them; `NEVER` names
 them and `never_words()` is the plain sentence a person gets instead. The
 absence is the control, and `backend/test_github_tools.py` pins the absence.
 
+THE ONE CREATE (2026-11-09)
+
+`plan_create_repo()` is the only action that makes something NEW on GitHub: one
+empty repository on the owner's own account, never an organization's, one per
+card. It is a separate action (`github_create_repo`) at the "ask" tier, so no
+loosened setting and no bulk call can run it with nobody looking. Nothing is
+pushed into it and there is no delete action, so the card says plainly that
+Jarvis cannot take it back.
+
 Standard library only.
 """
 from __future__ import annotations
@@ -112,7 +122,12 @@ API_VERSION = "2022-11-28"
 
 USER_AGENT = "jarvis-github"
 
-#: The four things this module is allowed to do, as the gate action each one is
+#: The longest description GitHub accepts for a new repository. Refused here
+#: with plain words rather than sent and refused by GitHub, because the card
+#: must be able to show the whole thing.
+MAX_DESCRIPTION = 350
+
+#: The five things this module is allowed to do, as the gate action each one is
 #: decided under. These names are also the `[autonomy.tiers]` keys and the
 #: `_RISK` rows in `jarvis_gate.py` (github-tools.patch), so the card a person
 #: sees and the tier that governs it are always the same thing.
@@ -120,6 +135,10 @@ ACTION_INSPECT = "github_inspect"
 ACTION_COMMENT = "github_comment"
 ACTION_OPEN_ISSUE = "github_open_issue"
 ACTION_RERUN = "github_rerun_workflow"
+#: Creating ONE new empty repository on the owner's own account (2026-11-09).
+#: Its own action, never `github_open_issue`: the card's title and the risk row
+#: have to say "create a repository", not "open an issue".
+ACTION_CREATE_REPO = "github_create_repo"
 
 #: Read scopes `github_list` accepts. A closed set, never an arbitrary URL: the
 #: model picks a NAME here, and this module decides what that name means.
@@ -134,13 +153,15 @@ SCOPE_WORDS = {
 }
 
 #: The one sentence a person gets when they ask for something this module does
-#: not do. Kept here, in one place, so every path says the same thing.
+#: not do. Kept here, in one place, so every path says the same thing. Creating
+#: a repository is NOT on this list since 2026-11-09: it is now one carded
+#: action of its own - but nothing after it is (no delete, no push into it).
 NEVER = frozenset({"merge", "push", "commit", "delete", "close", "edit_file",
                    "write_file", "create_branch", "force_push", "approve_pr"})
 NEVER_WORDS = ("Jarvis cannot merge, push, commit, delete or close anything on "
-               "GitHub - it can read your GitHub, comment, open an issue and "
-               "re-run a workflow, and nothing else. That is deliberate: a "
-               "mistake in any of those cannot be undone.")
+               "GitHub - it can read your GitHub, comment, open an issue, re-run a "
+               "workflow and create one new empty repository, and nothing else. "
+               "That is deliberate: a mistake in any of those cannot be undone.")
 
 #: Said when no token is saved yet. NOT a card: there is nothing to approve,
 #: and a card nobody can act on is noise. `backend/jarvis_connect_account.py`
@@ -353,6 +374,47 @@ def _repo_path(repo: str) -> str:
     return "/repos/" + urllib.parse.quote(repo, safe="/")
 
 
+#: What GitHub accepts as a NEW repository's name: letters, numbers, dot, dash
+#: and underscore, 100 characters at most. Strict on purpose: a space is the one
+#: a person types by habit ("Fitness Band") and GitHub's API refuses it, so it is
+#: refused HERE with words that say what to type instead - never silently turned
+#: into a different name, which would create something the card did not name.
+_NEW_REPO_NAME = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+
+
+def _check_new_repo_name(name: str) -> str:
+    name = str(name or "").strip()
+    if not name:
+        raise GitHubError("Jarvis needs the new repository's name - there was none.")
+    if name in (".", "..") or not _NEW_REPO_NAME.match(name):
+        raise GitHubError(
+            'GitHub does not allow that as a repository name. A name can use only '
+            'letters, numbers, dot, dash and underscore, with no spaces - say for '
+            'example "Fitness-Band" instead of "Fitness Band".')
+    return name
+
+
+def _check_private(value) -> bool:
+    """The `private` flag as a real bool. Absent means a public repository."""
+    if value is None or value == "":
+        return False
+    if isinstance(value, bool):
+        return value
+    raise GitHubError('The private flag has to be true or false, so Jarvis did not '
+                      'ask GitHub to create anything.')
+
+
+def _check_description(text: str) -> str:
+    """The description that will be sent, or "" - bounded so the card shows it."""
+    text = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        return ""
+    if len(text) > MAX_DESCRIPTION:
+        raise GitHubError(f"That description is longer than GitHub accepts "
+                          f"({MAX_DESCRIPTION} characters). Shorten it.")
+    return text
+
+
 def plan_list(args: Optional[dict] = None) -> Request:
     """Read a fixed list: your repos, or one repo's PRs, issues or runs."""
     args = args or {}
@@ -503,9 +565,42 @@ def plan_rerun(args: Optional[dict] = None) -> Request:
     )
 
 
-#: The three actions this module can take, by name - the closed set. A name
+def plan_create_repo(args: Optional[dict] = None) -> Request:
+    """Create ONE new empty repository on the owner's own account.
+
+    The owner's ask of 2026-11-09 - "create a repository called Fitness Band" -
+    answered as a carded action rather than a sentence about being unable to.
+    The address is fixed (`POST /user/repos`): "user" is whoever the saved token
+    belongs to, so this can never create a repository in an organization or in
+    somebody else's account. `body` is built here, field by field, so the model
+    cannot add a field GitHub would act on (no `team_id`, no `gitignore_template`).
+    """
+    args = args or {}
+    name = _check_new_repo_name(args.get("name"))
+    description = _check_description(args.get("description"))
+    private = _check_private(args.get("private"))
+    payload = {"name": name, "private": private}
+    if description:
+        payload["description"] = description
+    shows = [f'Name: {name}', f"Private: {'yes' if private else 'no'}"]
+    if description:
+        shows.append(f"Description: {description}")
+    return Request(
+        ACTION_CREATE_REPO,
+        f"Jarvis will create ONE new repository called \"{name}\" on your own GitHub "
+        f"account, as you:",
+        (Step("POST", "/user/repos"),),
+        body=payload,
+        shows="\n".join(shows),
+        touches=("Your GitHub account gets one new, EMPTY repository. Nothing is "
+                 "pushed into it, no code and no files are sent, and Jarvis cannot "
+                 "delete it afterwards - it has no delete action."),
+    )
+
+
+#: The four actions this module can take, by name - the closed set. A name
 #: outside it is a bug, not a feature: `run()` refuses it.
-ACTIONS = (ACTION_COMMENT, ACTION_OPEN_ISSUE, ACTION_RERUN)
+ACTIONS = (ACTION_COMMENT, ACTION_OPEN_ISSUE, ACTION_RERUN, ACTION_CREATE_REPO)
 
 
 def never_words(name: str = "") -> str:
@@ -598,6 +693,53 @@ def _plain_failure(status: int, *, token: Optional[str] = None) -> str:
     return "GitHub did not answer the way it should have, so nothing was changed."
 
 
+def _github_message(text: str) -> str:
+    """GitHub's OWN message from an error body, or "".
+
+    The REST API answers a refusal with `{"message": "...", "errors": [...]}` -
+    for a repository name it takes, `{"message": "Repository creation failed.",
+    "errors": [{"resource": "Repository", "field": "name", "code": "custom",
+    "message": "name already exists on this account"}]}`. Both the top-level
+    message and each error's own message are real things GitHub said, so they are
+    read here and never invented. Anything that is not JSON is not a message.
+    """
+    try:
+        doc = json.loads(str(text or "") or "{}")
+    except Exception:                        # noqa: BLE001 - not JSON is no message
+        return ""
+    if not isinstance(doc, dict):
+        return ""
+    said = str(doc.get("message") or "").strip()
+    extra = []
+    for row in (doc.get("errors") or ()):
+        if isinstance(row, dict):
+            more = str(row.get("message") or "").strip()
+            if more and more not in (said, *extra):
+                extra.append(more)
+    return " ".join([said] + extra).strip()
+
+
+def _github_refusal(status: int, text: str, token: str) -> str:
+    """A create-repo failure: GitHub's own message, scrubbed, and what happened.
+
+    The owner asked (2026-11-09) to be told what GitHub really answered, so this
+    says GitHub's words rather than a paraphrase. `_plain_failure` is the
+    fallback for a refusal with no message in it (a dead network, an empty 500),
+    and for the one status whose own words are unhelpful to a person: a 401 says
+    only "Bad credentials", so the token hint is added AFTER it - never instead
+    of it.
+    """
+    said = _scrub(_github_message(text), token).rstrip(".")
+    if not said:
+        return _plain_failure(status, token=token) + " Nothing was created."
+    line = (f"GitHub refused to create the repository and said: {said}. "
+            f"Nothing was created.")
+    if status == 401:
+        line += (' The token saved on this PC may have expired or been cancelled - say '
+                 '"connect GitHub" to save a new one.')
+    return line
+
+
 def run(r: Request, *, fetch: Optional[Callable] = None,
         approved: bool = False) -> dict:
     """Do the one request `r` describes. `approved` is not a courtesy argument.
@@ -643,6 +785,11 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
                     "error": f"api.github.com did not answer ({type(exc).__name__}), "
                              f"so nothing was changed."}
         if status < 200 or status >= 300:
+            if r.action == ACTION_CREATE_REPO:
+                # The owner's ask of 2026-11-09: for this one action, GitHub's
+                # own message, because "the name is taken" is the answer he acts
+                # on and a generic sentence would hide it.
+                return {"ok": False, "error": _github_refusal(status, text, token)}
             return {"ok": False, "error": _plain_failure(status, token=token)}
         answers.append((status, _scrub(text, token)))
         if "{commit}" not in "".join(s.path for s in r.steps):
@@ -686,6 +833,8 @@ def _said(r: Request, answers: list) -> str:
     if r.action == ACTION_RERUN:
         return ("GitHub accepted the re-run. It starts in a moment, and the newest "
                 "run's result is what github_ci_status will show.")
+    if r.action == ACTION_CREATE_REPO:
+        return _created_repo_words(doc)
     if r.action != ACTION_INSPECT:
         return "Done."
     # A read: shape it by which planner built it, so the words match the question.
@@ -708,6 +857,34 @@ def _said(r: Request, answers: list) -> str:
 
 def _list(doc):
     return doc if isinstance(doc, list) else []
+
+
+def _created_repo_words(doc) -> str:
+    """What GitHub really answered to `POST /user/repos`, and nothing more.
+
+    A 201 carries the new repository itself: `full_name` ("owner/name") and
+    `html_url`. Those two are quoted; if GitHub answered without them this says
+    so plainly instead of guessing a name or an address - the card named the
+    name that was asked for, and that is not the same as a repository that now
+    exists.
+    """
+    if not isinstance(doc, dict):
+        return ("GitHub accepted the request but did not send the new repository back, "
+                "so Jarvis cannot name it. Check github.com to see whether it was made.")
+    full = str(doc.get("full_name") or "").strip()
+    url = str(doc.get("html_url") or "").strip()
+    if not full and not url:
+        return ("GitHub accepted the request but did not send the new repository back, "
+                "so Jarvis cannot name it. Check github.com to see whether it was made.")
+    said = "GitHub created the repository"
+    said += f" {full}" if full else ""
+    if url:
+        said += f". Its address is {url}."
+    else:
+        said += "."
+    if doc.get("private") is True:
+        said += " It is private."
+    return said
 
 
 def _repos_words(doc) -> str:

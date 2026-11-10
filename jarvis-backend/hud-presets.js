@@ -1027,8 +1027,8 @@ export function mountHudPresets(options = {}) {
    *  `.hud-presets-item.is-chosen` border drawn by the page's own stylesheet,
    *  and `aria-current="true"` tells a screen reader which row it is. The word
    *  stays in `aria-label`, so a reader still hears it without it being drawn.
-   *  One helper for all three lists (model presets, the Cloud row and the cloud
-   *  providers), so they cannot drift apart. */
+   *  One helper for every list here (the model presets, the Cloud row and its
+   *  providers, and both personality lists), so they cannot drift apart. */
   function markChosen(button, hintText) {
     button.classList.add("is-chosen");
     button.setAttribute("aria-current", "true");
@@ -1277,11 +1277,14 @@ export function mountHudPresets(options = {}) {
     for (const row of builtIns) {
       const asking = pcBusy.personality === row.id;
       const button = menuItem(
-        `${row.title}${row.current ? " (current)" : ""}${asking ? " - switching..." : ""}`,
+        `${row.title}${asking ? " - switching..." : ""}`,
         row.hint,
         () => { pickPersonality(row.id, row.title); },
       );
-      if (row.current) button.setAttribute("aria-current", "true");
+      // The chosen personality wears the SAME rectangle a chosen preset does
+      // (owner's ask, 2026-11-09: "instead of being highlighted like the
+      // preset, the current personality choice shows current in writing").
+      if (row.current) markChosen(button, row.hint);
       button.dataset.personality = row.id;
       group.appendChild(button);
     }
@@ -1298,11 +1301,14 @@ export function mountHudPresets(options = {}) {
     for (const row of own) {
       const asking = pcBusy.personality === row.id;
       const button = menuItem(
-        `${row.title}${row.current ? " (current)" : ""}${asking ? " - switching..." : ""}`,
+        `${row.title}${asking ? " - switching..." : ""}`,
         row.hint,
         () => { pickPersonality(row.id, row.title); },
       );
-      if (row.current) button.setAttribute("aria-current", "true");
+      // The chosen personality wears the SAME rectangle a chosen preset does
+      // (owner's ask, 2026-11-09: "instead of being highlighted like the
+      // preset, the current personality choice shows current in writing").
+      if (row.current) markChosen(button, row.hint);
       button.dataset.personality = row.id;
       group.appendChild(button);
     }

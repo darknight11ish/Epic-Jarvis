@@ -138,6 +138,12 @@ NO_PATCH = {
     # from jarvis_wifi.install(), called by the drop-in loader, so the folder is
     # the whole of its wiring and no patch is added to `jarvis_hud.py`.
     "wifi-reconnect",
+    # Creator mode (2026-11-09, Wave 13; the owner's ruling that its scope is
+    # "Plug-ins and skills"): its two routes (/api/creator/incoming and
+    # /api/creator/install) come from jarvis_creator.install(), called by the
+    # drop-in loader, so the folder is the whole of its wiring and no patch is
+    # added to `jarvis_hud.py`.
+    "creator-mode",
 }
 
 

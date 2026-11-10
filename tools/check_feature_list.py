@@ -299,6 +299,11 @@ INTERNAL = {
     "memory_entities": "the people-and-things read behind the list; 'memory-people' names it",
     "memory_facts": "the whole fact store read behind the list; 'memory-known' names it",
     "memory_pending": "the cards waiting for a yes; 'memory-waiting' names it",
+    # 2026-11-09 (JARVIS-API section 213): the ONE learning-fault banner's
+    # read. It is one line at the top of the queue 'memory-waiting' names, not
+    # a screen or an ability of its own - and the retry it carries is a single
+    # button there, never a control page.
+    "memory_fault": "the learning-fault banner's own read; drawn at the top of 'memory-waiting'",
     "content_risk": "the scanner's own read; its results are drawn in the Trust tab 'trust' names",
     "status": "the connection and model status read; the 'connection' entry names the line it feeds",
     "undo": "the undo shelf's own read; the 'undo' entry names the pane",
@@ -409,6 +414,13 @@ LESSON_EXEMPT = {
     # tool dossier; the education tab's own Docker note asks for a lesson only
     # when there is a screen a person has to be shown.
     "connected-github": "no screen to teach: it is chat tools and their own approval cards, and each tool's dossier (\"what does github_comment do?\") already says what it does and what it never does; a lesson would repeat the three card sentences",
+    # Creator mode (2026-11-09, Wave 13) is ONE block inside Settings -> Skills,
+    # and that card's own lines say the whole of it: the waiting folder, the
+    # read-only scan, ONE card a thing, and a skill that lands turned off. Its
+    # plug-in half installs nothing yet, so a lesson now would teach a flow the
+    # first slice deliberately cannot finish. The lesson lands with the
+    # plug-in-install slice, or with the Skills lesson, whichever comes first.
+    "creator-mode": "one block inside Settings -> Skills whose own lines say the whole of it, and the plug-in half installs nothing yet: a lesson would teach a flow this slice cannot finish",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

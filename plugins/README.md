@@ -9,12 +9,12 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **57 drop-in modules**, in [`ready/`](ready/) -
+- **58 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **29** replace a patch, and are generated from it;
-  - **28** replace no patch: they were born as folders, and
+  - **29** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **148 core patches**, which still go on through
+- **149 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -57,7 +57,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 28 were never patches. There is nothing in the core
+These 29 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -94,6 +94,7 @@ it is one `apply-patches.ps1` copies in.
 | 178 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 | 188 | `upload` | a document from your phone: three routes put one file into a folder Jarvis already looks in, after ONE approval card per file, and then it is processed exactly as a file you dropped there yourself. |
 | 189 | `wifi-reconnect` | the auto Wi-Fi reconnect: GET/POST /api/wifi-reconnect, ON by default, every 2 hours while this PC has no internet it asks Windows to connect to a saved password-protected Wi-Fi network it already knows - never open, never new, never a password, never while Jarvis is answering, and every attempt is reported in one calm line. |
+| 190 | `creator-mode` | Creator mode: ONE waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card is opened, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in the pack manager's own words in this slice. |
 
 ## What stays in the core
 
@@ -249,6 +250,7 @@ stack's order and cannot be moved into a folder.
 | `phone-apps.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `bench.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `packs-tamper-on-load.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `skill-scan-wiring.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `activity-turn-guard.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 

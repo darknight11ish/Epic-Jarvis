@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 181 rows from features/features.json.
+The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 4988979ccad2ba66bbfe90a9efbc1713c5caad0bd6f327b6a1e5c7f4bf08c2c3); the apps' Features pages read their own
+`features/features.json` (sha256 5ca89aeea55117fea570c9fa6bc154dbf362934b3a8a57d0af900d696aafd0cc); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "4988979ccad2ba66bbfe90a9efbc1713c5caad0bd6f327b6a1e5c7f4bf08c2c3"
+SOURCE_SHA256 = "5ca89aeea55117fea570c9fa6bc154dbf362934b3a8a57d0af900d696aafd0cc"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -380,7 +380,7 @@ FEATURES = (
         "what": "One place for everything Jarvis knows and how it learns.",
         "where": "Brain, Memory.",
         "asks": "No card.",
-        "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
+        "limit": "The lists hide while \"Hide memory lists and chat history\" is on. If a check Jarvis learns with fails, one banner with \"Retry now\" appears instead of a card per fact.",
         "surface": "both",
         "covers": ["brain.tab.memory", "memory"],
     },
@@ -819,10 +819,10 @@ FEATURES = (
         "id": "connected-github",
         "group": "Notes and files",
         "title": "Read and act on your own GitHub",
-        "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file. It can also comment on an issue or pull request, open an issue and re-run a workflow.",
-        "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
-        "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the three reads share one action, and commenting, opening an issue and re-running a workflow each have their own.",
-        "limit": "There is no merge, push, commit, delete, close or file-write action: it can never merge a pull request, and no card or approval can create one - a pull request is merged on GitHub itself. Private repositories need the token; a read sends it to api.github.com.",
+        "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file. It can also comment on an issue or pull request, open an issue, re-run a workflow, and create one new, empty repository on your own account.",
+        "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue, github_rerun_workflow and github_create_repo. All seven ship off; github_search and the scheduled watch_github job are separate switches.",
+        "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the three reads share one action, and commenting, opening an issue, re-running a workflow and creating a repository each have their own. Creating a repository is one repository per card, on your own account only.",
+        "limit": "There is no merge, push, commit, delete, close or file-write action: it can never merge a pull request, and no card or approval can create one - a pull request is merged on GitHub itself. Creating a repository is the only thing it can make, that repository stays empty (nothing is pushed into it, no code and no files), and Jarvis cannot delete it afterwards - there is no delete action. Private repositories need the token; a read sends it to api.github.com.",
         "surface": "both",
         "aliases": ["read my own github", "your own github", "github read and act"],
         "covers": [],
@@ -1966,6 +1966,19 @@ FEATURES = (
         "surface_reason": "The feature repairs THIS PC's own Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section 8, owner ruling Q4).",
         "aliases": ["wifi reconnect", "wi-fi reconnect", "auto wifi reconnect", "automatic wi-fi reconnection"],
         "covers": ["settings.wifi-reconnect"],
+    },
+    {
+        "id": "creator-mode",
+        "group": "The PC itself",
+        "title": "Creator mode: put a skill or a plug-in in a waiting folder",
+        "what": "ONE waiting folder on this PC, where you drop a skill folder or a plug-in folder. Jarvis reads and scans what is there, shows you what the scanner found, and installs ONE item at a time when you say yes.",
+        "where": "Settings, Skills, Creator mode, on the PC. The waiting folder is creator-incoming, beside the skills folder in Jarvis's own settings folder.",
+        "asks": "Looking at the folder raises no card. Installing ONE item raises ONE card (modify_own_code), and a skill the scanner refuses never becomes a card at all. Turning it on afterwards is the ordinary Turn on control, with its own card.",
+        "limit": "Installing is not enabling: a skill lands turned off, and the only way on is the ordinary Turn on control. A plug-in is a program, and this first slice stages it, scans it and refuses it in the pack manager's own words - no plug-in is installed yet. There is no install-all, no download source and no watcher: the folder is scanned when the card is opened, nothing is installed without a card answered on the PC, and the phone has no Creator mode screen.",
+        "surface": "desktop",
+        "surface_reason": "A skill is instructions the model follows and a plug-in is code that runs beside it, so the screen that puts one in sits where the folder is; the phone keeps reading the plain list of what is already installed (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["creator mode", "put a skill in a waiting folder", "stage a plug-in"],
+        "covers": [],
     },
     {
         "id": "approvals",

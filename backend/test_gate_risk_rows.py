@@ -378,7 +378,11 @@ def t_the_patch_is_registered_last():
              "web-search-grant.patch",
 # github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
 # everything these patches wrote, so it rewrites none of their lines.
-             "github-tools.patch"}
+             "github-tools.patch",
+             # skill-scan-wiring.patch (2026-11-09, F5): five hunks, ALL in
+             # jarvis_skills.py, and no hunk in jarvis_hud.py or jarvis_gate.py,
+             # so it rewrites nothing this patch wrote.
+             "skill-scan-wiring.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

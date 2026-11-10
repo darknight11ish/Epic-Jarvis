@@ -4,9 +4,10 @@
  *
  * TWO Rust commands (src-tauri/src/wifi_reconnect.rs), Settings window only:
  *  - get_wifi_reconnect: the whole switch state, in the PC's own shape;
- *  - set_wifi_reconnect {enabled}: ONE change, cardless in both directions (OFF
- *    removes the two-hourly automatic attempt; ON restores the shipped default
- *    the owner asked for).
+ *  - set_wifi_reconnect {enabled}: ONE change, carded in ONE direction: turning
+ *    it ON raises ONE `change_own_config` approval card and the switch stays off
+ *    until it is answered; turning it OFF is instant and removes the two-hourly
+ *    automatic attempt that the shipped default the owner asked for restores.
  *
  * THE VALUE IS THE PC'S, NOT THIS WINDOW'S. It is not in localStorage and there
  * is no second copy: a chat or Jarvis Live sentence ("turn off the auto Wi-Fi

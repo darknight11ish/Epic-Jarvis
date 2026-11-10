@@ -117,6 +117,9 @@ TOOL_NAMES = {
     "github_comment": "Posting a comment on GitHub (one card each)",
     "github_open_issue": "Opening a GitHub issue (one card each)",
     "github_rerun_workflow": "Running a GitHub workflow again (one card each)",
+    # The one CREATE (2026-11-09): one new, empty repository on the owner's own
+    # account, one card each, never an organization's and never bulk.
+    "github_create_repo": "Creating one new empty repository on your GitHub (one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",

@@ -34,10 +34,19 @@
 //!   reach the same folder.
 //! * `edit`         - `POST /api/skills/edit`: the same scanner and the same
 //!   ONE card, for a SKILL.md the owner changed here.
+//! * `creator_read` - `GET /api/creator/incoming`: the ONE waiting folder and
+//!   every skill or plug-in folder in it, each with the scanner's own verdict
+//!   and findings. A READ-ONLY scan: it copies, moves and installs nothing and
+//!   raises no card (2026-11-09, Wave 13; JARVIS-API section 209).
+//! * `creator_install` - `POST /api/creator/install`: ONE staged item, by NAME.
+//!   A skill goes through the pack manager's own scanner and its own ONE card,
+//!   and lands TURNED OFF; a plug-in is refused before any card, in the pack
+//!   manager's own words.
 //!
-//! The three actions that can raise a card (`install`, `enable`, `edit`) are
-//! held while the event stream is stale (rule 4: never act when the stream is
-//! stale). `disable`, the reads and the two pickers are never held.
+//! The four actions that can raise a card (`install`, `enable`, `edit` and
+//! `creator_install`) are held while the event stream is stale (rule 4: never
+//! act when the stream is stale). `disable`, the reads and the two pickers are
+//! never held.
 //!
 //! This window never gets a file system of its own: the pickers run here, and
 //! only the path the owner chose is sent - to this PC's Jarvis, nowhere else.
@@ -56,11 +65,22 @@ const INSTALL_PATH: &str = "/api/skills/install";
 const IMPORT_SCAN_PATH: &str = "/api/skills/import/scan";
 const STATE_PATH: &str = "/api/skills/state";
 const EDIT_PATH: &str = "/api/skills/edit";
+/// Creator mode's two routes (2026-11-09, Wave 13; JARVIS-API section 209).
+/// The waiting folder is on this PC, so both are answered here and by the PC
+/// alone - `jarvis_creator` refuses any other device with its own words.
+const CREATOR_INCOMING_PATH: &str = "/api/creator/incoming";
+const CREATOR_INSTALL_PATH: &str = "/api/creator/install";
 
 /// What a backend without `jarvis_skill_menu.py` is told. The same sentence the
 /// Settings card shows, so the window and the page cannot drift.
 pub(crate) const SKILLS_MENU_MISSING: &str =
     "Your PC's Jarvis cannot show the skills menu yet - run apply-patches.ps1 on the PC.";
+
+/// What a PC without `jarvis_creator.py` is told, in the same words the card
+/// shows. Creator mode is part of the same Settings card, so the answer names
+/// the same one command.
+pub(crate) const CREATOR_MISSING: &str =
+    "Your PC's Jarvis cannot show Creator mode yet - run apply-patches.ps1 on the PC.";
 
 const STALE: &str =
     "The connection to Jarvis is catching up, so nothing can be sent until it does.";
@@ -94,7 +114,7 @@ pub(crate) enum Plan {
 
 /// Is this action one that raises a card? Only those wait for a live stream.
 pub(crate) fn held(action: &str) -> bool {
-    matches!(action, "install" | "enable" | "edit")
+    matches!(action, "install" | "enable" | "edit" | "creator_install")
 }
 
 fn text(value: &Option<String>) -> String {
@@ -214,6 +234,23 @@ pub(crate) fn plan(
                 CARD_WAIT,
             ))
         }
+        "creator_read" => Ok(Plan::Get(CREATOR_INCOMING_PATH.to_string(), READ_TIMEOUT)),
+        "creator_install" => {
+            // ONE folder's NAME, never a path: the PC resolves it inside its
+            // own waiting folder and refuses anything that is not a plain name.
+            let item = text(name);
+            if item.is_empty() {
+                return Err("Name one folder from the waiting folder first.".to_string());
+            }
+            Ok(Plan::Post(
+                CREATOR_INSTALL_PATH,
+                serde_json::json!({
+                    "name": item,
+                    "accept_warnings": accept_warnings,
+                }),
+                CARD_WAIT,
+            ))
+        }
         other => Err(format!("There is no such skills action ({other}).")),
     }
 }
@@ -239,6 +276,13 @@ pub(crate) fn menu_answer(status: u16, body: &str) -> Result<serde_json::Value, 
 /// on 4xx (the warnings to accept, a skill that is off, a bad name), and
 /// [`SKILLS_MENU_MISSING`] when the route is not there at all.
 pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    change_answer_for(status, body, SKILLS_MENU_MISSING)
+}
+
+/// A write's answer with its own "this PC has not got it yet" sentence. Creator
+/// mode is a separate module from the skills menu, so a 404 there must not tell
+/// the owner to re-run the installer for the wrong reason.
+fn change_answer_for(status: u16, body: &str, missing: &str) -> Result<serde_json::Value, String> {
     if (200..300).contains(&status) {
         return serde_json::from_str::<serde_json::Value>(body)
             .ok()
@@ -246,10 +290,34 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
             .ok_or_else(|| UNREADABLE.to_string());
     }
     if status == 404 {
-        return Err(SKILLS_MENU_MISSING.to_string());
+        return Err(missing.to_string());
     }
     if let Some(said) = sentence(body) {
         return Err(said);
+    }
+    Err(backend_refusal(status, body))
+}
+
+/// Creator mode's one write: the same "the PC's own words" rule, with Creator
+/// mode's own missing-module sentence when the route is not there at all.
+pub(crate) fn creator_change_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    change_answer_for(status, body, CREATOR_MISSING)
+}
+
+/// Creator mode's read: the waiting folder and its scanned items. `items` must
+/// be a list, because a page that cannot find one would quietly show an empty
+/// folder - and "nothing waiting" is not the same answer as "I could not ask".
+pub(crate) fn creator_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.get("items").is_some_and(|i| i.is_array()))
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 {
+        return Ok(serde_json::json!({
+            "ok": false, "available": false, "why": CREATOR_MISSING, "items": []
+        }));
     }
     Err(backend_refusal(status, body))
 }
@@ -284,7 +352,8 @@ fn stale(app: &AppHandle) -> bool {
     app.state::<crate::stream::StreamState>().link().stale
 }
 
-/// The skills menu: one command, ten actions, all of them the PC's.
+/// The skills menu and Creator mode: one command, twelve actions, all of them
+/// the PC's.
 #[tauri::command]
 pub async fn skills_menu(
     app: AppHandle,
@@ -332,7 +401,11 @@ pub async fn skills_menu(
                 .map_err(|e| backend_unreachable(&e, &base))?;
             let status = response.status().as_u16();
             let body = response.text().await.unwrap_or_default();
-            menu_answer(status, &body)
+            if action.starts_with("creator_") {
+                creator_answer(status, &body)
+            } else {
+                menu_answer(status, &body)
+            }
         }
         Plan::Post(route, body, timeout) => {
             let base = jarvis_base(&app);
@@ -345,14 +418,21 @@ pub async fn skills_menu(
                 .map_err(|e| backend_unreachable(&e, &base))?;
             let status = response.status().as_u16();
             let said = response.text().await.unwrap_or_default();
-            change_answer(status, &said)
+            if action.starts_with("creator_") {
+                creator_change_answer(status, &said)
+            } else {
+                change_answer(status, &said)
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{change_answer, held, menu_answer, plan, Plan, SKILLS_MENU_MISSING};
+    use super::{
+        change_answer, creator_answer, creator_change_answer, held, menu_answer, plan, Plan,
+        CREATOR_MISSING, SKILLS_MENU_MISSING,
+    };
 
     fn none() -> Option<String> {
         None
@@ -371,6 +451,8 @@ mod tests {
             "disable",
             "remove_off",
             "edit",
+            "creator_read",
+            "creator_install",
         ] {
             assert!(
                 plan(
@@ -399,12 +481,84 @@ mod tests {
             "import_scan",
             "disable",
             "remove_off",
+            "creator_read",
         ] {
             assert!(!held(action), "{action} must not be held");
         }
-        for action in ["install", "enable", "edit"] {
+        for action in ["install", "enable", "edit", "creator_install"] {
             assert!(held(action), "{action} raises a card and must be held");
         }
+    }
+
+    #[test]
+    fn creator_mode_reads_its_folder_and_installs_one_named_item() {
+        // A read: no body, never held, and its own route.
+        match plan("creator_read", &none(), &none(), &none(), &none(), false) {
+            Ok(Plan::Get(route, _)) => assert_eq!(route, "/api/creator/incoming"),
+            other => panic!("{other:?}"),
+        }
+        // An install: ONE name, never a path, and the warnings flag carried.
+        match plan(
+            "creator_install",
+            &Some("C:\\a\\path\\the-page-must-not-send".into()),
+            &none(),
+            &Some("tidy-desk".into()),
+            &none(),
+            true,
+        ) {
+            Ok(Plan::Post(route, body, _)) => {
+                assert_eq!(route, "/api/creator/install");
+                assert_eq!(body["name"], serde_json::json!("tidy-desk"));
+                assert_eq!(body["accept_warnings"], serde_json::json!(true));
+                assert!(
+                    body.get("path").is_none(),
+                    "Creator mode takes a NAME in the waiting folder, never a path"
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(plan(
+            "creator_install",
+            &none(),
+            &none(),
+            &Some("   ".into()),
+            &none(),
+            false
+        )
+        .unwrap_err()
+        .contains("waiting folder"));
+    }
+
+    #[test]
+    fn creator_answers_say_their_own_missing_module_and_keep_the_pc_s_words() {
+        let missing = creator_answer(404, "").unwrap();
+        assert_eq!(missing["why"], CREATOR_MISSING);
+        assert_eq!(missing["items"], serde_json::json!([]));
+        assert!(creator_change_answer(404, "")
+            .unwrap_err()
+            .contains("Creator mode"));
+        // The waiting folder's answer: `items` is a list or it is not an answer
+        // the page can honestly show.
+        let view = creator_answer(
+            200,
+            r#"{"ok": true, "folder": "C:\\c\\creator-incoming", "items": []}"#,
+        )
+        .unwrap();
+        assert_eq!(view["items"], serde_json::json!([]));
+        assert!(creator_answer(200, r#"{"ok": true, "folder": "x"}"#).is_err());
+        // A refusal keeps the PC's own sentence, whichever key it used.
+        let said = creator_change_answer(
+            200,
+            r#"{"ok": false, "refused": true, "reason": "that folder is not a skill"}"#,
+        )
+        .unwrap();
+        assert_eq!(said["refused"], serde_json::json!(true));
+        let err = creator_change_answer(
+            409,
+            r#"{"ok": false, "reason": "this one has warnings to read first"}"#,
+        )
+        .unwrap_err();
+        assert!(err.to_lowercase().contains("warnings"), "{err}");
     }
 
     #[test]

@@ -717,7 +717,11 @@ def t_hygiene():
              "gate-tool-actions-gap.patch",
 # github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
 # everything these patches wrote, so it rewrites none of their lines.
-             "github-tools.patch"}
+             "github-tools.patch",
+             # skill-scan-wiring.patch (2026-11-09, F5): five hunks, ALL in
+             # jarvis_skills.py, and no hunk in jarvis_hud.py or jarvis_gate.py,
+             # so it rewrites nothing this patch wrote.
+             "skill-scan-wiring.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

@@ -509,15 +509,21 @@ def main(argv=None):
     # joined as PC-Only Setting (the phone neither shows nor changes it, and
     # the route refuses every device but this PC). 16 + 1 -> 17 PC-Only,
     # 180 + 1 -> 181 features. Measured from the contract, not chosen.
+    # 2026-11-09 (Wave 13, Creator mode): "put a skill or a plug-in in a
+    # waiting folder" joined as ONE Command-Only row - the waiting folder is a
+    # place in Settings, looking at it is a read, and each install raises its
+    # own modify_own_code card, so there is no stored setting to turn on/off.
+    # 107 + 1 -> 108 Command-Only, 181 + 1 -> 182 features. Measured from the
+    # contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
-        LAB_COMMAND: 107, LAB_ALWAYS: 12,
+        LAB_COMMAND: 108, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/107/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/17/108/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/106/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/17/108/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

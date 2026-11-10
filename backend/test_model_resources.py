@@ -12,6 +12,12 @@ WHAT EACH BLOCK PROVES
     its video-memory size, its percent on the card and the cards carrying it; a
     lane with nothing loaded says "nothing loaded"; a lane that does not answer
     says it is not running. None of them reports 0 as a fact.
+  * TWO loaded lanes each name their OWN cards (F6): the driver lists the model
+    runner, not the Ollama server listening on the lane's port, so the lane is
+    found by walking the runner's parent chain to its own listener. With the
+    chain unreadable the lane's words say the cards were not reported - never a
+    guessed card; and the older one-loaded-lane fallback still names the model
+    server's cards.
   * spill is reported as spill: `size_vram` below `size` becomes a percent and
     a MiB figure in words, and 100% / equal sizes say nothing spilled.
   * cards: per-card total/used/free come from nvidia-smi, and the local model
@@ -133,6 +139,58 @@ def process_stats(pid):
             "uptime_s": 10_000}
 
 
+# --------------------------------------------------------------------------
+#   Fixtures: TWO loaded lanes (F6) - the driver names the runner pids, the
+#   lane listeners have their own pids, and the parent chains link them.
+# --------------------------------------------------------------------------
+TWO_LANE_PS = {
+    "http://127.0.0.1:11436": {"models": [{
+        "name": "huihui-qwen3.5-9b-abliterated:latest",
+        "context_length": 196608,
+        "size": 9_855_335_135,
+        "size_vram": 9_855_335_135,
+    }]},
+    "http://127.0.0.1:11435": {"models": [{
+        "name": "qwen3:8b",
+        "context_length": 16384,
+        "size": 6_281_599_384,
+        "size_vram": 6_281_599_384,
+    }]},
+}
+TWO_LANE_SMI = {"gpus": GPU_LINES, "apps": [
+    "GPU-aaa, 5151, llama-server.exe, [N/A]",   # the everyday lane's runner
+    "GPU-ccc, 6262, llama-server.exe, [N/A]",   # the coding lane's runner
+], "error": ""}
+TWO_LANE_PARENTS = {
+    5151: 6001,   # the everyday lane's runner, started by ... 
+    6001: 5001,   # ... a helper, whose own parent is the lane's listener 5001
+    6262: 5002,   # the coding lane's runner, a direct child of its listener
+    5001: 1,
+    5002: 1,
+}
+
+
+def two_lane_get_json(url):
+    if url.endswith("/api/ps"):
+        lane = url[:-len("/api/ps")]
+        if lane in TWO_LANE_PS:
+            return 200, TWO_LANE_PS[lane], ""
+        return 0, None, "ConnectionRefusedError: the lane is down"
+    return 404, None, "not used"
+
+
+def two_lane_listen(ports):
+    return {11436: 5001, 11435: 5002, 11450: 5003}, ""
+
+
+def two_lane_parents(pid):
+    return TWO_LANE_PARENTS.get(pid)
+
+
+def no_parent(pid):
+    return None
+
+
 def run_collect(**overrides):
     # THE OWNER'S LIVE PRESET CHOICE MUST NOT DECIDE THIS SUITE'S ANSWER.
     # `collect()` asks `jarvis_presets.choice()` for the last applied preset,
@@ -149,8 +207,8 @@ def run_collect(**overrides):
                                "file": str(TMP / "presets-active-lane.json"),
                                "fallback": False},
                   get_json=get_json, smi=SMI, listen=listen,
-                  process_stats=process_stats, now=1_760_000_000.0,
-                  jarvis_pid=999)
+                  process_stats=process_stats, parents=no_parent,
+                  now=1_760_000_000.0, jarvis_pid=999)
     kwargs.update(overrides)
     saved = os.environ.get("OPENJARVIS_CONFIG_DIR")
     os.environ["OPENJARVIS_CONFIG_DIR"] = str(TMP)
@@ -231,6 +289,71 @@ def t_a_loaded_lane_reports_context_size_size_and_cards():
           and "100% on all three graphics cards" in pooled["words"], pooled["words"])
     check("nothing is said as 0 for a model that is not loaded",
           all(l["model"] is None or l["state"] == "loaded" for l in answer["lanes"]))
+
+
+def t_two_loaded_lanes_name_their_own_cards():
+    """F6: with BOTH lanes loaded, each lane names its own card(s) - by the
+    runner's ancestry - and with no readable parent the split stays unreported."""
+    answer = run_collect(get_json=two_lane_get_json, smi=TWO_LANE_SMI,
+                         listen=two_lane_listen, parents=two_lane_parents)
+    lanes = {l["key"]: l for l in answer["lanes"] if l["loaded"]}
+    check("both lanes are loaded in this fixture",
+          sorted(lanes) == ["coding", "main"], sorted(lanes))
+    check("each lane gets its OWN cards, not the other lane's",
+          lanes["main"]["gpu_indices"] == [0]
+          and lanes["coding"]["gpu_indices"] == [2],
+          {k: v["gpu_indices"] for k, v in lanes.items()})
+    check("... the words name the card per lane",
+          "graphics card 0" in lanes["main"]["words"]
+          and "graphics card 2" in lanes["coding"]["words"],
+          (lanes["main"]["words"], lanes["coding"]["words"]))
+    check("... the aggregate still names both cards",
+          answer["gpu_share"]["cards"] == [0, 2], answer["gpu_share"]["cards"])
+
+    # The same two loaded lanes, with the OS refusing to name a parent: the
+    # honest fallback - the split is NOT guessed, and the words say so.
+    answer = run_collect(get_json=two_lane_get_json, smi=TWO_LANE_SMI,
+                         listen=two_lane_listen, parents=no_parent)
+    lanes = {l["key"]: l for l in answer["lanes"] if l["loaded"]}
+    check("an unreadable parent chain leaves the two-lane split unreported",
+          lanes["main"]["gpu_indices"] == [] and lanes["coding"]["gpu_indices"] == [],
+          {k: v["gpu_indices"] for k, v in lanes.items()})
+    check("... and the lane says the cards were not reported, not 'card 0'",
+          "no graphics card (or the cards carrying it were not reported)"
+          in lanes["main"]["words"], lanes["main"]["words"])
+
+    # One loaded lane with an unreadable chain keeps the old measured fallback:
+    # all the model server's cards are that lane's.
+    one = run_collect(
+        smi={"gpus": GPU_LINES, "apps": [
+            "GPU-aaa, 5151, llama-server.exe, [N/A]",
+            "GPU-ccc, 6262, llama-server.exe, [N/A]",
+        ], "error": ""},
+        listen=two_lane_listen, parents=no_parent,
+        get_json=lambda url: (
+            (200, TWO_LANE_PS["http://127.0.0.1:11436"], "")
+            if url == "http://127.0.0.1:11436/api/ps"
+            else (0, None, "down")))
+    loaded = [l for l in one["lanes"] if l["loaded"]]
+    check("one loaded lane still gets all the model server's cards",
+          len(loaded) == 1 and loaded[0]["gpu_indices"] == [0, 2],
+          [l["gpu_indices"] for l in loaded])
+
+
+def t_a_parent_walk_that_loops_is_bounded_and_invents_nothing():
+    """A broken/looping parent read is bounded, and it never fabricates a card."""
+    loop = {5151: 6262, 6262: 5151}
+    answer = run_collect(
+        get_json=two_lane_get_json, smi=TWO_LANE_SMI, listen=two_lane_listen,
+        parents=lambda pid: loop.get(pid))
+    lanes = {l["key"]: l for l in answer["lanes"] if l["loaded"]}
+    check("a looping parent chain terminates and names no card",
+          lanes["main"]["gpu_indices"] == [] and lanes["coding"]["gpu_indices"] == [],
+          {k: v["gpu_indices"] for k, v in lanes.items()})
+    check("... and the words stay the honest 'not reported'",
+          all("no graphics card (or the cards carrying it were not reported)"
+              in v["words"] for v in lanes.values()),
+          {k: v["words"] for k, v in lanes.items()})
 
 
 def t_not_loaded_and_unreachable_lanes_say_so():
@@ -683,6 +806,8 @@ def main():
         t_word_helpers_are_honest,
         t_the_active_lane_is_the_product_file_not_a_constant,
         t_a_loaded_lane_reports_context_size_size_and_cards,
+        t_two_loaded_lanes_name_their_own_cards,
+        t_a_parent_walk_that_loops_is_bounded_and_invents_nothing,
         t_not_loaded_and_unreachable_lanes_say_so,
         t_spill_is_reported_as_spill_not_hidden,
         t_a_driver_that_reports_no_per_program_memory_is_said_not_guessed,

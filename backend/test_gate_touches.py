@@ -900,7 +900,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              "gate-tool-actions-gap.patch",
 # github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
 # everything these patches wrote, so it rewrites none of their lines.
-             "github-tools.patch"}
+             "github-tools.patch",
+             # skill-scan-wiring.patch (2026-11-09, F5): five hunks, ALL in
+             # jarvis_skills.py - no hunk in jarvis_gate.py, no tier row, no
+             # _RISK row and no _TOOL_ACTIONS line, so it rewrites nothing this
+             # patch wrote. It sits immediately before activity-turn-guard.patch,
+             # which stays the last core patch before plugin-loader.patch.
+             "skill-scan-wiring.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

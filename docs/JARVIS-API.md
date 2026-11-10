@@ -6291,14 +6291,19 @@ the owner asked for it.
 ### 21.4 The event
 
 `schedule`: `{"id", "kind", "state": "fired" | "changed" | "ready",
-"late"?: bool, "notify"?: false}` - **ids and the kind only, never the
+"late"?: bool, "notify": bool}` - **ids and the kind only, never the
 words** (ARCHITECTURE section 6). `"ready"` is a morning briefing whose own
 words are built and kept: `jarvis_briefing.py` publishes it (its
 `deps.publish("schedule", {"id", "kind", "state": "ready"})`) once the
 briefing exists, so a notification is never ahead of it (section 22).
-`"notify": false` (since 2026-09-25) marks a kind
+`"notify"` says whether THIS firing is something to tell the owner about, and
+since 2026-11-09 it is on every `fired` event, true or false (section 21.17).
+`false` (since 2026-09-25) marks a kind
 that tells nobody - the standby schedule at 01:00 - and then neither app
-shows a toast or a notification; both still read Coming up again.
+shows a toast or a notification; both still read Coming up again. Both apps
+only ever test for `false`, so a `true` and an older event's absent key mean
+the same thing to them; carrying the key on every firing is the 2026-11-09
+change, not a new requirement on a client.
 `"fired"` is a job going off; `"changed"` is the list changing (added,
 paused, deleted, a card decided). Both apps read Coming up again on it.
 Since 2026-09-25 there is also `"matched"` - a "tell me when" that
@@ -7755,6 +7760,117 @@ sentences falling through, all 178 rows answering from their own words and
 surface with no denial, the read-only contract (READ_ONLY_INTENTS, no card, no
 route, a private chat gets None), and the measured settings inversion answering
 with its rule.
+
+### 21.17 The words a reminder is set from - relative dates, the title, and one true receipt (added 2026-11-09)
+
+**What the owner saw.** He said *"remind me to call Grandma in 4 days from
+now"* and got three things wrong at once: the reminder was due **today at
+13:00** instead of four days out, its **title was the whole instruction**, and
+Jarvis said **"I've updated it"** on a turn whose own footer said no action ran.
+All three are fixed in `backend/jarvis_quick.py`, `backend/jarvis_schedule.py`,
+`backend/jarvis_claims.py` and `backend/jarvis_agent.py`, and the suite that
+pins his exact sentence with a frozen clock is
+`backend/test_reminders_grandma.py`.
+
+**A length of time in days and weeks is now a length of time.** Until
+2026-11-09 `jarvis_quick.parse_duration` knew hours, minutes and seconds and
+nothing larger, so "4 days" was not a duration at all; `parse_when` then gave up
+on "in 4 days from now" both for the fast path and for the model's
+`set_reminder` tool call. Days and weeks are units now (seven days each, to the
+second), and the way the phrase is framed makes no difference - all of these
+read the same:
+
+    in 4 days           4 days from now           in 4 days from now
+    in 2 weeks          in 2 hours                in 15 minutes
+
+A length of time keeps the CLOCK TIME it was said at: "in 4 days" at 10:15 is
+due at 10:15 four days later, not at a default hour, because the owner said a
+length and not a day. A phrase with **no** length but a day - "next Monday",
+"tomorrow", "tonight", "on Friday" - uses the same default the product already
+uses (`jarvis_quick.DEFAULT_HOUR`: 09:00, or 14:00/18:00/20:00 for
+afternoon/evening/tonight) **on that day**, and the reply always names the time
+it chose ("Reminder set for 09:00 on Monday 16 November.") so a default is never
+a surprise. "next <weekday>" is the same day "on <weekday>" already meant - the
+next time that weekday comes round.
+
+A bare "in 4 days", with no request around it, is a **reminder**, never a
+timer: a timer is capped at 24 hours (`jarvis_schedule.MAX_TIMER`, whose own
+comment says "later than that, set a reminder"), and the fast path now sends the
+long phrase to the reminder path instead of letting the scheduler refuse a timer
+nobody asked for.
+
+**The title is the action, never the sentence.** A reminder has one field for
+its words (`text`) - that is its title in both apps and the body of its
+notification; there is no second "body" field to put detail in. `text` is the
+ACTION in the owner's own words, with his capitals kept ("call Grandma",
+"take my pills"), and the sentence's own framing is removed:
+`jarvis_quick.reminder_action_words` drops the command that asked for it
+("remind me to ...", "set a reminder for ...") and a trailing time phrase
+("in 4 days from now", "tomorrow at 9", and a joining word left behind such as
+the "in" of "call Grandma in"). It is applied on BOTH roads into a reminder: the
+fast path's grammar, and the model's `set_reminder` arguments (the tool's `text`
+description now says the action only). A `text` that is nothing but the command
+and the time comes back empty, and the scheduler then refuses with its ordinary
+"a reminder needs some words" rather than storing "tomorrow".
+
+**One receipt, and only because the action ran.** The fast path's receipt is
+`Result.made` - the ids of rows that really exist; nothing else ever fills it,
+so a matched intent that changes nothing (a question, a read) leaves it empty
+and writes no "cancel that" record. On the model's road the claim was the
+problem: when a `set_reminder`/`set_timer`/`todo_add`/`todo_done` call FAILED,
+the model could still answer "I've updated it", and the owner read that above a
+footer saying no action ran. Now:
+
+- `jarvis_claims.CLAIMS_DONE` knows the verb **"updated"** - "I've updated it."
+  on its own is read as a claim for the first time; before this only a sentence
+  that happened to contain another claim verb was caught.
+- a scheduler WRITE that did not succeed sets `_TurnWatch.schedule_failed`, and
+  the words of the round that answers are **held** (the same seam a spending
+  table and a what-if already use). If those words claim the change was made
+  they are **dropped** and the tool's own error is said instead - "That reminder
+  was not set: <the tool's reason>. Nothing was changed." Words that claim
+  nothing are shown exactly as written (they are only delayed in this rare
+  case). The generic "nothing was actually done" footer is not added a second
+  time over that sentence.
+- No gate is weakened by any of this: the approval rule, the outside-text
+  refusal and the scheduler's own checks have all already decided; this changes
+  only what the ANSWER may say after them.
+
+**The phone notification flag is `notify`, and a reminder now carries it
+explicitly.** The key both apps read is `notify` on the `schedule` event: the
+phone's `Schedule.kt` `firedFrom` shows no notification for `false`, and the
+desktop's `coming-up.js` tests the same key. Until 2026-11-09 the key was
+present only when it was `false` (the standby schedule), so a reminder notified
+by carrying NO key at all - "notify by omission". Since 2026-11-09:
+
+- a job's own view (`GET /api/schedule`, and `GET /api/schedule?id=`) carries
+  `"notify": true` for every kind that tells the owner about its time (a
+  reminder, alarm, timer, to-do) and `"notify": false` for the quiet kinds;
+- every `fired` event carries the same key, true or false.
+
+This is additive for an older client: both apps only ever test for `false`, so
+`true` and an absent key mean the same thing to them, and a kind that tells
+nobody still says `false` and is still silent. What it buys is that a saved
+reminder states, in its own row and in its own going-off event, that the phone
+should be told - a default one silent kind away from a reminder that never
+notified could not be read from the data at all.
+
+**Honest limits.** The phone notification still needs the phone connected to the
+PC when the job goes off (the PC is the clock, §21.1); nothing here sets a phone
+alarm of its own. The relative-date grammar reads the shapes listed above - an
+unusual phrasing still falls through to the model, and the model's own reading
+of a time is not checked by this section. The frozen-clock suite proves the
+scheduler row, the title, the receipt and the `notify` field; it does not prove
+that a notification appeared on a real phone, which is a field-test row, not a
+test in this repository.
+
+Tests: `backend/test_reminders_grandma.py` (the owner's sentence with a frozen
+clock, every relative phrasing, the title cleanup on both roads, one receipt
+against a real scheduler row, a control turn with none, the failed-write claim
+dropped through a scripted model, and the `notify` field on the row and the
+event), plus the existing `backend/test_schedule.py`,
+`backend/test_schedule_steps.py`, `backend/test_standby_schedule.py`,
+`backend/test_smarter_answers.py` and `backend/test_reminders_honesty.py`.
 
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
@@ -29439,9 +29555,13 @@ Field rules, each proved by `backend/test_model_resources.py`:
   RAM".
 - **Cards per lane** come from the model server's own compute-process GPU rows
   (`llama-server.exe`/`ollama.exe`), because the Ollama listener spawns the
-  runner under a different pid. With exactly one loaded lane they are that
-  lane's cards; with two loaded lanes the split cannot be told from these reads
-  and the lane's `gpu_indices` is left empty - never guessed.
+  runner under a different pid. The runner's parent chain names the lane's own
+  listening Ollama server, so each loaded lane keeps its own `gpu_indices` even
+  when two lanes are loaded at once (the walk is a read-only process query and
+  starts no process; it is bounded). With exactly one loaded lane and no
+  readable parent, its cards are all the model server's cards. With two loaded
+  lanes and no readable parent the split is left empty - never guessed - and the
+  lane's words say the cards carrying it were not reported.
 - **`jarvis_mb`/`other_mb` are `null` when the driver does not report
   per-program video memory.** This PC's Windows driver answers `[N/A]` for
   `used_memory` on every compute-apps row, so `gpu_share.known` is `false`, the
@@ -35537,6 +35657,12 @@ deflecting.
 
 ## 190. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
 
+**Updated 2026-11-09:** there is one more tool and one more carded action now -
+`github_create_repo`, which creates ONE new, empty repository on the owner's own
+account. §209 is its record, including why the phone deliberately gets no screen
+for it. Everything below describes the 2026-11-03 slice and stays as it was
+written.
+
 The owner's decision of 2026-11-03: *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card, never merge and never push**.
 
 ### 190.1 What exists, and what each one does
@@ -36184,10 +36310,12 @@ dimension explicitly:
 
 POST /api/voice/utterance?source=live can now answer a clip it DROPPED as background audio. Nothing is renamed and nothing is removed: every field an older client reads keeps its meaning.
 
-- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
+- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-
+alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
 - **
 eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
-- **ok and owner are alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
+- **ok and owner are 
+alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
 - **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
 - **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
 
@@ -37491,5 +37619,429 @@ still asks (a download, `forget_range`, Lockdown off; source pins for the
 live-only modules); a body naming `owner_ui`/`ui_direct` is ignored in both
 directions, and no query or header is read; the tier table still says
 `switch_model = "ask"`; the module is in both SHIPPED lists and the two copies
-are byte-equal. `backend/test_presets_owner_ui.py` keeps section 209's own
+are byte-equal. `backend/test_presets_owner_ui.py` keeps section 212's own
 proof.
+
+
+## 211. Creator mode: one waiting folder, a scan, and ONE card a thing (added 2026-11-09, Wave 13)
+
+The owner's ruling (2026-11-09, via the Lead): **Creator Mode's scope is "Plug-ins
+and skills"** - not plug-ins only and not everything. This is the first slice: a
+creator puts a skill folder or a plug-in folder in ONE fixed waiting folder on
+this PC, the PC scans what is there when the Settings card is opened, and the
+owner installs ONE item behind ONE approval card. Installing is not enabling.
+A plug-in is a program, so this slice stages it, scans it and refuses it **in the
+pack manager's own words** rather than inventing a code-install path; the exact
+remaining work for that half is 211.9.
+
+Creator mode is a new module, `jarvis-backend/jarvis_creator.py`, shipped whole
+and loaded by the drop-in folder `plugins/ready/creator-mode/` - no patch. Its
+two routes are answered by its own `install()`, the same way
+`jarvis_skill_menu.install()` answers the Skills routes (section 178).
+
+### 211.1 The waiting folder
+
+ONE place, and it is a folder on this PC:
+
+```
+<config folder>/creator-incoming
+```
+
+beside `skills/`, `skills-off/`, `skills-quarantine/` and `skills-incoming/` -
+the folders the rest of the skill machinery already uses. `JARVIS_CREATOR_INCOMING`
+overrides it, for the suites. It is made **when it is first needed**, so the
+installer carries no empty folder and no new deploy path; the only write this
+module does on a read is that `mkdir`.
+
+Every direct child folder is one item. A folder with `SKILL.md` is a skill; a
+folder with `plugin.json` is a plug-in; a folder with both, or with neither, is
+refused with a sentence saying so rather than guessed at. A link or a junction is
+refused, because a link can point anywhere on this PC. Folder names are names,
+never paths: the install request names one folder and the PC resolves it inside
+the waiting folder and proves the result is still under it.
+
+Nothing in that folder is ever run, imported, moved or copied by a read. There is
+no loader, no watcher, no timer and no scheduler looking at it: the scan happens
+when the owner opens the card (or presses **Look again**, or returns to the
+page), and the install happens when they answer a card. Writing a file into
+`creator-incoming` cannot change what Jarvis does.
+
+### 211.2 The two routes, PC only
+
+```http
+GET  /api/creator/incoming
+POST /api/creator/install
+```
+
+Both refuse every device but this PC (`jarvis_owner_check.from_this_pc`; 403 with
+one plain sentence), and `tools/check_parity.py` classifies both `deliberate`
+with the one-sided reason. The phone keeps reading the plain list of what is
+already installed (`GET /api/skills`), which is unchanged.
+
+`GET /api/creator/incoming` answers with the waiting folder's path, one row per
+item (`name`, `kind`, `verdict`, `refused`, `can_install`, `summary`, `reason`,
+the scanner's `findings`, `installed`, `where`), the counts, and one `note` in
+plain words. It is a READ: it raises no card.
+
+`POST /api/creator/install` takes **one** field, `name` - one folder - plus the
+optional `accept_warnings` the owner sends after reading warnings. It answers
+with the PC's own words: `installed`, `state`, `where`, `message`, and the pack
+manager's scan report. A refusal is `ok: false` with `refused: true` and
+`asked: false`; it is never a transport error the page has to decode.
+
+### 211.3 The scan is the pack manager's, called not copied
+
+A skill is handed to `jarvis_packs.scan_source()`, which is the pack manager's
+own full pre-install scan (section 197.3): file list and hashes, the code and
+binary refusal, the link refusal, compatibility, the existing
+`jarvis_skills.vet()` verdict and findings - including the four extra checks in
+`jarvis_skills._extra_findings()` (`hermes_exec`, `exfil_phrasing`,
+`gate_bypass_claim`, `bare_url`; section 178) and the bundled-scripts warning
+("ships N executable file(s) ... Nothing here runs them"). A folder whose
+`SKILL.md` is missing, oversized or malformed is a `malformed` refusal, not a
+card.
+
+A plug-in (`plugin.json`) is a program that runs inside the backend at start-up
+(`jarvis_plugins.py:57-63`), so it is **refused before any card**. The sentence
+is `jarvis_packs.CODE_REFUSED`, imported from that module - never copied - with
+this folder's evidence: the first file that can run when the folder holds one
+(the pack manager's own scan produces that refusal word for word), or the module
+its `plugin.json` names when the folder holds only its manifest. Nothing is
+imported to read the manifest.
+
+### 211.4 Install is ONE card, and installing is not enabling
+
+A skill install calls **`jarvis_packs.install_pack()`** - the pack manager's own
+door - which re-scans from scratch, refuses a refused skill without asking,
+raises exactly ONE `modify_own_code` card, copies only after the yes, records the
+ledger and receipt, and then **turns the skill OFF** through the existing off
+path (`jarvis_skill_menu.set_state({"on": false})`). The result is the same
+state a skill the owner switched off is in: not in `skills/`, not in
+`jarvis_skills.cards()`, not loadable, and offered again only by the ordinary
+**Turn on** control, which runs the scanner again and raises its own card.
+
+There is **no bulk path**: the request names one folder, a body with a list is
+refused before anything is scanned, and each item is its own card. There is no
+"install all", no yes-to-all and no per-row loop that installs several.
+
+### 211.5 What this deliberately does not do
+
+- **No plug-in install.** A plug-in is code with the same trust as the backend
+  itself; installing one needs the phase-2 code-trust work (197.7, 197.10), not a
+  second scanner here. It is listed, scanned and refused, so the owner can see
+  it and see why.
+- **No network, no marketplace, no URL, no git.** A local folder only.
+- **No watcher and no auto-install.** Nothing installs without a card answered
+  on the PC, and nothing installs because a file appeared.
+- **No phone surface.** A skill is instructions the model follows and a plug-in
+  is code that runs beside it; the screen that puts one in sits where the folder
+  is. ARCHITECTURE section 8 records the one-sided reason.
+- **No second scanner and no second card.** `jarvis_skills.vet()`,
+  `jarvis_packs.scan_source()`, `jarvis_packs.install_pack()` and
+  `jarvis_skills.install()` are called; none is re-implemented.
+- **No quarantine copy for a refused plug-in.** The staged folder IS the
+  evidence and it stays exactly where the creator put it; nothing was ever
+  handed to the installer, so there is nothing to quarantine. A refused skill
+  goes through the pack manager's own path and is refused before the card, for
+  the same reason.
+
+### 211.6 The Settings card
+
+Settings -> **Skills** gains a **Creator mode - things waiting** block
+(`jarvis-desktop/src/settings.html`; `skills-menu-settings.js` over two new
+actions on the existing `skills_menu` command in
+`jarvis-desktop/src-tauri/src/skills_menu.rs`):
+
+| action | what it asks the PC |
+|---|---|
+| `creator_read` | `GET /api/creator/incoming` - the folder and its scanned items. Read only; no card. |
+| `creator_install` | `POST /api/creator/install` with ONE name - the pack manager's scanner, then its ONE card. Held while the event stream is stale. |
+
+The block shows the folder's path, one row per item with the scanner's verdict
+and findings, and an **Install it…** button ONLY on a row the PC says can be
+installed. A refused skill and a plug-in show the refusal and get no button,
+because the PC would not draw a card for them. The status line shows the PC's
+own message - for a successful skill, the pack manager's sentence saying it was
+installed and turned off.
+
+**One-sided on purpose:** there is no phone control and no new phone screen.
+The phone's existing list of what is installed is unchanged. ARCHITECTURE
+section 8 carries the entry.
+
+### 211.7 What is proved, and what needs the owner's PC
+
+`py -3 backend/test_creator_mode.py` (130 checks, all passing): a staged skill is
+seen and scanned with no card; a warning and a block are both shown, never
+hidden; a plug-in is refused with `jarvis_packs.CODE_REFUSED.format(...)` word
+for word; a folder that is neither shape is refused; two reads change no byte of
+the staged folder, copy nothing, quarantine nothing and raise no card; a clean
+install raises exactly ONE `modify_own_code` card and lands the skill in
+`skills-off/` with the ledger saying `disabled`; the ordinary ON control then
+raises its own card and restores it; a blocked skill and a plug-in come back
+`asked: false` with the gate never called; a multi-name body is refused; names
+that are paths cannot reach outside; the routes answer and fall through, are
+refused from another device, and are classified `deliberate` in
+`tools/check_parity.py`; and the module imports no network, process or watcher.
+
+`node jarvis-desktop/tests/skills-menu.mjs` (25 checks) holds the page's
+`creatorView()`, its missing-module sentence, the one-button-per-row rule, the
+"no watcher" wiring and the `turned off` wording. `cargo test` covers the two new
+actions' plan/held/answer rules. **NOT-TESTABLE here, said plainly:** the owner's
+real click on the real card, on his own PC, with a real folder in
+`creator-incoming` - no lane has driven that, so the field-test row stays NOT RUN
+YET until he does.
+
+### 211.8 What a creator sees, in order
+
+1. Put the folder in `creator-incoming`. Nothing happens; nothing runs.
+2. Open Settings -> Skills (the Creator mode block is in that card). The block
+   scans what is there and shows the verdict, the findings, and (for a skill)
+   whether it needs its warnings read first.
+3. Press **Install it…** on ONE item, read the ONE card, answer it.
+4. The skill lands in `skills-off/`, turned off. Turn it on in the Skills list,
+   which scans it again and asks its own card.
+5. A plug-in shows the pack manager's code refusal and no button. That is this
+   slice's whole plug-in half.
+
+### 211.9 What the plug-in half still needs
+
+The staged plug-in folder is refused by `jarvis_packs.CODE_REFUSED`, so nothing
+half-installs. To turn a plug-in into an installable item, the next slice needs,
+in order:
+
+1. the phase-2 code-trust design `jarvis_packs` already names (197.7/197.10):
+   what a code pack may touch, where it runs (a separate process, not the HUD's
+   own), and what the scan can prove about it (AST/import and obfuscation);
+2. a real install path for a plug-in folder into `jarvis_plugins\` beside
+   `jarvis_hud.py` (today `scripts/add-plugin.ps1` is the only door), with the
+   ONE-card shape and a ledger row like the pack manager's;
+3. install != enable for a plug-in too: the loader already honours a `disabled`
+   marker beside `plugin.json` (`jarvis_plugins.py:159`), so landing one disabled
+   and switching it on through that marker is the shape - but the restart
+   sentence and the scanner's verdict for code must exist first;
+4. the same tests this slice has for skills: staged, scanned, refused-never-a-
+   card, one-card install, install-is-not-enable, and the phone's one-sidedness
+   classified in `tools/check_parity.py`.
+
+Until that lands, **no plug-in is installed by Creator mode, and the card says
+so in the pack manager's own words** - which is the honest smaller slice rather
+than a code-install path nobody has designed.
+
+## 212. The truth about what reaches the web, and one carded `github_create_repo` (2026-11-09)
+
+**The owner's report.** He asked why Jarvis denied web browsing while the `web_search`
+switch was ON, and he asked it to create a repository called "Fitness Band". Both were
+the same fault: four different things leave this PC for the internet, each with its own
+switch, and the answer treated "the web" as one thing. This section records what was
+added to make the answer factual without asking a language model to guess.
+
+**The four things, kept apart on purpose.**
+
+| What | What it really does | What decides it |
+| --- | --- | --- |
+| (a) web search | Sends the search words to a search engine and brings back titles and snippets. | Settings, Web search (`jarvis_search.request_enabled()`), AND the `web_search` row on Settings, What asks first. |
+| (b) reading one web page | Fetches the ONE address shown on its card, once, and never a link on the page. | The `read_web_page` tool row on Settings, What asks first (`jarvis_readpage.py`). |
+| (c) browser control | Works a real page - clicking and typing in one tab. | Its own switch on Settings, What asks first, AND the second graphics card's "Browser control" lane or the windowless browser (Obscura). |
+| (d) the GitHub integration | Reads, comments, opens an issue, re-runs a workflow and creates one new empty repository, each on its own card. | A token saved through the "connect my GitHub" card, AND each of its seven tool rows on Settings, What asks first. |
+
+**Where the deterministic answer lives (no model, no guess).**
+
+- `backend/jarvis_feature_guide.py`'s `SELF_FACTS["internet_access"]` - the ONE source of
+  the fixed words. Its `sentence` is the owner-facing answer; its `digest` is what the
+  model's `self_portrait` tool result carries, so a model turn cannot contradict the
+  fixed answer. It is in `SELF_FACT_IDS`, which is what makes the portrait carry it.
+- `backend/jarvis_quick.py`'s `_INTERNET_ACCESS` grammar and `_run_internet_access()` -
+  whole sentences only, answered from `jarvis_reach.view()` (the same rows both apps draw
+  under "What Jarvis can reach") plus `jarvis_github.connected()` and
+  `jarvis_asks_first.tools_enabled_set()`. The answer says ON or OFF for each of the
+  four and, for an OFF one, quotes that row's own reason and what turns it on. It is in
+  `READ_ONLY_INTENTS`, so "cancel that" cannot undo a question.
+- **Why only the BARE phrase is claimed.** `jarvis_quick.normalise()` strips a leading
+  "can/could/would/will you" before any grammar sees the sentence, so "can you browse the
+  web?" and "browse the web" arrive identically. The bare phrase is the only shape that
+  is a capability question and nothing else, so it is the one claimed. A phrase with a
+  task in it ("browse the web for flights to Rome") deliberately keeps its own path,
+  because that one has something real to do.
+
+- **The create-a-repository question, in the owner's own words.** `_GITHUB_CREATE_REPO`
+  claims the capability forms and answers them from `_github_create_repo_words()` - the
+  action's existence, its own tool switch and whether a token is saved - including the
+  exact sentence the owner used, "can you create a repository?". Because `normalise()`
+  removes the leading "can you", the claimed shape is the BARE `create a repository`
+  (optionally `me`, `new`, `github`, `on my github`), and the match is whole-sentence: a
+  request that carries the name or a description ("create a repository called Fitness
+  Band") has words left over, keeps its own path to the model's `github_create_repo` tool,
+  and raises its ONE card. It is never answered with a speech about the action.
+
+**The one CREATE: `github_create_repo`.** A new model tool, `github_create_repo`, decided
+under its own gate action of the same name, shipped `"ask"` in both settings copies and
+listed in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still raises the card.
+
+- It takes a typed `name` (required) and an optional `description` and `private` flag.
+  Nothing else: the request body is built field by field in `jarvis_github.plan_create_repo`,
+  so a model cannot add a team, an organization or a template field, and a list of names
+  is ignored rather than looped over.
+- It POSTs to the fixed `https://api.github.com/user/repos` - "user" is whoever the saved
+  token belongs to, so it can never create a repository in an organization or in somebody
+  else's account.
+- A name must be 1-100 characters of letters, numbers, dot, dash and underscore, and not
+  "." or "..". A name with a space is REFUSED here with the fix in the sentence
+  (`"Fitness Band"` -> `"Fitness-Band"`), never silently rewritten into a different
+  repository name. A description is capped at 350 characters so the card can show it.
+- ONE approval card is raised BEFORE any network call, and it prints the exact name,
+  whether it is private, the description, and the one `POST` address. Nothing is sent
+  until a person says yes; a denial sends nothing at all. One repository per card.
+- On 201 the receipt quotes only what GitHub really answered: `full_name` and `html_url`
+  (and that it is private when GitHub says so). A 201 without those fields says GitHub did
+  not send the repository back rather than inventing a name or an address.
+- On a refusal it quotes **GitHub's own message** (the top-level `message` and each
+  `errors[].message`), scrubbed of the token, then says nothing was created. A 401 adds
+  the "save a new token" sentence after GitHub's own "Bad credentials". There is no
+  silent retry, and there is no HTTP code in the words the owner reads.
+- The token is read from Windows Credential Manager through
+  `jarvis_token_store.resolve_secret` (the same secret the connect card wrote), sent only
+  in the `Authorization` header to `api.github.com`, and never printed in a card, a tool
+  result, a failure sentence or a log line.
+
+**What it still cannot do.** It cannot push anything into the new repository, upload code
+or files, create a branch, delete the repository it created, merge, close or comment in
+the same call. There is one create planner and one create action; nothing here is bulk.
+
+**The phone deliberately gets no screen for it.** The tool works identically from either
+app's chat, and the approval card is answerable on the phone; a name-and-private-flag form
+on the phone would be a second door onto a write that cannot be undone. ARCHITECTURE
+section 8 records that as one-sided on purpose.
+
+**How it is held (hermetic, no network, no real token).**
+
+- `python -B backend/test_github_tools.py` - the card is built and the denial sends
+  nothing; the body is exactly `{name, private, description}`; extra arguments and extra
+  fields are refused or ignored; the token is in no card, receipt or failure and a server
+  that echoes it is scrubbed; a 201 reports GitHub's real full name and address and a 201
+  with no repository in it invents neither; 401 and 422 quote GitHub's own message with no
+  token and no HTTP code; every tier is `"ask"`, every table a new tool must join carries
+  it, and there is exactly one create planner.
+- `python -B backend/test_web_access_truth.py` - the four questions route to the fixed
+  answer (not the model), the answer names all four as separate with live ON/OFF state and
+  the OFF rows' own reasons, the GitHub half reads the token state and the tool count, the
+  fixed words are the model's own digest, "can you create a repository?" and its other
+  capability wordings ARE answered from the real action state, "create a repository called
+  Fitness Band" is NOT claimed as a capability answer (it must reach the model, which calls
+  the tool), and the intent is read-only.
+
+**NOT-TESTABLE here, said plainly.** Nothing in this repository made a real GitHub call:
+every test drives the module through the injected `fetch` seam with a fake transport and a
+fake token. The first real `POST /user/repos` with the owner's own token, the real 201
+body, GitHub's real refusal for a name that is already taken, and whether his token has
+the `repo`/`public_repo` permission the create needs are only provable on his PC, with his
+token, once he asks for a repository. That is a field-test row, never a pass.
+
+## 213. A failed learning check is ONE banner, not 200 cards (2026-11-09)
+
+**The measured finding this answers** (`.dsh-scratch`/`D:\jarvis-scratch` research of
+2026-11-09; the section on "the finding I would lead with, because it is a fault and not a
+decision"). When one of automatic learning's THREE batch checks fails - a damaged or
+unreadable `auto-learning.json`, no local model (`OLLAMA_URL` not loopback), a cloud model
+name, or a missing `jarvis_intake.py` - `after_pass` writes the SAME reason onto every
+proposal in the pass. A damaged settings file reads as "off", so from then on every fact is
+a card, every pass, until the file is rewritten - and the review queue holds 200. One bad
+write therefore looked exactly like "Jarvis has become paranoid", and the owner's only cure
+was a card. That is a fault, not a decision: it now gets one record, one banner and one
+button.
+
+**What is a fault, and what is the owner's own choice.** The two plain settings sentences -
+"automatic learning is off" and "background learning is off" - are his switches, so those
+proposals stay cards exactly as before. A DAMAGED settings file, a model check that fails,
+and a missing intake module are machinery failing, and those are the fault. A per-fact
+reason is never a fault and never hidden: a sensitive topic, a correction, a fact that
+would replace a stored one, words that are not the owner's, a topic card, and "could not be
+saved automatically" all keep their own cards.
+
+**The record.** `jarvis_auto_learn.py` writes `memory-fault.json` beside
+`auto-learning.json` and `learning-stats.json` in the config folder
+(`~/.openjarvis`), atomically (temp file, then `os.replace`). It holds only
+`{version, reason, count, at, since, tries, last_try_at, last_result}` - the check's own
+fixed sentence, times, and the number of cards it parked. **No fact's words can reach it**:
+the reason is one of the check functions' own strings, and nothing here reads a proposal's
+text. A record that cannot be written is reported as `written: false` and **hides nothing** -
+the cards are shown instead, because a suppression with no banner to explain it would be
+worse than the cards.
+
+**The two routes** (both behind the same auth as every memory route: `_origin_ok`, then
+`_token_ok`; apps send `X-Jarvis-Client: hud`; no tier, no approval card, no new
+permission).
+
+- `GET /api/memory/fault` - the banner both apps read:
+  `{"active": bool, "reason", "headline", "count", "since", "at", "tries",
+  "last_try_at", "last_result", "recorded", "why"}`. `headline` is the PC's own sentence
+  for the banner ("Jarvis could not check the facts it was about to save: ... This is the
+  check failing, not your facts."). `active` is `false` when there is no fault; a record
+  that cannot be READ is also `active: false` (fail visible - the cards show) with `why`
+  saying so. A read changes nothing.
+- `POST /api/memory/fault/retry` - the one button, body `{}`:
+  `{"ok", "cleared", "fault", "outcome"}`. It re-runs ONLY the three batch checks
+  (`check_settings`, `check_intake`, `check_local_model`) through the same functions and
+  the same in-process `model`/`ollama` handles the learning pass uses - no new route for a
+  model, no cloud call, no outside text, and none of the three checks calls a model at all.
+  It approves nothing, saves nothing and decides no proposal; the cards stay exactly where
+  they were. When the check passes it removes the record and `outcome` is the PC's own
+  sentence ("The check works again, so the warning is cleared. Nothing was saved or
+  approved by this: your facts are still waiting where they were."); if learning was
+  switched OFF instead, it says that ("Learning is off on this PC, so there is no check to
+  run. Nothing was saved or approved.") rather than claiming a check passed. When it still
+  fails it KEEPS the record, adds one try, stores the reason in `last_result`, and
+  `outcome` says "The check still fails: <reason>. Nothing was saved or approved." It
+  answers 200 either way - a check that still fails is an answer, not an error. With no
+  active fault it is a no-op that says so.
+
+**The suppression boundary, exactly.** `jarvis_auto_learn.visible_pending()` is called from
+`jarvis_extract.pending()`, so the one pending read every client makes (the Brain and the
+phone, `/api/memory/facts`' pending count and the HUD's proposal event) stops returning the
+parked cards. A row is hidden only when its `auto_learn_notes` reason is EXACTLY the
+fault's reason **and** it has no sensitive label and no topic question - so a sensitive
+card, a correction, a "not in your own words" card and a topic card are never hidden. The
+proposal is not decided, retired or saved: it stays `pending`, and **when the fault clears
+those cards come back** (fail-closed, and the banner said so). The queue cap still counts
+them, because they are still in the queue. While the fault is active a per-fact card with a
+different reason still appears; a new pass that fails the same check parks its cards under
+the same one record, and `count` is the number the store really holds for that reason.
+
+**What each app shows, and where.** Neither app invents a word of it - both draw the PC's
+own `headline`/`reason`, and after a press the PC's own `outcome`.
+
+- Desktop: the Brain window, Memory tab, the "Waiting for you" card - ONE warn-toned banner
+  at the top with the PC's sentence and one "Retry now" button; no new screen, no new card
+  in the queue. It reads `GET /api/memory/fault` through the Brain's `brain_read`
+  allowlist (section "memory_fault" in `brain/routes.rs`), and the button is one Tauri
+  command, `brain_memory_fault_retry` (`src-tauri/src/brain/auto_learn.rs`). It is the one
+  write in that file deliberately NOT held on a stale link: it approves and saves nothing,
+  it only asks the PC what its check says now.
+- Phone: Mind, "Memory awaiting review" - the same ONE banner and the same one "Retry now",
+  reading the PC's `/api/memory/fault` and posting `/api/memory/fault/retry`
+  (`net/MemoryFault.kt`, `JarvisApi.retryMemoryFault`, `JarvisRuntime.retryMemoryFault`).
+  The phone adds no local logic: it renders the PC's sentence, and after a press the PC's
+  `outcome` (the banner stays, without a button, once a retry clears it).
+
+**How it is held.** `python -B backend/test_memory_fault.py` - 51 checks: a synthetic batch
+failure writes ONE record and hides exactly its cards (through the SHIPPED
+`jarvis_extract.pending()`, built by applying the patch's own hunk to the published base
+with `git apply`), a sensitive card and a sensitive-labelled card that happens to carry the
+fault's reason still appear, the owner's own "off" is not a fault, a retry clears only when
+the check passes and writes no fact and decides no proposal, a retry that still fails keeps
+the record with `tries` and its reason, no fact's words are in the record (also after a
+failed retry), a record that cannot be written hides nothing, and both routes answer what
+they document. `node jarvis-desktop/tests/memory-fault.mjs` - the banner renders the PC's
+words as text, exactly one button calls exactly one command, the PC's outcome is shown, and
+a cleared retry leaves the sentence without a button. `jarvis-client`'s
+`MemoryFaultTest` - the routes and words, the shapes, only an exactly-true `active` is a
+banner, a retry keeps or clears with the PC's own sentence, and the failure lines. The
+patch itself is proved forwards and backwards byte for byte by
+`backend/test_auto_learn.py`, and the twin `jarvis-backend/jarvis_auto_learn.py` is
+byte-equal (the two-file rule).
+
+**NOT-TESTABLE here, said plainly.** No test ran on the owner's own PC against a real
+damaged `auto-learning.json` or a live learning lane: every batch failure above is
+synthetic (a non-loopback address, a written bad file). The route's auth is the existing
+shared memory block, not a new check proved here. Both app screens were exercised against
+the desktop's mock browser and the phone's JVM contract only - not driven on real hardware
+with a real fault. Those are field-test rows, never a pass.

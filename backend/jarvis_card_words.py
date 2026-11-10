@@ -180,6 +180,10 @@ TITLES = {
     "github_comment": "post a comment on GitHub",
     "github_open_issue": "open an issue on GitHub",
     "github_rerun_workflow": "run a GitHub workflow again",
+    # The one CREATE (2026-11-09, the owner's "create a repository called
+    # Fitness Band"): one new, empty repository on his own account. Its own
+    # title, because "open a GitHub issue" is a different action.
+    "github_create_repo": "create a new repository on your GitHub",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -457,6 +461,7 @@ SUMMARY = {
     "github_comment": "post a GitHub comment",
     "github_open_issue": "open a GitHub issue",
     "github_rerun_workflow": "run a workflow again",
+    "github_create_repo": "create a repository",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

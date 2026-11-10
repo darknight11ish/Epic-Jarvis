@@ -155,7 +155,8 @@ CATALOGUE = [
     # they ship SWITCHED OFF, because each one sends the owner's GitHub token
     # out and the tools are useless until a token is saved anyway. They are in
     # the catalogue so the next tool added has to be looked at here too.
-    "github_ci_status", "github_comment", "github_list", "github_open_issue",
+    "github_ci_status", "github_comment", "github_create_repo", "github_list",
+    "github_open_issue",
     "github_read_file", "github_rerun_workflow",
     "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",

@@ -691,9 +691,18 @@ _UNITS = {w: i for i, w in enumerate(
     "fourteen fifteen sixteen seventeen eighteen nineteen".split())}
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
          "seventy": 70, "eighty": 80, "ninety": 90}
+#: Lengths of time, in seconds. Days and weeks are here since 2026-11-09 (the
+#: owner's Wave-13 "Grandma" bug): "remind me to call Grandma in 4 days from
+#: now" is a plain length of time, and the fast path used to have no unit for
+#: it at all - so the sentence fell to the model, which is where a wrong time
+#: and the whole sentence as the title came from. A timer is still capped at a
+#: day by the scheduler (`jarvis_schedule.MAX_TIMER`), and `_bare_when` sends
+#: anything longer to the REMINDER path, exactly as `MAX_TIMER`'s own comment
+#: says ("a timer is for today; later is a reminder").
 _UNIT_S = {"h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
            "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
-           "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1}
+           "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+           "day": 86400, "days": 86400, "week": 604800, "weeks": 604800}
 
 
 def _tokens(s: str) -> list:
@@ -1036,7 +1045,11 @@ def _parse_day(s: str):
     m = re.fullmatch(r"this\s+(morning|afternoon|evening)", s)
     if m:
         return 0, m.group(1)
-    m = re.fullmatch(r"(?:on\s+)?(" + _WD + r")" + _DAYPART, s)
+    # "next Monday" (2026-11-09): the same day "on Monday" already means - the
+    # NEXT time that weekday comes round, today counting as next week when it
+    # is today (`_days_until`). The word "next" changes nothing by itself, so
+    # this is one optional word and not a second way to read a weekday.
+    m = re.fullmatch(r"(?:on\s+)?(?:next\s+)?(" + _WD + r")" + _DAYPART, s)
     if m:
         return ("wd", _WEEKDAYS.index(m.group(1))), m.group(2)
     return None
@@ -1122,21 +1135,26 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
     if s.startswith("every ") or s.startswith("each "):
         return None
     # --- once ---------------------------------------------------------------
-    m = re.fullmatch(r"in\s+(.+)", s)
-    if m:
-        d = parse_duration(m.group(1))
-        if d is None:
-            return None
-        return When(at=now + d)
-    # "30 minutes from now", "an hour from now", "half an hour from now"
-    # (2026-10-31: the live owner's "a reminder for 30 minutes from now to
-    # check my phone" reached the model as a calendar event).
-    m = re.fullmatch(r"(.+?)\s+from\s+now", s)
-    if m:
-        d = parse_duration(m.group(1))
-        if d is None:
-            return None
-        return When(at=now + d)
+    # A LENGTH OF TIME, whichever way it is framed (2026-11-09): "in 4 days",
+    # "4 days from now" and "in 4 days from now" are ONE phrase in three
+    # shapes, and the owner's own words were the third. The frame is removed
+    # before the length is read, so the same time comes out of all three.
+    #
+    # This used to be two branches, and each one answered None when its own
+    # frame was not the one used: "in 4 days from now" reached `in ...`, which
+    # handed "4 days from now" to parse_duration and returned None; and it
+    # reached "from now", which handed "in 4 days" to the same parser. The fast
+    # path split the phrase first and got through, which is why only the
+    # model's `set_reminder` call ("could not read `when`") and the bare
+    # "in 4 days" phrase were broken.
+    if s.startswith("in ") or s.endswith(" from now"):
+        length = re.sub(r"^in\s+(?:the\s+next\s+)?", "", s)
+        length = re.sub(r"\s+from\s+now$", "", length)
+        d = parse_duration(length)
+        if d is not None:
+            return When(at=now + d)
+        # Not a length of time after all ("in the morning", "in your notes"):
+        # the day and clock parsers below still get their turn.
     # "tomorrow at 6", "on friday at 5pm", "tonight at 8", "tomorrow 6am"
     for split in _splits(s):
         a, b = split
@@ -3129,12 +3147,108 @@ def _bare_when(s: str, now: float) -> Optional[Intent]:
     if m:
         d = parse_duration(m.group(1))
         if d is not None:
-            return Intent("timer_set", {"seconds": d, "label": ""})
+            # "in 10 minutes" is a timer, "in 4 days" is a reminder: a timer is
+            # for today and the scheduler refuses longer than
+            # `MAX_TIMER` ("a timer can be up to 24 hours - for later than
+            # that, set a reminder" - `jarvis_schedule.add_timer`). Said HERE
+            # (2026-11-09), before the scheduler is even called, so a bare
+            # "in 4 days" gets a real reminder instead of an error about a
+            # timer nobody asked for. The default hour is not used: "in 4
+            # days" is a LENGTH of time, so the clock time is the one the
+            # owner put it down at.
+            try:
+                import jarvis_schedule as _S
+                longest_timer = _S.MAX_TIMER
+            except Exception:
+                longest_timer = 86400.0
+            if d <= longest_timer:
+                return Intent("timer_set", {"seconds": d, "label": ""})
+            return Intent("reminder_set", {"text": "your reminder",
+                                           "when": When(at=now + d)})
         return None
     when = parse_when(s, now, "reminder")
     if when is not None:
         return Intent("reminder_set", {"text": "your reminder", "when": when})
     return None
+
+
+#: The words a reminder's title must never carry (2026-11-09, the owner's
+#: Wave-13 "Grandma" bug): the COMMAND that asked for it, and the time phrase
+#: that says when. Both belong to the sentence, not to the action - the title
+#: is what the notification and both apps print above the reminder, so it has
+#: to read "call Grandma", never "remind me to call Grandma in 4 days from now"
+#: and never "call Grandma in".
+_REMIND_COMMAND_LEAD = re.compile(
+    r"^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?"
+    r"(?:remind\s+me(?:\s+(?:to|that|about))?"
+    r"|(?:set|add|make|create|schedule)\s+(?:a|an)?\s*(?:new\s+)?reminder(?:\s+(?:to|for|about))?"
+    r"|reminder\s*[:\-])\s+", re.I)
+#: A word that only ever JOINS a time phrase to the action ("call Grandma **in**
+#: 4 days", "pills **at** 9"). Left on the end of a title it is the sentence
+#: leaking through, which is exactly what the owner saw. `to` and `about` are
+#: here for the same reason on the model's side ("remind me to call Grandma
+#: **to**"), and never for a title the fast path builds, whose grammar has
+#: already removed the joining word.
+_TITLE_JOIN_TAIL = re.compile(r"[\s,]+(?:in|at|on|for|from|by|after|before|and|to|about|that)$",
+                              re.I)
+
+
+def reminder_action_words(text, now: Optional[float] = None) -> str:
+    """The ACTION a reminder is about, from words that may still carry the
+    sentence around it (2026-11-09).
+
+    A title is what the reminder says when it goes off and what both apps print
+    above it, so it has to be the action - "call Grandma" - and never the
+    instruction ("remind me to call Grandma in 4 days from now"). Three pieces
+    of the sentence are removed, in this order, and only when something is left:
+
+      1. the command that asked for it ("remind me to", "set a reminder for");
+      2. a time phrase at the END that `parse_when` reads whole ("in 4 days
+         from now", "tomorrow at 9") - `now` is needed for that, so a caller
+         without a clock keeps it;
+      3. a joining word left on the end ("call Grandma in").
+
+    The owner's own words and capitals inside the action are untouched: the
+    fast path's `_restore` has already put them back, and a title this function
+    shortens is still the owner's own phrasing ("call Grandma", not "Call
+    grandma" and not a paraphrase). NEVER returns a different action - only
+    fewer words from the same sentence - and a title that is ALL command or ALL
+    time comes back empty, so the caller says it needs words rather than
+    storing nothing.
+    """
+    out = " ".join(str(text or "").replace("\u2019", "'").split()).strip(" ,;:.")
+    out = _REMIND_COMMAND_LEAD.sub("", out).strip(" ,;:.")
+    out = re.sub(r"^(?:to|that|about)\s+", "", out, flags=re.I).strip(" ,;:.")
+    if not out:
+        return ""
+    while True:
+        trimmed = _TITLE_JOIN_TAIL.sub("", out).strip(" ,;:.")
+        if trimmed == out or not trimmed:
+            break
+        out = trimmed
+    if now is not None:
+        # The LONGEST time phrase at the end wins ("at 5pm on Friday" before
+        # "on Friday"), it is removed, and the end is looked at AGAIN - "tomorrow
+        # at 9" loses "at 9" first and then the "tomorrow" left behind it.
+        # A phrase that is ALL time leaves nothing: the caller then says it needs
+        # some words rather than storing "tomorrow" as the action.
+        while out:
+            words = out.split()
+            removed = False
+            for take in range(min(len(words), 8), 0, -1):
+                tail = " ".join(words[-take:])
+                candidate = re.sub(r"^(?:at|on|for)\s+(?=\d|noon|midday|midnight)", "", tail)
+                if parse_when(candidate, now, "reminder") is None:
+                    continue
+                kept = " ".join(words[:-take]).strip(" ,;:.")
+                out = reminder_action_words(kept, None) if kept else ""
+                removed = True
+                break
+            if not removed:
+                break
+        if out and parse_when(out, now, "reminder") is not None:
+            return ""
+    return out
 
 
 def _reminder(s: str, now: float) -> Optional[Intent]:
@@ -3148,7 +3262,7 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
                         + _REMIND_ASK +
                         r"\s+(?:to|about|that)\s+(?P<text>.+)", s)
     if lead:
-        text = lead.group("text").strip()
+        text = reminder_action_words(lead.group("text"), now)
         if text and len(text) <= 300 and text not in (
                 "it", "this", "that", "something", "things", "stuff"):
             when = parse_when(lead.group("lead") + " " + lead.group("when"),
@@ -3172,7 +3286,12 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
         for k in range(1, len(words)):
             candidates.append((" ".join(words[:k]), " ".join(words[k:])))
     for text, when_s in candidates:
-        text = text.strip()
+        # The ACTION, never the sentence's own time framing (2026-11-09): the
+        # candidate loop stops at the first split that leaves a readable time,
+        # and "call Grandma in" / "4 days from now" leaves the sentence's "in"
+        # stuck to the end of the title. Cleaned here, so the split that is
+        # found does not decide the words the owner reads back.
+        text = reminder_action_words(text, now)
         if not text or len(text) > 300:
             continue
         # A reminder "about" nothing is not one.
@@ -8587,6 +8706,7 @@ PLUGIN_CATALOGUE = (
     ('card-prefs', 'how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.'),
     ('chatbot-limits-hud', "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app."),
     ('chatbot-routes', 'the routes both apps use to have Jarvis talk to an AI chatbot for the owner.'),
+    ('creator-mode', 'a waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card opens, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in this first slice.'),
     ('decks', 'review decks.'),
     ('docker', "the containers on Jarvis's OWN list, and start/stop for them."),
     ('documents', '"Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part...'),
@@ -13043,6 +13163,61 @@ _REACH = re.compile(
 REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 "
                  "on the PC.")
 
+#: THE OWNER'S 2026-11-09 REPORT, answered deterministically. He asked why Jarvis
+#: denied web browsing while `web_search` was ON, and asked it to create a
+#: repository called "Fitness Band". The fault was one word doing four jobs:
+#: FOUR separate things reach the internet - web search, reading one web page,
+#: browser control, and the GitHub integration - and each has its own switch.
+#: The answer is `jarvis_feature_guide.SELF_FACTS["internet_access"]`'s fixed
+#: sentence (the same one the model's self_portrait carries) plus the LIVE state
+#: of each from `jarvis_reach.view()` and the GitHub modules. Read-only: no card,
+#: no model, no socket, no write.
+#:
+#: WHY THE BARE PHRASES ARE CLAIMED AND NOT `can you ...`. `normalise()` strips a
+#: leading "can/could/would/will you" BEFORE any grammar sees the sentence (its
+#: own `_LEAD`), so "can you browse the web?" arrives as exactly "browse the web"
+#: - which is also how a real request would start ("browse the web for flights").
+#: The BARE phrase with no task words after it is the only shape that is a
+#: capability question and nothing else, and it is the one measured going to the
+#: model and coming back as "I cannot browse the web". A phrase with a task in it
+#: ("browse the web for flights") is deliberately NOT claimed: it keeps the model
+#: and the web_search tool, which is what can actually do it.
+_INTERNET_ACCESS = re.compile(
+    # The bare capability question, after the polite lead has been stripped.
+    r"(?:browse|access|use|search)\s+(?:the\s+)?(?:web|internet|online)"
+    r"|browse\s+(?:some\s+)?(?:websites|web\s+sites|sites)"
+    r"|go\s+online"
+    # Reading ONE page out loud is its own tool, and its own question.
+    r"|read\s+(?:a\s+|one\s+|this\s+|that\s+|the\s+)?(?:web\s?page|webpage|website|"
+    r"web\s+site|page|url)"
+    r"|read\s+web\s?pages"
+    # Browser control: a real browser tab being clicked and typed in.
+    r"|control\s+(?:my\s+|the\s+|a\s+)?browser"
+    r"|have\s+(?:you\s+got\s+)?browser\s+control"
+    # The explicit "do you have ..." forms, which survive the normaliser.
+    r"|(?:do|does)\s+(?:you|jarvis)\s+have\s+(?:any\s+)?(?:web\s+browsing|web\s+access|"
+    r"internet\s+access|access\s+to\s+the\s+(?:web|internet)|browser\s+control|"
+    r"web\s+search|internet)"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:browse|access|use|search)\s+"
+    r"(?:the\s+)?(?:web|internet|online)"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:read|open|fetch)\s+(?:a\s+|one\s+|any\s+)?"
+    r"(?:web\s?page|webpage|website|web\s+site|url)"
+    # Which switch is on - asked as a switch question, answered from the switch.
+    r"|is\s+(?:the\s+)?(?:web\s+search|page\s+reading|web\s+browsing|browser\s+control)\s+"
+    r"(?:on|off|enabled|disabled|switched\s+on|switched\s+off)"
+    r"|(?:which|what)\s+(?:of\s+)?(?:these|the)\s+(?:is|are)\s+on\s*:?\s*web\s+search.*"
+    # "Why did you refuse / say you can't" - the exact shape of the owner's report.
+    r"|why\s+(?:did|do|does|would)\s+(?:you|jarvis)\s+(?:say\s+|keep\s+saying\s+)?"
+    r"(?:that\s+)?(?:you\s+)?(?:can'?t|cannot|can\s+not|won'?t|refuse[sd]?\s+to)\s+"
+    r"(?:browse|access|use|read|search|open|control)\b.*"
+    r"|why\s+(?:can'?t|cannot|can\s+not|don'?t|do\s+not|won'?t)\s+(?:you|jarvis)\s+"
+    r"(?:browse|access|use|read|search|open|control)\b.*"
+    r"|why\s+(?:did|do|does)\s+(?:you|jarvis)\s+(?:refuse|say\s+no|deny)\b.*"
+    r"|what\s+(?:web|internet)\s+(?:access|browsing)\s+(?:do\s+you|does\s+jarvis|have\s+you)\s+"
+    r"(?:have|got)\b.*"
+    r"|what\s+(?:can|could)\s+(?:you|jarvis)\s+(?:do|access|use)\s+(?:on\s+)?"
+    r"(?:the\s+)?(?:web|internet)\b.*")
+
 #: THE THREE DATA-BACKED SELF-QUESTIONS docs/SELF-AWARENESS.md promised and the
 #: code did not answer (2026-11-04 self-awareness audit, gap 4). Each is a
 #: WHOLE sentence, and each is answered from the module that already owns the
@@ -13264,6 +13439,12 @@ def _self_answers(s: str) -> Optional[Intent]:
     # model can never deny the one door Live and typed chat share.
     if _SELF_LIVE_SETTINGS.fullmatch(s):
         return Intent("how_live_settings")
+    # The owner's 2026-11-09 report: web search, reading one page, browser
+    # control and the GitHub integration are FOUR things, each with its own
+    # switch. Before this, "can you browse the web?" arrived as "browse the
+    # web" and went to the model, which denied it while web search was on.
+    if _INTERNET_ACCESS.fullmatch(s):
+        return Intent("internet_access")
     return None
 
 
@@ -13367,6 +13548,46 @@ _GITHUB_OWN_CI = re.compile(
     r"(?:\s+(?:status|doing|like))?\s*\??$"
     r"|how\s+is\s+(?:your|jarvis'?s?)\s+ci\b.*"
     r"|is\s+(?:your|jarvis'?s?)\s+ci\s+(?:green|passing|failing|red)\s*\??$")
+
+#: "Can you create a repository?" - the owner's own 2026-11-09 ask, answered with
+#: the real carded action instead of a denial. The capability forms are claimed;
+#: the ACTION is not.
+#:
+#: `normalise()` strips a leading "can/could/would/will you", so the owner's own
+#: sentence arrives as the bare "create a repository". That bare shape is
+#: therefore claimed here, and the match is a FULL match with nothing after the
+#: noun: a request that carries the repository's name or a description ("create
+#: a repository called Fitness Band") has words left over, so it deliberately
+#: does NOT match and must reach the model, which calls `github_create_repo`.
+#: Claiming that one would replace the action with a speech about the action.
+#:
+#: The older capability wordings stay claimed too ("are you able to ...", "do
+#: you have a way to ...", "is creating one possible", "why did you say you
+#: can't ..."). The sentence-normalising branch for "can you create ... on my
+#: github" is the BARE branch below - the old `(?:can|could) you` branch here
+#: could never match, because normalise() had already removed those words.
+_GITHUB_CREATE_REPO = re.compile(
+    r"(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:create|make|set\s+up)\s+"
+    r"(?:me\s+)?(?:a\s+|an\s+|one\s+|new\s+|any\s+)*(?:new\s+)?(?:github\s+)?"
+    r"(?:repos?(?:itory|itories)?)\b.*"
+    r"|(?:do|does)\s+(?:you|jarvis)\s+have\s+(?:a\s+|the\s+|any\s+)?"
+    r"(?:way|ability|tool|feature|option)\s+(?:to\s+)?(?:create|make)\s+"
+    r"(?:me\s+)?(?:a\s+|an\s+|one\s+|new\s+|any\s+)*(?:new\s+)?(?:github\s+)?"
+    r"(?:repos?(?:itory|itories)?)\b.*"
+    r"|why\s+(?:did|do|does)\s+(?:you|jarvis)\s+(?:say\s+|keep\s+saying\s+)?"
+    r"(?:that\s+)?(?:you\s+)?(?:can'?t|cannot|can\s+not|won'?t|refuse[sd]?\s+to)\s+"
+    r"(?:create|make)\s+(?:me\s+)?(?:a\s+|an\s+|one\s+|any\s+)*(?:new\s+)?"
+    r"(?:github\s+)?(?:repos?(?:itory|itories)?)\b.*"
+    r"|why\s+(?:did|do|does)\s+(?:you|jarvis)\s+(?:refuse|say\s+no|deny)\b.*"
+    r"(?:repos?(?:itory|itories)?)\b.*"
+    r"|is\s+(?:creating|making)\s+(?:a\s+|an\s+|one\s+)?(?:new\s+)?(?:github\s+)?"
+    r"(?:repo|repository)\s+(?:possible|supported|allowed)\b.*"
+    # The bare capability sentence normalise() leaves behind: "create a
+    # repository", "create me a repository", "set up a new github repository",
+    # "create repositories on my github". A full match only - see above.
+    r"|(?:create|make|set\s*up)\s+(?:me\s+)?(?:a\s+|an\s+|one\s+|new\s+|any\s+)*"
+    r"(?:new\s+)?(?:github\s+)?(?:repos?(?:itory|itories)?)"
+    r"(?:\s+(?:on|in)\s+(?:my|the)\s+github)?\s*\??")
 
 _GITHUB_ASKS = re.compile(
     r"what\s+asks?\s+(?:you\s+)?(?:first\s+)?before\s+github\s+acts?\s*\??$"
@@ -13571,6 +13792,10 @@ def _self_github(s: str) -> Optional[Intent]:
         return Intent("github_self", {"shape": "never"})
     if _GITHUB_TOOLS_QUESTION.fullmatch(s):
         return Intent("github_self", {"shape": "tools"})
+    # "Are you able to create a repository?" (2026-11-09): the real carded action,
+    # not the denial the model gave to "create a repository called Fitness Band".
+    if _GITHUB_CREATE_REPO.fullmatch(s):
+        return Intent("github_self", {"shape": "create_repo"})
     # A request to DO one of the never-list things, or to ask whether it can.
     # `token`/`account` are excluded: "delete my GitHub token" is a disconnect
     # question and belongs to the accounts answer below, not to this refusal.
@@ -21031,6 +21256,104 @@ def _run_reach(intent: Intent) -> Result:
         return Result(REACH_MISSING, intent.name)
 
 
+#: The words when the feature guide's own row is missing (an older PC): the
+#: same four distinctions, said here so the answer is never the model's guess.
+INTERNET_ACCESS_FALLBACK = (
+    "Four separate things reach the internet, and turning on one never turns on "
+    "another: web search, reading one web page, browser control, and the GitHub "
+    "integration. Each has its own switch. So \"I cannot browse the web\" is never "
+    "the whole true answer - the honest answer names which of the four is off and "
+    "what turns it on.")
+
+INTERNET_ACCESS_NO_STATE = (
+    "I could not read this PC's web switches just now, so I will not say which of "
+    "the four is on.")
+
+
+def _internet_reach_said(row: dict) -> str:
+    """One reach row, said in one sentence - the row's OWN words, never a guess."""
+    name = str(row.get("name") or "").strip()
+    if row.get("on"):
+        asks = str(row.get("asks") or "")
+        tail = " It asks you first every time." if asks.startswith("Yes") else ""
+        return f"{name} is On.{tail}"
+    state = str(row.get("state_words") or row.get("state") or "off").strip()
+    line = str(row.get("line") or "").strip()
+    # The rows write their reason starting with the state ("Off. Switch it on in
+    # Settings...", "Off: it needs the second card's browser lane..."), so the
+    # state is taken off the front rather than said twice.
+    rest = re.sub(r"^\s*" + re.escape(state) + r"\s*[.:]\s*", "", line, flags=re.I)
+    if rest and rest[0].islower():
+        rest = rest[0].upper() + rest[1:]
+    if not rest:
+        return f"{name} is {state}."
+    return f"{name} is {state}. {rest}".strip()
+
+
+def _internet_github_said() -> str:
+    """The GitHub integration's own state, from jarvis_github and asks_first.
+
+    Separate from the three web rows on purpose: the owner's 2026-11-09 report
+    was that a GitHub request was answered as if GitHub were the web. A saved
+    token and a switched-on tool are two different conditions, and both are said.
+    """
+    GH = _github_module()
+    if GH is None:
+        return ("The GitHub integration is not installed on this PC yet, so it is "
+                "not one of the four.")
+    try:
+        saved = bool(GH.connected())
+    except Exception:                       # noqa: BLE001 - unreadable is unknown
+        saved = None
+    try:
+        import jarvis_asks_first as AF
+        enabled = {str(n) for n in (AF.tools_enabled_set() or ())}
+    except Exception:                       # noqa: BLE001 - older PC
+        enabled = set()
+    names = ("github_list", "github_read_file", "github_ci_status",
+             "github_comment", "github_open_issue", "github_rerun_workflow",
+             "github_create_repo")
+    on = [n for n in names if n in enabled]
+    if saved is True:
+        token = "a GitHub token is saved"
+    elif saved is False:
+        token = "no GitHub token is saved, so it cannot do anything yet"
+    else:
+        token = "I could not read whether a GitHub token is saved"
+    tools = (f"{len(on)} of its {len(names)} tools are switched on" if on
+             else f"none of its {len(names)} tools is switched on")
+    create = (" Creating one new empty repository is one of its actions, on its own "
+              "card." if "github_create_repo" in GH.ACTIONS else "")
+    return (f"The GitHub integration is separate from all three: {token}, and {tools}."
+            + create)
+
+
+def _run_internet_access(intent: Intent) -> Result:
+    """The four-way truth about what reaches the internet, with live state.
+
+    Read-only: `jarvis_reach.view()` writes nothing and opens no socket, and
+    `jarvis_github.connected()` only reads whether a token is saved.
+    """
+    lead = ""
+    try:
+        import jarvis_feature_guide as FG
+        lead = str(FG.self_fact_words("internet_access") or "").strip()
+    except Exception:                       # noqa: BLE001 - older PC
+        lead = ""
+    said = [lead or INTERNET_ACCESS_FALLBACK]
+    try:
+        import jarvis_reach as RE
+        view = RE.view()
+        rows = {str((r or {}).get("id") or ""): r for r in (view.get("rows") or ())}
+        lines = [_internet_reach_said(rows[i]) for i in
+                 ("web_search", "read_web_page", "browser") if rows.get(i)]
+    except Exception:                       # noqa: BLE001 - unreadable is said
+        lines = []
+    said.append("Right now: " + " ".join(lines) if lines else INTERNET_ACCESS_NO_STATE)
+    said.append(_internet_github_said())
+    return Result("\n\n".join(said), intent.name)
+
+
 # --------------------------------------------------------------------------
 #   The self-questions the doc promised (2026-11-04)
 # --------------------------------------------------------------------------
@@ -21189,13 +21512,14 @@ def _run_connected(intent: Intent) -> Result:
 #: plus the research tool and the scheduled watch body - so the inventory
 #: answer names the whole real GitHub surface and nothing invented.
 GITHUB_TOOLS_WORDS = (
-    "Six tools for your own GitHub: github_list (your repositories, a "
+    "Seven tools for your own GitHub: github_list (your repositories, a "
     "repository's pull requests, issues or workflow runs), github_read_file (one "
     "file), github_ci_status (the newest workflow run), github_comment (one "
-    "comment), github_open_issue (one new issue) and github_rerun_workflow (run an "
-    "existing workflow again). Plus github_search, which researches a library on "
-    "GitHub, and the scheduled watch_github job behind \"tell me when\" GitHub "
-    "checks.")
+    "comment), github_open_issue (one new issue), github_rerun_workflow (run an "
+    "existing workflow again) and github_create_repo (create ONE new, empty "
+    "repository on your own account). Plus github_search, which researches a "
+    "library on GitHub, and the scheduled watch_github job behind \"tell me "
+    "when\" GitHub checks.")
 
 
 def _github_asks_words() -> str:
@@ -21204,10 +21528,11 @@ def _github_asks_words() -> str:
         import jarvis_asks_first as AF
         view = AF.view(here=False)
     except Exception:                       # noqa: BLE001 - older PC
-        return ("Four actions ask you first every time: reading your GitHub, "
-                "commenting, opening an issue and re-running a workflow.")
+        return ("Five actions ask you first every time: reading your GitHub, "
+                "commenting, opening an issue, re-running a workflow and creating a "
+                "repository.")
     wanted = ("github_inspect", "github_comment", "github_open_issue",
-              "github_rerun_workflow")
+              "github_rerun_workflow", "github_create_repo")
     got = []
     for group in view.get("groups") or ():
         for row in group.get("rows") or ():
@@ -21215,11 +21540,57 @@ def _github_asks_words() -> str:
             if rid in wanted:
                 got.append(str(row.get("title") or rid))
     if not got:
-        return ("Four actions ask you first every time: reading your GitHub, "
-                "commenting, opening an issue and re-running a workflow.")
+        return ("Five actions ask you first every time: reading your GitHub, "
+                "commenting, opening an issue, re-running a workflow and creating a "
+                "repository.")
     return ("These GitHub actions ask you first every time: " + _self_list(got)
             + ". The reads ask too, because a read sends your token to "
               "api.github.com. That cannot be loosened from an app.")
+
+
+def _github_create_repo_words() -> str:
+    """The real answer to "can you create a repository?", read from the modules.
+
+    Three facts, each read where it lives: the action exists (`GH.ACTIONS`),
+    whether its tool is switched on (`jarvis_asks_first`), and whether a token is
+    saved (`GH.connected()`, appended by the caller as `state`). The name rule is
+    GitHub's own and is the one that made "Fitness Band" fail: no spaces.
+    """
+    GH = _github_module()
+    if GH is None:
+        # The caller appends `state`, which is already the missing-module
+        # sentence - so this returns nothing rather than saying it twice.
+        return ""
+    try:
+        exists = "github_create_repo" in tuple(getattr(GH, "ACTIONS", ()) or ())
+    except Exception:                       # noqa: BLE001 - older PC
+        exists = False
+    if not exists:
+        return ("This PC's Jarvis does not have the create-a-repository action yet - "
+                "run apply-patches.ps1 on the PC. It can read your GitHub, comment, "
+                "open an issue and re-run a workflow, and nothing else.")
+    try:
+        import jarvis_asks_first as AF
+        switched = "github_create_repo" in {str(n) for n in AF.tools_enabled_set()}
+    except Exception:                       # noqa: BLE001 - unreadable is unknown
+        switched = None
+    if switched is True:
+        tool = "Its own tool, github_create_repo, is switched on in Settings, What asks first."
+    elif switched is False:
+        tool = ("Its own tool, github_create_repo, is switched OFF in Settings, What "
+                "asks first, under \"Jarvis's own tools\" - switching it on is one "
+                "card on the PC. While it is off, I cannot ask GitHub to create one.")
+    else:
+        tool = "I could not read whether its tool is switched on."
+    return ("Yes - creating ONE new, empty repository on your own GitHub account is a "
+            "real action I have, and it always waits for your own approval card "
+            "first. The card shows the exact name and whether it is private; nothing "
+            "is sent to GitHub until you approve that card. It creates the repository on your "
+            "own account only - never an organization's - and nothing is pushed into "
+            "it, no code and no files. It also needs a GitHub token saved on this PC "
+            "through the connect card. " + tool + " A name may use only letters, "
+            "numbers, dot, dash and underscore: GitHub does not allow spaces, so "
+            "\"Fitness Band\" has to be typed as \"Fitness-Band\".")
 
 
 #: The same capability words as `jarvis_feature_guide.SELF_FACTS
@@ -21231,24 +21602,27 @@ GITHUB_CAPABILITY_FALLBACK = (
     "request - that proves the token identifies your GitHub account, nothing more. "
     "It lets me search GitHub, see private repositories and watch CI. With the "
     "GitHub tools switched on I can also read your repositories, pull requests, "
-    "issues, CI status and one file, comment, open an issue and re-run a workflow - "
-    "each on its own approval card. I can never clone, push or pull code, and never "
-    "merge, commit, close or delete anything.")
+    "issues, CI status and one file, comment, open an issue, re-run a workflow and "
+    "create one new empty repository on your own account - each on its own approval "
+    "card. I can never clone, push or pull code, and never merge, commit, close or "
+    "delete anything.")
 GITHUB_NEVER_FALLBACK = (
     "No - I never copy a repository to this PC, send code back to GitHub, or change "
     "code in any way: there is no action, card or endpoint for that, so approving a "
     "card cannot create one. What a saved token does let me do: search GitHub, see "
     "private repositories and watch CI; and with the GitHub tools switched on, read "
     "your repositories, pull requests, issues, CI status and one file, comment, open "
-    "an issue and re-run a workflow - each on its own approval card. There is no "
-    "merge action and no merge card at all.")
+    "an issue, re-run a workflow and create one new empty repository on your own "
+    "account - each on its own approval card. There is no merge action and no merge "
+    "card at all.")
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
     "GitHub tools switched on, it can also read your repositories, pull requests, "
-    "issues, CI status and one file, comment, open an issue and re-run a workflow - "
-    "each on its own approval card. I never copy a repository to this PC, send code "
-    "back to GitHub, or change code in any way: there is no action, card or endpoint "
-    "for that, and no merge action or merge card either.")
+    "issues, CI status and one file, comment, open an issue, re-run a workflow and "
+    "create one new empty repository on your own account - each on its own approval "
+    "card. I never copy a repository to this PC, send code back to GitHub, or change "
+    "code in any way: there is no action, card or endpoint for that, and no merge "
+    "action or merge card either.")
 
 
 def _github_capability_words(which: str = "sentence") -> str:
@@ -21347,6 +21721,9 @@ def _run_github_self(f: dict) -> Result:
             GITHUB_TOOLS_WORDS + " All of them are off by default: each has its own "
             "switch in Settings, What asks first, under \"Let the AI use this\" "
             "(group \"Jarvis's own tools\"). " + state, "github_self")
+    if shape == "create_repo":
+        return Result((_github_create_repo_words() + " " + state).strip(),
+                      "github_self")
     if shape == "needs":
         return Result(
             "Two things. First a GitHub personal access token, saved on this PC by "
@@ -25772,6 +26149,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "internet_access":
+        return _run_internet_access(intent)
     if n == "tools_inventory":
         return _run_tools_inventory(intent)
     if n == "tools_asking":
@@ -26619,6 +26998,10 @@ READ_ONLY_INTENTS = frozenset({
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
     "github_self", "accounts_answer",
+    # The four-way internet answer (2026-11-09): it reads jarvis_reach's own rows
+    # and whether a GitHub token is saved, raises no card and opens no socket, so
+    # it must not take away what "cancel that" undoes.
+    "internet_access",
     # The connect-card receipt answer (2026-11-08): it reads ONE non-secret
     # verdict file (service, timestamp, pass/fail words - never a value) and
     # changes nothing, so "cancel that" must not lose its record to it.

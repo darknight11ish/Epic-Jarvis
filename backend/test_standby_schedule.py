@@ -351,8 +351,8 @@ def t_the_two_ends():
               ev and ev[-1].get("notify") is False and set(ev[-1]) ==
               {"id", "kind", "state", "late", "notify"}, ev)
         timer_ev = [d for k, d in w.events if d.get("kind") == "timer" and d["state"] == "fired"]
-        check("a timer's event still notifies (no notify key)",
-              timer_ev and "notify" not in timer_ev[-1], timer_ev)
+        check("a timer's event says notify true (the flag the phone reads)",
+              timer_ev and timer_ev[-1].get("notify") is True, timer_ev)
         check("Jarvis is on standby, through power_manage like the Standby button",
               P.current() == "standby" and gate.asked and gate.asked[-1][0] == "power_manage"
               and "asked from the standby schedule" in gate.asked[-1][1], gate.asked)

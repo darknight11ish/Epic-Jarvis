@@ -271,12 +271,14 @@ def t_a_timer_goes_off_once_and_the_event_has_no_words():
     check("it goes off on time", w.s.tick() == [j["id"]])
     check("... once", w.s.tick() == [] and w.s.tick(w.clock.t + 3600) == [])
     fired = [d for k, d in w.events if d.get("state") == "fired"]
-    check("the event is kind `schedule`, with the id, the kind and late=false",
-          fired == [{"id": j["id"], "kind": "timer", "state": "fired", "late": False}], fired)
+    check("the event is kind `schedule`, with the id, the kind, late=false and notify=true",
+          fired == [{"id": j["id"], "kind": "timer", "state": "fired", "late": False,
+                     "notify": True}], fired)
     blob = json.dumps(w.events)
     check("no event carries the words", "pasta" not in blob)
-    check("every event has only id, kind, state (and late)",
-          all(set(d) <= {"id", "kind", "state", "late"} and k == "schedule" for k, d in w.events))
+    check("every event has only id, kind, state, late and notify",
+          all(set(d) <= {"id", "kind", "state", "late", "notify"} and k == "schedule"
+              for k, d in w.events))
     v = w.s.job(j["id"])
     check("after it went off it is still readable by id, words and all",
           v is not None and v["state"] == "fired" and v["text"] == "pasta")

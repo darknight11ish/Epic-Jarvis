@@ -741,14 +741,15 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 
 
 # --------------------------------------------------------------------------
-#   GitHub: read it, and take three small actions (jarvis_github.py)
+#   GitHub: read it, and take a few small actions (jarvis_github.py)
 # --------------------------------------------------------------------------
 #: The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
-#: open pull requests, issues, CI status, one file) and take three small ACTIONS
-#: (comment, open an issue, re-run a workflow) - each action behind its own
-#: approval card - and it may never merge, push, commit, delete or close.
+#: open pull requests, issues, CI status, one file) and take a few small ACTIONS
+#: (comment, open an issue, re-run a workflow - plus, since 2026-11-09, create one
+#: new empty repository) - each action behind its own approval card - and it may
+#: never merge, push, commit, delete or close.
 #:
-#: ALL SIX ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
+#: ALL SEVEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
 #: a fixed-endpoint read still sends the owner's own GitHub token to
 #: api.github.com, so it is egress with a credential attached. `github_read` is
 #: the action a "tell me when" GitHub watch already uses, and it MUST stay
@@ -758,7 +759,11 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: NEEDS_A_PERSON as well means an owner who loosens that line still cannot make
 #: a GitHub read run with nobody asked.
 GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status")
-GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow")
+GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow",
+                       # 2026-11-09: one new, empty repository on the owner's own
+                       # account - the owner's "create a repository called
+                       # Fitness Band" ask. Its own action at "ask".
+                       "github_create_repo")
 GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
 
 
@@ -816,6 +821,11 @@ def _prepare_github_open_issue(args: dict):
 def _prepare_github_rerun_workflow(args: dict):
     import jarvis_github as GH
     return _github_plan(GH.plan_rerun, args)
+
+
+def _prepare_github_create_repo(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_create_repo, args)
 
 
 def _run_github(args: dict, plan_obj, **_) -> dict:
@@ -4989,11 +4999,12 @@ TOOLS: dict = {
         # which action name (and therefore which tier) governs THIS call.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
-    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03: "Read + actions"). Every one of the six
-    # asks a person: `github_inspect`'s tier is "ask" in the shipped config, and
-    # all six are in NEEDS_A_PERSON, so a loosened tier still cannot run one with
-    # nobody asked (the reason is on GITHUB_READ_TOOLS above).
+    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03: "Read + actions", and the one CREATE of
+    # 2026-11-09). Every one of the seven asks a person: `github_inspect`'s tier
+    # is "ask" in the shipped config, and all seven are in NEEDS_A_PERSON, so a
+    # loosened tier still cannot run one with nobody asked (the reason is on
+    # GITHUB_READ_TOOLS above).
     #
     # The lookup names are the TOOL names: github-tools.patch registers each one
     # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
@@ -5075,6 +5086,26 @@ TOOLS: dict = {
             "run_id": {"type": "string", "description": "the workflow run's number"}},
          "required": ["repo", "run_id"]},
         _prepare_github_rerun_workflow, _run_github),
+    # ONE new, empty repository on the owner's own account (2026-11-09, the
+    # owner's "create a repository called Fitness Band"). A card first, always:
+    # it is a write on GitHub in the owner's name that Jarvis cannot undo.
+    "github_create_repo": Tool(
+        "github_create_repo",
+        "Create ONE new, EMPTY repository on the owner's own GitHub account, with a "
+        "name and optional description. The owner sees the exact name and whether it "
+        "is private on an approval card first, and nothing is created without their "
+        "yes. Nothing is pushed into it, no code or files are sent, no organization "
+        "is created, and it never merges, pushes, commits, closes or deletes anything.",
+        {"type": "object", "properties": {
+            "name": {"type": "string",
+                     "description": 'the new repository\'s name, e.g. "Fitness-Band" '
+                                    "(letters, numbers, dot, dash and underscore; no spaces)"},
+            "description": {"type": "string",
+                            "description": "a short description; may be left out"},
+            "private": {"type": "boolean",
+                        "description": "true for a private repository; default false"}},
+         "required": ["name"]},
+        _prepare_github_create_repo, _run_github),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -5455,7 +5486,10 @@ TOOLS: dict = {
         "Set a reminder or alarm on this PC, once or repeating. `when` is plain "
         "English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\".",
         {"type": "object", "properties": {
-            "text": {"type": "string", "description": "what to remind the owner of, in their words"},
+            "text": {"type": "string",
+                     "description": "the ACTION only, in the owner's words - e.g. \"Call "
+                                    "Grandma\" or \"take my pills\"; never the whole request "
+                                    "(\"remind me to call Grandma in 4 days\") and never the time"},
             "when": {"type": "string"},
             "alarm": {"type": "boolean", "description": "true for a wake-up alarm"},
             "repeat": {"type": "object", "description": "only for something that repeats",
@@ -5748,6 +5782,26 @@ TOOLS: dict = {
 #: set Jarvis's alarms. The owner can type or say it instead.
 SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done", "coming_up"})
 
+#: The scheduler tools that CHANGE something, as opposed to `coming_up`, which
+#: only reads. A failed write is what `run_local_turn` holds the answering
+#: round's words for (2026-11-09), so a claim like "I've updated it" cannot be
+#: said over a tool result that says it was not.
+SCHEDULE_WRITE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done"})
+
+#: What a failed scheduler write says in the answer, in place of the model's
+#: own "done" claim. One noun per tool, so the owner reads which thing was not
+#: set; `{why}` is the tool's own error, in the tool's own words.
+SCHEDULE_NOT_DONE = {
+    "set_reminder": "That reminder was not set: {why}",
+    "set_timer": "That timer was not started: {why}",
+    "todo_add": "That was not added to your list: {why}",
+    "todo_done": "That was not marked done: {why}",
+}
+#: The last line, always: nothing changed, whatever the reason was.
+SCHEDULE_NOT_DONE_END = " Nothing was changed."
+#: When the tool gave no reason at all, the same sentence without one.
+SCHEDULE_NOT_DONE_PLAIN = "That was not set, and nothing was changed."
+
 SCHEDULE_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not set or "
                           "change timers, reminders or the to-do list from it. Nothing was "
                           "changed. Tell the owner they can type or say it themselves.")
@@ -5858,7 +5912,14 @@ def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
         return {"ok": bool(res.ids), "said": res.reply}
     # set_reminder
     kind = "alarm" if args.get("alarm") is True else "reminder"
-    text = str(args.get("text") or "").strip()
+    # THE TITLE IS THE ACTION, NEVER THE SENTENCE (2026-11-09, the owner's
+    # Wave-13 "Grandma" bug): a model that copies the whole request into `text`
+    # ("remind me to call Grandma in 4 days from now") used to store exactly
+    # that, so the reminder's title - what both apps print and what a
+    # notification says - was the instruction. The command lead and a trailing
+    # time phrase are the SENTENCE's words, not the action's, so they are
+    # removed here, once, on the only path a model has into a reminder.
+    text = Q.reminder_action_words(str(args.get("text") or ""), now)
     if isinstance(args.get("repeat"), dict):
         res = Q._set_at(kind, Q.When(rule=args["repeat"]), text, sched, now, "reminder_set")
         return {"ok": bool(res.ids), "said": res.reply}
@@ -5911,6 +5972,18 @@ def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, 
             # schedule_correction).
             step["said"] = str(result.get("said") or "").strip()
         say_step("tool_finished", name, ok=step["ok"])
+    if watch is not None and not step["ok"] and name in SCHEDULE_WRITE_TOOLS:
+        # A WRITE THAT DID NOT HAPPEN (2026-11-09). The owner's Wave-13 bug:
+        # Jarvis answered "I've updated it" on a turn whose own footer said no
+        # action ran. The words of the round that answers are HELD from here
+        # (run_local_turn), so that claim is dropped before it is read and the
+        # tool's own error is said instead - a receipt exists only when the
+        # action really ran. Nothing is weakened by recording this: the gate,
+        # the outside-text refusal and the tool's own checks have all already
+        # decided, and this only changes what the ANSWER may say.
+        watch.schedule_failed = {"tool": name,
+                                 "why": str(result.get("error")
+                                            or result.get("said") or "").strip()}
     if name == "coming_up" and watch is not None:
         # C5 (security audit 2026-10-30): a reminder's own words are stored
         # data - a previous turn could in principle have written them, and
@@ -6103,8 +6176,9 @@ def _github_search_action_name() -> str:
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
-    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03). The READS are here for the same reason
+    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03, plus the one CREATE of 2026-11-09). The
+    # READS are here for the same reason
     # `github_search` above is: a read sends the owner's own GitHub token to
     # api.github.com on a fixed address, so it is egress with a credential
     # attached, and "it is only a read" is not a reason to spend a credential
@@ -6120,6 +6194,8 @@ NEEDS_A_PERSON = {
     "github_open_issue": "opens a new issue on GitHub in the owner's name",
     "github_rerun_workflow": "starts a CI run on GitHub, which spends the work of running "
                              "the checks again",
+    "github_create_repo": "creates a new repository on GitHub in the owner's name, which "
+                          "Jarvis cannot delete afterwards",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -9250,6 +9326,13 @@ class _TurnWatch:
         # per-review fake/real verdict the model wrote cannot reach the owner.
         self.product_result = None
         self.product_done = False
+        # A reminder, timer or to-do WRITE that did not succeed this turn
+        # (2026-11-09): {"tool", "why"}. The answering round's words are held
+        # from then on so a claim ("I've updated it") can be dropped before the
+        # owner sees it, and `schedule_failed_done` says the held words have
+        # been dealt with. Empty/False on every turn that raised nothing.
+        self.schedule_failed = {}
+        self.schedule_failed_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
         # The websites (host names) browser_control read this turn, for the
         # form-review rule "only the form's own site" (FORM_REVIEW_OTHER_SITE).
@@ -10079,14 +10162,15 @@ TOOL_GROUPS = (
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
     ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
     # GitHub: searching it for a library, and (2026-11-03) reading the owner's
-    # own and taking the three small actions. The six joined this group rather
+    # own and taking the small actions. The seven joined this group rather
     # than starting new ones for the reason the propose_plan note below gives: a
     # NEW group name costs tokens in more_tools' own description on every turn,
     # and a group's MEMBERS cost nothing extra there. They belong together
-    # anyway - every one of them is about GitHub, and all six ship switched off.
+    # anyway - every one of them is about GitHub, and all seven ship switched off.
     ("github", "search GitHub for a library, or read your own GitHub and act on it",
      ("github_search", "github_list", "github_read_file", "github_ci_status",
-      "github_comment", "github_open_issue", "github_rerun_workflow")),
+      "github_comment", "github_open_issue", "github_rerun_workflow",
+      "github_create_repo")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single
@@ -10314,9 +10398,10 @@ TOOL_HINTS = {
                         r"\bfirefox\b", r"page element"),
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
                       r"\bpackage\b", r"\bexisting\b"),
-    # Your own GitHub, on demand (2026-11-03). Each of the six has words of its
-    # own so `tool_diet` can tell them apart: `github` alone is on all six, and
-    # the six must not be sent to the model for every GitHub question - the
+    # Your own GitHub, on demand (2026-11-03, plus the one CREATE of 2026-11-09).
+    # Each of the seven has words of its own so `tool_diet` can tell them apart:
+    # `github` alone is on all seven, and the seven must not be sent to the model
+    # for every GitHub question - the
     # other words are what actually narrow it.
     "github_list": (r"\bgithub\b", r"\brepos?\b", r"\bpull requests?\b",
                     r"\bissues?\b", r"\bworkflow runs?\b", r"\bmy repos\b"),
@@ -10329,6 +10414,8 @@ TOOL_HINTS = {
                           r"\bfile\b[\s\S]{0,20}\bbug\b", r"\bnew issue\b"),
     "github_rerun_workflow": (r"\bgithub\b", r"\bre-?run\b", r"\bworkflow\b",
                               r"\bci\b", r"\bagain\b"),
+    "github_create_repo": (r"\bgithub\b", r"\brepos?(?:itory|itories)?\b",
+                           r"\bcreate\b", r"\bmake\b", r"\bnew\b", r"\bproject\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
                    r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
@@ -14288,6 +14375,80 @@ def _pooled_num_ctx(ollama_url) -> Optional[int]:
         return None
 
 
+#: How the last pooled-lane preload went (for the tests, and for anyone
+#: asking): state "warmed" | "already" | "off" | "failed", that model and
+#: window, and why. Mirrors WARM_LAST one lane over.
+POOLED_PRELOAD_LAST: dict = {}
+_POOLED_PRELOAD_LOCK = threading.Lock()
+#: One plain line when the preload could not be sent. The turn still runs, at
+#: whatever window Ollama chose - and this says so rather than passing silently.
+POOLED_PRELOAD_FAILED_LINE = ("The pooled lane did not take its {ctx:,}-token window "
+                              "({why}); this answer still ran, at whatever window "
+                              "Ollama chose.")
+
+
+def _pooled_preload_record(state: str, why: str, model: str, ctx) -> dict:
+    out = {"state": state, "why": why, "model": str(model or ""), "ctx": ctx,
+           "at": time.time()}
+    with _POOLED_PRELOAD_LOCK:
+        POOLED_PRELOAD_LAST.clear()
+        POOLED_PRELOAD_LAST.update(out)
+    return dict(out)
+
+
+def pooled_preload(ollama_url: str, model: str) -> dict:
+    """F2 (2026-11-09): make the POOLED lane's runner resident at the window the
+    chat request names, BEFORE the /v1/chat/completions turn is dispatched.
+
+    Why this exists, measured live on the 0.2.441 install at 2026-11-09 04:00
+    PT: `/v1/chat/completions` IGNORES a top-level `options` field when it
+    spawns a runner, so a COLD pooled turn loaded the 30B at Ollama's own
+    default (8192 here) even though `chat_body` sent `options.num_ctx` =
+    49,152 - the request naming the window made no difference. Ollama's NATIVE
+    `/api/generate` DOES honour `options.num_ctx` and keeps that runner
+    resident: it is exactly the call the Q8 warm measured at 49,152 tokens /
+    0 spill on this PC, and the one `warm_everyday` already uses.
+
+    So: read the lane's own `/api/ps`, and only when this model is not resident
+    there, or is resident below the lane's configured window, send that native
+    load first. The /v1 turn then reuses the resident runner. When `/api/ps`
+    cannot be read the preload is sent anyway - a model already at the named
+    window is not reloaded - so the guarantee is not traded for a probe.
+
+    Only the pooled lane, the one `jarvis_presets.lane_num_ctx` names; every
+    other lane answers "off" without a request, so the everyday and coding
+    lanes keep today's behaviour byte for byte. Never starts, pauses or stops a
+    lane, never changes a setting, never raises. `POOLED_PRELOAD_LAST` keeps
+    how it went; a "failed" one is said by the caller in one plain line and the
+    real turn still goes.
+    """
+    ctx = _pooled_num_ctx(ollama_url)
+    if not ctx:
+        return _pooled_preload_record("off", "not the pooled lane", model, None)
+    url = str(ollama_url).rstrip("/")
+    why = "no model loaded"
+    try:
+        ps = _get_json(f"{url}/api/ps", timeout=1.0)
+        rows = [r for r in (ps or {}).get("models") or [] if isinstance(r, dict)]
+    except Exception:
+        rows, why = [], "could not read /api/ps"
+    for row in rows:
+        if _same_model(row.get("name") or row.get("model"), model):
+            size = int(row.get("context_length") or 0)
+            if size >= int(ctx):
+                return _pooled_preload_record("already", "", model, ctx)
+            why = f"loaded at {size:,}"
+            break
+    try:
+        _get_json(f"{url}/api/generate",
+                  {"model": model, "options": {"num_ctx": int(ctx)}},
+                  timeout=WARM_TIMEOUT)
+    except Exception as exc:
+        kind = f"HTTP {exc.code}" if getattr(exc, "code", None) else type(exc).__name__
+        return _pooled_preload_record("failed", f"{why}; {kind}", model, ctx)
+    return _pooled_preload_record("warmed", why, model, ctx)
+
+
 def chat_body(model: str, messages: list, opts: dict, tools=None, *,
               spoken: bool = False, question: str = "", role: str = "everyday",
               ollama_url: Optional[str] = None,
@@ -15129,6 +15290,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_CHAT_OVERHEAD
                    - estimate_tokens(offer["schemas"]))
 
+    # F2 (2026-11-09): a failed pooled preload is said once per turn, not once
+    # per round; POOLED_PRELOAD_LAST keeps the record either way.
+    preload_note = {"said": False}
+
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
         rnd = _Round()
@@ -15225,7 +15390,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         spend_hold = _spending_hold(watch, names)
         holding = (spend_hold
                    or (watch.retirement_result is not None and not watch.retirement_done)
-                   or (watch.product_result is not None and not watch.product_done))
+                   or (watch.product_result is not None and not watch.product_done)
+                   # A reminder, timer or to-do write that FAILED this turn
+                   # (2026-11-09): the answering round's words are held and
+                   # checked before the owner sees them, so "I've updated it"
+                   # over a tool result saying it was not set cannot be read.
+                   # The same seam a spending table and a what-if already use.
+                   or (bool(watch.schedule_failed) and not watch.schedule_failed_done))
         # The model's words this round are thrown away and replaced by code's
         # own text (a what-if, a product report): they are not "what it said"
         # for the checks that read the model's words (the "I've done it" line).
@@ -15255,6 +15426,22 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 else:
                     emit(clean)
 
+        # F2 (2026-11-09), immediately before the dispatch: on the pooled lane
+        # the body's own `options` is not enough, because /v1 ignores it when it
+        # spawns a runner. Warm the lane at the window it names first, so a COLD
+        # turn does not silently run at 8192. Once the runner is resident its
+        # own /api/ps answer makes the next round's check a read and no call;
+        # every non-pooled lane returns at once, without a request.
+        _preload = pooled_preload(cur["url"], cur["model"])
+        if (_preload.get("state") == "failed" and announce is not None
+                and not preload_note["said"]):
+            preload_note["said"] = True
+            try:
+                announce(POOLED_PRELOAD_FAILED_LINE.format(
+                    ctx=int(_preload.get("ctx") or 0),
+                    why=_preload.get("why") or "no reason"))
+            except Exception:
+                pass
         if post is not None:
             whole = dict(body, stream=False)
             # Only a stream takes stream_options; a whole reply has `usage`.
@@ -15324,6 +15511,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 deliver_table("".join(held))
             elif spend_hold:
                 deliver_plain("".join(held))
+            elif watch.schedule_failed and not watch.schedule_failed_done:
+                # A failed reminder/timer/to-do write: the model's words are
+                # checked for a "done" claim before the owner reads them
+                # (2026-11-09). A spending answer keeps its own checked
+                # sentence above, which is itself a guard.
+                deliver_schedule_truth("".join(held))
             deliver_retirement()
             deliver_product_report()
         elif spend_hold and not watch.spending_asked and watch.spending_table is None:
@@ -15424,6 +15617,49 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = True          # a blank line after another held sentence
         out.set_status(None)
         emit(answer)
+
+    def deliver_schedule_truth(text: str) -> None:
+        """A reminder, timer or to-do was asked for and NOT set (2026-11-09).
+
+        The owner's Wave-13 bug, in his own words: Jarvis said "I've updated
+        it" on a turn whose own footer said no action ran. The footer was
+        right; the claim above it was not, and the owner read both. The
+        answering round's words are held when a scheduler WRITE failed
+        (`_TurnWatch.schedule_failed`, set by `_schedule_call`), and this is
+        the one place they are dealt with before they stream:
+
+          * words that claim the change was made are DROPPED - a receipt
+            exists only when the action really ran - and the tool's own error
+            is said instead, in a sentence the owner can act on;
+          * words that claim nothing are shown exactly as written (delayed
+            only in this rare case).
+
+        It cannot check when `jarvis_claims` is missing or broken: then the
+        words are treated as a claim rather than risked, the same fail-closed
+        direction the private-chat gate uses. The tool's error is always the
+        tool's own; nothing here invents a reason.
+        """
+        watch.schedule_failed_done = True
+        try:
+            import jarvis_claims
+            claimed = jarvis_claims.unbacked_claim(text, steps)
+        except Exception:
+            claimed = True
+        out.set_status(None)
+        if not claimed:
+            if text.strip():
+                emit(text)
+            return
+        failed = watch.schedule_failed if isinstance(watch.schedule_failed, dict) else {}
+        tool = str(failed.get("tool") or "")
+        why = str(failed.get("why") or "").strip()
+        head = SCHEDULE_NOT_DONE.get(tool, "That was not set: {why}")
+        reason = head.format(why=why).rstrip() if why else ""
+        if reason and reason[-1] not in ".!?":
+            reason += "."                # the tool's error need not end a sentence
+        line = (reason + SCHEDULE_NOT_DONE_END) if reason else SCHEDULE_NOT_DONE_PLAIN
+        said["gap"] = True
+        emit(line)
 
     def fail(message: str) -> None:
         if out.sse:
@@ -16715,12 +16951,19 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
     broken pattern costs that one line and nothing else.
     """
     kinds: list = []
-    try:
-        line = _nothing_done_line(text, list(steps or ()), spoken=spoken)
-    except Exception:
-        line = ""
-    if line:
-        kinds.append(("claimed_undone", line))
+    # A failed reminder/timer/to-do write whose claim was already dropped and
+    # replaced by code's own line (`deliver_schedule_truth`, 2026-11-09) needs
+    # no second correction: the generic line would repeat what the owner has
+    # just been told. `watch` may be None on the cloud lane, where no scheduler
+    # tool can run at all - so the check is False there, and nothing changes.
+    already_told = bool(getattr(watch, "schedule_failed_done", False))
+    if not already_told:
+        try:
+            line = _nothing_done_line(text, list(steps or ()), spoken=spoken)
+        except Exception:
+            line = ""
+        if line:
+            kinds.append(("claimed_undone", line))
     try:
         line = _schedule_refusal_line(text, list(steps or ()))
     except Exception:

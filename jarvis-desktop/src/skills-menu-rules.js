@@ -46,10 +46,17 @@ export const ACTIONS = [
   "disable",
   "remove_off",
   "edit",
+  "creator_read",
+  "creator_install",
 ];
 
 /** The actions that raise a card on the PC, and so wait for a live link. */
-export const CARD_ACTIONS = ["install", "enable", "edit"];
+export const CARD_ACTIONS = ["install", "enable", "edit", "creator_install"];
+
+/** The PC's answer when it has no Creator mode module yet. */
+export const CREATOR_MISSING =
+  "This PC's Jarvis cannot show Creator mode yet. On the PC, in the Jarvis folder, run " +
+  "apply-patches.ps1, then restart Jarvis.";
 
 /** The sentence for `n` files in scripts/, or "" when there are none. */
 export function inertLine(n) {
@@ -231,4 +238,83 @@ export function answerWords(raw) {
   }
   if (raw.ok === true) return "Done.";
   return "";
+}
+
+/* ── Creator mode (2026-11-09, Wave 13; JARVIS-API section 209) ──────────── */
+
+/**
+ * One item in the waiting folder, made safe for the page.
+ *
+ * The PC decides all of it: the kind, the scanner's verdict, the findings and
+ * whether it may be installed at all. The page only decides what a refused row
+ * LOOKS like - and a refused row never gets a button, because the PC would not
+ * draw a card for it anyway.
+ */
+function creatorRow(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  if (!name) return null;
+  const kind = raw.kind === "skill" ? "skill" : raw.kind === "plugin" ? "plugin" : "";
+  const verdict = typeof raw.verdict === "string" ? raw.verdict : "";
+  const findings = Array.isArray(raw.findings) ? raw.findings : [];
+  const pick = (severity) =>
+    findings
+      .filter((f) => f && f.severity === severity && typeof f.message === "string")
+      .map((f) => ({
+        message: f.message,
+        where: typeof f.where === "string" ? f.where : "",
+      }));
+  return {
+    name,
+    kind,
+    kindWords:
+      kind === "skill" ? "skill" : kind === "plugin" ? "plug-in" : "not a skill or a plug-in",
+    verdict,
+    refused: raw.refused === true || verdict === "refuse" || verdict === "malformed",
+    // The PC's own answer, never re-derived here: a plug-in and a blocked skill
+    // both come back with can_install false, and the page must not invent a
+    // button the PC would refuse.
+    canInstall: raw.can_install === true,
+    needsWarnings: raw.needs_warnings === true,
+    summary: typeof raw.summary === "string" ? raw.summary : "",
+    reason: typeof raw.reason === "string" ? raw.reason : "",
+    blocking: pick("block"),
+    warnings: pick("warn"),
+    installed: raw.installed === true,
+    where: typeof raw.where === "string" ? raw.where : "",
+    sentence: typeof raw.sentence === "string" ? raw.sentence : "",
+  };
+}
+
+/**
+ * The PC's `GET /api/creator/incoming`, made safe for the page: the waiting
+ * folder and every item in it. `null` when the answer is not the shape this
+ * page can honestly show - "nothing waiting" must never be shown for "I could
+ * not ask".
+ */
+export function creatorView(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (raw.ok === false) {
+    return {
+      available: false,
+      why:
+        (typeof raw.reason === "string" && raw.reason) ||
+        (typeof raw.error === "string" && raw.error) ||
+        (typeof raw.why === "string" && raw.why) ||
+        CREATOR_MISSING,
+      folder: typeof raw.folder === "string" ? raw.folder : "",
+      items: [],
+      counts: {},
+      note: "",
+    };
+  }
+  if (!Array.isArray(raw.items)) return null;
+  return {
+    available: true,
+    why: "",
+    folder: typeof raw.folder === "string" ? raw.folder : "",
+    items: raw.items.map(creatorRow).filter(Boolean),
+    counts: raw.counts && typeof raw.counts === "object" ? raw.counts : {},
+    note: typeof raw.note === "string" ? raw.note : "",
+  };
 }
