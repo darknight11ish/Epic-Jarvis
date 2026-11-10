@@ -1,0 +1,8 @@
+        # auto-learn.patch (2026-11-09, the memory-card research): while a
+        # learning fault is active, the cards it parked are left out of this
+        # one read - the single banner in both apps says why. Nothing is
+        # decided: they stay pending, and they come back when it clears.
+        _rows = _intake_annotate([dict(r) for r in c.execute(
+            "SELECT id,text,replaces,replaces_id,replaces_text,confidence,source,created"
+            " FROM proposals WHERE state='pending' ORDER BY created")])
+        return _intake_fault_visible(_rows)

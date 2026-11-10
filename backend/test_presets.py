@@ -1,4 +1,4 @@
-"""The nine focus presets: ids, lanes, honest measurements, one rendered contract."""
+"""The ten focus presets: ids, lanes, honest measurements, one rendered contract."""
 import json
 import re
 import sys
@@ -258,7 +258,7 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
           "note opens with, so the two fields cannot disagree",
           all(row["note"].startswith(row["card"])
               for row in two["by_gpu_count"]["3"].values()
-              if row["preset"] != "coding"),
+              if row["preset"] not in ("coding", "medical")),
           {k: (v["card"], v["note"]) for k, v in two["by_gpu_count"]["3"].items()})
     check("the pooled lane's port is ONE number, pinned to the two modules that "
           "own it rather than typed three times",
@@ -351,10 +351,10 @@ def t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane():
 
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
-    check("exactly nine presets, in the owner's order",
+    check("exactly ten presets, in the owner's order",
           [p["id"] for p in fixture["presets"]]
           == ["general", "general_uncensored", "coding", "agentic_vision", "fast",
-              "reflect", "pictures", "documents", "browser"],
+              "reflect", "pictures", "documents", "browser", "medical"],
           [p["id"] for p in fixture["presets"]])
     check("the five old ids are named as replaced",
           fixture["old_ids_replaced"] == ["everyday", "coding", "admin", "long", "specialist"])
@@ -374,7 +374,7 @@ def main() -> int:
     check("General is qwen3.5:9b on the 2060 at 196,608",
           gen.model == "qwen3.5:9b" and gen.context == 196608 and gen.lane == "main")
     cod = P.by_id("coding")
-    check("Coding is the one heavy row, on the pooled all-three-card lane",
+    check("Coding is heavy, on the pooled all-three-card lane",
           cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
           and cod.lane == "pooled"
           and cod.measured["tok_s"] == 83.8 and cod.measured["rubric"] == "6/6 coding rubric"
@@ -446,9 +446,42 @@ def main() -> int:
     check("Reflective Coach is a model choice only, never a therapist claim",
           "not a therapist" in caps["reflect"].worse
           and "no therapy record" in caps["reflect"].worse)
+    med = P.by_id("medical")
+    check("Medical Expert is the tenth row: medgemma:27b on the pooled all-three-card "
+          "lane at its measured 32,768",
+          med.model == "medgemma:27b" and med.lane == "pooled"
+          and med.context == 32768 and med.heavy_mode is True
+          and med.mode == "medical", (med.model, med.lane, med.context))
+    check("... its measured figures are the 2026-11-09 receipt, with no tool calling "
+          "claimed",
+          med.measured["tok_s"] == 9.27 and med.measured["cold_load_s"] == 46.8
+          and med.measured["size_gib"] == 17.31 and med.measured["tools"] == 0
+          and med.measured["spill_gib"] == 0.0, med.measured)
+    check("... its words say the honest cost and refuse the doctor claim",
+          "17.31" in med.cost and "46.8" in med.cost and "9.27" in med.cost
+          and "three cards" in med.cost
+          and "tool" in med.worse and "not a doctor" in med.worse.lower(), med.worse)
+    check("... and it is appended LAST, so the nine older rows keep their order",
+          P.PRESET_IDS[-1] == "medical" and len(P.PRESETS) == 10, P.PRESET_IDS)
+    modes = P.pooled_modes()
+    check("pooled_modes(): three named rows - Medical from its Preset row, and two "
+          "measured candidates nothing points at",
+          [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "qwen3-vl-30b-a3b"]
+          and modes[0]["model"] == med.model and modes[0]["num_ctx"] == med.context
+          and [m["num_ctx"] for m in modes] == [32768, 32768, 32768]
+          and all(m["needs_cards"] == 3 for m in modes), modes)
+    check("... no preset points at either candidate: availability, not a default change",
+          all(m["model"] not in {p.model for p in P.PRESETS} for m in modes[1:])
+          and modes[1]["spill_allowance"] > 0 and modes[2]["spill_allowance"] > 0,
+          [m["model"] for m in modes])
     rec3 = P.recommendations()["by_gpu_count"]["3"]
     check("every preset has a 3-GPU recommendation row (the id-keyed GPU dicts cover the catalogue)",
           set(rec3) == set(P.PRESET_IDS), sorted(rec3))
+    check("... Medical's 3-GPU row is heavy-mode and names its model and window",
+          "medgemma:27b" in rec3["medical"]["note"]
+          and "32768" in rec3["medical"]["note"].replace(",", "")
+          and rec3["medical"]["card"] == "all the cards (pooled lane, port 11450)",
+          rec3["medical"])
 
     hw = fixture["hardware"]
     # The exact key set is pinned, not "at least these": the two facts added on
@@ -467,7 +500,7 @@ def main() -> int:
                   for c in hw["detected"]["cards"]),
           hw["detected"])
     t_every_installed_card_reports_its_own_vram()
-    check("questionnaire: the nine focus ids and the four priorities",
+    check("questionnaire: the ten focus ids and the four priorities",
           hw["questionnaire"]["focus_choices"] == [p["id"] for p in fixture["presets"]]
           and hw["questionnaire"]["priority_choices"] == ["speed", "quality", "long_context", "vision"]
           and hw["questionnaire"]["answers"] is None, hw["questionnaire"])

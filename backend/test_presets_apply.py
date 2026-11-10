@@ -38,8 +38,8 @@ class Deps:
         self.lane = "http://127.0.0.1:11436"
         self.choice = None
 
-    def start(self, key):
-        self.calls.append(("start", key))
+    def start(self, key, mode=""):
+        self.calls.append(("start", key) if not mode else ("start", key, mode))
         return (200, {"ok": True}) if self.start_ok else (503, {"ok": False, "reason": "task missing"})
 
     def switch(self, ref):
@@ -106,6 +106,48 @@ def t_general_success_one_card_and_order():
           d.calls[1] == ("switch", "qwen3.5:9b")
           and d.calls[2] == ("set_url", "http://127.0.0.1:11436"), d.calls)
     check("the chosen preset is persisted", d.choice == "general")
+
+
+def t_medical_starts_the_pooled_lane_in_its_own_mode():
+    d = Deps()
+    code, out = apply({"preset": "medical"}, d)
+    check("Medical applies in its OWN pooled mode, never Coding's 49,152 lane",
+          code == 200 and d.calls == [("start", "pooled", "medical"),
+                                      ("switch", "medgemma:27b"),
+                                      ("set_url", "http://127.0.0.1:11450"),
+                                      ("choice", "medical")], (code, d.calls))
+    check("... and the answer is the heavy Medical preset",
+          out.get("preset", {}).get("heavy_mode") is True
+          and out.get("preset", {}).get("id") == "medical", out.get("preset"))
+
+
+def t_pooled_num_ctx_follows_the_applied_preset():
+    import jarvis_model_lanes as L
+    choice_file = Path(TMP) / "presets-choice.json"
+    old_choice = P.choice
+    try:
+        P._write_choice("medical")
+        check("pooled_num_ctx follows the applied Medical preset (32,768)",
+              P.pooled_num_ctx() == 32768, P.pooled_num_ctx())
+        P._write_choice("coding")
+        check("... and returns to Coding's 49,152",
+              P.pooled_num_ctx() == 49152, P.pooled_num_ctx())
+        P.choice = lambda: "medical"
+        check("... reading presets-choice.json, not a second table",
+              P.pooled_num_ctx() == 32768, P.pooled_num_ctx())
+    finally:
+        P.choice = old_choice
+        try:
+            choice_file.unlink()
+        except FileNotFoundError:
+            pass
+    real_now = L.pooled_mode_now
+    L.pooled_mode_now = lambda: None
+    try:
+        check("... with no choice file and nothing loaded, the coding default",
+              P.pooled_num_ctx() == 49152, P.pooled_num_ctx())
+    finally:
+        L.pooled_mode_now = real_now
 
 
 def t_fast_starts_the_coding_lane_on_demand():
@@ -329,7 +371,7 @@ def t_get_work_serves_the_new_contract():
           code == 200 and "presets" in seen[-1][1]
           and "setup_ids" not in seen[-1][1], seen[-1][1] if seen else None)
     body = seen[-1][1]
-    check("... it carries nine presets with the apply contract",
+    check("... it carries ten presets with the apply contract",
           [p["id"] for p in body["presets"]] == list(P.PRESET_IDS)
           and body["presets"][0]["apply"]["apply_route"] == "/api/work/apply")
     check("... and the hardware/questionnaire/recommendations blocks",
@@ -370,6 +412,8 @@ def t_get_work_serves_the_new_contract():
 
 def main() -> int:
     for fn in (t_default_unchanged_without_a_call, t_general_success_one_card_and_order,
+               t_medical_starts_the_pooled_lane_in_its_own_mode,
+               t_pooled_num_ctx_follows_the_applied_preset,
                t_fast_starts_the_coding_lane_on_demand, t_refusals_change_nothing,
                t_lane_start_failure_stops_before_the_switch,
                t_switch_failure_rolls_back_lane_and_choice, t_install_wires_only_the_apply_route,

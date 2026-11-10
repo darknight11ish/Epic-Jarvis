@@ -907,7 +907,13 @@
    *     command that carries Windows Hello, the stale check and the App-lock
    *     rule. This shim is what stops the page's own POST from becoming a
    *     second, unchecked approval path.
-   *   - memory writes are refused (the Brain decides memory);
+   *   - memory writes are refused, with ONE exception (the owner's ruling of
+   *     2026-11-09, "Keep on plain facts only"): `POST /api/memory/decide`
+   *     carrying exactly one integer `id` and `accept:true` - ONE plain new
+   *     fact, kept from the HUD's Memory tab. It goes through the Brain's own
+   *     command (`brain_memory_decide`), so the stale-link hold, the
+   *     one-integer-id rule and the PC's own answer apply unchanged. Every
+   *     other memory write, and every other body shape, is refused here;
    *   - anything else under /api/ is refused.
    *
    * Everything that is not under /api/ (fonts, the stylesheet) is fetched
@@ -918,20 +924,60 @@
   var shellInvoke =
     tauriCore && typeof tauriCore.invoke === "function" ? tauriCore.invoke.bind(tauriCore) : null;
   var ShellChannel = tauriCore && tauriCore.Channel;
-  // Memory is decided in the Brain window, and only there: its cards warn
-  // about text that reads like a slipped-in instruction, offer "Both are
-  // true", say "would replace" only when something really is replaced, and
-  // refuse while the link is stale. This page's own copy of those cards had
-  // none of that. The page no longer draws them (jarvis_hud.html), and a
-  // later copy of the page that brings them back still cannot send one:
-  // every memory write from this page is refused here, stale link or not.
-  // Reads (/api/memory/pending, /status, /facts) pass untouched. The
-  // "Always keep in mind" route (/api/memory/profile) and "Between us"
-  // (/api/memory/shared) are refused whole - their POST pins or tags a
-  // fact, and this page never reads either list.
+  // Memory is decided in the Brain window. Since the owner's ruling of
+  // 2026-11-09 ("Keep on plain facts only") the HUD's Memory tab also offers
+  // Keep, but ONLY on a card the Brain would have nothing to say about: a
+  // plain new fact, no warning flag, no replacement, not the sleep offer. The
+  // page's one press is one POST /api/memory/decide with an integer id and
+  // accept:true; that ONE shape is forwarded to `brain_memory_decide`, the
+  // Brain's own command, so a stale link and the one-id rule still hold. Any
+  // other memory write - and a decide-shaped POST with any other body - is
+  // refused whole. Reads (/api/memory/pending, /status, /facts) pass
+  // untouched. The "Always keep in mind" route (/api/memory/profile) and
+  // "Between us" (/api/memory/shared) are refused whole - their POST pins or
+  // tags a fact, and this page never reads either list.
   var MEMORY_WRITE =
     /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time|profile|shared)(\?|$)/;
   var APPROVAL = /^\/api\/(approve|deny)(\?|$)/;
+
+  /** The ONE body the HUD may send to /api/memory/decide: `{id:<integer>,
+   *  accept:true}` and nothing else. Returns the id, or null. */
+  function memoryKeepId(init) {
+    var body = null;
+    try {
+      body = JSON.parse(String((init && init.body) || ""));
+    } catch (err) {
+      return null;
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+    var keys = Object.keys(body);
+    if (keys.length !== 2 || keys.indexOf("id") < 0 || keys.indexOf("accept") < 0) return null;
+    if (body.accept !== true) return null;
+    if (typeof body.id !== "number" || !Number.isInteger(body.id) || body.id <= 0) return null;
+    return body.id;
+  }
+
+  /** ONE plain fact kept, through the Brain's own command. A refusal (a stale
+   *  link, a card no longer waiting) comes back as the PC's own sentence and
+   *  the page keeps the row. */
+  function shellMemoryKeep(init) {
+    var id = memoryKeepId(init);
+    if (id === null) {
+      return jsonReply(403, {
+        ok: false,
+        error:
+          "the HUD may keep ONE plain new fact, and only that - nothing was sent",
+      });
+    }
+    return shellInvoke("brain_memory_decide", { id: id, accept: true }).then(
+      function (reply) {
+        return jsonReply(200, reply && typeof reply === "object" ? reply : { ok: true });
+      },
+      function (err) {
+        return jsonReply(409, { ok: false, error: String((err && err.message) || err) });
+      }
+    );
+  }
 
   function jsonReply(status, body) {
     return Promise.resolve(
@@ -1185,6 +1231,9 @@
       var path = apiPath(target);
       if (path === null) return realFetch(input, init);
       var method = String((init && init.method) || (isRequest && input.method) || "GET").toUpperCase();
+      if (method === "POST" && path === "/api/memory/decide" && !isRequest) {
+        return shellMemoryKeep(init);
+      }
       if (MEMORY_WRITE.test(path)) {
         return jsonReply(403, {
           ok: false,

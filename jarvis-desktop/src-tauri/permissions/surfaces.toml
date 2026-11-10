@@ -132,6 +132,22 @@ identifier = "hud-approvals"
 description = "Answer ONE waiting approval card from the HUD, through the same decide_approval the Jarvis bar and the widget use. Deny works on any card; Approve is held by Windows Hello where the settings ask for it, refused while the link is stale, and refused while App lock covers this window."
 permissions = ["allow-decide-approval"]
 
+# Keeping ONE plain new fact from the HUD's Memory tab (the owner's ruling of
+# 2026-11-09: "Keep on plain facts only" - asked for as "an accept button here
+# too"). This is the Brain's OWN one-fact command, `brain_memory_decide`, the
+# same one the Brain's Memory tab calls: one integer id, accept:true, held on a
+# stale link, and the PC's own answer. The page draws Keep ONLY on a card the
+# Brain would have nothing to say about (no warning flag, no replacement, not a
+# retire card, not the sleep offer); every other card still sends the owner to
+# the Brain, and this page copies no warning rule of its own. The bootstrap's
+# fetch shim forwards exactly `{id, accept:true}` and refuses every other body,
+# and this set deliberately holds nothing else from `brain-memory` - no Forget,
+# no Erase, no Edit, no "Both are true", no sleep-time write.
+[[set]]
+identifier = "hud-memory-keep"
+description = "Keep ONE plain new fact from the HUD's Memory tab, through the Brain's own brain_memory_decide. Only a card with no warning, no replacement and no merge question draws the button; the command is held on a stale link and the page's own memory writes stay refused."
+permissions = ["allow-brain-memory-decide"]
+
 # The fixed Stop everything control on the HUD (owner-approved 2026-10-22):
 # the SAME command the Alt+Shift+X hotkey, the tray and the widget use. It stops
 # the running turn and Jarvis's speech, approves nothing and starts nothing, and

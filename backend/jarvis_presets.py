@@ -14,10 +14,12 @@ click. That road is the `POST /api/work/apply` route alone; the model/chat
 path keeps its card. The boundary and its reasoning sit above
 `apply_preset`.
 
-The nine local presets: the original five (General, General Uncensored, Coding,
-Agentic+Vision, Fast) and four capability rows added 2026-10-27 at the owner's
-request - Reflective Coach, Pictures & Screens, Long Documents, Browser & Forms.
-They replace the five "work setups" in jarvis_work.py (decision 2026-10-18).
+The ten local presets: the original five (General, General Uncensored, Coding,
+Agentic+Vision, Fast), four capability rows added 2026-10-27 at the owner's
+request - Reflective Coach, Pictures & Screens, Long Documents, Browser & Forms -
+and Medical Expert, appended tenth on 2026-11-09 (medgemma:27b, the second
+pooled row). They replace the five "work setups" in jarvis_work.py (decision
+2026-10-18).
 
 Every measured number below is from
 .dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it);
@@ -31,8 +33,9 @@ The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
 lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
 its own pooled three-card lane on demand.
 
-Coding is the ONE heavy row, and since 2026-11-02 it has a lane that can really
-hold it: a 14.8 GB model fits neither card alone, so its lane is ONE Ollama on
+Coding is the FIRST of the two heavy rows, and since 2026-11-02 it has a lane
+that can really hold it: a 14.8 GB model fits neither card alone, so its lane is
+ONE Ollama on
 its own port with all three cards visible (`jarvis_model_lanes.start_pooled_lane`),
 started by the apply and stopped by the next apply that is not heavy. The cost
 is stated in the preset's own words and on the card: the two lane models are
@@ -100,6 +103,10 @@ class Preset:
     #: not a refusal: the refusal was "lane support is arriving", and the lane
     #: is here (`jarvis_model_lanes.start_pooled_lane`).
     heavy_words: str = ""
+    #: The pooled mode this preset starts (`jarvis_model_lanes.
+    #: start_pooled_lane(mode=...)`), "" for a preset on a named lane. Only the
+    #: Medical row names one (2026-11-09); Coding keeps the lane's own default.
+    mode: str = ""
     words: tuple = ()       # trigger words for /api/work/recommend
     strong: tuple = ()
 
@@ -131,6 +138,26 @@ class Preset:
                       "auto": False},
         }
 
+
+#: The Medical mode's measured sentence, quoted from the one bench receipt. It is
+#: used by the card text and by `pooled_modes()`; no second copy exists.
+MEDICAL_MEASURED_WORDS = (
+    "measured on this PC on 2026-11-09: 17.31 GiB loaded entirely in the three "
+    "cards' memory, 0 B spilled, a 46.8 s cold load and 9.27 tokens a second "
+    "(11.1 on the measured ~150-word explanation, 7.89 on the four-token answer)")
+
+#: The two measured pooled candidates the lane can load but NO preset points at
+#: (2026-11-09). They are availability, not a default change: nothing applies
+#: them until the owner picks one, and a test pins that no preset names either
+#: model. The numbers are the 2026-11-09 bench rows, spill included.
+GEMMA4_26B_MEASURED_WORDS = (
+    "measured on this PC on 2026-11-09: 15.5 GiB loaded with 0.68 GiB (4.4%) "
+    "spilled into system memory, 96% in the cards' memory, a 52.0 s cold load "
+    "and 49.26 tokens a second")
+QWEN3_VL_30B_MEASURED_WORDS = (
+    "measured on this PC on 2026-11-09: 19.88 GiB loaded with 2.24 GiB (11.2%) "
+    "spilled into system memory, 89% in the cards' memory, a 54.8 s cold load "
+    "and 33.1 tokens a second")
 
 PRESETS = (
     Preset(
@@ -372,10 +399,80 @@ PRESETS = (
         words=("browser", "web page", "form", "fill in", "website"),
         strong=("use the browser", "fill in this form"),
     ),
+    Preset(
+        id="medical", title="Medical Expert",
+        focus="clinical reading and patient-advocate questions",
+        what="For reading clinical material carefully and in calm plain words: lab panels, "
+             "letters, medication lists and health questions. It is a purpose-trained "
+             "medical model on all three cards at once. It is not a doctor, gives no "
+             "diagnosis and replaces no clinician.",
+        cost="HEAVY MODE: it needs all three cards at once (17.31 GiB loaded entirely in "
+             "video memory, 0 B spilled) and pauses the everyday and Fast models while it "
+             "runs. It is slow: a 46.8 s cold load and 9.27 tokens a second on the measured "
+             "coding prompt (11.1 on the measured ~150-word explanation, 7.89 on the "
+             "four-token answer), so a long answer takes a while. Measured on this PC on "
+             "2026-11-09 (model-bench run 20261109-105956, the medgemma window row).",
+        worse="It has NO tool calling - `ollama show` reports no `tools` capability, so it "
+              "cannot use Jarvis's tools, browser or files. It reports vision (pictures), "
+              "but its picture quality is not measured here. It is not a doctor: no "
+              "diagnosis, no prescription and no replacement for your own clinician, and a "
+              "model trained on clinical text can still be wrong about your case.",
+        model="medgemma:27b", lane="pooled", context=32768, heavy_mode=True, mode="medical",
+        prompt="balanced", diet="balanced",
+        measured={"tok_s": 9.27, "tok_s_long": 11.1, "tok_s_short": 7.89,
+                  "size_gib": 17.31, "spill_gib": 0.0, "cold_load_s": 46.8,
+                  "context_measured": 32768,
+                  "gpu_use": "100% in video memory, 0 B spilled",
+                  "tools": 0, "vision": "reported, not measured",
+                  "source": "model matrix 2026-11-09 10:59:56, windows[1] medgemma: "
+                            "18,588,222,089 B loaded, spill 0, load 46.8 s, summary "
+                            "decode 9.27 tok/s (long 11.1, short 7.89); no tools"},
+        heavy_words="This preset needs all three cards at once as one pooled lane. While it "
+                    "runs, the everyday and Fast models are paused - they come back, proved "
+                    "from the model list, when you apply another preset. It loads about "
+                    "17.31 GiB, takes about 47 s cold, writes slowly (about 9 tokens a "
+                    "second) and cannot use tools.",
+        words=("medical", "medicine", "doctor", "symptom", "symptoms", "lab",
+               "lab result", "prescription", "health", "clinical", "patient",
+               "diagnosis"),
+        strong=("medical question", "read this lab result", "medical",
+                "health question"),
+    ),
 )
 
 PRESET_IDS = tuple(p.id for p in PRESETS)
 _BY_ID = {p.id: p for p in PRESETS}
+
+
+def pooled_modes() -> tuple:
+    """The THREE pooled mode rows the preset layer owns (2026-11-09).
+
+    `jarvis_big_coder.MODES` owns coding/deep_think/creative. This is the preset
+    layer's own extra rows: `medical`, derived from the Medical Preset row so its
+    model and window are typed once, plus the two measured candidates
+    (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`) that NO preset points at - they are
+    availability for the owner's own measured choice, never a default change.
+    Read by `jarvis_model_lanes` and `jarvis_big_coder` through lazy imports.
+    Never raises; `()` when the Medical row is absent (a trimmed backend).
+    """
+    p = _BY_ID.get("medical")
+    if p is None or not p.mode:
+        return ()
+    return (
+        {"key": p.mode, "label": "Medical", "model": p.model,
+         "num_ctx": p.context, "measured_words": MEDICAL_MEASURED_WORDS,
+         "spill_allowance": 0, "needs_cards": 3},
+        {"key": "gemma4-26b-a4b", "label": "Gemma 4 26B A4B",
+         "model": "gemma4:26b-a4b-it-qat", "num_ctx": 32768,
+         "measured_words": GEMMA4_26B_MEASURED_WORDS,
+         "spill_allowance": round(0.68 * 1024 ** 3), "needs_cards": 3},
+        {"key": "qwen3-vl-30b-a3b", "label": "Qwen3-VL 30B A3B",
+         "model": "qwen3-vl:30b-a3b-instruct", "num_ctx": 32768,
+         "measured_words": QWEN3_VL_30B_MEASURED_WORDS,
+         "spill_allowance": round(2.24 * 1024 ** 3), "needs_cards": 3},
+    )
+
+
 OLD_IDS = ("everyday", "coding", "admin", "long", "specialist")
 FOCUS_WORDS = ("quick answers", "writing", "coding", "agentic", "pictures",
                "speed")
@@ -484,7 +581,7 @@ CLOUD_ESCALATE_PATH = "/api/work/cloud-escalate"
 CLOUD_LANE = "jarvis-escalate"
 #: The card action every loosening in this program uses.
 CLOUD_ACTION = "change_own_config"
-#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' nine-preset
+#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' ten-preset
 #: list is unchanged and the phone keeps ignoring a key it does not know.
 CLOUD_PRESET_ID = "cloud"
 
@@ -649,7 +746,7 @@ def cloud_view() -> dict:
 
     `provider` is the service in use ("" when none is), `providers` every
     connected service (see cloud_providers), `escalate` the PC's own standing
-    switch. Additive: the nine presets are untouched, `version` stays 1, and
+    switch. Additive: the ten presets are untouched, `version` stays 1, and
     every reader that does not know this key ignores it.
     """
     return {"provider": cloud_chosen(),
@@ -761,7 +858,7 @@ def cloud_preset_view() -> dict:
     """The Cloud row itself, in the SAME shape as a `Preset.view()`.
 
     Its id is "cloud", it is deliberately absent from `PRESETS`/`PRESET_IDS`
-    (both apps' nine-row list stays nine rows), and its `apply` block says the
+    (both apps' ten-row list stays ten rows), and its `apply` block says the
     two things that make it different: it is a cloud row, and it needs a
     provider before it can be applied.
     """
@@ -1158,11 +1255,38 @@ def active_chat_url(default: str = "") -> str:
     return lane
 
 
+def _applied_pooled_mode() -> str:
+    """The pooled mode the APPLIED preset names, from presets-choice.json.
+
+    `choice()` reads that file (`_choice_path`); the file is written last by a
+    successful apply (`write_choice(p.id)`). A named-lane preset returns "" and
+    the caller falls back to the lane's own evidence. Never raises.
+    """
+    try:
+        p = by_id(choice())
+        return str(getattr(p, "mode", "") or "") if p is not None else ""
+    except Exception:
+        return ""
+
+
 def pooled_num_ctx() -> Optional[int]:
-    """The pooled lane's configured window, from the ONE lane config (MODES)."""
+    """The pooled lane's configured window for the preset that is APPLIED.
+
+    THE DEFECT THIS FIXES: this called `pooled_profile()` with no mode, so it
+    answered the coding window (49,152) whatever preset had been applied. A chat
+    turn then asked a 32,768-token Medical lane for 49,152 tokens - a window it
+    never loaded. The answer now follows the APPLIED preset's `mode` from
+    `presets-choice.json`; only when that file does not name a pooled preset
+    (a just-restarted server, or the lane started outside the preset road) does
+    it ask the lane what it really holds (`pooled_mode_now`, one /api/ps read),
+    and it keeps the coding default as the last resort. This is read-only.
+    """
     try:
         import jarvis_model_lanes as lanes
-        profile = lanes.pooled_profile()
+        mode = _applied_pooled_mode()
+        if not mode:
+            mode = str(lanes.pooled_mode_now() or "") or "coding"
+        profile = lanes.pooled_profile(mode)
         return int(profile.get("num_ctx") or lanes.POOLED_CTX)
     except Exception:
         try:
@@ -1226,6 +1350,9 @@ def is_pooled_model(model) -> bool:
             return True
     except Exception:
         pass
+    for row in pooled_modes():
+        if _bare_model(row.get("model") or "") == name:
+            return True
     return False
 
 
@@ -1304,7 +1431,7 @@ def _active_lane_key() -> Optional[str]:
 
 
 def live_status() -> dict:
-    """GET /api/work's and GET /api/presets' answer: the nine local presets,
+    """GET /api/work's and GET /api/presets' answer: the ten local presets,
     the Cloud row, the cloud provider list and the PC's own escalation switch,
     the detected cards, the questionnaire, the 1/2/3-GPU recommendations, the
     chosen preset and the active lane.
@@ -1332,9 +1459,9 @@ def live_status() -> dict:
     return {
         "found": f"{len(PRESETS)} focus presets",
         "presets": [p.view() for p in PRESETS],
-        # The Cloud row: a TENTH row in the same shape (nine presets + this
-        # one), deliberately not in `presets` - both apps' nine-row list stays
-        # nine rows (the owner's decision of 2026-10-27: additive keys only, so
+        # The Cloud row: an ELEVENTH row in the same shape (ten presets + this
+        # one), deliberately not in `presets` - both apps' ten-row list stays
+        # ten rows (the owner's decision of 2026-10-27: additive keys only, so
         # the phone needs no change at all to keep working).
         "cloud_preset": cloud_preset_view(),
         # The provider in use, the services to choose from, and the PC's own
@@ -1656,6 +1783,10 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     `_default_adopt` for the whole argument. A card the owner denies leaves
     NOTHING changed on this path: nothing has been unloaded yet.
 
+    Since 2026-11-09 the same road carries the Medical preset: `p.mode` is
+    passed to `start_pooled_lane`, which loads `medgemma:27b` at 32,768 with
+    the same one card.
+
     The other direction matters too: a preset that is NOT heavy needs the two
     lanes back, so applying one ENDS the pooled lane first (it unloads the 30B
     and puts both models back exactly as they were). If it cannot end it, the
@@ -1688,7 +1819,7 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     # on an existing lane. Coding keeps the pooled lane's own card; Cloud
     # returned above. See the section above `apply_preset`.
     direct_owner = bool(owner_ui) and not heavy
-    start_lane = start_lane or (lambda key: _default_start_lane(key))
+    start_lane = start_lane or _lane_starter
     if direct_owner:
         switch_model = (switch_for_owner or switch_model
                         or (lambda ref: _switch_for_the_owner(ref)))
@@ -1721,7 +1852,9 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                          "error": ("the big coding model is still holding both "
                                    f"cards, so this preset was not applied: {why}")}
     try:
-        code, start_body = start_lane(p.lane)
+        mode = str(getattr(p, "mode", "") or "")
+        code, start_body = (start_lane(p.lane, mode=mode) if mode
+                            else start_lane(p.lane))
     except Exception as exc:
         return 503, {"ok": False, "changed": False,
                      "error": f"the {p.lane} lane could not be started "
@@ -1868,23 +2001,38 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  "receipt_id": receipt_id}
 
 
-def _default_start_lane(key: str):
+def _default_start_lane(key: str, mode: str = ""):
     """The preset's own lane, started on demand.
 
     "pooled" is not one of the PC's logon tasks: it is the ONE Ollama that sees
     all three cards, started here and stopped by the next apply that is not heavy
     (`_default_stop_pooled`). `jarvis_model_lanes.start_pooled_lane` raises the
-    ONE card for it, before it unloads anything.
+    ONE card for it, before it unloads anything. `mode` is the applied preset's
+    pooled mode (Medical today); "" keeps the coding lane every pre-wave-14
+    caller has always started.
     """
     import jarvis_model_lanes
     if str(key) == jarvis_model_lanes.POOLED_KEY:
-        return jarvis_model_lanes.start_pooled_lane()
+        return jarvis_model_lanes.start_pooled_lane(mode=str(mode or "coding"))
     mapped = LANE_START_KEYS.get(str(key))
     if mapped is None or jarvis_model_lanes.lane_by_key(mapped) is None:
         return 409, {"ok": False, "changed": False,
                      "reason": f"the preset lane {key!r} has no model lane on this PC "
                                f"(known lanes: {', '.join(l.key for l in jarvis_model_lanes.LANES)})"}
     return jarvis_model_lanes.start_lane(mapped)
+
+
+def _lane_starter(key: str, mode: str = ""):
+    """`_default_start_lane` with the mode passed ONLY when a preset names one.
+
+    The nine older presets name no pooled mode, so they call the starter with
+    one argument exactly as before: every injected one-argument seam in the
+    existing tests, and every caller that replaced `_default_start_lane`, keeps
+    working. The two-argument call is reserved for a preset that really does
+    name a pooled mode (Medical today), and an injected seam that cannot take
+    it says so with a TypeError rather than being silently downgraded.
+    """
+    return _default_start_lane(key, mode) if mode else _default_start_lane(key)
 
 
 def _default_stop_pooled() -> dict:
@@ -2469,7 +2617,7 @@ def recommendations() -> dict:
                     # (`p.measured`), so only the words were stale.
                     rows[p.id] = _row(p, 0, cards, p.measured is not None,
                                       p.measured is None,
-                                      "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on "
+                                      f"HEAVY MODE: {p.model} on "
                                       "the pooled lane (port 11450) across ALL THREE cards, "
                                       "started on demand; it pauses the other lanes' "
                                       "models while it runs",
@@ -2500,7 +2648,8 @@ def recommendations() -> dict:
                        "coding": roles["main"],
                        "fast": roles["display"], "agentic_vision": roles["main"],
                        "reflect": roles["main"], "pictures": roles["main"],
-                       "documents": roles["main"], "browser": roles["main"]}[p.id]
+                       "documents": roles["main"], "browser": roles["main"],
+                       "medical": roles["main"]}[p.id]
                 note = {
                     "general": f"{everyday}: main chat/everyday, 196,608 window",
                     "general_uncensored": f"{everyday}: main chat/everyday, 196,608 window",
@@ -2512,6 +2661,10 @@ def recommendations() -> dict:
                                 f"32,768 window",
                     "documents": f"{everyday}: Documents & Notes, qwen3.5:9b, 196,608 window",
                     "browser": f"{everyday}: Browser & Forms, qwen3.5:9b, 196,608 window",
+                    "medical": (f"medgemma:27b on ONE pooled lane (port "
+                                f"{POOLED_PLAN_PORT}) across ALL the cards at 32,768 "
+                                f"tokens: HEAVY MODE, it pauses the other lanes' models "
+                                f"while it runs"),
                 }[p.id]
                 role_text = {
                     "general": everyday,
@@ -2529,6 +2682,8 @@ def recommendations() -> dict:
                     "pictures": everyday,
                     "documents": everyday,
                     "browser": everyday,
+                    "medical": (f"all the cards (pooled lane, port "
+                                f"{POOLED_PLAN_PORT})"),
                 }[p.id]
                 # EVERY row names its card by ROLE. `_row()`'s fallback is
                 # `f"card {index}"` - an array position the owner cannot see -
@@ -2552,8 +2707,10 @@ def recommendations() -> dict:
                 # has always guarded it still guards something true.
                 "layout": ("everyday presets keep one lane per GPU (the everyday "
                            "lane, the monitor card's lane and the headless card's "
-                           f"lane); only on-demand heavy Coding pools the cards on "
-                           f"port {POOLED_PLAN_PORT}. Agentic + Vision stays on the "
+                           f"lane); only the on-demand heavy Coding preset pools the "
+                           f"cards on port {POOLED_PLAN_PORT}, and the Medical preset "
+                           f"pools the same cards the same way. Agentic + Vision "
+                           f"stays on the "
                            "everyday card, not the headless one: the 9B weights plus "
                            "the vision projector need about 7.00 GiB and an 8 GB card "
                            "with no monitor has 6.65 GiB free, so there is no window "
@@ -2577,9 +2734,11 @@ def recommendations() -> dict:
                 "heavy_pooled": (f"on demand, the Coding preset pauses those three lanes "
                                  f"and loads qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled "
                                  f"lane on port {POOLED_PLAN_PORT} across all the cards. "
-                                 f"It is too big for one card, so this is the ONE case "
-                                 f"where a model is split across cards; every other "
-                                 f"preset keeps one lane per GPU."),
+                                 f"It is too big for one card, so this is one of the two "
+                                 f"cases where a model is split across cards; every other "
+                                 f"preset keeps one lane per GPU. The Medical preset "
+                                 f"pools the same cards the same way for medgemma:27b "
+                                 f"at 32,768 tokens."),
                 "link_note": ("the third card likely sits on the B550 chipset through an "
                               "M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs "
                               "loading time, not a lane; each lane keeps its own model."),

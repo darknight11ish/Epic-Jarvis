@@ -105,7 +105,19 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # headroom, the same shape as my_files above.
                    # test_short_tool_list.py's own pin moved with it (1,615 ->
                    # 1,656, its whole growth).
-                   "set_reminder": 320}
+                   "set_reminder": 320,
+                   # project_read (2026-11-09, P1a - the read half of "Jarvis
+                   # takes over dev work"): measured 368 with this module's own
+                   # rule. The description carries the four boundary sentences
+                   # that keep the answer honest - the listed folder (or a
+                   # project) only, read-only, a PDF/Word/Excel/PowerPoint file
+                   # belongs to my_files, and a file outside the listed folders
+                   # to file_read. Those last two are "use that" lines for the
+                   # three reading tools the model confuses, so a trim to 300
+                   # would hide exactly what C1 and the confusion pairs check.
+                   # 380 leaves 12 tokens of headroom, the same shape as
+                   # my_files above.
+                   "project_read": 380}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),

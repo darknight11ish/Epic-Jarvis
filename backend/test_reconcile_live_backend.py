@@ -113,6 +113,17 @@ real PC:
       file this repository holds, never against a copy of the delta); the activity
       test says SKIPPED, never "ok", until #1198's patch file is in the tree.
 
+  16. the 2026-11-09 wave-13 false green: `auto-learn.patch` grew the two fault-route
+      dispatch lines and the extractor's `_intake_fault_visible` read, but had no
+      DELTA_TABLE entry, so 129 of its 144 already-live distinctive HUD lines made the
+      fallback report the whole patch ALREADY_PRESENT and the deploy carried none of
+      the new hunks (the live HUD held 0 `/api/memory/fault` matches; both routes
+      404'd). The entry is two files carried as five region pairs - never
+      `hunks: True`, whose hunk 8 pre-image still matches next to the old dispatch
+      block and would insert a second copy. The test reproduces the false green, proves
+      both files ABSENT with the entry, carries the regions byte-for-byte, checks the
+      second plan is a no-op, and guards every real-patch entry's probes against a typo.
+
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
 uses, and the published base files under `jarvis-backend/` - used as realistic FIXTURES
@@ -4079,6 +4090,282 @@ def t_the_bench_patch_is_carried_not_false_greened():
 
 
 # --------------------------------------------------------------------------
+#   WAVE 13 (2026-11-09): the auto-learn.patch false-green that never carried
+#   the fault banner's dispatch to the live HUD / extractor
+# --------------------------------------------------------------------------
+#
+# MEASURED READ-ONLY ON THE OWNER'S LIVE FOLDER, 2026-11-09, and on a COPY of it
+# for the plan: `jarvis_hud.py` 442,086 B held 0 `/api/memory/fault` matches, the
+# old 2-tuple at 3606 and the old `handle_post(route, body)` at 5060;
+# `jarvis_extract.py` 42,548 B held 0 `_intake_fault_visible` and the old intake
+# return at 512. Wave 13 grew the patch 23,159 -> 25,589 B, but with no entry the
+# fallback rule found 129 of its 144 distinctive HUD lines already live and
+# answered ALREADY_PRESENT, so the run finished clean and carried nothing. This
+# fixture is the pre-wave-13 shape; the entry must make both files ABSENT and the
+# five regions must reproduce the patch's own post-image, byte for byte.
+
+#: The live-shape HUD fixture: wave 13's three OLD blocks, verbatim, inside
+#: enough code to compile. The fault dispatch is deliberately NOT here.
+WAVE13_HUD_LIVE = '''"""a live HUD stand-in with wave 13's pre-image only"""
+
+
+def do_GET(self):
+    path = ""
+    if True:
+        if path in ("/api/memory/learning", "/api/memory/auto"):
+            # auto-learn.patch - automatic learning (jarvis_auto_learn.py,
+            # docs/JARVIS-API.md section 19). /api/memory/learning: both
+            # switches, whether a card for either is waiting, and background
+            # learning's own switch as `enabled`. /api/memory/auto: the facts
+            # saved without a card, newest first (?limit=&before=). Read-only,
+            # behind the token like every memory route.
+            return None
+    return None
+
+
+def do_POST(self):
+    route = ""
+    body = b""
+    if True:
+        if route in ("/api/memory/learning/auto", "/api/memory/learning/sensitive",
+                     "/api/memory/learning/paraphrase"):
+            # auto-learn.patch (jarvis_auto_learn.py).
+            if not _origin_ok(self):
+                return None
+            if not _token_ok(self):
+                return None
+            try:
+                import jarvis_auto_learn
+            except Exception:
+                return None
+            try:
+                code, out = jarvis_auto_learn.handle_post(route, body)
+            except Exception as exc:
+                return self._send(500, {"error": type(exc).__name__})
+            return self._send(code, out)
+        if route in ("/api/memory/forget", "/api/memory/edit",
+                     "/api/memory/learning", "/api/memory/sleep_time",
+                     "/api/memory/keep_both"):
+            return None
+    return None
+'''
+
+
+def t_the_auto_learn_fault_routes_are_carried_not_false_greened():
+    """Wave 13's fault routes were ALREADY_PRESENT to the fallback rule and never shipped.
+
+    The measured defect (2026-11-09): `auto-learn.patch` had no DELTA_TABLE entry, so
+    `patch_presence` accepted ONE already-live added line (129 of its 144 distinctive
+    HUD lines were live) and the run inserted nothing - the live HUD held zero
+    `/api/memory/fault` matches and both routes 404'd. The entry is TWO files carried
+    as FIVE region pairs, never `hunks: True`: hunk 8's pre-image still matches after
+    the old dispatch block is in place, so replaying it would insert a SECOND copy.
+    This proves the bug, the fix, the byte-for-byte result and the idempotent second
+    plan, all on strings; the real live folder is never read.
+    """
+    name = "auto-learn.patch"
+    if not (REPO / "backend" / name).is_file():
+        print(f"SKIPPED  t_the_auto_learn_fault_routes_are_carried_not_false_greened - "
+              f"backend/{name} is not in this ref. This test did NOT run, and it did "
+              f"NOT pass.")
+        return
+    root = tmpdir()
+    try:
+        raw = patch_text(name).decode("utf-8")
+        files = R.parse_patch_files(raw)
+        hud_added = files["jarvis_hud.py"]["added"]
+        hud_pre = R.patch_pre_image(raw, "jarvis_hud.py")
+        ext_added = files["jarvis_extract.py"]["added"]
+        ext_pre = R.patch_pre_image(raw, "jarvis_extract.py")
+        ext_hunks = R.patch_hunks(raw, "jarvis_extract.py")
+        hunk3 = ext_hunks[-1]
+        eof_added = R._delta_lines(R.AUTOLEARN_EXTRACT_EOF_NEW_FILE)[2:]
+        old_eof = R._delta_lines(R.AUTOLEARN_EXTRACT_EOF_OLD_FILE)
+        check("the patch still has the measured wave-13 shape (3 extract hunks, "
+              "the last 104 lines / 101 added)",
+              len(ext_hunks) == 3 and len(hunk3["new"]) == 104
+              and len(hunk3["added"]) == 101 and len(eof_added) == 16,
+              (len(ext_hunks), len(hunk3["new"]), len(hunk3["added"])))
+        check("the EOF pair is the live last two lines + the 16 lines the patch appends",
+              tuple(old_eof) == tuple(hunk3["new"][-18:-16])
+              and tuple(eof_added) == tuple(hunk3["new"][-16:]),
+              (len(old_eof), len(eof_added)))
+        # The live tail is the patch's own post-image MINUS those 16 lines: the first
+        # 85 added lines of hunk 3 were already deployed, and the last two of them are
+        # the EOF pair's OLD block. Built from the real patch, never retyped.
+        tail = hunk3["new"][:88]
+        extract_live = (
+            '"""a live extract stand-in with wave 13\'s pre-image only"""\n'
+            "from typing import Optional\n\n\n"
+            "def pending_proposals(c):\n"
+            "    if True:\n"
+            + "\n".join(R._delta_lines(R.AUTOLEARN_EXTRACT_INTAKE_OLD_FILE))
+            + "\n\n\n"
+            "def _propose_unchecked(*args, **kwargs):\n"
+            "    if not args:\n"
+            "        print(\n"
+            + "\n".join(tail)
+            + "\n"
+        )
+        check("both fixtures are valid Python before any plan",
+              R.rehearse({"jarvis_hud.py": WAVE13_HUD_LIVE,
+                          "jarvis_extract.py": extract_live}) == [],
+              R.rehearse({"jarvis_hud.py": WAVE13_HUD_LIVE,
+                          "jarvis_extract.py": extract_live}))
+        live = make_base_live(root, "wave13", {
+            "jarvis_hud.py": WAVE13_HUD_LIVE,
+            "jarvis_extract.py": extract_live,
+            "jarvis_gate.py": ("def _risk_rows():\n    return {\n"
+                               + "\n".join(files["jarvis_gate.py"]["added"])
+                               + "\n    }\n"),
+        })
+
+        # (0) The entry's shape: TWO files, 3 + 2 regions, and no hunks replay.
+        entry = R.DELTA_TABLE.get(name) or {}
+        check("the entry names BOTH files (hud 3 regions, extract 2), not hunks",
+              set(entry) == {"jarvis_hud.py", "jarvis_extract.py"}
+              and len(entry["jarvis_hud.py"]["regions"]) == 3
+              and len(entry["jarvis_extract.py"]["regions"]) == 2
+              and not entry["jarvis_hud.py"].get("hunks")
+              and not entry["jarvis_extract.py"].get("hunks"), entry)
+
+        # (1) The bug, reproduced: no entry => both files PRESENT while the new
+        # hunks are absent. This is the silent skip the entry exists to stop.
+        for target, added, pre, fixture in (
+                ("jarvis_hud.py", hud_added, hud_pre, WAVE13_HUD_LIVE),
+                ("jarvis_extract.py", ext_added, ext_pre, extract_live)):
+            state, why = R.patch_presence(name, target, added, fixture,
+                                          table={}, pre_image=pre)
+            check(f"with NO entry {target} is wrongly ALREADY_PRESENT (the bug)",
+                  state == R.PRESENT, (state, why))
+            # (2) With the entry: ABSENT, so the regions are what carry it.
+            state2, why2 = R.patch_presence(name, target, added, fixture,
+                                            pre_image=pre)
+            check(f"with the entry the SAME live shape is ABSENT for {target}",
+                  state2 == R.ABSENT, (state2, why2))
+
+        # The OLD blocks are the live pre-image (exactly once); the NEW blocks are
+        # absent from it. A second copy of an OLD block, or a NEW block already
+        # there, would make a region replace nothing or land twice.
+        fixtures = {"jarvis_hud.py": WAVE13_HUD_LIVE,
+                    "jarvis_extract.py": extract_live}
+        for target, target_entry in entry.items():
+            for region in target_entry["regions"]:
+                old_text = "\n".join(R._delta_lines(region["replace_file"]))
+                new_text = "\n".join(R._delta_lines(region["file"]))
+                fixture = fixtures[target]
+                check(f"{region['replace_file']} appears EXACTLY ONCE in the live shape",
+                      fixture.count(old_text) == 1,
+                      (region["replace_file"], fixture.count(old_text)))
+                check(f"{region['file']} appears ZERO times there (it is what we carry)",
+                      fixture.count(new_text) == 0,
+                      (region["file"], fixture.count(new_text)))
+                check(f"... and every region probe is in its NEW block, not its OLD",
+                      bool(region.get("probes"))
+                      and all(str(p) in new_text and str(p) not in old_text
+                              for p in region["probes"]), region.get("probes"))
+
+        # (3) The plan: the two missing files are inserts, the already-live gate is
+        # not refused, and NOTHING else is staged.
+        show = lambda repo, ref, path: (patch_text(name)
+                                        if Path(path).name == name else b"")
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=show, repo=REPO, state_patches=[])
+        check("the plan inserts BOTH missing files with NO refusal",
+              refusals == []
+              and [(d.file, d.status) for d in deltas if d.status == "insert"]
+              == [("jarvis_hud.py", "insert"), ("jarvis_extract.py", "insert")],
+              (refusals, [(d.patch, d.file, d.status) for d in deltas]))
+        check("... the gate patch was already live, so it is already-present, not refused",
+              [(d.file, d.status) for d in deltas if d.file == "jarvis_gate.py"]
+              == [("jarvis_gate.py", "already")], deltas)
+        check("... only the two files with missing hunks were staged",
+              sorted(staged) == ["jarvis_extract.py", "jarvis_hud.py"], sorted(staged))
+        check("... the HUD insert is named as 3 regions and the extract as 2",
+              [(d.file, d.anchor) for d in deltas if d.status == "insert"]
+              == [("jarvis_hud.py", "3 region(s)"),
+                  ("jarvis_extract.py", "2 region(s)")],
+              [(d.file, d.anchor) for d in deltas])
+
+        # (4) The staged bytes: the fault dispatch is there exactly ONCE, the old
+        # blocks are gone, and the extractor ends with hunk 3's full post-image.
+        hud_out = staged.get("jarvis_hud.py", "")
+        ext_out = staged.get("jarvis_extract.py", "")
+        check('the staged HUD carries "/api/memory/fault" exactly ONCE',
+              hud_out.count('                    "/api/memory/fault"):') == 1,
+              hud_out.count('                    "/api/memory/fault"):'))
+        check("... and the old 2-tuple and the old handle_post call are GONE",
+              '        if path in ("/api/memory/learning", "/api/memory/auto"):'
+              not in hud_out
+              and "jarvis_auto_learn.handle_post(route, body)" not in hud_out)
+        check("... both new dispatch sites are present",
+              '                     "/api/memory/learning/paraphrase", "/api/memory/fault/retry"):'
+              in hud_out
+              and '                    model=_extract_model(), ollama=getattr('
+                  'jarvis_extract, "OLLAMA", None))' in hud_out)
+        check("the staged extract defines _intake_fault_visible exactly ONCE",
+              ext_out.count("def _intake_fault_visible(rows: list) -> list:") == 1)
+        check("... and ends with hunk 3's post-image, byte for byte",
+              ext_out.endswith("\n".join(hunk3["new"]) + "\n"),
+              (len(ext_out), len(hunk3["new"])))
+        # (6) Both staged files still compile.
+        check("both staged files still compile", R.rehearse(staged) == [],
+              R.rehearse(staged))
+
+        # (5) The second plan: everything already present, nothing staged.
+        for target, text in staged.items():
+            (live / target).write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [name], show=show, repo=REPO, state_patches=[])
+        check("a second plan sees BOTH files ALREADY_PRESENT and stages nothing",
+              refusals2 == [] and staged2 == {}
+              and [(d.file, d.status) for d in again
+                   if d.file in ("jarvis_hud.py", "jarvis_extract.py")]
+              == [("jarvis_hud.py", "already"), ("jarvis_extract.py", "already")],
+              (again, staged2, refusals2))
+
+        # (7) The class guard: a typo'd probe would make an entry permanently ABSENT
+        # and re-insert on every deploy. Every probe of every REAL patch entry must be
+        # a line the patch ADDS and not one its own pre-image already shows. The ONE
+        # documented exception is briefing.patch's gate probe: that entry's own comment
+        # says the live gate is newer than the patch and probes the LIVE wording, so a
+        # re-deploy reports ALREADY_PRESENT instead of refusing. Pinning the exception
+        # here means a second one fails this test.
+        violations = []
+        checked = 0
+        for patch, targets in R.DELTA_TABLE.items():
+            patch_path = REPO / "backend" / patch
+            if not patch_path.is_file():
+                continue
+            raw_i = patch_path.read_text(encoding="utf-8")
+            files_i = R.parse_patch_files(raw_i)
+            for target, target_entry in targets.items():
+                added_i = (files_i.get(target) or {}).get("added") or []
+                added_text = "\n".join(str(line) for line in added_i)
+                pre_i = R.patch_pre_image(raw_i, target)
+                probes = [str(p) for p in (target_entry.get("probes") or ())]
+                for region in target_entry.get("regions") or ():
+                    probes += [str(p) for p in (region.get("probes") or ())]
+                for probe in probes:
+                    checked += 1
+                    if probe not in added_text:
+                        violations.append((patch, target, "not an added line", probe))
+                    if probe in pre_i:
+                        violations.append((patch, target, "also in the pre-image", probe))
+        check("the class guard actually looked at every real-patch entry's probes",
+              checked >= 100, checked)
+        check("the ONLY entry whose probe is not a patch-added line is briefing's "
+              "documented live-wording gate probe",
+              {(p, t) for p, t, _kind, _probe in violations}
+              == {("briefing.patch", "jarvis_gate.py")},
+              violations[:6])
+        check("... and the new entry contributes NO violation",
+              not [v for v in violations if v[0] == name], violations)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
 #   WAVE 6 (2026-11-04/05): the four patches that write a patched base file,
 #   plus the `call_notes` risk row that NO patch carries
 # --------------------------------------------------------------------------
@@ -5282,7 +5569,8 @@ def main():
                t_a_plugin_failure_rolls_back_the_already_written_files,
                t_a_probe_failure_keeps_the_complete_write_and_names_the_backup,
                t_cli_rollback_restores_from_a_backup_folder,
-               t_the_bench_patch_is_carried_not_false_greened):
+               t_the_bench_patch_is_carried_not_false_greened,
+               t_the_auto_learn_fault_routes_are_carried_not_false_greened):
         fn()
     print()
     if FAILED:

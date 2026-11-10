@@ -3863,7 +3863,7 @@ sentences say "on this PC", so there is no phone parity change to classify.
 layouts"*, and *"i also want the presets to include all the ideal local ai
 presets that are made (like coder, or general, etc) along with the different
 personalities of jarvis that i can select"*. Above the saved layouts, the SAME
-one menu now draws the nine local-AI focus presets from `GET /api/presets` and
+one menu now draws the ten local-AI focus presets from `GET /api/presets` and
 the ten personalities plus the owner's own from `GET /api/manner`, each marked
 current only from the PC's own `chosen_preset` / `personality`. The two kinds
 keep their existing permission rules: **a model preset is a loosening** -
@@ -4981,7 +4981,17 @@ what is missing is only the Settings screen agreeing about who turned it off.
   same store. The map writes nothing (no index, no cache), adds no gate action
   and no card (a read, under the existing `read_files_readonly` line), runs no
   model, opens no socket, and lists names and signatures only - never a
-  function's body. `project_edit` (a code-writing tool) remains unbuilt.
+  function's body. **The READ half of the next item is built since
+  2026-11-09:** the `project_read` tool (JARVIS-API §211) reads ONE file of
+  code, config or docs inside a folder on that same list, or inside a
+  registered project's folder, behind the same `jarvis_documents.allowed_path`
+  boundary and the same `.gitignore`-aware walk the map uses - so the model can
+  read a project's own source file, which `file_read` (no folder check at all)
+  and `my_files` (refuses code: `TEXT_KINDS` is md/txt/csv) each could not do.
+  It adds no route and no card (a read, under the existing
+  `read_files_readonly` line), so neither app gains a screen and
+  `tools/check_parity.py` is unaffected. `project_edit` (a code-writing tool)
+  remains unbuilt.
 
 **A spoken answer is not a screen, so the Live read-aloud fix adds nothing one-sided** (2026-11-05; the owner's report, `docs/LIVE-DESIGN.md` §3.6; `backend/jarvis_live.py`'s `MODEL_NOTE` and `backend/jarvis_manner.py`'s `post_history_hint`). Both apps already receive the same `/api/chat` reply and speak it with their own voice - the change is the model instruction for a Live turn, composed on the PC and never sent to either app as a field. No route, no card, no setting, no screen and no client code changed, so there is nothing for this section to declare one-sided: `tools/check_parity.py` has nothing new to classify.
 
@@ -5266,9 +5276,14 @@ they landed):
 - **The memory review pane.** The desktop has it (Brain → Memory: accept,
   reject, "both are true", edit, forget, and "what did you believe then?"),
   and so does the phone (Brain). Both read `/api/memory/pending`
-  (`memory-pane.patch`). The HUD page decides no memory cards: it says how
-  many are waiting and points at the Brain, and `hud_bootstrap.js` refuses
-  any memory write from it.
+  (`memory-pane.patch`). The HUD page decides one kind of card and no more:
+  since the owner's ruling of 2026-11-09 ("Keep on plain facts only", asked
+  for as "an accept button here too") its Memory tab offers Keep on a plain
+  new fact, through the Brain's own `brain_memory_decide` - one integer id,
+  `accept:true`, held on a stale link - while every card with a warning, a
+  replacement, a retire question or the sleep offer still goes to the Brain,
+  and `hud_bootstrap.js` forwards exactly that one body and refuses every
+  other memory write.
 - **Obsidian** (added 2026-09-24). `#obs` appends to today's daily note and
   the notes search reads the vault, both as a plain folder on this PC - no
   plugin, no key, no socket (`jarvis_note_capture.py`, `jarvis_notes.py`,

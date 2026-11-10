@@ -723,7 +723,7 @@ export const MENUS = [
   {
     "id": "settings.focus-presets",
     "title": "Focus presets",
-    "about": "The nine presets the PC sends, with the model, card, cost and what each is worse at.",
+    "about": "The ten presets the PC sends, with the model, card, cost and what each is worse at.",
     "apps": [
       "desktop",
       "phone"

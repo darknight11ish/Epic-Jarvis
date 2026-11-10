@@ -382,6 +382,21 @@ def _same_model(a, b) -> bool:
     return bool(x) and x == y
 
 
+def _preset_mode_rows() -> list:
+    """The preset layer's own pooled modes, read lazily.
+
+    `jarvis_big_coder.MODES` owns the three measured modes; these are the rows
+    a preset adds (2026-11-09: `medical`, plus the two measured candidates no
+    preset points at). Never raises: a backend without the presets module keeps
+    the three modes it always had.
+    """
+    try:
+        import jarvis_presets as P
+        return [dict(r) for r in P.pooled_modes()]
+    except Exception:
+        return ()
+
+
 def pooled_profile(mode: str = "coding", *, engine=None) -> dict:
     """The model, window and measured words for ONE pooled mode.
 
@@ -417,8 +432,22 @@ def pooled_profile(mode: str = "coding", *, engine=None) -> dict:
                 "measured_words": POOLED_MEASURED_WORDS,
                 "spill_allowance": POOLED_SPILL_ALLOWANCE,
                 "needs_cards": 3}
+    for row in _preset_mode_rows():
+        if str(row.get("key") or "") == want:
+            # The preset row carries its OWN measured spill allowance: 0 for
+            # Medical (measured 0 B) and the measured figure for a candidate
+            # that spilled. `start_pooled_lane` hands this number to
+            # `load_coder`, so a row without it could never start.
+            return {"key": str(row["key"]), "label": str(row.get("label") or ""),
+                    "model": str(row.get("model") or ""),
+                    "num_ctx": int(row.get("num_ctx") or 0),
+                    "measured_words": str(row.get("measured_words") or ""),
+                    "spill_allowance": int(row.get("spill_allowance") or 0),
+                    "needs_cards": int(row.get("needs_cards") or 3)}
     raise ValueError(f"{mode!r} is not one of the pooled modes: "
-                     + ", ".join(str(getattr(m, "key", "")) for m in modes)
+                     + ", ".join([str(getattr(m, "key", "")) for m in modes]
+                                 + [str(r.get("key") or "")
+                                    for r in _preset_mode_rows()])
                      + ("the coding lane only" if not modes else ""))
 
 
@@ -449,7 +478,8 @@ def pooled_state(*, engine=None, mode: Optional[str] = None) -> dict:
                 "model": None}
     wanted = [profile["model"]] if profile else [
         str(getattr(m, "model", "")) for m in
-        (getattr(eng, "MODES", ()) or ())]
+        (getattr(eng, "MODES", ()) or ())] + [
+        str(row.get("model") or "") for row in _preset_mode_rows()]
     wanted.append(POOLED_MODEL)
     row, model = None, None
     for name in wanted:
@@ -463,6 +493,10 @@ def pooled_state(*, engine=None, mode: Optional[str] = None) -> dict:
     for m in list(getattr(eng, "MODES", ()) or ()):
         if _same_model(getattr(m, "model", ""), model):
             found_mode = str(getattr(m, "key", ""))
+            break
+    for pm in _preset_mode_rows():
+        if _same_model(str(pm.get("model") or ""), model):
+            found_mode = str(pm.get("key") or "")
             break
     return {
         "url": url,

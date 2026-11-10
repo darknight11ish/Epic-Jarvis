@@ -1,0 +1,11 @@
+        if path in ("/api/memory/learning", "/api/memory/auto",
+                    "/api/memory/fault"):
+            # auto-learn.patch - automatic learning (jarvis_auto_learn.py,
+            # docs/JARVIS-API.md section 19). /api/memory/learning: both
+            # switches, whether a card for either is waiting, and background
+            # learning's own switch as `enabled`. /api/memory/auto: the facts
+            # saved without a card, newest first (?limit=&before=). And since
+            # 2026-11-09 /api/memory/fault: the ONE fault banner both apps
+            # read - the PC's own reason, sentence, count and times, never a
+            # fact's words. All three are reads, behind the token like every
+            # memory route.

@@ -417,6 +417,11 @@
           "detail": ""
         },
         {
+          "id": "medical",
+          "label": "Medical and clinical reading",
+          "detail": ""
+        },
+        {
           "id": "uncensored",
           "label": "Uncensored answers",
           "detail": ""

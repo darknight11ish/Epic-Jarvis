@@ -1812,7 +1812,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -2134,6 +2135,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -4263,7 +4272,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -4585,6 +4595,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -6710,7 +6728,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -7032,6 +7051,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -9152,7 +9179,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -9474,6 +9502,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -11614,7 +11650,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -11936,6 +11973,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -14067,7 +14112,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -14389,6 +14435,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -16505,7 +16559,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -16827,6 +16882,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -18960,7 +19023,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -19282,6 +19346,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -21407,7 +21479,8 @@
        "my_files",
        "propose_plan",
        "change_setting",
-       "feature_guide"
+       "feature_guide",
+       "project_read"
       ],
       "title": "Everyday helpers"
      },
@@ -21729,6 +21802,14 @@
       "last": null,
       "on": false,
       "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "project_read",
+      "last": null,
+      "on": false,
+      "title": "Reading one file of code, config or notes in a folder you listed",
       "waiting": false
      },
      {
@@ -22112,6 +22193,7 @@
   "propose_plan",
   "change_setting",
   "feature_guide",
+  "project_read",
   "goals_list",
   "goal_add",
   "goal_progress",

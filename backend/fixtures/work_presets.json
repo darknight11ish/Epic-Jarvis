@@ -377,6 +377,51 @@
         "lane_start": false,
         "auto": false
       }
+    },
+    {
+      "id": "medical",
+      "title": "Medical Expert",
+      "focus": "clinical reading and patient-advocate questions",
+      "what": "For reading clinical material carefully and in calm plain words: lab panels, letters, medication lists and health questions. It is a purpose-trained medical model on all three cards at once. It is not a doctor, gives no diagnosis and replaces no clinician.",
+      "cost": "HEAVY MODE: it needs all three cards at once (17.31 GiB loaded entirely in video memory, 0 B spilled) and pauses the everyday and Fast models while it runs. It is slow: a 46.8 s cold load and 9.27 tokens a second on the measured coding prompt (11.1 on the measured ~150-word explanation, 7.89 on the four-token answer), so a long answer takes a while. Measured on this PC on 2026-11-09 (model-bench run 20261109-105956, the medgemma window row).",
+      "worse": "It has NO tool calling - `ollama show` reports no `tools` capability, so it cannot use Jarvis's tools, browser or files. It reports vision (pictures), but its picture quality is not measured here. It is not a doctor: no diagnosis, no prescription and no replacement for your own clinician, and a model trained on clinical text can still be wrong about your case.",
+      "model": "medgemma:27b",
+      "lane": {
+        "key": "pooled",
+        "card": "all three cards",
+        "port": 11450,
+        "words": "one model across all three cards"
+      },
+      "context": 32768,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 9.27,
+        "tok_s_long": 11.1,
+        "tok_s_short": 7.89,
+        "size_gib": 17.31,
+        "spill_gib": 0.0,
+        "cold_load_s": 46.8,
+        "context_measured": 32768,
+        "gpu_use": "100% in video memory, 0 B spilled",
+        "tools": 0,
+        "vision": "reported, not measured",
+        "source": "model matrix 2026-11-09 10:59:56, windows[1] medgemma: 18,588,222,089 B loaded, spill 0, load 46.8 s, summary decode 9.27 tok/s (long 11.1, short 7.89); no tools"
+      },
+      "pending": false,
+      "heavy_mode": true,
+      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday and Fast models are paused - they come back, proved from the model list, when you apply another preset. It loads about 17.31 GiB, takes about 47 s cold, writes slowly (about 9 tokens a second) and cannot use tools.",
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
+        "lane_start": true,
+        "auto": false
+      }
     }
   ],
   "old_ids_replaced": [
@@ -388,30 +433,14 @@
   ],
   "hardware": {
     "detected": {
-      "count": 3,
+      "count": 1,
       "cards": [
         {
           "index": 0,
-          "name": "NVIDIA GeForce RTX 2060",
-          "vram_gib": 12.0,
-          "uuid": "",
-          "pci_id": "0000:04:00.0",
-          "monitor": null
-        },
-        {
-          "index": 1,
           "name": "NVIDIA GeForce RTX 2080 SUPER",
           "vram_gib": 8.0,
-          "uuid": "",
+          "uuid": "GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313",
           "pci_id": "0000:05:00.0",
-          "monitor": null
-        },
-        {
-          "index": 2,
-          "name": "NVIDIA GeForce RTX 2080 SUPER",
-          "vram_gib": 8.0,
-          "uuid": "",
-          "pci_id": "0000:08:00.0",
           "monitor": null
         }
       ],
@@ -427,7 +456,8 @@
         "reflect",
         "pictures",
         "documents",
-        "browser"
+        "browser",
+        "medical"
       ],
       "priority_choices": [
         "speed",
@@ -445,7 +475,7 @@
           "preset": "general",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -456,7 +486,7 @@
           "preset": "general_uncensored",
           "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -467,7 +497,7 @@
           "preset": "coding",
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 49152,
           "tok_s": null,
           "measured": false,
@@ -478,7 +508,7 @@
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 16384,
           "tok_s": null,
           "measured": false,
@@ -489,7 +519,7 @@
           "preset": "fast",
           "model": "qwen3.5:4b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 16384,
           "tok_s": null,
           "measured": false,
@@ -500,7 +530,7 @@
           "preset": "reflect",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -511,7 +541,7 @@
           "preset": "pictures",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 32768,
           "tok_s": null,
           "measured": false,
@@ -522,7 +552,7 @@
           "preset": "documents",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -533,8 +563,19 @@
           "preset": "browser",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "medical": {
+          "preset": "medical",
+          "model": "medgemma:27b",
+          "card_index": 0,
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
@@ -546,7 +587,7 @@
           "preset": "general",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": 44.9,
           "measured": true,
@@ -557,7 +598,7 @@
           "preset": "general_uncensored",
           "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": 45.6,
           "measured": true,
@@ -579,7 +620,7 @@
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 16384,
           "tok_s": null,
           "measured": true,
@@ -590,7 +631,7 @@
           "preset": "fast",
           "model": "qwen3.5:4b",
           "card_index": 1,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 1",
           "context": 16384,
           "tok_s": 77.1,
           "measured": true,
@@ -601,7 +642,7 @@
           "preset": "reflect",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": 44.9,
           "measured": true,
@@ -612,7 +653,7 @@
           "preset": "pictures",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 32768,
           "tok_s": null,
           "measured": false,
@@ -623,7 +664,7 @@
           "preset": "documents",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": 44.9,
           "measured": true,
@@ -634,12 +675,23 @@
           "preset": "browser",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
           "tok_s": 44.9,
           "measured": true,
           "best_effort_not_tested": false,
           "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "medical": {
+          "preset": "medical",
+          "model": "medgemma:27b",
+          "card_index": 0,
+          "card": "all three cards (pooled lane, port 11450)",
+          "context": 32768,
+          "tok_s": 9.27,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "HEAVY MODE: medgemma:27b on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the other lanes' models while it runs"
         }
       },
       "3": {
@@ -647,23 +699,23 @@
           "preset": "general",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: main chat/everyday, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: main chat/everyday, 196,608 window"
         },
         "general_uncensored": {
           "preset": "general_uncensored",
           "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: main chat/everyday, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: main chat/everyday, 196,608 window"
         },
         "coding": {
           "preset": "coding",
@@ -680,92 +732,103 @@
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Agentic+Vision, qwen3.5:9b with images"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Agentic+Vision, qwen3.5:9b with images"
         },
         "fast": {
           "preset": "fast",
           "model": "qwen3.5:4b",
           "card_index": 1,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0); monitor not reported by this PC",
+          "card": "the second 2080 SUPER (not installed yet)",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0); monitor not reported by this PC: display + Fast/Live lane, qwen3.5:4b"
+          "note": "the second 2080 SUPER (not installed yet): display + Fast/Live lane, qwen3.5:4b"
         },
         "reflect": {
           "preset": "reflect",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Reflective Coach, qwen3.5:9b, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Reflective Coach, qwen3.5:9b, 196,608 window"
         },
         "pictures": {
           "preset": "pictures",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Pictures & Screens, qwen3.5:9b with images, 32,768 window"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Pictures & Screens, qwen3.5:9b with images, 32,768 window"
         },
         "documents": {
           "preset": "documents",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Documents & Notes, qwen3.5:9b, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Documents & Notes, qwen3.5:9b, 196,608 window"
         },
         "browser": {
           "preset": "browser",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Browser & Forms, qwen3.5:9b, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Browser & Forms, qwen3.5:9b, 196,608 window"
+        },
+        "medical": {
+          "preset": "medical",
+          "model": "medgemma:27b",
+          "card_index": 0,
+          "card": "all the cards (pooled lane, port 11450)",
+          "context": 32768,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "medgemma:27b on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the other lanes' models while it runs"
         }
       }
     },
     "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested",
     "three_gpu_plan": {
       "confirmed": true,
-      "layout": "everyday presets keep one lane per GPU (the everyday lane, the monitor card's lane and the headless card's lane); only on-demand heavy Coding pools the cards on port 11450. Agentic + Vision stays on the everyday card, not the headless one: the 9B weights plus the vision projector need about 7.00 GiB and an 8 GB card with no monitor has 6.65 GiB free, so there is no window at which it fits a headless card",
+      "layout": "everyday presets keep one lane per GPU (the everyday lane, the monitor card's lane and the headless card's lane); only the on-demand heavy Coding preset pools the cards on port 11450, and the Medical preset pools the same cards the same way. Agentic + Vision stays on the everyday card, not the headless one: the 9B weights plus the vision projector need about 7.00 GiB and an 8 GB card with no monitor has 6.65 GiB free, so there is no window at which it fits a headless card",
       "cards": [
         {
           "role": "everyday lane: main chat / everyday, 196,608 tokens",
-          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608
         },
         {
           "role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0); monitor not reported by this PC",
+          "card": "the second 2080 SUPER (not installed yet)",
           "context": 16384
         },
         {
           "role": "headless card's lane: no 9B lane fits - Agentic+Vision needs about 7.00 GiB against 6.65 GiB free, so it stays on the everyday card",
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:08:00.0)",
+          "card": "the headless 2080 SUPER (not installed yet)",
           "context": 16384
         }
       ],
-      "heavy_pooled": "on demand, the Coding preset pauses those three lanes and loads qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane on port 11450 across all the cards. It is too big for one card, so this is the ONE case where a model is split across cards; every other preset keeps one lane per GPU.",
+      "heavy_pooled": "on demand, the Coding preset pauses those three lanes and loads qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane on port 11450 across all the cards. It is too big for one card, so this is one of the two cases where a model is split across cards; every other preset keeps one lane per GPU. The Medical preset pools the same cards the same way for medgemma:27b at 32,768 tokens.",
       "link_note": "the third card likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane; each lane keeps its own model.",
       "future_not_a_preset": "Qwen3.8-27B pooled to 28 GB across cards is a future 'max quality' experiment only; it is not a preset and no figure is claimed until it is measured."
     }

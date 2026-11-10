@@ -339,5 +339,42 @@ function allCards() {
   ok("Hide toggles, and a hidden card can be reached again in Edit HUD");
 }
 
+/* ------- 11. In Edit HUD a first click SELECTS, it never performs --------- */
+{
+  // The owner's report (2026-11-09): "in the edit HUD, when i click on any part
+  // including the left column icons, there should be the edit options that
+  // appear. right now when i click on it it just opens the icon's intended
+  // menu." The behaviour is driven for real in tests/hud-edit-select.mjs; this
+  // pins the shape that makes it true, so an edit that deletes or reorders the
+  // interception (a capture-phase stop, with the editor's own controls exempt)
+  // fails in a second on a machine with no Playwright.
+  check("the main-screen click is intercepted in the CAPTURE phase while editing",
+    /doc\.addEventListener\("click", onMainScreenClick, true\);/.test(EDIT),
+    "onMainScreenClick is not registered as a document capture listener");
+  check("...and the interceptor stops the page's own handler before it runs",
+    /function onMainScreenClick\(event\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);/
+      .test(EDIT),
+    "the interceptor does not preventDefault + stopPropagation");
+  check("...it runs only while Edit HUD is on",
+    /function onMainScreenClick\(event\) \{\s*\n\s*if \(!editing \|\| !event/.test(EDIT),
+    "the interceptor is not gated on edit mode");
+  check("...the editor's own controls keep their click",
+    /const EDITOR_OWN_CLICK = \[[\s\S]*?"#hud-edit-bar"[\s\S]*?"\.hud-card-tools"[\s\S]*?"\[data-hud-card-handle\]"[\s\S]*?"#hud-edit-toggle"[\s\S]*?"#hud-stop"[\s\S]*?\]\.join\(", "\);/
+      .test(EDIT),
+    "the Done/Undo bar, card toolbars, drag handle, Edit HUD toggle or Stop control is not exempt");
+  check("...a click inside a card selects that card through the ONE selector",
+    /const shell = event\.target\.closest\("\[data-hud-card\]"\);[\s\S]*?selectEditCard\(id\);/
+      .test(EDIT),
+    "a click inside a card does not select it");
+  check("...a click on the left column's own icons selects the Navigation card",
+    /closest\("\.rail\.left"\) && selectedCard !== "nav"[\s\S]*?selectEditCard\("nav"\);/
+      .test(EDIT),
+    "the left column's non-card icons (Presets, Live, Faces, Calendar, Brain, Galaxy, dock) are not mapped to Navigation");
+  check("...a selection opens the Cards tab, so its options are visible",
+    /if \(selectedCard\) editTab = "cards";/.test(EDIT),
+    "selectEditCard no longer opens the Cards tab");
+  ok("Edit HUD click: capture-phase selection, editor controls exempt, left column maps to Navigation");
+}
+
 console.log(`\n${passed} passed, ${fails.length} failed`);
 if (fails.length) { console.log(`failed: ${fails.join(", ")}`); process.exit(1); }

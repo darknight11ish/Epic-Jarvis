@@ -77,7 +77,7 @@ so keep it there where you see it.
    ```
 
 4. **Get the models** (section 1.8). The everyday model - the one most of the
-   nine focus presets use - is about 6.5 GB, downloaded into Ollama's own
+   ten focus presets use - is about 6.5 GB, downloaded into Ollama's own
    models folder (`C:\Users\<you>\.ollama\models`). Then quit Ollama from its
    tray icon and start it again from the Start menu:
 
@@ -87,7 +87,7 @@ so keep it there where you see it.
 
    The Fast preset, for the quickest short answers, uses the smaller
    `qwen3.5:4b` - run `ollama pull qwen3.5:4b` too if you want it. **Settings
-   → Focus presets** describes each of the nine.
+   → Focus presets** describes each of the ten.
 
    **And the older fallback, once.** Typed chat still names the older tuned
    copy `jarvis-primary` by default, and Live names plain `qwen3:8b`; neither
@@ -508,7 +508,7 @@ stop it).
 
 One time. The first two commands are settings Ollama reads at start-up (a
 Modelfile cannot hold them); the rest downloads the everyday model - the one
-most of the nine focus presets use - about 6.5 GB, into Ollama's own models
+most of the ten focus presets use - about 6.5 GB, into Ollama's own models
 folder:
 
 ```powershell

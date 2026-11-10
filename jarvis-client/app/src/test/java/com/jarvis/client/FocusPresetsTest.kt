@@ -21,13 +21,13 @@ import java.io.File
  * The focus-presets contract (net/FocusPresets.kt), against the REAL generated
  * fixture `backend/fixtures/work_presets.json` (tools/gen_work_presets.py from
  * backend/jarvis_presets.py - never hand-edited). The merged answer carries the
- * nine rows plus `hardware`/`questionnaire`/`recommendations`, and the saved
+ * ten rows plus `hardware`/`questionnaire`/`recommendations`, and the saved
  * `chosen` id when the PC has one; this test reads that whole shape.
  *
  * The list is deliberately generic: the owner added a fifth preset
  * (general_uncensored), and Agentic+Vision's model may change after a
  * measurement, so the parser must not hardcode a count or a model; the fixture
- * test still pins the nine rows the screens actually draw.
+ * test still pins the ten rows the screens actually draw.
  */
 class FocusPresetsTest {
 
@@ -92,7 +92,7 @@ class FocusPresetsTest {
 
     @Test
     fun `the contract is one list, parsed generically - no id or count hardcoded`() {
-        // At least the owner's nine named presets are present, in the PC's order.
+        // At least the owner's ten named presets are present, in the PC's order.
         val ids = view.presets.map { it.id }
         assertTrue("General", "general" in ids)
         assertTrue("General Uncensored", "general_uncensored" in ids)
@@ -103,6 +103,7 @@ class FocusPresetsTest {
         assertTrue("Pictures & Screens", "pictures" in ids)
         assertTrue("Long Documents", "documents" in ids)
         assertTrue("Browser & Forms", "browser" in ids)
+        assertTrue("Medical Expert", "medical" in ids)
         assertEquals("the fixture's own order is kept", ids, view.presets.map { it.id })
 
         // A client never invents the list: one extra unknown preset parses too.
@@ -121,10 +122,10 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `the merged answer carries nine rows and the hardware, questionnaire and recommendations blocks`() {
+    fun `the merged answer carries ten rows and the hardware, questionnaire and recommendations blocks`() {
         // The chip and the plate render one row per preset; the merged contract
-        // has exactly the owner's nine today.
-        assertEquals(9, view.presets.size)
+        // has exactly the owner's ten today.
+        assertEquals(10, view.presets.size)
 
         val hardware = requireNotNull(view.hardware) { "hardware block missing" }
         assertTrue("detected" in hardware)
@@ -133,7 +134,7 @@ class FocusPresetsTest {
         assertEquals(
             listOf(
                 "general", "general_uncensored", "coding", "agentic_vision", "fast",
-                "reflect", "pictures", "documents", "browser",
+                "reflect", "pictures", "documents", "browser", "medical",
             ),
             (q["focus_choices"] as JsonArray).map { (it as JsonPrimitive).content },
         )
@@ -171,7 +172,7 @@ class FocusPresetsTest {
 
     @Test
     fun `the live GET answer - hardware, questionnaire, chosen, active lane and paths - parses`() {
-        assertEquals(9, live.presets.size)
+        assertEquals(10, live.presets.size)
         assertEquals("coding", live.chosen)
         assertEquals("Coding", FocusPresets.chipLabel(live))
         assertEquals("main", (live.activeLane!!["key"] as JsonPrimitive).content)
@@ -283,6 +284,40 @@ class FocusPresetsTest {
         )
         assertEquals("", FocusPresets.heavyCost(requireNotNull(view.preset("fast"))))
         assertNull(FocusPresets.blocker(view, fast, stale = false, linkUp = true))
+    }
+
+    @Test
+    fun `Medical Expert is the tenth row - medgemma 27b on the pooled all-three-card lane`() {
+        val medical = requireNotNull(view.preset("medical"))
+        assertEquals("Medical Expert", medical.title)
+        assertEquals("medgemma:27b", medical.model)
+        assertEquals("pooled", medical.lane.key)
+        assertEquals("all three cards", medical.lane.card)
+        assertEquals(32768, medical.context)
+        assertTrue("Medical needs all three cards while it runs", medical.heavyMode)
+        assertNull("no second worker is planned in this contract", medical.helper)
+        // Its measured numbers are the PC's own, carried in the same shape as
+        // every other measured row.
+        val measured = requireNotNull(medical.measured) {
+            "Medical carries its measured numbers, in every row's shape"
+        }
+        assertEquals(9.27, measured.tokensPerSecond ?: 0.0, 0.001)
+        assertEquals(17.31, measured.sizeGib ?: 0.0, 0.001)
+        assertEquals(0.0, measured.spillGib ?: -1.0, 0.001)
+        // Heavy mode IS offered (2026-11-02): the PC's pooled three-card lane
+        // applies it, so there is no blocker - and the cost it states is shown
+        // as its own line, never as a reason it cannot be used.
+        assertNull(
+            "a heavy preset is offered like every other one",
+            FocusPresets.blocker(view, medical, stale = false, linkUp = true),
+        )
+        assertTrue(
+            "the heavy cost is said in the PC's own words: ${FocusPresets.heavyCost(medical)}",
+            FocusPresets.heavyCost(medical).contains("all three cards")
+                && FocusPresets.heavyCost(medical).contains("paused"),
+        )
+        // Appended last, so the nine older rows above keep their order.
+        assertEquals("medical", view.presets.last().id)
     }
 
     @Test

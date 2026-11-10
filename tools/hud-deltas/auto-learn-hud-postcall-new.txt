@@ -1,0 +1,8 @@
+                # 2026-11-09: /api/memory/fault/retry re-runs the failed
+                # batch check with the learner's OWN handles - the same
+                # functions and the same model this PC already learns with,
+                # so no new route for the model and nothing off this PC. The
+                # three switches ignore them.
+                code, out = jarvis_auto_learn.handle_post(
+                    route, body, learning_on=learning_enabled(),
+                    model=_extract_model(), ollama=getattr(jarvis_extract, "OLLAMA", None))

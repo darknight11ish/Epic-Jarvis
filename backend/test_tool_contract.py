@@ -172,7 +172,12 @@ CATALOGUE = [
     # NOT in FULL_ENABLED - `[product_check] enabled = false` ships, and the
     # tool is not even offered while it is off - and not in a cloud or
     # private-turn allow-list (both are empty by design).
-    "product_check", "propose_plan",
+    "product_check",
+    # The read half of taking over dev work (2026-11-09): cardless, decided
+    # under file_read's own `read_files_readonly` action, and ships OFF - so
+    # it is here (the catalogue is where "a new tool landed" is recorded) but
+    # not in FULL_ENABLED, OFFERED_FRESH, the cloud lane or a private turn.
+    "project_read", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh

@@ -258,7 +258,7 @@ def t_awareness_answers_read_locally():
     check("... and reports the real preset count, never 0 (finding 1)",
           chg is not None and real_presets >= 9
           and f"between {real_presets} presets" in chg.reply
-          and "0 presets" not in chg.reply,
+          and "between 0 presets" not in chg.reply,
           None if chg is None else (real_presets, chg.reply[:240]))
     changes = _ran("what changed about you?", sched)
     check("the change journal answers (empty honestly at first)",

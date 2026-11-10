@@ -79,8 +79,9 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 61 at
-/// 2026-11-09 (60 at 2026-11-05; Wave 13 added the carded repository create)
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 62 at
+/// 2026-11-09 (60 at 2026-11-05; Wave 13 added the carded repository create,
+/// wave 14 the cardless `project_read`)
 /// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
 /// pack-manager tools that ship ON, hands-free's send_text_message and the
 /// approval-policy tool's own row): the
@@ -89,7 +90,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 61] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 62] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -121,7 +122,8 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 61] = [
     "read_web_page",
     "connect_account",
     "rea_investigate",
-    // The everyday helpers that used to be "not this slice" (8)
+    // The everyday helpers that used to be "not this slice" (9: wave 14 added
+    // the cardless project_read, decided under file_read's own action)
     "calculator",
     "memory_search",
     "file_read",
@@ -130,6 +132,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 61] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
+    "project_read",
     // Jarvis's own tools, which had no switch row before 2026-11-04 (23: the
     // original 12, plus the four pack-manager tools, hands-free's
     // send_text_message and the six on-demand GitHub tools)

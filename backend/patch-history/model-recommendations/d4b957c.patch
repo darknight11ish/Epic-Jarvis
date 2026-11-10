@@ -1,15 +1,17 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -6871,3 +6871,19 @@
+@@ -6871,3 +6871,21 @@
      # Before the main socket, so the banner lists every address together.
 +    # model-recommendations.patch (2026-10-28, the owner's request): ONE check of
 +    # the public model catalogues, a bounded benchmark of a model ALREADY on this
-+    # PC, and preset changes justified only by measured numbers. Five PC-only
-+    # routes: GET /api/models/recommendations, POST /api/models/check,
-+    # POST /api/models/benchmark, POST /api/presets/recommend and
-+    # POST /api/presets/recommend/opinion. It approves nothing and changes
-+    # nothing: a download is the EXISTING /api/models/install card and applying
-+    # a preset is the EXISTING /api/work/apply card. See jarvis_model_recommendations.py.
++    # PC, and preset changes justified only by measured numbers. Seven PC-only
++    # routes: GET /api/models/recommendations, GET /api/models/resources (what is
++    # loaded right now), GET /api/models/measured (the benchmark rows already
++    # stored), POST /api/models/check, POST /api/models/benchmark,
++    # POST /api/presets/recommend and POST /api/presets/recommend/opinion. It
++    # approves nothing and changes nothing: a download is the EXISTING
++    # /api/models/install card and applying a preset is the EXISTING
++    # /api/work/apply card. See jarvis_model_recommendations.py.
 +    try:
 +        import jarvis_model_recommendations
 +        print(jarvis_model_recommendations.install(Handler, origin_ok=_origin_ok,

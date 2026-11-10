@@ -1,0 +1,18 @@
+    cid = got[0] if got else None
+    return cid if isinstance(cid, str) and cid else None
+
+
+def _intake_fault_visible(rows: list) -> list:
+    """auto-learn.patch (2026-11-09, the memory-card research): the pending
+    read without the cards a learning fault parked.
+
+    ONE read for every client - the Brain, the phone, and the HUD's proposal
+    count - so the banner and the hidden cards can never disagree. With no
+    fault, or a store that cannot be read, the list comes back unchanged:
+    hiding a card with nothing to explain it would be worse than showing it.
+    """
+    try:
+        import jarvis_auto_learn
+        return jarvis_auto_learn.visible_pending(rows)
+    except Exception:
+        return rows

@@ -2014,7 +2014,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/watch` | GET | `routes.rs:24` | **no** | |
 | `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. **The shape, verified against the owner's running backend and `jarvis_watch.py` on 2026-10-09** (it was unverified before, and both apps guessed wrong): `{available, new, updated, count, topics, note}` - the module splits its rows by `kind`, and its own consumer reads `new` + `updated`, in that order (`jarvis_watch.py:524`). A row is `{topic, kind, repo, url, stars, licence, archived, description, what_changed, at}`: a repository is named **`repo`**, not `full_name`/`name`, and there is no `descr`, no per-row `note`, and no `findings`/`items` anywhere in it. A repository with **no licence file** carries the two words **`"none stated"`** (`jarvis_watch.py:492`), not an empty string - so it draws the warning "no licence stated - no permission to use it", never a settled licence. Both apps read `findings`/`items` until 2026-10-09, so every *successful* read came back empty and both screens drew "Nothing new since you last marked the list read." over a list they had not read, while the badge above could say "Watches · 3 new" at the same moment. Held now by `jarvis-desktop/tests/fixtures/watch-report-cases.json` and the phone's copy under `contract/`, both written from the module by `tools/gen_watch_report_cases.py`; `backend/test_watch_notify.py` fails if either goes stale. |
 | `/api/memory/status` | GET | `routes.rs:28` | `JarvisRuntime.memoryStatus` (`MemoryCounts.STATUS_PATH`; Brain, "What Jarvis remembers", `MemoryCountsPlate.kt`) | `{available, db, facts, current, retired, erased, entities, embedder, semantic, vector_search, unembedded, reranker, said_again, sleep_time}` - `MemoryStore.status()` plus the route's own two. `facts` counts retired ones too; `current` is what is in use; `erased` (since 2026-09-24) counts facts whose words were erased; `entities` (since 2026-09-25) counts the people and things facts are linked to (one per group), and `entity_errors` appears only when linking a saved fact failed (the fact is saved either way). `reranker` (since 2026-09-26, §34) is `{"state": "on" \| "loading" \| "off" \| "not started", "model", "why", "used", "slow"?}`; `said_again` (since 2026-09-26, §34) is how many "said again" rows are kept. `embedder` is the meaning model's name as the store keeps it (a model that needs its maker's prefixes carries `+prefixes-1`, e.g. `Qwen/Qwen3-Embedding-0.6B-Q+prefixes-1`); `embedder_refused` (since 2026-09-28, "Model tryouts", `tools/model_tryout/README.md`) appears only when `JARVIS_MEMORY_EMBED_MODEL` named a model that could not be used - why, in plain words, with the default in use - and neither app shows it yet (the backend's window says it once). Both apps show the same rows in the same words (`memory-words.js` `statusRows`, `MemoryWords.statusRows`, one shared fixture - §34 "In the apps"); only the desktop shows `db`, a path on the PC. The phone reads this route too - this table used to say it did not (the memory review's B19, 2026-09-27). |
-| `/api/memory/pending` | GET | `routes.rs` (`memory_pending`), as `?retire_cards=1&sleep_offer=1&merge_cards=1` (the "are these the same?" card, desktop only - below) | via `probe`, as `/api/memory/pending?retire_cards=1&sleep_offer=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. Both apps ask for retire cards because they label them correctly, and for the overnight-tidy card because they show it - see below. The HUD page reads it plainly, for a count only. |
+| `/api/memory/pending` | GET | `routes.rs` (`memory_pending`), as `?retire_cards=1&sleep_offer=1&merge_cards=1` (the "are these the same?" card, desktop only - below) | via `probe`, as `/api/memory/pending?retire_cards=1&sleep_offer=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. Both apps ask for retire cards because they label them correctly, and for the overnight-tidy card because they show it - see below. The HUD page reads it for the banner's count and, with both flags, for its Memory tab's list; since 2026-11-09 a plain new fact in that list also carries Keep, which the page sends through the Brain's own `brain_memory_decide` (one integer id, `accept:true`, held on a stale link) - no list form and no other memory write. |
 | `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" Each fact's `current` is judged as Jarvis knew it at that moment, not as of today: a fact retired later (`retired_at` after that moment) was current then; `valid_to` counts only while `retired_at` is empty (`bitemporal.patch`). Every row carries `erased_at` (a column since 2026-09-24): a number means "Erase the words" was used on it - its `text` is then only the marker `[erased]`, and both apps show "Erased on <date>" instead, never the marker (`/api/memory/erase`, under Writes). |
 | `/api/memory/export` | GET | `brain.rs` `brain_memory_export` | **no** | Everything, current and retired. The desktop saves it to a file the owner picks in the Windows "Save as" dialog - never the clipboard, which Windows can sync to other devices. |
 | `/api/initiative` | GET | `routes.rs:33` | via `probe` | The **only** list route that uses the key `items`. |
@@ -2250,7 +2250,7 @@ neither app says it would.
 | `/api/models/install` | POST | `{"ref": …}` | `brain.rs:434` | `JarvisApi.kt:326` | Allowed from the phone since the 2026-09-20 amendment: tier `ask`, same shape as switch. No catalogue - the ref is typed in, never browsed. |
 | `/api/models/switch` | POST | `{"ref": …}` | `brain.rs:435` | `JarvisApi.kt:310` | Allowed from the phone since the 2026-09-18 amendment: tier `ask`, so success means "a card was raised". |
 | `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:314` | Tier `auto`; never waits. |
-| `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
+| `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. Since 2026-11-09 the HUD's Memory tab sends this same decision for ONE plain new fact (no flags, no replacement, not a retire card, not the sleep offer) through the Brain's own `brain_memory_decide`, granted by `hud-memory-keep`; every other card is still decided in the Brain. |
 | `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
 | `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs` `mark_answer` (quickbar, and the HUD page through `hud_bootstrap.js`, which holds no token) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). **Wave 10 (2026-11-08), the HUD's Wrong sheet:** the body may also carry an optional `reason` (one of `wrong_fact`, `outdated`, `misunderstood`, `too_long`, `too_sensitive`, or `""`), and an optional `correction` (the owner's one-line "what should I have said?", at most 500 characters, or `""`); both are sent only by the HUD's own answer menu after Submit, and omitting both is byte-identical to the old request ("Just mark it wrong"). The reply keeps `ok` and may add `said` (the PC's own one-sentence receipt, which the HUD shows) and `card_raised` (bool; the HUD never approves anything). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | `JarvisApi.forgetFact`, from the "Saved automatically" list (§19) and, since 2026-09-25, from "Used in this answer" and "Jarvis remembered N things" (§4, §19.5), after a confirm, held on a stale link | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
@@ -16114,9 +16114,10 @@ the list "Windows Hello for memory lists" hides (`lock/rules.rs`
   own parts (fact, document, person, or any group it does not know), and
   its "what the brain reached for" trace (`/api/retrieve`) answers
   `{"available": false, "hidden": true}` (`lock/rules.rs` `redact_graph`,
-  `redact_hud_read`). The HUD's waiting-card count
-  (`/api/memory/pending`) is left as it is: it shows a number, never
-  words.
+  `redact_hud_read`). The HUD's waiting-card read
+  (`/api/memory/pending`) is left as it is: while the lists are hidden its
+  Memory tab draws the fixed hidden sentence and no titles, and the banner
+  is a number.
 - **Finding a name** (bug **B3**: it jumped to the first match only and
   said nothing when there was none): every match is counted, Enter steps
   to the next and Shift+Enter back, and the line beside the box says "2 of
@@ -23698,7 +23699,7 @@ style on the owner's behalf. "Show everything" on its own deliberately stays
 
 ## 128. Work setups: five model combinations for a kind of work (added 2026-10-10)
 
-**SUPERSEDED for `GET /api/work` (2026-10-19).** The public read route now serves the nine FOCUS PRESETS in section 145 (`jarvis_presets.py`); the five work setups below remain only inside `jarvis_work.py` for the old `POST /api/work/recommend` and `POST /api/work/choose` compatibility paths, and are no longer what either app reads. The preset UI contract is section 145.
+**SUPERSEDED for `GET /api/work` (2026-10-19).** The public read route now serves the ten FOCUS PRESETS in section 145 (`jarvis_presets.py`); the five work setups below remain only inside `jarvis_work.py` for the old `POST /api/work/recommend` and `POST /api/work/choose` compatibility paths, and are no longer what either app reads. The preset UI contract is section 145.
 
 The owner asked (2026-10-10):
 
@@ -26358,7 +26359,7 @@ selector in both apps' chat bars and a Settings page. The contract is the file
 from `backend/jarvis_presets.py` (shipped whole, twin in the base); the app UIs
 render it verbatim. No new token and no new gate action.
 
-**Nine local presets since 2026-10-27.** The owner asked for the strong
+**Ten local presets since 2026-11-09.** The owner asked for the strong
 integrated abilities to be preset choices that load the best local model for
 the job, so four capability rows joined the original five: **Reflective Coach**
 (talking a difficult thought through), **Pictures & Screens** (a screenshot or
@@ -26371,11 +26372,15 @@ speed are not separately measured (the model's vision capability is
 documented). **Fast** now runs `qwen3.5:4b` on the RTX 2080 SUPER (the `coding`
 lane) at 16,384 tokens, the window that lane serves; measured 2026-10-10 on the
 same card: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token
-window, the file 3.16 GB on disk. The split is deliberate: only the 12 GB card
+window, the file 3.16 GB on disk. **Medical Expert** is the tenth row, appended
+last on 2026-11-09: `medgemma:27b` on the same pooled lane Coding uses, at
+32,768 tokens - its measured numbers are in §145.1b. The split is deliberate:
+only the 12 GB card
 holds the 196,608-token window (Qwen3.5's recurrent layers keep no KV cache),
 while the 8 GB card is the display card and runs the small model with about
 4 GB of video memory, leaving headroom for Windows, DWM and WebView2; Coding's
-30B model uses both cards only while it is applied. Nothing switches by itself:
+30B model and Medical's 27B use all three cards only while one is applied.
+Nothing switches by itself:
 an apply that needs a different model raises the ONE existing `switch_model`
 approval card, a model already loaded is simply chosen with nothing to approve,
 and no automatic per-feature model switching exists.
@@ -26383,7 +26388,7 @@ and no automatic per-feature model switching exists.
 **`GET /api/work` (and its alias `GET /api/presets`) - READ ONLY.** The same
 origin and token checks as the old route; the answer is:
 
-    {"found", "presets": [nine], "old_ids_replaced": [...],
+    {"found", "presets": [ten], "old_ids_replaced": [...],
      "hardware": {"detected": {"count",
                                "cards": [{"index","name","vram_gib","uuid",
                                           "pci_id","monitor"}],
@@ -26408,10 +26413,11 @@ Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
 words}/context/helper/policy/measured/pending/heavy_mode/heavy_words/apply{action,
 switch_route,apply_route,lane_start,auto:false}`. A `pending` preset has no
 model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
-coder) means the preset's model needs BOTH cards as ONE pooled lane; since
+coder, and since 2026-11-09 Medical on `medgemma:27b` at 32,768) means the
+preset's model needs ALL THREE cards as ONE pooled lane; since
 2026-11-02 that lane exists and the row is applicable like every other one,
-with `heavy_words` carrying the PC's own plain-words cost (both cards, and the
-other two models paused while it runs). Both fields are additive: a reader that
+with `heavy_words` carrying the PC's own plain-words cost (all three cards, and
+the other two models paused while it runs). Both fields are additive: a reader that
 ignores them behaves exactly as before. `chosen` is the id last applied;
 `active_lane` is the lane chat is pointed at now.
 
@@ -26599,6 +26605,37 @@ Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
 pending/heavy refusals, rollback), and `tools/gen_work_presets.py --check`.
 
+### 145.1b The Medical preset on the same pooled lane (added 2026-11-09)
+
+**Medical Expert** (`id: "medical"`) is the tenth row, appended after Browser &
+Forms so the nine older rows keep their order, ids and `focus_choices` order.
+Its model is `medgemma:27b` on the `pooled` lane at **32,768 tokens** - the same
+one-Ollama-on-port-11450 shape Coding's row uses, with `heavy_mode: true` and
+`mode: "medical"`. Its words are on the row: clinical reading and
+patient-advocate questions, **no tool calling** (`ollama show` reports no
+`tools` capability, so it cannot use Jarvis's tools, browser or files), vision
+reported but not measured here, and plainly that it is not a doctor - no
+diagnosis, no prescription, no replacement for the owner's own clinician.
+
+Measured on this PC on 2026-11-09 (`model-bench` run
+`run-20261109-105956`, the `medgemma` window row): **17.31 GiB loaded, 100% in
+video memory, 0 B spilled**, a **46.8 s** cold load and **9.27 tokens a
+second** on the summary/coding prompt, 11.1 on the measured ~150-word
+explanation and 7.89 on the four-token answer. That is the honest
+**7.9-11.1 tok/s** range, not a single optimistic figure.
+
+The preset changes no wording: choose the **Patient Advocate** personality in
+How Jarvis talks if that manner is wanted - a preset is a model, a lane and a
+window, never a personality.
+
+Applying it starts that lane **in its own mode**: the row's `mode: "medical"`
+reaches the pooled lane's start, so `medgemma:27b` is what loads, and the
+window this backend reports for the pooled lane follows the preset that is
+applied (`pooled_num_ctx()`), so a Medical turn asks for 32,768 tokens - the
+window the lane really loaded - never Coding's 49,152. Stopping the lane and
+`GET /api/work`'s lane state recognise `medgemma:27b` the same way, from the
+preset layer's own `pooled_modes()` rows.
+
 ### 145.1 The Cloud row, the provider list, and the standing escalation switch (added 2026-10-27)
 
 Owner decision, 2026-10-27: the Cloud row belongs in the Presets menu beside
@@ -26628,8 +26665,8 @@ Two new top-level keys on `GET /api/work` / `GET /api/presets`:
                              "key_where"}],
               "escalate": {"on": false, "why": "not turned on for this PC"}}
 
-* `cloud_preset` is a TENTH row in the same shape as a preset, and it is
-  deliberately **not** in `presets[]` - both apps' nine-row list stays nine
+* `cloud_preset` is an ELEVENTH row in the same shape as a preset, and it is
+  deliberately **not** in `presets[]` - both apps' ten-row list stays ten
   rows. Its `apply` block says the two things that make it different: it is a
   cloud row (`cloud: true`) and it needs a provider (`needs_provider: true`);
   it starts no lane and switches no model (`lane_start: false`).
@@ -26649,7 +26686,7 @@ Two new top-level keys on `GET /api/work` / `GET /api/presets`:
 
 **`POST /api/work/apply` gains ONE optional field.** `{"preset": "cloud",
 "provider": "deepseek_api"}` uses that service. `provider` is read only for the
-cloud preset and ignored for the local nine, so **a body with no `provider` is
+cloud preset and ignored for the local ten, so **a body with no `provider` is
 the same request it always was, byte for byte**. The cloud apply:
 
 1. refuses `400` for no provider or an id this PC does not know, naming the six;
@@ -37472,19 +37509,21 @@ for jarvis, it shouldnt need a card"* and *"if i manually choose anything in the
 jarvis app or deskstop program, and its something that i can easily click and
 change back right away, it shouldnt need a card"*.
 
-**The rule.** A local focus preset picked in either app's own preset control
-applies at once, with no approval card. The preset it replaced is written into
+**The rule.** A local focus preset that is not one of the two heavy rows
+(Coding and Medical), picked in either app's own preset control, applies at
+once with no approval card. The preset it replaced is written into
 a receipt (`preset_apply` in `jarvis_receipts.py`), and the menu it was picked
 from puts the old preset one click away - that menu row is the everyday way
 back. The receipt is readable through `GET /api/receipts` and undoable through
 `POST /api/receipts/<receipt_id>/undo`; the apply's own answer carries its id
 as `receipt_id`, and `previous_preset` names what was replaced. Undo is
-registered only when the preset it replaced is itself a local one: if the row
-it replaced was Coding or Cloud, the receipt is still written, but Undo is not
-offered, because going back to either of those raises its own card and that
-menu row is the way back. (Receipts are routes only today - there is no
-separate receipts screen in either app - so the receipt is the machine record
-plus the Undo the existing route can run, not a new button.)
+registered only when the preset it replaced is itself a local one that is not
+heavy: if the row it replaced was Coding, Medical or the Cloud row, the receipt
+is still written, but Undo is not offered, because going back to any of those
+raises its own card and that menu row is the way back. (Receipts are
+routes only today - there is no separate receipts screen in either app - so the
+receipt is the machine record plus the Undo the existing route can run, not a
+new button.)
 
 **Why this is the owner's click and not the model's.** Both apps' preset
 controls call ONE route, `POST /api/work/apply` (`jarvis_presets.install()`,
@@ -37505,10 +37544,11 @@ the request is a paired app's screen, the change is one model switch on a lane
 that already exists, the preset it replaced is one click away in the same menu,
 and nothing is downloaded, installed, deleted or spent. Under that rule:
 
-* the nine local presets, except Coding, apply with no card;
-* **Coding keeps its card.** Its pooled three-card lane unloads both other lane
-  models and loads a 14.8 GB model for about half a minute; that is not a quick
-  click back, and the card is the warning before the first unload
+* the ten local presets, except the two heavy ones (Coding and Medical), apply with no card;
+* **Coding and Medical keep their cards.** Each needs the pooled three-card lane
+  to unload the other lane models and load its own model - Coding's 14.8 GB in
+  about half a minute, Medical's `medgemma:27b` at 17.31 GiB in about 47 s; that
+  is not a quick click back, and the card is the warning before the first unload
   (`jarvis_model_lanes.start_pooled_lane` raises it, unchanged);
 * **the Cloud row keeps its card.** It chooses where the owner's words go, and
   its card is `change_own_config` (`jarvis_presets.apply_cloud`, unchanged);
@@ -37528,16 +37568,19 @@ menu apply through `apply_focus_preset` (Rust) to the same route; the phone's
 Focus presets plate does the same through `JarvisApi.focusPresetApply`. So the
 rule is one-sided in neither app, and `tools/check_parity.py` is unaffected.
 The phone's own sentence says the same thing as the desktop's: a local preset
-switches at once, and Coding and Cloud still ask.
+that is not heavy switches at once, and Coding, Medical and the Cloud row still
+ask.
 
 **Proved by:** `backend/test_presets_owner_ui.py` - the route applies a local
 preset with zero `jarvis_gate.check()` calls and writes one undoable receipt;
 Undo puts the previous preset, model and lane back; `apply_from_body` (the
 model/chat road) raises exactly one `switch_model` card and writes no receipt;
-Coding still goes through its pooled lane's asking start; Cloud still raises
-`change_own_config`; no request field can ask for the uncarded road; and the
-shipped `jarvis_models.switch_to` still asks. `backend/test_presets_apply.py`
-keeps the carded path's rollback and refusal checks.
+the heavy ids are exactly Coding and Medical and the uncarded decision is
+`owner_ui and not heavy`; Coding still goes through its pooled lane's asking
+start; Cloud still raises `change_own_config`; no request field can ask for the
+uncarded road; and the shipped `jarvis_models.switch_to` still asks.
+`backend/test_presets_apply.py` keeps the carded path's rollback and refusal
+checks.
 
 ## 210. The manual-click rule: one allow-list, and the model path still asks (2026-11-09)
 
@@ -38045,3 +38088,252 @@ synthetic (a non-loopback address, a written bad file). The route's auth is the 
 shared memory block, not a new check proved here. Both app screens were exercised against
 the desktop's mock browser and the phone's JVM contract only - not driven on real hardware
 with a real fault. Those are field-test rows, never a pass.
+
+## 214. `project_read`: one bounded read of a code file inside a folder you listed (2026-11-09)
+
+The owner approved "Jarvis takes over dev work" as a plan in four slices, the
+first of which is the read half; the 2026-11-05 project decision said each
+previously-unbuilt item needs its own owner decision, so this is that half's
+own entry (`decisions.d/2026-11-09-project-read.md`). This section documents
+the one thing that half added: a model tool called `project_read`.
+
+**The gap it closes, measured against the two readers that already existed.**
+Neither could do this job:
+
+* `file_read` (section 35.3) opens any text file at any path, and it has **no
+  check against the owner's folder list at all**. It is the unbounded read, on
+  purpose, and it was left exactly as it is - adding a folder check there
+  would change a shipped tool both apps and this document already describe.
+* `my_files`' `read` action **is** bounded (`jarvis_documents.read` asks
+  `allowed_path` before it opens anything) and it refuses code:
+  `TEXT_KINDS` is `.md`, `.markdown`, `.txt`, `.csv`, so a `.py` file is
+  answered with *"Jarvis reads PDF, Word (.docx), Excel (.xlsx), PowerPoint
+  (.pptx), Markdown, text and CSV files only."*
+
+So "read this Python file in my project" had no bounded door. `project_read`
+is a **composition of two things that already ship**, not a third boundary:
+
+* `jarvis_documents.allowed_path()` - the ONE folder boundary the files tool
+  uses - asked for the folder, and then again for the file itself;
+* `jarvis_repomap._walk()` - the only `.gitignore`-aware walk in this tree,
+  the same one `GET /api/projects/{id}/map` uses (section 195) - plus that
+  module's own per-file cap.
+
+**The tool.** `project_read`, declared in `jarvis_agent.TOOLS` beside
+`my_files`, four fields:
+
+| Field | Meaning |
+|---|---|
+| `path` | a folder on "Folders Jarvis may look in", **or** a registered project's id (a `uuid4().hex`, so 32 hex characters; the map's matcher accepts 16 to 64, and a name is only taken as an id when it is not an existing folder - the same single-field convention `my_files`' `map` action uses) |
+| `file` | the file's path **inside** that folder, forward or back slashes: `app/server.py` |
+| `start_line` | *optional*: the first line to show, counting from 1 (default 1) |
+| `lines` | *optional*: how many lines to show (default 400, hard cap 2,000) |
+
+`start_line` and `lines` are the 2026-11-09 architecture ruling's first two
+conditions (Q3). Asking for either one turns the read into a **line range**;
+asking for neither is the whole-file read exactly as it shipped, so every
+existing answer and every existing check stays true. Their schema is
+`"integer"`, and they are not in `required` - a model that says nothing about
+lines gets the whole file.
+
+The answer is JSON: `{"ok": true, "content": "<the file's text>", "path":
+"<the resolved path that was opened>", "file": "app/server.py", "folder":
+{"path", "name"}, "bytes": int, "cap": int, "truncated": bool,
+"outside_text": true, "what": "..."}`. A project read adds
+`{"project": {"id", "name"}}`. A refusal is `{"ok": false, "error": "<ONE
+plain sentence>"}` - never a stack trace, for anything a caller can cause.
+
+**A line range, and the ONE footer.** A range read returns numbered lines in
+`content`, one per line, `"{line_number}: {text}"` - the number is the REAL
+file line number, so a window never restarts at 1. It adds `start_line`,
+`end_line`, `total_lines`, `line_cap` (2,000) and keeps `cap` (the 512 KB
+whole-file byte cap); `truncated` is `true` exactly when more follows.
+`end_line` is the last line shown, or `start_line - 1` when the file ends
+before that line; `total_lines` is `null` only when the file is too big to
+count (below); `bytes` is how many file bytes the shown lines hold, not the
+length of the numbered text. It works through a project id exactly as it does
+through a folder, because `read_project` passes straight to `read_folder`.
+A binary file is refused as binary for a range read too - a picture is never
+numbered as if its bytes were words.
+
+The footer is a THIRD condition from the same ruling, and it is a separate
+field on purpose: **`more`, never `content`**. The model reads `content` as
+source code, and a sentence appended to it is a sentence the model can quote
+as if the file said it (`file_read` records the same rule). `more` is omitted
+when nothing follows. Its sentence is deterministic:
+
+* `"Showing lines A–B of N; request the next line range to read more"` - the
+  exact shape the ruling asked for, with A, B and N the real numbers.
+* A **second fixed sentence** when the file is over 64 MiB (`MAX_COUNT_BYTES`):
+  the exact total is unknown because counting it would mean reading every byte,
+  and the sentence says so and says a line range can still be asked for. The
+  total is counted by STREAMING the file in binary chunks (a line ends at a
+  newline, so a Windows CRLF counts once, and a last piece with no newline is
+  still a line) - never by loading the file and never by guessing.
+* A third fixed sentence when the 96 KiB answer limit (`MAX_SLICE_BYTES`)
+  stopped the slice before the range asked for was complete - it says the limit
+  was reached, so the footer never claims the file ended.
+* A whole-file read cut at the 512 KB cap carries the same "request the next
+  line range" footer too, using the counted total where the file is small
+  enough to count; that is how a model that hits the cap learns there is a way
+  to ask for the rest.
+
+Both bound the answer: at most 2,000 lines, and at most 96 KiB of text, so an
+absurd `lines` request cannot overflow the model's context. The 2,000 limit is
+enforced by capping, not refusing. A value that is not a whole number of 1 or
+more (`0`, `-1`, `"11"`, `1.5`, `true`) is refused with one plain sentence - a
+return, never an exception. A `\r` from a Windows CRLF is dropped from the text
+shown but never from the count.
+
+**What it refuses, and why each refusal is the existing code's rather than a
+second rule.**
+
+* A folder that is not on the owner's list: refused in the map's own sentence,
+  `jarvis_repomap.REFUSED`, before any walk starts. An unlisted folder is
+  never walked and then filtered.
+* A path that climbs out with `..`, a whole path (a drive letter, a leading
+  slash, a UNC name), an empty name and a NUL byte: refused before a single
+  path is built, because joining a `..` is exactly the mistake that makes a
+  folder boundary meaningless.
+* A link that leads out of the folder: `allowed_path()` resolves it and
+  refuses it, and the check that passes is the same resolved path that is
+  opened - the lesson `file_read` records, that checking one path and opening
+  another lets a link swapped in between point elsewhere.
+* A hidden file or folder (a name starting with `.`), a "Protected from
+  Jarvis" item, a reserved Windows device name and a place file_read refuses
+  (keys, saved passwords, browser data): all of them are `allowed_path()`'s
+  own refusals, unchanged.
+* A file the repository map would not list - ignored by the folder's own
+  `.gitignore` (nested files and `!` negation included), or inside a
+  build/vendor/dependency folder - is refused in one plain sentence. So the
+  two readers cannot disagree about the same file.
+* A binary file (a NUL byte in its first 8,192 bytes) is refused in words
+  rather than returned as mojibake.
+* A **credential file is refused by name**, with one plain sentence that names
+  the reason: *"That is a credential file (its name says it holds a key, a
+  password or a token), so Jarvis will not read it even inside a folder you
+  listed."* The predicate is small and deterministic, and it is the NAME only -
+  it never opens, stats or lists the file, so it cannot depend on the file
+  existing or on being readable. Refused: `.env` and `.env.*` (`.env.local`),
+  `.netrc`, `.git-credentials`, `.npmrc`, `credentials`, `credentials.json`,
+  `id_rsa`/`id_ed25519`/`id_ecdsa`/`id_dsa` with or without a suffix
+  (`id_rsa.pub`), the `.pem`, `.key`, `.pfx`, `.p12`, `.kdbx` and `.jks`
+  extensions, and any path with a `.git` FOLDER in it (`.git/config`,
+  `pkg/.git/HEAD`). Deliberately NOT refused: `key.py`, `keys.py`, `env.py`,
+  `credentials_migration.py`, `my.env`, `credentials.md`, `my.git/config` -
+  ordinary source files that merely contain the word.
+
+**Measured before the credential sentence existed, so the record does not
+overclaim.** Three of those names were genuinely readable: `id_dsa`,
+`credentials` and `credentials.json`. The rest were already refused, but by
+`allowed_path()`'s protected-name list, with the wrong words - a `.env` inside
+a folder the owner HAD listed was answered *"Jarvis may read only files inside
+the folders on the owner's list"*, which is false for that file. So this change
+is both a real refusal for three names and a true reason for the rest. The
+checker runs when the folder/file boundary has already refused the path and
+again after the walk, before the file is opened - after the boundary/walk
+checks and before any read, as the ruling required - so a name the boundary's
+own list does not know is still refused, and a binary `.env` is answered as a
+credential file rather than as binary, which proves it was never opened.
+
+**The honest limit inside that last point: "`.gitignore`-aware" is NOT
+"tracked files only".** `_walk` never asks git. An ignored file is skipped; an
+untracked file that is not ignored **is** read, exactly as the map lists it.
+Anything that needs "only what git tracks" is a different rule and is not
+claimed here.
+
+**The whole-file cap is the map's own number, not a copy of it.**
+`MAX_FILE_BYTES` is `jarvis_repomap.MAX_FILE_BYTES` (512 KB). A whole-file
+read past it is read to the cap and the answer says `truncated: true` and
+carries the `more` footer - it is not refused, and a cut file is never
+presented as the whole file. A file past the cap can be read in full a line
+range at a time, which is what the footer tells the model to ask for. Bytes
+that are not valid UTF-8 are decoded with replacement characters, exactly as
+`file_read` and the map do. The walk carries the map's bounds too (4,000
+files, 6 seconds); when it stops early the answer names the bound that stopped
+it rather than reporting "no such file".
+
+**No card, and no new gate action.** Reading is decided under `file_read`'s
+own action, `read_files_readonly` - tier `auto` in the shipped
+`[autonomy.tiers]` (`backend/rebuilt/jarvis-framework.toml`) - by declaring
+the tool with `gate_lookup_name=lambda args: "file_read"`. There is no new
+`_TOOL_ACTIONS` line, no new tier line and no `.patch`; the same shape the
+repository map shipped with. Nothing is approved, written, moved or sent, so
+there is nothing to approve. The tool is in
+`jarvis_agent._PROTECTION_READ_ONLY_TOOLS`, so a folder the owner marked
+read-only may be read and a blocked one is refused by `allowed_path()` before
+anything opens.
+
+**It is a switch row on the Tools page, and that is the repo's own law, not a
+choice made here.** Since the owner's 2026-11-04 decision, every tool the
+model can be offered has its own switch, and the only exceptions are the
+handful whose own switch (or another tool) decides them - a closed set pinned
+by `backend/test_asks_first.py`. `project_read` honours `[tools].enabled`
+like every ordinary tool, so a row is real: it joins
+`jarvis_asks_first.TIER_UNLISTED` (the same "Everyday helpers" group
+`file_read` and `my_files` sit in), which makes the switchable count **62**,
+and the desktop mirror in `jarvis-desktop/src/asks-first.js` carries the same
+row. It ships **OFF** - it is not a line in the shipped `[tools].enabled`,
+exactly like `file_read` - so the owner turns it on in Settings, "What asks
+first", and turning it on is one card plus Windows Hello.
+
+**Both apps: nothing new on a screen, and that is not a gap left undecided.**
+This is a tool the local model calls; no app draws it, and no route was added
+- the same one-sided-by-design shape section 195's repository map records in
+`docs/ARCHITECTURE.md` section 8. `tools/check_parity.py` has no route to
+classify here, because there is no route.
+
+**Rule 1 holds and is unchanged.** The whole read is local: no network call,
+no socket, no model call inside the module - it is `ast`-free, standard
+library only, and it sends nothing anywhere. Its result carries
+`outside_text: true`, and the agent's own boundary (`_TurnWatch.took_in`)
+labels and scans every tool result before the model reads it, so a turn that
+read code counts as having read outside text, latches private, and cannot learn
+a fact from it.
+
+**Proved by:** `backend/test_project_read.py` (178 checks, all green).
+It proves: a `.py` file inside a listed folder is read and the words are the
+file's own bytes; an unlisted folder is refused with the map's one sentence
+and nothing is read; `..`, a bare `..`, a drive letter, a leading slash and a
+UNC name are each refused before anything is joined; a real symlink that leads
+outside is refused and not one word of its target comes back (SKIPPED, never
+"passed", on a PC that cannot make a link); the per-file cap **is**
+`jarvis_repomap.MAX_FILE_BYTES` and a 550 KB file is cut at exactly that, says
+`truncated` and carries the `more` footer with the real total; an ignored
+folder, an ignored `*.gen.py`, a `!` un-ignore, a build folder and a hidden
+folder all behave as the map's own walk says they do, and every file that walk
+lists is readable byte for byte; a project id reads that project's folder and a
+folder taken off the list stops being readable even for a project that still
+names it.
+
+The ruling's four conditions have their own checks. **Line ranges:** a range
+`11..15` comes back as `11: ...` through `15: ...` with the real numbers,
+`start_line`/`end_line`/`total_lines` right for a 60-line file; `more` is the
+exact ruling sentence and appears in no other field; a range that reaches the
+end has no `more` at all; `lines` alone starts at 1, `start_line` alone shows
+the default 400; `100,000` is capped at 2,000; 600 lines of 200 characters are
+stopped at 96 KiB with the byte-cap sentence and `end_line` well before the
+total; a file larger than a 1 MiB counting limit reports `total_lines: null`
+and the unknown-total sentence while still returning the lines asked for; a
+range read of a binary file is refused as binary; the same range through a
+project id works; and `0`, `-1`, `"11"`, `1.5` and `true` are each refused in
+the one sentence, never raised. With neither argument, the whole-file read is
+byte for byte the old one and carries no range keys. **Credentials:** `.env`,
+`.env.local`, `.netrc`, `.git-credentials`, `.npmrc`, `credentials`,
+`credentials.json`, `id_rsa`, `id_rsa.pub`, `id_ed25519`, `id_ecdsa`,
+`id_dsa`, `.pem`/`.key`/`.pfx`/`.p12`/`.kdbx`/`.jks` files,
+`pkg/.git/config` and `pkg/.git/HEAD` are all refused with `PR.CREDENTIAL` and
+none of their words come back, while `key.py`, `keys.py`, `env.py`,
+`credentials_migration.py`, `notes.txt` and `app/server.py` still read; the
+predicate is pinned on both sides (`my.env`, `server.pem.txt`,
+`credentials.md`, `my.git/config` and `key` are NOT refused); a `.env` and an
+`id_dsa` full of NUL bytes are answered as credential files, not as binary,
+which proves they were never opened; and a hidden non-credential file keeps the
+boundary's own sentence. **Zero mutation:** every file's relative path, size,
+mtime_ns and SHA-256 in a temp tree is recorded before and after both a
+whole-file read and a line-range read, and nothing changes, is added or is
+removed. And - against the **real** `jarvis_gate` from the published base, with
+the **shipped** tier table, driven through the real `_one_call` - the tool runs
+at tier `auto`, the step records `"outcome": "auto"`, exactly one gate call is
+made under `read_files_readonly`, and nothing is left pending: no card is
+raised.

@@ -737,7 +737,7 @@ def _config_dir() -> Path:
 
 
 def _preset_rows() -> list:
-    """The nine preset rows as dicts (id/title/model/lane key), or []."""
+    """The ten preset rows as dicts (id/title/model/lane key), or []."""
     try:
         import jarvis_presets as presets  # type: ignore
     except Exception:  # noqa: BLE001
