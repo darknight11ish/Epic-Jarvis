@@ -1896,10 +1896,11 @@ export function mountHudEditor(options = {}) {
       if (id && MOVABLE_SET.has(id)) selectEditCard(id);
       return;
     }
-    // The left column's own controls (Presets, Live, Faces, Calendar, Brain,
-    // Galaxy, the Studio dock and Galaxy options) are the Navigation card's
-    // rail, not cards of their own - so a click on one selects Navigation, the
-    // card that column is, instead of opening the menu the icon stands for.
+    // The left column's own controls (Presets, Live, the face-models button,
+    // Calendar, Brain, Galaxy, the Studio dock and Galaxy options) are the
+    // Navigation card's rail, not cards of their own - so a click on one
+    // selects Navigation, the card that column is, instead of opening the
+    // menu the icon stands for.
     if (event.target.closest(".rail.left") && selectedCard !== "nav") {
       selectEditCard("nav");
     }
