@@ -285,13 +285,15 @@ READING_TOOLS = ("calendar_read", "email_read", "notes_search", "home_read")
 ANIMAL_SWITCHES = ("still", "nods", "focus_buddy", "acks", "petting",
                    "cute_moments", "seasonal")
 
-#: The nine work presets, by the ids `jarvis_presets.PRESETS` uses. The answer
+#: The ten work presets, by the ids `jarvis_presets.PRESETS` uses. The answer
 #: to "what will you mostly use it for" only RECOMMENDS one; test_setup.py and
 #: test_setup_quiz.py fail if an id here leaves the preset table. Widened from
 #: five on 2026-11-03 (Wave B): the registry already lists all nine, and the
-#: missing four were a real gap in the recommendation question.
+#: missing four were a real gap in the recommendation question. Widened from
+#: nine on 2026-11-09, when Medical Expert was added.
 PRESET_IDS = {"general": "General", "general_uncensored": "General Uncensored",
-              "coding": "Coding", "agentic_vision": "Agentic + Vision",
+              "coding": "Coding", "medical": "Medical Expert",
+              "agentic_vision": "Agentic + Vision",
               "fast": "Fast", "reflect": "Reflective Coach",
               "pictures": "Pictures & Screens", "documents": "Documents & Notes",
               "browser": "Browser & Forms"}
@@ -610,14 +612,16 @@ QUESTIONS: tuple = (
              "changes": ({"kind": "preset", "to": "agentic_vision"},)},
             {"id": "coding", "label": "Coding and long jobs with tools",
              "changes": ({"kind": "preset", "to": "coding"},)},
+            {"id": "medical", "label": "Medical and clinical reading",
+             "changes": ({"kind": "preset", "to": "medical"},)},
             {"id": "uncensored", "label": "Uncensored answers",
              "changes": ({"kind": "preset", "to": "general_uncensored"},)},
             {"id": "quick", "label": "Quick, short answers",
              "changes": ({"kind": "preset", "to": "fast"},)},
-            # Widened to the other four built-in presets on 2026-11-03: the
-            # table above had five of the nine, so four real answers could not
-            # be given. Still a RECOMMENDATION only - plan() reports it and
-            # never applies it.
+            # Widened to every built-in preset on 2026-11-03: the table above
+            # had five of the nine, so four real answers could not be given;
+            # Medical Expert joined on 2026-11-09. Still a RECOMMENDATION only -
+            # plan() reports it and never applies it.
             {"id": "reflect", "label": "Talking things through and coaching",
              "changes": ({"kind": "preset", "to": "reflect"},)},
             {"id": "pictures", "label": "Making and reading pictures",
