@@ -3073,6 +3073,183 @@ html[data-cal-view="day"] .cal-side{display:none;}
 .setup-offer-btns button:hover{color:var(--ice); border-color:rgb(var(--accent-rgb) / .5);}
 .setup-offer-btns button.primary{color:var(--ice); border-color:rgb(var(--accent-rgb) / .5);}
 
+/* ==================================================================== *
+ *  THE 2026-11-09 HUD PAGE REDESIGN - the stylesheet half.
+ *
+ *  §2.1 one authoritative navigation (Zone A: the centre-stage switcher;
+ *       Zone B: the window header), §2.2 one notification pill bar,
+ *       §4.1 the Memory tab's card hierarchy, §4.2 never two approval
+ *       cards, §5.2 the density rules for a 1900x1000 window.
+ *
+ *  STYLING AND WORDING ONLY. Every id, class and data attribute the page's
+ *  own scripts and the desktop tests read is kept, and #hud-safety (the
+ *  non-hideable safety strip), #approvals' honesty wording and the Galaxy
+ *  map are untouched on purpose - they are the protected strengths.
+ * ==================================================================== */
+
+/* ---- §2.1 ZONE A: the ONE centre-stage switcher --------------------- *
+ * The row under the window header: five plain-word tabs with icons on the
+ * left, the notification pills (§2.2) on the right. It is the stage's own
+ * row (#stage-menu), so it costs no new grid row in the Studio shell and
+ * no new layout in the others. Ambient (center-core) and Mini
+ * (single-stage-bento) hide it on purpose: in those two the spec asks for
+ * the face and its return pill and nothing else (spec §1.2). */
+#stage-menu{
+  display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap;
+  padding:6px 16px; min-height:40px; border-bottom:1px solid var(--line);
+  flex-shrink:0; min-width:0;
+}
+html[data-hud-shell="center-core"] #stage-menu,
+html[data-hud-shell="single-stage-bento"] #stage-menu{display:none;}
+
+#hud-stage-nav{display:flex; align-items:center; gap:4px; flex-wrap:wrap; min-width:0;}
+.hud-nav-tab{
+  display:inline-flex; align-items:center; gap:7px; flex-shrink:0;
+  min-height:30px; padding:4px 11px; border:1px solid transparent; border-radius:6px;
+  background:transparent; color:var(--dim); cursor:pointer;
+  font-family:var(--f-hud, inherit); font-size:12px; letter-spacing:.02em;
+  white-space:nowrap;
+}
+.hud-nav-tab:hover{color:var(--text); border-color:var(--line);}
+.hud-nav-tab:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.hud-nav-tab[aria-pressed="true"]{
+  color:var(--text); border-color:rgb(var(--accent-rgb) / .55);
+  background:rgb(var(--accent-rgb) / .12);
+}
+.hud-nav-icon{display:inline-flex; align-items:center; justify-content:center;
+  width:15px; height:15px; color:var(--ice);}
+.hud-nav-icon svg{width:15px; height:15px; display:block;}
+.hud-nav-tab[aria-pressed="false"] .hud-nav-icon{color:var(--dim);}
+/* The count is a real number, never an em dash, and it stays readable while
+ * the tab it belongs to is the chosen one (the Fig 16 bug). */
+.hud-nav-count{
+  min-width:17px; padding:0 5px; border-radius:9px; text-align:center;
+  background:rgb(var(--warn-rgb, 240 180 80) / .20); color:var(--warn, #e8b25a);
+  font:600 10px/16px var(--f-mono, monospace);
+}
+.hud-nav-count[hidden]{display:none !important;}
+
+/* §2.1: the old BRAIN / PRESETS / GALAXY OPTIONS words are RETIRED from the
+ * strip - the window header carries those doors now. The three buttons stay
+ * in the document (their handlers, ids and aria state are what the shell's
+ * own modules bind to), so nothing is lost: they are simply not a second
+ * navigation any more. */
+#stage-words{display:none !important;}
+
+/* ---- §2.1 ZONE B: the window header's own actions ------------------- */
+.hud-head-door{display:inline-flex; align-items:center; gap:6px; flex-shrink:0;}
+.hud-head-door[hidden]{display:none !important;}
+#hud-ai-mode-door{max-width:230px;}
+#hud-ai-mode-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+#hud-ai-mode-door .hud-head-caret{font-size:9px; color:var(--dim);}
+
+/* ---- §2.2 ONE compact notification pill bar, never stacked banners -- *
+ * A 32-40px single row of two pills. The memory pill keeps the `.init`
+ * class its own code gives it (the banner was an initiative card), so the
+ * styles below neutralise the card look and keep the one line. */
+#hud-pills{display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;}
+.hud-pill{
+  display:inline-flex; align-items:center; gap:8px; min-height:32px; max-width:100%;
+  padding:0 12px; border-radius:16px; cursor:pointer;
+  border:1px solid var(--line); background:rgb(var(--info-rgb) / .08);
+  color:var(--text); font:600 11.5px/1.2 "IBM Plex Sans",sans-serif;
+  text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.hud-pill:hover{border-color:rgb(var(--accent-rgb) / .55); color:var(--ice);}
+.hud-pill:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.hud-pill[hidden]{display:none !important;}
+.hud-pill-icon{font-size:13px; line-height:1;}
+.hud-pill-action{color:var(--ice);}
+#hud-pill-approvals{border-color:rgb(var(--warn-rgb, 240 180 80) / .5);}
+#hud-pill-approvals .hud-pill-icon{color:var(--warn, #e8b25a);}
+/* The memories pill: the page's own initiative card, shrunk to one line. */
+.init.hud-pill{
+  border:1px solid rgb(var(--info-rgb) / .45); border-left:1px solid rgb(var(--info-rgb) / .45);
+  border-radius:16px; padding:0 12px; background:rgb(var(--info-rgb) / .10);
+  margin:0; gap:8px;
+}
+.init.hud-pill .hdr{margin:0; gap:8px; min-width:0;}
+.init.hud-pill .who{font-weight:600; font-size:11.5px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;}
+.init.hud-pill .kind{flex-shrink:0; text-transform:none; letter-spacing:.03em;
+  font-size:9.5px; padding:2px 6px;}
+.init.hud-pill .btns{margin:0; flex-shrink:0;}
+.init.hud-pill .btns button{padding:2px 7px; font-size:10.5px;}
+/* An initiative column with nothing visible in it takes no room, so the
+ * pill bar never leaves an empty 10px gap where a banner used to be. */
+#initiative:not(:has(.init:not([hidden]))):not(:has(.hud-pill:not([hidden]))){display:none !important;}
+
+/* ---- §4.1 the Memory tab's three-button hierarchy ------------------- *
+ * Plain new fact: [ OK Keep ] primary, [ Edit in Brain ] secondary,
+ * [ Dismiss ] quiet. Warning / replacement / retire / merge: a 1-line
+ * amber reason badge, [ Review in Brain ] primary-amber, [ Dismiss ] quiet.
+ * The Keep ELIGIBILITY is the page's own memoryDoorKeepable() and is not
+ * touched by any style here. */
+.memory-door-btns{align-items:center;}
+.memory-door-btns .memory-door-keep{
+  color:var(--text); background:rgb(var(--ok-rgb, 90 200 140) / .22);
+  border-color:rgb(var(--ok-rgb, 90 200 140) / .75); font-weight:650;
+}
+.memory-door-btns .memory-door-keep:hover{color:var(--diff-add, #7fe0a8);}
+.memory-door-btns .memory-door-review.is-secondary{
+  color:var(--text); background:transparent; border-color:var(--border-strong, var(--line));
+}
+.memory-door-btns .memory-door-review.is-primary{
+  color:var(--text); background:rgb(var(--warn-rgb, 240 180 80) / .18);
+  border-color:rgb(var(--warn-rgb, 240 180 80) / .7); font-weight:650;
+}
+.memory-door-btns .memory-door-dismiss{
+  margin-left:auto; color:var(--dim); background:transparent;
+  border-color:transparent; text-decoration:underline; text-underline-offset:2px;
+}
+.memory-door-btns .memory-door-dismiss:hover{color:var(--text); border-color:transparent;}
+.memory-door-why{
+  align-self:flex-start; max-width:100%; padding:1px 7px; border-radius:9px;
+  background:rgb(var(--warn-rgb, 240 180 80) / .16); color:var(--warn, #e8b25a);
+  font-size:10.5px; line-height:1.5; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis;
+}
+.memory-door-count{margin:0 0 2px; font-size:11px; color:var(--dim);}
+.memory-door-count[hidden]{display:none !important;}
+
+/* ---- §4.2 never render the same approval card twice ----------------- *
+ * The right rail's own "Cards waiting" card is a COUNT, not a second set
+ * of buttons. When the full card (#approvals) is on screen, the rail copy
+ * steps out of the way instead of offering the same decision twice. */
+#rail-waiting[data-duplicate-of-stage="true"]{display:none !important;}
+
+/* ---- §5.2 density: the last row is never clipped --------------------- *
+ * At 1900x1000 the schedule list and the right column scroll cleanly with
+ * a visible scrollbar, and the last row keeps 24px of air under it. */
+#rail-reminders, #tab-reminders{
+  overflow-y:auto; max-height:100%; padding-bottom:24px;
+}
+#rail-right{overflow-y:auto; max-height:100%; padding-bottom:24px;}
+
+/* ---- §2.1 the left rail is never a wall of bare symbols --------------- *
+ * The six shortcuts the Studio rail draws (the five sections + Galaxy
+ * options) each carry their plain words under the icon. The buttons stay in
+ * the same 42px box the rail always had, so no column width and no other
+ * shell's geometry moves; the words wrap to a second line instead. */
+html[data-hud-shell="split-stage"] .dock-btn{
+  height:auto; min-height:38px; flex-direction:column; gap:2px;
+  padding:4px 1px; font-size:15px;
+}
+html[data-hud-shell="split-stage"] .dock-glyph{font-size:15px; line-height:1;}
+html[data-hud-shell="split-stage"] .dock-label{
+  display:block; max-width:40px; font-size:8.5px; line-height:1.1;
+  letter-spacing:.01em; text-align:center; white-space:normal;
+  overflow-wrap:break-word; color:inherit; font-variant-emoji:text;
+}
+/* A quiet one-shot mark on the card a Zone A tab just chose, so a press in a
+ * shell with no Inspector stage still visibly did something. */
+@keyframes hud-nav-flash-pulse{
+  0%{box-shadow:0 0 0 0 rgb(var(--accent-rgb) / .55);}
+  100%{box-shadow:0 0 0 14px rgb(var(--accent-rgb) / 0);}
+}
+.hud-nav-flash{animation:hud-nav-flash-pulse 1s ease-out 1;}
+@media (prefers-reduced-motion: reduce){ .hud-nav-flash{animation:none;} }
+
 </style>
 
 <!-- ==================================================================== *
@@ -3173,19 +3350,19 @@ html[data-cal-view="day"] .cal-side{display:none;}
          id and data-hud-tab-choice is unchanged: only the positions moved. -->
     <nav class="studio-dock" id="studio-dock" aria-label="HUD sections">
       <button type="button" class="dock-btn" data-hud-tab-choice="galaxy" title="Galaxy map" aria-pressed="false">
-        <span aria-hidden="true">&#10022;</span>
+        <span class="dock-glyph" aria-hidden="true">&#10022;</span><span class="dock-label">Memory Map</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="today" title="Approvals waiting for you" aria-pressed="false">
-        <span aria-hidden="true">&#10003;</span>
+        <span class="dock-glyph" aria-hidden="true">&#10003;</span><span class="dock-label">Waiting for You</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="reminders" title="Reminders, timers, alarms and to-do" aria-pressed="false">
-        <span aria-hidden="true">&#9200;&#xFE0E;</span>
+        <span class="dock-glyph" aria-hidden="true">&#9200;&#xFE0E;</span><span class="dock-label">Today &amp; Reminders</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="memory" title="Memory and the second brain" aria-pressed="false">
-        <span aria-hidden="true">&#9672;</span>
+        <span class="dock-glyph" aria-hidden="true">&#9672;</span><span class="dock-label">Memory</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
-        <span aria-hidden="true">&#9637;</span>
+        <span class="dock-glyph" aria-hidden="true">&#9637;</span><span class="dock-label">Speed &amp; GPUs</span>
       </button>
       <!-- The owner's NEW left-column icon (2026-10-27): "have that as a new
            icon on the left column of the jarvis hud". It opens the page's ONE
@@ -3483,7 +3660,27 @@ html[data-cal-view="day"] .cal-side{display:none;}
       </div>
       <div id="ca-status" class="sh-status" hidden></div>
     </section>
-    <div id="initiative" hidden></div>
+    <!-- §2.2 (2026-11-09): the ONE compact notification pill bar. Instead of
+         stacked multi-line banners, one ~40px row: [ N Approval Waiting -
+         Review ] and [ N memory cards waiting - Open ]. It only exists while
+         something is waiting (#initiative and each pill are hidden at 0), and
+         the words are the DASHBOARD's own count, painted from the DOM the
+         cards are already in - no new read, no second queue.
+
+         The approvals pill below is the page's own markup; the memories pill
+         is the existing #init-memory card (same id, same Dismiss, same
+         memoryDismiss) moved into this row by initPoll and shrunk to one line,
+         which is what fixes the truncated banner text in the owner's Fig 17. -->
+    <div id="initiative" hidden>
+      <div id="hud-pills">
+        <button type="button" class="hud-pill" id="hud-pill-approvals" hidden
+                title="Review the approval card waiting in the stage">
+          <span class="hud-pill-icon" aria-hidden="true">&#128737;&#xFE0E;</span>
+          <span id="hud-pill-approvals-words">No approvals waiting</span>
+          <span class="hud-pill-action" aria-hidden="true">&mdash; Review</span>
+        </button>
+      </div>
+    </div>
 
     <div id="banner">
       <span id="banner-text"><b>Demo data.</b>
@@ -3559,6 +3756,29 @@ html[data-cal-view="day"] .cal-side{display:none;}
               aria-label="Current Models: what Jarvis is using and has loaded"
               title="Current Models: what Jarvis is using and has loaded"><span class="chip" id="chip-model">local</span><svg class="chip-door-caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M2 4l3 3 3-3"/></svg></button>
       <span class="chip" id="chip-state">standing by</span>
+      <!-- §2.1 ZONE B - the WINDOW-LEVEL actions (2026-11-09). These open a
+           window or a mode menu and choose no stage pane; the five plain-word
+           tabs in #hud-stage-nav are Zone A. [Layout: <name>] and
+           [Edit Layout] are drawn in this same bar by hud-edit.js (its own
+           module, its own ids - untouched here), so the whole of Zone B is
+           one bar: AI Mode, Open Brain, Layout, Edit Layout, Settings.
+
+           AI Mode opens the page's ONE Presets menu through the SAME
+           `jarvis:hud-presets-open` event every other presets door uses, and
+           only ever names a mode the PC's own contract marked chosen.
+
+           Settings is a second DOOR to the ONE Settings window: on
+           2026-10-27 the owner moved the gear into the left column, so this
+           button clicks that same gear (#hud-settings, injected by the
+           shell) rather than growing a second settings surface. With no
+           shell there is no gear, so this door stays hidden. -->
+      <button class="ghost hud-head-door" id="hud-ai-mode-door" type="button"
+              aria-haspopup="menu" aria-expanded="false"
+              title="AI Mode: how Jarvis thinks and talks">AI Mode: <span id="hud-ai-mode-name">General</span><span class="hud-head-caret" aria-hidden="true"> &#9662;</span></button>
+      <button class="ghost hud-head-door" id="hud-open-brain-door" type="button"
+              title="Open the Brain window: memory, models, skills, history">Open Brain</button>
+      <button class="ghost hud-head-door" id="hud-settings-door" type="button"
+              title="Settings" hidden>Settings</button>
       <!-- The separate [Current Models] button that used to sit here was
            DELETED on 2026-10-27: the model name above is the one door now, in
            every shell (hud-presets.js `mountCurrentModels`). -->
@@ -3607,6 +3827,51 @@ html[data-cal-view="day"] .cal-side{display:none;}
          the memory readouts (#r-facts/#r-docs/#r-ents), and the telemetry
          rail (#r-model/#r-latency/...). Nothing is duplicated. -->
     <div id="stage-menu">
+      <!-- §2.1 ZONE A - the ONE authoritative centre-stage switcher
+           (2026-11-09). Five plain-word tabs with icons: Talk, Memory Map,
+           Waiting for You (N), Today & Reminders, Speed & GPUs. They choose
+           what is DRAWN IN THE CENTRE STAGE and nothing else: each press
+           goes through the page's own setView()/setTab(), the same two
+           routines the shell's F6 navigation calls, so the Galaxy map, the
+           Inspector panes, the dock icons and the `body[data-hud-tab]`
+           contract stay one system. No new state, no new fetch, no second
+           set of panes.
+
+           The window-level actions are NOT here: they live in the header
+           bar (§2.1 Zone B) - AI Mode, Open Brain, Layout, Edit Layout and
+           Settings. The old GALAXY OPTIONS / PRESETS / BRAIN words below
+           keep their ids and handlers (the shell's modules bind to them)
+           but are retired from the strip by the #stage-words rule. -->
+      <nav id="hud-stage-nav" aria-label="HUD sections">
+        <button type="button" class="hud-nav-tab" data-hud-nav="talk"
+                aria-pressed="true" title="Talk: the conversation and the microphone">
+          <span class="hud-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l1.9-4.4A8.5 8.5 0 1 1 21 11.5z"/></svg></span>
+          Talk
+        </button>
+        <button type="button" class="hud-nav-tab" data-hud-nav="galaxy"
+                aria-pressed="false" title="Memory Map: the Galaxy picture of what Jarvis remembers">
+          <span class="hud-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.2" cy="7" r="1.9"/><circle cx="18" cy="9" r="1.9"/><circle cx="9" cy="17.4" r="1.9"/><path d="M7.8 8.2l7.4 1.1M16.6 10.4l-5.8 5.3"/></svg></span>
+          Memory Map
+        </button>
+        <button type="button" class="hud-nav-tab" data-hud-nav="today"
+                aria-pressed="false" title="Waiting for You: approvals and new memories to review">
+          <span class="hud-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.2A8 8 0 1 1 12.8 4"/><path d="M8.6 12l2.4 2.4 6.4-6.6"/></svg></span>
+          Waiting for You
+          <!-- The (N) badge: a real count, never an em dash, and it is NOT
+               hidden when this tab is the chosen one (§2.2 / Fig 16). -->
+          <span class="hud-nav-count" id="hud-nav-waiting-count" hidden>0</span>
+        </button>
+        <button type="button" class="hud-nav-tab" data-hud-nav="reminders"
+                aria-pressed="false" title="Today &amp; Reminders: reminders, timers, alarms and the to-do list">
+          <span class="hud-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.6v4M16 3.6v4"/></svg></span>
+          Today &amp; Reminders
+        </button>
+        <button type="button" class="hud-nav-tab" data-hud-nav="telemetry"
+                aria-pressed="false" title="Speed &amp; GPUs: last answer speed, the model, and the graphics cards">
+          <span class="hud-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l3.6-4.6"/><circle cx="12" cy="16" r="1.2"/></svg></span>
+          Speed &amp; GPUs
+        </button>
+      </nav>
       <div id="stage-tabs" role="tablist" aria-label="Inspector stage">
         <button type="button" class="stage-tab" data-hud-tab-choice="galaxy" role="tab" aria-selected="true">Galaxy</button>
         <button type="button" class="stage-tab" data-hud-tab-choice="today" role="tab" aria-selected="false">Approvals</button>
@@ -4070,7 +4335,7 @@ html[data-cal-view="day"] .cal-side{display:none;}
       <!-- Cockpit layout hides the six dash rows until a turn has actually
            run, and says this instead. The rows are always in the document:
            the page's tests read them, and a later turn fills them. -->
-      <p class="bento-empty" id="telemetry-empty">No turns yet this session</p>
+      <p class="bento-empty" id="telemetry-empty">Ask Jarvis a question to see speed stats</p>
       <div class="readout"><span class="k">answered by</span><span class="v gold" id="r-model">—</span></div>
       <div class="readout"><span class="k">latency</span><span class="v" id="r-latency">—</span></div>
       <div class="readout"><span class="k">tokens</span><span class="v" id="r-tokens">—</span></div>
@@ -4100,6 +4365,9 @@ html[data-cal-view="day"] .cal-side{display:none;}
       <div class="readout"><span class="k">recalled</span><span class="v ice" id="r-mem">—</span></div>
       <div id="memory-door" hidden>
         <div class="hud-label">Memory cards waiting for you</div>
+        <!-- §2.2: the count stays readable while this tab is the open one (the
+             Fig 16 bug), and it is a real number, never an em dash. -->
+        <p class="memory-door-count" id="memory-door-count" hidden></p>
         <p class="memory-door-hidden" id="memory-door-hidden" hidden></p>
         <ul class="memory-door-list" id="memory-door-list"></ul>
         <p class="memory-door-note" id="memory-door-note" role="status" hidden></p>
@@ -7579,6 +7847,9 @@ function setView(v){
   if(v === "brain") requestAnimationFrame(() => galaxy.resize());
   reactor.show(faceOnScreen(v));
   galaxy.syncRunning();
+  // §2.1: the centre-stage switcher (#hud-stage-nav) reads the view, so it is
+  // told. Published by the shell/tab script below; absent only before it runs.
+  if(typeof window.__hudNavPaint === "function") window.__hudNavPaint();
 }
 document.querySelectorAll(".mode").forEach(b =>
   b.addEventListener("click", () => setView(b.dataset.view)));
@@ -9826,15 +10097,30 @@ async function initPoll(){
       else {
         if(old && (n === 0 || old.dataset.n !== String(n))) old.remove();
         if(n > 0 && !document.getElementById("init-memory")){
+          /* §2.2 (2026-11-09): ONE line, in the notification pill bar, with the
+           * same id, the same count, the same Dismiss (memoryDismiss) and no
+           * second decision surface. The two-sentence banner whose tail
+           * truncated mid-word in the owner's Fig 17 is gone; the cards
+           * themselves are listed on the Memory tab, and the pill only takes
+           * you there. */
           const el = initCard(
-            `<div class="hdr"><span class="who">${n} memory card${n === 1 ? "" : "s"} waiting for you</span><span class="kind">memory</span></div>`
-            + `<div class="det">Review them in the Brain window's Memory tab (tray icon, then Open the Brain). `
-            + `Each card there shows what it would replace and warns about anything that looks slipped in. Nothing is kept until you say so.</div>`
-            + `<div class="btns"><button class="no">Dismiss</button></div>`);
+            `<div class="hdr"><span class="who">\u{1F9E0} ${n} memory card${n === 1 ? "" : "s"} waiting to review</span>`
+            + `<span class="kind">Brain</span></div>`
+            + `<div class="btns"><button class="no" type="button" title="Dismiss until something else is waiting">Dismiss</button></div>`);
           if(el){
             el.id = "init-memory";
+            el.classList.add("hud-pill");
             el.dataset.n = String(n);
+            const pills = document.getElementById("hud-pills");
+            if(pills) pills.appendChild(el);
             el.querySelector(".no").onclick = () => memoryDismiss(el);
+            el.addEventListener("click", function(ev){
+              if(ev.target && ev.target.closest && ev.target.closest(".no")) return;
+              // To the cards, never a decision: the Memory tab lists them with
+              // Keep / Review / Dismiss on each one.
+              setTab("memory");
+              paintHudNav();
+            });
           }
         }
       }
@@ -9907,7 +10193,8 @@ function memoryDoorOffer(offer){
   if(!offer || typeof offer !== "object") return null;
   return { id:"sleep_offer", kind:"Sleep offer",
     words:String(offer.title || offer.what || "The overnight tidy-up"),
-    detail:String(offer.what || "") };
+    detail:String(offer.what || ""),
+    why:"Runs overnight, so the Brain decides it" };
 }
 
 /* Would the Brain have something to say about this card? Then it is the
@@ -9934,6 +10221,24 @@ function memoryDoorKeepable(row){
     if(!Array.isArray(row.flags) || row.flags.length > 0) return false;
   }
   return memoryDoorKind(row) === "New fact";
+}
+
+/* The ONE-LINE amber reason a card is not decided here (spec §4.1, the
+ * warning / replacement / retire / merge card): the Brain's own reason in
+ * plain words. This adds NO rule of its own - memoryDoorKeepable() above is
+ * still the only thing that decides whether a Keep is drawn - so a card can
+ * never gain or lose a Keep because of the badge. */
+function memoryDoorWhy(row){
+  if(!row || typeof row !== "object") return "Needs a closer look in the Brain";
+  var flags = row.flags;
+  if(flags !== null && flags !== undefined
+     && (!Array.isArray(flags) || flags.length > 0)) {
+    return "Contains a safety warning";
+  }
+  var kind = memoryDoorKind(row);
+  if(kind === "Retire") return "Asks to forget an existing fact";
+  if(kind === "Correction") return "Updates an existing fact";
+  return "Needs a closer look in the Brain";
 }
 
 /* The shell's own verdict on the link, published as `jarvis-link-status`
@@ -10038,6 +10343,7 @@ function paintMemoryDoor(){
       shown.push({ id: row && row.id, kind: memoryDoorKind(row),
         words: memoryDoorWords(row),
         keep: memoryDoorKeepable(row),
+        why: memoryDoorWhy(row),
         replaces: memoryDoorKind(row) === "Correction"
           ? String(row.replaces_text || row.replaces || "") : "" });
     }
@@ -10047,6 +10353,15 @@ function paintMemoryDoor(){
     }
   }
   for(var k = 0; k < shown.length; k++) listEl.appendChild(memoryDoorCardEl(shown[k]));
+  /* §2.2: the count badge stays readable while the tab is open (Fig 16). */
+  var countEl = document.getElementById("memory-door-count");
+  if(countEl){
+    var waiting = shown.length;
+    countEl.hidden = hidden || waiting === 0;
+    countEl.textContent = waiting === 1
+      ? "1 card waiting for you"
+      : waiting + " cards waiting for you";
+  }
   if(emptyEl) emptyEl.hidden = hidden || shown.length > 0;
   if(whereEl) whereEl.hidden = hidden;
   var noteEl = document.getElementById("memory-door-note");
@@ -10074,6 +10389,14 @@ function memoryDoorCardEl(card){
     rep.textContent = "Replaces: " + card.replaces;
     li.appendChild(rep);
   }
+  /* §4.1 (2026-11-09): the 1-line amber reason for a card this page will not
+   * decide, so the owner can see WHY it is the Brain's before clicking. */
+  if(card.why && card.keep !== true){
+    var why = document.createElement("div");
+    why.className = "memory-door-why";
+    why.textContent = card.why;
+    li.appendChild(why);
+  }
   var btns = document.createElement("div");
   btns.className = "memory-door-btns";
   // Keep is drawn ONLY for a card memoryDoorKeepable accepted (a plain new
@@ -10082,14 +10405,28 @@ function memoryDoorCardEl(card){
     var keep = document.createElement("button");
     keep.type = "button";
     keep.className = "memory-door-keep yes";
-    keep.textContent = "Keep";
+    keep.textContent = "\u2713 Keep";
+    keep.title = "Keep this fact - one click, nothing to undo";
     keep.onclick = function(){ memoryDoorKeep(card, li, keep); };
     btns.appendChild(keep);
   }
+  /* §4.1's three-level hierarchy: a plain new fact's second door is the
+   * outlined [ Edit in Brain ] (the owner only goes there to reword it); a
+   * card the Brain must decide gets the solid-amber [ Review in Brain ].
+   * Both are the SAME navigation - the shell's one open_fix_place call with
+   * the brain place - so the class stays memory-door-review and nothing here
+   * gains a second route. */
   var review = document.createElement("button");
   review.type = "button";
-  review.className = "memory-door-review";
-  review.textContent = "Review in the Brain";
+  review.className = card.keep === true
+    ? "memory-door-review is-secondary"
+    : "memory-door-review is-primary";
+  review.textContent = card.keep === true
+    ? "Edit in Brain \u2197"
+    : "Review in Brain \u2197";
+  review.title = card.keep === true
+    ? "Open the Brain to reword this fact or change its topic"
+    : "Open the Brain to compare this card with what it would change";
   review.onclick = function(){ openMemoryInBrain(); };
   btns.appendChild(review);
   var dismiss = document.createElement("button");
@@ -10630,6 +10967,7 @@ subscribe();
 
   function refreshTab() {
     paintTabs();
+    paintHudNav();
     if (body.dataset.hudShell === "split-stage" && body.dataset.hudTab === "galaxy") {
       window.requestAnimationFrame(resizeGalaxy);
     }
@@ -10690,6 +11028,242 @@ subscribe();
   tabs.forEach(function (b) {
     b.addEventListener("click", function () { setTab(b.dataset.hudTabChoice); });
   });
+
+  /* The shell's own F6 navigation ("open the Approvals tab") looks for this
+   * name on the page (`hud_bootstrap.js`'s applyNav). It was never published,
+   * so a shell-pushed stage tab fell through to "this HUD page cannot switch
+   * to it" while the tab itself worked; publishing the one routine is the
+   * whole fix, and no second tab mechanism is added. */
+  window.setTab = setTab;
+
+  /* ── §2.1 ZONE A: the ONE centre-stage switcher (2026-11-09) ─────────── *
+   * The five plain-word tabs (#hud-stage-nav) choose what the CENTRE STAGE
+   * draws, and nothing else. Every press goes through the page's own
+   * setView()/setTab(), so the Galaxy map, the Inspector panes, the dock
+   * icons and `body[data-hud-tab]` stay one system - there is no second set
+   * of panes and no new state. In a shell with no Inspector stage (every
+   * shell except split-stage) the tab still picks the rail card that answers
+   * it and brings that card into view, so a press is never a no-op. Which
+   * CARDS a layout draws is hud-layout.js's business (per-layout card lists),
+   * not this page's, so nothing here hides or copies a card.
+   *
+   * "Waiting for You" is the approvals queue; the Memory tab's pending cards
+   * are the same idea, so while that tab is the chosen one the Waiting tab
+   * stays lit - a press on the memories pill (§2.2) never leaves the bar
+   * looking as if nothing happened. */
+  var NAV_KEYS = ["talk", "galaxy", "today", "reminders", "telemetry"];
+
+  function hudNavKey() {
+    var tab = body.dataset.hudTab;
+    var view = (typeof S !== "undefined" && S && S.view) || "talk";
+    if (view === "brain" || tab === "galaxy") return "galaxy";
+    if (tab === "reminders") return "reminders";
+    if (tab === "telemetry") return "telemetry";
+    if (tab === "today" || tab === "memory") return "today";
+    return "talk";
+  }
+
+  function paintHudNav() {
+    var now = hudNavKey();
+    var nav = $("hud-stage-nav");
+    if (nav) {
+      var btns = nav.querySelectorAll("[data-hud-nav]");
+      for (var i = 0; i < btns.length; i += 1) {
+        btns[i].setAttribute("aria-pressed",
+          String(btns[i].dataset.hudNav === now));
+      }
+    }
+    paintHudAiMode();
+  }
+
+  function flashHudCard(key) {
+    var id = key === "reminders" ? "rail-reminders"
+      : key === "telemetry" ? "rail-telemetry"
+      : key === "today" ? "rail-waiting" : "";
+    if (!id) return;
+    var el = $(id);
+    if (!el || el.hidden) return;
+    if (typeof el.scrollIntoView === "function") {
+      try { el.scrollIntoView({ block: "nearest" }); } catch (e) { /* older engine */ }
+    }
+    el.classList.remove("hud-nav-flash");
+    void el.offsetWidth;               // restart the pulse on a second press
+    el.classList.add("hud-nav-flash");
+  }
+
+  function hudNavRoute(key) {
+    if (NAV_KEYS.indexOf(key) < 0) return false;
+    if (key === "talk") {
+      setView("talk");
+    } else if (key === "galaxy") {
+      setView("brain");
+      setTab("galaxy");
+    } else {
+      setView("talk");
+      setTab(key);
+    }
+    flashHudCard(key);
+    paintHudNav();
+    return true;
+  }
+
+  (function mountHudNav() {
+    var nav = $("hud-stage-nav");
+    if (nav) {
+      nav.addEventListener("click", function (event) {
+        var btn = event.target && event.target.closest
+          ? event.target.closest("[data-hud-nav]") : null;
+        if (!btn || !nav.contains(btn)) return;
+        event.preventDefault();
+        hudNavRoute(btn.dataset.hudNav);
+      });
+    }
+    window.__hudNavPaint = paintHudNav;
+    window.addEventListener("jarvis:hud-shell", paintHudNav);
+    paintHudNav();
+  }());
+
+  /* ── §2.1 ZONE B: the window header's own doors ──────────────────────── */
+
+  /** The AI Mode door's words are the PC's chosen focus preset, read from the
+   *  ONE #presets group renderPresets() already draws - never a second read,
+   *  never a guess. "General" until the PC names one. */
+  function paintHudAiMode() {
+    var name = $("hud-ai-mode-name");
+    if (!name) return;
+    var chosen = document.querySelector('#presets .preset[aria-pressed="true"]');
+    var words = chosen ? String(chosen.textContent || "").trim() : "";
+    name.textContent = words || "General";
+  }
+
+  function hudPresetsMenuOpen() {
+    var menu = $("hud-presets-menu");
+    return Boolean(menu && !menu.hidden);
+  }
+
+  (function mountHudHeaderDoors() {
+    var ai = $("hud-ai-mode-door");
+    if (ai) {
+      var sync = function () {
+        ai.setAttribute("aria-expanded", String(hudPresetsMenuOpen()));
+      };
+      ai.addEventListener("click", function (event) {
+        event.preventDefault();
+        // The SAME one door every other presets control uses: one event, one
+        // menu (hud-presets.js owns it), opened beside the button pressed.
+        window.dispatchEvent(new CustomEvent("jarvis:hud-presets-open", {
+          detail: { anchor: ai },
+        }));
+        window.setTimeout(sync, 0);
+      });
+      window.addEventListener("jarvis:hud-presets-open", function () {
+        window.setTimeout(sync, 0);
+      });
+      document.addEventListener("pointerdown", function () { window.setTimeout(sync, 0); }, true);
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") window.setTimeout(sync, 0);
+      });
+      window.addEventListener("jarvis:hud-shell", paintHudAiMode);
+      window.addEventListener("focus", paintHudAiMode);
+    }
+    var brain = $("hud-open-brain-door");
+    if (brain) {
+      brain.addEventListener("click", function () {
+        // ONE opener: the shell's own Brain-window buttons, which already
+        // route through open_fix_place. Nothing new is opened here.
+        var door = $("rail-brain-window") || $("stage-brain-window");
+        if (door) { door.click(); return; }
+        try {
+          var core = window.__TAURI__ && window.__TAURI__.core;
+          if (core && typeof core.invoke === "function") {
+            core.invoke("open_fix_place", { place: "brain" });
+          }
+        } catch (e) { /* a plain browser has no shell: the tray still opens it */ }
+      });
+    }
+    var settings = $("hud-settings-door");
+    if (settings) {
+      settings.addEventListener("click", function () {
+        var gear = $("hud-settings");
+        if (gear) gear.click();
+      });
+      // The shell injects the gear into the left column after this script
+      // runs, so reveal the header door when (and only when) that gear is
+      // really there - a plain browser keeps it hidden rather than offering
+      // a button that can do nothing.
+      var reveal = function () {
+        if ($("hud-settings")) settings.hidden = false;
+      };
+      reveal();
+      document.addEventListener("DOMContentLoaded", reveal);
+      window.setTimeout(reveal, 1500);
+      window.addEventListener("jarvis:hud-shell", reveal);
+    }
+  }());
+
+  /* ── §2.2 the ONE notification pill bar ──────────────────────────────── *
+   * Two counts, both read from what is already on the page: the approval
+   * queue's own cards (#approvals .appr, the same nodes paintWaiting counts)
+   * and the pending-memory count the initiative poll reads. No new fetch, no
+   * second queue, and no second decision surface: each pill only takes you
+   * to the card that decides. */
+
+  function paintPillApprovals(n) {
+    var pill = $("hud-pill-approvals");
+    if (!pill) return;
+    var words = $("hud-pill-approvals-words");
+    var count = Number(n) || 0;
+    pill.hidden = count === 0;
+    if (words) {
+      words.textContent = count === 0
+        ? "No approvals waiting"
+        : (count === 1 ? "1 Approval Waiting" : count + " Approvals Waiting");
+    }
+    pill.setAttribute("title", count === 0
+      ? "Nothing is waiting for your approval"
+      : (count === 1 ? "Review the approval card waiting in the stage"
+                     : "Review the " + count + " approval cards waiting in the stage"));
+  }
+
+  (function mountPills() {
+    var pill = $("hud-pill-approvals");
+    if (pill) {
+      pill.addEventListener("click", function () {
+        setView("talk");
+        setTab("today");
+        if (approvals) {
+          if (typeof approvals.scrollIntoView === "function") {
+            try { approvals.scrollIntoView({ block: "nearest" }); } catch (e) {}
+          }
+          var first = approvals.querySelector("button");
+          if (first) first.focus();
+        }
+        paintHudNav();
+      });
+    }
+    paintPillApprovals(0);
+  }());
+
+  /* ── §4.2 never render the same approval card twice ──────────────────── *
+   * `#rail-waiting` is the rail's COUNT of the queue, not a second set of
+   * buttons. While the full card (#approvals) is really on screen, the count
+   * card steps out of the way; when the queue is empty, or the card is not
+   * drawn in this shell/tab, it comes straight back. The flag is a data
+   * attribute so the rule is visible in the DOM (and testable), and the
+   * stylesheet is what does the hiding. */
+  function paintApprovalDuplicate() {
+    var box = $("rail-waiting");
+    if (!box) return;
+    var n = approvals ? approvals.querySelectorAll(".appr").length : 0;
+    var shown = false;
+    if (n > 0 && approvals && !approvals.hidden) {
+      var style = window.getComputedStyle(approvals);
+      var rect = approvals.getBoundingClientRect();
+      shown = style.display !== "none" && style.visibility !== "hidden"
+        && rect.width > 2 && rect.height > 2;
+    }
+    box.setAttribute("data-duplicate-of-stage", shown ? "true" : "false");
+  }
 
   /* ── the Cockpit's live pieces ──────────────────────────────────────── */
 
@@ -10764,6 +11338,17 @@ subscribe();
       chip.hidden = n === 0;
       chip.textContent = n + " waiting";
     }
+    /* §2.1 / §2.2 (2026-11-09): the (N) on the centre-stage switcher's
+     * "Waiting for You" tab, and the one-line approval pill. Same count, same
+     * DOM the cards are in - a mirror, never a second queue. The badge stays
+     * visible while its tab is the chosen one (the Fig 16 bug). */
+    var navCount = $("hud-nav-waiting-count");
+    if (navCount) {
+      navCount.textContent = String(n);
+      navCount.hidden = n === 0;
+    }
+    paintPillApprovals(n);
+    paintApprovalDuplicate();
   }
 
   var waitingOpen = $("waiting-open");
