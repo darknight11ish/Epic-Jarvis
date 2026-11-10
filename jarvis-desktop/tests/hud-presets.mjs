@@ -1,12 +1,12 @@
 /**
- * The HUD's left rail: the owner's nine focus presets + ONE Cloud button
+ * The HUD's left rail: the owner's ten focus presets + ONE Cloud button
  * (owner request 2026-10-21, replacing the "BRAIN IN USE" lane boxes).
  *
  *   node tests/hud-presets.mjs
  *
  * WHAT IS PROVEN, in the real page (jarvis_hud.html) with the PC stubbed:
  *
- *   - the rail lists the PC's nine presets in the contract's order/titles
+ *   - the rail lists the PC's ten presets in the contract's order/titles
  *     (`backend/fixtures/work_presets.json`, generated from jarvis_presets.py),
  *     and marks the one `chosen_preset` names - never one before that;
  *   - a click posts /api/work/apply ONCE with {"preset": "<id>"} - the same
@@ -28,7 +28,7 @@
  *   - the panel says plainly when the PC has nothing loaded or did not answer,
  *     and opening it reads exactly /api/models, /api/status and /api/presets -
  *     no POST, no card, no model switch;
- *   - the Cloud section: the row sits after the nine, opens a provider
+ *   - the Cloud section: the row sits after the ten, opens a provider
  *     submenu (no POST), picking a ready provider posts ONE apply with the
  *     provider id, a provider with no key is words and its PC command and posts
  *     nothing, and the mark comes from the refetched `cloud.provider`;
@@ -368,7 +368,7 @@ async function sendChat(page, text = "hello there") {
 
 const browser = await launch();
 
-await check("the rail lists the PC's nine presets in the contract's order, titles and models", async () => {
+await check("the rail lists the PC's ten presets in the contract's order, titles and models", async () => {
   const { page, problems } = await openHud(browser);
   const rows = await presetRows(page);
   await page.close();
@@ -953,14 +953,23 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
     "the menu does not list the PC's presets in its order");
   assert.deepEqual(menu.model.map((r) => r.text), live.map((p) => p.title),
     "the presets' visible labels are not the PC's own titles");
-  assert.deepEqual(menu.costs.map((r) => r.preset), ["coding"],
-    `the heavy preset's cost is not said under it: ${JSON.stringify(menu.costs)}`);
+  assert.deepEqual(menu.costs.map((r) => r.preset), ["coding", "medical"],
+    `both heavy presets' costs are not said under them: ${JSON.stringify(menu.costs)}`);
+  // Coding and Medical are the two heavy rows (2026-11-09): each says the
+  // PC's own cost sentence - all three cards, the other models pause, and no
+  // refusal wording (they run, they do not refuse).
+  for (const row of menu.costs) {
+    assert.match(row.text, /all three cards at once/,
+      `the PC's own heavy-mode sentence is missing under ${row.preset}: ${row.text}`);
+    assert.match(row.text, /paus/,
+      `the heavy cost does not say the other models pause (${row.preset}): ${row.text}`);
+    assert.doesNotMatch(row.text, /refuses|cannot be used/,
+      `the heavy cost still refuses ${row.preset}: ${row.text}`);
+  }
   assert.match(menu.costs[0].text, /needs all three cards at once as one pooled lane/,
-    `the PC's own heavy-mode sentence is missing: ${menu.costs[0].text}`);
+    `Coding's own heavy-mode sentence is missing: ${menu.costs[0].text}`);
   assert.match(menu.costs[0].text, /paused/,
-    `the heavy cost does not say the other models pause: ${menu.costs[0].text}`);
-  assert.doesNotMatch(menu.costs[0].text, /refuses|cannot be used/,
-    `the heavy cost still refuses the preset: ${menu.costs[0].text}`);
+    `Coding's heavy cost does not say the other models pause: ${menu.costs[0].text}`);
   assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["general"],
     "the chosen mark is not the PC's chosen_preset");
   // The chosen item is a rectangle (class + border), and the word "(chosen)"
@@ -1051,7 +1060,7 @@ await check("a refused model preset leaves nothing marked, and says why", async 
  *    coder/general/fast, listing "the API providers the PC has connected",
  *    plus "Escalate to the cloud when the work is too complex") ──────────── */
 
-await check("the Cloud row sits after the nine and opens the PC's providers without posting", async () => {
+await check("the Cloud row sits after the ten and opens the PC's providers without posting", async () => {
   const { page, state, problems } = await openHud(browser);
   await openPresetMenu(page);
   const closed = await menuReport(page);
