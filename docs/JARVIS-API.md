@@ -37509,19 +37509,21 @@ for jarvis, it shouldnt need a card"* and *"if i manually choose anything in the
 jarvis app or deskstop program, and its something that i can easily click and
 change back right away, it shouldnt need a card"*.
 
-**The rule.** A local focus preset picked in either app's own preset control
-applies at once, with no approval card. The preset it replaced is written into
+**The rule.** A local focus preset that is not one of the two heavy rows
+(Coding and Medical), picked in either app's own preset control, applies at
+once with no approval card. The preset it replaced is written into
 a receipt (`preset_apply` in `jarvis_receipts.py`), and the menu it was picked
 from puts the old preset one click away - that menu row is the everyday way
 back. The receipt is readable through `GET /api/receipts` and undoable through
 `POST /api/receipts/<receipt_id>/undo`; the apply's own answer carries its id
 as `receipt_id`, and `previous_preset` names what was replaced. Undo is
-registered only when the preset it replaced is itself a local one: if the row
-it replaced was Coding or Cloud, the receipt is still written, but Undo is not
-offered, because going back to either of those raises its own card and that
-menu row is the way back. (Receipts are routes only today - there is no
-separate receipts screen in either app - so the receipt is the machine record
-plus the Undo the existing route can run, not a new button.)
+registered only when the preset it replaced is itself a local one that is not
+heavy: if the row it replaced was Coding, Medical or the Cloud row, the receipt
+is still written, but Undo is not offered, because going back to any of those
+raises its own card and that menu row is the way back. (Receipts are
+routes only today - there is no separate receipts screen in either app - so the
+receipt is the machine record plus the Undo the existing route can run, not a
+new button.)
 
 **Why this is the owner's click and not the model's.** Both apps' preset
 controls call ONE route, `POST /api/work/apply` (`jarvis_presets.install()`,
@@ -37543,9 +37545,10 @@ that already exists, the preset it replaced is one click away in the same menu,
 and nothing is downloaded, installed, deleted or spent. Under that rule:
 
 * the ten local presets, except the two heavy ones (Coding and Medical), apply with no card;
-* **Coding keeps its card.** Its pooled three-card lane unloads both other lane
-  models and loads a 14.8 GB model for about half a minute; that is not a quick
-  click back, and the card is the warning before the first unload
+* **Coding and Medical keep their cards.** Each needs the pooled three-card lane
+  to unload the other lane models and load its own model - Coding's 14.8 GB in
+  about half a minute, Medical's `medgemma:27b` at 17.31 GiB in about 47 s; that
+  is not a quick click back, and the card is the warning before the first unload
   (`jarvis_model_lanes.start_pooled_lane` raises it, unchanged);
 * **the Cloud row keeps its card.** It chooses where the owner's words go, and
   its card is `change_own_config` (`jarvis_presets.apply_cloud`, unchanged);
@@ -37565,16 +37568,19 @@ menu apply through `apply_focus_preset` (Rust) to the same route; the phone's
 Focus presets plate does the same through `JarvisApi.focusPresetApply`. So the
 rule is one-sided in neither app, and `tools/check_parity.py` is unaffected.
 The phone's own sentence says the same thing as the desktop's: a local preset
-switches at once, and Coding and Cloud still ask.
+that is not heavy switches at once, and Coding, Medical and the Cloud row still
+ask.
 
 **Proved by:** `backend/test_presets_owner_ui.py` - the route applies a local
 preset with zero `jarvis_gate.check()` calls and writes one undoable receipt;
 Undo puts the previous preset, model and lane back; `apply_from_body` (the
 model/chat road) raises exactly one `switch_model` card and writes no receipt;
-Coding still goes through its pooled lane's asking start; Cloud still raises
-`change_own_config`; no request field can ask for the uncarded road; and the
-shipped `jarvis_models.switch_to` still asks. `backend/test_presets_apply.py`
-keeps the carded path's rollback and refusal checks.
+the heavy ids are exactly Coding and Medical and the uncarded decision is
+`owner_ui and not heavy`; Coding still goes through its pooled lane's asking
+start; Cloud still raises `change_own_config`; no request field can ask for the
+uncarded road; and the shipped `jarvis_models.switch_to` still asks.
+`backend/test_presets_apply.py` keeps the carded path's rollback and refusal
+checks.
 
 ## 210. The manual-click rule: one allow-list, and the model path still asks (2026-11-09)
 

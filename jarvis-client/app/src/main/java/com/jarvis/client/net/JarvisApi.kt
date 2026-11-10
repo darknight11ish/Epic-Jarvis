@@ -3467,8 +3467,9 @@ class JarvisApi(
     /**
      * The ONE apply action the focus-preset contract names: a POST to the
      * route the CONTRACT supplies (never one invented here), with the
-     * contract's body. A local preset applies at once (the owner's own
-     * reversible pick); Coding and Cloud still raise the PC's approval card.
+     * contract's body. A local preset that is not heavy applies at once (the
+     * owner's own reversible pick); Coding, Medical and the Cloud row still
+     * raise the PC's approval card.
      * [FocusPresets.replyLine] turns the answer into words. Only `/api/...`
      * routes are accepted, and the pairing routes are refused outright.
      */

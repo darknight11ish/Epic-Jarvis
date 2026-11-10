@@ -138,9 +138,9 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     Gap(4)
     Text(
         "Presets choose the local model and card for the work you are about to do. " +
-            "Picking a local preset switches at once, and picking another switches straight back. " +
-            "Coding pauses both other models first, and the Cloud row changes where your words go, " +
-            "so those two still raise a single approval card on your PC. " +
+            "Picking a local preset that is not Coding or Medical switches at once, and picking another switches straight back. " +
+            "Coding and Medical pause the other models first, and the Cloud row changes where your words go, " +
+            "so those three still raise one approval card on your PC. " +
             "The Fast preset uses the 2080 SUPER.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
