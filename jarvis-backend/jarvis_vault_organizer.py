@@ -207,7 +207,12 @@ _PLANS_LOCK = threading.Lock()
 _PLAN_KEEP = 8
 
 _P_LOCK = threading.Lock()
-_PENDING: dict = {"id": "", "since": 0.0}
+#: NO CARD WAITING IS AN EMPTY DICT, and `_PENDING.get("id")` is the one test
+#: for "a card is waiting". A placeholder `{"id": "", "since": 0.0}` is truthy
+#: and used to answer the first turn-on on a fresh process with "one card is
+#: already waiting", spawning none (measured live 2026-11-09; see
+#: backend/test_vault_organizer_switch.py for the fresh-import proof).
+_PENDING: dict = {}
 _WITHDRAWN: dict = {}
 _LAST_CARD: dict = {}
 _SWITCH = threading.Lock()
@@ -394,8 +399,9 @@ def request_enabled(on, *, gate: Optional[Callable] = None,
     if not on:
         with _SWITCH:
             with _P_LOCK:
-                if _PENDING:
-                    _WITHDRAWN[_PENDING.get("id", "")] = True
+                pid = str(_PENDING.get("id") or "")
+                if pid:
+                    _WITHDRAWN[pid] = True
                     _PENDING.clear()
             out = dict(set_enabled(False) or {})
         out.setdefault("ok", True)
@@ -409,7 +415,7 @@ def request_enabled(on, *, gate: Optional[Callable] = None,
     _reconcile_pending()
     with _SWITCH:
         with _P_LOCK:
-            if _PENDING:
+            if _PENDING.get("id"):
                 return 202, {"ok": True, "enabled": False, "waiting": True,
                              "pending": dict(_PENDING),
                              "message": "one card is already waiting"}
@@ -537,7 +543,7 @@ def _reconcile_pending() -> bool:
 def switch_status() -> dict:
     _reconcile_pending()
     with _P_LOCK:
-        pending = dict(_PENDING)
+        pending = dict(_PENDING) if _PENDING.get("id") else {}
         last = dict(_LAST_CARD)
     return {"enabled": enabled(), "waiting": bool(pending),
             "pending": pending or None, "last_card": last or None,
