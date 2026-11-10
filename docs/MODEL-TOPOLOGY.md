@@ -945,6 +945,51 @@ spills past 352 MiB: the Q4 coder at 32,768, then 49,152 only if the first
 passed with room, then the Q3 tag at 49,152, then `gemma4:31b-it-qat` at
 32,768, then the 27B at 32,768.
 
+### The Medical preset, measured 2026-11-09
+
+**Medical Expert** is the tenth preset and the second pooled row: `medgemma:27b`
+at a **32,768-token window**, loaded across the same three cards as the Coding
+preset (`jarvis_model_lanes.start_pooled_lane(mode="medical")`, one Ollama on
+port 11450). It was measured on 2026-11-09 in the model matrix's `windows[1]`
+medgemma run (`model-bench run 20261109-105956`):
+
+| | Measured 2026-11-09 |
+|---|---:|
+| Loaded | **17.31 GiB**, 100% in the three cards' memory |
+| Spilled | **0 B** |
+| Cold load | **46.8 s** |
+| Summary decode | **9.27 tok/s** |
+| The measured ~150-word explanation | 11.1 tok/s |
+| The four-token answer | 7.89 tok/s |
+
+It has **NO tool capability** - `ollama show` reports no `tools` - so it cannot
+use Jarvis's tools, browser or files. It reports vision (pictures), but its
+picture quality is not measured here. It is slow and it pauses the everyday and
+Fast models while it runs; the preset's own card says both plainly, and the
+preset is not a doctor: no diagnosis, no prescription and no replacement for
+the owner's own clinician.
+
+The nine other presets keep the model, card and window they have today - this
+wave adds the row and changes none of theirs.
+
+### The Coding speed default stays: the `coding_q4` verdict is KEEP CURRENT (2026-11-09)
+
+The bench packet's `coding_q4` pair was retired on 2026-11-09, and its last
+completed receipt is the honest verdict rather than a pending promotion. The
+shipped Coding model answered at **64.6-76.8 tok/s with 0 B spilled** on the
+same three-card lane; the Q4 coder build (`qwen3-coder:30b-a3b-q4_K_M`) answered
+at **65.3 tok/s with 231.5 MiB spilled**, and both scored **6/6** on the coding
+rubric. The other installed challenger, `gemma4:26b-a4b-it-qat` at 32,768
+tokens, measured **49.26 tok/s with 4.4% (0.68 GiB) spilled**. A challenger that
+spills and reads slower does not replace the incumbent, so
+`qwen3-coder-30b-a3b-ud-q3-k-xl` stays the Coding preset's speed default -
+**KEEP CURRENT**, measured rather than assumed.
+
+The Q4 build's tag was deleted from this PC on 2026-11-09 11:09 PT, so the pair
+could never be measured again: it is gone from `jarvis_bench.PROMOTION_PAIRS`,
+and `pair_verdict("coding_q4")` refuses the id by name. The dated
+`coding_q4_*` rows stay in `docs/MEASURED-2026-11-07-THREE-GPU.md` as measured.
+
 ---
 
 ## The picture reader on the processor (one-card PCs, 2026-09-29)
