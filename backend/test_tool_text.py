@@ -91,14 +91,23 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # spoken answer gives - because
                    # `backend/test_github_parity.py` pins that the model reads it.
                    # Measured on this tree with this module's own 3-chars-a-token
-                   # rule: 759, 813 and 815 tokens, where the 300 rule would
-                   # allow 900 characters and the sentence alone is about 1,100.
-                   # The cost is paid ONLY when the `github` group is opened,
-                   # never on every turn (they are group members, not core
-                   # tools), and it buys one inventory with one home instead of a
-                   # second copy that drifts. 850 leaves each ~35 tokens of room.
-                   "github_pr_scan": 850, "github_merge_pr": 850,
-                   "github_fix_and_push": 850,
+                   # rule: 890, 949 and 900 tokens. The first pin here was 850; the
+                   # 2026-11-10 polish pass raised it, and this is the decision the
+                   # note above asks for, with the two causes named:
+                   #   (a) `NEVER_WORDS` grew to cover five permanently banned verbs
+                   #       the owner's Q3/Q4 rulings added (approve a PR, close an
+                   #       issue, edit a comment, dispatch a workflow, gists), and
+                   #       that sentence rides on all three descriptions;
+                   #   (b) github_pr_scan must now say it prints each pull request's
+                   #       40-hex head commit, and github_merge_pr's `head_sha` must
+                   #       say that number comes from github_pr_scan - without which
+                   #       the merge tool's one required argument is unreachable.
+                   # 960 leaves 11 tokens of headroom on the largest. The cost is
+                   # paid ONLY when the `github` group is opened, never on every
+                   # turn (they are group members, not core tools), and it buys one
+                   # inventory with one home instead of a second copy that drifts.
+                   "github_pr_scan": 960, "github_merge_pr": 960,
+                   "github_fix_and_push": 960,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six
                    # format names and two "use that" lines. Measured 329 with

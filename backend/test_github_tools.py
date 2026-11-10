@@ -26,21 +26,27 @@ NO network and NO real token anywhere, and NO real git process:
   2. The read scopes are a CLOSED set. A repository, a path, a branch, a number
      or a 40-hex commit the model wrote is checked before it goes into a URL or
      a git command.
-  3. The token is never printed, and never in a command line. It travels in the
-     Authorization header, and for the push in git's own environment config; it
-     is never in the clone URL and never in the folder on disk.
+  3. The token is never printed, and never in a process command line. It travels
+     in the Authorization header, and for BOTH git steps (the prepare clone and
+     the push) in git's own environment config - never in the clone URL, never in
+     an argument, and never in the folder on disk.
   4. No token, no card. The ten planners answer "connect GitHub" in plain
      words and `_one_call` returns before the gate.
   5. Each action is ONE card that names exactly what it will do - and the merge
-     card names the exact 40-hex head commit, the ONE body that will be sent,
-     and that squash/rebase/admin/auto-merge are impossible.
+     card names the exact 40-hex head commit, the pull request's github.com
+     address to look at, that the method is one merge commit, the seven required
+     checks and that squash/rebase/admin/auto-merge are impossible. The PUT body
+     is still pinned by its own test to exactly {"merge_method", "sha"}.
   6. Failures are plain sentences. A refused token, a rate limit, a moved head
-     commit and a missing repository are said in words, with no HTTP code.
+     commit, a 409 (moved/conflict), a 405 (not mergeable now), a required merge
+     queue and a missing repository are said in words, with no HTTP code.
   7. Nothing from email, files, credentials or saved memory is ever sent.
   8. Merge and PR-branch push exist ONLY behind their own cards. The absolute
      bans still hold: force-push, squash-merge, rebase-merge, admin bypass,
      auto-merge, bypassing required checks, pushing to main/master/release/*,
-     and deleting or closing a repository or branch.
+     deleting or closing a repository or branch - and, from the Q3/Q4 rulings,
+     approving a PR, closing an issue, editing a comment, dispatching a workflow
+     and gists.
   9. The patch: it reverses out of the published base and applies forward
      again byte for byte, it sits between `web-search-grant.patch` and the
      last writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so
@@ -147,7 +153,14 @@ MUST_NAME = {
     "github_create_repo": ("Fitness-Band", "Private: yes",
                            "A band that counts steps."),
     "github_merge_pr": ("darknight11ish/Epic-Jarvis", "1116", HEAD_SHA,
-                        "merge commit", "squash", "rebase", "admin", "auto-merge"),
+                        "https://github.com/darknight11ish/Epic-Jarvis/pull/1116",
+                        "It will be merged at this exact commit",
+                        "one merge commit", "squash", "rebase", "admin",
+                        "auto-merge",
+                        "GitHub is told: merge, and only merge, at this exact "
+                        "commit",
+                        "rust, frontend, backend, backend-windows, "
+                        "credential-manager, powershell-5, phone-unit-tests"),
     "github_fix_and_push": ("darknight11ish/Epic-Jarvis", "1116", "prepare",
                             "nothing is pushed in this stage"),
 }
@@ -670,6 +683,30 @@ def t_a_refused_token_is_a_plain_sentence():
               not re.search(r"\b(?:HTTP|40[0-9]|429|500)\b", err), err)
 
 
+def t_the_ci_answer_tells_the_truth_about_logs():
+    """The 2026-11-10 review / ruling Q1 item 7: the old sentence was false.
+
+    `_job_log` reads the end of a failing check's log, and `_failing_evidence`
+    reads GitHub's annotations, while a fix is being prepared - so "GitHub keeps
+    the log; Jarvis does not read it" contradicted the module's own code. This
+    pins the true sentence and that it points at the flow that shows the evidence.
+    """
+    failed = json.dumps({"workflow_runs": [
+        {"name": "CI", "status": "completed", "conclusion": "failure",
+         "head_branch": "main"}]})
+    _r, out = _run("github_ci_status", Fake(200, failed))
+    text = out.get("text", "")
+    check("a failed CI run is still reported as failed", "failed" in text, text)
+    check("... and the answer no longer says Jarvis does not read the log",
+          "Jarvis does not read it" not in text
+          and "GitHub keeps the log" not in text, text)
+    check("... it says Jarvis can read the end of a failing check's log and "
+          "GitHub's annotations",
+          "end of a failing check's log" in text and "annotations" in text, text)
+    check("... and points at the fix flow that shows them",
+          "github_fix_and_push" in text, text)
+
+
 # --------------------------------------------------------------------------
 #   7. Nothing private is ever sent
 # --------------------------------------------------------------------------
@@ -745,18 +782,31 @@ def t_merge_and_push_exist_only_behind_their_own_cards():
         check(f"{tool}: it is a carded action, not a read",
               tool in AG.GITHUB_ACTION_TOOLS and tool in AG.NEEDS_A_PERSON, tool)
 
-    # The ruling's sentence, word for word.
+    # The ruling's sentence, word for word - and the same day's Q3/Q4 added the
+    # five permanently banned verbs it now has to cover.
     check("the refusal is the owner's 2026-11-10 sentence, word for word",
           GH.never_words() == (
-              "Jarvis can never force-push, squash-merge, bypass required "
-              "checks, push directly to main, or delete/close repositories or "
-              "branches; every merge or PR-branch push requires its own "
-              "approval card."), GH.never_words())
+              "Jarvis can never force-push, squash-merge or rebase, use an "
+              "admin bypass, turn on auto-merge, bypass required checks, push "
+              "directly to main, approve a pull request in your name, close an "
+              "issue, edit a comment, dispatch a workflow, use a gist, or "
+              "delete/close repositories or branches; every merge or PR-branch "
+              "push requires its own approval card."), GH.never_words())
     check("the module names every ban that remains",
           {"force_push", "squash_merge", "rebase_merge", "admin_bypass",
            "auto_merge", "bypass_required_checks", "push_to_main",
            "delete_repository", "close_repository", "delete_branch",
            "close_branch"} <= GH.NEVER, sorted(GH.NEVER))
+    check("... and the five permanently banned verbs Q3/Q4 added",
+          {"approve_pr", "close_issue", "edit_comment", "workflow_dispatch",
+           "gist"} <= GH.NEVER, sorted(GH.NEVER))
+    check("... and the one sentence covers every one of them",
+          all(w in GH.never_words() for w in
+              ("force-push", "squash-merge", "rebase", "admin bypass",
+               "auto-merge", "bypass required checks", "main",
+               "approve a pull request", "close an issue", "edit a comment",
+               "dispatch a workflow", "gist", "delete/close", "approval card")),
+          GH.never_words())
     check("... and plain merge/push are NOT banned any more - they are carded",
           "merge" not in GH.NEVER and "push" not in GH.NEVER, sorted(GH.NEVER))
 
@@ -1066,8 +1116,12 @@ def t_a_file_read_shows_the_files_text_not_the_envelope():
         "# Jarvis\n\nThe README's own words.\n")))
     text = out.get("text", "")
     check("a base64 file answer is decoded to the file's own text",
-          out.get("ok") is True and text == "# Jarvis\n\nThe README's own words.",
-          repr(text)[:200])
+          out.get("ok") is True and "The README's own words." in text
+          and "# Jarvis" in text, repr(text)[:300])
+    check("... wrapped in the data delimiters, because a file is fetched text "
+          "too (2026-11-10 prompt-injection hardening)",
+          text.startswith(GH.GITHUB_TEXT_BEGINS)
+          and text.endswith(GH.GITHUB_TEXT_ENDS), repr(text)[:300])
     check("... and never the envelope it arrived in",
           '"encoding"' not in text and '"content"' not in text
           and "base64" not in text, text[:200])
@@ -1092,12 +1146,15 @@ def t_a_file_read_shows_the_files_text_not_the_envelope():
 def t_the_answer_is_bounded_and_unapproved_runs_send_nothing():
     _r, out = _run("github_read_file", Fake(200, _file_envelope(
         "a" * (GH.MAX_FILE_CHARS + 5000))))
+    text = out.get("text", "")
     check("a huge file is cut, and says so",
-          out.get("ok") and GH.CUT_MARKER in out.get("text", ""),
-          len(out.get("text", "")))
+          out.get("ok") and "(cut here)" in text, len(text))
+    # The cap applies to the file's own text; the two data-delimiter lines are
+    # the sanitizer's, not the file's, so they are allowed on top.
+    ceiling = (GH.MAX_FILE_CHARS + len("\n(cut here)")
+               + len(GH.GITHUB_TEXT_BEGINS) + len(GH.GITHUB_TEXT_ENDS) + 2)
     check("... at the file cap, not the socket cap",
-          len(out.get("text", "")) <= GH.MAX_FILE_CHARS + len(GH.CUT_MARKER) + 2,
-          len(out.get("text", "")))
+          len(text) <= ceiling, (len(text), ceiling))
 
     for tool in ALL_TOOLS:
         _r, out = _run(tool, Fake(200, "[]"), approved=False)
@@ -1401,16 +1458,37 @@ def t_the_merge_card_names_the_pinned_commit_and_the_exact_body():
           "darknight11ish/Epic-Jarvis" in text and "#1116" in text, text[:300])
     check("... and the EXACT 40-hex head commit it is pinned to",
           HEAD_SHA in text, text[:400])
+    check("... and the pull request's real address on github.com, so the owner "
+          "can see what he is approving",
+          "https://github.com/darknight11ish/Epic-Jarvis/pull/1116" in text,
+          text[:500])
+    check("... and the plain sentence that says where it is merged",
+          "It will be merged at this exact commit: " + HEAD_SHA in text,
+          text[:500])
     check("... and the one PUT address",
           r.urls() == (GH.GITHUB_API + "/repos/darknight11ish/Epic-Jarvis/"
                        "pulls/1116/merge",), r.urls())
     check("the body is exactly merge_method=merge and the pinned sha",
           r.body == {"merge_method": "merge", "sha": HEAD_SHA}, r.body)
-    check("... and the card shows that body, so a person can see it",
-          json.dumps(r.body, sort_keys=True) in text, text[:500])
+    # The 2026-11-10 ruling: the card speaks plain words, not JSON. The body is
+    # still pinned by the check above and by the run test - a person just does not
+    # read `{"merge_method": ...}` on an approval card any more.
+    check("... and the card shows NO raw JSON request body",
+          "Request body" not in text and '{"merge_method"' not in text, text)
+    check("... it says instead what GitHub is told, in words",
+          "GitHub is told: merge, and only merge, at this exact commit." in text,
+          text)
     check("the card says merge commit only and names the impossible halves",
-          all(w in text.lower() for w in ("merge commit", "squash", "rebase",
-                                          "admin", "auto-merge")), text)
+          all(w in text.lower() for w in ("merge commit", "no squash", "no rebase",
+                                          "no admin bypass", "no auto-merge")), text)
+    check("... and it names all seven required checks that must have passed",
+          all(c in text for c in GH.REQUIRED_CHECKS), text)
+    check("... and the whole refusal list is one plain sentence",
+          all(w in text.lower() for w in ("draft", "closed or already merged",
+                                          "moved to a different commit",
+                                          "conflicts with its base",
+                                          "check still running",
+                                          "required checks not passed")), text)
     check("the card says a changed head commit means nothing is merged",
           "moved since you looked" in text.lower()
           or "still exactly at the head commit" in text.lower(), text)
@@ -1566,6 +1644,65 @@ def t_a_merge_answered_without_a_result_is_not_claimed_as_done():
           out.get("error"))
 
 
+def t_a_refused_merge_is_refused_in_the_words_its_cause_deserves():
+    """The owner's ruling Q1 item 3 / Q6: the 409, the 405 and the merge queue.
+
+    Each is driven through the real run(), with the pull request and its checks
+    clean, so the ONLY reason for the refusal is the PUT's answer - which is what
+    makes the words the point of the test.
+    """
+    clean = [("/pulls/1116", (200, _pr_doc())),
+             ("/check-runs", (200, _all_green_runs()))]
+
+    def refused(answer):
+        fake = Routed([("/pulls/1116/merge", answer)] + clean)
+        _r, out = _run("github_merge_pr", fake)
+        check("... it is a refusal", out.get("ok") is False, out)
+        check("... with no HTTP code in the words",
+              not re.search(r"\b(?:HTTP|40[0-9]|409|405)\b",
+                            out.get("error", "")), out.get("error"))
+        check("... and it says nothing was merged",
+              "nothing was merged" in out.get("error", "").lower(),
+              out.get("error"))
+        return out.get("error", "")
+
+    # 409: the head moved or the pull request now conflicts - look again first.
+    err = refused((409, json.dumps({"message": "Head branch was modified"})))
+    check("a 409 says the head commit moved or it conflicts",
+          "head commit moved or it has a merge conflict" in err, err)
+    check("... and points back at the cockpit before asking again",
+          "github_pr_scan" in err and "look at it again" in err.lower(), err)
+
+    # 405: not mergeable right now - checks, review gate or the merge queue.
+    err = refused((405, json.dumps({"message": "Pull Request is not mergeable"})))
+    check("a 405 says it is not mergeable right now",
+          "not mergeable right now" in err, err)
+    check("... and names the three things that can hold it",
+          all(w in err for w in ("required checks", "review gate",
+                                 "merge queue")), err)
+
+    # The merge queue itself, which Q6 says Jarvis must refuse rather than join.
+    # GitHub has answered both 405 and 409 for this, so the words are chosen from
+    # its own message and not from the status alone.
+    for status in (405, 409):
+        err = refused((status, json.dumps(
+            {"message": "This branch has a merge queue and cannot be merged "
+                        "directly"})))
+        check(f"{status}: a merge-queue branch gets the one honest sentence",
+              "requires GitHub's merge queue" in err
+              and "Jarvis does not queue merges" in err, err)
+        check(f"{status}: ... which says what to do instead",
+              "Queue the merge on GitHub" in err, err)
+        check(f"{status}: ... and that Jarvis never claims it merged anything",
+              "nothing was merged" in err.lower(), err)
+
+    # Anything else keeps the ordinary plain-words failure.
+    err = refused((422, json.dumps({"message": "Validation Failed"})))
+    check("another status keeps the ordinary plain-words failure",
+          "not valid to github" in err.lower() and "nothing was merged" in err.lower(),
+          err)
+
+
 # --------------------------------------------------------------------------
 #   13. github_fix_and_push, stage prepare (2026-11-10)
 # --------------------------------------------------------------------------
@@ -1646,13 +1783,20 @@ def t_fix_prepare_copies_the_pr_into_its_own_scratch_folder():
               len(clone) == 1 and "https://github.com/darknight11ish/"
               "Epic-Jarvis.git" in clone[0]["args"]
               and str(target) in clone[0]["args"], clone)
-        header = [a for a in clone[0]["args"] if a.startswith("http.extraheader=")]
-        check("the token rides in git's own extraheader config, never the URL",
-              header == [f"http.extraheader=Authorization: Bearer {TOKEN}"], header)
-        check("... and the clone URL itself carries no token",
-              not any(TOKEN in a for a in clone[0]["args"]
-                      if a.startswith("https://")), clone[0]["args"])
+        check("the token rides in git's own environment config, never the argv",
+              clone[0]["env"].get("GIT_CONFIG_COUNT") == "1"
+              and clone[0]["env"].get("GIT_CONFIG_KEY_0") == "http.extraheader"
+              and clone[0]["env"].get("GIT_CONFIG_VALUE_0")
+              == f"Authorization: Bearer {TOKEN}", clone[0]["env"])
+        check("... and no argument on the clone command line says -c or carries "
+              "the token",
+              "-c" not in clone[0]["args"]
+              and not any(TOKEN in a for a in clone[0]["args"]), clone[0]["args"])
         check("... and the token is in no word of the answer", TOKEN not in text)
+        check("... and in NO argument of ANY git call this stage made - the "
+              "command line is the thing an outsider can read",
+              not any(TOKEN in " ".join(c["args"]) for c in git.calls),
+              git.commands())
         check("it fetches the pull request's head into a local branch, then "
               "checks it out",
               any(f"pull/1116/head:refs/heads/fix-pr-1116" in " ".join(c["args"])
@@ -1921,6 +2065,42 @@ def t_the_push_run_rechecks_everything_then_pushes_once():
               not re.search(r"\b(?:HTTP|40[0-9]|500)\b", out5.get("error", "")),
               out5)
 
+        # The matching 409 for a push: the branch moved on GitHub since prepare,
+        # so git refuses as non-fast-forward. Never forced over, and the answer
+        # says to prepare again from the new head.
+        g = _push_git(push=(1, "", "! [rejected] feature/tray-icon -> "
+                                  "feature/tray-icon (non-fast-forward)\n"
+                                  "error: failed to push some refs to "
+                                  "'https://github.com/o/r.git'\n"
+                                  "hint: Updates were rejected because the tip of "
+                                  "your current branch is behind\n"))
+        r6 = GH.plan_fix_and_push({"repo": repo, "number": "1116",
+                                   "stage": "push", "worktree": str(folder)},
+                                  git=g)
+        out6 = _run_request(r6, Routed([("/pulls/1116", (200, _pr_doc()))]), git=g)
+        check("a non-fast-forward push is refused in the branch-moved words",
+              out6.get("ok") is False
+              and "branch moved on GitHub since this fix was prepared"
+              in out6.get("error", ""), out6)
+        check("... it says nothing was pushed and to prepare again",
+              "nothing was pushed" in out6.get("error", "").lower()
+              and "prepare the fix again" in out6.get("error", "").lower(), out6)
+        check("... and it never builds a force/delete/mirror flag",
+              not any(flag in " ".join(c["args"]) for c in g.calls
+                      for flag in GH.BANNED_GIT_FLAGS), g.commands())
+        check("... and it never reports the push as done",
+              "Pushed " not in out6.get("error", ""), out6)
+
+        # The token is in NO argument of ANY git call in either stage: the command
+        # line is the thing `Get-CimInstance Win32_Process` / ps can read.
+        check("the token is in no argument of any git call in this whole block",
+              not any(TOKEN in " ".join(c["args"]) for c in git.calls),
+              [c["args"] for c in git.calls if TOKEN in " ".join(c["args"])])
+        check("... and the push itself carried it in the environment",
+              all(c["env"].get("GIT_CONFIG_VALUE_0") ==
+                  f"Authorization: Bearer {TOKEN}" for c in git.calls
+                  if c["args"][:1] == ["push"]), git.calls[-1] if git.calls else {})
+
 
 def t_fix_and_push_run_refuses_unapproved_and_unknown_stages():
     r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
@@ -1986,6 +2166,7 @@ if __name__ == "__main__":
                    t_each_action_is_one_card_naming_what_it_does,
                    t_the_reads_ask_too_and_never_write,
                    t_a_refused_token_is_a_plain_sentence,
+                   t_the_ci_answer_tells_the_truth_about_logs,
                    t_nothing_private_is_ever_sent,
                    t_merge_and_push_exist_only_behind_their_own_cards,
                    t_no_squash_rebase_admin_or_force_path_exists,
@@ -2006,6 +2187,7 @@ if __name__ == "__main__":
                    t_merge_refuses_everything_but_a_clean_unmoved_green_pull_request,
                    t_merge_sends_exactly_the_pinned_body_once,
                    t_a_merge_answered_without_a_result_is_not_claimed_as_done,
+                   t_a_refused_merge_is_refused_in_the_words_its_cause_deserves,
                    t_fix_prepare_copies_the_pr_into_its_own_scratch_folder,
                    t_fix_prepare_refuses_a_fork_and_a_protected_branch,
                    t_the_job_log_redirect_is_allowlisted_and_strips_the_token,

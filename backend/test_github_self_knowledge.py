@@ -26,8 +26,8 @@ it connected", so everything else fell to the local model, which guessed:
 WHAT THIS SUITE PROVES, all read-only and with no network:
 
   1. the catalogue has ONE `connected-github` row naming the real surface (the
-     six tools, `github_search`, the scheduled `watch_github` job, the three
-     carded actions and the never-list), and every generated copy is current;
+     ten tools, `github_search`, the scheduled `watch_github` job, the six carded
+     actions and the never-list), and every generated copy is current;
   2. "what can you do with my GitHub?" is answered from that row, not from the
      model and not only from the two research rows;
   3. `/api/accounts`'s GitHub row is the real six-ability surface, no longer
@@ -38,8 +38,10 @@ WHAT THIS SUITE PROVES, all read-only and with no network:
      answer invents a merge card or a tool that does not exist;
   6. the connected / not-connected state comes from `jarvis_github.connected()`,
      never from a guess;
-  7. no merge/push/commit/close/delete surface exists anywhere: not a tool, not
-     a planner, not a gate row, not a case;
+  7. the merge/push surface exists ONLY behind its own card, and the permanent
+     bans still hold: no squash/rebase/admin/force/delete/close planner, tool or
+     gate row anywhere - and, from the 2026-11-10 Q3/Q4 rulings, no approve, no
+     issue close, no comment edit, no workflow dispatch and no gist either;
   8. the four earlier fixes this branch also carries: the six tools' enable
      hints name the real control, the connect card's summary is current, the
      update grammar takes "YOUR latest release", and the feature guide no longer
@@ -292,7 +294,9 @@ def t_the_eight_recorded_questions_route_deterministically():
         "did you merge that PR?": ("one approval card", "merge commit",
                                    "never squash"),
         "what can't you do on GitHub?": ("force-push", "squash-merge", "delete",
-                                         "main"),
+                                         "main", "approve a pull request",
+                                         "close an issue", "dispatch a workflow",
+                                         "gist"),
         "what do you need before you can read my repos?":
             ("personal access token", "let the ai use this"),
         "what GitHub tools do you have?": TEN_TOOLS + ("github_search",
@@ -358,14 +362,29 @@ def t_no_merge_push_commit_close_surface_exists():
            "auto_merge", "bypass_required_checks", "push_to_main",
            "delete_repository", "close_repository", "delete_branch",
            "close_branch"} <= set(GH.NEVER), sorted(GH.NEVER))
+    # 2026-11-10 rulings Q3/Q4: five more verbs are permanently banned, and the
+    # ONE owner-facing sentence has to name every one of them - otherwise "can you
+    # approve this?" gets an answer about repositories and branches.
+    check("... and the five permanently banned verbs Q3/Q4 added",
+          {"approve_pr", "close_issue", "edit_comment", "workflow_dispatch",
+           "gist"} <= set(GH.NEVER), sorted(GH.NEVER))
+    check("the one never sentence covers all of them",
+          all(w in GH.NEVER_WORDS for w in
+              ("force-push", "squash-merge", "rebase", "admin bypass",
+               "auto-merge", "bypass required checks", "main",
+               "approve a pull request", "close an issue", "edit a comment",
+               "dispatch a workflow", "gist", "delete/close", "approval card")),
+          GH.NEVER_WORDS)
     check("jarvis_github has no planner for any banned verb",
           not [n for n in dir(GH) if n.startswith("plan_")
-               and re.search(r"squash|rebase|admin|force|delete|close|commit", n)],
+               and re.search(r"squash|rebase|admin|force|delete|close|commit|"
+                             r"approve|dispatch|gist", n)],
           [n for n in dir(GH) if n.startswith("plan_")])
     check("jarvis_agent.TOOLS has no squash/rebase/admin/force/delete/close tool",
-          not [n for n in AG.TOOLS
-               if re.search(r"squash|rebase|admin|force|delete|close|commit", n)],
-          sorted(AG.TOOLS))
+          not [n for n in AG.TOOLS if n.startswith("github")
+               and re.search(r"squash|rebase|admin|force|delete|close|commit|"
+                             r"approve|dispatch|gist", n)],
+          [n for n in AG.TOOLS if n.startswith("github")])
     check("the ten GitHub tools are the only github_* tools registered for the "
           "owner's own GitHub (github_search is the separate research tool)",
           sorted(n for n in AG.TOOLS if n.startswith("github_")) ==

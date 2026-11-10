@@ -228,14 +228,21 @@ SERVICES: "collections.OrderedDict[str, Service]" = collections.OrderedDict([
             name="token",
             label="GitHub personal access token",
             kind="token",
-            hint=("On github.com: Settings, Developer settings, Personal access tokens, "
-                  "then create one. A read-only token is enough to read private "
-                  "repositories, CI and a file; commenting, opening an issue, "
-                  "re-running a workflow and creating a repository need a token "
-                  "allowed to write issues, actions and repositories."),
+            hint=("On github.com: Settings, Developer settings, Personal access "
+                  "tokens, then a FINE-GRAINED token. Limit it to the repositories "
+                  "you choose and set an expiration date. Its repository "
+                  "permissions: Metadata, read-only (mandatory base, and it also "
+                  "lets Jarvis read branch rulesets); Pull requests, read and "
+                  "write; Issues, read and write; Actions, read and write; "
+                  "Contents, read and write. GitHub groups pull-request merging "
+                  "and branch pushing under Contents: write, so Jarvis protects "
+                  "every merge and push with its own approval card. Leave these "
+                  "OFF: Workflows (write), Administration, Secrets, Environments "
+                  "and Pages."),
         ),),
-        summary=("Jarvis uses this token for GitHub searches, private repositories and "
-                 "CI watches - and, when the GitHub tools are switched on, to read your "
+        summary=("Jarvis uses a fine-grained token, limited to the repositories you "
+                 "choose, for GitHub searches, private repositories and CI watches - "
+                 "and, when the GitHub tools are switched on, to read your "
                  "repositories, pull requests, issues, CI and a file, scan the pull "
                  "requests that can be merged, comment, open an issue, re-run a "
                  "workflow, create one new empty repository, merge one pull request "

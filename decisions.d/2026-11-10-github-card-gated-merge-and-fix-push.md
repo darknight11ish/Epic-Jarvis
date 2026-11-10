@@ -30,6 +30,23 @@
   admin bypass, auto-merge, bypassing required checks, pushing directly to
   main/master/release/*, and deleting or closing repositories or branches** -
   `jarvis_github.NEVER_WORDS` is now exactly the sentence that says so. The
-  record of the build is `docs/JARVIS-API.md` §190.9 and §190.10,
+  2026-11-10 11:42 PT rulings then fixed the boundary around it (Q1's
+  eleven-item polish, Q3, Q4, Q5, Q6): a formal pull-request **APPROVE** review
+  is permanently banned, because it would satisfy branch-protection
+  required-reviewer rules and hand the owner's sign-off to the assistant;
+  `workflow_dispatch` and gists are permanently banned too (arbitrary remote
+  input execution, and a public-by-default exfiltration sink); the merge stays a
+  classic synchronous pinned merge under `X-GitHub-Api-Version: 2022-11-28` with
+  no `merge-async` and no merge queue - a branch that requires the queue is
+  refused with the sentence that says to queue it on GitHub; and the connect
+  surface and `CAPABILITY_DETAILS` carry the fine-grained Personal Access Token
+  matrix - Metadata read-only (it also enables reading branch rulesets), Pull
+  requests/Issues/Actions/Contents read and write, with **Contents: write** named
+  as the one GitHub permission that covers both a merge and a branch push, and
+  Workflows (write), Administration, Secrets, Environments and Pages explicitly
+  left off. The scratch-scoped code-authoring tool that would let fix-and-push
+  write its own fix is deliberately deferred to wave 16B; this wave ships the
+  isolated-worktree prepare and the carded push only. The record of the build is
+  `docs/JARVIS-API.md` §190.9 and §190.10,
   `backend/jarvis_github.py`, `backend/github-tools.patch` and
   `backend/test_github_tools.py`.

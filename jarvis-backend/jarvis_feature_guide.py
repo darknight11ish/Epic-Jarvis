@@ -856,10 +856,15 @@ TOOL_SWITCHES = {
     # The GitHub research tool (jarvis_agent TOOLS "github_search"; its switch
     # title is "GitHub research" in jarvis_asks_first.tools_status).
     "github-research": ("github_search",),
-    # The six on-demand tools: one switch each, all off by default.
+    # The ten on-demand tools: one switch each, all off by default. The list is
+    # every model tool in the connected surface, because the row's own `where`
+    # names all ten - a short list here said "six switches" for a surface with
+    # ten (measured 2026-11-10, the 2026-11-07 miss plus wave 16's three).
     "connected-github": ("github_list", "github_read_file", "github_ci_status",
                          "github_comment", "github_open_issue",
-                         "github_rerun_workflow"),
+                         "github_rerun_workflow", "github_create_repo",
+                         "github_pr_scan", "github_merge_pr",
+                         "github_fix_and_push"),
 }
 
 
@@ -2866,10 +2871,11 @@ NO_COMMAND_REASON = {
     "pc-help": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "github-watchlist": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     # The connected-GitHub surface (2026-11-07, the owner's 2026-11-03 "Read +
-    # actions" decision finally given its catalogue row). The six TOOLS each
+    # actions" decision finally given its catalogue row). The ten TOOLS each
     # have their own switch on Settings, What asks first - no ONE switch belongs
-    # to the feature itself, so the row is an ability with three carded actions
-    # and no boolean of its own.
+    # to the feature itself, so the row is an ability with six carded writes
+    # (comment, open an issue, re-run a workflow, create one repository, merge,
+    # fix-and-push) and no boolean of its own.
     "connected-github": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "chatbot": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "support": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
@@ -4037,48 +4043,81 @@ SELF_FACTS = {
                    "one GitHub request; that one test proves the token identifies your "
                    "GitHub account and nothing more. A saved token lets Jarvis search "
                    "GitHub, see private repositories and watch CI. With the GitHub tools "
-                   "switched on it can also read your repositories, pull requests, issues, "
-                   "CI status and one file, comment, open an issue, re-run a workflow and "
-                   "create one new empty repository on your own account - each on its own "
-                   "approval card. It can NEVER clone, push or pull code, and never merge, "
-                   "commit, close or delete anything: there is no action, card or endpoint "
-                   "for those."),
+                   "switched on - TEN of them, all off by default - it can also read your "
+                   "repositories, pull requests, issues, CI status, one file and the PR "
+                   "cockpit (whether each open pull request can merge, with its 40-hex "
+                   "head commit); comment; open an issue; re-run a workflow; create one "
+                   "new empty repository on your own account; merge ONE pull request with "
+                   "a merge commit pinned to the exact 40-hex head commit on its own card; "
+                   "and fix-and-push - copy a failing pull request into an isolated "
+                   "scratch folder on this PC, then push commits a person made there to "
+                   "that pull request's own branch, two stages and two cards. Every one "
+                   "of those six writes asks on its own approval card and is in "
+                   "jarvis_agent.NEEDS_A_PERSON. It never force-pushes, squash-merges, "
+                   "rebases, uses an admin bypass or auto-merge, bypasses required checks, "
+                   "pushes directly to main, deletes or closes a repository or branch, "
+                   "approves a pull request, dispatches a workflow or touches gists, and "
+                   "it has no tool that edits or commits code."),
         "sentence": ("A GitHub token saved on the connect card is tested once with one "
                      "GitHub request - that proves the token identifies your GitHub "
                      "account, nothing more. It lets me search GitHub, see private "
-                     "repositories and watch CI. With the GitHub tools switched on I can "
-                     "also read your repositories, pull requests, issues, CI status and "
-                     "one file, comment, open an issue, re-run a workflow and create one "
-                     "new empty repository on your own account - each on its own approval "
-                     "card. I can never clone, push or pull code, and never merge, commit, "
-                     "close or delete anything."),
+                     "repositories and watch CI. With the GitHub tools switched on - ten "
+                     "of them, all off by default - I can also read your repositories, "
+                     "pull requests, issues, CI status, one file and the pull request "
+                     "cockpit (whether each open pull request can merge, with its head "
+                     "commit), comment, open an issue, re-run a workflow, create one new "
+                     "empty repository on your own account, merge ONE pull request with a "
+                     "merge commit pinned to the exact head commit on its approval card, "
+                     "and fix-and-push: copy a failing pull request into an isolated folder "
+                     "on this PC, then push commits a person made there to that pull "
+                     "request's own branch - two stages and two cards, with the token sent "
+                     "to api.github.com and nowhere else. I never force-push, squash-merge, "
+                     "rebase, use an admin bypass or auto-merge, bypass required checks, "
+                     "push directly to main, delete or close a repository or branch, "
+                     "approve a pull request, dispatch a workflow or touch gists, and I "
+                     "have no tool that edits or commits code."),
         # The capability half alone, for the deterministic chat answer after a
         # connect-card save: short, and the same words as `sentence`'s second
         # half. One source of truth for both.
         # NO "cloning / pushing / pulling" in this chat-facing half (GH-5): the
-        # overclaim words an owner reads as "so you can do that". The refusal is
-        # the same fact in plain words.
-        "short": ("It lets me search GitHub, see private repositories and watch CI; "
-                  "with the GitHub tools switched on, it can also read your "
-                  "repositories, pull requests, issues, CI status and one file, "
-                  "comment, open an issue, re-run a workflow and create one new empty "
-                  "repository on your own account - each on its own "
-                  "approval card. I never copy a repository to this PC, send code "
-                  "back to GitHub, or change code in any way: there is no action, "
-                  "card or endpoint for that, and no merge action or merge card "
-                  "either."),
+        # overclaim words an owner reads as "so you can do that". Since
+        # 2026-11-10 the honest answer also names the two carded writes that ARE
+        # built - the merge and the fix-and-push - because a sentence saying
+        # "there is no merge card" became false when that card shipped.
+        "short": ("It lets me search GitHub, see private repositories and watch CI; with "
+                  "the GitHub tools switched on - ten of them, all off by default - it "
+                  "can also read your repositories, pull requests, issues, CI status, one "
+                  "file and the pull request cockpit (whether each open pull request can "
+                  "merge, with its head commit), comment, open an issue, re-run a "
+                  "workflow, create one new empty repository on your own account, merge "
+                  "ONE pull request with one merge commit pinned to the exact head commit "
+                  "on its own approval card, and fix-and-push: copy a failing pull "
+                  "request into an isolated folder on this PC, then push commits a person "
+                  "made there to that pull request's own branch - two stages and two "
+                  "cards. It never force-pushes, squash-merges, rebases, uses an admin "
+                  "bypass or auto-merge, bypasses required checks, pushes to main, "
+                  "deletes or closes a repository or branch, approves a pull request, "
+                  "dispatches a workflow or touches gists, and there is no tool that "
+                  "edits or commits code."),
         # The same never-list, said as the answer to "can you clone/push/pull?".
         # Kept here so the fixed answer, the model's digest and the chat receipt
         # answer cannot drift apart.
-        "never": ("No - I never copy a repository to this PC, send code back to "
-                  "GitHub, or change code in any way: there is no action, card or "
-                  "endpoint for that, so approving a card cannot create one. What a "
-                  "saved token does let me do: search GitHub, see private repositories "
-                  "and watch CI; and with the GitHub tools switched on, read your "
-                  "repositories, pull requests, issues, CI status and one file, comment, "
-                  "open an issue, re-run a workflow and create one new empty repository "
-                  "on your own account - each on its own approval card. "
-                  "There is no merge action and no merge card at all."),
+        "never": ("No - I never copy a repository to this PC, and I have no tool that "
+                  "edits or commits code. What a saved token does let me do: search "
+                  "GitHub, see private repositories and watch CI; and with the GitHub "
+                  "tools switched on, read your repositories, pull requests, issues, CI "
+                  "status, one file and the pull request cockpit (whether each open pull "
+                  "request can merge, with its head commit), comment, open an issue, "
+                  "re-run a workflow and create one new empty repository on your own "
+                  "account - each on its own approval card; and, on its own cards, merge "
+                  "ONE pull request with one merge commit pinned to the exact 40-hex head "
+                  "commit its card shows, and fix-and-push: copy a failing pull request "
+                  "into an isolated folder on this PC, then push commits a person made "
+                  "there to that pull request's own branch - two stages and two cards. "
+                  "It never force-pushes, squash-merges, rebases, uses an admin bypass or "
+                  "auto-merge, bypasses required checks, pushes to main, deletes or "
+                  "closes a repository or branch, approves a pull request, dispatches a "
+                  "workflow or touches gists."),
     },
     # THE OWNER'S 2026-11-08 ASK: "talk about the local AI models - what has
     # been measured, start Benchmarks, what a better models for the current

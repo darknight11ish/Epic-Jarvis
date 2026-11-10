@@ -13457,9 +13457,12 @@ def _self_answers(s: str) -> Optional[Intent]:
 # "what is your GitHub repository?" -> "I don't have a public GitHub
 # repository" (false: darknight11ish/Epic-Jarvis is public and the updater
 # downloads its releases from it); "can you merge a pull request?" -> a MERGE
-# APPROVAL CARD was invented ("I can propose the merge to you now"), while
-# jarvis_github.NEVER has merge in it and no merge action, card or endpoint
-# exists anywhere; "how do I disconnect it?" -> "you haven't told me what 'it'
+# APPROVAL CARD was invented ("I can propose the merge to you now"), while no
+# merge action existed to approve it in 2026-11-07. A merge and a
+# pull-request-branch push ARE real since 2026-11-10, but only behind their own
+# cards - never a squash, a rebase, an admin bypass or a force-push (the
+# 2026-11-07 card-answer block below answers that shape from the module now);
+# "how do I disconnect it?" -> "you haven't told me what 'it'
 # is yet", while the true careful sentence already sits in
 # jarvis_accounts.state_words("github").
 #
@@ -13663,6 +13666,18 @@ _GITHUB_CODE_CONTEXT = re.compile(
 _GITHUB_CODE_VERB = re.compile(
     r"\bclone(?:s|d|ing)?\b"
     r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b(?!\s+up\b)")
+#: An imperative SETTINGS sentence, not a question about what Jarvis can do
+#: (added 2026-11-10). The wave-16 tool names carry a code verb inside them -
+#: "the github fix and push tool", and the natural "github pull request …"
+#: names - so the never-list below would otherwise swallow the owner's own
+#: request to switch that tool on ("let the ai model read the github fix and
+#: push tool" answered the clone/push never-list instead of the switch). The
+#: word "tool"/"switch"/"setting" or a leading turn/let/allow verb is what
+#: tells the two apart: a capability question says "can you push", never
+#: "the … push tool". Measured by test_settings_registry's completeness check.
+_GITHUB_SETTINGS_SENTENCE = re.compile(
+    r"\b(?:tools?|switch(?:es)?|settings?)\b"
+    r"|^(?:please\s+)?(?:turn|switch|let|allow|stop|enable|disable|keep)\b")
 
 
 #: "do you have access to my github", "can you read my github" - the capability
@@ -13698,6 +13713,12 @@ def _github_connect_receipt_intent(s: str) -> Optional[Intent]:
     """The post-save receipt shapes, or None. Whole sentences only."""
     low = s.strip()
     if not low:
+        return None
+    # A settings sentence is not a capability question (2026-11-10): the tool
+    # names of this wave contain a code verb ("fix and push", "pull request"),
+    # so without this the never-list below would answer the owner's own request
+    # to switch that tool on. The settings grammar later in `match()` owns it.
+    if _GITHUB_SETTINGS_SENTENCE.search(low):
         return None
     # A "tell me when ..." watch sentence is jarvis_tellme's own, including the
     # PR-URL shape ("tell me when https://github.com/o/r/pull/9 is merged").
@@ -21639,29 +21660,49 @@ def _github_create_repo_words() -> str:
 GITHUB_CAPABILITY_FALLBACK = (
     "A GitHub token saved on the connect card is tested once with one GitHub "
     "request - that proves the token identifies your GitHub account, nothing more. "
-    "It lets me search GitHub, see private repositories and watch CI. With the "
-    "GitHub tools switched on I can also read your repositories, pull requests, "
-    "issues, CI status and one file, comment, open an issue, re-run a workflow and "
-    "create one new empty repository on your own account - each on its own approval "
-    "card. I can never clone, push or pull code, and never merge, commit, close or "
-    "delete anything.")
+    "It lets me search GitHub, see private repositories and watch CI. With the ten "
+    "GitHub tools switched on (all off by default) I can also read your "
+    "repositories, pull requests, issues, CI status, one file and the pull request "
+    "cockpit (whether each open pull request can merge, with its head commit), "
+    "comment, open an issue, re-run a workflow, create one new empty repository on "
+    "your own account, merge ONE pull request with one merge commit pinned to the "
+    "exact head commit on its approval card, and fix-and-push: copy a failing pull "
+    "request into an isolated folder on this PC, then push commits a person made "
+    "there to that pull request's own branch - two stages and two cards, with the "
+    "token sent to api.github.com and nowhere else. It never force-pushes, "
+    "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
+    "checks, pushes to main, deletes or closes a repository or branch, approves a "
+    "pull request, dispatches a workflow or touches gists, and it has no tool that "
+    "edits or commits code.")
 GITHUB_NEVER_FALLBACK = (
-    "No - I never copy a repository to this PC, send code back to GitHub, or change "
-    "code in any way: there is no action, card or endpoint for that, so approving a "
-    "card cannot create one. What a saved token does let me do: search GitHub, see "
-    "private repositories and watch CI; and with the GitHub tools switched on, read "
-    "your repositories, pull requests, issues, CI status and one file, comment, open "
-    "an issue, re-run a workflow and create one new empty repository on your own "
-    "account - each on its own approval card. There is no merge action and no merge "
-    "card at all.")
+    "No - I never copy a repository to this PC, and I have no tool that edits or "
+    "commits code. What a saved token does let me do: search GitHub, see private "
+    "repositories and watch CI; and with the GitHub tools switched on, read your "
+    "repositories, pull requests, issues, CI status, one file and the pull request "
+    "cockpit (whether each open pull request can merge, with its head commit), "
+    "comment, open an issue, re-run a workflow and create one new empty repository "
+    "on your own account - each on its own approval card; and, on its own cards, "
+    "merge ONE pull request with one merge commit pinned to the exact 40-hex head "
+    "commit its card shows, and fix-and-push: copy a failing pull request into an "
+    "isolated folder on this PC, then push commits a person made there to that "
+    "pull request's own branch - two stages and two cards. It never force-pushes, "
+    "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
+    "checks, pushes to main, deletes or closes a repository or branch, approves a "
+    "pull request, dispatches a workflow or touches gists.")
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
-    "GitHub tools switched on, it can also read your repositories, pull requests, "
-    "issues, CI status and one file, comment, open an issue, re-run a workflow and "
-    "create one new empty repository on your own account - each on its own approval "
-    "card. I never copy a repository to this PC, send code back to GitHub, or change "
-    "code in any way: there is no action, card or endpoint for that, and no merge "
-    "action or merge card either.")
+    "GitHub tools switched on - ten of them, all off by default - it can also read "
+    "your repositories, pull requests, issues, CI status, one file and the pull "
+    "request cockpit (whether each open pull request can merge, with its head "
+    "commit), comment, open an issue, re-run a workflow, create one new empty "
+    "repository on your own account, merge ONE pull request with one merge commit "
+    "pinned to the exact head commit on its own approval card, and fix-and-push: "
+    "copy a failing pull request into an isolated folder on this PC, then push "
+    "commits a person made there to that pull request's own branch - two stages and "
+    "two cards. It never force-pushes, squash-merges, rebases, uses an admin bypass "
+    "or auto-merge, bypasses required checks, pushes to main, deletes or closes a "
+    "repository or branch, approves a pull request, dispatches a workflow or "
+    "touches gists, and there is no tool that edits or commits code.")
 
 
 def _github_capability_words(which: str = "sentence") -> str:

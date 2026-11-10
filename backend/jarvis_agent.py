@@ -5230,7 +5230,9 @@ TOOLS: dict = {
         "github_pr_scan",
         "The pull request cockpit: list the open pull requests on one repository and "
         "say, for each one, whether it can be merged - merge-ready, blocked, "
-        "conflicted, running or draft - and which required check is holding it. "
+        "conflicted, running or draft - and which required check is holding it. It "
+        "prints each pull request's full 40-character head commit and base branch, "
+        "so that commit can be passed straight to github_merge_pr. "
         "Read-only: nothing on GitHub changes. It asks you before every read, and it "
         "never merges anything itself; merging is a separate carded tool. "
         + GITHUB_CAPABILITIES_WORDS,
@@ -5248,7 +5250,9 @@ TOOLS: dict = {
     "github_merge_pr": Tool(
         "github_merge_pr",
         "Merge ONE pull request with a MERGE COMMIT, pinned to the exact "
-        "40-character head commit you pass. One card names it and that commit. It "
+        "40-character head commit you pass. That commit is the one github_pr_scan "
+        "printed: copy it from there, because a different or short commit is "
+        "refused. One card names it and that commit. It "
         "refuses, sending nothing, if the pull request is a draft, cannot merge "
         "cleanly, has a check running, a required check failed, or it moved. It can "
         "never squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
@@ -5257,7 +5261,8 @@ TOOLS: dict = {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "number": {"type": "string", "description": "the pull request number"},
             "head_sha": {"type": "string",
-                         "description": "its full 40-character head commit"}},
+                         "description": "its full 40-character head commit, exactly as "
+                                        "github_pr_scan printed it"}},
          "required": ["repo", "number", "head_sha"]},
         _prepare_github_merge_pr, _run_github,
         instead={"github_pr_scan": "To see which pull requests are ready first, use "
