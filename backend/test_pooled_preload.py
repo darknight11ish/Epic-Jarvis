@@ -62,6 +62,12 @@ import jarvis_agent as AG  # noqa: E402
 import jarvis_model_lanes as LANES  # noqa: E402
 
 MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
+#: A model that legitimately runs on the one-card everyday lane. Needed by case
+#: (d) since Q7 (2026-11-10): the 30B is now REFUSED on a one-card lane before
+#: anything is sent (pinned in test_lane_integrity.py), which is the right
+#: behaviour and not this suite's subject - this suite's subject is that the
+#: preload seam leaves a non-pooled lane alone.
+EVERYDAY_MODEL = "qwen3.5:9b"
 POOLED = "http://127.0.0.1:11450"
 EVERYDAY = "http://127.0.0.1:11436"
 CTX = 49152
@@ -186,7 +192,7 @@ def last_preload() -> dict:
     return dict(getattr(AG, "POOLED_PRELOAD_LAST", {}) or {})
 
 
-def a_turn(lane: FakeLane, *, announce=None) -> dict:
+def a_turn(lane: FakeLane, *, announce=None, model: str = MODEL) -> dict:
     """One REAL `run_local_turn` against the fake lane, no tools."""
     AG._CTX_CACHE.clear()
     AG._TOOLS_CACHE.clear()
@@ -195,7 +201,7 @@ def a_turn(lane: FakeLane, *, announce=None) -> dict:
         with lock:
             AG.POOLED_PRELOAD_LAST.clear()
     return AG.run_local_turn(
-        [{"role": "user", "content": "hi"}], MODEL,
+        [{"role": "user", "content": "hi"}], model,
         ollama_url=lane.url, stream_out=lambda b: None,
         enabled_tools=set(), announce=announce, lane_choice=None,
         request={"conversation_id": "conv-f2", "stream": True,
@@ -343,9 +349,12 @@ def a_failed_preload_still_runs_the_real_turn() -> None:
 def an_everyday_lane_is_untouched() -> None:
     lane = FakeLane()
     try:
-        lane.loaded = [{"name": "qwen3.5:9b", "context_length": 196608}]
+        lane.loaded = [{"name": EVERYDAY_MODEL, "context_length": 196608}]
         # The REAL pooled port (11450), so this fake lane is not the pooled one.
-        out = a_turn(lane)
+        # An everyday model on purpose: Q7 refuses the 30B on a one-card lane
+        # before anything is sent (its own suite pins that), and THIS case is
+        # about the preload seam leaving a non-pooled lane alone.
+        out = a_turn(lane, model=EVERYDAY_MODEL)
         posts = lane.paths("POST")
         check("F2d: an everyday/coding lane sends no preload at all",
               first_index(posts, "/api/generate") < 0, posts)
