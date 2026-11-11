@@ -878,6 +878,23 @@ class _GitHubNoToken:
         self.words = words
 
 
+class _GitHubAnswered:
+    """A GitHub stage that answers directly, with NO card (wave 16B).
+
+    ONE caller: `github_fix_and_push`'s "read" stage, which reads a file inside
+    the isolated scratch copy. It sends nothing to GitHub, uses no token, and
+    changes nothing on this PC, so there is nothing for a person to approve -
+    the same rule every local read follows (notes, files, memory). It is still
+    reachable ONLY inside the prepared copy for one pull request, through the
+    same path resolver the carded write uses, so this is not a way to read
+    arbitrary disk. `_one_call` returns the words to the model and marks the
+    turn as having read outside text.
+    """
+
+    def __init__(self, words: str):
+        self.words = words
+
+
 def _github_plan(planner, args: dict):
     """(request, card text) for one GitHub tool, or the no-token answer.
 
@@ -938,7 +955,22 @@ def _prepare_github_merge_pr(args: dict):
 
 
 def _prepare_github_fix_and_push(args: dict):
+    """Plan one fix-and-push stage: prepare, read, write or push.
+
+    `read` is the wave-16B local read of the prepared copy: it sends nothing to
+    GitHub and changes nothing, so it answers directly and raises NO card.
+    `write` is carded under its OWN action (`github_fix_write`, resolved by the
+    tool's `gate_lookup_name`), and it needs no token either - it is dispatched
+    locally in `jarvis_github.run()` before the token is read. `prepare` and
+    `push` keep the GitHub read and the token they always had.
+    """
     import jarvis_github as GH
+    stage = str((args or {}).get("stage") or "prepare").strip().lower()
+    if stage == "read":
+        return _GitHubAnswered(GH.read_copy_file(args)), ""
+    if stage == "write":
+        r = GH.plan_fix_and_push(args)
+        return r, GH.describe(r)
     # The push stage reads the LOCAL folder only (no socket): its own git state,
     # and the note the prepare stage left there. The planner is called with the
     # real git executor here; tests pass a fake to `plan_fix_and_push` directly.
@@ -5251,13 +5283,12 @@ TOOLS: dict = {
     "github_merge_pr": Tool(
         "github_merge_pr",
         "Merge ONE pull request with a MERGE COMMIT, pinned to the exact "
-        "40-character head commit you pass. Copy the commit, the title and the "
-        "base branch from github_pr_scan, exactly as it printed them, because a "
-        "different or short commit is refused. One card names the commit, the "
-        "title and the target branch. It refuses, sending nothing, if the pull "
-        "request is a draft, cannot merge cleanly, has a check running, a required "
-        "check failed, moved, or was retargeted to another base branch. It can "
-        "never squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
+        "40-character head commit you pass. Pass the commit, title and base "
+        "branch exactly as github_pr_scan printed them: a different or short "
+        "commit is refused. It refuses, sending nothing, if the pull request is "
+        "a draft, cannot merge cleanly, has a check running, a required check "
+        "failed, moved, or was retargeted to another base branch. It can never "
+        "squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
         "required check. " + GITHUB_CAPABILITIES_WORDS,
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
@@ -5276,27 +5307,46 @@ TOOLS: dict = {
                                    "github_pr_scan.",
                  "github_ci_status": "To read CI without merging, use "
                                      "github_ci_status."}),
-    # Fix-and-push (2026-11-10): TWO cards, one per stage. Prepare copies the pull
-    # request into its own scratch folder and shows the failing checks; push shows
-    # the exact commits, files and command on a SECOND card and only then pushes
-    # to the pull request's own branch.
+    # Fix-and-push (2026-11-10, extended by wave 16B): FOUR stages, and every
+    # change has its own card. Prepare copies the pull request into its own
+    # scratch folder and shows the failing checks; "read" shows one file in that
+    # copy (no card - it sends nothing and changes nothing); "write" changes ONE
+    # file there and makes ONE commit on its own card, showing the exact change;
+    # "push" shows the exact commits, files and command on a further card and
+    # only then pushes to the pull request's own branch.
     "github_fix_and_push": Tool(
         "github_fix_and_push",
-        "Fix a failing pull request in a scratch folder, then push it to its own "
-        "branch. \"prepare\" reads the failing checks and copies it there; \"push\" "
-        "shows its commits and command on a second card. It never force-pushes, "
-        "deletes a branch or pushes to a protected branch, and refuses a folder "
-        "outside the scratch root or a credential file. "
-        + GITHUB_CAPABILITIES_WORDS,
+        "Fix a failing pull request in an isolated scratch folder on this PC, then "
+        "push the fix to its own branch. \"prepare\" copies the pull request there "
+        "and reads the failing checks; \"read\" shows one file (no card - nothing "
+        "is sent); \"write\" changes ONE file there and makes ONE commit on its own "
+        "card, showing the exact change; \"push\" shows the exact commits, files "
+        "and command. It never force-pushes, never pushes to a protected branch, "
+        "writes only inside that one copy and refuses a credential file.",
         {"type": "object", "properties": {
-            "stage": {"type": "string", "enum": ["prepare", "push"],
-                      "description": "prepare or push"},
+            "stage": {"type": "string", "enum": ["prepare", "read", "write", "push"],
+                      "description": "prepare, read, write or push"},
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "number": {"type": "string", "description": "the pull request number"},
             "worktree": {"type": "string",
-                         "description": "the scratch folder"}},
+                         "description": "the scratch folder the prepare stage made"},
+            "path": {"type": "string",
+                     "description": "read or write: the file's path INSIDE the "
+                                    "scratch folder, e.g. \"backend/app.py\""},
+            "content": {"type": "string",
+                        "description": "write: the file's whole new text, exactly"},
+            "message": {"type": "string",
+                        "description": "write: a one-line commit message for the fix"}},
          "required": ["repo", "number"]},
         _prepare_github_fix_and_push, _run_github,
+        # The ONE tool whose gate action depends on its stage: only the write is
+        # decided under `github_fix_write` (its own card, its own tier line).
+        # Everything else, the card-less read included, stays under the action
+        # that already governs the fix flow.
+        gate_lookup_name=lambda args: (
+            "github_fix_write"
+            if str((args or {}).get("stage") or "").strip().lower() == "write"
+            else "github_fix_and_push"),
         instead={"github_pr_scan": "To see what is failing, use github_pr_scan.",
                  "github_merge_pr": "To merge a ready one, use github_merge_pr."}),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
@@ -6435,8 +6485,10 @@ NEEDS_A_PERSON = {
     # in this set so a loosened tier line cannot run one with nobody asked.
     "github_merge_pr": "merges one pull request on GitHub in the owner's name, which "
                        "cannot be undone and cannot pass a required check",
-    "github_fix_and_push": "pushes commits to a pull request's own branch on GitHub in the "
-                           "owner's name, which cannot be taken back",
+    "github_fix_and_push": "writes one file inside a pull request's isolated fix copy "
+                           "on this PC and pushes commits to that pull request's own "
+                           "branch on GitHub in the owner's name, which cannot be "
+                           "taken back",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -18189,6 +18241,25 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                                 "error": state.words})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
+        return
+    if name in GITHUB_TOOLS and isinstance(state, _GitHubAnswered):
+        # A LOCAL GitHub stage that answers directly and raises NO CARD (wave
+        # 16B): reading one file inside the prepared fix copy sends nothing to
+        # GitHub, uses no token and changes nothing on this PC, so there is
+        # nothing for a person to approve - the same rule every other local read
+        # follows. It is NOT a card-less write: the only write in this tool is
+        # carded, and this object is only ever returned by the read stage.
+        result = {"ok": True, "text": state.words}
+        try:
+            watch.took_in(name, result)
+        except Exception:                    # noqa: BLE001 - a watch is a signal
+            pass
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": True, "ok": True,
+                      "outcome": "no card needed"})
+        say_step("tool_started", name)
+        say_step("tool_finished", name, ok=True)
         return
     if name == PROTECT_TOOL and isinstance(state, (_ProtectionListed,
                                                   _ProtectionNoChange)):

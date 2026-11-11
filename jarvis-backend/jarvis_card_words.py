@@ -189,6 +189,10 @@ TITLES = {
     # and "push a fix" is not "post a comment".
     "github_merge_pr": "merge a pull request with a merge commit",
     "github_fix_and_push": "push a fix to a pull request's own branch",
+    # Wave 16B (2026-11-10): the fix tool's "write" stage changes ONE file inside
+    # that isolated copy ON THIS PC. Its own phrase, never "push a fix": this
+    # card sends nothing anywhere and nothing on GitHub changes.
+    "github_fix_write": "write one file in a pull request's fix copy",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -469,6 +473,8 @@ SUMMARY = {
     "github_create_repo": "create a repository",
     "github_merge_pr": "merge a pull request (merge commit only)",
     "github_fix_and_push": "push a fix to a pull request",
+    # Wave 16B: the short line for the one local card in the fix flow.
+    "github_fix_write": "write one file in the fix copy",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

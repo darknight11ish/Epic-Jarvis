@@ -126,8 +126,9 @@ TOOL_NAMES = {
                       "(one card each)",
     "github_merge_pr": "Merging one pull request with a merge commit, pinned to its head "
                        "commit (one card each)",
-    "github_fix_and_push": "Pushing a fix to one pull request's own branch from a scratch "
-                           "folder (one card each)",
+    "github_fix_and_push": "Writing one file of a fix inside a pull request's own "
+                           "scratch copy here, then pushing it to that pull "
+                           "request's branch (one card for each change)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",

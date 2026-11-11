@@ -911,9 +911,27 @@ def t_the_capability_inventory_is_the_whole_wired_surface():
     check("every action tool is a write entry",
           {c["tool"] for c in caps if c["kind"] == "write"} ==
           set(AG.GITHUB_ACTION_TOOLS))
+    # `github_fix_and_push` is the ONE tool with two carded actions: its push
+    # (the row's own `gate`) and its wave-16B write (`extra_gates`), because a
+    # write card that read "push a fix" would be a lie. Every action in the
+    # closed set must still be named by exactly one row, so a future action
+    # cannot be added without saying which tool raises it.
+    write_gates = [c["gate"] for c in caps if c["kind"] == "write"]
+    extra_gates = [g for c in caps if c["kind"] == "write"
+                   for g in (c.get("extra_gates") or ())]
     check("every write entry's gate is a real closed-set action",
-          {c["gate"] for c in caps if c["kind"] == "write"} == set(GH.ACTIONS),
-          sorted(c["gate"] for c in caps if c["kind"] == "write"))
+          set(write_gates) | set(extra_gates) == set(GH.ACTIONS),
+          sorted(set(write_gates) | set(extra_gates)))
+    check("... and no carded action is named twice",
+          len(write_gates) + len(extra_gates)
+          == len(set(write_gates) | set(extra_gates)),
+          (write_gates, extra_gates))
+    check("... and only the fix tool has a second carded action",
+          [(c["tool"], tuple(c.get("extra_gates") or ())) for c in caps
+           if c.get("extra_gates")]
+          == [("github_fix_and_push", (GH.ACTION_FIX_WRITE,))],
+          [(c["tool"], c.get("extra_gates")) for c in caps
+           if c.get("extra_gates")])
     check("every read entry is decided under github_inspect",
           {c["gate"] for c in caps if c["kind"] == "read"} == {GH.ACTION_INSPECT})
     for c in caps:
@@ -931,17 +949,18 @@ def t_the_capability_inventory_is_the_whole_wired_surface():
               isinstance(c.get("absolute_bans"), tuple)
               and set(c["absolute_bans"]) <= set(GH.NEVER),
               (c.get("absolute_bans"), sorted(GH.NEVER)))
-        check(f"{c['tool']}: two_stage_kind is None, because it is one stage",
+        check(f"{c['tool']}: two_stage_kind names the fix flow or is None",
               c.get("two_stage_kind") is None or
-              c.get("two_stage_kind") == "prepare_then_push",
+              c.get("two_stage_kind") == "prepare_write_then_push",
               c.get("two_stage_kind"))
     two_stage = [c for c in caps if c.get("two_stage_kind")]
-    check("exactly ONE row is a two-stage flow, and it is fix-and-push",
+    check("exactly ONE row is a multi-stage flow, and it is fix-and-push",
           [c["tool"] for c in two_stage] == ["github_fix_and_push"]
-          and two_stage[0]["two_stage_kind"] == "prepare_then_push", two_stage)
-    check("a two-stage row's card fields name 'prepare' and 'push'",
+          and two_stage[0]["two_stage_kind"] == "prepare_write_then_push",
+          two_stage)
+    check("a multi-stage row's card fields name prepare, write and push",
           all(w in " ".join(two_stage[0]["card_fields"]).lower()
-              for w in ("prepare", "push")), two_stage[0]["card_fields"])
+              for w in ("prepare", "write", "push")), two_stage[0]["card_fields"])
     # Every fact has ONE home: the matrix and the per-row door are derived from
     # the same rows, never retyped.
     matrix = GH.capability_matrix()
@@ -1056,10 +1075,21 @@ def t_the_awareness_text_answers_what_can_you_do_with_github():
           line[:400])
     check("the agent's tool-description text is the module's own line",
           AG.GITHUB_CAPABILITIES_WORDS == line, AG.GITHUB_CAPABILITIES_WORDS[:120])
-    for tool in ("github_pr_scan", "github_merge_pr", "github_fix_and_push"):
+    # The whole-surface line rides on the two GitHub tools whose own schema has
+    # room for it. It is deliberately NOT on github_fix_and_push: its wave-16B
+    # schema gained the read/write fields, and the line would push it past its
+    # measured per-tool budget (backend/test_tool_text.py) on every turn the
+    # group is opened. The model still reads it from the other two tools in the
+    # same group, and the fix tool's own description states its boundary.
+    for tool in ("github_pr_scan", "github_merge_pr"):
         check(f"the model reads the capability line on {tool}",
               line and line in AG.TOOLS[tool].description,
               AG.TOOLS[tool].description[:120])
+    check("the fix tool names its own boundary instead",
+          "never force-pushes" in AG.TOOLS["github_fix_and_push"].description
+          and "writes only inside that one copy"
+          in AG.TOOLS["github_fix_and_push"].description,
+          AG.TOOLS["github_fix_and_push"].description[:200])
     check("no capability text names an action that is not wired",
           not [c for c in GH.CAPABILITIES
                if c["tool"] not in AG.TOOLS])
@@ -1102,6 +1132,17 @@ def t_every_capability_row_is_wired_one_to_one():
               c["tool"])
         check(f"{c['tool']}: a real gate action",
               c["gate"] in (GH.ACTION_INSPECT,) + GH.ACTIONS, c["gate"])
+        for extra in (c.get("extra_gates") or ()):
+            # The wave-16B write is a SECOND carded action of the same tool, so
+            # it needs the same proof a row's own gate gets: a real closed-set
+            # action, a plain card title, and no banned verb in its name.
+            check(f"{c['tool']}: a real second carded action", extra in GH.ACTIONS,
+                  extra)
+            check(f"{c['tool']}: a card title for its second action",
+                  extra in CW.TITLES and CW.has_written_title(extra),
+                  (extra, CW.TITLES.get(extra)))
+            check(f"{c['tool']}: the second action names no banned verb",
+                  not banned.search(extra), extra)
         check(f"{c['tool']}: a real 'What asks first' switch row",
               c["tool"] in AF.TOOLS_SWITCHABLE, c["tool"])
         check(f"{c['tool']}: a card title for its gate action",
