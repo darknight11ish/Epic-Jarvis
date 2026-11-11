@@ -161,7 +161,7 @@ def all_four_are_read_only():
 
 
 def tools_answer_is_the_registry_and_the_live_file():
-    # 70, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
+    # 72, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
     # GitHub "Read + actions") are in jarvis_agent.TOOLS and ship switched OFF,
     # hands-free then added send_text_message (on by default), the product check
     # added product_check (off), the four pack tools (2026-11-05) ship ON, and the
@@ -170,18 +170,19 @@ def tools_answer_is_the_registry_and_the_live_file():
     # github_create_repo) joined after it, project_read - the read half of
     # "Jarvis takes over dev work" - ships OFF like file_read, and wave 16's three
     # GitHub tools (2026-11-10: the PR cockpit, the carded merge and the carded
-    # fix-and-push) also ship OFF; so the registered count is 70 and enabled
-    # stays 19. The answer is still read from the registry and the settings file,
-    # never typed.
+    # fix-and-push) also ship OFF, and wave 16E's two tools (2026-11-10: the
+    # review packet and the record check before a push) joined after them and ship
+    # OFF; so the registered count is 72 and enabled stays 19. The answer is still
+    # read from the registry and the settings file, never typed.
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 70,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 72,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
           inv["enabled"] == 19, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "70 tools" in reply, reply[:120])
+    check("it names the registered count", "72 tools" in reply, reply[:120])
     check("it names the switched-on count", "19 of them are switched on" in reply,
           reply[:160])
     # The list is capped at about fourteen names plus "and N more", so the
@@ -217,8 +218,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 69 are not switched on",
-              bool(reply) and "other 69 are built in but not switched on" in reply,
+        check("... and says the other 71 are not switched on",
+              bool(reply) and "other 71 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:
