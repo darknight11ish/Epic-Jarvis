@@ -776,6 +776,28 @@
        "windows_hello": false
       },
       {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
        "action": "support_chat",
        "confirmations": 1,
        "fixed": false,
@@ -1843,6 +1865,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -2335,6 +2360,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -3233,6 +3282,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -4303,6 +4374,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -4795,6 +4869,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -5690,6 +5788,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -6759,6 +6879,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -7251,6 +7374,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -8141,6 +8288,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -9210,6 +9379,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -9702,6 +9874,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -10597,6 +10793,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -11681,6 +11899,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -12173,6 +12394,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -13064,6 +13309,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -14143,6 +14410,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -14635,6 +14905,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -15521,6 +15815,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -16590,6 +16906,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -17082,6 +17401,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -17984,6 +18327,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -19054,6 +19419,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -19546,6 +19914,30 @@
       "last": null,
       "on": false,
       "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
       "waiting": false
      },
      {
@@ -20441,6 +20833,28 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_merge_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_merge_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Merge a pull request with a merge commit",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_and_push",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_and_push",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Push a fix to a pull request's own branch",
        "windows_hello": false
       },
       {
@@ -21510,6 +21924,9 @@
        "github_open_issue",
        "github_rerun_workflow",
        "github_create_repo",
+       "github_pr_scan",
+       "github_merge_pr",
+       "github_fix_and_push",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -22006,6 +22423,30 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "github_pr_scan",
+      "last": null,
+      "on": false,
+      "title": "Looking at your open pull requests and whether they can be merged (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_merge_pr",
+      "last": null,
+      "on": false,
+      "title": "Merging one pull request with a merge commit, pinned to its head commit (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_fix_and_push",
+      "last": null,
+      "on": false,
+      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "approval_policy",
       "last": null,
       "on": false,
@@ -22218,6 +22659,9 @@
   "github_open_issue",
   "github_rerun_workflow",
   "github_create_repo",
+  "github_pr_scan",
+  "github_merge_pr",
+  "github_fix_and_push",
   "approval_policy"
  ],
  "words": {

@@ -19,6 +19,7 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The two-column Cockpit, a faster claims check, a shared credential denylist, two memory fixes, the everyday-lane guard, and GitHub merge / fix-and-push behind one card each',
     "The vault organizer's switch now says the approval card is waiting instead of claiming the organizer is already on",
     "The phone's Home screen gets its room back: the top strip's three information cards are in More, its two safety cards stay on Home as one thin row, and past chats are easy to reach",
     "The HUD's way back from Face Only and Mini View, one navigation, two wording fixes, and the third lane's prompt-cache cap kept",

@@ -280,8 +280,17 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,676 tokens)", short <= 1676,
+    check("the short list stays small (pinned: at most 1,691 tokens)", short <= 1691,
           str(short))
+    # Pinned 1,676 -> 1,691 on 2026-11-10 (wave 16), and the whole growth is
+    # measured with this module's own estimate_tokens rule: the `github` group
+    # gains the three GitHub tools of the owner's "Everything at once" decision
+    # (github_pr_scan, github_merge_pr, github_fix_and_push) as member names in
+    # `more_tools`' own schema, which the short list carries in full. Their own
+    # schemas are only sent when the group is opened, never on every turn, so
+    # nothing else here grows. 1,691 leaves the same 15 tokens of headroom the
+    # 2026-11-09 pin used (1,676 over a measured 1,656). The cost is still paid
+    # only with `[tools] short_list = true`, which ships OFF.
     # Pinned 1,635 -> 1,676 on 2026-11-09 (wave 13), and this is the whole of
     # the growth, measured with this module's own estimate_tokens rule: the
     # short list reads 1,656 here, where origin/main (d6df4022) reads 1,615.
@@ -404,9 +413,18 @@ def t_what_it_saves():
     # alternative - folding `send_text_message` into the existing `send_email`
     # group - was turned down for the reason this note keeps giving: that
     # group's line says "send an email", and a text message is not one.
-    check("more_tools itself stays small (at most 460 tokens)",
+    # Pinned 460 -> 482 on 2026-11-10 (wave 16), by the same rule: the `github`
+    # group's own line now lists the three GitHub tools the owner's "Everything
+    # at once" decision added (github_pr_scan, github_merge_pr,
+    # github_fix_and_push), and a member name costs this card its characters.
+    # Measured on this tree with estimate_tokens: 482, where it read 469 before
+    # the three names - so the old 460 had no room and the names need 13. 482
+    # leaves 0 spare; the next tool that lands here must widen this pin with its
+    # own measurement, which is exactly what this note is for. The cost is paid
+    # only with `[tools] short_list = true`, which ships OFF.
+    check("more_tools itself stays small (at most 482 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 460)
+          <= 482)
 
 
 if __name__ == "__main__":

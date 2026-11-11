@@ -228,17 +228,28 @@ SERVICES: "collections.OrderedDict[str, Service]" = collections.OrderedDict([
             name="token",
             label="GitHub personal access token",
             kind="token",
-            hint=("On github.com: Settings, Developer settings, Personal access tokens, "
-                  "then create one. A read-only token is enough to read private "
-                  "repositories, CI and a file; commenting, opening an issue, "
-                  "re-running a workflow and creating a repository need a token "
-                  "allowed to write issues, actions and repositories."),
+            hint=("On github.com: Settings, Developer settings, Personal access "
+                  "tokens, then a FINE-GRAINED token. Limit it to the repositories "
+                  "you choose and set an expiration date. Its repository "
+                  "permissions: Metadata, read-only (mandatory base, and it also "
+                  "lets Jarvis read branch rulesets); Pull requests, read and "
+                  "write; Issues, read and write; Actions, read and write; "
+                  "Contents, read and write. GitHub groups pull-request merging "
+                  "and branch pushing under Contents: write, so Jarvis protects "
+                  "every merge and push with its own approval card. Leave these "
+                  "OFF: Workflows (write), Administration, Secrets, Environments "
+                  "and Pages."),
         ),),
-        summary=("Jarvis uses this token for GitHub searches, private repositories and "
-                 "CI watches - and, when the GitHub tools are switched on, to read your "
-                 "repositories, pull requests, issues, CI and a file, comment, open an "
-                 "issue, re-run a workflow and create one new empty repository, each on "
-                 "its own card. It is sent to api.github.com and nowhere else."),
+        summary=("Jarvis uses a fine-grained token, limited to the repositories you "
+                 "choose, for GitHub searches, private repositories and CI watches - "
+                 "and, when the GitHub tools are switched on, to read your "
+                 "repositories, pull requests, issues, CI and a file, scan the pull "
+                 "requests that can be merged, comment, open an issue, re-run a "
+                 "workflow, create one new empty repository, merge one pull request "
+                 "with a merge commit pinned to the commit on its card, and push a fix "
+                 "to one pull request's own branch from a scratch folder - each on its "
+                 "own card. It never squash-merges, force-pushes, pushes to main or "
+                 "deletes anything. It is sent to api.github.com and nowhere else."),
         note=("The token is handled like a password: typed here, on this PC, and kept "
               "in Windows Credential Manager - never in the chat."),
         how="Say \"connect GitHub\" and one card appears for a personal access token.",

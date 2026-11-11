@@ -159,21 +159,22 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        // 62 at 2026-11-09 (60 at 2026-11-05): the seven on-demand GitHub
-        // tools, hands-free's
-        // send_text_message, the four pack-manager tools and the approval-policy
-        // tool's own row all joined the
-        // switchable list (48 since the owner's decision of 2026-11-04: every
-        // tool the AI model can be offered is a switch, raw Tier C set and
-        // everyday helpers included; 21 before that). The phone still shows
-        // them read-only.
-        assertEquals("62 one-tool switches", 62, rawIds.size)
+        // 65 at 2026-11-10 (62 at 2026-11-09, 60 at 2026-11-05): the seven
+        // on-demand GitHub tools, hands-free's send_text_message, the four
+        // pack-manager tools and the approval-policy tool's own row all joined
+        // the switchable list (48 since the owner's decision of 2026-11-04:
+        // every tool the AI model can be offered is a switch, raw Tier C set and
+        // everyday helpers included; 21 before that), and wave 16's read-only PR
+        // cockpit, carded merge and carded fix-and-push are the 63rd, 64th and
+        // 65th. The phone still shows them read-only.
+        assertEquals("65 one-tool switches", 65, rawIds.size)
         for (id in listOf("shell_exec", "control_computer", "browser_control",
                 "read_web_page", "connect_account", "rea_investigate",
                 "calculator", "propose_plan", "web_search",
                 "github_list", "github_read_file", "github_ci_status",
                 "github_comment", "github_open_issue", "github_rerun_workflow",
-                "github_create_repo")) {
+                "github_create_repo", "github_pr_scan", "github_merge_pr",
+                "github_fix_and_push")) {
             assertTrue("$id is switchable in the app since 2026-11-04", rawIds.contains(id))
         }
         for (id in listOf("approve_web_search_for_conversation", "stop_web_search_approval",

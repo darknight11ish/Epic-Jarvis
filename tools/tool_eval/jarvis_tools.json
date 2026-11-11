@@ -624,6 +624,100 @@
  {
   "type": "function",
   "function": {
+   "name": "github_pr_scan",
+   "description": "The pull request cockpit: list the open pull requests on one repository and say, for each one, whether it can be merged - merge-ready, blocked, conflicted, running or draft - and which required check is holding it. It prints each pull request's full 40-character head commit, its title and its base branch, so that commit, title and base branch can be passed straight to github_merge_pr. Read-only: nothing on GitHub changes. It asks you before every read, and it never merges anything itself; merging is a separate carded tool. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; and read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer. It can also take six carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, then push the commits you make there to that pull request's OWN branch on a SECOND card (github_fix_and_push). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card. For the plain list of open pull requests, use github_list with scope \"pulls\". For one branch's or pull request's newest run, use github_ci_status.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     }
+    },
+    "required": [
+     "repo"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_merge_pr",
+   "description": "Merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit you pass. Copy the commit, the title and the base branch from github_pr_scan, exactly as it printed them, because a different or short commit is refused. One card names the commit, the title and the target branch. It refuses, sending nothing, if the pull request is a draft, cannot merge cleanly, has a check running, a required check failed, moved, or was retargeted to another base branch. It can never squash, rebase, use an admin bypass, turn on auto-merge or bypass a required check. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; and read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer. It can also take six carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, then push the commits you make there to that pull request's OWN branch on a SECOND card (github_fix_and_push). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card. To see which pull requests are ready first, use github_pr_scan. To read CI without merging, use github_ci_status.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the pull request number"
+     },
+     "head_sha": {
+      "type": "string",
+      "description": "its full 40-character head commit, exactly as github_pr_scan printed it"
+     },
+     "title": {
+      "type": "string",
+      "description": "its title, exactly as github_pr_scan printed it"
+     },
+     "base_ref": {
+      "type": "string",
+      "description": "the branch it merges into, exactly as github_pr_scan printed it after \"base\""
+     }
+    },
+    "required": [
+     "repo",
+     "number",
+     "head_sha",
+     "title",
+     "base_ref"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_fix_and_push",
+   "description": "Fix a failing pull request in a scratch folder, then push it to its own branch. \"prepare\" reads the failing checks and copies it there; \"push\" shows its commits and command on a second card. It never force-pushes, deletes a branch or pushes to a protected branch, and refuses a folder outside the scratch root or a credential file. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; and read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer. It can also take six carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, then push the commits you make there to that pull request's OWN branch on a SECOND card (github_fix_and_push). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card. To see what is failing, use github_pr_scan. To merge a ready one, use github_merge_pr.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "prepare",
+       "push"
+      ],
+      "description": "prepare or push"
+     },
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the pull request number"
+     },
+     "worktree": {
+      "type": "string",
+      "description": "the scratch folder"
+     }
+    },
+    "required": [
+     "repo",
+     "number"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "web_search",
    "description": "Search the public web for current or outside information. Returns up to 5 results: title, link, snippet. Use a few plain search words; never put private details in them. For what Jarvis knows about the owner, use memory_search. For the owner's own notes, use notes_search. To grade GitHub libraries for a coding idea, use github_search.",
    "parameters": {

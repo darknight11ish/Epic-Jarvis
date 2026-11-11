@@ -1348,6 +1348,18 @@
      "name": "Creating one new empty repository on your GitHub (one card each)"
     },
     {
+     "id": "github_pr_scan",
+     "name": "Looking at your open pull requests and whether they can be merged (one card each)"
+    },
+    {
+     "id": "github_merge_pr",
+     "name": "Merging one pull request with a merge commit, pinned to its head commit (one card each)"
+    },
+    {
+     "id": "github_fix_and_push",
+     "name": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)"
+    },
+    {
      "id": "web_search",
      "name": "Web search"
     },

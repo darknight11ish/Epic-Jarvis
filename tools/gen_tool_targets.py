@@ -89,6 +89,16 @@ EXTRA_NAMES = {
     "my_spending": ("spending summary", "spending"),
     "read_web_page": ("one web page", "web page"),
     "send_file_to_phone": ("file to phone",),
+    # The owner says "pull request", and the tool's own name says "pr" (wave 16,
+    # 2026-11-10: the cockpit, the carded merge and the carded fix-and-push).
+    # The EXACT tool name is the real name and stays the first form; these are
+    # the words a person actually uses, added after it like every other entry.
+    "github_pr_scan": ("the github pull request scan tool", "github pull request scan tool",
+                       "the github pull request scan", "github pull request scan"),
+    "github_merge_pr": ("the github pull request merge tool", "github pull request merge tool",
+                        "the github pull request merge", "github pull request merge"),
+    "github_fix_and_push": ("the github pull request fix tool", "github pull request fix tool",
+                            "the github pull request fix", "github pull request fix"),
 }
 
 

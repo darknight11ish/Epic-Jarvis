@@ -120,6 +120,14 @@ TOOL_NAMES = {
     # The one CREATE (2026-11-09): one new, empty repository on the owner's own
     # account, one card each, never an organization's and never bulk.
     "github_create_repo": "Creating one new empty repository on your GitHub (one card each)",
+    # The read-only PR cockpit and the two carded writes of 2026-11-10 (the
+    # owner's "Everything at once"). A merge and a push each have their own card.
+    "github_pr_scan": "Looking at your open pull requests and whether they can be merged "
+                      "(one card each)",
+    "github_merge_pr": "Merging one pull request with a merge commit, pinned to its head "
+                       "commit (one card each)",
+    "github_fix_and_push": "Pushing a fix to one pull request's own branch from a scratch "
+                           "folder (one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",

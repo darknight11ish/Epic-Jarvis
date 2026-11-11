@@ -3161,32 +3161,40 @@ backend routes, in both directions; the rest are listed here only.
   and confuse that for the call (the PC's own delete of a recording it holds is
   a separate, PC-only route behind its own card).
 - **Your own GitHub is read and acted on by chat, and neither app has a screen
-  for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
-  tools = Read + actions"*; JARVIS-API §190). The ABILITY is on both apps'
-  chats, because the seven model tools (`github_list`, `github_read_file`,
-  `github_ci_status`, `github_comment`, `github_open_issue`,
-  `github_rerun_workflow`, and since 2026-11-09 `github_create_repo`) run on
-  this PC and either app's chat is the same turn. What is deliberately
-  one-sided is a screen: neither app lists repos, pull requests or runs, and
-  neither opens a comment box, a repository-name box or a "create" button. A
-  repository list, a diff and a comment editor are deep configuration and a
-  second door onto the owner's own code; the chat tool is the door, and the
-  card is the decision. **The one CREATE is the same decision, and the phone
-  deliberately gets no screen for it either:** `github_create_repo` is a model
-  tool, so the typed sentence works identically in both apps' chats, and
-  building a name-and-private-flag form on the phone would be a second door
-  onto a write that cannot be undone - exactly what the 2026-11-03 ruling
-  avoids. The card itself is answerable on the phone (the gate's own card
-  surface), which is where the owner's yes actually happens. No route was
-  added, so `tools/check_parity.py` is unchanged and clean. What asks first is
-  five gate actions, every one `ask`: `github_inspect` (the three reads - they
-  ask too, because a read still sends the saved GitHub token out),
-  `github_comment`, `github_open_issue`, `github_rerun_workflow` and
-  `github_create_repo`. They are NOT the existing `github_read`, which is the
-  scheduled look a "tell me when" watch makes and must stay `auto`; the reason
-  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close;
-  the one thing it can make is a new, empty repository, and it cannot delete
-  that. `backend/test_github_tools.py` holds the whole of it.
+  for it - one-sided on purpose** (2026-11-03, extended 2026-11-10; the owner's
+  decisions: *"GitHub tools = Read + actions"* on 2026-11-03 and *"Everything at
+  once"* on 2026-11-10; JARVIS-API §190). The ABILITY is in both apps' chats,
+  because the ten model tools (`github_list`, `github_read_file`,
+  `github_ci_status`, the read-only pull request cockpit `github_pr_scan`, and
+  the six carded writes `github_comment`, `github_open_issue`,
+  `github_rerun_workflow`, `github_create_repo`, `github_merge_pr` and
+  `github_fix_and_push`) run on this PC and either app's chat is the same turn -
+  including the merge and the fix-and-push: either app can type the sentence and
+  answer the card. **Two things are PC-only, deliberately.** The **token store**:
+  the personal access token is typed on a PC card, lives in Windows Credential
+  Manager on this PC, and never travels to or through a phone. And the **scratch
+  folder** the fix-and-push copies a failing pull request into - the folder
+  `%LOCALAPPDATA%\Jarvis\github-fix`, under `JARVIS_GITHUB_SCRATCH_ROOT` -
+  because there is no folder on the phone to copy into and no phone control
+  that pushes code. **What is one-sided is a SCREEN:** neither app lists repos,
+  pull requests or runs, and neither opens a comment box, a repository-name box
+  or a "create" button - no GitHub screen exists on either app. A repository
+  list, a diff and a comment editor are deep configuration and a second door
+  onto the owner's own code; the chat tool is the door, and the card is the
+  decision. No route was added, so `tools/check_parity.py` is unchanged and
+  clean. What asks first is seven gate actions, every one `ask`:
+  `github_inspect` (the four reads - they ask too, because a read still sends
+  the saved GitHub token out) and the six carded writes `github_comment`,
+  `github_open_issue`, `github_rerun_workflow`, `github_create_repo`,
+  `github_merge_pr` and `github_fix_and_push`. They are NOT the existing
+  `github_read`, which is the scheduled look a "tell me when" watch makes and
+  must stay `auto`; the reason is in JARVIS-API §190.2. Merge and PR-branch push
+  are real now - merge-commit only, pinned to the 40-hex head commit the card
+  showed - and everything else stays impossible: no force-push, no squash, no
+  rebase, no admin bypass, no auto-merge, no bypassing required checks, no
+  pushing to main, no delete or close of a repository or branch, no approve-pr,
+  no workflow dispatch and no gist. `backend/test_github_tools.py` holds the
+  whole of it.
 
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
@@ -5128,6 +5136,21 @@ what is missing is only the Settings screen agreeing about who turned it off.
   module itself (`jarvis_owner_check.from_this_pc`), so this is enforced rather
   than merely unported, and `tools/check_parity.py` classifies both
   `deliberate`.
+
+- **The GitHub merge and fix-and-push cards have no phone screen, and that is
+  one-sided on purpose** (2026-11-10, the owner's "Everything at once";
+  `docs/JARVIS-API.md` §190.9-§190.10). The ABILITY is not one-sided: the
+  ten GitHub tools run on this PC's backend and either app's chat is the same
+  turn, so a merge or a push can be asked for and approved from the phone's
+  chat exactly as from the desktop's - each raises its own card, and the card is
+  answered on whichever app shows it. What is one-sided is the two things that
+  physically live here: the token (Windows Credential Manager, written by the
+  PC-only "connect GitHub" card) and the fix-and-push scratch folder
+  (`%LOCALAPPDATA%\Jarvis\github-fix`), so `stage="prepare"` copies and
+  diagnoses the pull request on this PC and the fix is edited and committed
+  there. Neither app gained a GitHub screen, and `tools/check_parity.py` is
+  unchanged because no route was added: a GitHub screen would be deep
+  configuration, which the standing rule keeps off the phone.
 
 ## 9. Where the backend lives
 

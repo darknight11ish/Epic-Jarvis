@@ -184,6 +184,11 @@ TITLES = {
     # Fitness Band"): one new, empty repository on his own account. Its own
     # title, because "open a GitHub issue" is a different action.
     "github_create_repo": "create a new repository on your GitHub",
+    # The two 2026-11-10 actions (the owner's "Everything at once"). Each says
+    # exactly what it changes: "merge a pull request" is not "read your GitHub",
+    # and "push a fix" is not "post a comment".
+    "github_merge_pr": "merge a pull request with a merge commit",
+    "github_fix_and_push": "push a fix to a pull request's own branch",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -462,6 +467,8 @@ SUMMARY = {
     "github_open_issue": "open a GitHub issue",
     "github_rerun_workflow": "run a workflow again",
     "github_create_repo": "create a repository",
+    "github_merge_pr": "merge a pull request (merge commit only)",
+    "github_fix_and_push": "push a fix to a pull request",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

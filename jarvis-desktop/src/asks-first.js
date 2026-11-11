@@ -70,11 +70,13 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 62 at 2026-11-09 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
+ * 65 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
  * GitHub tools that landed with the GitHub tools branch, the four pack-manager
  * tools, hands-free's send_text_message and the approval-policy tool's own
- * row; wave 13's carded github_create_repo made it 61, and 62 adds project_read's
- * own row, the read half of "Jarvis takes over dev work"). A DIFFERENT thing from SWITCHABLE
+ * row; wave 13's carded github_create_repo made it 61, 62 added project_read's
+ * own row, the read half of "Jarvis takes over dev work", and wave 16's three
+ * GitHub tools of 2026-11-10 - the read-only PR cockpit, the carded merge and
+ * the carded fix-and-push - made it 65). A DIFFERENT thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -107,16 +109,19 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "project_read",
   // Jarvis's own tools, which had no switch row at all before 2026-11-04 (25:
   // the original 12, plus the four pack-manager tools, hands-free's
-  // send_text_message, the seven on-demand GitHub tools and the approval row)
+  // send_text_message, the ten on-demand GitHub tools and the approval row)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove",
   "send_text_message", "refresh_abilities", "self_portrait", "setup_quiz",
   // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05),
-  // including the carded repository create added 2026-11-09
+  // including the carded repository create added 2026-11-09 and the three
+  // tools of 2026-11-10: the read-only PR cockpit, the carded merge and the
+  // carded fix-and-push
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
-  "github_create_repo", "approval_policy",
+  "github_create_repo", "github_pr_scan", "github_merge_pr",
+  "github_fix_and_push", "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

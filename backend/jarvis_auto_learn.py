@@ -682,6 +682,17 @@ def _stats_read() -> dict:
     out = {"passes": 0, "saved": 0, "carded": 0, "failed": 0,
            "last_pass_at": None, "last_error": None, "last_error_at": None,
            "last_saved_at": None,
+           # 2026-11-10 (owner's 10:40 PT ruling, Q6 Bug 6B): the ACTUAL reason
+           # and time the most recent pass failed to do its work, whatever
+           # stopped it - a raised exception, the local model lane answering
+           # HTTP 500/timing out, or a batch check failing. `last_error` used to
+           # be written only by `note_failure` (a RAISED pass), so the live HUD
+           # showed a month-old `after_pass: OperationalError` (2026-10-10)
+           # while last night's model-lane failures were recorded nowhere it
+           # read - `last_model_error` is its own counter and no screen's
+           # "last error" line reads it. These two carry the newest failure of
+           # ANY kind, so a stale line can never mask a current one.
+           "last_pass_error": None, "last_pass_error_at": None,
            # 2026-10-28 (DEF-017): the model call itself failing is a DIFFERENT
            # thing from a pass that raised, and it used to be counted nowhere -
            # the learner printed "reached no model" and `failed` never moved.
@@ -730,15 +741,49 @@ def note_pass(*, saved: int = 0, carded: int = 0, at: Optional[float] = None) ->
     return d
 
 
+def note_pass_failure(reason, *, at: Optional[float] = None) -> dict:
+    """Record the ACTUAL reason and time a pass failed to do its work.
+
+    (Owner's 2026-11-10 10:40 PT ruling, Q6 Bug 6B.) One place writes BOTH the
+    old, screen-facing pair (`last_error`/`last_error_at`) and the explicit
+    pass pair (`last_pass_error`/`last_pass_error_at`), so:
+      * a raised pass, a model-lane HTTP 500/timeout and a failed batch check
+        all update the same two lines, and the newest failure is what a screen
+        shows - a month-old error can no longer sit there masking current ones;
+      * what is written is a CLOSED-WORLD sentence (a batch reason built by this
+        module, or the model reason from `_model_error_words`), never a prompt
+        word and never an answer word.
+    Best effort like every counter: a read-only folder never breaks a pass.
+    """
+    d = _stats_read()
+    words = str(reason or "").strip()[:300]
+    if not words:
+        return d
+    now = time.time() if at is None else at
+    d["last_error"] = words
+    d["last_error_at"] = now
+    d["last_pass_error"] = words
+    d["last_pass_error_at"] = now
+    _stats_write(d)
+    return d
+
+
 def note_failure(where: str, exc: BaseException, *, at: Optional[float] = None) -> dict:
     """A learning pass RAISED. One audit line, one counter, and the lesson is
     carried on the next status read - so a broken loop cannot look like a
-    quiet one."""
+    quiet one.
+
+    2026-11-10 (Q6 Bug 6B): it also records the failure in `last_pass_error`/
+    `last_pass_error_at`, so a raised pass and every other kind of failed pass
+    answer the same two fields on `GET /api/memory/learning`.
+    """
     d = _stats_read()
     d["failed"] = int(d.get("failed") or 0) + 1
     now = time.time() if at is None else at
     d["last_error"] = f"{where}: {type(exc).__name__}"
     d["last_error_at"] = now
+    d["last_pass_error"] = d["last_error"]
+    d["last_pass_error_at"] = now
     _stats_write(d)
     try:
         _audit("learning.failed", {"where": str(where), "kind": type(exc).__name__})
@@ -777,6 +822,14 @@ def note_model_failure(reason, *, at: Optional[float] = None) -> dict:
     how eight 2026-10-10 events could sit under a "reached no model" line for
     two weeks: `failed` never moved, so nothing looked wrong.
 
+    2026-11-10 (owner's 10:40 PT ruling, Q6 Bug 6B): it now ALSO updates
+    `last_error`/`last_error_at` and `last_pass_error`/`last_pass_error_at`
+    with the actual reason and time. That is the live defect this fixes: 8 of
+    17 passes failed and `GET /api/memory/learning` still showed a 2026-10-10
+    `after_pass: OperationalError`, because an HTTP 500/timeout on the model
+    lane only ever touched `last_model_error`, which that read's "last error"
+    line does not show.
+
     `reason` is `jarvis_extract`'s own dict - kind/status/seconds/done_reason.
     Nothing here reads the prompt or the answer, and nothing it writes can.
     """
@@ -785,6 +838,10 @@ def note_model_failure(reason, *, at: Optional[float] = None) -> dict:
     now = time.time() if at is None else at
     d["last_model_error"] = _model_error_words(reason)
     d["last_model_error_at"] = now
+    d["last_error"] = d["last_model_error"]
+    d["last_error_at"] = now
+    d["last_pass_error"] = d["last_model_error"]
+    d["last_pass_error_at"] = now
     _stats_write(d)
     try:
         _audit("learning.model_unreachable",
@@ -804,6 +861,34 @@ def note_saved(n: int, *, at: Optional[float] = None) -> dict:
     d["last_saved_at"] = time.time() if at is None else at
     _stats_write(d)
     return d
+
+
+#: How many unembedded facts ONE learning pass repairs (owner's 2026-11-10
+#: 10:40 PT ruling, Q6 Bug 6A). Small on purpose: a pass must stay a pass, and
+#: any backlog is worked down across the passes that follow. The live case this
+#: fixes was 4 current facts with no vector, and no pass ever repaired them.
+BACKFILL_PER_PASS = 64
+
+
+def _backfill_embeddings_safely(limit: int = BACKFILL_PER_PASS) -> int:
+    """Embed up to `limit` facts that were saved with no embedder available.
+
+    Q6 Bug 6A: `jarvis_memory.MemoryStore.backfill_embeddings()` existed but
+    had NO caller in the shipped backend, so a fact stored while the embedding
+    model was down/unloaded stayed findable only by keyword for ever -
+    `GET /api/memory/status` reported `semantic: true` while `unembedded: 4`.
+    The learning pass is the one job that runs repeatedly by itself, so it
+    repairs a bounded batch on every pass. Never raises; returns how many rows
+    this call repaired (0 when the store is missing or nothing could embed).
+    """
+    try:
+        st = _store()
+        fn = getattr(st, "backfill_embeddings", None)
+        if not callable(fn):
+            return 0
+        return max(0, int(fn(limit=limit) or 0))
+    except Exception:                                          # noqa: BLE001
+        return 0
 
 
 #: The reasons from jarvis_sensitive that mean THE CHECK could not run, rather
@@ -870,8 +955,9 @@ def stats() -> dict:
                        f"{d['carded']} fact(s) are waiting on cards.")
     else:
         out["note"] = f"{d['saved']} fact(s) saved so far, over {d['passes']} pass(es)."
-    if d.get("last_error"):
-        out["note"] += f" The last pass failed ({d['last_error']})."
+    last_pass_words = d.get("last_pass_error") or d.get("last_error")
+    if last_pass_words:
+        out["note"] += f" The last pass failed ({last_pass_words})."
     if d.get("last_model_error"):
         out["note"] += (f" The local model did not answer on the last try "
                         f"({d['last_model_error']}).")
@@ -2883,6 +2969,11 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
     their reason noted. Returns {"saved": [fact ids], "cards": {pid: reason}}.
     Never raises."""
     result = {"saved": [], "cards": {}}
+    # Q6A (owner's 2026-11-10 10:40 PT ruling): repair a bounded batch of facts
+    # that were saved while no embedder was available, BEFORE the "nothing to
+    # learn" early return below - a pass that learns nothing is exactly when a
+    # keyword-only fact used to sit unembedded for ever. Never raises.
+    result["embedded"] = _backfill_embeddings_safely()
     texts, entries = [], []
     try:
         texts = [t.get("content") if isinstance(t, dict) else t for t in turns or []]
@@ -3081,6 +3172,13 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 result["fault"] = note_fault(
                     fault_reason,
                     count=len([w for w in decisions.values() if w == fault_reason]))
+                # Q6B (owner's 2026-11-10 10:40 PT ruling): a pass stopped by a
+                # batch FAULT saved nothing because something is broken - record
+                # the ACTUAL reason and time as this pass's failure, so
+                # `GET /api/memory/learning` can never show an older error while
+                # passes fail. (The local model lane failing mid-extraction is
+                # recorded the same way by note_model_failure.)
+                note_pass_failure(fault_reason)
             elif fault().get("active"):
                 clear_fault()
         except Exception:                                     # noqa: BLE001

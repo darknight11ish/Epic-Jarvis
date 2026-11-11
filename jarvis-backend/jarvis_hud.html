@@ -3235,32 +3235,59 @@ html[data-hud-shell="single-stage-bento"] #hud-return-pill:not([hidden]){display
 #hud-return-pill .hud-return-glyph{font-size:14px; color:var(--ice);}
 #hud-return-pill-status:empty{display:none;}
 
-/* ---- §1.2 THE TWO-COLUMN COCKPIT: DESIGNED, NOT SHIPPED (2026-11-10) -- *
- * The design's Just Talk row (spec §1.2) asks for the stage and the right
- * rail and NO left column, with the rail as the off-canvas drawer this page
- * already knows how to open. That is what was built and measured first: a
- * `html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"])` rule set
- * (two grid columns, the rail fixed off-canvas, `#left-toggle` shown, Edit
- * HUD exempt) passed its own browser checks - two columns, the drawer really
- * opening, Escape really closing it, three columns back in edit mode.
+/* ---- §1.2 THE TWO-COLUMN COCKPIT ------------------------------------- *
+ * "Just Talk" (internal id `cockpit`) is the everyday layout: the stage and
+ * the 248px right rail, with NO left column on the glass (spec §1.2, "Remove
+ * Left Sidebar"). Command Center (`second_brain`) is the SAME `three-column`
+ * shell and keeps its sidebar, so the shell cannot say this - the page writes
+ * the active layout's base preset into `data-hud-preset` (hud-layout.js's
+ * `PRESET_ATTR`) and the rules below give that ONE layout two columns.
  *
- * IT IS NOT IN THIS TREE because the HUD's DEFAULT layout is `cockpit`: a
- * first run with no saved layout migrates to it (hud-layout-store.js
- * `loadLayout`), so the rail would be off the glass for every HUD window that
- * has not chosen Command Center. Eleven checks in tests/hud-presets.mjs alone
- * click a focus preset or the Cloud row inside that rail, and every one of
- * them then fails with Playwright's "element is outside of the viewport" -
- * the page is right and the tests describe the previous default. Shipping the
- * shape without adapting those suites (and the others that reach
- * `#presets`, `#lanes`, `#rail-faces`, `#rail-calendar-open`) would leave
- * required suites red, which this branch must not do.
+ * The left rail is not deleted: it becomes the SAME off-canvas drawer the
+ * `center-core` / `single-stage-bento` shells use, opened by the stage bar's
+ * "☰ Controls" toggle (already wired: #left-toggle + #left-close + Escape, no
+ * new JavaScript), so the rail's Presets / Faces / Calendar / Live / Brain /
+ * Galaxy-options doors are one click away instead of always on screen. That is
+ * what retires the wall of rail symbols as DEFAULT navigation - the design's
+ * actual complaint (spec §2.1: "Retire the 18 unlabelled symbols as default
+ * navigation").
  *
- * WHAT IS LEFT FOR WHOEVER TAKES IT: re-add the rule set (it is one block),
- * then give each affected suite a two-line helper that opens the drawer when
- * the rail is off-canvas - the same shape tests/hud.mjs already uses for its
- * drawer shells (`neededDrawer`) - and run them all. `PRESET_ATTR` is already
- * written by this page, so no other page work is needed.
- */
+ * EDITING IS THE EXCEPTION, on purpose: while `data-hud-edit="on"` the real
+ * three-column arrangement is drawn, because that is the document the owner is
+ * editing and a hidden column would hide half the cards.
+ *
+ * The two media queries match the page's own breakpoints: below 1081px the
+ * right rail is already a fixed drawer, so cockpit is ONE column there rather
+ * than an empty 248px track.
+ *
+ * SHIPPED in Wave 16 (Gemini ruling Q1, owner's 2026-11-10 00:05 PT, Option A).
+ * The build was held back once in Wave 15 because the HUD's default layout is
+ * `cockpit`, so a browser suite that clicked a control inside #rail-left failed
+ * with Playwright's "element is outside of the viewport". That is fixed in the
+ * tests, not by adding any page switch: each affected suite opens this drawer
+ * first with the same two-line `neededDrawer` shape tests/hud.mjs uses for its
+ * drawer shells, clicking the page's own [☰ Controls] toggle. No new
+ * JavaScript: #left-toggle / #left-close / Escape are the page's existing
+ * drawer wiring. */
+html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) .rail.left{
+  position:fixed; top:0; left:0; bottom:0; width:min(260px, 84vw);
+  z-index:26; background:var(--surface-sunken);
+  border-right:1px solid var(--line); padding:12px 10px 18px;
+  overflow-y:auto; transform:translateX(-100%); transition:transform .18s ease;
+}
+html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) .rail.left.open{transform:none;}
+html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) .left-toggle{display:flex;}
+@media (min-width:1081px){
+  html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) #shell{
+    grid-template-columns:minmax(0,1fr) 248px;
+  }
+}
+@media (max-width:1080px){
+  html[data-hud-preset="cockpit"] body:not([data-hud-edit="on"]) #shell{
+    grid-template-columns:minmax(0,1fr);
+  }
+}
+
 /* ---- §2.1 ZONE B: the window header's own actions ------------------- */
 .hud-head-door{display:inline-flex; align-items:center; gap:6px; flex-shrink:0;}
 .hud-head-door[hidden]{display:none !important;}

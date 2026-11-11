@@ -86,22 +86,39 @@ Settings screen and no app change, which is why `tools/check_parity.py` is
 untouched. Proved by `backend/test_plugin_switch.py`; documented in
 `docs/JARVIS-API.md` section 181 and `docs/ARCHITECTURE.md` section 8.
 
-**The GitHub tools - "Read + actions" (2026-11-03; JARVIS-API §190).** The
-owner's decision that Jarvis may read his GitHub and take a few small actions on
-it, each behind its own card, never merging and never pushing. Six model tools
-in `backend/jarvis_agent.py`, all on the network half in
-`backend/jarvis_github.py` (a SHIPPED module, so no patch for the code): three
-READS - `github_list`, `github_read_file`, `github_ci_status` - and three
-ACTIONS - `github_comment`, `github_open_issue`, `github_rerun_workflow`. The
-module talks to `api.github.com` and nothing else, refuses a redirect, caps
-every answer, never prints the token, and says a failure in a sentence with no
-HTTP code in it. The reads ask a person too: a fixed-endpoint read still sends
-the owner's own GitHub token out, which is why they are NOT the existing
+**The GitHub tools - "Read + actions" (2026-11-03; wave 16 finished the surface
+on 2026-11-10; JARVIS-API §190).** The owner's decisions: Jarvis may read his
+GitHub and take a few small actions on it, each behind its own card ("Read +
+actions", 2026-11-03), and wave 16's "Everything at once" (2026-11-10) added
+the merge and the fix-and-push. **Ten model tools** in
+`backend/jarvis_agent.py`, all on the network half in `backend/jarvis_github.py`
+(a SHIPPED module, so no patch for the code): four READS - `github_list`,
+`github_read_file`, `github_ci_status` and the read-only pull request cockpit
+`github_pr_scan`, which prints every open pull request's full 40-hex head commit
+and base branch - and **six carded WRITES** - `github_comment`,
+`github_open_issue`, `github_rerun_workflow`, `github_create_repo`,
+`github_merge_pr` and `github_fix_and_push`. The module talks to
+`api.github.com` and nothing else, refuses a redirect, caps every answer, never
+prints the token, and says a failure in a sentence with no HTTP code in it.
+**The two new cards of 2026-11-10, both `ask`, both in `NEEDS_A_PERSON`:** the
+merge is ONE merge commit only, pinned to the exact 40-hex head commit the card
+showed, and the `PUT` is refused - sending nothing - if the pull request is a
+draft, closed, moved, conflicted, still running a check, or has a required check
+that has not passed; fix-and-push is TWO stages and TWO cards (prepare copies a
+failing pull request into an isolated scratch folder under
+`%LOCALAPPDATA%\Jarvis\github-fix` and pushes nothing; push sends only the
+commits a person made there, to that pull request's own branch, with a
+credential-file denylist and no force flag). The token travels only in git's own
+`GIT_CONFIG_*` environment config - never in a URL, never on a command line and
+never written to disk. The reads ask a person too: a fixed-endpoint read still
+sends the owner's own GitHub token out, which is why they are NOT the existing
 `github_read` action (that one is the scheduled look a "tell me when" watch
 makes, and `jarvis_tellme.py` refuses to run a watch unless it stays `auto`).
-Their own action is `github_inspect`, at `"ask"`; all six are also in
-`NEEDS_A_PERSON`, so a loosened tier still asks. No merge, push, commit, delete
-or close exists anywhere, by construction. `backend/github-tools.patch` is the
+Their own action is `github_inspect`, at `"ask"`; all ten are also in
+`NEEDS_A_PERSON`, so a loosened tier still asks. Everything else stays
+impossible: no force-push, squash, rebase, admin bypass, auto-merge, bypassing
+required checks, direct push to main, delete or close of a repository or branch,
+approve-pr, workflow dispatch or gist. `backend/github-tools.patch` is the
 one gate change - `jarvis_gate.py` is not in `$SHIPPED`, so only a patch reaches
 the owner's own gate - and it is ONE hunk in the middle of that file,
 immediately AFTER `web-search-grant.patch` and BEFORE
@@ -110,7 +127,7 @@ end of the file belongs to `web-search-grant.patch`'s own block, whose last
 hunk must stay the last bytes (`git apply -R` needs that post-image contiguous
 and ending at EOF), so a block put after it broke that reversal. It anchors on
 the owner's own text - the end of `review()` and the opening of the
-`if __name__` block. All six ship
+`if __name__` block. All ten ship
 switched off, like `github_search`. Proved by `backend/test_github_tools.py`
 (no network, no real token); documented in `docs/JARVIS-API.md` section 190 and
 `docs/ARCHITECTURE.md` section 8.

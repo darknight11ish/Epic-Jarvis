@@ -597,7 +597,10 @@ BENCH_RUN_NEW_FILE = "hud-bench-run-new.txt"
 #: (history-purge), so only a file carrying the whole post-image counts as present, and
 #: none of them exists in the live files today (measured: 0 occurrences each).
 GITHUB_TOOLS_PROBES = (
-    '#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions',
+    # One added line from EACH `update` block the patch appends: the door
+    # mapping block and the risk block. (The old first probe was this patch's
+    # own header comment - the wave-16 patch no longer adds that comment line,
+    # and the class guard rightly refuses a probe the patch does not add.)
     '    "github_list": "github_inspect",',
     '    "github_comment": ("no", "outbound",',
 )

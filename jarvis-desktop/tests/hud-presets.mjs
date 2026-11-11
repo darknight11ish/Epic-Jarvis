@@ -358,6 +358,40 @@ async function presetRows(page) {
     })));
 }
 
+/**
+ * The cockpit layout is REALLY two columns since Wave 16 (Gemini ruling Q1):
+ * the left rail is an off-canvas drawer, opened by the page's own
+ * [☰ Controls] button and closed by Escape. This page's default layout is
+ * cockpit, so a click on a control inside #rail-left lands on an element that
+ * is off the glass and Playwright refuses it with "element is outside of the
+ * viewport". Open the drawer first, exactly as a person reaches the rail - the
+ * same two-line `neededDrawer` shape tests/hud.mjs uses for its drawer shells.
+ * Returns true when it had to open it.
+ */
+async function openRail(page) {
+  const opened = await page.evaluate(() => {
+    const rail = document.getElementById("rail-left");
+    if (!rail) return false;
+    const r = rail.getBoundingClientRect();
+    if (r.width > 1 && r.left >= -1) return false;   // a layout that keeps it on screen
+    const toggle = document.getElementById("left-toggle");
+    if (!toggle) return false;
+    toggle.click();
+    return true;
+  });
+  if (opened) await page.waitForTimeout(350);
+  return opened;
+}
+
+/** Put the drawer away again, so it cannot sit over a control in the stage. */
+async function closeRail(page) {
+  await page.evaluate(() => {
+    const rail = document.getElementById("rail-left");
+    if (rail) rail.classList.remove("open");
+  });
+  await page.waitForTimeout(200);
+}
+
 async function sendChat(page, text = "hello there") {
   await page.evaluate((t) => {
     document.getElementById("input").value = t;
@@ -441,6 +475,7 @@ await check("the model chip reads the chosen preset's model at boot, never the P
 
 await check("a click posts /api/work/apply once with the right preset id, then marks the PC's answer", async () => {
   const { page, state, problems } = await openHud(browser);
+  await openRail(page);
   await page.click('#presets .preset[data-preset="general"]');
   await page.waitForTimeout(700);
   const rows = await presetRows(page);
@@ -462,6 +497,7 @@ await check("Coding is drawn AND can be applied: the PC's pooled both-card lane 
     return { disabled: b.disabled, title: b.title, label: b.getAttribute("aria-label"),
       model: b.querySelector(".preset-model").textContent };
   });
+  await openRail(page);
   await page.click('#presets .preset[data-preset="coding"]');
   await page.waitForTimeout(700);
   const rows = await presetRows(page);
@@ -492,7 +528,11 @@ await check("the PC's card really flows: it paints in #approvals, Approve decide
     detail: { up: true, words: "linked", short: "linked", tone: "ok" },
   })));
   await page.waitForTimeout(150);
+  await openRail(page);
   await page.click('#presets .preset[data-preset="general"]');
+  // The rail is a drawer in this layout: put it away so it cannot sit over the
+  // Approve button the card paints in #approvals.
+  await closeRail(page);
   // The apply POST is waiting on the PC's ONE change_own_config card. The page
   // paints cards from #approvals on the shell's `approval` event (and on its
   // 30 s beat) - with no shell in this harness, call the same poll the event
@@ -519,6 +559,7 @@ await check("the PC's card really flows: it paints in #approvals, Approve decide
 
 await check("the NEXT chat body is an ordinary routed turn (auto, no lane override), like the bar and phone", async () => {
   const { page, state, problems } = await openHud(browser);
+  await openRail(page);
   await page.click('#presets .preset[data-preset="general"]');
   await page.waitForTimeout(700);
   await sendChat(page, "what is this preset doing");
@@ -536,6 +577,7 @@ await check("the NEXT chat body is an ordinary routed turn (auto, no lane overri
 
 await check("Cloud routes the next message through the cloud lane, and the body carries it", async () => {
   const { page, state, problems } = await openHud(browser, { proxy: true });
+  await openRail(page);
   await page.click("#preset-cloud");
   await page.waitForTimeout(300);
   const cloud = await page.evaluate(() => ({
@@ -544,6 +586,7 @@ await check("Cloud routes the next message through the cloud lane, and the body 
     words: document.getElementById("preset-words").textContent,
     chip: document.getElementById("chip-model").textContent,
   }));
+  await closeRail(page);
   await sendChat(page, "escalate this one");
   const body = state.chats[state.chats.length - 1] || {};
   await page.close();
@@ -558,6 +601,7 @@ await check("Cloud routes the next message through the cloud lane, and the body 
 
 await check("Cloud with the proxy DOWN says so plainly, marks nothing, and switches nothing", async () => {
   const { page, state, problems } = await openHud(browser, { proxy: false });
+  await openRail(page);
   await page.click("#preset-cloud");
   await page.waitForTimeout(300);
   const cloud = await page.evaluate(() => ({
@@ -566,6 +610,7 @@ await check("Cloud with the proxy DOWN says so plainly, marks nothing, and switc
     title: document.getElementById("preset-cloud").title,
     words: document.getElementById("preset-words").textContent,
   }));
+  await closeRail(page);
   await sendChat(page, "still local");
   const body = state.chats[state.chats.length - 1] || {};
   await page.close();
@@ -701,6 +746,7 @@ await check("a successful apply keeps the chip door: no turn may overwrite the d
   });
   // A successful preset apply: the page repaints the chip and renders the
   // lanes - and must not throw (P1-3), with #lanes still in the document.
+  await openRail(page);
   await page.click('#presets .preset[data-preset="general"]');
   await page.waitForTimeout(900);
   const afterApply = await page.evaluate(() => {
@@ -853,6 +899,7 @@ await check("at 960x640 the cockpit rail does not overflow, and all three layout
  *    that i can select") ─────────────────────────────────────────────────── */
 
 async function openPresetMenu(page) {
+  await openRail(page);
   await page.click("#rail-presets");
   await page.waitForSelector("#hud-presets-menu:not([hidden])", { timeout: 5000 });
   await page.waitForTimeout(700);          // both reads land, then the menu re-renders
