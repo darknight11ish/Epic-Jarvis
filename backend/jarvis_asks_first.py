@@ -528,16 +528,17 @@ NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: ones above. 65 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
+#: ones above. 67 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
 #: GitHub tools the tool list had grown without a row of their own, plus
 #: hands-free's send_text_message, plus the approval-policy tool's own row,
 #: plus the four pack tools; 61 was wave 13's carded github_create_repo, a model
 #: tool like the rest, 62 was project_read, the read half of "Jarvis takes over
-#: dev work", and 63-65 are wave 16's three GitHub tools of 2026-11-10 - the
-#: read-only PR cockpit, the carded merge and the carded fix-and-push; the
-#: product check is the fourth exception rather than a row, and the cloud
-#: escalation switch the fifth - it rides with change_setting, so the count does
-#: not move with it).
+#: dev work", 63-65 are wave 16's three GitHub tools of 2026-11-10 - the
+#: read-only PR cockpit, the carded merge and the carded fix-and-push - and
+#: 66-67 are wave 16E's two local review gates, the review packet and the record
+#: check; the product check is the fourth exception rather than a row, and the
+#: cloud escalation switch the fifth - it rides with change_setting, so the
+#: count does not move with it).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
