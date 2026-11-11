@@ -21706,42 +21706,58 @@ GITHUB_TOOLS_WORDS = (
 
 
 def _github_asks_words() -> str:
-    """Which GitHub actions ask first, from the asks-first page's own rows."""
-    fallback = ("These GitHub actions ask you first every time: reading your "
-                "GitHub, commenting, opening an issue, re-running a workflow, "
-                "creating a repository, merging a pull request, writing one file "
-                "in a pull request's fix copy and pushing a fix to a pull "
-                "request's branch.")
+    """Which GitHub actions ask first, from the asks-first page's own rows.
+
+    Since 2026-11-10 23:00 PT the five READS are card-free by default (the
+    owner's "make GitHub reads card-free" decision, with the switchable
+    `github_inspect` row): the answer is read from that row's own live state,
+    never typed. The twelve WRITES always ask and are not loosenable from an
+    app.
+    """
+    write_fallback = ("These GitHub actions ask you first every time: commenting, "
+                      "opening an issue, re-running a workflow, creating a "
+                      "repository, merging a pull request, opening a pull request, "
+                      "cancelling or re-running one workflow run, changing labels "
+                      "on one issue, editing a pull request's title or body, "
+                      "posting a review that is never an approval, closing or "
+                      "reopening one issue, and pushing a fix to a pull request's "
+                      "branch.")
+    read_switchable = ("Reading your GitHub does not ask you by default. It has "
+                       "its own switch on the What asks first page, in Settings: "
+                       "putting the card back is one card plus Windows Hello on "
+                       "the PC, and turning it off again is instant from either "
+                       "app.")
     try:
         import jarvis_asks_first as AF
         view = AF.view(here=False)
     except Exception:                       # noqa: BLE001 - older PC
-        return fallback
-    wanted = ("github_inspect", "github_comment", "github_open_issue",
-              "github_rerun_workflow", "github_create_repo", "github_merge_pr",
-              "github_fix_and_push", "github_fix_write")
-    got = []
+        return write_fallback + " " + read_switchable
+    rows = {}
     for group in view.get("groups") or ():
         for row in group.get("rows") or ():
-            rid = str((row or {}).get("id") or "")
-            if rid in wanted:
-                got.append(str(row.get("title") or rid))
+            if isinstance(row, dict):
+                rows[str(row.get("id") or "")] = row
+    writes = ("github_comment", "github_open_issue", "github_rerun_workflow",
+              "github_create_repo", "github_merge_pr", "github_fix_and_push",
+              "github_open_pr", "github_workflow", "github_issue_labels",
+              "github_edit_pr", "github_pr_review", "github_issue_state")
+    got = [str(rows.get(name, {}).get("title") or name) for name in writes
+           if name in rows]
     if not got:
-        return fallback
+        return write_fallback + " " + read_switchable
     said = ("These GitHub actions ask you first every time: " + _self_list(got)
-            + ". The reads ask too, because a read sends your token to "
-              "api.github.com. That cannot be loosened from an app.")
-    missing = [name for name in ("github_merge_pr", "github_fix_and_push",
-                                 "github_fix_write")
-               if name not in {str((row or {}).get("id") or "")
-                               for group in view.get("groups") or ()
-                               for row in group.get("rows") or ()}]
-    if missing:
-        # Said plainly rather than left out: the gate asks for these whatever an
-        # older What-asks-first page happens to list (jarvis_github.ACTIONS).
-        said += (" Merging a pull request, writing one file inside a pull "
-                 "request's fix copy and pushing a fix to a pull request's "
-                 "branch each raise their own card as well.")
+            + ". They cannot be loosened from an app.")
+    read_row = rows.get("github_inspect") or {}
+    read_switch = read_row.get("switch") if isinstance(read_row.get("switch"), dict) else {}
+    if read_switch.get("asks") is False:
+        said += (" Reading your GitHub does not ask you first right now: the "
+                 "GitHub reads switch on the PC's What asks first page turned "
+                 "that card off, and it can put the card back at once.")
+    else:
+        said += (" Reading your GitHub asks you first now, and it has its own "
+                 "switch on the PC's What asks first page - putting the card "
+                 "back there is one card plus Windows Hello, and turning it off "
+                 "again is instant.")
     return said
 
 
@@ -21810,7 +21826,8 @@ GITHUB_CAPABILITY_FALLBACK = (
     "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
     "checks, pushes to main, deletes or closes a repository or branch, approves a "
     "pull request, dispatches a workflow or touches gists, and it has no tool that "
-    "edits or commits code.")
+    "edits or commits code. The four reads ship asking too, and the owner can make "
+    "GitHub reads card-free from Settings, What asks first.")
 GITHUB_NEVER_FALLBACK = (
     "No - I never copy a repository to this PC, and I have no tool that edits or "
     "commits code. What a saved token does let me do: search GitHub, see private "
@@ -21825,7 +21842,9 @@ GITHUB_NEVER_FALLBACK = (
     "pull request's own branch - two stages and two cards. It never force-pushes, "
     "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
     "checks, pushes to main, deletes or closes a repository or branch, approves a "
-    "pull request, dispatches a workflow or touches gists.")
+    "pull request, dispatches a workflow or touches gists. The four reads ship "
+    "asking too, and the owner can make GitHub reads card-free from Settings, "
+    "What asks first.")
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
     "GitHub tools switched on - ten of them, all off by default - it can also read "
@@ -21839,7 +21858,9 @@ GITHUB_SHORT_FALLBACK = (
     "two cards. It never force-pushes, squash-merges, rebases, uses an admin bypass "
     "or auto-merge, bypasses required checks, pushes to main, deletes or closes a "
     "repository or branch, approves a pull request, dispatches a workflow or "
-    "touches gists, and there is no tool that edits or commits code.")
+    "touches gists, and there is no tool that edits or commits code. The four "
+    "reads ship asking too, and the owner can make GitHub reads card-free from "
+    "Settings, What asks first.")
 
 
 def _github_capability_words(which: str = "sentence") -> str:
@@ -21954,8 +21975,10 @@ def _run_github_self(f: dict) -> Result:
             "Two things. First a GitHub personal access token, saved on this PC by "
             "the one \"connect my GitHub\" card - it is typed on the card and never "
             "in chat. Second, the GitHub tools switched on in Settings, What asks "
-            "first, under \"Let the AI use this\"; each has its own switch and they "
-            "all ship off. " + state, "github_self")
+            "first, under \"Let the AI use this\": each has its own switch and they "
+            "all ship off, and one master switch, \"Offer GitHub tools to the AI "
+            "model\", offers all ten together on one card plus Windows Hello - every "
+            "use still asks on its own card either way. " + state, "github_self")
     if shape == "asks":
         return Result(_github_asks_words() + " " + state, "github_self")
     if shape == "action":
@@ -21966,10 +21989,12 @@ def _run_github_self(f: dict) -> Result:
             "commenting, opening an issue, re-running a workflow, creating a "
             "repository, merging a pull request with a merge commit pinned to the "
             "head commit on the card, and pushing a fix to a pull request's own "
-            "branch on a second card. Four reads work the same way: listing your "
+            "branch on a second card. Four reads exist too: listing your "
             "repositories, pull requests, issues or workflow runs, the pull request "
-            "cockpit, reading one file, and checking the newest CI run - each asks "
-            "first too, because a read sends your token out. " + state, "github_self")
+            "cockpit, reading one file, and checking the newest CI run - they ship "
+            "asking first, and since 2026-11-10 the owner can make GitHub reads "
+            "card-free from Settings, What asks first, with the GitHub reads switch "
+            "(turning it back on is instant). " + state, "github_self")
     return Result(never + " " + state, "github_self")
 
 

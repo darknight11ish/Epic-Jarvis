@@ -1261,13 +1261,14 @@ def capabilities_text() -> str:
     writes = [c for c in CAPABILITIES if c["kind"] == "write"]
     lines = ["With GitHub connected, Jarvis can do these things."]
     lines.append("")
-    lines.append(f"{_count_word(len(reads)).capitalize()} reads (they do NOT ask: "
-                 f"the owner's decision of 2026-11-10 23:00 made every GitHub "
-                 f"read card-free, because a read is a GET on api.github.com and "
-                 f"changes nothing; every write still raises its own card):")
+    lines.append(f"{_count_word(len(reads)).capitalize()} reads (they do NOT ask "
+                 f"by default: the owner's decision of 2026-11-10 23:00 made every "
+                 f"GitHub read card-free, and the switchable \"Read your GitHub\" row "
+                 f"on the What asks first page can put that card back; every write "
+                 f"still raises its own card):")
     for c in reads:
-        lines.append(f"  - {c['words']} ({c['tool']}). The card shows "
-                     f"{_card_shows(c)}. Limit: {c['limit']}.")
+        lines.append(f"  - {c['words']} ({c['tool']}). So its card, when it "
+                     f"asks, shows {_card_shows(c)}. Limit: {c['limit']}.")
     lines.append("")
     lines.append(f"{_count_word(len(writes)).capitalize()} writes (each raises its "
                  f"OWN approval card, and every one is {_default_state_word()} "

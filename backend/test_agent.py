@@ -846,6 +846,15 @@ def t_every_outbound_gate_action_is_covered():
                   "_web_search_call(args" in Path(AG.__file__).read_text(encoding="utf-8"))
             continue
         if action in outbound:
+            if tname in set(getattr(AG, "GITHUB_READ_TOOLS", ())):
+                # The owner's 2026-11-10 23:00 PT "make GitHub reads
+                # card-free" decision: the four fixed-address
+                # api.github.com GETs left NEEDS_A_PERSON, and the
+                # switchable `github_inspect` read row is the card's
+                # door. The token still only goes to api.github.com.
+                check(f"{tname} is the owner's card-free GitHub read",
+                      tname not in AG.NEEDS_A_PERSON)
+                continue
             check(f"{tname} ({action}) is in NEEDS_A_PERSON", tname in AG.NEEDS_A_PERSON)
 
 

@@ -23,6 +23,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   DETAIL,
+  GITHUB_TOOLS_GROUP,
+  GITHUB_TOOLS_GROUP_TITLE,
+  githubGroupRow,
+  githubGroupSwitchView,
   LIGHTS_DETAIL,
   LIGHTS_LABEL,
   LIGHTS_WAITING,
@@ -91,6 +95,10 @@ await check("the words are the PC's own, and the phone says the same", async () 
   assert.equal(TOOLS_LABEL, Wd.tools_label);
   assert.equal(TOOLS_DETAIL, Wd.tools_detail);
   assert.equal(TOOLS_PC_ONLY, Wd.tools_pc_only);
+  // The master GitHub group switch (2026-11-10): its id and fallback title are
+  // the PC's own words, and it is a separate object, never a per-tool item.
+  assert.equal(GITHUB_TOOLS_GROUP, Wd.github_group);
+  assert.equal(GITHUB_TOOLS_GROUP_TITLE, Wd.github_group_title);
   const html = read("src/settings.html");
   assert.ok(html.includes(`<h2>${TITLE}</h2>`), "the heading");
   assert.ok(html.includes(DETAIL), "the note under the heading");
@@ -225,10 +233,64 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
   assert.ok(other.lines.includes(ONE_AT_A_TIME));
 });
 
-await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {
-  const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 67,
-    "every tool the model can be offered is a switch (67 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65, and wave 16E's review packet and record check make 66 and 67)");
+await check("the GitHub group switch: one row, truthfully off/on/partial, ON held", async () => {
+  const shipped = readAsksFirst(C.pc_shipped);
+  const g = githubGroupRow(shipped.tools);
+  assert.equal(g.id, GITHUB_TOOLS_GROUP);
+  assert.equal(g.title, Wd.github_group_title);
+  assert.equal(g.what, Wd.github_group_what);
+  assert.deepEqual(g.tools, Wd.github_group_tools);
+  // It is NOT one of the per-tool items: the tool list keeps the count the PC
+  // sent (the wave-16E pins are the Lead's, not this feature's).
+  assert.ok(!shipped.tools.items.some((i) => i.id === GITHUB_TOOLS_GROUP));
+  assert.equal(shipped.tools.items.length, C.pc_shipped.tools.items.length);
+  assert.deepEqual(githubGroupSwitchView(g, shipped.tools, true),
+    { checked: false, disabled: false, partial: false, lines: [Wd.github_group_what] },
+    "shipped: all ten off, and turning them on is offered on the PC");
+  assert.equal(githubGroupSwitchView(g, shipped.tools, false).disabled, true,
+    "turning all ten ON is held on a stale link");
+  const phone = readAsksFirst(C.phone_shipped);
+  const pv = githubGroupSwitchView(githubGroupRow(phone.tools), phone.tools, true);
+  assert.equal(pv.disabled, true, "not from the PC: cannot turn the group on");
+  assert.ok(pv.lines.includes(TOOLS_PC_ONLY));
+  const on = readAsksFirst(C.pc_github_group_on);
+  const og = githubGroupRow(on.tools);
+  assert.equal(og.on, true);
+  assert.equal(og.onCount, 10);
+  assert.deepEqual(githubGroupSwitchView(og, on.tools, true),
+    { checked: true, disabled: false, partial: false, lines: [og.what] },
+    "all ten on: OFF is instant and never held");
+  const part = readAsksFirst(C.pc_github_group_partial);
+  const pg = githubGroupRow(part.tools);
+  assert.equal(pg.on, false, "some on is NOT on");
+  assert.equal(pg.partial, true);
+  assert.equal(pg.onCount, 4);
+  const partV = githubGroupSwitchView(pg, part.tools, true);
+  assert.equal(partV.checked, false, "a partial list never draws as ON");
+  assert.equal(partV.partial, true);
+  assert.ok(partV.lines.some((l) => l.includes("4 of the 10 GitHub tools are on now")),
+    partV.lines.join(" | "));
+  const waiting = readAsksFirst(C.pc_github_group_card_waiting);
+  const wv = githubGroupSwitchView(githubGroupRow(waiting.tools), waiting.tools, true);
+  assert.equal(wv.checked, true, "its card waits: nothing has changed yet");
+  assert.equal(wv.disabled, true);
+  assert.ok(wv.lines.includes(WAITING));
+  // One at a time: any tool's card waiting holds the group's ON too.
+  const oneAtATime = {
+    canEnable: true,
+    items: [{ id: "calendar_read", waiting: true }],
+    githubGroup: { ...g, on: false, partial: true, onCount: 4 },
+  };
+  const held = githubGroupSwitchView(oneAtATime.githubGroup, oneAtATime, true);
+  assert.equal(held.disabled, true);
+  assert.ok(held.lines.includes(ONE_AT_A_TIME));
+  assert.equal(githubGroupSwitchView(null, shipped.tools, true), null,
+    "an older PC sends no group object: nothing is drawn");
+});
+
+await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {  const pc = readAsksFirst(C.pc_shipped);
+  assert.equal(pc.tools.items.length, 65,
+    "every tool the model can be offered is a switch (65 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));
@@ -325,7 +387,7 @@ await check("Settings: every group and row in the PC's words and order", async (
   }
   assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`),
     ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights",
-    "af-vault-organizer"].sort());
+    "af-vault-organizer", "af-github-group"].sort());
   assert.ok(text.includes(LIGHTS_LABEL));
   assert.deepEqual(errors, []);
 });
@@ -392,6 +454,29 @@ await check("Settings: offering a tool - ON held on a stale link, OFF goes", asy
   const calls = await page.evaluate(() => window.__asksCalls.filter((c) => c.cmd !== "get_asks_first"));
   await page.close();
   assert.deepEqual(calls, [{ cmd: "set_tool_enabled", tool: "calendar_read", enabled: false }]);
+});
+
+await check("Settings: the GitHub group switch - one row, ON held, OFF goes", async () => {
+  let page = await settings(C.pc_shipped, { link: { stale: true } });
+  const held = await page.locator("#af-github-group").isDisabled();
+  await page.close();
+  assert.equal(held, true, "turning all ten ON is held on a stale link");
+  page = await settings(C.pc_github_group_on, { link: { stale: true } });
+  const offHeld = await page.locator("#af-github-group").isDisabled();
+  await page.close();
+  assert.equal(offHeld, false, "already on: turning all ten OFF is never held");
+  page = await settings(C.pc_github_group_on, { link: { stale: true } });
+  await page.locator("#af-github-group").click();
+  await page.waitForTimeout(300);
+  const calls = await page.evaluate(() => window.__asksCalls.filter((c) => c.cmd !== "get_asks_first"));
+  await page.close();
+  assert.deepEqual(calls, [{ cmd: "set_tool_enabled", tool: GITHUB_TOOLS_GROUP, enabled: false }]);
+  page = await settings(C.pc_github_group_partial);
+  const partialText = await page.locator("#asks-first").innerText();
+  const partialBox = await page.locator("#af-github-group").isChecked();
+  await page.close();
+  assert.equal(partialBox, false, "a partial list never draws as checked");
+  assert.ok(partialText.includes("4 of the 10 GitHub tools are on now"), partialText.slice(0, 400));
 });
 
 await check("Settings: Lockdown - ON sent at once even on a stale link; OFF held, then ONE request", async () => {
@@ -469,7 +554,10 @@ await check("CONTROL: Settings only; Rust refuses an action off the list; no app
   // D4 (2026-11-04): only the ON direction is refused before it is sent now.
   // OFF goes to the PC for any real tool name, because the settings file may
   // have a tool on that this app has no switch row for.
-  assert.match(rs, /if enabled && !TOOLS_SWITCHABLE\.contains\(&tool\)/);
+  // The master GitHub group switch (2026-11-10) is accepted by the SAME
+  // command in both directions, and it is NOT added to the per-tool list.
+  assert.match(rs, /pub\(crate\) const GITHUB_TOOLS_GROUP: &str = "github_tools_group"/);
+  assert.match(rs, /if enabled && tool != GITHUB_TOOLS_GROUP && !TOOLS_SWITCHABLE\.contains\(&tool\)/);
   assert.match(rs, /held_on_stale\(!ask\) && stale\(&app\)/);
   assert.doesNotMatch(rs, /api\/approve/);
   const js = read("src/asks-first-settings.js");

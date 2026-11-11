@@ -821,6 +821,22 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: (`github_workflow`), adding and removing labels (`github_issue_labels`),
 #: editing a pull request's title and/or body (`github_edit_pr`), and posting a
 #: COMMENT or REQUEST_CHANGES review (`github_pr_review`, never APPROVE).
+#:
+#: Since 2026-11-10 23:00 PT the five READ tools are NOT in `NEEDS_A_PERSON`: the
+#: owner chose "make GitHub reads card-free". A read is a fixed-address GET to
+#: api.github.com, the token still only goes there and changes nothing - and the
+#: switchable read row (`github_inspect` in jarvis_asks_first.LOOSE) is how the
+#: card is put back: ONE card plus Windows Hello loosens it, turning it back on
+#: is instant. `github_read` is the action a "tell me when" GitHub watch already
+#: uses, and it MUST stay `"auto"` in the shipped config (a look every 30
+#: minutes cannot raise a card every 30 minutes), which is why these tools do
+#: NOT reuse that name. The TWELVE WRITES each keep their own action
+#: (`github_comment` / `github_open_issue` / `github_rerun_workflow` /
+#: `github_create_repo` / `github_merge_pr` / `github_fix_and_push` /
+#: `github_open_pr` / `github_workflow` / `github_issue_labels` /
+#: `github_edit_pr` / `github_pr_review` / `github_issue_state`), and being in
+#: NEEDS_A_PERSON as well means an owner who loosens one of THOSE lines still
+#: cannot make a write, a merge or a push run with nobody asked.
 GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status",
                      # 2026-11-10: the read-only PR cockpit - every open pull
                      # request, whether it can merge, and which required check
@@ -5282,10 +5298,13 @@ TOOLS: dict = {
         instead={"web_search": "For a general web search, use web_search."}),
     # GitHub reads and the small GitHub actions (jarvis_github.py, the owner's
     # decision of 2026-11-03: "Read + actions", the one CREATE of 2026-11-09, and
-    # the cockpit / merge / fix-and-push of 2026-11-10). Every one of the ten asks
-    # a person: `github_inspect`'s tier is "ask" in the shipped config, and all ten
-    # are in NEEDS_A_PERSON, so a loosened tier still cannot run one with nobody
-    # asked (the reason is on GITHUB_READ_TOOLS above).
+    # the cockpit / merge / fix-and-push of 2026-11-10). The six WRITES each ask
+    # a person and are in NEEDS_A_PERSON, so a loosened tier still cannot run one
+    # with nobody asked. The FOUR READS are the owner's 2026-11-10 "make GitHub
+    # reads card-free" decision: fixed-address GETs to api.github.com that ship
+    # asking (`github_inspect` is "ask" in the shipped config) and can be turned
+    # card-free from Settings, What asks first, with the switchable read row -
+    # and turned back at once. They are NOT in NEEDS_A_PERSON any more.
     #
     # The lookup names are the TOOL names: github-tools.patch registers each one
     # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
@@ -5297,8 +5316,10 @@ TOOLS: dict = {
         "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the "
         "open pull requests on one repository (\"pulls\"), its open issues "
         "(\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing "
-        "on GitHub changes. It does not ask - a read is a GET and changes nothing. It "
-        "cannot merge, push, " 
+        "on GitHub changes. It does not ask by default; the switchable "
+        "\"Read your GitHub\" row on the What asks first page can put the "
+        "card back, and take it off again instantly. It "
+        "cannot merge, push, "
         "commit, delete or close anything.",
         {"type": "object", "properties": {
             "scope": {"type": "string", "enum": ["repos", "pulls", "issues", "runs"],
@@ -5312,8 +5333,10 @@ TOOLS: dict = {
     "github_read_file": Tool(
         "github_read_file",
         "Read ONE file's text from a repository the saved GitHub token can see, "
-        "at an optional branch or commit. Read-only: nothing changes, and it does not "
-        "ask - a read is a GET. It cannot write, edit or commit a file.",
+        "at an optional branch or commit. Read-only: nothing changes. It does "
+        "not ask by default; the switchable \"Read your GitHub\" row on "
+        "the What asks first page can put that card back. It cannot "
+        "write, edit or commit a file.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "path": {"type": "string",
@@ -5325,7 +5348,9 @@ TOOLS: dict = {
     "github_ci_status": Tool(
         "github_ci_status",
         "How CI went: the newest workflow run for a repository and branch, or for "
-        "a pull request. Read-only: nothing changes, and it does not ask - a read is a GET.",
+        "a pull request. Read-only: nothing changes. It does not ask by "
+        "default; the switchable \"Read your GitHub\" row on the What "
+        "asks first page can put that card back.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "branch": {"type": "string", "description": "a branch name"},
@@ -5388,9 +5413,10 @@ TOOLS: dict = {
                         "description": "true for a private repository; default false"}},
          "required": ["name"]},
         _prepare_github_create_repo, _run_github),
-    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): one
-    # card, then every open pull request with its merge state and required checks.
-    # It reads - and it asks, because a read still spends the GitHub token.
+    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): every
+    # open pull request with its merge state and required checks. It reads only,
+    # and it ships asking; since 2026-11-10 23:00 PT the owner can make GitHub
+    # reads card-free from Settings (the switchable `github_inspect` row).
     "github_pr_scan": Tool(
         "github_pr_scan",
         "The pull request cockpit: list the open pull requests on one repository and "
@@ -5399,8 +5425,10 @@ TOOLS: dict = {
         "prints each pull request's full 40-character head commit, its title and its "
         "base branch, so that commit, title and base branch can be passed straight "
         "to github_merge_pr. "
-        "Read-only: nothing on GitHub changes, and it does not ask - a read is a GET. It "
-        "never merges anything itself; merging is a separate carded tool. "
+        "Read-only: nothing on GitHub changes. It does not ask by default; "
+        "the switchable \"Read your GitHub\" row on the What asks first "
+        "page can put that card back, and it never merges anything "
+        "itself; merging is a separate carded tool. "
         + GITHUB_CAPABILITIES_WORDS,
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'}},
@@ -6778,11 +6806,15 @@ def _github_search_action_name() -> str:
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
-    # The GitHub READS are deliberately NOT here (the owner's decision of
-    # 2026-11-10 23:00): a read is a GET on api.github.com and changes nothing,
-    # so the reads are card-free now (`github_inspect` ships "auto"). Every WRITE
-    # below still asks its own card, and each is here so a loosened tier line
-    # cannot run one with nobody asked.
+    # The GitHub WRITES (jarvis_github.py, the owner's decisions of 2026-11-03
+    # and 2026-11-10, plus the one CREATE of 2026-11-09, and the 22:30/23:00
+    # Step 2 writes). Each raises its OWN one-shot card, and each is in this
+    # set so a loosened tier line cannot run one with nobody asked. The five
+    # READS ARE NOT HERE since 2026-11-10 23:00 PT: the owner chose "make
+    # GitHub reads card-free" - they are fixed-address GETs to
+    # api.github.com, the token still only goes there and nothing changes, and
+    # the owner's switchable read row (`github_inspect`) is how the card is
+    # put back. Each action's line says what changes.
     "github_comment": "posts a comment on GitHub in the owner's name, which cannot be "
                       "taken back",
     "github_open_issue": "opens a new issue on GitHub in the owner's name",
@@ -6790,8 +6822,9 @@ NEEDS_A_PERSON = {
                              "the checks again",
     "github_create_repo": "creates a new repository on GitHub in the owner's name, which "
                           "Jarvis cannot delete afterwards",
-    # The mutating tools: each raises its OWN card, and each is in this set so a
-    # loosened tier line cannot run one with nobody asked.
+    # The mutating tools: merge, fix-and-push, open-pr, workflow, labels,
+    # edit-pr, review and issue-state. Each raises its OWN card, and each is
+    # in this set so a loosened tier line cannot run one with nobody asked.
     "github_merge_pr": "merges one pull request on GitHub in the owner's name, which "
                        "cannot be undone and cannot pass a required check",
     "github_fix_and_push": "writes one file inside a pull request's isolated fix copy "

@@ -35737,6 +35737,8 @@ never a delete, transfer or edit. `close_issue` left `jarvis_github.NEVER`;
 `bulk_close` joined it. §216 is the full record of both, and of the other nine
 actions the same day's 22:30 ruling added.
 
+**Updated 2026-11-10 23:00 PT (the owner's second decision that day):** GitHub READS are card-free - the four read tools left `jarvis_agent.NEEDS_A_PERSON`, `github_inspect` is a switchable READ row on What asks first, and ONE master switch offers/removes the ten GitHub tools together. Section **217** is the record of that decision and of the switch door; §190.2's read paragraphs below are corrected to match.
+
 The owner's decisions: of 2026-11-03, *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card** - and of 2026-11-10 ("Everything at once"), the same rule now covers **merge and fix-and-push**: each gets its own card, the merge is merge-commit-only and pinned to the head commit on the card, and the push only ever goes to the pull request's own branch from an isolated scratch folder. The reads ask too, on their own card, because a read still sends the saved token to `api.github.com`.
 
 ### 190.1 What exists, and what each one does
@@ -35767,11 +35769,11 @@ last three rows here, and §190.9-§190.10 are their two envelopes):
 
 **Eight gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the four reads share) and the **seven carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push` and (wave 16B) `github_fix_write`. **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
 
-**The reads used to ask too - CORRECTED at 23:00 PT on 2026-11-10: they are card-free now.** The owner decided that a read is a GET on `api.github.com` and changes nothing, so it should not raise a card; `github_inspect` ships `"auto"` and the read tools are not in `NEEDS_A_PERSON`. Every WRITE still asks. §216 records the decision.
+**The reads are card-free by default - and the owner can put the card back (2026-11-10 23:00 PT).** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so the owner's decision that evening is the shipped default: the five read tools do NOT ask. The switchable read row (`github_inspect`) on the What asks first page is how the card is put back - ONE card plus Windows Hello to loosen, instant from either app - and every WRITE still asks its own card. §216 and §217 record both decisions.
 
 **It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
 
-All ten tools are also in `jarvis_agent.NEEDS_A_PERSON`, so the setting says how much Jarvis asks and that set says a read like this is never done with nobody asked: an owner who loosens a tier line still gets a card. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
+The **six WRITES** are in `jarvis_agent.NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run a write, a merge or a push with nobody asked. The **four reads are not** since 2026-11-10 23:00 PT (the owner's card-free decision); their card is put back from this page with the switchable `github_inspect` row. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
 
 ### 190.3 No token, no card
 
@@ -38748,3 +38750,126 @@ call a fake or a real temporary repository.
 
 **One-sided on purpose:** no new screen in either app and no new route; both
 apps' chats already reach every tool, and `tools/check_parity.py` is unchanged.
+
+
+## 217. The GitHub switch door: one master switch, a switchable read row, and card-free GitHub reads (2026-11-10)
+
+**Two owner decisions, both on 2026-11-10.** At **22:30 PT** the owner ruled
+that `/api/asks_first` must never again answer "There is no switch for this
+one: going looser is only possible by hand in your PC's settings file" about a
+GitHub ability: the GitHub ACTION rows now name the tool switches and where
+they live, and ONE master switch offers or removes all ten GitHub tools
+together. At **23:00 PT** the owner chose **card-free GitHub reads**: the four
+read tools' shared action `github_inspect` joined the switchable READ actions,
+and the four reads left `jarvis_agent.NEEDS_A_PERSON` while the six writes
+stayed. This section is the record of both decisions.
+
+### 217.1 The master group switch (`tools.github_group`)
+
+One switch, "Offer GitHub tools to the AI model", sits in the "Jarvis's own
+tools" group beside the ten per-tool rows. It is a SEPARATE object in the
+payload, never an item in `tools.items` - that keeps the per-tool list exactly
+its ten rows and every app's count of it unchanged:
+
+```json
+"tools": {
+  "github_group": {
+    "id": "github_tools_group",
+    "title": "Offer GitHub tools to the AI model",
+    "group": "Jarvis's own tools",
+    "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered.",
+    "tools": ["github_list", "github_read_file", "github_ci_status", "github_pr_scan", "github_comment", "github_open_issue", "github_rerun_workflow", "github_create_repo", "github_merge_pr", "github_fix_and_push"],
+    "on": false, "partial": false, "on_count": 0, "total": 10,
+    "waiting": false, "can_enable": true, "last": null
+  }
+}
+```
+
+* **ON is one card plus Windows Hello, on the PC only.** The card says it
+  offers ALL TEN and names every one, that the ten names are written into the
+  settings file in ONE step, that each use is still decided by "Ask me first",
+  and what a no means. It names no protected file.
+* **The write is atomic.** `set_tools_enabled_many` writes all ten names in ONE
+  temp-file-and-replace step (the whole list parsed and compared before and
+  after it), so a crash cannot leave half a list; names already present are
+  never duplicated and the owner's other `[tools].enabled` names keep their
+  order.
+* **OFF is instant, from either app** - never a card - and removes only those
+  ten names.
+* **Partial is never shown as ON.** `on` is true only when all ten are on; with
+  some on, the row carries `partial: true` and `on_count`/`total`, and the page
+  draws it unchecked with "N of the 10 GitHub tools are on now". Its ON card
+  offers only the missing ones and leaves the ones already on alone.
+* **The same route, the same command.** `POST /api/asks_first/tools
+  {"tool": "github_tools_group", "enabled": true|false}` through the existing
+  `set_tool_enabled` command - no new route and no new permission.
+* **Older PCs stay honest:** a PC without the object sends no row, and the page
+  draws nothing extra.
+
+### 217.2 The switchable read row: `github_inspect` in the READ actions
+
+`github_inspect` - the one action the four GitHub READ tools share - joined the
+switchable READ-action family (`jarvis_asks_first.LOOSE` / `SWITCHABLE`, 12 to
+13 rows). Its row appears on What asks first as "Read your GitHub":
+
+* its note says exactly what it is: READS ONLY, nothing on GitHub changes, and
+  the saved token is still sent only to api.github.com;
+* turning it to "don't ask" is ONE card plus Windows Hello on the PC; turning
+  it back to "ask" is instant, from either app;
+* the six GitHub writes are NOT on that list and keep their own ask actions.
+
+The desktop carries it (`jarvis-desktop/src/asks-first.js` `SWITCHABLE`, the
+Rust `SWITCHABLE` array, and the contract fixture both apps read); the phone
+shows it read-only like every other loosening switch.
+
+### 217.3 GitHub reads are card-free (2026-11-10 23:00 PT)
+
+The four read tools (`github_list`, `github_read_file`, `github_ci_status`,
+`github_pr_scan`) have LEFT `jarvis_agent.NEEDS_A_PERSON`. They ship asking
+(`github_inspect = "ask"` in the shipped `[autonomy.tiers]`; the release sets
+the shipped default to `"auto"`), and what decides each read now is the tier
+line the switch writes. The belt that refused a `NEEDS_A_PERSON` tool at a
+looser tier therefore no longer catches them - that is the point of the
+decision, not an oversight.
+
+**What stays safe in the same decision:**
+
+* the reads are fixed-address GETs to `api.github.com`; there is still no
+  arbitrary-URL path, a redirect is refused, and the token is sent nowhere
+  else;
+* the six writes, the merge and the fix-and-push are STILL in
+  `NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run one
+  with nobody asked;
+* the plan-step belt, the URL belt and the sandbox belt are untouched - they
+  fire on the tools that remain in the set;
+* putting the card back is one action: the `github_inspect` switch above, or
+  its line in the owner's own settings file.
+
+### 217.4 The honest wording everywhere
+
+* The GitHub action rows on `/api/asks_first` no longer say "There is no switch
+  for this one": each of the six write rows names its tool's own switch and the
+  master switch and where they are, and the read row has its real "Ask me
+  first" switch and a note saying reads only.
+* The tools card's detail says the master switch turns the ten GitHub abilities
+  together, so "nothing here switches two tools at once" is no longer claimed
+  anywhere.
+* The model's own GitHub tool descriptions, the feature-guide self-fact, the
+  chat capability words and the feature list all say the reads are fixed-address
+  GETs whose card can be turned off from Settings; none of them claims a read
+  changes GitHub.
+* The not-switchable note and the "New - currently off" pill never name a
+  GitHub tool: every one of the ten has a real switch.
+
+### 217.5 What proves it
+
+`backend/test_asks_first.py` (the group object, the atomic ten-name write, the
+one card, the partial truth, OFF instant from either app, the PC-only refusal,
+withdrawal, and the seven GitHub action rows naming their switches),
+`backend/test_settings_switches.py` (the same route against a hermetic settings
+file), `jarvis-desktop/tests/asks-first.mjs` with the shared contract fixture
+`tests/fixtures/asks-first-cases.json` (three new cases: the group on, partial,
+and its card waiting), `backend/test_github_tools.py` / `test_github_parity.py`
+/ `test_agent.py` (the reads left the belt, the six writes stayed, the switch is
+the card's door), and `backend/test_lockdown.py` (the one way out an app may now
+loosen is the read row).
