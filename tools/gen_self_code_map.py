@@ -335,12 +335,19 @@ SUBSYSTEMS = (
             "jarvis_calendar", "jarvis_google_calendar", "jarvis_local_calendar",
             "jarvis_accounts", "jarvis_connect_account",
             "jarvis_connect_account_wiring", "jarvis_github",
+            # The two read-only pre-push gates (2026-11-10, wave 16E): the
+            # review packet and the repository record check. They sit in this
+            # subsystem because they are the local half of the same GitHub work
+            # the owner does here - they read a checkout on this PC, never the
+            # network, and write nothing.
+            "jarvis_review",
         ),
         "paths": (),
         "key_modules": ("jarvis_calendar", "jarvis_local_calendar", "jarvis_github",
-                        "jarvis_connect_account"),
+                        "jarvis_review", "jarvis_connect_account"),
         "tests": ("backend/test_calendar.py", "backend/test_local_calendar.py",
                   "backend/test_google_calendar.py", "backend/test_github_tools.py",
+                  "backend/test_github_review.py", "backend/test_github_record.py",
                   "backend/test_connect_account.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/ACCOUNT-KEYS-DESIGN.md",
                  "docs/JARVIS-API.md"),

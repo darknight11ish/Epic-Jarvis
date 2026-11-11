@@ -1783,6 +1783,16 @@ SHIPPED = (
     # same position, is in scripts/apply-patches.ps1's $SHIPPED, above
     # jarvis_bench.py, which stays last.
     "jarvis_project_read.py",
+    # The two pre-push review gates (jarvis_review.py, 2026-11-10, wave 16E):
+    # the review packet - what changed, by area, with the risk flags and the
+    # evidence - and the repository record check that says READY or
+    # NEEDS-RECORDS before a push. Both READ ONLY: no file, no log, no socket,
+    # no GitHub token; every command is a fixed read-only git command or one of
+    # this repository's own twelve checkers, from a closed list. Neither raises
+    # a card, both ship off behind their own switch. The same entry, in the same
+    # position, is in scripts/apply-patches.ps1's $SHIPPED - above
+    # jarvis_bench.py, which stays last.
+    "jarvis_review.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

@@ -128,6 +128,12 @@ TOOL_NAMES = {
                        "commit (one card each)",
     "github_fix_and_push": "Pushing a fix to one pull request's own branch from a scratch "
                            "folder (one card each)",
+    # The two LOCAL review gates (2026-11-10, wave 16E): reads of a checkout on
+    # this PC - no token, no network, no file written - so no card.
+    "review_changes": "Reviewing a change on this PC before it is pushed (read-only, "
+                     "no card)",
+    "check_records": "Checking a change's records before a push (read-only, "
+                           "no card)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",

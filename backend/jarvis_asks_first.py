@@ -454,6 +454,13 @@ TIER_UNLISTED = (
     # is a read decided under read_files_readonly at tier "auto" - the same
     # line file_read and my_files sit on, which is why it is the same group.
     "project_read",
+    # The two local review gates (jarvis_review.py, 2026-11-10, wave 16E): the
+    # review packet and the repository record check. Both are READS of a
+    # checkout on this PC - no token, no socket, no file written - so they sit
+    # on the same "auto" line as project_read and raise NO card. The switch here
+    # is real and it is the only way in: neither name is in the shipped
+    # [tools].enabled list, so both ship OFF.
+    "review_changes", "check_records",
 )
 #: The tools that shipped ON and had no switch row at all before 2026-11-04.
 #: Each one really is decided by its line in [tools].enabled, so a switch here

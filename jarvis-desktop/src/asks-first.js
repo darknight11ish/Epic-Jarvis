@@ -121,7 +121,13 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
   "github_create_repo", "github_pr_scan", "github_merge_pr",
-  "github_fix_and_push", "approval_policy",
+  "github_fix_and_push",
+  // The two local, cardless pre-push gates (2026-11-10, wave 16E): the review
+  // packet and the repository record check. The switch is the only way in -
+  // neither is in the shipped enabled list - and once on, neither raises a card
+  // of its own: they only read a checkout on this PC and write nothing.
+  "review_changes", "check_records",
+  "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

@@ -38417,3 +38417,134 @@ the **shipped** tier table, driven through the real `_one_call` - the tool runs
 at tier `auto`, the step records `"outcome": "auto"`, exactly one gate call is
 made under `read_files_readonly`, and nothing is left pending: no card is
 raised.
+
+## 215. The two pre-push review gates: a review packet and a record check (2026-11-10, wave 16E)
+
+The owner's order of 2026-11-10 was **"full parity of what DeepSeek can do on
+GitHub, for Jarvis"**. Two of the DeepSeek-side abilities were read-only gates
+run before a push instead of after a red CI run: a **review packet** (what
+changed, by area, with the risk flags) and a **repository record check** (does
+the change carry the bookkeeping CI demands). Jarvis had neither as a product.
+This section documents the two model tools and the two chat sentences that add
+them: `review_changes`, `check_records`, and the deterministic intents
+"review my branch" and "check the records before I push".
+
+**Both are READ-ONLY, and that is the design.** `backend/jarvis_review.py`
+writes no file, keeps no log, opens no socket and reads no GitHub token. Every
+command it runs is a fixed read-only git command (`rev-parse`, `merge-base`,
+`diff`, `status`, `for-each-ref`, `show`) or one of this repository's own twelve
+checkers from a closed allow-list. No argument a caller gives is ever spliced
+into a command: a ref must match one strict pattern, the folder reaches only
+`cwd`, and the checkers' argv is a constant plus an allow-listed script path.
+`backend/test_github_review.py` and `backend/test_github_record.py` pin that -
+including an `ast` walk for a network import and for a write call, and a real
+run over a temporary repository that leaves every file's size and mtime
+unchanged and creates nothing.
+
+**The switch, and the missing card.** Each tool has its own row in
+`jarvis_asks_first.TOOLS_SWITCHABLE` (tier list `TIER_UNLISTED`) and is decided
+under `file_read`'s action, `read_files_readonly`, at tier `auto` - the same
+line `project_read` sits on. That is why **neither raises an approval card**:
+there is nothing to approve, because nothing is written, nothing is sent, and
+no credential is touched. Both ship OFF (neither name is in the shipped
+`[tools].enabled`), so the owner's own switch is the only way in, and the chat
+answer names the switch when it is off rather than running anyway.
+
+**The folder.** The backend runs from its installed folder, which is not the
+git checkout, so the repository is named by `JARVIS_REVIEW_REPO` (documented,
+one value, the PC only) or by the tool's `path` argument. A folder under a key
+store, a browser profile or the Windows folder is refused by name before git is
+started; that is a guard rail, not a sandbox - the review prints file NAMES and
+line COUNTS, never a file's words.
+
+**`review_changes` - the review packet** (`jarvis_review.review`). Fields:
+`path`, `base`, `branch`, `pr`, `limit_files`. It measures:
+
+| Part | What it says |
+|---|---|
+| the header | the folder (full path), `base <ref> <sha>` -> common ancestor -> `head <sha>`, the branch or "the local working tree", and the time it measured |
+| the counts | `+N / -M` lines from `git diff --numstat`, including untracked text files' lines (bounded) and saying how many untracked files were counted |
+| the groups | every changed path under one of: backend (modules and tests), jarvis-backend (the published base), desktop and HUD, Android client, docs, tools and scripts, contract and records, other |
+| the risk flags | one line each, with the evidence and the next step (below) |
+| the checklist | the owner's standing three-part audit (bugs, both apps, fit) and the three review rules |
+
+The risk flags, and what each one is for: a **one-sided or mismatched twin edit**
+(`backend/<file>` and `jarvis-backend/<file>` are kept equal, including the
+`BESIDE` files whose base name differs and the ten `rebuilt/` modules that land
+flattened); **no test changed** while a backend module did; a **new document
+without the `docs/README.md` count bump** (and the size figure is never
+regenerated); a **tool or route changed without `docs/JARVIS-API.md`** (this
+file); **tracked scratch**; a **hand-edited `CHANGELOG.md`**; a changed
+`backend/*.patch` (which needs `tools/build_patch_history.py`); the **size** of
+the change (past 40 files or 3,000 lines); a **dirty working tree** (the packet
+includes it, so it says so); and a note that `docs/DECISIONS.md` moved. A clean
+change prints "(none of the recorded flags fired)".
+
+A **branch** is reviewed against its `git merge-base` with the base, so another
+branch's uncommitted work is not in it; this checkout includes its own. A
+**pull request number** is resolved among the LOCAL branches (`fix/pr-1222` and
+friends) and nothing is fetched - if no local branch carries it, the answer says
+to check it out. The base defaults to `origin/main`, then `main`, then `master`,
+and a base that is not there is one plain sentence, never a fetch.
+
+**`check_records` - the record check before a push**
+(`jarvis_review.record_check`). Fields: `path`, `base`, `branch`, `pr`. Six
+obligations, each PRESENT / MISSING / FAIL / INFO with the exact next step:
+
+1. **changelog** - exactly ONE `changelog.d/YYYY-MM-DD-<slug>.md` fragment, one
+   bullet with a bold title; a `CHANGELOG.md` edit is a FAIL (the rule is one
+   fragment per pull request, and the roll edits `CHANGELOG.md` on a quiet
+   main).
+2. **docs-count** - when a document was added, `docs/README.md` must move, and
+   the count it states must equal the tree's; the next step says the number and
+   says NOT to touch the size.
+3. **backend-twin** - every changed `backend/<file>` carried to
+   `jarvis-backend/<file>` (or its `BESIDE` name), the two copies still equal
+   (line endings ignored), and `backend/_where.py` re-taken rather than copied.
+4. **decision** - ONE `decisions.d/YYYY-MM-DD-<slug>.md` whose bullet is one
+   dated entry and whose date agrees with its name, OR a pure tail append to
+   `docs/DECISIONS.md`; a rewrite of the record is a FAIL, and the obligation
+   says which form it found.
+5. **claims** - every changed `docs/CLAIMS.tsv` row: 5 TAB columns, a state of
+   built/open/unverifiable, and a check beginning with `file:`, `no-file:`,
+   `grep:`, `absent:`, `test:` or `number:` (or an unverifiable reason).
+6. **defect-register** - every changed register row: 7 columns and an
+   open/closed status, with the `.md` twin still agreeing.
+
+Then the repository's own **twelve checkers**, each a fixed command, bounded in
+time and output: `tools/roll_changelog.py --check`, `tools/check_docs_map.py`,
+`tools/roll_decisions.py --check`, `tools/check_claims.py` (the slow one - it
+re-runs the suites its rows name), `tools/check_defect_register.py`,
+`tools/check_stale_twins.py`, `backend/test_base_matches_repo.py`,
+`backend/test_base_regeneration.py`, `tools/check_no_source_pins.py`,
+`tools/check_parity.py`, `tools/check_plugins.py` and
+`tools/check_no_scratch_in_the_tree.py`. Each is selected by the change set (a
+checker nothing it checks touched is named as "not needed", which is neither a
+failure nor a pass), and each is run with the Python that runs the backend,
+`PYTHONDONTWRITEBYTECODE=1` (so no `__pycache__` appears in the tree it just
+measured) and `GIT_OPTIONAL_LOCKS=0` (so not even `git status` may refresh the
+index).
+
+**Nothing that did not run is a pass.** A checker that will not start, runs out
+of time, exits non-zero, or whose own output says SKIPPED is **NOT-RUN**,
+**TIMEOUT** or **FAIL** with the reason - and the verdict says so:
+
+| Verdict | Meaning |
+|---|---|
+| `READY` | no obligation is MISSING or FAIL, and every checker that was supposed to run really passed |
+| `NEEDS-RECORDS` | every checker passed, but a record obligation is missing or wrong |
+| `CHECKER-FAILED` | a checker failed, timed out or could not start |
+| `INCOMPLETE` | an obligation is fine and no checker failed, but a checker did not run |
+
+The answer is bounded at 7,000 characters (900 when Live speaks it), says which
+folder and head it measured, and never writes a log: the failure excerpt rides
+in the answer and the full output is dropped.
+
+**Where the owner reaches it.** In chat or Live, "review my branch" and "check
+the records before I push" are answered **deterministically** by
+`jarvis_quick.py` - not by the model, because a review the model narrates is a
+description of a review. Those two answers are in `READ_ONLY_INTENTS`, so they
+cannot take away what "cancel that" would undo, and a private chat hands them to
+its own gate like every other read. The model also has the two tools, in the
+`github` group, and both ship off until their own switch is turned on under
+Settings, What asks first, "Jarvis's own tools".
