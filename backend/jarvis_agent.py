@@ -805,16 +805,20 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: worktree (`github_fix_and_push`). Each mutating one raises its OWN one-shot
 #: card; neither can be auto-approved.
 #:
-#: ALL TEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
-#: a fixed-endpoint read still sends the owner's own GitHub token to
-#: api.github.com, so it is egress with a credential attached. `github_read` is
-#: the action a "tell me when" GitHub watch already uses, and it MUST stay
-#: `"auto"` in the shipped config (a look every 30 minutes cannot raise a card
-#: every 30 minutes), which is exactly why these tools do NOT reuse that name.
-#: Their own actions are `github_inspect`, `github_merge_pr` and
-#: `github_fix_and_push`, all shipped as `"ask"`; being in NEEDS_A_PERSON as
-#: well means an owner who loosens that line still cannot make a GitHub read,
-#: a merge or a push run with nobody asked.
+#: The SIX GitHub WRITES ARE IN `NEEDS_A_PERSON` BELOW; the four READ tools are
+#: NOT, since 2026-11-10 23:00 PT. The owner's decision that day: "make GitHub
+#: reads card-free". The reads are fixed-address GETs to api.github.com, the
+#: token still only ever goes there, and the owner can put the card back from
+#: Settings, What asks first, with the switchable read row (`github_inspect` in
+#: jarvis_asks_first.LOOSE: ONE card plus Windows Hello loosens it, turning it
+#: back on is instant). `github_read` is the action a "tell me when" GitHub
+#: watch already uses, and it MUST stay `"auto"` in the shipped config (a look
+#: every 30 minutes cannot raise a card every 30 minutes), which is exactly why
+#: these tools do NOT reuse that name. Their own action is `github_inspect`; the
+#: writes keep `github_comment` / `github_open_issue` / `github_rerun_workflow`
+#: / `github_create_repo` / `github_merge_pr` / `github_fix_and_push`, and being
+#: in NEEDS_A_PERSON as well means an owner who loosens one of THOSE lines still
+#: cannot make a write, a merge or a push run with nobody asked.
 GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status",
                      # 2026-11-10: the read-only PR cockpit - every open pull
                      # request, whether it can merge, and which required check
@@ -5192,10 +5196,13 @@ TOOLS: dict = {
         instead={"web_search": "For a general web search, use web_search."}),
     # GitHub reads and the small GitHub actions (jarvis_github.py, the owner's
     # decision of 2026-11-03: "Read + actions", the one CREATE of 2026-11-09, and
-    # the cockpit / merge / fix-and-push of 2026-11-10). Every one of the ten asks
-    # a person: `github_inspect`'s tier is "ask" in the shipped config, and all ten
-    # are in NEEDS_A_PERSON, so a loosened tier still cannot run one with nobody
-    # asked (the reason is on GITHUB_READ_TOOLS above).
+    # the cockpit / merge / fix-and-push of 2026-11-10). The six WRITES each ask
+    # a person and are in NEEDS_A_PERSON, so a loosened tier still cannot run one
+    # with nobody asked. The FOUR READS are the owner's 2026-11-10 "make GitHub
+    # reads card-free" decision: fixed-address GETs to api.github.com that ship
+    # asking (`github_inspect` is "ask" in the shipped config) and can be turned
+    # card-free from Settings, What asks first, with the switchable read row -
+    # and turned back at once. They are NOT in NEEDS_A_PERSON any more.
     #
     # The lookup names are the TOOL names: github-tools.patch registers each one
     # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
@@ -5207,8 +5214,9 @@ TOOLS: dict = {
         "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the "
         "open pull requests on one repository (\"pulls\"), its open issues "
         "(\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing "
-        "on GitHub changes. It asks you before every read. It cannot merge, push, "
-        "commit, delete or close anything.",
+        "on GitHub changes. It asks you before every read unless you turned that "
+        "card off for GitHub reads in Settings, What asks first. It cannot merge, "
+        "push, commit, delete or close anything.",
         {"type": "object", "properties": {
             "scope": {"type": "string", "enum": ["repos", "pulls", "issues", "runs"],
                       "description": "which list to read"},
@@ -5222,7 +5230,8 @@ TOOLS: dict = {
         "github_read_file",
         "Read ONE file's text from a repository the saved GitHub token can see, "
         "at an optional branch or commit. Read-only: nothing changes. It asks you "
-        "before every read. It cannot write, edit or commit a file.",
+        "before every read unless you turned that card off for GitHub reads in "
+        "Settings, What asks first. It cannot write, edit or commit a file.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "path": {"type": "string",
@@ -5234,7 +5243,9 @@ TOOLS: dict = {
     "github_ci_status": Tool(
         "github_ci_status",
         "How CI went: the newest workflow run for a repository and branch, or for "
-        "a pull request. Read-only: nothing changes. It asks you before every read.",
+        "a pull request. Read-only: nothing changes. It asks you before every read "
+        "unless you turned that card off for GitHub reads in Settings, What asks "
+        "first.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "branch": {"type": "string", "description": "a branch name"},
@@ -5297,9 +5308,10 @@ TOOLS: dict = {
                         "description": "true for a private repository; default false"}},
          "required": ["name"]},
         _prepare_github_create_repo, _run_github),
-    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): one
-    # card, then every open pull request with its merge state and required checks.
-    # It reads - and it asks, because a read still spends the GitHub token.
+    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): every
+    # open pull request with its merge state and required checks. It reads only,
+    # and it ships asking; since 2026-11-10 23:00 PT the owner can make GitHub
+    # reads card-free from Settings (the switchable `github_inspect` row).
     "github_pr_scan": Tool(
         "github_pr_scan",
         "The pull request cockpit: list the open pull requests on one repository and "
@@ -5308,8 +5320,9 @@ TOOLS: dict = {
         "prints each pull request's full 40-character head commit, its title and its "
         "base branch, so that commit, title and base branch can be passed straight "
         "to github_merge_pr. "
-        "Read-only: nothing on GitHub changes. It asks you before every read, and it "
-        "never merges anything itself; merging is a separate carded tool. "
+        "Read-only: nothing on GitHub changes. It asks you before every read unless "
+        "that card is off in Settings, What asks first, and it never merges "
+        "anything itself; merging is a separate carded tool. "
         + GITHUB_CAPABILITIES_WORDS,
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'}},
@@ -6522,19 +6535,14 @@ def _github_search_action_name() -> str:
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
-    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03, plus the one CREATE of 2026-11-09). The
-    # READS are here for the same reason
-    # `github_search` above is: a read sends the owner's own GitHub token to
-    # api.github.com on a fixed address, so it is egress with a credential
-    # attached, and "it is only a read" is not a reason to spend a credential
-    # with nobody looking. Each action's line says what changes.
-    "github_list": "sends the owner's GitHub token to api.github.com to read their "
-                   "repositories, pull requests, issues or workflow runs",
-    "github_read_file": "sends the owner's GitHub token to api.github.com to read one "
-                        "file in a repository",
-    "github_ci_status": "sends the owner's GitHub token to api.github.com to read how CI "
-                        "went",
+    # The GitHub WRITES (jarvis_github.py, the owner's decisions of 2026-11-03
+    # and 2026-11-10, plus the one CREATE of 2026-11-09). Each raises its OWN
+    # one-shot card, and each is in this set so a loosened tier line cannot run
+    # one with nobody asked. THE FOUR READS ARE NOT HERE since 2026-11-10 23:00
+    # PT: the owner chose "make GitHub reads card-free" - they are fixed-address
+    # GETs to api.github.com, the token still only goes there, and the owner's
+    # switchable read row (`github_inspect`) is how the card is put back. Each
+    # action's line says what changes.
     "github_comment": "posts a comment on GitHub in the owner's name, which cannot be "
                       "taken back",
     "github_open_issue": "opens a new issue on GitHub in the owner's name",
@@ -6542,10 +6550,6 @@ NEEDS_A_PERSON = {
                              "the checks again",
     "github_create_repo": "creates a new repository on GitHub in the owner's name, which "
                           "Jarvis cannot delete afterwards",
-    # The read-only PR cockpit (2026-11-10): a read, and in this set for the same
-    # reason the other GitHub reads are - it sends the owner's token out.
-    "github_pr_scan": "sends the owner's GitHub token to api.github.com to read the open "
-                      "pull requests and their checks",
     # The two mutating tools of 2026-11-10. Each raises its OWN card, and each is
     # in this set so a loosened tier line cannot run one with nobody asked.
     "github_merge_pr": "merges one pull request on GitHub in the owner's name, which "

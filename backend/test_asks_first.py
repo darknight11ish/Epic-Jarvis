@@ -253,7 +253,12 @@ def t_the_safe_list_never_meets_the_hard_limits():
           s == {"calendar_read", "email_read", "notes_search", "home_read",
                 "append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
                 "read_files_readonly", "read_joplin_note", "read_logseq_page",
-                "create_logseq_page", "power_manage"}, s)
+                "create_logseq_page", "power_manage",
+                # 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free":
+                # the one action the four GitHub READ tools share. READS ONLY -
+                # nothing on GitHub changes - so it is a read row like the rest,
+                # and the six GitHub writes keep their own ask actions.
+                "github_inspect"}, s)
     # The two of the seven left OFF the list, and why - so a later change has
     # to argue with the reason, not just add a name.
     # browse_model_catalog: a way out of this PC (LOCKDOWN_ACTIONS,
@@ -840,6 +845,14 @@ class ToolsFile:
 
     def write(self, tool, on):
         self.writes.append((tool, on))
+        if AF.real_tool(tool) == AF.GITHUB_TOOLS_GROUP:
+            # The master GitHub group switch writes its ten names in ONE call.
+            for name in AF.GITHUB_TOOLS:
+                if on:
+                    self.on.add(name)
+                else:
+                    self.on.discard(name)
+            return
         if on:
             self.on.add(tool)
         else:
@@ -1501,6 +1514,296 @@ def t_both_routes_raise_a_card_the_gate_can_actually_show():
     check("... nor does the detail handed beside it",
           _protected_hits(json.dumps(seen.get("detail", {})), names) == [],
           _protected_hits(json.dumps(seen.get("detail", {})), names))
+
+
+# ========================= 11. the master GitHub group switch (2026-11-10)
+#
+# The owner's ruling (Q1 step 2, 2026-11-10 22:30 PT): never leave this page
+# telling him "There is no switch for this one" about a GitHub ability. The ten
+# GitHub tools keep their own switches; ONE master switch offers/removes all
+# ten together, and the GitHub ACTION rows now name it instead of the blanket
+# sentence. The group is a SEPARATE object (`tools.github_group`), not an item
+# in `tools.items`, so the per-tool list (and every app's pin on it) does not
+# move for it.
+
+GITHUB_GATE_ACTIONS = ("github_inspect", "github_comment", "github_open_issue",
+                       "github_rerun_workflow", "github_create_repo",
+                       "github_merge_pr", "github_fix_and_push")
+
+
+def t_the_github_master_switch_speaks_for_exactly_the_ten_tools():
+    check("the ten GitHub tools are the ones this module names, in the ten-tool order",
+          AF.GITHUB_TOOLS == ("github_list", "github_read_file", "github_ci_status",
+                              "github_pr_scan", "github_comment", "github_open_issue",
+                              "github_rerun_workflow", "github_create_repo",
+                              "github_merge_pr", "github_fix_and_push"), AF.GITHUB_TOOLS)
+    check("each is a real model tool and has its own per-tool switch row",
+          all(t in AG.TOOLS and t in AF.TOOLS_SWITCHABLE for t in AF.GITHUB_TOOLS),
+          [t for t in AF.GITHUB_TOOLS if t not in AG.TOOLS or t not in AF.TOOLS_SWITCHABLE])
+    check("none is one of the tools whose own switch decides it",
+          not set(AF.GITHUB_TOOLS) & set(AF.NOT_A_SWITCH))
+    check("the group id is not a model tool and not a switchable row",
+          AF.GITHUB_TOOLS_GROUP not in AG.TOOLS
+          and AF.GITHUB_TOOLS_GROUP not in AF.TOOLS_SWITCHABLE)
+    st = AF.tools_status(here=True)
+    ids = [i["id"] for i in st["items"]]
+    check("the per-tool list is unchanged: it is still every switchable tool",
+          len(st["items"]) == len(AF.TOOLS_SWITCHABLE)
+          and all(t in ids for t in AF.GITHUB_TOOLS))
+    check("the group is a SEPARATE object, never a per-tool item",
+          AF.GITHUB_TOOLS_GROUP not in ids
+          and st["github_group"]["id"] == AF.GITHUB_TOOLS_GROUP)
+    g = st["github_group"]
+    check("it names the ten, sits in \"Jarvis's own tools\", and is off on a fresh page",
+          g["tools"] == list(AF.GITHUB_TOOLS)
+          and g["group"] == "Jarvis's own tools"
+          and g["on"] is False and g["partial"] is False
+          and g["on_count"] == 0 and g["total"] == 10, g)
+    check("it carries the PC's one-sentence honest description",
+          g["what"] == AF.GITHUB_TOOLS_GROUP_WHAT
+          and "every use is still decided by" in g["what"]
+          and "Off: instantly, none of them is offered" in g["what"], g["what"])
+    check("it is NOT in not_switchable, new_off or extra",
+          AF.GITHUB_TOOLS_GROUP not in st["not_switchable"]["ids"]
+          and all(i["id"] not in AF.GITHUB_TOOLS for i in st["new_off"]["items"])
+          and all(i["id"] not in AF.GITHUB_TOOLS for i in st["extra"]))
+    check("the tools card's own detail says the one master switch turns ten together",
+          "Offer GitHub tools to the AI model" in st["detail"]
+          and "ten GitHub abilities" in st["detail"], st["detail"])
+    # A partial list is truthful: same object, on=False, partial=True, counts.
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = lambda: set(AF.GITHUB_TOOLS[:4])
+    try:
+        st = AF.tools_status(here=True)
+    finally:
+        AF.tools_enabled_set = keep
+    g = st["github_group"]
+    check("some on is PARTIAL, never shown as on",
+          g["on"] is False and g["partial"] is True and g["on_count"] == 4, g)
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = lambda: set(AF.GITHUB_TOOLS)
+    try:
+        st = AF.tools_status(here=True)
+    finally:
+        AF.tools_enabled_set = keep
+    g = st["github_group"]
+    check("all ten on is ON, not partial",
+          g["on"] is True and g["partial"] is False and g["on_count"] == 10, g)
+
+
+def t_the_github_action_rows_name_the_tool_switch_not_a_missing_one():
+    page = AF.view(here=True)
+    rows = {}
+    for group in page["groups"]:
+        for row in group.get("rows") or ():
+            if isinstance(row, dict):
+                rows[row.get("action") or row.get("id")] = row
+    for action in GITHUB_GATE_ACTIONS:
+        row = rows.get(action)
+        check(f"{action}: the GitHub action row is on the page", row is not None, sorted(rows))
+        note = str((row or {}).get("note") or "")
+        if action == "github_inspect":
+            # The READ row is switchable since 2026-11-10 23:00 PT (the owner's
+            # "make GitHub reads card-free"): it has its own "Ask me first"
+            # switch, so its note must say reads only + where the switch is, and
+            # never the old "there is no switch for this one" dead end.
+            check("github_inspect: the read row really carries its own switch",
+                  isinstance((row or {}).get("switch"), dict)
+                  and row["switch"]["can_loosen"] is True, row)
+            check("github_inspect: the note says reads only, that the token still goes "
+                  "out, and that the switch is one card",
+                  "Reads only" in note and "nothing on GitHub changes" in note
+                  and "GitHub token" in note and "ONE approval card" in note, note)
+            check("github_inspect: ... and never says there is no switch for it",
+                  "There is no switch for this one" not in note
+                  and "no switch for this one" not in note.lower(), note)
+            continue
+        check(f"{action}: the note names the tool's own switch and the master switch, "
+              f"and where they are",
+              "Let the AI use this" in note and "Jarvis's own tools" in note
+              and "master switch" in note and "its own switch" in note, note)
+        check(f"{action}: ... and never says there is no switch for it",
+              "There is no switch for this one" not in note
+              and "no switch for this one" not in note.lower(), note)
+        check(f"{action}: it still says what IS true - the tier itself is a hand edit",
+              "going looser here is only possible by hand" in note
+              and "jarvis-framework.toml" in note, note)
+    check("the shared NOTE_FILE is unchanged for the rows it really covers",
+          "There is no switch for this one" in AF.NOTE_FILE
+          and "github_inspect" not in AF.NOTE_EXTRA)
+
+
+def _tools_text_with(*enabled) -> str:
+    """SAMPLE with a [tools].enabled line holding `enabled`, CRLF and all."""
+    line = ", ".join(f'"{x}"' for x in enabled)
+    return SAMPLE.replace(
+        "[self_modification]",
+        f'[tools]\r\nenabled = [{line}]\r\n\r\n[self_modification]')
+
+
+def t_the_github_master_switch_writes_all_ten_in_one_step():
+    p = TMP / "tools-master.toml"
+    p.write_bytes(_tools_text_with("web_search", "calendar_read").encode("utf-8"))
+    out = AF.set_tools_enabled_many(AF.GITHUB_TOOLS, True, path=p)
+    text = p.read_bytes().decode("utf-8")
+    items = list(AF._parse(text)["tools"]["enabled"])
+    check("ON writes all ten in ONE step", out["changed"] is True
+          and [x for x in items if x in AF.GITHUB_TOOLS] == list(AF.GITHUB_TOOLS), items)
+    check("... each name exactly once", len(items) == len(set(items)), items)
+    check("... and the owner's own names keep their place and order",
+          items[:2] == ["web_search", "calendar_read"], items)
+    check("... while every other byte of the file survives (CRLF, comments, tables)",
+          "\r\n" in text and "# a comment in the middle" in text
+          and "[self_modification]" in text, text)
+    # Partial: only the missing names are added.
+    p.write_bytes(_tools_text_with("web_search", "github_list", "github_merge_pr",
+                                   "github_fix_and_push").encode("utf-8"))
+    AF.set_tools_enabled_many(AF.GITHUB_TOOLS, True, path=p)
+    items = list(AF._parse(p.read_text(encoding="utf-8"))["tools"]["enabled"])
+    check("a partial file gets only the missing seven, and no duplicates",
+          len([x for x in items if x in AF.GITHUB_TOOLS]) == 10
+          and len(items) == len(set(items)), items)
+    # OFF: all ten go, everything else stays, and a second OFF writes nothing.
+    out = AF.set_tools_enabled_many(AF.GITHUB_TOOLS, False, path=p)
+    items = list(AF._parse(p.read_text(encoding="utf-8"))["tools"]["enabled"])
+    check("OFF removes all ten and keeps the owner's own names",
+          out["changed"] is True and items == ["web_search"], items)
+    out = AF.set_tools_enabled_many(AF.GITHUB_TOOLS, False, path=p)
+    check("... a group that is already off reports changed=False", out["changed"] is False)
+    # A file the page cannot change safely is refused BEFORE anything is written.
+    broken = TMP / "tools-two-tables.toml"
+    before = _tools_text_with("web_search") + "\n[tools]\nenabled = []\n"
+    broken.write_bytes(before.encode("utf-8"))
+    try:
+        AF.set_tools_enabled_many(AF.GITHUB_TOOLS, True, path=broken)
+        check("two [tools] tables: refused", False)
+    except AF.TierFileError:
+        check("two [tools] tables: refused, and the file is untouched",
+              broken.read_bytes() == before.encode("utf-8"))
+
+
+def t_the_github_master_switch_is_one_card_and_instant_off():
+    tools = ToolsFile()
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=False)
+    check("ON from the phone: 403, the PC only, nothing written",
+          code == 403 and out.get("pc_only") is True and tools.writes == [], (code, out))
+    asked, held = [], []
+    tools = ToolsFile("plugin_scan", "web_search")
+    # The card's own words: the default spawn runs the card synchronously, so
+    # the gate records exactly what the owner would be shown and what an
+    # approval writes.
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True,
+                      gate=lambda a, d, p: (asked.append((a, d, p)),
+                                            Verdict(True, "ask", "approved"))[1])
+    check("ON from the PC: 202, ONE card, the same enable_reading_tool action",
+          code == 202 and [a for a, _, _ in asked] == [AF.ENABLE_TOOL_ACTION],
+          (code, [a for a, _, _ in asked]))
+    card = asked[0][2] if asked else ""
+    check("the card says it offers ALL TEN and names every one",
+          card.startswith(AF.GITHUB_TOOLS_GROUP_CARD_TITLE)
+          and all(t in card for t in AF.GITHUB_TOOLS), card[:400])
+    check("... says ten lines change in ONE step, each use still asks, Windows Hello",
+          "written into your settings file on this PC in ONE step" in card
+          and '"Ask me first"' in card and "Windows Hello" in card
+          and "If you say no: nothing changes" in card, card)
+    check("... and names no file jarvis_gate.py protects",
+          "jarvis-framework.toml" not in card)
+    check("approving that card writes all ten through ONE write call",
+          tools.writes == [(AF.GITHUB_TOOLS_GROUP, True)]
+          and set(AF.GITHUB_TOOLS) <= tools.on, (tools.writes, tools.on))
+    check("... and the page says so", AF._T_STATE["last"].get("outcome") == "enabled"
+          and "all ten" in AF._T_STATE["last"].get("message", ""), AF._T_STATE["last"])
+    # A HELD card writes nothing until the person answers.
+    asked_held = []
+    tools = ToolsFile()
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True,
+                      gate=lambda a, d, p: (asked_held.append(p),
+                                            Verdict(True, "ask", "approved"))[1],
+                      spawn=held.append)
+    check("... a card that waits writes NOTHING yet, and the row says waiting",
+          code == 202 and tools.writes == []
+          and out["tools"]["github_group"]["waiting"] is True,
+          (code, tools.writes, out["tools"]["github_group"]["waiting"]))
+    held[0]()
+    check("... and only an approval writes the ten",
+          tools.writes == [(AF.GITHUB_TOOLS_GROUP, True)]
+          and set(AF.GITHUB_TOOLS) <= tools.on, (tools.writes, tools.on))
+    # OFF: instant from EITHER app, one write, and only the ten go.
+    tools = ToolsFile(*AF.GITHUB_TOOLS, "web_search")
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": False}, tools, here=False)
+    check("OFF from the phone: 200 at once, one write, all ten gone, the rest kept",
+          code == 200 and out["changed"] is True
+          and tools.writes == [(AF.GITHUB_TOOLS_GROUP, False)]
+          and not (set(AF.GITHUB_TOOLS) & tools.on) and "web_search" in tools.on,
+          (code, tools.writes, tools.on))
+    check("... and the answer says the ten are not offered any more",
+          "ten GitHub tools" in out.get("message", ""), out.get("message"))
+    tools = ToolsFile("web_search")
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": False}, tools, here=True)
+    check("a group already off: 200, changed=False, nothing written",
+          code == 200 and out["changed"] is False and tools.writes == [], (code, out))
+    tools = ToolsFile(*AF.GITHUB_TOOLS)
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True)
+    check("all ten already on: 200, changed=False, no card",
+          code == 200 and out["changed"] is False and tools.writes == [], (code, out))
+    # A PARTIAL list's card is honest about how many are already on.
+    asked = []
+    tools = ToolsFile(*AF.GITHUB_TOOLS[:4])
+    _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True,
+          gate=lambda a, d, p: (asked.append(p), Verdict(True, "ask", "approved"))[1])
+    check("a partial list's card says how many are on and that the rest are offered",
+          "4 of the ten are already on. This card offers the other 6 and leaves "
+          "those 4 on." in (asked[0] if asked else ""), asked[0] if asked else "")
+    # Refusals that keep the ON half safe: not armed, tier not ask.
+    tools = ToolsFile()
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True,
+                      armed=False)
+    check("without the backend's own Windows Hello check: 503, nothing written",
+          code == 503 and tools.writes == [] and "Windows Hello" in out["error"], (code, out))
+    tools = ToolsFile()
+    code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True,
+                      tiers=Tiers(**{AF.ENABLE_TOOL_ACTION: "auto"}))
+    check("the card's own tier not 'ask': 503 - a line is not a yes",
+          code == 503 and tools.writes == [], (code, out))
+    # One card at a time, and an OFF while it waits withdraws it. The calls are
+    # made directly, not through _treq, because _treq resets the pending state
+    # between calls and this check is about that state surviving them.
+    held, tools = [], ToolsFile(*AF.GITHUB_TOOLS[:4])
+    AF._reset_for_tests()
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = tools.enabled
+    try:
+        def raise_group() -> tuple:
+            return AF.request_tool_enable(
+                {"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, here=True,
+                tier_of=Tiers(), write=tools.write,
+                gate=lambda a, d, p: Verdict(True, "ask", "approved"),
+                spawn=held.append, armed=lambda: True)
+
+        def off_group() -> tuple:
+            return AF.request_tool_enable(
+                {"tool": AF.GITHUB_TOOLS_GROUP, "enabled": False}, here=True,
+                tier_of=Tiers(), write=tools.write, armed=lambda: True)
+
+        code, out = raise_group()
+        check("a tool card is already waiting: the group's own ON is refused 409",
+              code == 202 and len(held) == 1, (code, out))
+        code, out = raise_group()
+        check("... a second request while it waits: 409",
+              code == 409 and "already waiting" in out["error"], (code, out))
+        code, out = off_group()
+        check("OFF while its card waits: instant, and the ten go",
+              code == 200 and not (set(AF.GITHUB_TOOLS) & tools.on), (code, out))
+        writes_before = list(tools.writes)
+        held[0]()
+        check("... approving the card later changes nothing",
+              tools.writes == writes_before
+              and AF._T_STATE["last"].get("outcome") == "withdrawn",
+              (tools.writes, AF._T_STATE["last"]))
+    finally:
+        AF.tools_enabled_set = keep
+    code, out = AF.request_tool_enable({"tool": AF.GITHUB_TOOLS_GROUP}, here=True)
+    check("a body without enabled: 400", code == 400)
 
 
 if __name__ == "__main__":

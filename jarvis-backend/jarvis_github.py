@@ -849,11 +849,12 @@ def capabilities_text() -> str:
     writes = [c for c in CAPABILITIES if c["kind"] == "write"]
     lines = ["With GitHub connected, Jarvis can do these things."]
     lines.append("")
-    lines.append(f"{_count_word(len(reads)).capitalize()} reads (they ask first "
-                 f"too, because a read sends the token out):")
+    lines.append(f"{_count_word(len(reads)).capitalize()} reads (they ship "
+                 f"asking, because a read sends the token out; the owner can "
+                 f"make GitHub reads card-free from Settings, What asks first):")
     for c in reads:
-        lines.append(f"  - {c['words']} ({c['tool']}). The card shows "
-                     f"{_card_shows(c)}. Limit: {c['limit']}.")
+        lines.append(f"  - {c['words']} ({c['tool']}). So its card, when it "
+                     f"asks, shows {_card_shows(c)}. Limit: {c['limit']}.")
     lines.append("")
     lines.append(f"{_count_word(len(writes)).capitalize()} writes (each raises its "
                  f"OWN approval card, and every one is {_default_state_word()} "

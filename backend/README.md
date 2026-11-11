@@ -110,12 +110,18 @@ failing pull request into an isolated scratch folder under
 commits a person made there, to that pull request's own branch, with a
 credential-file denylist and no force flag). The token travels only in git's own
 `GIT_CONFIG_*` environment config - never in a URL, never on a command line and
-never written to disk. The reads ask a person too: a fixed-endpoint read still
-sends the owner's own GitHub token out, which is why they are NOT the existing
-`github_read` action (that one is the scheduled look a "tell me when" watch
-makes, and `jarvis_tellme.py` refuses to run a watch unless it stays `auto`).
-Their own action is `github_inspect`, at `"ask"`; all ten are also in
-`NEEDS_A_PERSON`, so a loosened tier still asks. Everything else stays
+never written to disk. The four reads ship asking too - a fixed-endpoint read
+still sends the owner's own GitHub token out, which is why they are NOT the
+existing `github_read` action (that one is the scheduled look a "tell me
+when" watch makes, and `jarvis_tellme.py` refuses to run a watch unless it
+stays `auto`). Their own action is `github_inspect`; since 2026-11-10 23:00 PT
+the owner's "make GitHub reads card-free" decision makes that action a
+switchable READ row on What asks first (ONE card plus Windows Hello to loosen,
+instant to put the card back), and the four reads left
+`jarvis_agent.NEEDS_A_PERSON`. The SIX writes stay in `NEEDS_A_PERSON`, so a
+loosened tier still asks for those. ONE master switch, "Offer GitHub tools to
+the AI model", offers/removes all ten tools together - one card, written
+atomically, OFF instant (JARVIS-API §217). Everything else stays
 impossible: no force-push, squash, rebase, admin bypass, auto-merge, bypassing
 required checks, direct push to main, delete or close of a repository or branch,
 approve-pr, workflow dispatch or gist. `backend/github-tools.patch` is the

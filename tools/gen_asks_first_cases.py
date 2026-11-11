@@ -57,6 +57,11 @@ SHIPPED = {
     "wiki_update": "ask", "big_model_enable": "ask", "learning_enable": "ask",
     "history_enable": "ask", "learning_auto_enable": "ask", "learning_sensitive_enable": "ask",
     "custom_voice": "ask", "better_voice_enable": "ask", "enable_reading_tool": "ask",
+    # 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free": the one
+    # action the four GitHub read tools share. Shipped "ask" here (the release
+    # changes the default separately); the page offers the switch that can
+    # turn it to "auto" from the PC.
+    "github_inspect": "ask",
 }
 
 
@@ -133,6 +138,17 @@ def cases() -> dict:
     AF._T_STATE["off_rows"]["plugin_scan"] = {
         "outcome": "disabled", "message": AF._tools_off_said("plugin_scan"), "at": 0}
     out["pc_unlisted_tool_turned_off"] = AF.view(here=True)
+    # The master GitHub group switch (2026-11-10): all ten on (so the row is
+    # truthfully ON), some of them on (truthfully PARTIAL, never "on"), and its
+    # one card waiting. The per-tool list is the same in all three - the group
+    # is a separate object, never an item.
+    _with(SHIPPED, tools_enabled=list(AF.GITHUB_TOOLS))
+    out["pc_github_group_on"] = AF.view(here=True)
+    _with(SHIPPED, tools_enabled=list(AF.GITHUB_TOOLS[:4]))
+    out["pc_github_group_partial"] = AF.view(here=True)
+    _with(SHIPPED, tools_enabled=["web_search"],
+          tool_waiting=AF.GITHUB_TOOLS_GROUP)
+    out["pc_github_group_card_waiting"] = AF.view(here=True)
     _with(SHIPPED)
     AF._reset_for_tests()
     return {
@@ -151,6 +167,12 @@ def cases() -> dict:
             "tools_pc_only": AF.TOOLS_PC_ONLY, "tools_not_on_list": AF.TOOLS_NOT_ON_LIST,
             "tools_not_switched_why": AF.TOOLS_NOT_SWITCHED_WHY,
             "no_switch_note": dict(AF.NO_SWITCH_NOTE),
+            # The master GitHub group switch's own words and id (2026-11-10).
+            "github_group": AF.GITHUB_TOOLS_GROUP,
+            "github_group_title": AF.GITHUB_TOOLS_GROUP_TITLE,
+            "github_group_what": AF.GITHUB_TOOLS_GROUP_WHAT,
+            "github_group_card_title": AF.GITHUB_TOOLS_GROUP_CARD_TITLE,
+            "github_group_tools": list(AF.GITHUB_TOOLS),
             "lockdown_label": AF.LOCKDOWN_LABEL, "lockdown_detail": AF.LOCKDOWN_DETAIL,
             "lockdown_on_says": AF.LOCKDOWN_ON_SAYS, "lockdown_off_says": AF.LOCKDOWN_OFF_SAYS,
             "lockdown_on_label": AF.LOCKDOWN_ON_LABEL,

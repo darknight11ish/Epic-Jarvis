@@ -107,6 +107,11 @@ object AsksFirst {
         // rollback_model (the undo for a switch must never wait) stay off.
         "read_files_readonly", "read_joplin_note", "read_logseq_page",
         "create_logseq_page", "power_manage",
+        // 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free": the
+        // one action the four GitHub read tools share. The phone shows the row
+        // read-only like every other loosening switch; turning it ON (stricter)
+        // is the only direction it sends. READS ONLY - nothing on GitHub changes.
+        "github_inspect",
     )
 
     data class Switch(val asks: Boolean, val canLoosen: Boolean)

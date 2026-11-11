@@ -3182,11 +3182,21 @@ backend routes, in both directions; the rest are listed here only.
   list, a diff and a comment editor are deep configuration and a second door
   onto the owner's own code; the chat tool is the door, and the card is the
   decision. No route was added, so `tools/check_parity.py` is unchanged and
-  clean. What asks first is seven gate actions, every one `ask`:
-  `github_inspect` (the four reads - they ask too, because a read still sends
-  the saved GitHub token out) and the six carded writes `github_comment`,
+  clean. ONE master switch, "Offer GitHub tools to the AI model"
+  (`tools.github_group`), sits beside the ten per-tool rows and offers or
+  removes all ten GitHub tools together: ON is ONE card plus Windows Hello on
+  the PC and writes the ten names atomically, OFF is instant from either app,
+  and a partial list is reported as partial, never as on. It is a separate
+  payload object, so the per-tool list is unchanged (JARVIS-API §217). What
+  asks first is seven gate actions: the six carded writes `github_comment`,
   `github_open_issue`, `github_rerun_workflow`, `github_create_repo`,
-  `github_merge_pr` and `github_fix_and_push`. They are NOT the existing
+  `github_merge_pr` and `github_fix_and_push` are `ask` and in
+  `NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run one
+  with nobody asked; `github_inspect` (the four reads) ships `ask` too and is
+  the ONE switchable READ row on that page since the owner's 2026-11-10
+  "make GitHub reads card-free" decision - ONE card plus Windows Hello to
+  loosen, instant to put the card back - and the four reads left
+  `NEEDS_A_PERSON` in that same decision. They are NOT the existing
   `github_read`, which is the scheduled look a "tell me when" watch makes and
   must stay `auto`; the reason is in JARVIS-API §190.2. Merge and PR-branch push
   are real now - merge-commit only, pinned to the 40-hex head commit the card

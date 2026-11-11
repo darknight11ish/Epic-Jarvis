@@ -1485,9 +1485,22 @@ def t_every_write_is_ask_and_in_needs_a_person():
                   table.get(action) == "ask", table.get(action))
     for tool in AG.GITHUB_ACTION_TOOLS:
         check(f"{tool} is in NEEDS_A_PERSON", tool in AG.NEEDS_A_PERSON)
+    # The owner's 2026-11-10 23:00 PT "make GitHub reads card-free"
+    # decision: the FOUR READS left NEEDS_A_PERSON; the six writes above
+    # stay. The card is put back from the app with the switchable
+    # `github_inspect` read row (ONE card + Windows Hello; turning it back
+    # on is instant), and the token still only goes to api.github.com.
     for tool in AG.GITHUB_READ_TOOLS:
-        check(f"{tool} asks too, because a read sends the token",
-              tool in AG.NEEDS_A_PERSON)
+        check(f"{tool} is not forced to wait for a person (card-free reads)",
+              tool not in AG.NEEDS_A_PERSON)
+    import jarvis_asks_first as _AF
+    check("the read action itself is a switchable asks-first row",
+          "github_inspect" in _AF.SWITCHABLE)
+    check("... with turning it back ON the instant direction",
+          _AF.LOOSE.get("github_inspect") == "auto")
+    check("... and the ten GitHub tools are still exactly ten",
+          set(AG.GITHUB_READ_TOOLS) | set(AG.GITHUB_ACTION_TOOLS)
+          == set(AG.GITHUB_TOOLS) and len(AG.GITHUB_TOOLS) == 10)
     check("the merge and the push are never auto-approvable",
           all(AG.TOOLS[t].name in AG.NEEDS_A_PERSON
               for t in ("github_merge_pr", "github_fix_and_push")))

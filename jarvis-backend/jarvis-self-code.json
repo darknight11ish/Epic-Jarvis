@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "37a3cc4ca9b486975879f52a6739de2102f800c7",
- "built_at": "2026-11-10T20:16:37-08:00",
+ "ref": "aabb72128b27b1e469e786abb4f5ec6749120d4c",
+ "built_at": "2026-11-10T22:35:51-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4587,6 +4587,7 @@
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
+    "changelog.d/2026-11-10-github-review-and-record-gate.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
@@ -4738,6 +4739,7 @@
     "decisions.d/2026-11-09-wave14-project-read-presets-hud.md",
     "decisions.d/2026-11-10-cockpit-two-column-ships.md",
     "decisions.d/2026-11-10-github-card-gated-merge-and-fix-push.md",
+    "decisions.d/2026-11-10-github-review-and-record-gate.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5186,7 +5188,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 833,
+   "file_count": 835,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6269,6 +6271,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "aabb72128b27b1e469e786abb4f5ec6749120d4c",
+   "date": "2026-11-10",
+   "subject": "feat(github): wave 16E - a review packet and a record check before a push"
+  },
+  {
    "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
    "date": "2026-11-10",
    "subject": "test(ci): the wave-16 CI catch - diet hints, AST source pins, a real probe, and the no-vec skip"
@@ -6362,11 +6369,6 @@
    "sha": "2b21e1d1b39ca093279b345c7863823403bf4626",
    "date": "2026-11-10",
    "subject": "Merge origin/main into the wave-15 branch (carries the merged wave-14 follow-ups, PR #1220)"
-  },
-  {
-   "sha": "455765eb5d406d5c5d531c23b75bd952c30b5b35",
-   "date": "2026-11-09",
-   "subject": "Merge pull request #1220 from darknight11ish/integration/wave14-followups-2026-11-10"
   }
  ],
  "top_level": [
@@ -6403,7 +6405,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 232
+   "files": 233
   },
   {
    "path": "videos/",
@@ -6413,7 +6415,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 149
+   "files": 150
   },
   {
    "path": "plugins/",
@@ -6487,8 +6489,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5606,
-  "covered": 5134,
+  "tracked_files": 5608,
+  "covered": 5136,
   "excluded": 472,
   "subsystems": 27
  },
