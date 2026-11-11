@@ -21,21 +21,29 @@ docs/APPROVALS-AUDIT-2026-09-26.md; CLAUDE.md)
     Locks, doors, alarms and covers always keep a card of their own.
 
 OFFERING A READING TOOL TO THE AI MODEL AT ALL (2026-09-27, the owner's
-answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md)
+answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md;
+extended 2026-11-10)
   * "Reading tools (calendar, email, notes, home status) can be switched on
     from the PC app, each with a card plus Windows Hello; other tools stay
     in the settings file." A DIFFERENT thing from loosening, above: loosening
     changes whether an offered tool asks first ([autonomy.tiers]); this
     changes whether the model is offered the tool AT ALL ([tools].enabled -
-    jarvis_agent.offered_tools() only offers a tool named there). Each of
-    the four switches on its own, one card at a time (ENABLE_TOOL_ACTION,
-    "enable_reading_tool"), the same PC-only, Windows-Hello shape as
-    loosening (jarvis_owner_check.PC_ONLY_ACTIONS). Turning one OFF removes
-    it from [tools].enabled at once, from either app, never a card - it
-    only narrows what the model may do. Every other tool (github_search,
-    send_email, home_control, browser_control, ...) stays file-only: it can
-    only be added to [tools].enabled by hand (jarvis_reach.py's rows for
-    them say so plainly).
+    jarvis_agent.offered_tools() only offers a tool named there).
+  * SINCE 2026-11-04 every tool the AI can be offered has its own switch, one
+    card at a time (ENABLE_TOOL_ACTION, "enable_reading_tool"), and the card
+    NAMES that one tool.
+  * The owner's ruling of 2026-11-10: "LET THE PHONE APPROVE TOOL SWITCHES
+    TOO." The card is requested from the PC (the phone's page is read-only),
+    and it is a RISKY card, not a PC-only one: on the PC it asks Windows Hello,
+    and on the phone it needs that phone's own signed approval (a fingerprint
+    or PIN) - a phone with no approval key is refused and offered turning
+    signing on. Denying works from anywhere. Turning a tool OFF removes it
+    from [tools].enabled at once, from either app, never a card - it only
+    narrows what the model may do. Each USE of an offered tool still has its
+    own "Ask me first" decision; this card approves no use.
+  * Every other tool (github_search, send_email, home_control, browser_control,
+    ...) stays file-only: it can only be added to [tools].enabled by hand
+    (jarvis_reach.py's rows for them say so plainly).
 
 THE TWO CARDS HERE MUST NOT NAME A FILE THE GATE PROTECTS (fixed 2026-10-10)
 The loosening card (LOOSEN_ACTION, `loosen_card()`) and the reading-tool card
@@ -726,8 +734,11 @@ def normalise_enabled(names) -> set:
             out.add(new)
     return out
 
-#: The approval card for offering one of them. jarvis_owner_check.
-#: PC_ONLY_ACTIONS holds the same name.
+#: The approval card for offering one of them. It is NOT on
+#: jarvis_owner_check.PC_ONLY_ACTIONS: since the owner's ruling of 2026-11-10
+#: the phone may approve it too, and it is a RISKY card instead (the gate's
+#: own `_RISK` row in jarvis_gate.py), so the PC asks Windows Hello and the
+#: phone needs its own signed approval.
 ENABLE_TOOL_ACTION = "enable_reading_tool"
 
 #: Never loosened from an app, whatever else changes: anything that leaves
@@ -1902,10 +1913,12 @@ def _here(here: Optional[bool], peer, local) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Offering a reading tool to the AI model at all - the PC, one card plus
-# Windows Hello. A DIFFERENT thing from loosening (above): that changes
-# whether a tool asks first once it is offered; this changes whether it is
-# offered at all - one line of [tools].enabled, never [autonomy.tiers].
+# Offering a reading tool to the AI model at all - the PC requests it, ONE
+# card, and it is a RISKY card: Windows Hello on the PC, or the phone's own
+# signed approval (the owner's ruling of 2026-11-10). A DIFFERENT thing from
+# loosening (above): that changes whether a tool asks first once it is
+# offered; this changes whether it is offered at all - one line of
+# [tools].enabled, never [autonomy.tiers].
 # ---------------------------------------------------------------------------
 
 TOOLS_LABEL = "Let the AI use this"
@@ -1913,13 +1926,15 @@ TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separat
                "from whether it asks you first, above. Since 2026-11-04 EVERY ability "
                "the AI can be offered has a switch here, the raw and everyday ones "
                "included; a few are not switches because their own switch decides them, "
-               "and the page names those. Turning one on shows ONE approval card and asks "
-               "Windows Hello on this PC; turning it off is instant, from either app. "
-               "One master switch, \"Offer GitHub tools to the AI model\", turns the ten "
-               "GitHub abilities on or off together - its own card says so - and every "
-               "other switch here changes exactly one tool.")
+               "and the page names those. Turning one on shows ONE approval card that "
+               "names that one ability: approve it on the PC with Windows Hello, or on "
+               "your phone with its own fingerprint or PIN. Turning it off is instant, "
+               "from either app. One master switch, \"Offer GitHub tools to the AI "
+               "model\", turns the seventeen GitHub abilities on or off together - its "
+               "own card says so - and every other switch here changes exactly one tool.")
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
-                 "What asks first). It takes one approval card and Windows Hello.")
+                 "What asks first). It takes one approval card - approve it on the PC with "
+                 "Windows Hello, or on your phone with its own fingerprint or PIN.")
 TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
 #: The known tools that have no switch of their own (NOT_A_SWITCH). The page
 #: lists them so nobody hunts for a switch that is not there, and the route
@@ -2208,8 +2223,9 @@ def tool_enable_card(tool: str) -> str:
                   "not start either, and without one the AI is not offered it.",
                   ""]
     lines += [
-        "Approving it needs Windows Hello on this PC. You can turn it off again at any time "
-        "from either app, and that is instant.",
+        "Approving it needs a real person's check: Windows Hello on this PC, or your "
+        "phone's own fingerprint or PIN (a phone with no approval key is refused). You "
+        "can turn it off again at any time from either app, and that is instant.",
         "",
         "If you did not just do this, say no.",
         "",
@@ -2683,9 +2699,13 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                         armed: Optional[Callable[[], bool]] = None,
                         here: Optional[bool] = None) -> tuple:
     """POST /api/asks_first/tools {"tool": "<name>", "enabled": bool}.
-    (code, body). ON is the PC only, one card plus Windows Hello - the same
-    shape as request_tier's looser side, aimed at [tools].enabled instead of
-    [autonomy.tiers]. OFF is instant, never a card, from either app.
+    (code, body). ON is requested from the PC only (the phone's page is
+    read-only), and its ONE card NAMES that one tool. The card is RISKY, not
+    PC-only (the owner's ruling of 2026-11-10, "let the phone approve tool
+    switches too"): on the PC it asks Windows Hello, and on the phone it needs
+    that phone's own signed approval (a fingerprint or PIN); a phone with no
+    approval key is refused there, by jarvis_owner_check. Denying works from
+    anywhere. OFF is instant, never a card, from either app.
 
     ON accepts EVERY tool the AI model can be offered (the owner's decision,
     2026-11-04): Tier A and B, the raw Tier C set, the everyday helpers and
@@ -2754,7 +2774,8 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
         _audit("asks_first.tools.disabled", {"tool": tool})
         return 200, {"ok": True, "changed": True, "tools": tools_status(here=True),
                      "message": said}
-    # ON: the PC only, one card plus Windows Hello.
+    # ON: requested from the PC, ONE card, and that card is a RISKY approval
+    # (Windows Hello on the PC; the phone's own signed approval, 2026-11-10).
     if not known:
         note = no_switch_note(tool)
         if note:
@@ -2793,7 +2814,9 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                      "Waiting for your approval. Approve the card on this PC - it asks "
                      "Windows Hello - and the AI model will be offered this tool.")
     return 202, {"ok": True, "waiting": True, "tools": tools_status(here=True),
-                 "message": waiting_words}
+                 "message": "Waiting for your approval. Approve the card on this PC (Windows "
+                            "Hello) or on your phone (its fingerprint or PIN), and the AI "
+                            "model will be offered this tool."}
 
 
 def _vault_switch_status(here: bool) -> dict:

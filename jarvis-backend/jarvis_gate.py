@@ -564,12 +564,18 @@ _RISK: dict[str, tuple[str, str, str]] = {
     # reaches this PC. Turning it off again is instant.
     "watch_notifications_enable": ("yes", "local", "lets your phone's own notification bridging copy Jarvis's notifications to a paired smartwatch too, instead of keeping them on the phone only; nothing about this reaches this PC, and turning it off again is instant"),
     # tools-enable.patch (jarvis_asks_first.py, the owner's answer of
-    # 2026-09-27). A DIFFERENT thing from loosen_what_asks_first, above: this
-    # offers a reading tool to the AI model at all, by changing one line of
-    # [tools].enabled on this PC, and sends nothing. Turning it back off is
-    # instant, from either app. jarvis_owner_check.PC_ONLY_ACTIONS makes its
-    # approval need Windows Hello on this PC whatever this line says.
-    "enable_reading_tool": ("yes", "local", "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant"),
+    # 2026-09-27; made RISKY by the owner's ruling of 2026-11-10). A DIFFERENT
+    # thing from loosen_what_asks_first, above: this offers ONE named tool -
+    # the one on its own card - to the AI model at all, by changing one line of
+    # [tools].enabled on this PC, and sends nothing. It is a RISKY card on
+    # purpose: the switch can be turned back off at once, but while it was on
+    # the model may already have used that ability in a chat, and that use
+    # cannot be taken back. So on the PC it asks Windows Hello, and on the phone
+    # it needs that phone's own signed approval (the owner's 2026-11-10 ruling:
+    # "let the phone approve tool switches too") - a phone with no approval key
+    # is refused with "no_approval_key" so it can offer to turn signing on.
+    # Turning it back off is instant, from either app, no card.
+    "enable_reading_tool": ("no", "local", "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back"),
     # backup.patch (jarvis_backup.py, the owner's decision of 2026-09-27).
     # Replaces memory, chat history, settings and notes with an older
     # backup, and puts the chat-history key back in Windows Credential
@@ -781,6 +787,16 @@ def notice_for(item: dict) -> dict:
     the reader down inside the app where it appears in quotation marks next to
     its source. `raised` travels as a BOOLEAN. See docs/ARCHITECTURE.md.
 
+    THE ONE CARD THAT NAMES ITS SUBJECT (owner's ruling, 2026-11-10). The
+    tool-enable card's subject is chosen at runtime, not by the action name, so
+    a generic "offer a tool to the AI model" left the owner unable to tell WHICH
+    tool he was approving on the phone. For `enable_reading_tool` (and only
+    that action) this function reads `detail.setting`, and only after checking
+    it is a plain tool id (`^[a-z][a-z0-9_]{0,63}$`) and mapping it through
+    `jarvis_reach.TOOL_NAMES`, this project's own labels. Every other row still
+    reads nothing but `action`; a malformed row falls back to the generic title,
+    so no payload text can reach a lock screen through here.
+
     Returns:
         title    one line: what Jarvis wants to do
         body     why it matters, and that nothing has happened yet
@@ -790,6 +806,32 @@ def notice_for(item: dict) -> dict:
     action = str(item.get("action") or "an action")
     r = risk_for(action)
     raised = bool(item.get("raised"))
+
+    # The tool a tool-enable card is about, or "" - see "THE ONE CARD THAT
+    # NAMES ITS SUBJECT" above. Strictly validated: a plain tool id, mapped
+    # through our own table, never the row's own words.
+    tool_name = ""
+    if action == "enable_reading_tool":
+        try:
+            import json as _json
+            import re as _re
+            _detail = item.get("detail")
+            if isinstance(_detail, str) and _detail.strip().startswith("{"):
+                _detail = _json.loads(_detail)
+            _setting = str((_detail or {}).get("setting") or "").strip() \
+                if isinstance(_detail, dict) else ""
+            if _re.match(r"^[a-z][a-z0-9_]{0,63}$", _setting):
+                try:
+                    import jarvis_reach as _reach
+                    tool_name = str((getattr(_reach, "TOOL_NAMES", {}) or {})
+                                    .get(_setting) or "")
+                except Exception:
+                    tool_name = ""
+                if not tool_name:
+                    tool_name = _setting.replace("_", " ")
+                tool_name = " ".join(tool_name.split())[:80]
+        except Exception:
+            tool_name = ""
 
     # The title from jarvis_card_words.TITLES: a plain phrase for every action
     # the gate knows ("Jarvis wants to switch to a different AI model"). It
@@ -808,6 +850,8 @@ def notice_for(item: dict) -> dict:
                                   for c in str(item.get("action") or "")).split())[:60].strip()
         title = (f'Jarvis wants your OK for "{_words}"' if _words
                  else "Jarvis is asking for your approval")
+    if tool_name:
+        title = f'Jarvis wants to offer "{tool_name}" to the AI model'
 
     # Heavy means "interrupt them". Any one of three things earns it: it cannot
     # be undone, it leaves the machine, or outside text pushed the tier up.
@@ -816,6 +860,8 @@ def notice_for(item: dict) -> dict:
     heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
 
     bits = [r["why"]]
+    if tool_name:
+        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
     if not r["classified"]:
         # The warning line above is the headline; this says WHY the worst case
         # was chosen, in the plainest words there are. Both are this file's own

@@ -1812,7 +1812,98 @@ def t_the_windows_side_is_arithmetic_checked_and_fails_closed():
               OC.parse_child_answer(r.returncode, r.stdout) == "failed", r.stdout + r.stderr)
 
 
-# ------------------------------------------------------- the words --
+# ------------------------- the tool-enable card (owner's ruling, 2026-11-10) --
+
+TOOL_ENABLE = "enable_reading_tool"
+#: A phone-shaped request: a mesh address talking to a different local address.
+PHONE_PEER = ("100.101.102.103", "100.64.0.5")
+
+
+def _tool_enable_row(rid="te1"):
+    """A real tool-enable card row, with the gate's OWN risk row for the action
+    and the one tool named in `detail` (as jarvis_asks_first raises it)."""
+    import test_approval_contract as AC
+    rev, reach, why = AC._risk_table()[TOOL_ENABLE]
+    asked = 'Offer this ability to the AI model: "Reading your calendar"?'
+    return {"id": rid, "action": TOOL_ENABLE, "tier": "ask",
+            "created": time.time() - 5, "expires_in": 150,
+            "raised": None, "prompt": asked,
+            "detail": json.dumps({"text": asked, "setting": "calendar_read", "to": True}),
+            "risk": {"reversible": rev, "reach": reach, "why": why,
+                     "swipe_ok": False, "classified": True}}
+
+
+def t_the_phone_may_approve_a_tool_enable_card_too():
+    """THE OWNER'S RULING OF 2026-11-10: "let the phone approve tool switches
+    too." The card appeared on his phone with only Deny because the action was
+    in PC_ONLY_ACTIONS. It is a RISKY card instead, so a person still has to
+    confirm it - Windows Hello on the PC, this phone's own signature on the
+    phone - and a phone with no approval key is refused with the existing
+    sentence. This fails on the old code in three ways: the action is in
+    PC_ONLY_ACTIONS, the gate row is not risky, and a phone approval is refused
+    with `pc_only` before the signature is ever asked for."""
+    row = _tool_enable_row()
+    check("the gate's own row for enabling a tool classifies it RISKY "
+          "(the choice cannot be taken back once the model has used it)",
+          row["risk"]["reversible"] == "no", row["risk"])
+    check("... so is_risky() is True, and the PC still asks Windows Hello",
+          OC.is_risky(row) is True, row["risk"])
+    check("enable_reading_tool is NOT in PC_ONLY_ACTIONS any more",
+          TOOL_ENABLE not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+    check("... and no other PC-only action was changed",
+          sorted(OC.PC_ONLY_ACTIONS) == sorted([
+              "loosen_what_asks_first", "restore_backup", "pair_device",
+              "unretire_shared_key", "register_approval_key", "handoff_keep_offering",
+              "handoff_bring_to_front", "desktop_update", "product_check",
+              "change_approval_policy"]), sorted(OC.PC_ONLY_ACTIONS))
+
+    import jarvis_devices as D
+    real = D.check_signed_approval
+    seen = []
+
+    def signed(body, r, dev):
+        seen.append(dev)
+        return None                       # the phone's signature checked out
+    try:
+        D.check_signed_approval = signed
+        _fresh_stamps()
+        got = OC.approve_check({"id": "te1"}, peer=PHONE_PEER[0], local=PHONE_PEER[1],
+                               pending=lambda: [row], own=(), device="dev1")
+    finally:
+        D.check_signed_approval = real
+    check("a risky tool-enable card from a paired phone asks THAT phone's own signature",
+          got is None and seen == ["dev1"], (got, seen))
+    check("... and the approval is stamped once the signature checked out",
+          OC.take_stamp("te1", TOOL_ENABLE))
+
+    def no_key(body, r, dev):
+        return 403, {"ok": False, "owner_check": "no_approval_key",
+                     "error": "This phone does not have an approval key on this PC yet."}
+    try:
+        D.check_signed_approval = no_key
+        _fresh_stamps()
+        got = OC.approve_check({"id": "te1"}, peer=PHONE_PEER[0], local=PHONE_PEER[1],
+                               pending=lambda: [row], own=(), device="dev1")
+    finally:
+        D.check_signed_approval = real
+    check("a phone with no approval key is refused with the existing sentence, so it "
+          "can offer to turn signing on",
+          got is not None and got[0] == 403
+          and got[1].get("owner_check") == "no_approval_key", got)
+
+    # NOT-RISKY-CONTROL: the old, non-risky row shape (what the gate said before
+    # this ruling) does not ask for a signature - which is why the risk row, not
+    # a hard-coded name, is what keeps a person in the loop.
+    safe = dict(row)
+    safe["risk"] = {"reversible": "yes", "reach": "local", "why": "old row",
+                    "swipe_ok": True, "classified": True}
+    check("CONTROL: without the RISKY row the phone's signature would not be asked "
+          "for - so the class is what carries the check",
+          OC.is_risky(safe) is False)
+
+
+
+#------------------------------------------------------- the words --
 
 def _rust_const(name):
     src = RULES_RS.read_text(encoding="utf-8")

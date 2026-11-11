@@ -158,7 +158,8 @@ object AsksFirst {
     /** The PC's own sentence for a switch page opened away from the PC. */
     const val TOOLS_PC_ONLY =
         "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
-            "first). It takes one approval card and Windows Hello."
+            "first). It takes one approval card - approve it on the PC with Windows Hello, or " +
+            "on your phone with its own fingerprint or PIN."
 
     /** The read-only state lines the phone draws for one tool. */
     const val TOOLS_ON = "On: the AI model is offered this."

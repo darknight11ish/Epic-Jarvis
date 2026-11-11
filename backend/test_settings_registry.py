@@ -691,17 +691,28 @@ def t_loosen_asks_first_pc_only():
         OC._ARMED = False
 
 
-def t_enable_reading_tool_pc_only():
-    check("enable_reading_tool is really on PC_ONLY_ACTIONS (not invented for this test)",
-          "enable_reading_tool" in OC.PC_ONLY_ACTIONS)
+def t_enable_reading_tool_is_risky_not_pc_only():
+    """The owner's ruling of 2026-11-10: the phone may approve tool switches.
+
+    The action left PC_ONLY_ACTIONS and became a RISKY card instead (the gate's
+    own `_RISK` row), so a person still confirms it - Windows Hello on the PC,
+    this phone's signature on the phone. The ROUTE is still PC-only for RAISING
+    the card (the phone's page is read-only), and OFF is still instant from
+    anywhere. This fails on the old code at the first check."""
+    check("enable_reading_tool is NOT on PC_ONLY_ACTIONS any more",
+          "enable_reading_tool" not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+    import test_approval_contract as AC
+    rev, reach, _why = AC._risk_table()["enable_reading_tool"]
+    check("... it is a RISKY gate row instead (reversible 'no'), so a person is still "
+          "in the loop", rev == "no", (rev, reach))
     AF._reset_for_tests()
     OC.set_verifier(lambda m, t: OC.CONFIRMED)
     OC._ARMED = True
     try:
         before = set(AF.tools_enabled_set())
         r = go("let the ai model read my calendar", peer=PHONE)
-        check("ON, from a phone-shaped peer: refused",
-              r is not None and "PC" in r.reply)
+        check("ON, from a phone-shaped peer: still requested from the PC only (the "
+              "phone's page is read-only)", r is not None and "PC" in r.reply)
         check("... and [tools].enabled is unchanged", AF.tools_enabled_set() == before)
         AF._reset_for_tests()
         r = go("let the ai model read my calendar", peer=PC)
