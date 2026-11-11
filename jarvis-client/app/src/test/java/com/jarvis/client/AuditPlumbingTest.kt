@@ -294,6 +294,7 @@ class AuditPlumbingTest {
         // Since 2026-11-01 the Photo row is gone too: its photo half lives in
         // the one Attach row, routed to the picture path by AttachFile.
         for (word in listOf(
+            "MoreMenuWords.HISTORY",
             "MoreMenuWords.FILE",
             "MoreMenuWords.MODES",
             "MoreMenuWords.NOTIFICATIONS",

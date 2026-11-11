@@ -3713,8 +3713,20 @@ phone's layout is its OWN document: four ordered sections (`top_strip`, `hero`,
 `body`, `composer`), its own `MenuCatalog` card ids, five read-only built-in
 arrangements (**Default**, **Live & Voice**, **Brain & Learning**, **Everyday
 Ops**, **Calm**), one versioned JSON document in the phone's own
-`SharedPreferences`, and one `HudLayout.apply` reducer every input calls. It
-cannot read `contract/hud-presets.json`, because the desktop's five regions and
+`SharedPreferences`, and one `HudLayout.apply` reducer every input calls. Since
+**2026-11-10** the `top_strip` section is split at the owner's ask (the strip
+took the room the conversation needed): its two **safety** cards - the approvals
+queue ("Waiting for your yes") and the emergency stop - stay on the Home screen
+as ONE compact row, because a safety control is never hidden behind a menu, while
+its other cards (Right now, Attention budget, What Jarvis is doing) open from the
+app's **More menu** in the menu's own "Top strip" section. The section id and the
+saved layout document did not change, so an owner's arrangement keeps its cards;
+`HomeScreen.kt`'s `HomeHud` draws `HudLayout.homeStrip` (the compact safety row)
+plus the full-width `HudLayout.HOME_SECTIONS` (hero, body, composer), and
+`HomeMoreMain` draws `HudLayout.moreStrip` and the new History row. Both read the
+same saved layout through `HudLayout.visible`, so the hide rules and the
+unremovable safety cards are unchanged.
+It cannot read `contract/hud-presets.json`, because the desktop's five regions and
 its card ids do not exist on a phone column - the two are different questions,
 not two halves of one choice. `tools/check_parity.py` has nothing to classify:
 no backend route and no phone source names that file. `docs/HUD-MAIN-SCREEN-CARDS-2026-10-29.md`
