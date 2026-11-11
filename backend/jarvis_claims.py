@@ -172,6 +172,10 @@ READ_ONLY_TOOLS = frozenset({
     # state and their checks, and changes nothing. The MERGE it suggests is a
     # separate tool in ACTING_TOOLS, so "I merged it" is still corrected.
     "github_pr_scan",
+    # The review pair (2026-11-10): review_changes reads the change and
+    # check_records runs the record checkers; neither writes anything, so a
+    # result from one never backs "I've done it" and is corrected as a read.
+    "review_changes", "check_records",
     # "plugin_list" (2026-11-02): it lists the drop-in plugin folder - names,
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
