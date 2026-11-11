@@ -246,9 +246,9 @@ await check("the GitHub group switch: one row, truthfully off/on/partial, ON hel
   assert.equal(shipped.tools.items.length, C.pc_shipped.tools.items.length);
   assert.deepEqual(githubGroupSwitchView(g, shipped.tools, true),
     { checked: false, disabled: false, partial: false, lines: [Wd.github_group_what] },
-    "shipped: all ten off, and turning them on is offered on the PC");
+    "shipped: all twenty off, and turning them on is offered on the PC");
   assert.equal(githubGroupSwitchView(g, shipped.tools, false).disabled, true,
-    "turning all ten ON is held on a stale link");
+    "turning all twenty ON is held on a stale link");
   const phone = readAsksFirst(C.phone_shipped);
   const pv = githubGroupSwitchView(githubGroupRow(phone.tools), phone.tools, true);
   assert.equal(pv.disabled, true, "not from the PC: cannot turn the group on");
@@ -256,10 +256,10 @@ await check("the GitHub group switch: one row, truthfully off/on/partial, ON hel
   const on = readAsksFirst(C.pc_github_group_on);
   const og = githubGroupRow(on.tools);
   assert.equal(og.on, true);
-  assert.equal(og.onCount, 10);
+  assert.equal(og.onCount, 20);
   assert.deepEqual(githubGroupSwitchView(og, on.tools, true),
     { checked: true, disabled: false, partial: false, lines: [og.what] },
-    "all ten on: OFF is instant and never held");
+    "all twenty on: OFF is instant and never held");
   const part = readAsksFirst(C.pc_github_group_partial);
   const pg = githubGroupRow(part.tools);
   assert.equal(pg.on, false, "some on is NOT on");
@@ -268,7 +268,7 @@ await check("the GitHub group switch: one row, truthfully off/on/partial, ON hel
   const partV = githubGroupSwitchView(pg, part.tools, true);
   assert.equal(partV.checked, false, "a partial list never draws as ON");
   assert.equal(partV.partial, true);
-  assert.ok(partV.lines.some((l) => l.includes("4 of the 10 GitHub tools are on now")),
+  assert.ok(partV.lines.some((l) => l.includes("4 of the 20 GitHub tools are on now")),
     partV.lines.join(" | "));
   const waiting = readAsksFirst(C.pc_github_group_card_waiting);
   const wv = githubGroupSwitchView(githubGroupRow(waiting.tools), waiting.tools, true);
@@ -289,7 +289,7 @@ await check("the GitHub group switch: one row, truthfully off/on/partial, ON hel
 });
 
 await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {  const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 65,
+  assert.equal(pc.tools.items.length, 74,
     "every tool the model can be offered is a switch (65 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
@@ -460,11 +460,11 @@ await check("Settings: the GitHub group switch - one row, ON held, OFF goes", as
   let page = await settings(C.pc_shipped, { link: { stale: true } });
   const held = await page.locator("#af-github-group").isDisabled();
   await page.close();
-  assert.equal(held, true, "turning all ten ON is held on a stale link");
+  assert.equal(held, true, "turning all twenty ON is held on a stale link");
   page = await settings(C.pc_github_group_on, { link: { stale: true } });
   const offHeld = await page.locator("#af-github-group").isDisabled();
   await page.close();
-  assert.equal(offHeld, false, "already on: turning all ten OFF is never held");
+  assert.equal(offHeld, false, "already on: turning all twenty OFF is never held");
   page = await settings(C.pc_github_group_on, { link: { stale: true } });
   await page.locator("#af-github-group").click();
   await page.waitForTimeout(300);
@@ -476,7 +476,7 @@ await check("Settings: the GitHub group switch - one row, ON held, OFF goes", as
   const partialBox = await page.locator("#af-github-group").isChecked();
   await page.close();
   assert.equal(partialBox, false, "a partial list never draws as checked");
-  assert.ok(partialText.includes("4 of the 10 GitHub tools are on now"), partialText.slice(0, 400));
+  assert.ok(partialText.includes("4 of the 20 GitHub tools are on now"), partialText.slice(0, 400));
 });
 
 await check("Settings: Lockdown - ON sent at once even on a stale link; OFF held, then ONE request", async () => {

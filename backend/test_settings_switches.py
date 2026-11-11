@@ -417,14 +417,14 @@ def t_the_gate_lines_and_the_tables():
 
 # ============================================ 3. the GitHub master group switch
 #
-# 2026-11-10, the owner's ruling Q1 step 2: ONE switch offers/removes the ten
+# 2026-11-10, the owner's ruling Q1 step 2: ONE switch offers/removes the twenty
 # GitHub tools together. It is a SEPARATE object in the PC's payload
 # (`tools.github_group`), never a row in `tools.items`, so the per-tool rows -
 # and every app's pin on that list - do not move for it. These checks drive the
 # REAL route against the hermetic temp settings file, the same way section 1
 # does, so the atomic [tools].enabled write is proved end to end.
 
-def t_the_github_master_switch_writes_all_ten_in_one_step():
+def t_the_github_master_switch_writes_all_twenty_in_one_step():
     write_toml(["plugin_scan", "calendar_read"])
     AF._reset_for_tests()
     code, out = route(AF.GITHUB_TOOLS_GROUP, True)
@@ -433,7 +433,7 @@ def t_the_github_master_switch_writes_all_ten_in_one_step():
           AF.GITHUB_TOOLS_GROUP not in AF.TOOLS_SWITCHABLE
           and all(i["id"] != AF.GITHUB_TOOLS_GROUP
                   for i in AF.tools_status(here=True)["items"]))
-    check("group ON through the real route: 202 and all ten names written",
+    check("group ON through the real route: 202 and all twenty names written",
           code == 202 and set(AF.GITHUB_TOOLS) <= got, (code, out.get("message"), got))
     check("... each name exactly once, and the owner's own names kept",
           len(got) == len(AF.GITHUB_TOOLS) + 2
@@ -441,17 +441,17 @@ def t_the_github_master_switch_writes_all_ten_in_one_step():
     check("... and the page reports the group as ON, not partial",
           out["tools"]["github_group"]["on"] is True
           and out["tools"]["github_group"]["partial"] is False
-          and out["tools"]["github_group"]["on_count"] == 10,
+          and out["tools"]["github_group"]["on_count"] == len(AF.GITHUB_TOOLS),
           out["tools"]["github_group"])
     code, out = route(AF.GITHUB_TOOLS_GROUP, False)
     got = enabled_in_file()
-    check("group OFF is instant, from the phone too, and removes only the ten",
+    check("group OFF is instant, from the phone too, and removes only the twenty",
           code == 200 and got == {"plugin_scan", "calendar_read"}, (code, got))
     # A partial file: the row must be truthful, and ON adds only the missing.
     write_toml([AF.GITHUB_TOOLS[0], AF.GITHUB_TOOLS[1], AF.GITHUB_TOOLS[2], "plugin_scan"])
     AF._reset_for_tests()
     g = AF.tools_status(here=True)["github_group"]
-    check("a file with three of the ten reads as PARTIAL, never as on",
+    check("a file with three of the twenty reads as PARTIAL, never as on",
           g["on"] is False and g["partial"] is True and g["on_count"] == 3, g)
     code, out = AF.request_tool_enable(
         {"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, here=False,
@@ -462,11 +462,11 @@ def t_the_github_master_switch_writes_all_ten_in_one_step():
                                     AF.GITHUB_TOOLS[2], "plugin_scan"}, (code, out))
     code, out = route(AF.GITHUB_TOOLS_GROUP, True)
     got = enabled_in_file()
-    check("group ON from a partial file adds only the missing seven",
+    check("group ON from a partial file adds only the missing seventeen",
           code == 202 and set(AF.GITHUB_TOOLS) <= got and "plugin_scan" in got
           and len(got) == len(AF.GITHUB_TOOLS) + 1, got)
     code, out = route(AF.GITHUB_TOOLS_GROUP, True)
-    check("... and asking again when all ten are on changes nothing",
+    check("... and asking again when all twenty are on changes nothing",
           code == 200 and out["changed"] is False, (code, out.get("changed")))
     AF._reset_for_tests()
 

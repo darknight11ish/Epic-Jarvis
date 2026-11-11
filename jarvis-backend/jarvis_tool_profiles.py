@@ -1068,8 +1068,11 @@ PROFILES: dict = {
                                    "at; check_records says whether the "
                                    "records CI demands are already in place.",
         },
-        "tier": "switchable",
-        "enable_hint": REVIEW_TOOL_ENABLE_HINT,
+        "tier": "always-available",
+        "enable_hint": (
+            "Always available - it is in the shipped `[tools].enabled` list, "
+            "card-free, and its own switch on Settings, What asks first, can "
+            "turn it off and back on."),
         "sources": [AGENT, REVIEW, ASKS_FIRST],
     },
 
@@ -1102,8 +1105,11 @@ PROFILES: dict = {
                              "place; review_changes says what changed and what to "
                              "look at.",
         },
-        "tier": "switchable",
-        "enable_hint": REVIEW_TOOL_ENABLE_HINT,
+        "tier": "always-available",
+        "enable_hint": (
+            "Always available - it is in the shipped `[tools].enabled` list, "
+            "card-free, and its own switch on Settings, What asks first, can "
+            "turn it off and back on."),
         "sources": [AGENT, REVIEW, ASKS_FIRST],
     },
 
@@ -2947,6 +2953,9 @@ FAMILIES: dict = {
                   "github_pr_scan", "github_comment", "github_open_issue",
                   "github_rerun_workflow", "github_create_repo",
                   "github_merge_pr", "github_fix_and_push",
+                  "github_pr_detail", "github_open_pr", "github_workflow",
+                  "github_issue_labels", "github_edit_pr", "github_pr_review",
+                  "github_issue_state",
                   "review_changes", "check_records"],
         "impact": "This is the family the owner uses to actually build things with "
                   "Jarvis: it answers \"has someone already built this?\" with a "
@@ -2967,7 +2976,7 @@ FAMILIES: dict = {
                   "says whether the bookkeeping CI demands is already in place.",
         "limits": ["Every way out of the PC here is carded: shell commands always "
                    "ask, GitHub research needs an approved plan, a look at your "
-                   "own GitHub asks every time, each of its six actions has its "
+                   "own GitHub asks every time, each of its write actions has its "
                    "own card, a repository it creates is empty and cannot be "
                    "deleted by Jarvis, a merge is merge-commit only and pinned to "
                    "one commit, and a push goes only to a pull request's own "

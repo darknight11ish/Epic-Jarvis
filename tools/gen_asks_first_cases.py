@@ -57,11 +57,10 @@ SHIPPED = {
     "wiki_update": "ask", "big_model_enable": "ask", "learning_enable": "ask",
     "history_enable": "ask", "learning_auto_enable": "ask", "learning_sensitive_enable": "ask",
     "custom_voice": "ask", "better_voice_enable": "ask", "enable_reading_tool": "ask",
-    # 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free": the one
-    # action the four GitHub read tools share. Shipped "ask" here (the release
-    # changes the default separately); the page offers the switch that can
-    # turn it to "auto" from the PC.
-    "github_inspect": "ask",
+    # 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free" (and the
+    # 2026-11-11 union): the one action the five GitHub read tools share. The
+    # shipped file itself says "auto" now, so the simulated PC must too.
+    "github_inspect": "auto",
 }
 
 

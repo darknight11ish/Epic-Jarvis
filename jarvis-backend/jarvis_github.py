@@ -338,9 +338,10 @@ OWN_REPO = "darknight11ish/Epic-Jarvis"
 
 #: How many workflow runs one `github_ci_status` read asks for. It is
 #: deliberately SMALLER than `PER_PAGE` (the 2026-11-11 Q-G ruling): a run list
-#: carries a lot of JSON per run, and a GitHub answer over `MAX_BYTES` cannot be
-#: parsed at all - so the CI read asks for the newest 5 and says plainly if
-#: GitHub still sends too much, rather than showing half an answer.
+#: carries a lot of JSON per run, and the read layer caps any answer at
+#: `MAX_BYTES` and marks a genuinely oversized one as cut (`_capped_text`), so
+#: the CI read asks for the newest 5 and says plainly when GitHub still sends
+#: too much, rather than showing half an answer.
 CI_PER_PAGE = 5
 
 #: Branches a push may NEVER target, and the prefixes that are the same rule
@@ -3203,6 +3204,26 @@ class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
             headers, fp)
 
 
+def _read_capped(stream) -> bytes:
+    """One byte PAST the cap: enough to know the answer was cut, never more."""
+    return stream.read(MAX_BYTES + 1)
+
+
+def _capped_text(raw: bytes) -> str:
+    """The answer's text, with `CUT_MARKER` when the READ itself cut it.
+
+    `MAX_BYTES` is applied here, at the one place a socket is read, so an answer
+    GitHub really sent larger than the cap carries the marker into every parser
+    and every words-builder that sees it. Before 2026-11-11 the read stopped at
+    the cap and returned an unparseable prefix with NO marker - so a genuinely
+    oversized `github_ci_status` answer came out as "GitHub answered without
+    saying anything about CI" about an answer Jarvis had cut itself.
+    """
+    if len(raw) > MAX_BYTES:
+        return raw[:MAX_BYTES].decode("utf-8", "replace") + CUT_MARKER
+    return raw.decode("utf-8", "replace")
+
+
 def _default_fetch_full(method: str, url: str, *, headers: dict,
                         body: Optional[bytes] = None,
                         timeout: float = TIMEOUT) -> tuple:
@@ -3222,17 +3243,17 @@ def _default_fetch_full(method: str, url: str, *, headers: dict,
     opener = urllib.request.build_opener(_RefuseRedirect)
     try:
         with opener.open(req, timeout=timeout) as r:
-            raw = r.read(MAX_BYTES)
+            raw = _read_capped(r)
             got = {str(k).lower(): v for k, v in (r.headers or {}).items()}
             return (int(getattr(r, "status", 200) or 200),
-                    raw.decode("utf-8", "replace"), got)
+                    _capped_text(raw), got)
     except urllib.error.HTTPError as exc:
         try:
-            raw = exc.read(MAX_BYTES)
+            raw = _read_capped(exc)
         except Exception:                    # noqa: BLE001 - no body is fine
             raw = b""
         got = {str(k).lower(): v for k, v in (getattr(exc, "headers", None) or {}).items()}
-        return int(exc.code or 0), raw.decode("utf-8", "replace"), got
+        return int(exc.code or 0), _capped_text(raw), got
 
 
 def _default_fetch(method: str, url: str, *, headers: dict,
@@ -3575,6 +3596,22 @@ def _required_problems(runs: list, required=REQUIRED_CHECKS) -> list:
     return problems
 
 
+def _generic_problems(runs: list) -> list:
+    """Every check that is not a completed, passing result, in plain words.
+
+    The generic rule of Q-C (2026-11-11): a repository with no NAMED required
+    contexts still must not be merged past a check that failed, is still
+    running, or never finished. `success`, `neutral` and `skipped` are the pass
+    set; anything else - including a workflow run with no conclusion - is named.
+    """
+    return [f"{_check_name(x)} finished as "
+            f"{_clean_github_text(x.get('conclusion'), wrap=False) or 'no result'}"
+            for x in runs
+            if str(x.get("status") or "") != "completed"
+            or str(x.get("conclusion") or "") not in
+            ("success", "neutral", "skipped")]
+
+
 def _state_words(state: str) -> str:
     """What GitHub's `mergeable_state` means, in the owner's words."""
     words = {
@@ -3598,28 +3635,45 @@ def _state_words(state: str) -> str:
 # --------------------------------------------------------------------------
 
 
-def _classify(pr_doc: dict, runs: list) -> tuple:
+def _classify(pr_doc: dict, runs: list, plan=None, problem: str = "") -> tuple:
     """(word, one plain sentence) for one open pull request.
 
     The five words are the cockpit's whole vocabulary, and they are decided in
     this order: a draft is a draft whatever else is true; a conflict is a
     conflict; anything still running is running; anything else that is not clean
-    is blocked; only a clean, unpinned pull request whose every required check
-    passed is merge-ready.
+    is blocked; only a clean, unpinned pull request whose every check passed is
+    merge-ready.
+
+    The checks are judged with the SAME per-repository plan the merge gate uses
+    (Q-C, 2026-11-11): `plan` is `_check_plan`'s result for THIS repository and
+    base branch, and `problem` is its plain refusal when one was returned. Before
+    2026-11-11 every repository was measured against the Epic seven, so a green
+    pull request in another repository printed "blocked - rust has not
+    reported"; the field test drives merges from these rows, so that mattered.
     """
     if pr_doc.get("draft") is True:
         return "draft", "it is still a draft"
     state = str(pr_doc.get("mergeable_state") or "")
     if state == "dirty":
         return "conflicted", _state_words("dirty")
-    still = _running(runs)
+    plan_runs = list((plan or {}).get("runs") or runs)
+    still = _running(plan_runs)
     if still:
         return "running", "still running: " + ", ".join(still)
-    problems = _required_problems(runs)
+    if problem:
+        return "blocked", problem
+    if plan and plan.get("mode") == "generic":
+        problems = _generic_problems(plan_runs)
+    else:
+        required = tuple((plan or {}).get("names") or REQUIRED_CHECKS)
+        problems = _required_problems(plan_runs, required)
     if problems:
         return "blocked", "; ".join(problems)
     if pr_doc.get("mergeable") is not True or state != "clean":
         return "blocked", _state_words(state or "unknown")
+    if plan and plan.get("mode") == "generic":
+        return "merge-ready", ("every check on that commit finished cleanly and "
+                               "GitHub says it is clean")
     return "merge-ready", "every required check passed and GitHub says it is clean"
 
 
@@ -3676,7 +3730,12 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
                          f"head {sha or '(not named)'}; "
                          f"base {base_ref or '(not named)'}")
             continue
-        word, because = _classify(one, runs)
+        # The SAME per-repository check plan the merge gate uses (Q-C, 2026-11-11):
+        # the owner's own repo always the Epic seven, another repo its own rules
+        # or the generic every-check rule. Never the seven against a foreign repo.
+        plan, _kind, problem = _check_plan(
+            r.repo, base_ref, sha, fetch, headers, token, runs)
+        word, because = _classify(one, runs, plan, problem)
         counts[word] = counts.get(word, 0) + 1
         lines.append(f"  #{number} {title}: {word} - "
                      f"{_clean_github_text(because, wrap=False)}; "
@@ -3756,58 +3815,90 @@ def _workflow_runs_for_sha(fetch: Callable, headers: dict, token: str,
     return [r for r in (runs or ()) if isinstance(r, dict)], status, ""
 
 
-def _merge_check_plan(r: Request, fetch: Callable, token: str, headers: dict,
-                      runs: list) -> tuple:
-    """(plan, error) - WHICH checks this merge must pass, from Q-C's own order.
+def _check_plan(repo: str, base_ref: str, sha: str, fetch: Callable,
+                headers: dict, token: str, runs: list) -> tuple:
+    """(plan, problem kind, plain problem) - WHICH checks this repository's own
+    rules require, for BOTH the merge gate and the read-only cockpit.
 
-    The owner's field-test ruling of 2026-11-11 01:40 (Q-C), exactly:
+    Q-C's order, exactly, in one function so the gate and the cockpit cannot
+    disagree (2026-11-11):
 
       * `darknight11ish/Epic-Jarvis` (case-insensitive) ALWAYS enforces the seven
         `REQUIRED_CHECKS` as an unbypassable floor - no repository rules can
         lower it and no missing rules can skip it.
       * Any other repository: read its own branch rules. If the token cannot
-        read them (401/403) the merge is REFUSED plainly rather than silently
-        weakened. If the rules name required status-check contexts, every one of
-        those must have completed successfully on the carded commit. If the
-        rules exist but name no contexts (200 with none), or the rules endpoint
-        is 404, fall back to the commit's own checks: at least one check-run (or
-        workflow run) for that exact commit, all completed with a conclusion in
-        success/neutral/skipped. A 401/403 on those reads is refused the same
-        way.
+        read them (401/403) the answer is a refusal. If the rules name required
+        status-check contexts, every one of those must have completed
+        successfully on the carded commit. If the rules exist but name no
+        contexts (200 with none), or the rules endpoint is 404, fall back to the
+        commit's own checks: at least one check-run (or workflow run) for that
+        exact commit, all completed with a conclusion in success/neutral/skipped.
+        A 401/403 on those reads is refused the same way.
+
+    The caller supplies the sentence its own door needs: the merge gate adds
+    "Nothing was merged."; the cockpit adds nothing (its footer already says it
+    only read). `problem kind` is "" when a `plan` was built.
     """
-    if str(r.repo or "").strip().lower() == OWN_REPO.lower():
+    if str(repo or "").strip().lower() == OWN_REPO.lower():
         return {"mode": "named", "names": tuple(REQUIRED_CHECKS),
-                "runs": runs, "source": "your own Epic-Jarvis repository"}, ""
+                "runs": runs, "source": "your own Epic-Jarvis repository"}, "", ""
     rules, status, err = _raw_read(
-        fetch, f"{_repo_path(r.repo)}/rules/branches/"
-               f"{urllib.parse.quote(r.base_ref, safe='')}", headers, token)
+        fetch, f"{_repo_path(repo)}/rules/branches/"
+               f"{urllib.parse.quote(base_ref, safe='')}", headers, token)
     if status in (401, 403):
-        return {}, ("This GitHub token cannot read branch protection rules for "
-                    "this repository, so Jarvis will not merge it. Nothing was "
-                    "merged.")
+        return {}, "token-rules", (
+            "This GitHub token cannot read branch protection rules for this "
+            "repository, so Jarvis cannot judge its checks.")
     if err:
-        return {}, err + " Nothing was merged."
+        return {}, "rules-read", err
     names = _required_context_names(rules)
     if names:
         return {"mode": "named", "names": names, "runs": runs,
-                "source": "this repository's own branch rules"}, ""
+                "source": "this repository's own branch rules"}, "", ""
     if not runs:
         wf, wstatus, werr = _workflow_runs_for_sha(
-            fetch, headers, token, r.repo, r.expected_sha)
+            fetch, headers, token, repo, sha)
         if wstatus in (401, 403):
-            return {}, ("This GitHub token cannot read this repository's checks, "
-                        "so Jarvis will not merge it. Nothing was merged.")
+            return {}, "token-checks", (
+                "This GitHub token cannot read this repository's checks, so "
+                "Jarvis cannot judge them.")
         if werr:
-            return {}, werr + " Nothing was merged."
+            return {}, "checks-read", werr
         runs = wf
         source = "this repository's workflow runs"
     else:
         source = "this repository's checks"
     if not runs:
+        return {}, "no-checks", (
+            "GitHub found no checks for that exact commit, so Jarvis will not "
+            "judge a change whose checks it cannot see.")
+    return {"mode": "generic", "runs": runs, "source": source}, "", ""
+
+
+def _merge_check_plan(r: Request, fetch: Callable, token: str, headers: dict,
+                      runs: list) -> tuple:
+    """(plan, error) for MERGING - `_check_plan` plus the merge door's words.
+
+    The refusal sentences are kept exactly as they read before this refactor
+    (the merge gate's own tests pin them); only the DECISION moved into
+    `_check_plan`, so the cockpit cannot drift from the gate.
+    """
+    plan, kind, problem = _check_plan(r.repo, r.base_ref, r.expected_sha,
+                                      fetch, headers, token, runs)
+    if plan:
+        return plan, ""
+    if kind == "token-rules":
+        return {}, ("This GitHub token cannot read branch protection rules for "
+                    "this repository, so Jarvis will not merge it. Nothing was "
+                    "merged.")
+    if kind == "token-checks":
+        return {}, ("This GitHub token cannot read this repository's checks, so "
+                    "Jarvis will not merge it. Nothing was merged.")
+    if kind == "no-checks":
         return {}, ("GitHub found no checks for that exact commit, and Jarvis "
-                    "will not merge a change whose checks it cannot see. Nothing "
-                    "was merged.")
-    return {"mode": "generic", "runs": runs, "source": source}, ""
+                    "will not merge a change whose checks it cannot see. "
+                    "Nothing was merged.")
+    return {}, problem + " Nothing was merged."
 
 
 def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
@@ -3879,12 +3970,7 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
                       " did not pass (" + "; ".join(problems) +
                       "). Jarvis never merges past a required check.")
     else:
-        bad = [f"{_check_name(x)} finished as "
-               f"{_clean_github_text(x.get('conclusion'), wrap=False) or 'no result'}"
-               for x in plan_runs
-               if str(x.get("status") or "") != "completed"
-               or str(x.get("conclusion") or "") not in
-               ("success", "neutral", "skipped")]
+        bad = _generic_problems(plan_runs)
         if bad:
             return no("A check of " + plan["source"] +
                       " did not finish cleanly (" + "; ".join(bad) +

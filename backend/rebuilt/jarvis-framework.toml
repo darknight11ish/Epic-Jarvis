@@ -2256,8 +2256,7 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy",
-   "review_changes", "check_records"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy", "review_changes", "check_records"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

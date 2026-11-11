@@ -723,13 +723,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -738,7 +738,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -749,7 +749,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -760,7 +760,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -771,7 +771,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -782,7 +782,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -793,10 +793,87 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -1771,7 +1848,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -1783,20 +1860,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": true,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -1897,6 +1984,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -2204,7 +2298,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -2212,7 +2306,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -2428,7 +2522,63 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -2514,6 +2664,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -3273,13 +3431,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -3288,7 +3446,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -3299,7 +3457,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -3310,7 +3468,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -3321,7 +3479,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -3332,7 +3490,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -3343,10 +3501,87 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -4321,7 +4556,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -4329,24 +4564,34 @@
      "id": "github_tools_group",
      "last": null,
      "on": true,
-     "on_count": 10,
+     "on_count": 20,
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -4447,6 +4692,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -4609,7 +4861,7 @@
       "group": "Safety and sharing",
       "id": "github_search",
       "last": null,
-      "on": false,
+      "on": true,
       "title": "GitHub research",
       "waiting": false
      },
@@ -4753,16 +5005,16 @@
       "group": "Everyday helpers",
       "id": "review_changes",
       "last": null,
-      "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "on": true,
+      "title": "review changes",
       "waiting": false
      },
      {
       "group": "Everyday helpers",
       "id": "check_records",
       "last": null,
-      "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "on": true,
+      "title": "check records",
       "waiting": false
      },
      {
@@ -4978,7 +5230,63 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": true,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": true,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": true,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": true,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": true,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": true,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": true,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": true,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -5827,13 +6135,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -5842,7 +6150,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -5853,7 +6161,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -5864,7 +6172,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -5875,7 +6183,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -5886,7 +6194,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -5897,10 +6205,87 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -6875,7 +7260,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -6887,20 +7272,30 @@
      "partial": true,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -7001,6 +7396,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -7163,7 +7565,7 @@
       "group": "Safety and sharing",
       "id": "github_search",
       "last": null,
-      "on": false,
+      "on": true,
       "title": "GitHub research",
       "waiting": false
      },
@@ -7308,7 +7710,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -7316,7 +7718,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -7515,7 +7917,7 @@
       "group": "Jarvis's own tools",
       "id": "github_pr_scan",
       "last": null,
-      "on": true,
+      "on": false,
       "title": "Looking at your open pull requests and whether they can be merged (one card each)",
       "waiting": false
      },
@@ -7532,7 +7934,63 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -7622,6 +8080,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -8383,7 +8849,8 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_inspect",
-       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
+       "lockdown": true,
+       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -8399,7 +8866,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -8410,7 +8877,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -8421,7 +8888,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -8432,7 +8899,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -8443,7 +8910,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -8454,7 +8921,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -9510,7 +9977,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -9522,20 +9989,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -9950,7 +10427,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -9958,7 +10435,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -10320,6 +10797,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -11081,7 +11566,8 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_inspect",
-       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
+       "lockdown": true,
+       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -11097,7 +11583,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -11108,7 +11594,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -11119,7 +11605,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -11130,7 +11616,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -11141,7 +11627,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -11152,7 +11638,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -12208,7 +12694,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -12220,20 +12706,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -12648,7 +13144,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -12656,7 +13152,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -13018,6 +13514,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -13777,13 +14281,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -13792,7 +14296,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -13803,7 +14307,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -13814,7 +14318,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -13825,7 +14329,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -13836,7 +14340,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -13847,7 +14351,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -14902,7 +15406,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -14914,20 +15418,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -15342,7 +15856,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -15350,7 +15864,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -15712,6 +16226,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -16466,13 +16988,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -16481,7 +17003,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -16492,7 +17014,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -16503,7 +17025,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -16514,7 +17036,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -16525,7 +17047,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -16536,7 +17058,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -17591,7 +18113,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": true,
@@ -17603,20 +18125,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -18031,7 +18563,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -18039,7 +18571,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -18401,6 +18933,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -19160,13 +19700,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -19175,7 +19715,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -19186,7 +19726,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -19197,7 +19737,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -19208,7 +19748,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -19219,7 +19759,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -19230,7 +19770,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -20285,7 +20825,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [
      {
       "group": "Also on in your settings file",
@@ -20312,20 +20852,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -20740,7 +21290,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -20748,7 +21298,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -21106,6 +21656,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -21865,13 +22423,13 @@
        "fixed": false,
        "id": "github_inspect",
        "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
-       "says": "Asks you first, every time",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": true,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -21880,7 +22438,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -21891,7 +22449,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -21902,7 +22460,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -21913,7 +22471,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -21924,7 +22482,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -21935,7 +22493,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -22990,7 +23548,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [
      {
       "group": "Also on in your settings file",
@@ -23012,20 +23570,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -23440,7 +24008,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -23448,7 +24016,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -23806,6 +24374,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -24559,14 +25135,14 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_inspect",
-       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
-       "says": "Asks you first, every time",
+       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": false,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -24575,7 +25151,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -24586,7 +25162,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -24597,7 +25173,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -24608,7 +25184,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -24619,7 +25195,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -24630,7 +25206,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -25685,7 +26261,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": false,
@@ -25697,20 +26273,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -26125,7 +26711,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -26133,7 +26719,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -26495,6 +27081,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -27260,7 +27854,8 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_inspect",
-       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
+       "lockdown": true,
+       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -27276,7 +27871,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -27287,7 +27882,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -27298,7 +27893,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -27309,7 +27904,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -27320,7 +27915,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -27331,7 +27926,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -28387,7 +28982,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": false,
@@ -28399,20 +28994,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -28827,7 +29432,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -28835,7 +29440,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -29197,6 +29802,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -29955,14 +30568,14 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_inspect",
-       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
-       "says": "Asks you first, every time",
+       "note": "Reads only: it lists or reads your GitHub and nothing on GitHub changes (it still sends your saved GitHub token to api.github.com). This switch is whether each read asks you first: turning it off is ONE approval card and Windows Hello on this PC, and turning it back on asks first again at once, from either app.",
+       "says": "Does it without asking",
        "switch": {
-        "asks": true,
+        "asks": false,
         "can_loosen": false,
         "loose": "auto"
        },
-       "tier": "ask",
+       "tier": "auto",
        "title": "Read your GitHub",
        "windows_hello": false
       },
@@ -29971,7 +30584,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_comment",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Post a comment on GitHub",
@@ -29982,7 +30595,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_open_issue",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Open an issue on GitHub",
@@ -29993,7 +30606,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_rerun_workflow",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
@@ -30004,7 +30617,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_create_repo",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Create a new repository on your GitHub",
@@ -30015,7 +30628,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_merge_pr",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Merge a pull request with a merge commit",
@@ -30026,7 +30639,7 @@
        "confirmations": 1,
        "fixed": false,
        "id": "github_fix_and_push",
-       "note": "One of the ten GitHub abilities. The AI model is offered it by its own switch, and by the master switch that offers all ten at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "note": "One of the GitHub tools in the master switch's group. The AI model is offered it by its own switch, and by the master switch that offers all twenty at once, in Settings, What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". This line only decides whether each use asks you first; going looser here is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
@@ -31081,7 +31694,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
     "extra": [],
     "github_group": {
      "can_enable": false,
@@ -31093,20 +31706,30 @@
      "partial": false,
      "title": "Offer GitHub tools to the AI model",
      "tools": [
+      "github_search",
       "github_list",
       "github_read_file",
       "github_ci_status",
       "github_pr_scan",
+      "github_pr_detail",
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
       "github_create_repo",
       "github_merge_pr",
-      "github_fix_and_push"
+      "github_fix_and_push",
+      "github_open_pr",
+      "github_workflow",
+      "github_issue_labels",
+      "github_edit_pr",
+      "github_pr_review",
+      "github_issue_state",
+      "review_changes",
+      "check_records"
      ],
-     "total": 10,
+     "total": 20,
      "waiting": false,
-     "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+     "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
     },
     "groups": [
      {
@@ -31521,7 +32144,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "title": "review changes",
       "waiting": false
      },
      {
@@ -31529,7 +32152,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "Checking a change's records before a push (read-only, no card)",
+      "title": "check records",
       "waiting": false
      },
      {
@@ -31891,6 +32514,14 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "review_changes",
+       "title": "review changes"
+      },
+      {
+       "id": "check_records",
+       "title": "check records"
       }
      ],
      "label": "New — currently off",
@@ -32037,21 +32668,31 @@
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
   "github_group": "github_tools_group",
-  "github_group_card_title": "Offer ALL TEN GitHub tools to the AI model?",
+  "github_group_card_title": "Offer ALL TWENTY GitHub and review tools to the AI model?",
   "github_group_title": "Offer GitHub tools to the AI model",
   "github_group_tools": [
+   "github_search",
    "github_list",
    "github_read_file",
    "github_ci_status",
    "github_pr_scan",
+   "github_pr_detail",
    "github_comment",
    "github_open_issue",
    "github_rerun_workflow",
    "github_create_repo",
    "github_merge_pr",
-   "github_fix_and_push"
+   "github_fix_and_push",
+   "github_open_pr",
+   "github_workflow",
+   "github_issue_labels",
+   "github_edit_pr",
+   "github_pr_review",
+   "github_issue_state",
+   "review_changes",
+   "check_records"
   ],
-  "github_group_what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered.",
+  "github_group_what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered.",
   "lights_detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
   "lights_label": "Lights, plugs and fans without a card",
   "lights_waiting": "Waiting for your yes on the approval card, on your PC or phone.",
@@ -32085,11 +32726,11 @@
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
-  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns the ten GitHub abilities on or off together - its own card says so - and every other switch here changes exactly one tool.",
+  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. One master switch, \"Offer GitHub tools to the AI model\", turns all twenty tools of that group - the GitHub tools and both local review gates - on or off together; its own card says so, and every tool.",
   "tools_label": "Let the AI use this",
   "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
   "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it.",
-  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
+  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card - approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }
 }

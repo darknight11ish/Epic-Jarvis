@@ -199,6 +199,10 @@
       "title": "Jarvis wants to create a new repository on your GitHub"
     },
     {
+      "action": "github_edit_pr",
+      "title": "Jarvis wants to edit a pull request's title or body"
+    },
+    {
       "action": "github_fix_and_push",
       "title": "Jarvis wants to push a fix to a pull request's own branch"
     },
@@ -211,6 +215,14 @@
       "title": "Jarvis wants to read your GitHub"
     },
     {
+      "action": "github_issue_labels",
+      "title": "Jarvis wants to change the labels on an issue"
+    },
+    {
+      "action": "github_issue_state",
+      "title": "Jarvis wants to close or reopen one issue"
+    },
+    {
       "action": "github_merge_pr",
       "title": "Jarvis wants to merge a pull request with a merge commit"
     },
@@ -219,12 +231,24 @@
       "title": "Jarvis wants to open an issue on GitHub"
     },
     {
+      "action": "github_open_pr",
+      "title": "Jarvis wants to open a pull request for a new branch"
+    },
+    {
+      "action": "github_pr_review",
+      "title": "Jarvis wants to post a pull request review, never an approval"
+    },
+    {
       "action": "github_read",
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
     },
     {
       "action": "github_rerun_workflow",
       "title": "Jarvis wants to run a GitHub workflow again"
+    },
+    {
+      "action": "github_workflow",
+      "title": "Jarvis wants to cancel or re-run a workflow run"
     },
     {
       "action": "google_calendar_write",
@@ -1125,6 +1149,18 @@
       }
     },
     {
+      "action": "github_edit_pr",
+      "notice": {
+        "title": "Jarvis wants to edit a pull request's title or body",
+        "summary": "Jarvis wants to edit a pull request's text.",
+        "full": "changes ONE pull request's title and/or body on GitHub in your name; no other field is editable and the same tool can change it back. nothing has happened yet.",
+        "body": "changes ONE pull request's title and/or body on GitHub in your name; no other field is editable and the same tool can change it back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_fix_and_push",
       "notice": {
         "title": "Jarvis wants to push a fix to a pull request's own branch",
@@ -1161,6 +1197,30 @@
       }
     },
     {
+      "action": "github_issue_labels",
+      "notice": {
+        "title": "Jarvis wants to change the labels on an issue",
+        "summary": "Jarvis wants to change labels.",
+        "full": "adds and/or removes labels on ONE GitHub issue or pull request in your name; no other field changes, nothing is closed or reopened, and the whole new label set is sent in ONE request. nothing has happened yet.",
+        "body": "adds and/or removes labels on ONE GitHub issue or pull request in your name; no other field changes, nothing is closed or reopened, and the whole new label set is sent in ONE request. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_issue_state",
+      "notice": {
+        "title": "Jarvis wants to close or reopen one issue",
+        "summary": "Jarvis wants to close or reopen an issue.",
+        "full": "closes ONE issue or reopens ONE closed issue on GitHub in your name; the same tool changes it back, and it never touches a pull request, more than one issue, a delete or a transfer. nothing has happened yet.",
+        "body": "closes ONE issue or reopens ONE closed issue on GitHub in your name; the same tool changes it back, and it never touches a pull request, more than one issue, a delete or a transfer. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_merge_pr",
       "notice": {
         "title": "Jarvis wants to merge a pull request with a merge commit",
@@ -1185,6 +1245,30 @@
       }
     },
     {
+      "action": "github_open_pr",
+      "notice": {
+        "title": "Jarvis wants to open a pull request for a new branch",
+        "summary": "Jarvis wants to open a pull request.",
+        "full": "pushes ONE new branch to GitHub and opens ONE pull request from it into a base branch in your name; never a force-push, never main/master/release/hotfix, never a delete; a pushed branch and an opened pull request cannot be taken back by Jarvis. nothing has happened yet.",
+        "body": "pushes ONE new branch to GitHub and opens ONE pull request from it into a base branch in your name; never a force-push, never main/master/release/hotfix, never a delete; a pushed branch and an opened pull request cannot be taken back by Jarvis. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_pr_review",
+      "notice": {
+        "title": "Jarvis wants to post a pull request review, never an approval",
+        "summary": "Jarvis wants to post a review, never an approval.",
+        "full": "posts ONE review on a pull request on GitHub in your name - a comment or a request for changes, never an APPROVE; the review text cannot be edited or taken back afterwards. nothing has happened yet.",
+        "body": "posts ONE review on a pull request on GitHub in your name - a comment or a request for changes, never an APPROVE; the review text cannot be edited or taken back afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_read",
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
@@ -1203,6 +1287,18 @@
         "summary": "Jarvis wants to run a workflow again.",
         "full": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
         "body": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_workflow",
+      "notice": {
+        "title": "Jarvis wants to cancel or re-run a workflow run",
+        "summary": "Jarvis wants to cancel or re-run a run.",
+        "full": "cancels ONE running workflow run or re-runs only the failed jobs of ONE finished run on GitHub; a cancelled run cannot be resumed and a started run cannot be taken back, and it never dispatches a workflow. nothing has happened yet.",
+        "body": "cancels ONE running workflow run or re-runs only the failed jobs of ONE finished run on GitHub; a cancelled run cannot be resumed and a started run cannot be taken back, and it never dispatches a workflow. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

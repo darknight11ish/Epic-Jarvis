@@ -2951,6 +2951,40 @@ def t_merge_checks_are_per_repository():
           and not any("/rules/branches/" in c["url"] for c in fake.calls), out)
 
 
+def t_pr_scan_classifies_a_foreign_repo_with_its_own_checks():
+    """Q-C read side: a foreign repo is judged by ITS checks, never Epic's seven.
+
+    The field test drives merges from the cockpit's rows, so a green pull request
+    in `darknight11ish/jarvis-coding-field-test` that printed "blocked - rust has
+    not reported" would have stopped the operator merging a genuinely ready
+    change. This drives the real tool through a fake transport: its own branch
+    rules answer 404 (no named contexts), its one check-run passed, and the row
+    must read merge-ready with no Epic check name in it. Under the old code the
+    row was judged against REQUIRED_CHECKS and read blocked.
+    """
+    routes = [("/pulls?", (200, json.dumps([{
+                   "number": 1116, "title": "Fix the tray icon",
+                   "head": {"sha": HEAD_SHA}, "base": {"ref": "main"}}]))),
+              ("/pulls/1116", (200, _pr_doc(head={
+                   "sha": HEAD_SHA, "ref": "feature/tray-icon",
+                   "repo": {"full_name": "other-owner/other-repo"}}))),
+              ("/rules/branches/main", (404, "{}")),
+              ("/commits/%s/check-runs" % HEAD_SHA,
+               _checks(("ci", "completed", "success")))]
+    fake = Routed(routes)
+    _r, out = _run("github_pr_scan", fake,
+                   args={"repo": "darknight11ish/jarvis-coding-field-test"})
+    text = out.get("text", "")
+    check("Q-C read side: a foreign repo's green pull request reads merge-ready",
+          out.get("ok") is True and "merge-ready" in text
+          and "blocked" not in text, out)
+    check("... and the Epic seven are never named against a foreign repo",
+          "rust" not in text and "phone-unit-tests" not in text, text)
+    check("... because it read THAT repository's own rules",
+          any("/rules/branches/main" in c["url"] for c in fake.calls),
+          [c["url"] for c in fake.calls])
+
+
 def t_ci_status_reads_five_runs_and_refuses_a_cut():
     """Q-G: per_page=5 only for github_ci_status, and a cut answer is spoken."""
     r = _card("github_ci_status")[0]
@@ -2970,12 +3004,52 @@ def t_ci_status_reads_five_runs_and_refuses_a_cut():
     list_r = GH.plan_list({"scope": "pulls", "repo": "o/r"})
     check("every other read keeps the normal page size", 
           all("per_page=20" in u for u in list_r.urls()), list_r.urls())
-    # A cut JSON answer cannot be parsed at all: say so in plain words.
-    _r, out = _run("github_ci_status", Fake(200, "not json " + GH.CUT_MARKER))
+    # A REAL cut at the READ LAYER (2026-11-11 adversarial review): the
+    # transport sends more than MAX_BYTES, so the text the tool receives carries
+    # the marker the CAP added - never one the test typed. Before the fix the
+    # read stopped at MAX_BYTES and returned an unparseable prefix with no
+    # marker, and this exact case came out as "GitHub answered without saying
+    # anything about CI" about an answer Jarvis had itself truncated.
+    import io
+
+    class _Overlong:
+        def __init__(self, body):
+            self.status = 200
+            self.headers = {}
+            self._body = io.BytesIO(body)
+
+        def read(self, size=-1):
+            return self._body.read(size)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    class _Opener:
+        def open(self, _req, timeout=None):
+            return _Overlong(b"not json " + b" " * (GH.MAX_BYTES + 64))
+
+    real_build = GH.urllib.request.build_opener
+    GH.urllib.request.build_opener = lambda *_a, **_k: _Opener()
+    try:
+        status, cut_text, _headers = GH._default_fetch_full(
+            "GET", GH.GITHUB_API + "/rate_limit", headers={})
+    finally:
+        GH.urllib.request.build_opener = real_build
+    check("the READ LAYER marks a really oversized answer as cut",
+          status == 200 and cut_text.endswith(GH.CUT_MARKER), (status, cut_text[-80:]))
+    _r, out = _run("github_ci_status", Fake(200, cut_text))
     text = out.get("text", "")
-    check("a CI answer cut at MAX_BYTES is said plainly, not half-shown",
+    check("a REALLY cut CI answer is refused in plain words",
           "longer than Jarvis reads in one go" in text
           and "will not guess" in text, out)
+    check("... and it never says GitHub answered nothing",
+          "answered without saying anything about CI" not in text, out)
+    check("the 200 KB cap and the five-run page are unchanged",
+          GH.MAX_BYTES == 200_000 and GH.CI_PER_PAGE == 5,
+          (GH.MAX_BYTES, GH.CI_PER_PAGE))
 
 
 def t_the_six_github_reads_are_card_free_and_every_write_asks():
@@ -3102,6 +3176,7 @@ if __name__ == "__main__":
                    t_issue_state_closes_or_reopens_one_issue,
                    t_open_pr_prepares_then_pushes_and_opens_one_pull_request,
                    t_merge_checks_are_per_repository,
+                   t_pr_scan_classifies_a_foreign_repo_with_its_own_checks,
                    t_ci_status_reads_five_runs_and_refuses_a_cut,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
                    t_review_tools_are_card_free_and_in_the_master_switch):

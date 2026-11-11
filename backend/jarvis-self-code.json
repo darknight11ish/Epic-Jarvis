@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "5f97f421d2f788634d03122f87f7f8a4cda3147c",
- "built_at": "2026-11-10T22:31:00-08:00",
+ "ref": "8475a145e864e64fa899ae32bd178acaca568b86",
+ "built_at": "2026-11-11T02:40:05-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -587,9 +587,10 @@
     "backend/jarvis_connect_account_wiring.py",
     "backend/jarvis_github.py",
     "backend/jarvis_google_calendar.py",
-    "backend/jarvis_local_calendar.py"
+    "backend/jarvis_local_calendar.py",
+    "backend/jarvis_review.py"
    ],
-   "file_count": 7,
+   "file_count": 8,
    "key_modules": [
     {
      "path": "backend/jarvis_calendar.py",
@@ -604,6 +605,10 @@
      "summary": "jarvis_github.py - read the owner's GitHub, and take a few small actions on it."
     },
     {
+     "path": "backend/jarvis_review.py",
+     "summary": "jarvis_review.py - look a change over before it is pushed, and check its records."
+    },
+    {
      "path": "backend/jarvis_connect_account.py",
      "summary": "jarvis_connect_account.py - \"connect my calendar\" / \"set up github\", with ONE card that takes the value and puts it in Windows Credential Manager."
     }
@@ -613,6 +618,8 @@
     "backend/test_local_calendar.py",
     "backend/test_google_calendar.py",
     "backend/test_github_tools.py",
+    "backend/test_github_review.py",
+    "backend/test_github_record.py",
     "backend/test_connect_account.py"
    ],
    "docs": [
@@ -3865,6 +3872,8 @@
     "backend/test_gate_unknown_risk.py",
     "backend/test_github_authoring.py",
     "backend/test_github_parity.py",
+    "backend/test_github_record.py",
+    "backend/test_github_review.py",
     "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
@@ -4304,7 +4313,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 685,
+   "file_count": 687,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4580,7 +4589,11 @@
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
     "changelog.d/2026-11-10-github-authoring-in-the-copy.md",
+    "changelog.d/2026-11-10-github-parity-actions.md",
+    "changelog.d/2026-11-10-github-review-and-record-gate.md",
+    "changelog.d/2026-11-10-github-switch-door.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
+    "changelog.d/2026-11-10-phone-approves-tool-switches.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/README.md",
@@ -4732,7 +4745,11 @@
     "decisions.d/2026-11-10-cockpit-two-column-ships.md",
     "decisions.d/2026-11-10-github-authoring-in-the-copy.md",
     "decisions.d/2026-11-10-github-card-gated-merge-and-fix-push.md",
+    "decisions.d/2026-11-10-github-parity-actions.md",
+    "decisions.d/2026-11-10-github-review-and-record-gate.md",
+    "decisions.d/2026-11-10-github-switch-door.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
+    "decisions.d/2026-11-10-phone-approves-tool-switches.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5180,7 +5197,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 835,
+   "file_count": 843,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6131,6 +6148,7 @@
     "jarvis-backend/jarvis_research.py",
     "jarvis-backend/jarvis_retirement.py",
     "jarvis-backend/jarvis_reversible_ui.py",
+    "jarvis-backend/jarvis_review.py",
     "jarvis-backend/jarvis_router.py",
     "jarvis-backend/jarvis_sandbox_exec.py",
     "jarvis-backend/jarvis_sayable.py",
@@ -6232,7 +6250,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 339,
+   "file_count": 340,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6262,111 +6280,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "5f97f421d2f788634d03122f87f7f8a4cda3147c",
-   "date": "2026-11-10",
-   "subject": "chore(self-code): regenerate the map for wave 16B - the new authoring suite and its two record fragments"
+   "sha": "8475a145e864e64fa899ae32bd178acaca568b86",
+   "date": "2026-11-11",
+   "subject": "fix(base): the base README is its own document, not a copy of backend/README.md"
   },
   {
-   "sha": "1ad8ae0f3af6ef826655567bd858349a1e582867",
-   "date": "2026-11-10",
-   "subject": "feat(github): wave 16B - Jarvis writes the fix inside the isolated copy"
+   "sha": "543d12b2b06d27e866f246ade04421ce5d0930e9",
+   "date": "2026-11-11",
+   "subject": "Merge remote-tracking branch 'origin/main' into integration/github-union-02447-2026-11-11"
   },
   {
-   "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
-   "date": "2026-11-10",
-   "subject": "test(ci): the wave-16 CI catch - diet hints, AST source pins, a real probe, and the no-vec skip"
+   "sha": "2034e45c2e751602a8e6f69b43744f9164670f55",
+   "date": "2026-11-11",
+   "subject": "feat(github): the 2026-11-11 field-test rulings - Q-C per-repo merge checks, Q-G ci_status reads, Q3/Q4 card-free reads, Q-D/Q7 review tools"
   },
   {
-   "sha": "9694ff26fcf96c6dbc620051101fad2a4e9f54c6",
-   "date": "2026-11-10",
-   "subject": "test(live-parity): drive the Q2 probe cache instead of counting turns (CI catch)"
+   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
+   "date": "2026-11-11",
+   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
   },
   {
-   "sha": "b2b8f67ad020c982132047f65a848956f81f0392",
-   "date": "2026-11-10",
-   "subject": "fix: the second more_tools budget pin moves with the wave-16 GitHub group (482, measured)"
+   "sha": "213d35f9276aed80b11804f908a6850e320b7045",
+   "date": "2026-11-11",
+   "subject": "fix(union): repair two merge-resolution artifacts (a missing profile brace and an orphaned test check)"
   },
   {
-   "sha": "a9b9e8f35aed464064c9f453d0dcc51e0718a7c6",
-   "date": "2026-11-10",
-   "subject": "fix: the wave-16 GitHub tools reach the private-aloud table and the desktop Rust tool list"
+   "sha": "53a424509ebe786a7d4e2e5e23cb60c3a3030810",
+   "date": "2026-11-11",
+   "subject": "Merge commit '9f0d947abce618f050f494583b45f283dd60a852' into integration/github-union-02447-2026-11-11"
   },
   {
-   "sha": "e7544e21a691beb4c9880f5945492668e3ce4c50",
-   "date": "2026-11-10",
-   "subject": "fix: wave-16 desk catches - scratch cleanup, merge card fields, phone feature directory, doc accuracy"
+   "sha": "40875bd0677c959aabcfbac04a38fcfb0ba62985",
+   "date": "2026-11-11",
+   "subject": "Merge commit 'b7341af45432cb076505ebc9366508a01fd9e9c1' into integration/github-union-02447-2026-11-11"
   },
   {
-   "sha": "1acd8758c98659902730b19ce95055cb2268f362",
-   "date": "2026-11-10",
-   "subject": "fix: the desktop Tools page suites pin 65 switches, because wave 16 adds the PR cockpit, the carded merge and the carded fix-and-push"
+   "sha": "9f0d947abce618f050f494583b45f283dd60a852",
+   "date": "2026-11-11",
+   "subject": "fix(approvals): the phone may approve tool switches, and the card names the tool"
   },
   {
-   "sha": "f0620475ea1bd2cd816ffb9de5787e7a29c2c9ef",
-   "date": "2026-11-10",
-   "subject": "fix: the pooled-preload suite's non-pooled-lane case uses an everyday model, because Q7 now refuses the 30B on a one-card lane before anything is sent"
+   "sha": "23745c116fa4fcaa6789a1d5eb4082ba17507159",
+   "date": "2026-11-11",
+   "subject": "assemble: github parity step 2 - nine actions"
   },
   {
-   "sha": "b2273d3ad2e923e77cb628d79d2eb8bcae966473",
-   "date": "2026-11-10",
-   "subject": "fix: keep the wave-16 additions inside the project's own ratchets - the phone test pins 65 tools, and the parity suite's ordering check is found structurally instead of by source index"
+   "sha": "30e8c6ab7166f2243bd17317e95b26fca3f5738f",
+   "date": "2026-11-11",
+   "subject": "assemble: 16B - github authoring lane (PR #1224)"
   },
   {
-   "sha": "4e6865f25ec5c5c76d54e3f0b44a4ad43201cdb5",
-   "date": "2026-11-10",
-   "subject": "wave 16: two-column Cockpit, claims cap 900 s + memoized parity, shared credential denylist, memory fixes, pooled-lane guard, and GitHub merge / fix-and-push behind one card each"
+   "sha": "49b4fcad6e659039f4b3b0b2c7e348a2be8515d5",
+   "date": "2026-11-11",
+   "subject": "assemble: 16E - github review tools lane (PR #1225)"
   },
   {
-   "sha": "a3d2bbd2dd205e7d050bb59f79b016e555b5614a",
-   "date": "2026-11-10",
-   "subject": "Merge lane C (wave16-github 58446374): the GitHub PR cockpit, card-gated merge-commit-only merge pinned to the 40-hex head, and card-gated fix-and-push in an isolated scratch worktree, with one CAPABILITIES inventory behind them"
+   "sha": "a922fb4a466b635aa1ff41e4c01d9892a9a23dce",
+   "date": "2026-11-11",
+   "subject": "feat(github): the 2026-11-10 Step 2 parity - nine actions, card-free reads, carded issue close/reopen"
   },
   {
-   "sha": "58446374acf3554e343a6995fed326f0bbabc399",
-   "date": "2026-11-10",
-   "subject": "feat(github): full parity behind one card per action - cockpit, merge, fix-and-push"
+   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
+   "date": "2026-11-11",
+   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
   },
   {
-   "sha": "953f9a3ef4711799d739576bc51fa8608c0f0cb6",
+   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
    "date": "2026-11-10",
-   "subject": "records: one combined wave-16 changelog bullet, and the cockpit-ships decision that reverses the wave-15 withholding by its own stated condition"
+   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
   },
   {
-   "sha": "b07223f2663bd3aecaed2a6b365505c7bcbc18fc",
+   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
    "date": "2026-11-10",
-   "subject": "Merge lane B (wave16-hud 98d8b2a0): ship the two-column Cockpit 'Just Talk' (Q1 Option A), recovered from the withdrawn wave-15 build; three HUD copies byte-identical; rail suites adapted with neededDrawer"
+   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
   },
   {
-   "sha": "2819da4bd48710830e56a8ea50d63f05fc0e07d5",
+   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
    "date": "2026-11-10",
-   "subject": "Merge lane A (wave16-backend e93d05f5): claims cap 900 + memoized parity (Q5), shared credential denylist (Q3), memory backfill + last_error (Q6), pooled-lane 30B/27B refusal (Q7)"
+   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
   },
   {
-   "sha": "e93d05f5400758d4715c588f6bdf7a288b44f56e",
+   "sha": "b7341af45432cb076505ebc9366508a01fd9e9c1",
    "date": "2026-11-10",
-   "subject": "wave16 backend lane: Q2 claims cap+memoization, Q3 shared credential denylist, Q6A/Q6B memory bugs, Q7 everyday-lane guard"
+   "subject": "feat(asks-first): the GitHub switch door - one master switch, a switchable read row, and card-free GitHub reads (2026-11-10)"
   },
   {
-   "sha": "98d8b2a01763bfd419e350d9a348a42b6e5995bd",
+   "sha": "e5524c6ae5d6d8e0ae6303cd39f88f3c63bae553",
    "date": "2026-11-10",
-   "subject": "feat(hud): ship the two-column Cockpit, \"Just Talk\" (Q1 Option A)"
+   "subject": "chore(records): regenerate the shipped recent-changes module for the wave 16B bullet"
   },
   {
-   "sha": "fd9cb5762c021a4b16508a7c0c75c7073db17fa4",
+   "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
    "date": "2026-11-10",
-   "subject": "Merge pull request #1221 from darknight11ish/integration/wave15-2026-11-10"
+   "subject": "fix: the record check's two reasons use plain words (wave 16E)"
   },
   {
-   "sha": "d66a0a4cf818966a127721049d8698cc628da401",
+   "sha": "8291d0ffc258ad205d87ded537044f970e92f813",
    "date": "2026-11-10",
-   "subject": "records: close DEF-063 and DEF-064 on the wave-15 tree, and regenerate the generated files"
+   "subject": "fix(desktop): wave 16E's two switchable rows reach the Rust, desktop and Android pin lists"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1427
+   "files": 1434
   },
   {
    "path": "jarvis-desktop/",
@@ -6386,7 +6404,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 351
+   "files": 352
   },
   {
    "path": "tools/",
@@ -6396,7 +6414,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 233
+   "files": 237
   },
   {
    "path": "videos/",
@@ -6406,7 +6424,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 150
+   "files": 154
   },
   {
    "path": "plugins/",
@@ -6480,15 +6498,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5605,
-  "covered": 5133,
-  "excluded": 472,
+  "tracked_files": 5621,
+  "covered": 5145,
+  "excluded": 476,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 216,
+   "count": 220,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",

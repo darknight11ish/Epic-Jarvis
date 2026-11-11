@@ -75,14 +75,16 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 67 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
- * GitHub tools that landed with the GitHub tools branch, the four pack-manager
- * tools, hands-free's send_text_message and the approval-policy tool's own
- * row; wave 13's carded github_create_repo made it 61, 62 added project_read's
- * own row, the read half of "Jarvis takes over dev work", wave 16's three
- * GitHub tools of 2026-11-10 - the read-only PR cockpit, the carded merge and
- * the carded fix-and-push - made it 65, and wave 16E's two local review gates
- * made it 67). A DIFFERENT thing from SWITCHABLE
+ * 74 at 2026-11-11 (67 at 2026-11-10; 60 at 2026-11-05: 48 at 2026-11-04, plus
+ * the six on-demand GitHub tools that landed with the GitHub tools branch, the
+ * four pack-manager tools, hands-free's send_text_message and the
+ * approval-policy tool's own row; wave 13's carded github_create_repo made it
+ * 61, 62 added project_read's own row, the read half of "Jarvis takes over dev
+ * work", wave 16's three GitHub tools of 2026-11-10 - the read-only PR cockpit,
+ * the carded merge and the carded fix-and-push - made it 65, wave 16E's two
+ * local review gates made it 67, and the parity pass added the full
+ * pull-request read plus six more carded writes). A DIFFERENT thing from
+ * SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -120,7 +122,7 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "review_changes", "check_records",
   // Jarvis's own tools, which had no switch row at all before 2026-11-04 (25:
   // the original 12, plus the four pack-manager tools, hands-free's
-  // send_text_message, the ten on-demand GitHub tools and the approval row)
+  // send_text_message, the seventeen on-demand GitHub tools and the approval row)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove",
@@ -133,6 +135,11 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "github_comment", "github_open_issue", "github_rerun_workflow",
   "github_create_repo", "github_pr_scan", "github_merge_pr",
   "github_fix_and_push",
+  // Wave 16 parity (2026-11-10): the full pull-request read and the six more
+  // carded writes of the 22:30/23:00 rulings, each with its own switch row.
+  "github_pr_detail", "github_open_pr", "github_workflow",
+  "github_issue_labels", "github_edit_pr", "github_pr_review",
+  "github_issue_state",
   "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
@@ -150,7 +157,8 @@ export const TOOLS_PC_ONLY =
   "your phone with its own fingerprint or PIN.";
 /**
  * The MASTER GitHub group switch (2026-11-10, the owner's ruling): ONE switch
- * that offers/removes the ten GitHub tools together. It is a SEPARATE object
+ * that offers/removes the twenty tools together - the eighteen GitHub tools
+ * and both local review gates. It is a SEPARATE object
  * in the PC's `tools.github_group`, NOT an item in `tools.items`, so the
  * per-tool list (and every app's count of it) does not change for it. Its id
  * is sent through the same `set_tool_enabled` command and POST body as a tool:

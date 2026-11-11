@@ -11515,18 +11515,21 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
   `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
   the tools the earlier slice left out.
-- **Jarvis's own tools (24):** `goals_list`, `goal_add`, `goal_progress`,
+- **Jarvis's own tools (35):** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
   `plugin_list`, `plugin_switch`, `pack_list`, `pack_inspect`, `pack_install`,
   `pack_remove`, `send_text_message`, `refresh_abilities`,
   `self_portrait`, `setup_quiz`, `approval_policy` - the switch that offers
   the approval-policy TOOL at all (it never changes a policy by itself;
   §193 is the changing, and every loosening still needs its own card) - and,
-  since 2026-11-05, the six on-demand GitHub tools `github_list`,
-  `github_read_file`, `github_ci_status`, `github_comment`,
-  `github_open_issue`, `github_rerun_workflow` (the three reads share the
-  `github_inspect` action, the other three their own; every use still raises
-  its own card). The twelve before the GitHub six shipped ON and had no
+  since 2026-11-05, the seventeen on-demand GitHub tools `github_list`,
+  `github_read_file`, `github_ci_status`, `github_pr_scan`, `github_pr_detail`,
+  `github_comment`, `github_open_issue`, `github_rerun_workflow`,
+  `github_create_repo`, `github_merge_pr`, `github_fix_and_push`,
+  `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`,
+  `github_pr_review` and `github_issue_state` (the five reads share the
+  `github_inspect` action, the twelve writes their own; every use still raises
+  its own card). The non-GitHub names above shipped ON and had no
   switch row at all before 2026-11-04; `send_text_message` came with
   hands-free the same day as the GitHub six.
 **Four known tools are NOT switches of their own**, because the turn ignores
@@ -35749,7 +35752,7 @@ never a delete, transfer or edit. `close_issue` left `jarvis_github.NEVER`;
 `bulk_close` joined it. §216 is the full record of both, and of the other nine
 actions the same day's 22:30 ruling added.
 
-**Updated 2026-11-10 23:00 PT (the owner's second decision that day):** GitHub READS are card-free - the four read tools left `jarvis_agent.NEEDS_A_PERSON`, `github_inspect` is a switchable READ row on What asks first, and ONE master switch offers/removes the ten GitHub tools together. Section **217** is the record of that decision and of the switch door; §190.2's read paragraphs below are corrected to match.
+**Updated 2026-11-10 23:00 PT (the owner's second decision that day):** GitHub READS are card-free - the five read tools left `jarvis_agent.NEEDS_A_PERSON`, `github_inspect` is a switchable READ row on What asks first, and ONE master switch offers/removes all twenty tools in the group - the eighteen GitHub tools and both local review gates together. Section **217** is the record of that decision and of the switch door; §190.2's read paragraphs below are corrected to match. Section **218** is the record of the 2026-11-11 01:40 field-test rulings: per-repository merge checks and the CI read's five runs and plain cut refusal.
 
 The owner's decisions: of 2026-11-03, *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card** - and of 2026-11-10 ("Everything at once"), the same rule now covers **merge and fix-and-push**: each gets its own card, the merge is merge-commit-only and pinned to the head commit on the card, and the push only ever goes to the pull request's own branch from an isolated scratch folder. The reads ask too, on their own card, because a read still sends the saved token to `api.github.com`.
 
@@ -35757,8 +35760,8 @@ The owner's decisions: of 2026-11-03, *"GitHub tools = Read + actions"* - Jarvis
 
 `backend/jarvis_github.py` is the whole of the network half. It talks to `api.github.com` and to nothing else: every address is built from the module's own `GITHUB_API` constant plus a path the module wrote, so there is **no arbitrary-URL code path at all** and a model cannot point it at another host. A redirect is REFUSED rather than followed (`_RefuseRedirect`), because following one would hand the owner's token to whoever answered. Every answer is capped (`MAX_BYTES` for a list, `MAX_FILE_CHARS` for a file) and every request has a timeout.
 
-Ten tools in `backend/jarvis_agent.py` (the three added on 2026-11-10 are the
-last three rows here, and §190.9-§190.10 are their two envelopes):
+Seventeen tools in `backend/jarvis_agent.py` (the seven added on 2026-11-10 are the
+last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 
 | Tool | What it does | The request |
 |---|---|---|
@@ -35772,6 +35775,13 @@ last three rows here, and §190.9-§190.10 are their two envelopes):
 | `github_pr_scan` | the read-only PR cockpit: every open pull request, whether it can merge, and the required check holding it | `GET .../pulls?state=open`, then each `GET .../pulls/{n}` and its check runs |
 | `github_merge_pr` | merges ONE pull request with a merge commit, pinned to the exact head commit on the card | `GET .../pulls/{n}` and its check runs, then `PUT .../pulls/{n}/merge` |
 | `github_fix_and_push` | copies a failing pull request into a scratch folder here, **writes ONE file of the fix there on its own card** (wave 16B), then pushes the fix to that pull request's own branch | `GET .../pulls/{n}`, its check runs, annotations and job log; `git clone`/`fetch`/`checkout`; the local write and `git commit` (no socket); `git push` |
+| `github_pr_detail` | reads ONE pull request in full: its body, changed files, commits, comments and reviews (ten of each at most) | five fixed `GET`s under `.../pulls/{n}` |
+| `github_open_pr` | prepares a NEW branch in the isolated copy, then pushes that one branch and opens ONE pull request | `git clone`/`checkout -b`/`push`; `POST .../pulls` |
+| `github_workflow` | cancels ONE running workflow run, or re-runs only its FAILED jobs - it never dispatches one | `POST .../actions/runs/{id}/cancel` or `.../rerun-failed-jobs` |
+| `github_issue_labels` | adds and/or removes labels on ONE issue or pull request, in ONE request | `PUT .../issues/{n}/labels` |
+| `github_edit_pr` | edits ONE pull request's title and/or body, showing the exact before and after | `PATCH .../pulls/{n}` |
+| `github_pr_review` | posts ONE review that is COMMENT or REQUEST_CHANGES - never APPROVE | `POST .../pulls/{n}/reviews` |
+| `github_issue_state` | closes ONE issue or reopens ONE closed issue, with an optional reason shown on the card | `PATCH .../issues/{n}` |
 
 `github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
 
@@ -35779,17 +35789,17 @@ last three rows here, and §190.9-§190.10 are their two envelopes):
 
 ### 190.2 The tiers: `ask`, on its own action, and never `auto`
 
-**Eight gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the four reads share) and the **seven carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push` and (wave 16B) `github_fix_write`. **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
+**Fourteen gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the five reads share), the **twelve carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review` and `github_issue_state` - and (wave 16B) `github_fix_write`. **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
 
 **The reads are card-free by default - and the owner can put the card back (2026-11-10 23:00 PT).** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so the owner's decision that evening is the shipped default: the five read tools do NOT ask. The switchable read row (`github_inspect`) on the What asks first page is how the card is put back - ONE card plus Windows Hello to loosen, instant from either app - and every WRITE still asks its own card. §216 and §217 record both decisions.
 
 **It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
 
-The **six WRITES** are in `jarvis_agent.NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run a write, a merge or a push with nobody asked. The **four reads are not** since 2026-11-10 23:00 PT (the owner's card-free decision); their card is put back from this page with the switchable `github_inspect` row. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
+The **twelve WRITES** are in `jarvis_agent.NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run a write, a merge or a push with nobody asked. The **five reads are not** since 2026-11-10 23:00 PT (the owner's card-free decision); their card is put back from this page with the switchable `github_inspect` row. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
 
 ### 190.3 No token, no card
 
-Without a saved token every one of the ten answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
+Without a saved token every one of the seventeen answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
 
 ### 190.4 What Jarvis will never do with GitHub
 
@@ -35803,7 +35813,7 @@ The card prints the **literal address** of every request and, for a comment or a
 
 All ten ship **SWITCHED OFF**. Settings, **What asks first**, under **"Let the AI use this"** (group **"Jarvis's own tools"**) holds **one switch per tool** - `github_list`, `github_read_file`, `github_ci_status`, `github_pr_scan`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr` and `github_fix_and_push` - and turning one ON from the PC is one card plus Windows Hello while OFF is instant from either app (`POST /api/asks_first/tools`; the owner's decision of 2026-11-04). Adding the name to `[tools].enabled` by hand still works and is what the switch writes. The Reach page lists each one as off until then. The same page has the switches for `github_search` (GitHub research) and every other reading tool.
 
-`backend/github-tools.patch` gives `jarvis_gate.py` the **eight** gate actions (the reads' own `github_inspect` plus the **seven** carded actions, the wave-16B write included) and **eleven** `_TOOL_ACTIONS` entries - the ten tools plus the fix tool's own `github_fix_write` stage name (a name the gate maps to itself, because the tool is still `github_fix_and_push` and picks it per stage) - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
+`backend/github-tools.patch` gives `jarvis_gate.py` the **fourteen** gate actions (the reads' own `github_inspect`, the **twelve** carded actions and the wave-16B `github_fix_write`) and **eighteen** `_TOOL_ACTIONS` entries - the seventeen tools plus the fix tool's own `github_fix_write` stage name (a name the gate maps to itself, because the tool is still `github_fix_and_push` and picks it per stage) - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
 
 ### 190.7 What proves it
 
@@ -35817,12 +35827,12 @@ those reversals is disturbed**. The same facts are held by `test_card_words.py`,
 
 The tool-capability audit of 2026-11-07 drove these questions through the live chat and found the model answering them: it denied having a public repository, offered a merge card that does not exist, said nothing was needed to read the owner's repos, and answered "how do I disconnect it?" with "you haven't told me what 'it' is yet". The surface was built; the self-knowledge was not. Two things fix that, and both are model-free (updated 2026-11-10 for the ten-tool surface):
 
-* **`features/features.json` has ONE `connected-github` row** - id `connected-github`, title "Read and act on your own GitHub" - naming the ten tools, `github_search`, the scheduled `watch_github` job, the **seven carded actions** (the wave-16B write included) and the bans that remain, with `gate` = the **eight** real `ask` actions (`github_inspect`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_fix_write`). It is the row the Features pages, the Feature Guide and the deterministic capability answer all read, so "what can you do with my GitHub?" now names the connected surface instead of only the two 2026-09-30 research features.
+* **`features/features.json` has ONE `connected-github` row** - id `connected-github`, title "Read and act on your own GitHub" - naming the seventeen tools, `github_search`, the scheduled `watch_github` job, the **twelve carded actions** (the wave-16B write included) and the bans that remain, with `gate` = the **fourteen** real `ask` actions (`github_inspect`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_fix_write`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review`, `github_issue_state`). It is the row the Features pages, the Feature Guide and the deterministic capability answer all read, so "what can you do with my GitHub?" now names the connected surface instead of only the two 2026-09-30 research features.
 * **Two read-only chat intents in `jarvis_quick.py`:**
   * `github_self` (shapes `repo`, `ci`, `tools`, `needs`, `never`, `merge`, `asks`, `action`) answers "what is your GitHub repository?" / "where does your code live?" with **`darknight11ish/Epic-Jarvis`**, reads `jarvis_github.connected()` for the token state, lists the ten tools plus `github_search` and `watch_github`, answers "what do you need before you can read my repos?" (a token + the tools switched on), "what can't you do on GitHub?" (the bans that remain), the eight `ask` rows from `jarvis_asks_first.view()`, and - since 2026-11-10 - answers "can you merge a pull request?" with the REAL boundary: yes, with one card, merge commit only, pinned to the head commit, refused if it moved / is a draft / is blocked / has a running or failing required check, and never squash, rebase, force or admin.
   * `accounts_answer` (shapes `list`, `abilities`, `disconnect`) is the door `jarvis_accounts.sentence()` / `state_words()` never had: "what accounts do I have?", "what abilities does my GitHub connection have?" and "how do I disconnect my GitHub?" (the row's own `remove` sentence) are answered from the same values `GET /api/accounts` serves. `probe=False` - no socket is opened by a chat answer.
 
-`GET /api/accounts`'s GitHub row is corrected in the same change: nine abilities (the four reads sharing `github_inspect`, plus `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, and the existing `github_read`/`research_authenticated` watch pair), with its limit saying "Read AND act, each with its own card", the merge-commit-only rule and the bans. `test_github_self_knowledge.py` holds all of it; `test_self_answers.py` and `test_feature_guide.py` hold the chat and guide cases.
+`GET /api/accounts`'s GitHub row is corrected in the same change: seventeen abilities (the five reads sharing `github_inspect`, plus `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review`, `github_issue_state`, and the existing `github_read`/`research_authenticated` watch pair), with its limit saying "Read AND act, each with its own card", the merge-commit-only rule and the bans. `test_github_self_knowledge.py` holds all of it; `test_self_answers.py` and `test_feature_guide.py` hold the chat and guide cases.
 
 ### 190.9 The merge envelope (2026-11-10)
 
@@ -35893,7 +35903,7 @@ that closes the gap.
 
 * **Two new stages of the same tool.** `github_fix_and_push` now takes
   `stage="read"` and `stage="write"` beside `prepare` and `push`. No new tool and
-  no new switch: the surface stays the ten switched-off GitHub tools, and the one
+  no new switch: the surface stays the seventeen switched-off GitHub tools, and the one
   switch that already governs the fix flow governs this too.
 * **`stage="read"` raises NO card**, and that is the same rule every local read
   follows: it opens ONE file inside the prepared copy, sends nothing to GitHub,
@@ -38885,3 +38895,62 @@ and its card waiting), `backend/test_github_tools.py` / `test_github_parity.py`
 / `test_agent.py` (the reads left the belt, the six writes stayed, the switch is
 the card's door), and `backend/test_lockdown.py` (the one way out an app may now
 loosen is the read row).
+
+## 218. The 2026-11-11 field-test rulings: per-repository merge checks, and a CI read that asks for five runs and refuses a cut answer (2026-11-11, the GitHub union 0.2.448)
+
+This section is the envelope of the owner's 2026-11-11 01:40 PT field-test
+rulings (Q-C, Q-G) and of the two decisions they complete (Q3/Q4 card-free
+reads; Q-D/Q7 review tools). It is a dated record: the sections above keep the
+history of their own days.
+
+* **Per-repository required checks (Q-C).** `github_merge_pr` no longer carries
+  one fixed list of seven checks for every repository. `darknight11ish/Epic-Jarvis`
+  (matched case-insensitively) ALWAYS enforces the seven `REQUIRED_CHECKS` as an
+  unbypassable floor, and its branch rules are never read - no repository rule can
+  lower the floor. Any OTHER repository is judged by its OWN branch rules: every
+  required status-check context they name must have completed successfully on the
+  carded head commit. When the rules name no contexts (200 with none) or the rules
+  endpoint answers 404, the commit's own check-runs decide (falling back to its
+  workflow runs when there are none): at least one check, all completed, every
+  conclusion in success/neutral/skipped. A 401/403 on the rules read or on the
+  checks read refuses the merge in plain words and appends the module's standing
+  sentence " Nothing was merged." - the rule is never silently weakened. The
+  READ-ONLY cockpit `github_pr_scan` uses the SAME plan for its rows (one
+  function, `_check_plan`, behind both doors), so a green pull request in another
+  repository reads "merge-ready" under its own rule and no longer prints
+  "blocked - rust has not reported". `backend/test_github_tools.py` pins both
+  halves (`t_merge_checks_are_per_repository`,
+  `t_pr_scan_classifies_a_foreign_repo_with_its_own_checks`). Honest residual,
+  recorded rather than hidden: the generic rule reads ONE page of check-runs /
+  workflow runs (page 1 only, `per_page=100` and the Q-G `per_page=5` fallback are
+  not paginated), so "every run" means every run on page 1 - the ruling itself
+  specified those page sizes, so this is a stated limit, not a silent gap.
+* **The CI read asks for the newest five runs (Q-G).** `github_ci_status` plans
+  `CI_PER_PAGE = 5` for its run reads while `PER_PAGE` stays 20 for every other
+  repository read. The read layer also marks a REAL cut, not only a self-cut:
+  `_read_capped` reads `MAX_BYTES + 1` and `_capped_text` appends `CUT_MARKER`
+  when the answer really exceeded `MAX_BYTES = 200_000`, so `_said()` can answer
+  a genuinely oversized answer with the plain refusal - *"GitHub's answer was
+  longer than Jarvis reads in one go, so Jarvis will not guess at it. Nothing on
+  GitHub changed - ask again about one thing at a time."* - instead of showing
+  half an answer or saying "GitHub answered without saying anything about CI"
+  about an answer Jarvis itself had truncated. `backend/test_github_tools.py`
+  proves the real transport cut (`t_ci_status_reads_five_runs_and_refuses_a_cut`).
+* **Card-free reads (Q3/Q4).** All six GitHub reads are out of
+  `jarvis_agent.NEEDS_A_PERSON`: `github_list`, `github_read_file`,
+  `github_ci_status`, `github_pr_scan` and `github_pr_detail` share the shipped
+  `github_inspect = "auto"` line, and `github_search` runs card-free under its OWN
+  actions `github_search_run` / `github_search_run_authenticated` (both `"auto"`),
+  while `web_research` and `research_authenticated` stay `"ask"` for every other
+  research egress. Every one of the twelve GitHub write tools and the
+  `github_fix_write` action inside `github_fix_and_push` still asks its own card
+  and stays in `NEEDS_A_PERSON`.
+* **The review tools are on by default and in the master switch (Q-D/Q7).**
+  `review_changes` and `check_records` move from switched-off to the shipped
+  `[tools].enabled` list (both settings files stay byte-identical), both are
+  `"auto"` in `[autonomy.tiers]`, both are in `jarvis_claims.READ_ONLY_TOOLS`,
+  and both are members of the ONE master switch `tools.github_group` - whose
+  twenty names are the eighteen GitHub tools (the library search, five reads and
+  twelve writes) plus the two local review gates. An EXISTING PC's settings file
+  is never overwritten: the two appear on its "New - currently off" pill and the
+  master switch offers them in the same one card.

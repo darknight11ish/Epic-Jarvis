@@ -84,20 +84,21 @@ pub(crate) const SWITCHABLE: [&str; 13] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The master GROUP switch (2026-11-10, the owner's ruling): ONE switch that
-/// offers/removes the ten GitHub tools together, sent through the SAME
+/// offers/removes the twenty union tools together, sent through the SAME
 /// `set_tool_enabled` command and `POST /api/asks_first/tools` body as a tool
 /// (`{"tool": "github_tools_group", "enabled": true}`). It is NOT a model tool
 /// and NOT an entry in [`TOOLS_SWITCHABLE`]: the PC's `tools.github_group`
-/// object carries its row, and its ON card writes the ten names in one atomic
+/// object carries its row, and its ON card writes the twenty names in one atomic
 /// step on the PC. The phone never sends it (it is read-only there).
 pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 67 at
-/// 2026-11-10 (62 at 2026-11-09; Wave 13 added the carded repository create,
-/// wave 14 the cardless `project_read`; Wave 16 added the read-only PR
-/// cockpit, the carded merge and the carded fix-and-push, and wave 16E the
-/// two local review gates - the review packet and the record check)
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 74 at
+/// 2026-11-11 (67 at 2026-11-10: 62 at 2026-11-09; Wave 13 added the carded
+/// repository create, wave 14 the cardless `project_read`; Wave 16 added the
+/// read-only PR cockpit, the carded merge and the carded fix-and-push, wave
+/// 16E the two local review gates, and the parity pass the full pull-request
+/// read plus six more carded writes)
 /// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
 /// pack-manager tools that ship ON, hands-free's send_text_message and the
 /// approval-policy tool's own row): the
@@ -106,7 +107,7 @@ pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 67] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 74] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -191,6 +192,16 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 67] = [
     "github_pr_scan",
     "github_merge_pr",
     "github_fix_and_push",
+    // Wave 16 parity (2026-11-10): the full pull-request read and the six more
+    // carded writes of the 22:30/23:00 rulings. Each has its own switch row on
+    // the Tools page; the twenty-name group switch above covers all of them.
+    "github_pr_detail",
+    "github_open_pr",
+    "github_workflow",
+    "github_issue_labels",
+    "github_edit_pr",
+    "github_pr_review",
+    "github_issue_state",
     "approval_policy",
 ];
 
@@ -511,7 +522,7 @@ mod tests {
             .iter()
             .map(|x| x.as_str().unwrap())
             .collect();
-        assert_eq!(group_tools.len(), 10, "the group speaks for ten tools");
+        assert_eq!(group_tools.len(), 20, "the group speaks for twenty tools");
         assert_eq!(
             doc["words"]["github_group_title"].as_str().unwrap(),
             "Offer GitHub tools to the AI model"
@@ -519,12 +530,12 @@ mod tests {
         assert!(doc["words"]["github_group_what"]
             .as_str()
             .unwrap()
-            .contains("every single use still asks you on its own card"));
+            .contains("every use is still decided by \"Ask me first\""));
         let group = &doc["cases"]["pc_github_group_on"]["tools"]["github_group"];
         assert_eq!(group["id"].as_str().unwrap(), GITHUB_TOOLS_GROUP);
         assert_eq!(group["on"], true);
-        assert_eq!(group["on_count"], 10);
-        assert_eq!(group["total"], 10);
+        assert_eq!(group["on_count"], 20);
+        assert_eq!(group["total"], 20);
         let partial = &doc["cases"]["pc_github_group_partial"]["tools"]["github_group"];
         assert_eq!(partial["on"], false, "a partial list is never shown as on");
         assert_eq!(partial["partial"], true);

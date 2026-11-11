@@ -81,10 +81,11 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: (a) A fresh install's `[tools].enabled`, read through
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
-    "approval_policy", "calculator", "change_setting", "conversation_find", "conversation_open",
+    "approval_policy", "calculator", "change_setting", "check_records",
+    "conversation_find", "conversation_open",
     "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install",
     "pack_list", "pack_remove", "phone_apps", "plugin_list", "plugin_switch",
-    "refresh_abilities", "self_portrait", "send_text_message",
+    "refresh_abilities", "review_changes", "self_portrait", "send_text_message",
     "web_search",
 ]
 
@@ -97,7 +98,7 @@ CLOUD_ALLOWED = []
 #: so the decision is recorded here rather than assumed.
 PRIVATE_CHAT_ALLOWED = []
 
-#: What those enabled nineteen become when a turn is built: `my_files` is
+#: What those enabled twenty-one become when a turn is built: `my_files` is
 #: dropped while no folder is listed (the model is never offered a tool that
 #: could read nothing), so a fresh PC offers twelve base tools - plus the
 #: conversation web-search approval and its instant stop, which ride with
@@ -112,10 +113,10 @@ PRIVATE_CHAT_ALLOWED = []
 #: tool at all, so it cannot appear here.
 OFFERED_FRESH = [
     "approval_policy", "approve_web_search_for_conversation", "calculator",
-    "change_setting", "cloud_escalation",
+    "change_setting", "check_records", "cloud_escalation",
     "conversation_find", "conversation_open", "feature_guide", "memory_search",
     "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
-    "plugin_list", "plugin_switch", "refresh_abilities",
+    "plugin_list", "plugin_switch", "refresh_abilities", "review_changes",
     "self_portrait", "stop_web_search_approval", "web_search",
 ]
 
@@ -129,89 +130,88 @@ OFFERED_FRESH = [
 #: ask rides with `web_search` - it is not a capability, and its card is the
 #: permission.
 CATALOGUE = [
-    "append_logseq_journal", "append_obsidian_daily",
+    # Every tool that exists, sorted, pinned in full (79 at the GitHub union
+    # of 2026-11-11). A future tool must be added here, which forces the
+    # three lists above to be looked at in the same edit; the per-tool
+    # commentary this block used to carry lives in the profiles and docs.
+    "append_logseq_journal",
+    "append_obsidian_daily",
     "approval_policy",
-    "approve_web_search_for_conversation", "browser_control",
-    "calculator", "calendar_read", "change_setting", "check_records",
-    # The standing cloud escalation switch (2026-11-06, the 0-of-6 action-card
-    # run): the only door in chat to the PRESETS menu's Cloud row. Like the
-    # web-search ask and its stop, `[tools].enabled` never names it - it rides
-    # with `change_setting` (jarvis_agent.RIDES_WITH_SETTINGS) - so it is NOT in
-    # FULL_ENABLED and IS in OFFERED_FRESH. Its ONE `change_own_config` card is
-    # raised inside jarvis_presets.cloud_escalate(), the same call the Presets
-    # menu makes.
-    "cloud_escalation", "coming_up",
-    "connect_account", "control_computer", "control_phone",
-    # Reading one of the owner's own kept conversations (2026-11-03: "pull up
-    # any old conversation"). Both are read-only under `skill_list`. Clearing is
-    # NOT a model tool (Gemini ruling 1, 2026-11-03): it stays route / app /
-    # fast-path only, behind its ONE `conversation_clear` card.
-    "conversation_find", "conversation_open",
+    "approve_web_search_for_conversation",
+    "browser_control",
+    "calculator",
+    "calendar_read",
+    "change_setting",
+    "check_records",
+    "cloud_escalation",
+    "coming_up",
+    "connect_account",
+    "control_computer",
+    "control_phone",
+    "conversation_find",
+    "conversation_open",
     "create_joplin_note",
     "draft_email",
-    "email_check", "feature_guide", "file_read",
-    # Your own GitHub, on demand (2026-11-03, the owner's "Read + actions").
-    # None of the six is in FULL_ENABLED or OFFERED_FRESH: like `github_search`
-    # they ship SWITCHED OFF, because each one sends the owner's GitHub token
-    # out and the tools are useless until a token is saved anyway. They are in
-    # the catalogue so the next tool added has to be looked at here too.
-    # The three of the owner's 2026-11-10 "Everything at once" decision - the
-    # read-only PR cockpit, the carded merge and the carded fix-and-push - sit
-    # in their sorted places, so a swap reads as a change.
-    #
-    # The two LOCAL review gates (2026-11-10, wave 16E) are here too, and they
-    # are the pair worth noticing: `review_changes` and `check_records`
-    # read a checkout on this PC, never GitHub, so they are in neither
-    # FULL_ENABLED nor OFFERED_FRESH (both ship off - their own switch is the
-    # only way in) and they are the only GitHub-group tools that raise NO card.
-    "github_ci_status", "github_comment", "github_create_repo",
-    "github_ci_status", "github_comment", "github_create_repo",
-    "github_edit_pr", "github_fix_and_push", "github_issue_labels",
-    "github_issue_state", "github_list", "github_merge_pr",
-    "github_open_issue", "github_open_pr", "github_pr_detail",
-    "github_pr_review", "github_pr_scan", "github_read_file",
-    "github_rerun_workflow", "github_search", "github_workflow",
-    "goal_add", "goal_done", "goal_progress", "goals_list",
-    "home_control", "home_read", "memory_search", "my_files", "my_spending",
+    "email_check",
+    "feature_guide",
+    "file_read",
+    "github_ci_status",
+    "github_comment",
+    "github_create_repo",
+    "github_edit_pr",
+    "github_fix_and_push",
+    "github_issue_labels",
+    "github_issue_state",
+    "github_list",
+    "github_merge_pr",
+    "github_open_issue",
+    "github_open_pr",
+    "github_pr_detail",
+    "github_pr_review",
+    "github_pr_scan",
+    "github_read_file",
+    "github_rerun_workflow",
+    "github_search",
+    "github_workflow",
+    "goal_add",
+    "goal_done",
+    "goal_progress",
+    "goals_list",
+    "home_control",
+    "home_read",
+    "memory_search",
+    "my_files",
+    "my_spending",
     "notes_search",
-    # The pack tools (2026-11-05): list and inspect are read-only under the gate
-    # action skill_list; install raises its one card inside jarvis_skills.install;
-    # remove raises one card naming exactly the files in the pack ledger.
-    "pack_inspect", "pack_install", "pack_list", "pack_remove",
-    "phone_apps", "plugin_list", "plugin_switch",
-    # The product check (2026-11-04, the owner's choice "wire the existing
-    # product check"): ONE Amazon product page, one PC-only card, tier "ask".
-    # NOT in FULL_ENABLED - `[product_check] enabled = false` ships, and the
-    # tool is not even offered while it is off - and not in a cloud or
-    # private-turn allow-list (both are empty by design).
+    "pack_inspect",
+    "pack_install",
+    "pack_list",
+    "pack_remove",
+    "phone_apps",
+    "plugin_list",
+    "plugin_switch",
     "product_check",
-    # The read half of taking over dev work (2026-11-09): cardless, decided
-    # under file_read's own `read_files_readonly` action, and ships OFF - so
-    # it is here (the catalogue is where "a new tool landed" is recorded) but
-    # not in FULL_ENABLED, OFFERED_FRESH, the cloud lane or a private turn.
-    "project_read", "propose_plan",
-    "protect_from_jarvis", "rea_investigate",
+    "project_read",
+    "propose_plan",
+    "protect_from_jarvis",
+    "rea_investigate",
     "read_web_page",
-    # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh
-    # its function and capabilities awareness"): read-only, no card, decided
-    # under the gate's own `skill_list` action like feature_guide. Not in a
-    # cloud or private-turn allow-list (both are empty by design).
     "refresh_abilities",
-    # What Jarvis is made of (2026-11-03: "be aware of every setting, function
-    # and ability it has"): read-only under `skill_list`, no card.
-    "retirement_whatif", "review_changes", "run_data_script",
+    "retirement_whatif",
+    "review_changes",
+    "run_data_script",
     "self_portrait",
-    "send_email", "send_file_to_phone",
-    # Texting a contact (2026-11-04, hands-free mode): a REAL message from the
-    # owner's own phone, in their name, which cannot be unsent. In the shipped
-    # template's list but withheld from every turn until the mode is on
-    # (`offered_tools`), so it is not in FULL_ENABLED; it is here because a
-    # cloud or private turn must never be offered it, and this list is where
-    # that decision is recorded.
+    "send_email",
+    "send_file_to_phone",
     "send_text_message",
     "set_reminder",
-    "set_timer", "setup_quiz", "shell_exec", "stop_web_search_approval", "tidy_inbox",
-    "todo_add", "todo_done",
+    "set_timer",
+    "setup_quiz",
+    "shell_exec",
+    "stop_web_search_approval",
+    "tidy_inbox",
+    "todo_add",
+    "todo_done",
     "web_search",
 ]
 
@@ -321,7 +321,7 @@ def t_a_fresh_install_enables_exactly_the_pinned_set():
         return sorted(AG.enabled_tools_for_turn())
 
     got = _with_fresh_settings(read)
-    check("a fresh install's turn enables exactly the nineteen pinned names",
+    check("a fresh install's turn enables exactly the twenty-one pinned names",
           got == FULL_ENABLED, got)
 
 
@@ -333,7 +333,7 @@ def t_a_fresh_install_offers_exactly_the_pinned_list():
             lambda: sorted(AG.offered_tools(AG.enabled_tools_for_turn())))
     finally:
         JD.folders = real_folders
-    check("a fresh install (no folder listed) offers exactly nineteen names - "
+    check("a fresh install (no folder listed) offers exactly twenty-three names - "
           "the seventeen local defaults plus the grant ask and its stop, which "
           "ride with web search - with my_files withheld by its own rule",
           got == OFFERED_FRESH, got)

@@ -1749,8 +1749,9 @@ def t_the_github_master_switch_is_one_card_and_instant_off():
           and tools.writes == [(AF.GITHUB_TOOLS_GROUP, False)]
           and not (set(AF.GITHUB_TOOLS) & tools.on) and "web_search" in tools.on,
           (code, tools.writes, tools.on))
-    check("... and the answer says the ten are not offered any more",
-          "ten GitHub tools" in out.get("message", ""), out.get("message"))
+    check("... and the answer says the twenty are not offered any more",
+          "twenty tools in the group" in out.get("message", ""),
+          out.get("message"))
     tools = ToolsFile("web_search")
     code, out = _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": False}, tools, here=True)
     check("a group already off: 200, changed=False, nothing written",
