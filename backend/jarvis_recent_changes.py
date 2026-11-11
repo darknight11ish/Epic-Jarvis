@@ -20,10 +20,10 @@ from pathlib import Path
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
     "The vault organizer's switch now says the approval card is waiting instead of claiming the organizer is already on",
+    "The phone's Home screen gets its room back: the top strip's three information cards are in More, its two safety cards stay on Home as one thin row, and past chats are easy to reach",
     "The HUD's way back from Face Only and Mini View, one navigation, two wording fixes, and the third lane's prompt-cache cap kept",
     "Wave 14: Jarvis reads one file of a project without asking, the HUD's Memory tab can keep a plain new fact, Edit Layout picks the card instead of running it, and a tenth Medical preset joins the nine",
     'Wave 13: Reminders hear the date you meant, one carded GitHub repository create, Creator mode, a memory fault banner, and the pooled window held after a cold turn',
-    "Wave 12: the dead skill checks are wired, files drag in, notes and Notion get their numbers, read-aloud speaks in Jarvis's own voice, a reversible click needs no card, and the Brain stops describing plans as facts",
 )
 
 

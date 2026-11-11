@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "2b21e1d1b39ca093279b345c7863823403bf4626",
- "built_at": "2026-11-10T02:01:59-08:00",
+ "ref": "a577d460e097a3c0c449b647492b3a8e9c8571fa",
+ "built_at": "2026-11-10T20:27:11-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1583,6 +1583,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/HistoryViewTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HoldEntryTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HomeLinkWordingTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/HomeMoreMenuTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HomeNavRowTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HudEditScreenTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HudLayoutTest.kt",
@@ -1871,7 +1872,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 968,
+   "file_count": 969,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4578,6 +4579,7 @@
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
+    "changelog.d/2026-11-10-phone-top-strip-in-more-and-history.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4726,6 +4728,7 @@
     "decisions.d/2026-11-09-wave-13-reminders-github-creator.md",
     "decisions.d/2026-11-09-wave14-project-read-presets-hud.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
+    "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5173,7 +5176,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 830,
+   "file_count": 832,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6255,6 +6258,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "a577d460e097a3c0c449b647492b3a8e9c8571fa",
+   "date": "2026-11-10",
+   "subject": "feat(phone): the top strip splits - safety stays on Home, the rest opens from More, and History gets a row"
+  },
+  {
+   "sha": "fd9cb5762c021a4b16508a7c0c75c7073db17fa4",
+   "date": "2026-11-10",
+   "subject": "Merge pull request #1221 from darknight11ish/integration/wave15-2026-11-10"
+  },
+  {
+   "sha": "d66a0a4cf818966a127721049d8698cc628da401",
+   "date": "2026-11-10",
+   "subject": "records: close DEF-063 and DEF-064 on the wave-15 tree, and regenerate the generated files"
+  },
+  {
    "sha": "2b21e1d1b39ca093279b345c7863823403bf4626",
    "date": "2026-11-10",
    "subject": "Merge origin/main into the wave-15 branch (carries the merged wave-14 follow-ups, PR #1220)"
@@ -6338,21 +6356,6 @@
    "sha": "c4259640f85c921b0f50b08f72578e5a11fe7a8a",
    "date": "2026-11-09",
    "subject": "chore(hud): the AI Mode name follows the PC's chosen preset, and the self code map is regenerated"
-  },
-  {
-   "sha": "2ec7410db0fb01f521edaaea2fdf7b4f87bc80d1",
-   "date": "2026-11-09",
-   "subject": "feat(hud): one navigation, one pill bar, one approval card (spec 2.1/2.2/4.1/4.2/5.2)"
-  },
-  {
-   "sha": "4a4864712d46ea780a2a39491565b2d31bd583c5",
-   "date": "2026-11-09",
-   "subject": "Merge pull request #1219 from darknight11ish/integration/wave14-2026-11-09"
-  },
-  {
-   "sha": "7b04937d3910ed6b8a5ab8faaa1bf64407e19bea",
-   "date": "2026-11-09",
-   "subject": "fix(feedback): run the C121 migration smoke on a pre-v2 fixture copy (Q9)"
   }
  ],
  "top_level": [
@@ -6369,7 +6372,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 928
+   "files": 929
   },
   {
    "path": "docs/",
@@ -6389,7 +6392,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 231
+   "files": 232
   },
   {
    "path": "videos/",
@@ -6399,7 +6402,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 147
+   "files": 148
   },
   {
    "path": "plugins/",
@@ -6473,8 +6476,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5597,
-  "covered": 5126,
+  "tracked_files": 5600,
+  "covered": 5129,
   "excluded": 471,
   "subsystems": 27
  },
