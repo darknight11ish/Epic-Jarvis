@@ -1597,7 +1597,7 @@ CHECKERS = (
                               or p == "scripts/apply-patches.ps1" for p in cs.paths)},
     {"id": "base-regeneration", "script": "backend/test_base_regeneration.py",
      "args": (), "timeout": CHECK_TIMEOUT, "always": False,
-     "why": "tools/gen_base_from_backend.py follows the base's own re-take rule",
+     "why": "the published base follows the repository's own re-take rule",
      "select": lambda cs: any(p.startswith("backend/") or p.startswith("jarvis-backend/")
                               or p == "tools/gen_base_from_backend.py"
                               for p in cs.paths)},
@@ -1612,7 +1612,7 @@ CHECKERS = (
                               or p.startswith("jarvis-client/") for p in cs.paths)},
     {"id": "plugins", "script": "tools/check_plugins.py", "args": (),
      "timeout": CHECK_TIMEOUT, "always": False,
-     "why": "the plugin catalogue matches the patch stack",
+     "why": "the plugin catalogue matches the patches this repository applies",
      "select": lambda cs: any(p.startswith("plugins/") or p == "scripts/apply-patches.ps1"
                               or p == "plugins/registry.json" for p in cs.paths)},
     {"id": "no-scratch", "script": "tools/check_no_scratch_in_the_tree.py", "args": (),
