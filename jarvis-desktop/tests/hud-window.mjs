@@ -617,7 +617,7 @@ await check("the card's status line names the chosen layout in words", () => {
   assert.match(S.describeHudLayout("bogus"), /Command Cockpit/);
 });
 
-await check("the Settings card offers the seven presets through the layout store", () => {
+await check("the Settings card offers the eight presets through the layout store", () => {
   const at = SETTINGS_HTML.indexOf('id="hud-window"');
   assert.ok(at > 0, "settings.html has no #hud-window card");
   const card = SETTINGS_HTML.slice(at, SETTINGS_HTML.indexOf("</section>", at));

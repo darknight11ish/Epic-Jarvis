@@ -3869,7 +3869,8 @@ H1 of the editable-HUD design, Gemini rulings 23-28; `jarvis-desktop/src/hud-lay
 `contract/hud-presets.json`, `src-tauri/src/hud_layout.rs`). The big HUD
 window is a 1280x820 widescreen WebView2 cockpit whose named regions
 (`header`, `left_rail`, `stage_top`, `stage_main`, `right_rail`) and card ids
-exist only there. The seven built-in layouts - **Cockpit** (the default),
+exist only there. The eight built-in layouts - **Simple** (the owner's
+2026-11-10 ask: the top row, essentials only), **Cockpit** (the default),
 **Studio**, **Ambient**, **Quiet**, **Telemetry & Ops**, **Second Brain &
 Planner** and **Minimal** - are therefore desktop-only data, mirrored in
 `contract/hud-presets.json` for the desktop's own Rust and tests. **The phone
@@ -3978,7 +3979,7 @@ always wins). The colour `theme` is no longer part of a layout document at all
 (Appearance owns colour), and the seven fixed cards carry no inert `col_span`/
 `row_span` in the contract (68 dead values removed); a saved document that still
 carries `theme` keeps loading with the key dropped, and `LAYOUT_VERSION` stays 1
-so no owner layout is discarded. The seven presets are renamed where the
+so no owner layout is discarded. The seven earlier presets are renamed where the
 coherence slice renamed them: **Quiet** (silently migrated from the old
 "focus"), and the registry label `lanes` is "Focus presets", matching the page.
 

@@ -6,7 +6,7 @@
  * regions (a left rail, a stage top, the stage, a right rail and a header),
  * and every card lives in one region in a chosen order, with a width and a
  * height. This module is the one place that says which cards exist, which
- * arrangement each of the seven built-in presets is, and how an untrusted
+ * arrangement each of the eight built-in presets is, and how an untrusted
  * document (a hand-edited one, an imported one, an old one) becomes a safe
  * layout. It changes nothing on screen by itself: H2 is the editor that draws
  * it, and the Settings picker and the HUD bootstrap read it through here.
@@ -30,7 +30,7 @@
  * NO DEPENDENCY, NO BUILD STEP. This file is plain ES module JavaScript, the
  * same as the rest of the pages, and it is imported by the Settings window,
  * by the HUD bootstrap (as a string copy, the bootstrap cannot import) and by
- * tests/hud-layout.mjs. `contract/hud-presets.json` mirrors the seven presets
+ * tests/hud-layout.mjs. `contract/hud-presets.json` mirrors the eight presets
  * so Rust and the tests can read the same data; the test compares the two and
  * fails if they drift.
  *
@@ -497,6 +497,13 @@ function textOf(value, max, fallback = "") {
 }
 
 const PRESET_NOTE = {
+  simple: {
+    label: "Simple",
+    glyph: "\u25cb",
+    blurb:
+      "The simple mode: the conversation, the ask box, approvals and voice, "
+      + "with the side panels, the memory map and the extra controls left out.",
+  },
   cockpit: {
     label: "Cockpit",
     glyph: "\u229e",
@@ -548,9 +555,17 @@ const PRESET_NOTE = {
 };
 
 /**
- * EACH PRESET'S COMPOSITION (Wave 15, 2026-11-09). The first/second/gone
- * columns of the redesign spec's section 1.2 table, as data:
+ * EACH PRESET'S COMPOSITION (Wave 15, 2026-11-09; Simple added 2026-11-10).
+ * The first/second/gone columns of the redesign spec's section 1.2 table, as
+ * data:
  *
+ *   simple       Simple (the owner's 2026-11-10 ask, first row) - the two
+ *                things a person uses, conversation and ask box, plus the four
+ *                protected cards. Every rail card, the Galaxy, Memory and
+ *                Reminders stage tabs and the Focus presets card are OFF, so
+ *                the first paint is one centred column with nothing to
+ *                configure. Its stage bar still carries the page's own AI Mode
+ *                (Presets), Open Brain and Settings doors.
  *   cockpit      Just Talk - the conversation and the ask box at the centre;
  *                the right column holds the waiting count and the page's today
  *                panel (2). The calendar, last-turn telemetry, abilities,
@@ -584,6 +599,38 @@ const PRESET_NOTE = {
  */
 function cardsFor(presetId) {
   const rows = {
+    simple: [
+      // THE ESSENTIALS ONLY (the owner, 2026-11-10: "also add a simple layout
+      // and have it at the top of layout presets ... simple with just the
+      // essential tools and not too much customization or options"). The four
+      // protected cards are here because no layout may hide them; the
+      // conversation and its ask box are the two things the owner actually
+      // uses. Every other card is NAMED and off on purpose: a document that
+      // omits a movable card gets it put back visible by hud-edit.js, which
+      // would quietly turn Simple back into a busy layout the first time Edit
+      // HUD opened. There is no galaxy map, no side panel, no telemetry and no
+      // Focus presets list - the stage bar's own AI Mode / Open Brain /
+      // Settings doors are page controls, not layout cards, so they remain.
+      ["emergency_stop", {}],
+      ["bar_launcher", { collapsed: true }],
+      ["approvals", {}],
+      ["voice_controls", {}],
+      ["conversation", { col_span: 12, row_span: 4 }],
+      ["composer", {}],
+      ["nav", { visible: false }],
+      ["lanes", { visible: false }],
+      ["systems", { visible: false }],
+      ["galaxy", { visible: false }],
+      ["reminders", { visible: false }],
+      ["memory", { visible: false }],
+      ["calendar", { visible: false }],
+      ["waiting", { visible: false }],
+      ["telemetry", { visible: false }],
+      ["tools", { visible: false }],
+      ["brain_stats", { visible: false }],
+      ["budget", { visible: false }],
+      ["voice_stats", { visible: false }],
+    ],
     cockpit: [
       ["emergency_stop", {}],
       ["nav", {}],
@@ -721,6 +768,12 @@ function cardsFor(presetId) {
 }
 
 const PRESET_FACTS = {
+  // SIMPLE (the owner, 2026-11-10): one column, both rails as closed drawers,
+  // and the comfortable density - a normal-size chat window, not Mini View's
+  // compact corner. The shell is the page's own `single-stage-bento`, which is
+  // already exactly one centred 1080px stage with the two rails off the glass,
+  // so this layout needs no new CSS and cannot disturb another preset's shape.
+  simple: { shell_template: "single-stage-bento", density: "comfortable", default_stage_tab: "talk" },
   // TWO-COLUMN COCKPIT (Wave 15, spec §1.2 "Just Talk": "Remove Left
   // Sidebar"). The shell stays `three-column` because Command Center
   // (`second_brain`) is the SAME shell and keeps its sidebar: the two layouts
@@ -775,8 +828,9 @@ function sortCards(cards) {
     || a.order - b.order || a.id.localeCompare(b.id));
 }
 
-/** The seven built-in presets, in the order the pickers draw them. */
+/** The eight built-in presets, in the order the pickers draw them. */
 export const PRESETS = Object.freeze([
+  buildPreset("simple"),
   buildPreset("cockpit"),
   buildPreset("studio"),
   buildPreset("ambient"),
@@ -786,8 +840,22 @@ export const PRESETS = Object.freeze([
   buildPreset("minimal"),
 ]);
 
-/** The default preset, first in the list (fresh installs get this one). */
-export const DEFAULT_PRESET_ID = PRESETS[0].id;
+/**
+ * The default preset, which is NOT the first row any more (2026-11-10).
+ *
+ * Simple was added at the TOP of the list because the owner asked for it
+ * there, but "the top row" and "what an unreadable document becomes" are two
+ * different decisions. This constant is the fallback `normalizeLayout`,
+ * `presetLayout` and `migrateLegacyLayout` use for a missing, wrong-version or
+ * unknown document - an existing owner's old `jarvis.hud.layout` value, or a
+ * document written by a build we do not know. Pointing that at the new id
+ * would silently change what those documents mean for people who already had
+ * one, and the owner did not ask for that. So the fallback stays the everyday
+ * layout: Cockpit. A saved document that NAMES a layout is untouched either
+ * way (its id wins); only fresh installs, and documents with no readable
+ * choice at all, land here.
+ */
+export const DEFAULT_PRESET_ID = "cockpit";
 
 const PRESET_BY_ID = new Map(PRESETS.map((preset) => [preset.id, preset]));
 

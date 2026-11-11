@@ -172,9 +172,9 @@ await check("F8: every registry label that has a page heading matches that headi
 /* ── 2. The pruned contract and the Quiet naming ────────────────────────── */
 
 await check("Q5: the contract has no colour theme and no inert fixed-card spans", () => {
-  assert.equal(contract.presets.length, 7);
+  assert.equal(contract.presets.length, 8);
   const ids = contract.presets.map((preset) => preset.id);
-  assert.deepEqual(ids, ["cockpit", "studio", "ambient", "quiet", "telemetry",
+  assert.deepEqual(ids, ["simple", "cockpit", "studio", "ambient", "quiet", "telemetry",
     "second_brain", "minimal"]);
   for (const preset of contract.presets) {
     assert.equal("theme" in preset, false, `${preset.id} still carries theme`);

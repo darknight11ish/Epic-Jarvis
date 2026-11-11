@@ -2,7 +2,7 @@
 //! rulings 23-28, 2026-10-21; docs/ARCHITECTURE.md section 8).
 //!
 //! WHAT THIS IS. `jarvis-desktop/src/hud-layout.js` owns the card registry, the
-//! seven presets and the closed-world normalizer. This module is the one place
+//! eight presets and the closed-world normalizer. This module is the one place
 //! that document is PERSISTED: the appearance-class settings store the theme
 //! already uses (`jarvis-desktop.json`), no backend call, no approval card -
 //! a layout holds card coordinates and visibility, nothing private, and it
@@ -83,6 +83,7 @@ pub const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
 /// slice renamed "focus" to "quiet", and the old id stays accepted as a silent
 /// migration alias, exactly as the JS normalizer does.
 pub const BUILT_IN_PRESETS: &[&str] = &[
+    "simple",
     "cockpit",
     "studio",
     "ambient",
@@ -257,7 +258,7 @@ fn sanitise_user_preset(entry: &serde_json::Value) -> Result<serde_json::Value, 
     let base_preset = text_of(object.get("base_preset"), MAX_TEXT)
         .ok_or_else(|| "a saved layout names no base preset".to_string())?;
     // H3-3: the JS normalizer drops a saved layout whose base preset is not one
-    // of the seven, so Rust must not store one either (otherwise the two
+    // of the eight, so Rust must not store one either (otherwise the two
     // normalizers disagree and an entry can be saved-but-never-shown).
     if !known_preset(&base_preset) {
         return Err(format!(
@@ -648,21 +649,25 @@ mod tests {
     }
 
     #[test]
-    fn the_contract_mirror_has_the_seven_presets_and_they_all_validate() {
+    fn the_contract_mirror_has_the_eight_presets_and_they_all_validate() {
         let text = include_str!("../../../contract/hud-presets.json");
         let doc: serde_json::Value = serde_json::from_str(text).unwrap();
         let presets = doc["presets"].as_array().unwrap();
-        assert_eq!(presets.len(), 7);
+        assert_eq!(presets.len(), 8);
         let ids: Vec<&str> = presets
             .iter()
             .map(|preset| preset["id"].as_str().unwrap())
             .collect();
+        // Simple was added at the top on 2026-11-10 (the owner's ask); it is
+        // the first row, not the default - `DEFAULT_PRESET_ID` stays Cockpit
+        // in the JS so an old or unreadable document is not re-pointed.
         // Focus was renamed Quiet on 2026-10-22 (coherence slice F7). The
         // contract carries the new id; the JS normalizer keeps "focus" as a
         // silent migration alias for a saved document.
         assert_eq!(
             ids,
             [
+                "simple",
                 "cockpit",
                 "studio",
                 "ambient",
