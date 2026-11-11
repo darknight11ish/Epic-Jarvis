@@ -3695,7 +3695,7 @@
       "name": "Read and act on your own GitHub",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr and github_fix_and_push. All ten ship off; github_search and the scheduled watch_github job are separate switches. The review packet and the record check (review_changes and check_records) are in the same group and ship off too; they read a folder on this PC and write nothing, so they raise no card.",
+      "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_pr_detail, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr, github_fix_and_push, github_open_pr, github_workflow, github_issue_labels, github_edit_pr, github_pr_review and github_issue_state. All seventeen ship off; github_search and the scheduled watch_github job are separate switches.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3706,7 +3706,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr and github_fix_and_push. All ten ship off; github_search and the scheduled watch_github job are separate switches. The review packet and the record check (review_changes and check_records) are in the same group and ship off too; they read a folder on this PC and write nothing, so they raise no card.",
+        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_pr_detail, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr, github_fix_and_push, github_open_pr, github_workflow, github_issue_labels, github_edit_pr, github_pr_review and github_issue_state. All seventeen ship off; github_search and the scheduled watch_github job are separate switches.",
         "search": [
           "Read and act on your own GitHub"
         ],
@@ -3714,7 +3714,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr and github_fix_and_push. All ten ship off; github_search and the scheduled watch_github job are separate switches. The review packet and the record check (review_changes and check_records) are in the same group and ship off too; they read a folder on this PC and write nothing, so they raise no card.",
+        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_pr_detail, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr, github_fix_and_push, github_open_pr, github_workflow, github_issue_labels, github_edit_pr, github_pr_review and github_issue_state. All seventeen ship off; github_search and the scheduled watch_github job are separate switches.",
         "search": [
           "read and act on your own github"
         ],

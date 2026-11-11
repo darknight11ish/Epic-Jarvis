@@ -26,8 +26,9 @@ it connected", so everything else fell to the local model, which guessed:
 WHAT THIS SUITE PROVES, all read-only and with no network:
 
   1. the catalogue has ONE `connected-github` row naming the real surface (the
-     ten tools, `github_search`, the scheduled `watch_github` job, the six carded
-     actions and the never-list), and every generated copy is current;
+     seventeen tools, `github_search`, the scheduled `watch_github` job, the
+     twelve carded write actions and the never-list), and every generated copy
+     is current;
   2. "what can you do with my GitHub?" is answered from that row, not from the
      model and not only from the two research rows;
   3. `/api/accounts`'s GitHub row is the real six-ability surface, no longer
@@ -118,6 +119,17 @@ SEVEN_TOOLS = SIX_TOOLS + ("github_create_repo",)
 #: actions (three reads and the cockpit share github_inspect).
 TEN_TOOLS = SEVEN_TOOLS + ("github_pr_scan", "github_merge_pr",
                            "github_fix_and_push")
+#: 2026-11-10 22:30/23:00 (full parity, Step 2): the full pull-request read, the
+#: five new carded writes and the carded issue close/reopen. Seventeen tools;
+#: twelve carded write actions beside `github_inspect` (the card-free reads).
+SIXTEEN_TOOLS = TEN_TOOLS + ("github_pr_detail", "github_open_pr",
+                             "github_workflow", "github_issue_labels",
+                             "github_edit_pr", "github_pr_review",
+                             "github_issue_state")
+WRITE_GATES = ("github_comment", "github_open_issue", "github_rerun_workflow",
+               "github_create_repo", "github_merge_pr", "github_fix_and_push",
+               "github_open_pr", "github_workflow", "github_issue_labels",
+               "github_edit_pr", "github_pr_review", "github_issue_state")
 
 
 def t_the_catalogue_has_the_connected_github_row():
@@ -127,15 +139,20 @@ def t_the_catalogue_has_the_connected_github_row():
         return
     blob = " ".join(str(row.get(k) or "") for k in
                     ("title", "what", "where", "asks", "limit")).lower()
-    check("it names the ten real tools",
-          all(tool in blob for tool in TEN_TOOLS), blob)
+    check("it names the seventeen real tools",
+          all(tool in blob for tool in SIXTEEN_TOOLS), blob)
     check("it names github_search and the scheduled watch_github job",
           "github_search" in blob and "watch_github" in blob, blob)
-    check("it names the seven carded actions",
+    check("it names the twelve carded actions",
           all(w in blob for w in ("comment", "open an issue", "re-run a workflow",
                                   "create one new, empty repository",
                                   "merge one pull request", "write the fix",
-                                  "push a fix")), blob)
+                                  "push a fix", "open one pull request",
+                                  "re-run only its failed jobs",
+                                  "labels", "title and body",
+                                  "close one issue")), blob)
+    check("it says the READS are card-free by the owner's 23:00 decision",
+          "card-free" in blob, blob)
     check("it says a merge is merge-commit only and pinned to one commit",
           "merge commit" in blob and "pinned to" in blob, blob)
     check("it names the absolute bans that remain",
@@ -143,13 +160,11 @@ def t_the_catalogue_has_the_connected_github_row():
                                   "never deletes")), blob)
     check("it says not-connected is a state that offers the connect card",
           "not connected" in blob and "connect my github" in blob, blob)
-    check("its gate rows are the seven real card actions",
-          set(row.get("gate") or []) == {"github_inspect", "github_comment",
-                                         "github_open_issue",
-                                         "github_rerun_workflow",
-                                         "github_create_repo", "github_merge_pr",
-                                         "github_fix_and_push"},
+    check("its gate rows are the twelve real card actions",
+          set(row.get("gate") or []) == set(WRITE_GATES),
           row.get("gate"))
+    check("... and a card-free read is not listed as a card",
+          "github_inspect" not in (row.get("gate") or []), row.get("gate"))
     check("the generated catalogue carries the row",
           any(r.get("id") == "connected-github" for r in CAT.FEATURES),
           [r.get("id") for r in CAT.FEATURES][-3:])
@@ -191,12 +206,9 @@ def t_the_accounts_row_is_the_real_surface():
     check("jarvis_accounts still has a GitHub family", family is not None)
     if family is None:
         return
-    check("its abilities are the nine real actions",
-          set(family.abilities) == {"github_inspect", "github_comment",
-                                    "github_open_issue", "github_rerun_workflow",
-                                    "github_create_repo", "github_merge_pr",
-                                    "github_fix_and_push", "github_read",
-                                    "research_authenticated"},
+    check("its abilities are the fifteen real actions",
+          set(family.abilities) == {"github_inspect"} | set(WRITE_GATES)
+          | {"github_read", "research_authenticated"},
           family.abilities)
     row = ACC.state_of("github")
     check("the row no longer says 'Read-only: private repositories and CI status'",
@@ -218,8 +230,8 @@ def t_the_accounts_row_is_the_real_surface():
           and "comment" in str(row.get("can") or "").lower(), row.get("can"))
     view = ACC.accounts_view(probe=False)
     fam = next((f for f in view["families"] if f.get("id") == "github"), None)
-    check("/api/accounts shows the same nine abilities", fam is not None
-          and len(fam.get("abilities") or []) == 9,
+    check("/api/accounts shows the same fifteen abilities", fam is not None
+          and len(fam.get("abilities") or []) == 15,
           (fam or {}).get("abilities"))
 
 
@@ -296,16 +308,17 @@ def t_the_eight_recorded_questions_route_deterministically():
                                    "never squash"),
         "what can't you do on GitHub?": ("force-push", "squash-merge", "delete",
                                          "main", "approve a pull request",
-                                         "close an issue", "dispatch a workflow",
-                                         "gist"),
+                                         "edit a comment",
+                                         "dispatch a workflow", "gist",
+                                         "more than one issue"),
         "what do you need before you can read my repos?":
             ("personal access token", "let the ai use this"),
-        "what GitHub tools do you have?": TEN_TOOLS + ("github_search",
-                                                       "watch_github"),
+        "what GitHub tools do you have?": SIXTEEN_TOOLS + ("github_search",
+                                                          "watch_github"),
         "can you comment on an issue?": ("approval card",),
         "what's your CI status?": ("GitHub Actions", "darknight11ish/Epic-Jarvis"),
         "what asks before GitHub acts?": ("ask you first every time",),
-        "do you have a feature that reads my GitHub?": TEN_TOOLS,
+        "do you have a feature that reads my GitHub?": SIXTEEN_TOOLS,
     }
     for question, needles in wanted.items():
         intent, name, reply = _reply(question)
@@ -366,16 +379,20 @@ def t_no_merge_push_commit_close_surface_exists():
     # 2026-11-10 rulings Q3/Q4: five more verbs are permanently banned, and the
     # ONE owner-facing sentence has to name every one of them - otherwise "can you
     # approve this?" gets an answer about repositories and branches.
-    check("... and the five permanently banned verbs Q3/Q4 added",
-          {"approve_pr", "close_issue", "edit_comment", "workflow_dispatch",
+    check("... and the four permanently banned verbs Q3/Q4 added",
+          {"approve_pr", "edit_comment", "workflow_dispatch",
            "gist"} <= set(GH.NEVER), sorted(GH.NEVER))
+    check("... and the 23:00 correction: close_issue out, bulk_close in",
+          "close_issue" not in GH.NEVER and "bulk_close" in GH.NEVER,
+          sorted(GH.NEVER))
     check("the one never sentence covers all of them",
           all(w in GH.NEVER_WORDS for w in
               ("force-push", "squash-merge", "rebase", "admin bypass",
                "auto-merge", "bypass required checks", "main",
-               "approve a pull request", "close an issue", "edit a comment",
-               "dispatch a workflow", "gist", "delete/close", "approval card")),
-          GH.NEVER_WORDS)
+               "approve a pull request", "edit a comment",
+               "dispatch a workflow", "gist", "more than one issue",
+               "delete/close", "approval card"))
+          and "close an issue" not in GH.NEVER_WORDS, GH.NEVER_WORDS)
     check("jarvis_github has no planner for any banned verb",
           not [n for n in dir(GH) if n.startswith("plan_")
                and re.search(r"squash|rebase|admin|force|delete|close|commit|"
@@ -386,10 +403,10 @@ def t_no_merge_push_commit_close_surface_exists():
                and re.search(r"squash|rebase|admin|force|delete|close|commit|"
                              r"approve|dispatch|gist", n)],
           [n for n in AG.TOOLS if n.startswith("github")])
-    check("the ten GitHub tools are the only github_* tools registered for the "
-          "owner's own GitHub (github_search is the separate research tool)",
+    check("the seventeen GitHub tools are the only github_* tools registered for "
+          "the owner's own GitHub (github_search is the separate research tool)",
           sorted(n for n in AG.TOOLS if n.startswith("github_")) ==
-          sorted(list(TEN_TOOLS) + ["github_search"]),
+          sorted(list(SIXTEEN_TOOLS) + ["github_search"]),
           sorted(n for n in AG.TOOLS if n.startswith("github_")))
     check("every merge/push tool is carded and can never be auto-approved",
           all(t in AG.NEEDS_A_PERSON and t in AG.GITHUB_ACTION_TOOLS
@@ -422,9 +439,9 @@ def t_no_merge_push_commit_close_surface_exists():
     toml = (REPO / "backend" / "rebuilt" / "jarvis-framework.toml").read_text(
         encoding="utf-8")
     block = toml.split("[autonomy.tiers]", 1)[1]
-    for action in ("github_inspect", "github_comment", "github_open_issue",
-                   "github_rerun_workflow", "github_create_repo",
-                   "github_merge_pr", "github_fix_and_push"):
+    check('shipped tier says github_inspect = "auto" (card-free reads)',
+          re.search(r'(?m)^github_inspect\s*=\s*"auto"', block) is not None)
+    for action in WRITE_GATES:
         check(f'shipped tier says {action} = "ask"',
               re.search(rf'(?m)^{action}\s*=\s*"ask"', block) is not None)
     check("the shipped tiers name no banned action",
@@ -437,7 +454,7 @@ def t_no_merge_push_commit_close_surface_exists():
 # --------------------------------------------------------------------------
 def t_the_ten_tool_hints_name_the_real_control():
     check("one shared hint constant exists", bool(TP.GITHUB_TOOL_ENABLE_HINT))
-    for tool in TEN_TOOLS:
+    for tool in SIXTEEN_TOOLS:
         hint = str(TP.PROFILES[tool]["enable_hint"])
         check(f"{tool}: the hint names 'Let the AI use this'",
               "Let the AI use this" in hint, hint)

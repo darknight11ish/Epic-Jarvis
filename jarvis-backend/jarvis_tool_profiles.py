@@ -1105,6 +1105,216 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": REVIEW_TOOL_ENABLE_HINT,
         "sources": [AGENT, REVIEW, ASKS_FIRST],
+    # The 2026-11-10 22:30 ruling's Step 2 surface: one full pull-request READ
+    # and five carded WRITES. Each is its own switch, each is off by default, and
+    # each write's card shows exactly what changes before anything is sent.
+    "github_pr_detail": {
+        "id": "github_pr_detail",
+        "title": "Read one pull request in full",
+        "what": "Reads ONE pull request: its title, body, state, draft and "
+                "mergeable flags, its head commit and base branch, and then its "
+                "changed files, its commits, its comments and its reviews - five "
+                "fixed GETs, nothing else. Every list keeps its real count and "
+                "shows at most ten items, each text bounded.",
+        "gives": [
+            "See a pull request's whole description and review state in chat",
+            "See its changed files, commits, comments and reviews without a browser",
+            "Get the current title and body to pass to github_edit_pr",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Reads only - no body, no method but GET",
+            "At most ten files/commits/comments/reviews shown per list, with the "
+            "real count printed",
+            "A read sends the owner's GitHub token to api.github.com, so it asks "
+            "every time",
+        ],
+        "combines": {
+            "github_edit_pr": "github_pr_detail reads the current title and body; "
+                              "github_edit_pr edits them.",
+            "github_pr_review": "github_pr_detail shows the review state; "
+                                "github_pr_review posts a new review.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "github_open_pr": {
+        "id": "github_open_pr",
+        "title": "Open one pull request for a new branch Jarvis prepares",
+        "what": "Two stages, two cards. \"prepare\" copies a repository at a base "
+                "branch into Jarvis's scratch root and makes a NEW branch there; "
+                "\"open\" shows every commit, every changed file, the exact push "
+                "command, the title and the whole body on one card, then pushes "
+                "that ONE new branch and creates the pull request into the base.",
+        "gives": [
+            "Prepare a new branch in an isolated copy on this PC",
+            "See every commit and changed file, the exact command and the whole "
+            "title/body before anything leaves",
+            "Open the pull request without a terminal or a browser",
+        ],
+        "touches": "network service",
+        "limits": [
+            "The NEW branch is never main, master, release/* or hotfix/*",
+            "One new branch, one pull request - never a fork's branch, never a "
+            "force-push, never a delete",
+            "A title over 200 characters, a body over 2,000, or a change with more "
+            "than 20 commits or changed files is refused before a card exists",
+            "A pushed branch and an opened pull request cannot be taken back",
+        ],
+        "combines": {
+            "github_fix_and_push": "Its write stage can change ONE file inside the "
+                                   "prepared new-branch copy",
+            "github_pr_detail": "After it opens, github_pr_detail reads the new "
+                                "pull request.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "github_workflow": {
+        "id": "github_workflow",
+        "title": "Cancel one run, or re-run only its failed jobs",
+        "what": "Does ONE thing to ONE existing workflow run: \"cancel\" a run "
+                "that is still going, or \"rerun_failed\" to run only the jobs "
+                "that failed in a finished run. It re-reads the run first and "
+                "refuses, changing nothing, if it is not in the state the card "
+                "named.",
+        "gives": [
+            "Stop a run that is going down the wrong path",
+            "Re-run only the failed jobs, not the whole workflow",
+            "See exactly which run and which action on the card first",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Never dispatches a workflow - that stays permanently banned",
+            "Only an existing run; it cannot start a run that did not exist",
+            "A cancelled run cannot be resumed and a re-run cannot be taken back",
+        ],
+        "combines": {
+            "github_ci_status": "github_ci_status shows how the newest run ended; "
+                                "github_workflow acts on that run.",
+            "github_rerun_workflow": "github_rerun_workflow re-runs a whole run; "
+                                     "github_workflow can re-run only its failures.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "github_issue_labels": {
+        "id": "github_issue_labels",
+        "title": "Change the labels on one issue or pull request",
+        "what": "Adds and/or removes labels on ONE issue or pull request. It reads "
+                "the current labels first, refuses if a label it would remove is "
+                "not there, and sends the whole new set in ONE request.",
+        "gives": [
+            "Label a bug report or a pull request without a browser",
+            "See the exact labels to add and remove on the card first",
+            "Know the whole set is changed in one step, never half-applied",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Labels only - it never closes or reopens an issue, and never edits "
+            "the title or the body",
+            "At most ten labels per set, each checked before a card exists",
+            "Closing an issue stays permanently banned: it awaits the owner's "
+            "decision, and there is no code path for it",
+        ],
+        "combines": {
+            "github_pr_detail": "github_pr_detail shows an item; "
+                                "github_issue_labels changes its labels.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "github_edit_pr": {
+        "id": "github_edit_pr",
+        "title": "Edit one pull request's title or body",
+        "what": "Changes ONE pull request's title and/or body, showing the exact "
+                "before and after on the card. The old values are passed in (from "
+                "github_pr_detail) and re-read before the edit, so a pull request "
+                "that changed since the card is refused with nothing sent.",
+        "gives": [
+            "Fix a typo or improve a pull request's description in chat",
+            "See the exact old and new text on the card first",
+            "Know it refuses if the pull request changed since you looked",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Title and body only - no other field is editable",
+            "Both are bounded so the card shows them whole",
+            "It never closes, merges or approves anything, and the same tool can "
+            "edit the text back",
+        ],
+        "combines": {
+            "github_pr_detail": "Read the current title and body with "
+                                "github_pr_detail, then edit them here.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "github_pr_review": {
+        "id": "github_pr_review",
+        "title": "Post one pull request review, never an approval",
+        "what": "Posts ONE review on a pull request with the verdict COMMENT or "
+                "REQUEST_CHANGES, and shows the whole review text on one card "
+                "first. The APPROVE verdict is permanently banned and refused by "
+                "name before any card exists.",
+        "gives": [
+            "Leave a review or ask for changes in chat",
+            "See the whole review text and the verdict on the card first",
+            "Know Jarvis can never hand your own sign-off to the assistant",
+        ],
+        "touches": "network service",
+        "limits": [
+            "COMMENT or REQUEST_CHANGES only - APPROVE is refused by name",
+            "One review per call, at most 2,000 characters of text",
+            "A posted review cannot be edited or taken back by Jarvis",
+        ],
+        "combines": {
+            "github_pr_detail": "github_pr_detail shows the pull request and its "
+                                "reviews; github_pr_review posts one more.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "github_issue_state": {
+        "id": "github_issue_state",
+        "title": "Close one issue, or reopen one closed issue",
+        "what": "Closes ONE issue on a repository, or reopens ONE closed issue - "
+                "one issue per card, never a pull request, never in bulk. The card "
+                "shows the repository, the issue number and its title, the "
+                "direction and an optional reason, and Jarvis re-reads the issue "
+                "first and refuses if its title changed.",
+        "gives": [
+            "Close a finished issue without a browser",
+            "Reopen a closed issue by mistake, on its own card",
+            "See the issue's title and the direction on the card first",
+        ],
+        "touches": "network service",
+        "limits": [
+            "ONE issue at a time - never a pull request, never bulk",
+            "No delete, no transfer and no edit - only the open/closed state",
+            "The owner's 2026-11-10 23:00 decision overturned the old absolute "
+            "ban; `github_open_issue` still cannot close what it opened",
+        ],
+        "combines": {
+            "github_list": "github_list lists the open issues; "
+                           "github_issue_state changes one issue's state.",
+            "github_edit_pr": "Both edit ONE GitHub item on their own card.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
     },
 
     "web_search": {

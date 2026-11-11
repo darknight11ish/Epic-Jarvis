@@ -107,7 +107,9 @@ TOKEN = "ghp_TESTONLYnotarealtoken0000000000000000"
 
 READ_TOOLS = ("github_list", "github_read_file", "github_ci_status",
               # 2026-11-10: the read-only PR cockpit.
-              "github_pr_scan")
+              "github_pr_scan",
+              # 2026-11-10 22:30 ruling: one pull request in full.
+              "github_pr_detail")
 #: The four actions whose card is ONE POST of something the owner wrote.
 POST_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow",
                      # 2026-11-09: one new, empty repository on the owner's own account.
@@ -116,7 +118,17 @@ ACTION_TOOLS = POST_ACTION_TOOLS + (
     # 2026-11-10: merge-commit only, pinned to the head sha the card named...
     "github_merge_pr",
     # ... and fix-and-push: a GET/copy card, then a SECOND push card.
-    "github_fix_and_push")
+    "github_fix_and_push",
+    # 2026-11-10 22:30 ruling: the five carded writes...
+    "github_open_pr", "github_workflow", "github_issue_labels",
+    "github_edit_pr", "github_pr_review",
+    # ... and the 23:00 decision: ONE issue close/reopen, carded.
+    "github_issue_state")
+#: The action tools whose ONE card shows SEVERAL requests (a GET that pins the
+#: live state, then the ONE write) - the "exactly one request" rule is about one
+#: WRITE, and each of these has exactly one.
+MULTI_STEP_ACTIONS = {"github_workflow", "github_issue_labels", "github_edit_pr",
+                      "github_issue_state"}
 ALL_TOOLS = READ_TOOLS + ACTION_TOOLS
 
 #: The commit the merge tests pin, and the one GitHub reports back afterwards.
@@ -142,6 +154,20 @@ ARGS = {
                         "head_sha": HEAD_SHA, "title": "Fix the tray icon",
                         "base_ref": "main"},
     "github_fix_and_push": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116"},
+    "github_pr_detail": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116"},
+    "github_open_pr": {"repo": "darknight11ish/Epic-Jarvis", "base": "main",
+                       "branch": "jarvis/new-feature"},
+    "github_workflow": {"repo": "darknight11ish/Epic-Jarvis", "run_id": "123456",
+                        "action": "cancel"},
+    "github_issue_labels": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+                            "add": ["triage"], "remove": ["help wanted"]},
+    "github_edit_pr": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+                       "title": "Fix the tray icon, properly",
+                       "old_title": "Fix the tray icon"},
+    "github_pr_review": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+                         "event": "COMMENT", "body": "Looks good to me."},
+    "github_issue_state": {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+                           "action": "close", "title": "The tray icon stays"},
 }
 
 #: What each action's card must name, and nothing else has to.
@@ -166,6 +192,18 @@ MUST_NAME = {
                         "credential-manager, powershell-5, phone-unit-tests"),
     "github_fix_and_push": ("darknight11ish/Epic-Jarvis", "1116", "prepare",
                             "nothing is pushed in this stage"),
+    "github_open_pr": ("darknight11ish/Epic-Jarvis", "Base branch", "main",
+                       "New branch", "jarvis/new-feature",
+                       "prepare (nothing is pushed in this stage)"),
+    "github_workflow": ("darknight11ish/Epic-Jarvis", "123456", "cancel"),
+    "github_issue_labels": ("darknight11ish/Epic-Jarvis", "#1116", "triage",
+                            "help wanted"),
+    "github_edit_pr": ("darknight11ish/Epic-Jarvis", "#1116",
+                       "Fix the tray icon", "Fix the tray icon, properly"),
+    "github_pr_review": ("darknight11ish/Epic-Jarvis", "#1116", "COMMENT",
+                         "Looks good to me."),
+    "github_issue_state": ("darknight11ish/Epic-Jarvis", "#1116",
+                           "The tray icon stays", "close"),
 }
 
 PASSED, FAILED, SKIPPED = [], [], []
@@ -649,10 +687,17 @@ def t_a_read_with_no_token_says_connect_github_and_raises_no_card():
 def t_each_action_is_one_card_naming_what_it_does():
     for tool in ACTION_TOOLS:
         r, text = _card(tool)
-        check(f"{tool}: exactly one request", len(r.steps) == 1, r.steps)
-        check(f"{tool}: exactly one address on the card", len(r.urls()) == 1, r.urls())
-        check(f"{tool}: the card prints that address",
-              r.urls()[0] in text, text[:200])
+        if tool in MULTI_STEP_ACTIONS:
+            # A GET that pins the live state, then exactly ONE write - never
+            # more than one thing changed.
+            writes = [s for s in r.steps if s.method != "GET"]
+            check(f"{tool}: one GET first, then exactly ONE write",
+                  len(r.steps) >= 2 and r.steps[0].method == "GET"
+                  and len(writes) == 1, [(s.method, s.path) for s in r.steps])
+        else:
+            check(f"{tool}: exactly one request", len(r.steps) == 1, r.steps)
+        check(f"{tool}: the card prints every address it will use",
+              all(u in text for u in r.urls()), text[:300])
         missing = [w for w in MUST_NAME[tool] if w not in text]
         check(f"{tool}: the card names exactly what it will do", not missing, missing)
         check(f"{tool}: it is decided under its own action",
@@ -697,8 +742,10 @@ def t_the_reads_ask_too_and_never_write():
         check(f"{tool}: a read carries no body at all", r.body is None, r.body)
         check(f"{tool}: a read is decided under github_inspect",
               r.action == GH.ACTION_INSPECT, r.action)
-        check(f"{tool}: a read asks a person too (NEEDS_A_PERSON)",
-              tool in AG.NEEDS_A_PERSON)
+        # The owner's decision of 2026-11-10 23:00: a read is a GET and
+        # changes nothing, so it is CARD-FREE and deliberately NOT here.
+        check(f"{tool}: a read is card-free (not in NEEDS_A_PERSON)",
+              tool not in AG.NEEDS_A_PERSON)
         check(f"{tool}: the card says nothing on GitHub changes",
               "Nothing on GitHub changes" in text, text[:200])
 
@@ -834,30 +881,36 @@ def t_merge_and_push_exist_only_behind_their_own_cards():
         check(f"{tool}: it is a carded action, not a read",
               tool in AG.GITHUB_ACTION_TOOLS and tool in AG.NEEDS_A_PERSON, tool)
 
-    # The ruling's sentence, word for word - and the same day's Q3/Q4 added the
-    # five permanently banned verbs it now has to cover.
+    # The ruling's sentence, word for word - extended 2026-11-10 for Q3/Q4,
+    # then corrected the same day at 23:00 when the owner overturned the
+    # close_issue ban for ONE carded action (and banned bulk close instead).
     check("the refusal is the owner's 2026-11-10 sentence, word for word",
           GH.never_words() == (
               "Jarvis can never force-push, squash-merge or rebase, use an "
               "admin bypass, turn on auto-merge, bypass required checks, push "
-              "directly to main, approve a pull request in your name, close an "
-              "issue, edit a comment, dispatch a workflow, use a gist, or "
-              "delete/close repositories or branches; every merge or PR-branch "
-              "push requires its own approval card."), GH.never_words())
+              "directly to main, approve a pull request in your name, edit a "
+              "comment, dispatch a workflow, use a gist, close or reopen more "
+              "than one issue at a time, or delete/close repositories or "
+              "branches; every merge, push, edit, review, label change or issue "
+              "close requires its own approval card."), GH.never_words())
     check("the module names every ban that remains",
           {"force_push", "squash_merge", "rebase_merge", "admin_bypass",
            "auto_merge", "bypass_required_checks", "push_to_main",
            "delete_repository", "close_repository", "delete_branch",
-           "close_branch"} <= GH.NEVER, sorted(GH.NEVER))
-    check("... and the five permanently banned verbs Q3/Q4 added",
-          {"approve_pr", "close_issue", "edit_comment", "workflow_dispatch",
+           "close_branch", "bulk_close"} <= GH.NEVER, sorted(GH.NEVER))
+    check("... and the four permanently banned verbs Q3/Q4 added",
+          {"approve_pr", "edit_comment", "workflow_dispatch",
            "gist"} <= GH.NEVER, sorted(GH.NEVER))
+    check("... and close_issue LEFT the set by the owner's 23:00 decision",
+          "close_issue" not in GH.NEVER, sorted(GH.NEVER))
     check("... and the one sentence covers every one of them",
           all(w in GH.never_words() for w in
               ("force-push", "squash-merge", "rebase", "admin bypass",
                "auto-merge", "bypass required checks", "main",
-               "approve a pull request", "close an issue", "edit a comment",
-               "dispatch a workflow", "gist", "delete/close", "approval card")),
+               "approve a pull request", "edit a comment",
+               "dispatch a workflow", "gist", "more than one issue",
+               "delete/close", "approval card"))
+          and "close an issue" not in GH.never_words(),
           GH.never_words())
     check("... and plain merge/push are NOT banned any more - they are carded",
           "merge" not in GH.NEVER and "push" not in GH.NEVER, sorted(GH.NEVER))
@@ -1063,67 +1116,94 @@ def t_the_gate_knows_the_ten_tools_and_six_actions():
     risk = _tables_of(src, "_RISK") or {}
     risk.update(_updated_rows(src, "_RISK"))
 
-    for tool, action in (("github_list", GH.ACTION_INSPECT),
-                         ("github_read_file", GH.ACTION_INSPECT),
-                         ("github_ci_status", GH.ACTION_INSPECT),
-                         ("github_pr_scan", GH.ACTION_INSPECT),
-                         ("github_comment", GH.ACTION_COMMENT),
-                         ("github_open_issue", GH.ACTION_OPEN_ISSUE),
-                         ("github_rerun_workflow", GH.ACTION_RERUN),
-                         ("github_create_repo", GH.ACTION_CREATE_REPO),
-                         ("github_merge_pr", GH.ACTION_MERGE),
-                         ("github_fix_and_push", GH.ACTION_FIX_PUSH),
-                         # Wave 16B: the fix tool's "write" stage is passed to the
-                         # gate under its own ACTION name (never a second tool), so
-                         # the mapping is an action-to-itself row on purpose.
-                         ("github_fix_write", GH.ACTION_FIX_WRITE)):
+    EXPECTED = {
+        "github_list": GH.ACTION_INSPECT,
+        "github_read_file": GH.ACTION_INSPECT,
+        "github_ci_status": GH.ACTION_INSPECT,
+        "github_pr_scan": GH.ACTION_INSPECT,
+        "github_pr_detail": GH.ACTION_INSPECT,
+        "github_comment": GH.ACTION_COMMENT,
+        "github_open_issue": GH.ACTION_OPEN_ISSUE,
+        "github_rerun_workflow": GH.ACTION_RERUN,
+        "github_create_repo": GH.ACTION_CREATE_REPO,
+        "github_merge_pr": GH.ACTION_MERGE,
+        "github_fix_and_push": GH.ACTION_FIX_PUSH,
+        # The fix tool's "write" stage is passed to the gate under its own ACTION
+        # name (never a second tool), so the mapping is an action-to-itself row.
+        "github_fix_write": GH.ACTION_FIX_WRITE,
+        "github_open_pr": GH.ACTION_OPEN_PR,
+        "github_workflow": GH.ACTION_WORKFLOW,
+        "github_issue_labels": GH.ACTION_ISSUE_LABELS,
+        "github_edit_pr": GH.ACTION_EDIT_PR,
+        "github_pr_review": GH.ACTION_PR_REVIEW,
+        "github_issue_state": GH.ACTION_ISSUE_STATE,
+    }
+    for tool, action in EXPECTED.items():
         check(f"the gate maps {tool} to {action}",
               actions.get(tool) == action, actions.get(tool))
+    check("the mapping is exactly the GitHub surface plus the action-to-itself row",
+          set(EXPECTED) == {k for k in actions if str(k).startswith("github") or
+                            k == "github_fix_write"},
+          sorted(set(actions) - set(EXPECTED)))
 
-    for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                   GH.ACTION_FIX_PUSH, GH.ACTION_FIX_WRITE):
+    WRITES = (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN,
+              GH.ACTION_CREATE_REPO, GH.ACTION_MERGE, GH.ACTION_FIX_PUSH,
+              GH.ACTION_FIX_WRITE, GH.ACTION_OPEN_PR, GH.ACTION_WORKFLOW,
+              GH.ACTION_ISSUE_LABELS, GH.ACTION_EDIT_PR, GH.ACTION_PR_REVIEW,
+              GH.ACTION_ISSUE_STATE)
+    for action in (GH.ACTION_INSPECT,) + WRITES:
         row = risk.get(action)
         check(f"{action} is classified, so its card is not 'unknown'",
               isinstance(row, tuple) and len(row) == 3, row)
-    check("the read is reversible and outbound, like every other read of a page",
+    check("the read action is reversible and outbound, like every read of a page",
           risk.get(GH.ACTION_INSPECT, ("",))[0:2] == ("yes", "outbound"),
           risk.get(GH.ACTION_INSPECT))
     for action in (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN,
-                   GH.ACTION_CREATE_REPO, GH.ACTION_MERGE, GH.ACTION_FIX_PUSH):
+                   GH.ACTION_CREATE_REPO, GH.ACTION_MERGE, GH.ACTION_FIX_PUSH,
+                   GH.ACTION_OPEN_PR, GH.ACTION_WORKFLOW, GH.ACTION_PR_REVIEW):
         check(f"{action} cannot be undone, and is advertised as such",
               risk.get(action, ("",))[0] == "no", risk.get(action))
-    # Wave 16B: the write is LOCAL and reversible - it changes one file and adds
-    # one commit inside a scratch folder that can be thrown away, and the push
-    # is the step that cannot be undone. Calling it "no" or "outbound" would be
-    # a lie in the opposite direction.
+    # Reversible ones say so: the write inside the copy (local), a label change,
+    # a title/body edit and one issue's state (the owner's 23:00 decision).
     check("the fix write is reversible and local, and says so",
           risk.get(GH.ACTION_FIX_WRITE, ("", ""))[0:2] == ("yes", "local"),
           risk.get(GH.ACTION_FIX_WRITE))
-    for action, must_say in ((GH.ACTION_MERGE, ("merge commit", "cannot",
-                                                "undone")),
-                             (GH.ACTION_FIX_PUSH, ("push", "branch", "cannot")),
-                             (GH.ACTION_FIX_WRITE, ("one file", "no github token",
-                                                    "cannot delete"))):
+    for action in (GH.ACTION_ISSUE_LABELS, GH.ACTION_EDIT_PR,
+                   GH.ACTION_ISSUE_STATE):
+        check(f"{action} is reversible and outbound, and says so",
+              risk.get(action, ("", ""))[0:2] == ("yes", "outbound"),
+              risk.get(action))
+    for action, must_say in (
+            (GH.ACTION_MERGE, ("merge commit", "cannot", "undone")),
+            (GH.ACTION_FIX_PUSH, ("push", "branch", "cannot")),
+            (GH.ACTION_FIX_WRITE, ("one file", "no github token",
+                                   "cannot delete")),
+            (GH.ACTION_OPEN_PR, ("new branch", "pull request", "cannot be taken back")),
+            (GH.ACTION_WORKFLOW, ("cancel", "workflow", "cannot")),
+            (GH.ACTION_PR_REVIEW, ("review", "never an approve", "cannot")),
+            (GH.ACTION_ISSUE_STATE, ("one issue", "close", "reopen"))):
         words = str(risk.get(action, ("", "", ""))[2]).lower()
-        check(f"{action}'s risk words say exactly what changes and that it "
-              f"cannot be undone", all(w in words for w in must_say), words)
+        check(f"{action}'s risk words say exactly what changes and whether it "
+              f"can be undone", all(w in words for w in must_say), words)
 
     # The patch's added lines must be visible to the parsers the other suites
-    # use: one `"_TOOL_ACTIONS"` line per tool, one `"action": (row` per action.
+    # use: one `_TOOL_ACTIONS` line per tool, one `"action": (row` per action.
     ptext = PATCH.read_text(encoding="utf-8")
     for tool in ALL_TOOLS:
         check(f"the patch's own + line carries {tool}",
               bool(re.search(r'^\+\s*"%s":\s*"[a-z_]+",?\s*$' % tool, ptext, re.M)),
               tool)
-    for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                   GH.ACTION_FIX_PUSH, GH.ACTION_FIX_WRITE):
+    for action in (GH.ACTION_INSPECT,) + WRITES:
         check(f"the patch's own + line carries the {action} risk row",
               bool(re.search(r'^\+\s*"%s":\s*\(' % action, ptext, re.M)), action)
 
 
 def t_every_tier_is_ask_and_the_tables_are_joined():
+    WRITES = (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN,
+              GH.ACTION_CREATE_REPO, GH.ACTION_MERGE, GH.ACTION_FIX_PUSH,
+              GH.ACTION_FIX_WRITE, GH.ACTION_OPEN_PR, GH.ACTION_WORKFLOW,
+              GH.ACTION_ISSUE_LABELS, GH.ACTION_EDIT_PR, GH.ACTION_PR_REVIEW,
+              GH.ACTION_ISSUE_STATE)
     for toml_path in TOMLS:
         text = toml_path.read_text(encoding="utf-8")
         try:
@@ -1131,22 +1211,22 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
         except ImportError:                  # Python < 3.11
             import tomli as tomllib          # type: ignore
         tiers = tomllib.loads(text)["autonomy"]["tiers"]
-        for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                       GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                       GH.ACTION_FIX_PUSH, GH.ACTION_FIX_WRITE):
+        # The owner's 2026-11-10 23:00 decision: READS ARE CARD-FREE.
+        check(f"{toml_path.name}: github_inspect ships as auto (card-free reads)",
+              tiers.get(GH.ACTION_INSPECT) == "auto", tiers.get(GH.ACTION_INSPECT))
+        for action in WRITES:
             check(f"{toml_path.parent.name}/{toml_path.name}: {action} ships as ask",
                   tiers.get(action) == "ask", tiers.get(action))
         check(f"{toml_path.name}: github_read stayed 'auto' (the watch needs it)",
               tiers.get("github_read") == "auto", tiers.get("github_read"))
         banned = [k for k in tiers
                   if re.match(r"github_", k)
-                  and re.search(r"squash|rebase|admin|force|delete|close", k)]
+                  and re.search(r"squash|rebase|admin|force|delete", k)]
         check(f"{toml_path.name}: no tier line names a banned action", not banned,
               banned)
 
-    for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                   GH.ACTION_FIX_PUSH):
+    ALL_ACTIONS = (GH.ACTION_INSPECT,) + WRITES
+    for action in ALL_ACTIONS:
         check(f"the card has plain words for {action}", action in CW.TITLES,
               sorted(CW.TITLES))
         check(f"... and they read as an action, not a code name",
@@ -1165,19 +1245,15 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
 
     import jarvis_asks_first as AF
     names = {n for _title, members in AF.GROUPS for n in members}
-    for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
-                   GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                   GH.ACTION_FIX_PUSH):
+    for action in ALL_ACTIONS:
         check(f"the 'What asks first' page has a row for {action}",
               action in names, sorted(names - {action})[:5])
 
     import jarvis_owner_check as OC
     check("a GitHub read is a SMALL card on this PC", GH.ACTION_INSPECT in OC.SMALL_ACTIONS)
-    for action in (GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE, GH.ACTION_RERUN,
-                   GH.ACTION_CREATE_REPO, GH.ACTION_MERGE, GH.ACTION_FIX_PUSH):
+    for action in WRITES:
         check(f"{action} is NOT a small card - it needs the owner's own check",
-              action not in OC.SMALL_ACTIONS,
-              sorted(OC.SMALL_ACTIONS))
+              action not in OC.SMALL_ACTIONS, sorted(OC.SMALL_ACTIONS))
 
 
 def t_a_file_read_shows_the_files_text_not_the_envelope():
@@ -1441,9 +1517,10 @@ def t_create_repo_has_no_auto_approve_or_bulk_path():
            "auto_merge", "bypass_required_checks", "push_to_main",
            "delete_repository", "close_repository", "delete_branch",
            "close_branch"} <= GH.NEVER, sorted(GH.NEVER))
-    check("... and the refusal names the card in front of every merge and push",
+    check("... and the refusal names the card in front of every write",
           "approval card" in GH.never_words()
-          and "every merge or PR-branch push" in GH.never_words(), GH.never_words())
+          and "every merge, push, edit, review, label change or issue close"
+          in GH.never_words(), GH.never_words())
     check("... and no longer claims merge or push are impossible",
           "cannot merge" not in GH.never_words()
           and "cannot push" not in GH.never_words(), GH.never_words())
@@ -2336,6 +2413,377 @@ def t_the_two_shipped_tomls_are_one_file():
           and b'github_fix_and_push       = "ask"' in b, "missing")
 
 
+# --------------------------------------------------------------------------
+#   17. The 2026-11-10 22:30 / 23:00 actions
+# --------------------------------------------------------------------------
+
+
+def t_the_reads_are_card_free_and_the_writes_ask():
+    """The owner's 23:00 decision: reads are card-free; every write still asks."""
+    for tool in READ_TOOLS:
+        check(f"{tool}: a read is card-free (not in NEEDS_A_PERSON)",
+              tool not in AG.NEEDS_A_PERSON, sorted(AG.NEEDS_A_PERSON))
+    for tool in ACTION_TOOLS:
+        check(f"{tool}: a write still asks its own card (NEEDS_A_PERSON)",
+              tool in AG.NEEDS_A_PERSON, tool)
+    with _Token():
+        r, _text = AG.TOOLS["github_pr_detail"].prepare(dict(ARGS["github_pr_detail"]))
+    check("a read is still decided under github_inspect", r.action == GH.ACTION_INSPECT,
+          r.action)
+    check("... and that action is the module's own read action",
+          GH.ACTION_INSPECT not in GH.ACTIONS)
+
+
+def t_pr_detail_reads_the_five_fixed_lists():
+    routes = [
+        ("/pulls/1116/files", (200, json.dumps([
+            {"filename": "backend/app.py", "status": "modified",
+             "additions": 2, "deletions": 1}]))),
+        ("/pulls/1116/commits", (200, json.dumps([
+            {"sha": "c" * 40, "commit": {"message": "fix the tray icon"}}]))),
+        ("/issues/1116/comments", (200, json.dumps([
+            {"user": {"login": "owner"}, "body": "please fix this"}]))),
+        ("/pulls/1116/reviews", (200, json.dumps([
+            {"user": {"login": "owner"}, "state": "COMMENTED",
+             "body": "looks close"}]))),
+        ("/pulls/1116", (200, _pr_doc(body="The tray icon stays after a restart.",
+                                      base={"ref": "main"}))),
+    ]
+    fake = Routed(routes)
+    _r, out = _run("github_pr_detail", fake)
+    text = out.get("text", "")
+    check("the full read answers", out.get("ok") is True, out)
+    check("every read it makes is a GET", set(fake.methods()) == {"GET"},
+          fake.methods())
+    for needle in ("Fix the tray icon", "backend/app.py", "fix the tray icon",
+                   "please fix this", "COMMENTED", "looks close", "base branch: main"):
+        check(f"the answer shows {needle!r}", needle in text, text[:600])
+    check("the PR body is shown as data, never as instructions",
+          GH.GITHUB_TEXT_BEGINS in text and GH.GITHUB_TEXT_ENDS in text, text[:400])
+    check("the token is on every read and in no word",
+          all(c["headers"].get("Authorization") == f"Bearer {TOKEN}"
+              for c in fake.calls) and TOKEN not in text)
+
+
+def t_workflow_cancels_or_reruns_only_failed_jobs():
+    routes = [("/actions/runs/9/cancel", (202, "{}")),
+              ("/actions/runs/9/rerun-failed-jobs", (201, "{}")),
+              ("/actions/runs/9", (200, json.dumps(
+                  {"status": "in_progress", "conclusion": None})))]
+    fake = Routed(routes)
+    _r, out = _run("github_workflow", fake, args={
+        "repo": "darknight11ish/Epic-Jarvis", "run_id": "9", "action": "cancel"})
+    check("a running run is cancelled", out.get("ok") is True, out)
+    check("... with exactly one POST, to its own cancel address",
+          [c["method"] for c in fake.calls] == ["GET", "POST"]
+          and fake.calls[1]["url"].endswith("/actions/runs/9/cancel"),
+          fake.urls())
+    # A finished run cannot be cancelled, and NOTHING is posted.
+    fake = Routed([("/actions/runs/9", (200, json.dumps(
+        {"status": "completed", "conclusion": "failure"})))])
+    _r, out = _run("github_workflow", fake, args={
+        "repo": "darknight11ish/Epic-Jarvis", "run_id": "9", "action": "cancel"})
+    check("a finished run cannot be cancelled, and nothing is posted",
+          out.get("ok") is False and len(fake.calls) == 1, out)
+    # Only the failed jobs of a finished failed run are re-run.
+    fake = Routed([("/actions/runs/9", (200, json.dumps(
+        {"status": "completed", "conclusion": "failure"})))])
+    _r, out = _run("github_workflow", fake, args={
+        "repo": "darknight11ish/Epic-Jarvis", "run_id": "9",
+        "action": "rerun_failed"})
+    check("the failed jobs of a failed run are re-run", out.get("ok") is True, out)
+    check("... at the rerun-failed-jobs address, not a full re-run",
+          fake.calls[-1]["url"].endswith("/actions/runs/9/rerun-failed-jobs"),
+          fake.urls())
+    # A successful run has no failed jobs to re-run.
+    fake = Routed([("/actions/runs/9", (200, json.dumps(
+        {"status": "completed", "conclusion": "success"})))])
+    _r, out = _run("github_workflow", fake, args={
+        "repo": "darknight11ish/Epic-Jarvis", "run_id": "9",
+        "action": "rerun_failed"})
+    check("a successful run has no failed jobs, and nothing is posted",
+          out.get("ok") is False and len(fake.calls) == 1, out)
+    check("a workflow is never dispatched - it stays banned",
+          "workflow_dispatch" in GH.NEVER
+          and "dispatch" not in " ".join(GH.WORKFLOW_OPS))
+    try:
+        GH.plan_workflow({"repo": "o/r", "run_id": "9", "action": "dispatch"})
+    except GH.GitHubError:
+        check("a 'dispatch' action is refused by the planner", True)
+    else:
+        check("a 'dispatch' action is refused by the planner", False)
+
+
+def t_issue_labels_read_then_change_the_whole_set_once():
+    routes = [
+        ("/issues/1116/labels", (200, json.dumps([
+            {"name": "bug"}, {"name": "help wanted"}]))),
+        ("/issues/1116", (200, json.dumps(
+            {"number": 1116, "labels": [{"name": "bug"}, {"name": "help wanted"}]}))),
+    ]
+    fake = Routed(routes)
+    _r, out = _run("github_issue_labels", fake)
+    check("the label change answers", out.get("ok") is True, out)
+    writes = [c for c in fake.calls if c["method"] != "GET"]
+    check("it sends ONE write, after reading the current labels",
+          len(writes) == 1 and writes[0]["method"] == "PUT",
+          [(c["method"], c["url"]) for c in fake.calls])
+    check("... with the WHOLE final set: bug kept, help wanted gone, triage added",
+          _json_body(writes[0]) == {"labels": ["bug", "triage"]},
+          writes[0]["body"])
+    # Removing a label that is not there changes nothing at all.
+    fake = Routed([("/issues/1116", (200, json.dumps(
+        {"number": 1116, "labels": [{"name": "bug"}]})))])
+    _r, out = _run("github_issue_labels", fake, args={
+        "repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+        "remove": ["does-not-exist"]})
+    check("a label that is not there is refused, and nothing is written",
+          out.get("ok") is False and all(c["method"] == "GET" for c in fake.calls),
+          out)
+
+
+def t_edit_pr_shows_before_and_after_and_pins_them():
+    r, text = _card("github_edit_pr")
+    check("the edit card shows the exact title before", "Fix the tray icon" in text,
+          text[:400])
+    check("... and after", "Fix the tray icon, properly" in text, text[:400])
+    check("... and its ONE write is a PATCH to the pull request",
+          [s.method for s in r.steps] == ["GET", "PATCH"]
+          and r.steps[1].url().endswith("/pulls/1116"), r.urls())
+    check("the body carries ONLY title and body fields",
+          set(r.body) <= {"title", "body"}, r.body)
+    fake = Routed([("/pulls/1116", (200, _pr_doc(title="A different title")))])
+    out = _run_request(r, fake)
+    check("a pull request whose title moved since the card is refused",
+          out.get("ok") is False and "title" in out.get("error", "").lower()
+          and [c["method"] for c in fake.calls] == ["GET"], out)
+    fake = Routed([("/pulls/1116", (200, _pr_doc(title="Fix the tray icon",
+                                                 body=None)))])
+    out = _run_request(r, fake)
+    check("a matching pull request is edited", out.get("ok") is True, out)
+    patch_calls = [c for c in fake.calls if c["method"] == "PATCH"]
+    check("... with exactly the new title and no other field",
+          len(patch_calls) == 1
+          and _json_body(patch_calls[0]) == {"title": "Fix the tray icon, properly"},
+          _json_body(patch_calls[0]) if patch_calls else None)
+
+
+def t_pr_review_never_approves():
+    try:
+        GH.plan_pr_review({"repo": "o/r", "number": "1", "event": "APPROVE",
+                           "body": "ship it"})
+    except GH.GitHubError as exc:
+        said = str(exc)
+        check("an APPROVE review is refused by name", "APPROVE" in said, said)
+        check("... and says it is permanently banned and why",
+              "permanently" in said.lower() and "sign-off" in said.lower(), said)
+    else:
+        check("an APPROVE review is refused by name", False)
+    r, text = _card("github_pr_review")
+    check("the review card shows the verdict and the WHOLE text",
+          "COMMENT" in text and "Looks good to me." in text, text[:400])
+    check("the request body is exactly the event and the text",
+          r.body == {"event": "COMMENT", "body": "Looks good to me."}, r.body)
+    fake = Routed([("/pulls/1116/reviews", (200, json.dumps(
+        {"id": 7, "state": "COMMENTED"})))])
+    _r, out = _run("github_pr_review", fake)
+    check("the review is posted and reported", out.get("ok") is True, out)
+    check("... and APPROVE is in the module's never list",
+          "approve_pr" in GH.NEVER and "approve" in GH.never_words().lower())
+
+
+def t_issue_state_closes_or_reopens_one_issue():
+    # The owner's 23:00 decision: ONE issue's state, carded, reversible.
+    r, text = _card("github_issue_state")
+    check("the card names the issue's title and the direction",
+          "The tray icon stays" in text and "close it" in text, text[:400])
+    check("... and its ONE write is a PATCH with exactly the state",
+          [s.method for s in r.steps] == ["GET", "PATCH"]
+          and r.body == {"state": "closed"}, (r.urls(), r.body))
+    fake = Routed([("/issues/1116", (200, json.dumps(
+        {"number": 1116, "title": "The tray icon stays", "state": "open"})))])
+    _r, out = _run("github_issue_state", fake)
+    check("closing an open issue works", out.get("ok") is True, out)
+    patches = [c for c in fake.calls if c["method"] == "PATCH"]
+    check("... sending exactly {'state': 'closed'} and nothing else",
+          len(patches) == 1 and _json_body(patches[0]) == {"state": "closed"},
+          _json_body(patches[0]) if patches else None)
+    # Reopen.
+    r2 = GH.plan_issue_state({"repo": "darknight11ish/Epic-Jarvis",
+                              "number": "1116", "action": "reopen",
+                              "title": "The tray icon stays"})
+    fake = Routed([("/issues/1116", (200, json.dumps(
+        {"number": 1116, "title": "The tray icon stays", "state": "closed"})))])
+    out = _run_request(r2, fake)
+    check("reopening a closed issue works and sends state open",
+          out.get("ok") is True
+          and _json_body([c for c in fake.calls if c["method"] == "PATCH"][0])
+          == {"state": "open"}, out)
+    # A pull request is not an issue, and nothing is written.
+    fake = Routed([("/issues/1116", (200, json.dumps(
+        {"number": 1116, "title": "The tray icon stays", "state": "open",
+         "pull_request": {"url": "x"}})))])
+    _r, out = _run("github_issue_state", fake)
+    check("a pull request number is refused, with nothing written",
+          out.get("ok") is False and all(c["method"] == "GET" for c in fake.calls),
+          out)
+    # The title on the card is the pin.
+    fake = Routed([("/issues/1116", (200, json.dumps(
+        {"number": 1116, "title": "A different issue", "state": "open"})))])
+    _r, out = _run("github_issue_state", fake)
+    check("a changed title is refused, with nothing written",
+          out.get("ok") is False and all(c["method"] == "GET" for c in fake.calls),
+          out)
+    # Already in that state: say so rather than claim a change.
+    fake = Routed([("/issues/1116", (200, json.dumps(
+        {"number": 1116, "title": "The tray icon stays", "state": "closed"})))])
+    _r, out = _run("github_issue_state", fake)
+    check("an issue already closed is said, not 'closed again'",
+          out.get("ok") is False and "already closed" in out.get("error", ""), out)
+    try:
+        GH.plan_issue_state({"repo": "o/r", "number": "1", "action": "delete",
+                             "title": "x"})
+    except GH.GitHubError:
+        check("a direction other than close/reopen is refused", True)
+    else:
+        check("a direction other than close/reopen is refused", False)
+    check("bulk close is still permanently banned", "bulk_close" in GH.NEVER)
+    check("the old close_issue ban is gone, by the owner's decision",
+          "close_issue" not in GH.NEVER)
+
+
+def _open_git(*, sha=HEAD_SHA, push=(0, "", "")):
+    return FakeGit([
+        ("branch --show-current", (0, "jarvis/new-feature\n", "")),
+        ("status --porcelain", (0, "", "")),
+        ("diff --name-status", (0, "M\tbackend/app.py\n", "")),
+        ("log --oneline", (0, "abc1234 Add the new feature\n", "")),
+        ("rev-parse HEAD", (0, sha + "\n", "")),
+        ("push origin", push),
+    ])
+
+
+def t_open_pr_prepares_then_pushes_and_opens_one_pull_request():
+    with _Scratch() as box:
+        r = _card("github_open_pr")[0]
+        text = GH.describe(r)
+        target = os.path.join(box.root, GH.open_pr_folder_name(
+            "darknight11ish/Epic-Jarvis", "jarvis/new-feature"))
+        check("the prepare card names the repository, base, new branch and folder",
+              "darknight11ish/Epic-Jarvis" in text and "main" in text
+              and "jarvis/new-feature" in text and target in text, text[:500])
+        fake = Routed([("/repos/darknight11ish/Epic-Jarvis", (200, json.dumps(
+            {"full_name": "darknight11ish/Epic-Jarvis"})))])
+        git = FakeGit([
+            ("clone", (0, "", "")),
+            ("checkout -b", (0, "", "")),
+            ("rev-parse origin/main", (0, HEAD_SHA + "\n", "")),
+        ])
+        out = _run_request(r, fake, git=git)
+        check("prepare copies the repository and makes the new branch",
+              out.get("ok") is True, out)
+        check("... the clone carries the token in the ENVIRONMENT, not argv",
+              any(c["env"].get("GIT_CONFIG_VALUE_0")
+                  == f"Authorization: Bearer {TOKEN}" for c in git.calls)
+              and not any(TOKEN in " ".join(c["args"]) for c in git.calls),
+              git.commands())
+        marker = json.loads(Path(GH._open_marker_path(target)).read_text(
+            encoding="utf-8"))
+        check("... and leaves its own note: repo, base, new branch, base commit",
+              marker.get("repo") == "darknight11ish/Epic-Jarvis"
+              and marker.get("base") == "main"
+              and marker.get("branch") == "jarvis/new-feature"
+              and marker.get("base_sha") == HEAD_SHA and TOKEN not in json.dumps(marker),
+              marker)
+        check("... and says nothing was pushed and no pull request exists",
+              "Nothing has been pushed" in out.get("text", ""), out)
+
+        # Stage "open": the card shows every commit/file, the exact command,
+        # the title and the WHOLE body.
+        open_r = GH.plan_open_pr({
+            "repo": "darknight11ish/Epic-Jarvis", "base": "main",
+            "branch": "jarvis/new-feature", "stage": "open", "worktree": target,
+            "title": "Add the new feature",
+            "body": "This adds the new feature.\n\nNothing else changes."},
+            git=_open_git())
+        otext = GH.describe(open_r)
+        check("the open card shows every commit", "abc1234 Add the new feature" in otext,
+              otext[:600])
+        check("... every changed file", "M backend/app.py" in otext, otext[:600])
+        check("... the exact push command",
+              "git push origin HEAD:refs/heads/jarvis/new-feature" in otext)
+        check("... the title and the whole body",
+              "Add the new feature" in otext
+              and "This adds the new feature.\n\nNothing else changes." in otext,
+              otext)
+        check("... and that it then creates the pull request",
+              "create ONE pull request from" in otext, otext[-400:])
+        check("the POST body is exactly title, body, head and base",
+              open_r.body == {"title": "Add the new feature",
+                              "body": "This adds the new feature.\n\nNothing else changes.",
+                              "head": "jarvis/new-feature", "base": "main"},
+              open_r.body)
+        fake = Routed([("/pulls", (201, json.dumps(
+            {"number": 12, "html_url":
+             "https://github.com/darknight11ish/Epic-Jarvis/pull/12"})))])
+        git = _open_git()
+        out = _run_request(open_r, fake, git=git)
+        check("the open stage pushes the branch and opens the pull request",
+              out.get("ok") is True and "#12" in out.get("text", ""), out)
+        pushes = [c for c in git.calls if c["args"][:1] == ["push"]]
+        check("... exactly ONE ordinary push of the NEW branch, never a force",
+              len(pushes) == 1
+              and pushes[0]["args"] == ["push", "origin",
+                                        "HEAD:refs/heads/jarvis/new-feature"],
+              pushes)
+        check("... with the token in the environment, never the argv",
+              not any(TOKEN in " ".join(c["args"]) for c in git.calls))
+        posts = [c for c in fake.calls if c["method"] == "POST"]
+        check("... then exactly ONE POST to /pulls",
+              len(posts) == 1 and posts[0]["url"].endswith("/pulls"), fake.urls())
+
+        # TOCTOU: the local commit moved since the card was shown.
+        git = _open_git(sha="b" * 40)
+        fake = Routed([("/pulls", (201, "{}"))])
+        out = _run_request(open_r, fake, git=git)
+        check("a local commit that moved since the card is refused",
+              out.get("ok") is False
+              and "moved since the card was shown" in out.get("error", ""), out)
+        check("... and NOTHING is pushed or posted",
+              not [c for c in git.calls if c["args"][:1] == ["push"]]
+              and fake.calls == [], (git.commands(), fake.calls))
+        # A rejected push is said plainly, and no pull request is opened.
+        git = _open_git(push=(1, "", "! [rejected] already exists"))
+        fake = Routed([("/pulls", (201, "{}"))])
+        out = _run_request(open_r, fake, git=git)
+        check("a rejected push is refused in plain words", out.get("ok") is False,
+              out)
+        check("... and no pull request is opened after it",
+              fake.calls == [] or all(c["method"] == "GET" for c in fake.calls),
+              fake.calls)
+    # Protected new branches are refused before any card.
+    for bad in ("main", "master", "release/1.2", "hotfix/x"):
+        try:
+            GH.plan_open_pr({"repo": "o/r", "base": "main", "branch": bad})
+        except GH.GitHubError as exc:
+            check(f"a protected NEW branch is refused: {bad}",
+                  "protected" in str(exc).lower(), str(exc))
+        else:
+            check(f"a protected NEW branch is refused: {bad}", False)
+    check("main is allowed as the BASE branch (a pull request must point there)",
+          GH.plan_open_pr({"repo": "o/r", "base": "main",
+                           "branch": "feat/x"}).base_ref == "main")
+    for bad in ("x" * 201,):
+        try:
+            GH.plan_open_pr({"repo": "o/r", "base": "main", "branch": "feat/x",
+                             "stage": "open", "title": bad,
+                             "body": "b"})
+        except GH.GitHubError:
+            check("a title over 200 characters is refused before a card", True)
+        else:
+            check("a title over 200 characters is refused before a card", False)
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {GATE_BASE}")
@@ -2382,7 +2830,15 @@ if __name__ == "__main__":
                    t_the_push_run_rechecks_everything_then_pushes_once,
                    t_fix_and_push_run_refuses_unapproved_and_unknown_stages,
                    t_the_twins_are_byte_identical,
-                   t_the_two_shipped_tomls_are_one_file):
+                   t_the_two_shipped_tomls_are_one_file,
+                   t_the_reads_are_card_free_and_the_writes_ask,
+                   t_pr_detail_reads_the_five_fixed_lists,
+                   t_workflow_cancels_or_reruns_only_failed_jobs,
+                   t_issue_labels_read_then_change_the_whole_set_once,
+                   t_edit_pr_shows_before_and_after_and_pins_them,
+                   t_pr_review_never_approves,
+                   t_issue_state_closes_or_reopens_one_issue,
+                   t_open_pr_prepares_then_pushes_and_opens_one_pull_request):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

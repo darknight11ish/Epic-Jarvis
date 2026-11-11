@@ -495,6 +495,13 @@ TIER_EXTRA = (
     # "Everything at once"). Same group and same reason: the model's own GitHub
     # tools, each with its own switch, each still raising its own card.
     "github_pr_scan", "github_merge_pr", "github_fix_and_push",
+    # The 2026-11-10 22:30 ruling's Step 2 (full parity with DeepSeek): one
+    # full pull-request read and five more carded writes, each with its own
+    # switch here and each still raising its own card.
+    "github_pr_detail", "github_open_pr", "github_workflow",
+    "github_issue_labels", "github_edit_pr", "github_pr_review",
+    # 2026-11-10 23:00 owner decision: ONE issue close/reopen, carded.
+    "github_issue_state",
     # Changing what needs a card, a second yes or Windows Hello by talking to
     # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). A
     # switch here offers the ability to the model at all; it never changes a
@@ -528,17 +535,18 @@ NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: ones above. 67 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
-#: GitHub tools the tool list had grown without a row of their own, plus
-#: hands-free's send_text_message, plus the approval-policy tool's own row,
-#: plus the four pack tools; 61 was wave 13's carded github_create_repo, a model
-#: tool like the rest, 62 was project_read, the read half of "Jarvis takes over
-#: dev work", 63-65 are wave 16's three GitHub tools of 2026-11-10 - the
-#: read-only PR cockpit, the carded merge and the carded fix-and-push - and
-#: 66-67 are wave 16E's two local review gates, the review packet and the record
-#: check; the product check is the fourth exception rather than a row, and the
-#: cloud escalation switch the fifth - it rides with change_setting, so the
-#: count does not move with it).
+#: ones above. 74 at 2026-11-11 (the union of wave 16E's two local review gates
+#: and the 22:30/23:00 ruling's seven GitHub tools: 67 + 7; 60 at 2026-11-05:
+#: 48 at 2026-11-04, plus the six GitHub tools the tool list had grown without a
+#: row of their own, plus hands-free's send_text_message, plus the
+#: approval-policy tool's own row, plus the four pack tools; 61 was wave 13's
+#: carded github_create_repo, a model tool like the rest, 62 was project_read,
+#: 63-65 were wave 16's three GitHub tools, 66-67 are wave 16E's review packet
+#: and record check, 68-73 are the 22:30 ruling's full pull-request read and
+#: five carded writes, and 74 is the 23:00 decision's carded issue close/reopen
+#: (`github_issue_state`); the product check is the fourth exception rather than
+#: a row, and the cloud escalation switch the fifth - it rides with
+#: change_setting, so the count does not move with it).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -886,6 +894,12 @@ GROUPS = (
                       # nothing, but it still raises a card and changes a file the
                       # owner will push, so the page names it too.
                       "github_merge_pr", "github_fix_and_push", "github_fix_write",
+                      # The 2026-11-10 22:30/23:00 actions: each can be the
+                      # action a card is raised under, so each has its own row
+                      # here (the reads share github_inspect above).
+                      "github_open_pr", "github_workflow",
+                      "github_issue_labels", "github_edit_pr",
+                      "github_pr_review", "github_issue_state",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -2850,6 +2864,10 @@ LOCKDOWN_ACTIONS = frozenset({
     # that a tier line loosened one day still asks while Lockdown is on, like
     # every other way out of this PC on this list.
     "github_merge_pr", "github_fix_and_push",
+    # The 2026-11-10 22:30/23:00 writes: every one can change GitHub in the
+    # owner's name with the saved token, so each is on the Lockdown list too.
+    "github_open_pr", "github_workflow", "github_issue_labels",
+    "github_edit_pr", "github_pr_review", "github_issue_state",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1ad8ae0f3af6ef826655567bd858349a1e582867",
- "built_at": "2026-11-10T21:43:53-08:00",
+ "ref": "5f97f421d2f788634d03122f87f7f8a4cda3147c",
+ "built_at": "2026-11-10T22:31:00-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6262,6 +6262,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "5f97f421d2f788634d03122f87f7f8a4cda3147c",
+   "date": "2026-11-10",
+   "subject": "chore(self-code): regenerate the map for wave 16B - the new authoring suite and its two record fragments"
+  },
+  {
    "sha": "1ad8ae0f3af6ef826655567bd858349a1e582867",
    "date": "2026-11-10",
    "subject": "feat(github): wave 16B - Jarvis writes the fix inside the isolated copy"
@@ -6355,11 +6360,6 @@
    "sha": "d66a0a4cf818966a127721049d8698cc628da401",
    "date": "2026-11-10",
    "subject": "records: close DEF-063 and DEF-064 on the wave-15 tree, and regenerate the generated files"
-  },
-  {
-   "sha": "2b21e1d1b39ca093279b345c7863823403bf4626",
-   "date": "2026-11-10",
-   "subject": "Merge origin/main into the wave-15 branch (carries the merged wave-14 follow-ups, PR #1220)"
   }
  ],
  "top_level": [

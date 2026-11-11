@@ -433,7 +433,7 @@
   "type": "function",
   "function": {
    "name": "github_list",
-   "description": "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the open pull requests on one repository (\"pulls\"), its open issues (\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing on GitHub changes. It asks you before every read. It cannot merge, push, commit, delete or close anything. For how CI went, use github_ci_status.",
+   "description": "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the open pull requests on one repository (\"pulls\"), its open issues (\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing on GitHub changes. It does not ask - a read is a GET and changes nothing. It cannot merge, push, commit, delete or close anything. For how CI went, use github_ci_status.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -462,7 +462,7 @@
   "type": "function",
   "function": {
    "name": "github_read_file",
-   "description": "Read ONE file's text from a repository the saved GitHub token can see, at an optional branch or commit. Read-only: nothing changes. It asks you before every read. It cannot write, edit or commit a file.",
+   "description": "Read ONE file's text from a repository the saved GitHub token can see, at an optional branch or commit. Read-only: nothing changes, and it does not ask - a read is a GET. It cannot write, edit or commit a file.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -490,7 +490,7 @@
   "type": "function",
   "function": {
    "name": "github_ci_status",
-   "description": "How CI went: the newest workflow run for a repository and branch, or for a pull request. Read-only: nothing changes. It asks you before every read.",
+   "description": "How CI went: the newest workflow run for a repository and branch, or for a pull request. Read-only: nothing changes, and it does not ask - a read is a GET.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -625,7 +625,7 @@
   "type": "function",
   "function": {
    "name": "github_pr_scan",
-   "description": "The pull request cockpit: list the open pull requests on one repository and say, for each one, whether it can be merged - merge-ready, blocked, conflicted, running or draft - and which required check is holding it. It prints each pull request's full 40-character head commit, its title and its base branch, so that commit, title and base branch can be passed straight to github_merge_pr. Read-only: nothing on GitHub changes. It asks you before every read, and it never merges anything itself; merging is a separate carded tool. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; and read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer. It can also take six carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, write ONE file of the fix there on its own card, then push those commits to that pull request's OWN branch on a further card (github_fix_and_push). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card. For the plain list of open pull requests, use github_list with scope \"pulls\". For one branch's or pull request's newest run, use github_ci_status.",
+   "description": "The pull request cockpit: list the open pull requests on one repository and say, for each one, whether it can be merged - merge-ready, blocked, conflicted, running or draft - and which required check is holding it. It prints each pull request's full 40-character head commit, its title and its base branch, so that commit, title and base branch can be passed straight to github_merge_pr. Read-only: nothing on GitHub changes, and it does not ask - a read is a GET. It never merges anything itself; merging is a separate carded tool. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer; and read ONE pull request in full: its title, body, state, draft and mergeable flags, its head commit and base branch, then its changed files, its commits, its comments and its reviews. It can also take twelve carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, write ONE file of the fix there on its own card, then push those commits to that pull request's OWN branch on a further card (github_fix_and_push); copy a repository at a base branch into an isolated scratch folder on this PC, make a NEW branch there, then push that branch and open ONE pull request from it into the base branch, on a second card showing every commit, every changed file, the exact push command, the title and the whole body (github_open_pr); cancel ONE in-progress workflow run, or re-run only the FAILED jobs of ONE finished run (github_workflow); add and/or remove labels on ONE issue or pull request, showing the exact add and remove sets (github_issue_labels); edit ONE pull request's title and/or body, showing the exact before and after (github_edit_pr); post ONE pull request review with the COMMENT or REQUEST_CHANGES verdict and the whole review text, never an approval (github_pr_review); close ONE issue, or reopen ONE closed issue, on its own card showing the issue's title and the direction, with an optional reason (github_issue_state). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, edit a comment, dispatch a workflow, use a gist, close or reopen more than one issue at a time, or delete/close repositories or branches; every merge, push, edit, review, label change or issue close requires its own approval card. For the plain list of open pull requests, use github_list with scope \"pulls\". For one branch's or pull request's newest run, use github_ci_status.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -644,7 +644,7 @@
   "type": "function",
   "function": {
    "name": "github_merge_pr",
-   "description": "Merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit you pass. Pass the commit, title and base branch exactly as github_pr_scan printed them: a different or short commit is refused. It refuses, sending nothing, if the pull request is a draft, cannot merge cleanly, has a check running, a required check failed, moved, or was retargeted to another base branch. It can never squash, rebase, use an admin bypass, turn on auto-merge or bypass a required check. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; and read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer. It can also take six carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, write ONE file of the fix there on its own card, then push those commits to that pull request's OWN branch on a further card (github_fix_and_push). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card. To see which pull requests are ready first, use github_pr_scan. To read CI without merging, use github_ci_status.",
+   "description": "Merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit you pass. Pass the commit, title and base branch exactly as github_pr_scan printed them: a different or short commit is refused. It refuses, sending nothing, if the pull request is a draft, cannot merge cleanly, has a check running, a required check failed, moved, or was retargeted to another base branch. It can never squash, rebase, use an admin bypass, turn on auto-merge or bypass a required check. GitHub, in full: Jarvis can read your repositories, or one repository's open pull requests, open issues or recent workflow runs; read ONE file's text from a repository, at a branch or commit if you name one; read how the newest CI run ended for a repository, a branch or a pull request; read every open pull request and say which are merge-ready, blocked, conflicted, running or draft, which required check is holding each one, and each one's full 40-character head commit, title and base branch so a merge can be asked for from that answer; and read ONE pull request in full: its title, body, state, draft and mergeable flags, its head commit and base branch, then its changed files, its commits, its comments and its reviews. It can also take twelve carded writes: post ONE comment on an issue or pull request, as you (github_comment); open ONE new issue on a repository, as you (github_open_issue); run ONE existing workflow run again, with the same code and settings it ran with before (github_rerun_workflow); create ONE new, empty repository on your own account (github_create_repo); merge ONE pull request with a MERGE COMMIT, pinned to the exact 40-character head commit the card showed (github_merge_pr); copy a failing pull request into an isolated scratch folder on this PC, write ONE file of the fix there on its own card, then push those commits to that pull request's OWN branch on a further card (github_fix_and_push); copy a repository at a base branch into an isolated scratch folder on this PC, make a NEW branch there, then push that branch and open ONE pull request from it into the base branch, on a second card showing every commit, every changed file, the exact push command, the title and the whole body (github_open_pr); cancel ONE in-progress workflow run, or re-run only the FAILED jobs of ONE finished run (github_workflow); add and/or remove labels on ONE issue or pull request, showing the exact add and remove sets (github_issue_labels); edit ONE pull request's title and/or body, showing the exact before and after (github_edit_pr); post ONE pull request review with the COMMENT or REQUEST_CHANGES verdict and the whole review text, never an approval (github_pr_review); close ONE issue, or reopen ONE closed issue, on its own card showing the issue's title and the direction, with an optional reason (github_issue_state). The token stays in Windows Credential Manager and is sent only to api.github.com, never printed; every write ships off under Settings, What asks first, \"Jarvis's own tools\", and raises its own one-shot card, and a stale event stream holds Approve. Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, edit a comment, dispatch a workflow, use a gist, close or reopen more than one issue at a time, or delete/close repositories or branches; every merge, push, edit, review, label change or issue close requires its own approval card. To see which pull requests are ready first, use github_pr_scan. To read CI without merging, use github_ci_status.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -723,8 +723,7 @@
      }
     },
     "required": [
-     "repo",
-     "number"
+     "repo"
     ]
    }
   }
@@ -788,6 +787,270 @@
      }
     },
     "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_pr_detail",
+   "description": "Read ONE pull request in full: its title, body, state, draft and mergeable flags, its head commit and base branch, and then its changed files, its commits, its comments and its reviews. Read-only: five fixed GETs, nothing on GitHub changes. It does not ask - a read is a GET. For every open pull request's merge state, use github_pr_scan.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the pull request number"
+     }
+    },
+    "required": [
+     "repo",
+     "number"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_open_pr",
+   "description": "Open ONE pull request for a branch Jarvis prepares. \"prepare\" copies the repository at a base branch into a scratch folder on this PC and makes a NEW branch there (never main/master/release/*/hotfix*); make the change and commit it there. \"open\" shows every commit, every changed file, the exact git push command, the pull request title and its whole body, then pushes that ONE new branch and creates the pull request into the base branch. Never a force-push, never a delete. To merge a pull request that already exists, use github_merge_pr.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "prepare",
+       "open"
+      ],
+      "description": "prepare or open"
+     },
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "base": {
+      "type": "string",
+      "description": "the branch the pull request merges INTO, e.g. main"
+     },
+     "branch": {
+      "type": "string",
+      "description": "the NEW branch's name"
+     },
+     "worktree": {
+      "type": "string",
+      "description": "open: the scratch folder prepare printed"
+     },
+     "title": {
+      "type": "string",
+      "description": "open: the pull request's title"
+     },
+     "body": {
+      "type": "string",
+      "description": "open: the whole pull request body"
+     }
+    },
+    "required": [
+     "repo",
+     "base",
+     "branch"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_workflow",
+   "description": "Do ONE thing to ONE existing workflow run: \"cancel\" a run that is still going, or \"rerun_failed\" to run only the jobs that failed in a finished run. It shows which run and which action on a card first; it never dispatches a workflow, never starts a new run and changes no code or setting. To see how the newest run ended, use github_ci_status.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "run_id": {
+      "type": "string",
+      "description": "the workflow run's number"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "cancel",
+       "rerun_failed"
+      ],
+      "description": "cancel it, or re-run only its failed jobs"
+     }
+    },
+    "required": [
+     "repo",
+     "run_id",
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_issue_labels",
+   "description": "Add and/or remove labels on ONE issue or pull request. It reads the current labels first and sends the whole new set in ONE request; the card shows the exact labels to add and remove. It never closes or reopens anything and never edits the title or body.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the issue or pull request number"
+     },
+     "add": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "label names to add, e.g. [\"bug\"]"
+     },
+     "remove": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "label names to remove"
+     }
+    },
+    "required": [
+     "repo",
+     "number"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_edit_pr",
+   "description": "Edit ONE pull request's title and/or body, showing the exact before and after on the card. Pass the CURRENT values as old_title/old_body (exactly as the pull request read tool printed them) so the card can show both and Jarvis can refuse if the pull request changed. No other field is editable; it never closes, merges or approves anything. To read the current title and body first, use github_pr_detail.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the pull request number"
+     },
+     "title": {
+      "type": "string",
+      "description": "the NEW title"
+     },
+     "body": {
+      "type": "string",
+      "description": "the NEW body"
+     },
+     "old_title": {
+      "type": "string",
+      "description": "the current title, as github_pr_detail printed it"
+     },
+     "old_body": {
+      "type": "string",
+      "description": "the current body, as github_pr_detail printed it"
+     }
+    },
+    "required": [
+     "repo",
+     "number"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_pr_review",
+   "description": "Post ONE review on a pull request: either a plain comment (\"COMMENT\") or a request for changes (\"REQUEST_CHANGES\"). The whole review text is shown on a card first. The APPROVE verdict is permanently banned - a formal approval would hand the owner's own sign-off to the assistant - and it is refused by name. For a plain comment rather than a review, use github_comment.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the pull request number"
+     },
+     "event": {
+      "type": "string",
+      "enum": [
+       "COMMENT",
+       "REQUEST_CHANGES"
+      ],
+      "description": "a comment, or a request for changes"
+     },
+     "body": {
+      "type": "string",
+      "description": "the whole review text"
+     }
+    },
+    "required": [
+     "repo",
+     "number",
+     "event",
+     "body"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_issue_state",
+   "description": "Close ONE issue on a repository, or reopen ONE closed issue - one issue per card, never in bulk and never a pull request. Pass the issue's title exactly as github_list printed it; the card shows the repository, the number, the title, the direction and an optional reason, and Jarvis re-reads the issue first and refuses if its title changed. It cannot delete, transfer or edit the issue. To open a NEW issue, use github_open_issue.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the issue number"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "close",
+       "reopen"
+      ],
+      "description": "close it, or reopen a closed issue"
+     },
+     "title": {
+      "type": "string",
+      "description": "the issue's title, exactly as github_list printed it"
+     },
+     "reason": {
+      "type": "string",
+      "description": "an optional why, shown on the card (at most 400 characters)"
+     }
+    },
+    "required": [
+     "repo",
+     "number",
+     "action",
+     "title"
+    ]
    }
   }
  },

@@ -809,6 +809,72 @@
        "windows_hello": false
       },
       {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
        "action": "support_chat",
        "confirmations": 1,
        "fixed": false,
@@ -1881,6 +1947,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -2413,6 +2486,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -3344,6 +3473,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -4419,6 +4614,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -4951,6 +5153,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -5879,6 +6137,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -6953,6 +7277,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -7485,6 +7816,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -8408,6 +8795,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -9482,6 +9935,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -10014,6 +10474,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -10942,6 +11458,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -12031,6 +12613,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -12563,6 +13152,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -13487,6 +14132,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -14571,6 +15282,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -15103,6 +15821,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -16022,6 +16796,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -17096,6 +17936,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -17628,6 +18475,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -18563,6 +19466,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -19638,6 +20607,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -20170,6 +21146,62 @@
       "last": null,
       "on": false,
       "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
       "waiting": false
      },
      {
@@ -21098,6 +22130,72 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
+       "action": "github_open_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_open_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open a pull request for a new branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_workflow",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Cancel or re-run a workflow run",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_labels",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_labels",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change the labels on an issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_edit_pr",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_edit_pr",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Edit a pull request's title or body",
+       "windows_hello": false
+      },
+      {
+       "action": "github_pr_review",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_pr_review",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a pull request review, never an approval",
+       "windows_hello": false
+      },
+      {
+       "action": "github_issue_state",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_issue_state",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Close or reopen one issue",
        "windows_hello": false
       },
       {
@@ -22172,6 +23270,13 @@
        "github_pr_scan",
        "github_merge_pr",
        "github_fix_and_push",
+       "github_pr_detail",
+       "github_open_pr",
+       "github_workflow",
+       "github_issue_labels",
+       "github_edit_pr",
+       "github_pr_review",
+       "github_issue_state",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -22708,6 +23813,62 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "github_pr_detail",
+      "last": null,
+      "on": false,
+      "title": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_pr",
+      "last": null,
+      "on": false,
+      "title": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_workflow",
+      "last": null,
+      "on": false,
+      "title": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_labels",
+      "last": null,
+      "on": false,
+      "title": "Adding or removing labels on one issue or pull request (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_edit_pr",
+      "last": null,
+      "on": false,
+      "title": "Editing one pull request's title and/or body (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_pr_review",
+      "last": null,
+      "on": false,
+      "title": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_issue_state",
+      "last": null,
+      "on": false,
+      "title": "Closing one issue, or reopening one closed issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "approval_policy",
       "last": null,
       "on": false,
@@ -22925,6 +24086,13 @@
   "github_pr_scan",
   "github_merge_pr",
   "github_fix_and_push",
+  "github_pr_detail",
+  "github_open_pr",
+  "github_workflow",
+  "github_issue_labels",
+  "github_edit_pr",
+  "github_pr_review",
+  "github_issue_state",
   "approval_policy"
  ],
  "words": {

@@ -35724,6 +35724,19 @@ push then carries the commit, with its card still showing the real commits, file
 and command. §190.13 is its envelope; §190.4's old sentence "there is no tool
 that edits or commits code" is now false and has been corrected.
 
+**Corrected 2026-11-10 at 23:00 PT (two owner decisions, asked and answered).**
+(A) **GitHub reads are card-free now.** A read is a GET on `api.github.com` and
+changes nothing, so the owner chose "make GitHub reads card-free":
+`github_inspect` ships `"auto"` in both shipped settings files, and the five
+read tools are deliberately NOT in `jarvis_agent.NEEDS_A_PERSON`. Every WRITE
+still raises its own one-shot card and is still `"ask"`. (B) **Closing one issue
+is allowed, carded.** The owner overturned the old absolute ban on
+`close_issue`: `github_issue_state` closes ONE issue or reopens ONE closed
+issue, on its own card, one issue at a time, never a pull request, never bulk,
+never a delete, transfer or edit. `close_issue` left `jarvis_github.NEVER`;
+`bulk_close` joined it. §216 is the full record of both, and of the other nine
+actions the same day's 22:30 ruling added.
+
 The owner's decisions: of 2026-11-03, *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card** - and of 2026-11-10 ("Everything at once"), the same rule now covers **merge and fix-and-push**: each gets its own card, the merge is merge-commit-only and pinned to the head commit on the card, and the push only ever goes to the pull request's own branch from an isolated scratch folder. The reads ask too, on their own card, because a read still sends the saved token to `api.github.com`.
 
 ### 190.1 What exists, and what each one does
@@ -35754,7 +35767,7 @@ last three rows here, and §190.9-§190.10 are their two envelopes):
 
 **Eight gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the four reads share) and the **seven carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push` and (wave 16B) `github_fix_write`. **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
 
-**The reads ask too, and the reason is not red tape.** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so it is egress with a credential attached: "it is only a read" is not a reason to spend a credential with nobody looking, and the same call was already made for `github_search` when it was found resolving to `web_research` at `auto`.
+**The reads used to ask too - CORRECTED at 23:00 PT on 2026-11-10: they are card-free now.** The owner decided that a read is a GET on `api.github.com` and changes nothing, so it should not raise a card; `github_inspect` ships `"auto"` and the read tools are not in `NEEDS_A_PERSON`. Every WRITE still asks. §216 records the decision.
 
 **It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
 
@@ -35766,7 +35779,7 @@ Without a saved token every one of the ten answers in plain words - *"Jarvis has
 
 ### 190.4 What Jarvis will never do with GitHub
 
-**The absolute bans that remain (the owner's rulings of 2026-11-10):** force-push, squash-merge, rebase-merge, admin bypass, auto-merge, bypassing required checks, pushing directly to `main`/`master`/`release/*`, and deleting or closing a repository or a branch. Five more are permanently banned and have no action, card or tool anywhere: **approving a pull request** (`approve_pr` - a formal APPROVE satisfies branch-protection required-reviewer rules, so it would hand the owner's own sign-off authority to the assistant), **closing an issue** (`close_issue`), **editing a comment** (`edit_comment`), **dispatching a workflow** (`workflow_dispatch`, which is arbitrary remote execution with model-chosen inputs), and **gists** (public by default, an exfiltration sink). There is now **exactly one way Jarvis can change code**: `github_fix_and_push`'s wave-16B "write" stage, which changes ONE file inside the isolated copy the "prepare" stage made and makes ONE local commit there, on its own card (§190.13). It cannot write in the owner's own checkout, in another pull request's copy, or anywhere else on this PC; it cannot delete, rename, move or change permissions; it refuses a credential file; and it sends nothing, so the separate carded push is still the only step that can put a commit on GitHub. Merge and PR-branch push ARE possible now - only behind their own cards - so the old sentence "there is no merge action and no merge card" is no longer true and is gone. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`): *"Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card."* Every action tool's own description carries the honest version of its own boundary. **The refusal is deterministic:** "can you merge a pull request?" is answered by the `github_self` chat intent (§190.8) from the module's own `ACTIONS` and `NEVER_WORDS` - it used to say "no" and then offer a merge card that did not exist; it now says yes, merge commit only, one card, and names the refusals.
+**The absolute bans that remain (the owner's rulings of 2026-11-10):** force-push, squash-merge, rebase-merge, admin bypass, auto-merge, bypassing required checks, pushing directly to `main`/`master`/`release/*`, and deleting or closing a repository or a branch. Five more are permanently banned and have no action, card or tool anywhere: **approving a pull request** (`approve_pr` - a formal APPROVE satisfies branch-protection required-reviewer rules, so it would hand the owner's own sign-off authority to the assistant), **editing a comment** (`edit_comment`), **dispatching a workflow** (`workflow_dispatch`, which is arbitrary remote execution with model-chosen inputs), **gists** (public by default, an exfiltration sink), and **closing or reopening more than one issue at a time** (`bulk_close`). **`close_issue` was overturned by the owner on 2026-11-10 at 23:00 for exactly ONE carded action**: `github_issue_state` closes ONE issue or reopens ONE closed issue on its own one-shot card (§216). There is now **exactly one way Jarvis can change code**: `github_fix_and_push`'s wave-16B "write" stage, which changes ONE file inside the isolated copy the "prepare" stage made and makes ONE local commit there, on its own card (§190.13). It cannot write in the owner's own checkout, in another pull request's copy, or anywhere else on this PC; it cannot delete, rename, move or change permissions; it refuses a credential file; and it sends nothing, so the separate carded push is still the only step that can put a commit on GitHub. Merge and PR-branch push ARE possible now - only behind their own cards - so the old sentence "there is no merge action and no merge card" is no longer true and is gone. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`): *"Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card."* Every action tool's own description carries the honest version of its own boundary. **The refusal is deterministic:** "can you merge a pull request?" is answered by the `github_self` chat intent (§190.8) from the module's own `ACTIONS` and `NEVER_WORDS` - it used to say "no" and then offer a merge card that did not exist; it now says yes, merge commit only, one card, and names the refusals.
 
 ### 190.5 The wording, the token and the failures
 
@@ -38623,3 +38636,115 @@ cannot take away what "cancel that" would undo, and a private chat hands them to
 its own gate like every other read. The model also has the two tools, in the
 `github` group, and both ship off until their own switch is turned on under
 Settings, What asks first, "Jarvis's own tools".
+
+## 216. GitHub full parity, Step 2: nine more actions, card-free reads, and a carded issue close/reopen (added 2026-11-10, the owner's 22:30 and 23:00 PT decisions)
+
+The owner's ruling of 2026-11-10 22:30, "GitHub full integration, full parity
+with DeepSeek", named a Step 2 of GitHub actions to build on top of the merge
+and the fix-and-push of §190.9-§190.10 (wave 16B). The same evening, at 23:00,
+the owner answered two questions that changed two standing rules: **GitHub reads
+are card-free**, and **closing one issue is allowed, carded**. This section is
+the record of both, and of every action the Step 2 list added.
+
+### 216.1 What was added, and what each one does
+
+| Tool | Kind | What it does | The request(s) |
+|---|---|---|---|
+| `github_pr_detail` | read (shares `github_inspect`) | reads ONE pull request in full: title, body, state/draft/mergeable, head commit and base branch, then its changed files, commits, comments and reviews. At most 10 of each shown, the real count always printed, every text bounded | five fixed GETs: the pull request, `.../files`, `.../commits`, `.../issues/{n}/comments`, `.../pulls/{n}/reviews` |
+| `github_open_pr` | write (own action) | two stages. "prepare" copies the repository at a base branch into the scratch root and makes a NEW branch there; "open" shows every commit, every changed file, the exact push command, the title and the WHOLE body on ONE card, then pushes that ONE new branch and opens the pull request, pinned to the HEAD commit the card showed | `GET /repos/{r}` then `git clone`/`checkout -b`; on open: local git reads, `git push origin HEAD:refs/heads/<new branch>`, then `POST /repos/{r}/pulls` with exactly `{title, body, head, base}` |
+| `github_workflow` | write (own action) | "cancel" ONE in-progress workflow run, or "rerun_failed" to run only the FAILED jobs of ONE finished run. It re-reads the run first and refuses, changing nothing, if it is not in the state the card named. It never dispatches a workflow | `GET .../actions/runs/{id}`, then `POST .../cancel` or `POST .../rerun-failed-jobs` |
+| `github_issue_labels` | write (own action) | adds and/or removes labels on ONE issue or pull request. It reads the current labels first, refuses if a label it would remove is not there, and sends the whole final set in ONE request | `GET .../issues/{n}`, then `PUT .../issues/{n}/labels` with the whole set |
+| `github_edit_pr` | write (own action) | edits ONE pull request's title and/or body. The card shows the exact before and after; the run re-reads the pull request and refuses, changing nothing, if either text is no longer the one on the card. No other field is editable | `GET .../pulls/{n}`, then `PATCH .../pulls/{n}` with only `title` and/or `body` |
+| `github_pr_review` | write (own action) | posts ONE review with verdict `COMMENT` or `REQUEST_CHANGES` and shows the whole review text first. The `APPROVE` verdict is **refused by name** before any card exists - a formal approval would hand the owner's own sign-off to the assistant | `POST .../pulls/{n}/reviews` with exactly `{event, body}` |
+| `github_issue_state` | write (own action) | **the owner's 23:00 decision**: closes ONE issue, or reopens ONE closed issue, on its own card. The card shows the repository, the issue number and title, the direction and an optional reason (at most 400 characters, shown on the card and in the answer; GitHub's state change has no free-text reason field, so it is not sent as one). It cannot delete, transfer or edit the issue, never touches a pull request, and never bulk | `GET .../issues/{n}` (the title is the pin - a changed title refuses with nothing sent), then `PATCH .../issues/{n}` with exactly `{"state": "closed"|"open"}` |
+
+The other two of the nine are not new tools: `github_pr_detail` is a read, and
+the owner's 23:00 answer also means `github_open_issue` is unchanged (it still
+cannot close what it opens - the close/reopen is the separate action above).
+
+### 216.2 Decision A: GitHub READS are card-free (owner, 2026-11-10 23:00 PT)
+
+A read is a GET on `api.github.com` and changes nothing, so the owner chose
+"make GitHub reads card-free". Concretely:
+
+* `github_inspect` ships **`"auto"`** in both shipped settings files
+  (`backend/rebuilt/jarvis-framework.toml` and `jarvis-backend/jarvis-framework.toml`).
+* The five read tools (`github_list`, `github_read_file`, `github_ci_status`,
+  `github_pr_scan`, `github_pr_detail`) are **not** in
+  `jarvis_agent.NEEDS_A_PERSON`; a read no longer raises a card.
+* The read TOOLS are still switched off until the owner switches them on (the
+  owner's 2026-11-04 rule: every offered tool is switchable). It is the read
+  ACTION that never asks.
+* **Every WRITE still asks its own card**, is its own `"ask"` tier line, and is
+  still in `NEEDS_A_PERSON`; a loosened line still raises its card.
+* `github_read` stays separate and `"auto"` - that is the scheduled look a
+  "tell me when" GitHub watch makes, and the two names must never be merged.
+
+### 216.3 Decision B: ONE issue's close/reopen is allowed, carded (owner, 2026-11-10 23:00 PT)
+
+The owner overturned the old absolute ban on `close_issue`, choosing "allow
+carded close/reopen" over keeping it banned. The ruling, exactly:
+
+* ONE issue per card; the card shows the repository, the issue number, its
+  title, the direction and an optional reason (≤ 400 characters).
+* The action is `github_issue_state`, its own `"ask"` tier line, its own switch,
+  and in `NEEDS_A_PERSON`.
+* It cannot delete, transfer or edit the issue, cannot touch a pull request
+  (`GET` says `pull_request` -> refused), and cannot close or reopen anything in
+  bulk: **`bulk_close` is in `jarvis_github.NEVER`**, and it is named in
+  `NEVER_WORDS`.
+* `github_open_issue` keeps its own boundary: that tool still cannot close what
+  it opened. The ban did not loosen there; it is a separate action.
+* `close_issue` left `jarvis_github.NEVER` - the same way `edit_file` and
+  `write_file` left it in wave 16B when the carded write landed. Removing a name
+  from `NEVER` is the one direction that needs a decision on the record, and
+  `decisions.d/2026-11-10-github-parity-actions.md` is it.
+* Reversible: the same tool reopens a closed issue, and the risk row says so
+  (`("yes", "outbound", ...)`).
+
+### 216.4 The refusals, in one place
+
+* `github_open_pr`: the NEW branch may never be `main`, `master`, `release/*` or
+  `hotfix/*`; the BASE branch may be `main` (a pull request must point at the
+  branch it merges into, and Jarvis only reads it); never a force-push, never a
+  delete, never a fork's branch; a title over 200 characters, a body over 2,000,
+  more than 20 commits or more than 20 changed files, or a card that cannot fit
+  in the gate's 4,000 characters, is refused BEFORE a card exists. The final
+  card pins the local HEAD commit and the run refuses if it moved since.
+* `github_workflow`: a finished run cannot be cancelled; a run that is not
+  finished cannot have its failed jobs re-run; a run with no failed jobs is
+  refused. It never dispatches a workflow (`workflow_dispatch` stays banned).
+* `github_issue_labels`: labels only - never close/reopen, never edit the title
+  or body; at most 10 labels per set; a label that is not there is refused with
+  nothing written; one `PUT` sends the whole set.
+* `github_edit_pr`: title and body only; no other field; refuses if the live
+  pull request is not still the carded one.
+* `github_pr_review`: `COMMENT` or `REQUEST_CHANGES` only; `APPROVE` refused by
+  name; at most 2,000 characters.
+* `github_issue_state`: ONE issue, never a pull request, never bulk, never a
+  delete/transfer/edit, title pinned on the card, refuses when it is already in
+  the state asked for.
+
+### 216.5 Tokens, cards and proof
+
+Every new tool obeys §190.5: the token is sent only to `api.github.com` (and for
+the two git steps of `github_open_pr` in git's own `GIT_CONFIG_*` environment,
+never on a command line), never printed, never on a card; fetched GitHub text
+goes through the one sanitizer; failures are plain sentences with no HTTP code.
+`github_open_pr` is the one action that does two things (a push then a POST):
+its card says so plainly, and if the pull request cannot be opened after a
+successful push the answer says the branch WAS pushed and nothing else changed.
+
+**The proof.** `backend/test_github_tools.py` grows by one function per action:
+the five-GET read, the two-stage open (including the "local commit moved"
+TOCTOU refusal and a refused push opening no pull request), cancel vs
+rerun-failed-jobs with every state refusal, the label set sent once, the edit
+card's before/after pin, the APPROVE refusal by name, and ONE issue's
+close/reopen with the pull-request/title/already-in-state/bulk refusals. The
+reads' card-free status and every write's `"ask"` tier are pinned from the
+shipped settings files in `test_github_tools.py` and `test_github_parity.py`.
+Nothing here opens a socket in a test: every HTTP call is a fake and every git
+call a fake or a real temporary repository.
+
+**One-sided on purpose:** no new screen in either app and no new route; both
+apps' chats already reach every tool, and `tools/check_parity.py` is unchanged.
