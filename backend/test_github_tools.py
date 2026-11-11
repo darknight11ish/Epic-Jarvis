@@ -742,14 +742,11 @@ def t_the_reads_ask_too_and_never_write():
         check(f"{tool}: a read carries no body at all", r.body is None, r.body)
         check(f"{tool}: a read is decided under github_inspect",
               r.action == GH.ACTION_INSPECT, r.action)
-        # The owner's decision of 2026-11-10 23:00: a read is a GET and
-        # changes nothing, so it is CARD-FREE and deliberately NOT here.
+        # 2026-11-10 23:00 PT: the owner chose card-free GitHub reads. The five
+        # reads left NEEDS_A_PERSON, and the switchable `github_inspect` read
+        # row on the What asks first page is how the owner puts the card back
+        # (ONE card + Windows Hello; turning it off again is instant).
         check(f"{tool}: a read is card-free (not in NEEDS_A_PERSON)",
-        # 2026-11-10 23:00 PT: the owner chose card-free GitHub reads. The
-        # four reads left NEEDS_A_PERSON; the switchable `github_inspect`
-        # read row on the What asks first page is how the owner puts the
-        # card back (ONE card + Windows Hello; turning it back on is instant).
-        check(f"{tool}: a read is NOT forced to wait for a person any more",
               tool not in AG.NEEDS_A_PERSON)
         check(f"{tool}: the card says nothing on GitHub changes",
               "Nothing on GitHub changes" in text, text[:200])

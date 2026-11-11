@@ -1105,6 +1105,8 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": REVIEW_TOOL_ENABLE_HINT,
         "sources": [AGENT, REVIEW, ASKS_FIRST],
+    },
+
     # The 2026-11-10 22:30 ruling's Step 2 surface: one full pull-request READ
     # and five carded WRITES. Each is its own switch, each is off by default, and
     # each write's card shows exactly what changes before anything is sent.
