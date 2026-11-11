@@ -798,6 +798,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
+       "windows_hello": false
+      },
+      {
        "action": "support_chat",
        "confirmations": 1,
        "fixed": false,
@@ -2401,7 +2412,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -3322,6 +3333,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -4928,7 +4950,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -5846,6 +5868,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -7451,7 +7484,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -8364,6 +8397,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -9969,7 +10013,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -10887,6 +10931,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -12507,7 +12562,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -13421,6 +13476,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -15036,7 +15102,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -15945,6 +16011,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -17550,7 +17627,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -18475,6 +18552,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -20081,7 +20169,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {
@@ -20999,6 +21087,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Push a fix to a pull request's own branch",
+       "windows_hello": false
+      },
+      {
+       "action": "github_fix_write",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_fix_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write one file in a pull request's fix copy",
        "windows_hello": false
       },
       {
@@ -22604,7 +22703,7 @@
       "id": "github_fix_and_push",
       "last": null,
       "on": false,
-      "title": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)",
+      "title": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)",
       "waiting": false
      },
      {

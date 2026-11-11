@@ -1,13 +1,13 @@
 diff --git a/jarvis_gate.py b/jarvis_gate.py
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -2982,6 +2982,103 @@
+@@ -2982,6 +2982,122 @@
      print()
      return 0
  
 +# --------------------------------------------------------------------------
-+#   github-tools.patch (2026-11-03, extended 2026-11-10) - the ten GitHub
-+#   tools, and six actions
++#   github-tools.patch (2026-11-03, extended 2026-11-10 and by wave 16B) - the
++#   ten GitHub tools, and EIGHT actions
 +# --------------------------------------------------------------------------
 +# The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
 +# open pull requests, issues, CI status, one file) and take three small ACTIONS
@@ -15,10 +15,13 @@ diff --git a/jarvis_gate.py b/jarvis_gate.py
 +# The owner's decision of 2026-11-10 (Gemini ruling Q1, "Everything at once")
 +# added the read-only PR cockpit and two more carded actions: one merge-commit-
 +# only merge pinned to the head sha the card showed, and one fix-and-push into
-+# an isolated scratch folder that pushes to the pull request's own branch. The
-+# absolute bans that remain: force-push, squash-merge, rebase-merge, admin
-+# bypass, auto-merge, bypassing required checks, pushing directly to
-+# main/master/release/*, and deleting or closing a repository or a branch.
++# an isolated scratch folder that pushes to the pull request's own branch.
++# Wave 16B (2026-11-10) added the eighth action, `github_fix_write`: the fix
++# tool's "write" stage, which changes ONE file inside that same isolated copy and
++# makes ONE commit there, with no token and no socket. The absolute bans that
++# remain: force-push, squash-merge, rebase-merge, admin bypass, auto-merge,
++# bypassing required checks, pushing directly to main/master/release/*, and
++# deleting or closing a repository or a branch.
 +#
 +# WHY IT SITS HERE, IN THE MIDDLE OF THE FILE, AND NOT AT THE END OF IT: two
 +# measured reasons, and the second is a break this patch caused before it moved.
@@ -73,6 +76,15 @@ diff --git a/jarvis_gate.py b/jarvis_gate.py
 +    # governs a merge has to be the line the owner can find.
 +    "github_merge_pr": "github_merge_pr",
 +    "github_fix_and_push": "github_fix_and_push",
++    # Wave 16B (2026-11-10): the fix tool's own "write" stage, decided under its
++    # OWN action so its card says "write one file in the scratch copy" rather
++    # than "push a fix". The name passed to the gate here is an ACTION name, not
++    # a tool name - the tool is still `github_fix_and_push`, and its own
++    # `gate_lookup_name` picks this one only for stage "write". The line is
++    # needed because `action_for_tool` answers "unclassified_tool" for a name it
++    # does not know, and an unclassified action would raise a card that says
++    # nothing true about what is being changed.
++    "github_fix_write": "github_fix_write",
 +})
 +_RISK.update({
 +    # Reading only. Reversible "yes" and reach "outbound" is the same pair
@@ -100,6 +112,13 @@ diff --git a/jarvis_gate.py b/jarvis_gate.py
 +    # pushed commit cannot be taken back. One ordinary push to the pull
 +    # request's own branch - never a force, never main, never a delete.
 +    "github_fix_and_push": ("no", "outbound", "copies a pull request into an isolated scratch folder on this PC and pushes your commits to that pull request's own branch in your name; never a force-push, never main/master/release/hotfix, never a delete, refuses a changed file that looks like a credential before anything is pushed, and a pushed commit cannot be taken back"),
++    # Writing ONE file inside that isolated copy (wave 16B, 2026-11-10). "yes"
++    # and "local": it sends nothing, reads no token and cannot leave this PC -
++    # it changes one file and adds one commit inside a scratch folder that can
++    # be thrown away. It is still a CARD because it changes something the owner
++    # will later push, and because a file is a thing a person should see before
++    # it changes.
++    "github_fix_write": ("yes", "local", "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy"),
 +})
 +
  

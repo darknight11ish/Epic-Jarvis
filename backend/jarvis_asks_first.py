@@ -881,8 +881,11 @@ GROUPS = (
                       # "Everything at once"): a merge and a PR-branch push both
                       # raise a card, so both are rows on this page. The cockpit
                       # (github_pr_scan) is a READ and shares github_inspect
-                      # above, so it has no row of its own here.
-                      "github_merge_pr", "github_fix_and_push",
+                      # above, so it has no row of its own here. `github_fix_write`
+                      # (wave 16B) is the fix tool's local write stage: it sends
+                      # nothing, but it still raises a card and changes a file the
+                      # owner will push, so the page names it too.
+                      "github_merge_pr", "github_fix_and_push", "github_fix_write",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the

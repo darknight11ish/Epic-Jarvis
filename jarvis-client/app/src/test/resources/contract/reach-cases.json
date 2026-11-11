@@ -1357,7 +1357,7 @@
     },
     {
      "id": "github_fix_and_push",
-     "name": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)"
+     "name": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)"
     },
     {
      "id": "review_changes",

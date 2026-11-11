@@ -18,11 +18,14 @@ OWN one-shot card and never auto-approved:
     this module sends is exactly {"merge_method": "merge", "sha": <pinned sha>}
     and there is no code path that can put another value there.
   * `plan_fix_and_push()` copies a pull request into an isolated scratch folder
-    on this PC (stage "prepare"), then - after ONE card showing the commits, the
+    on this PC (stage "prepare"), WRITES ONE FILE of the fix inside that copy
+    (stage "write", wave 16B - its own card, showing the exact unified diff,
+    with no token and no network), and - after ONE card showing the commits, the
     changed files and the exact command - pushes those commits to the pull
     request's OWN branch (stage "push"). Never to main/master/release/*, never
     with a force, delete or mirror flag, and a credential file is refused before
-    anything is pushed.
+    anything is pushed. A local READ of the copy (stage "read") raises no card
+    because it sends nothing anywhere and changes nothing.
 
 THE ABSOLUTE BANS THAT REMAIN (2026-11-10)
 
@@ -106,13 +109,17 @@ private and the saved key cannot see it).
 WHAT THIS MODULE WILL NEVER DO
 
 Force-push, squash-merge, rebase-merge, use an admin bypass, turn on
-auto-merge, bypass a required check, push to main/master/release/*, or delete
-or close a repository or a branch. Merge and PR-branch push exist only behind
-their own cards (2026-11-10); everything in that list has no planner, no
-endpoint and no tool, and `never_words()` is the plain sentence a person gets
-instead. The absence is the control, and `backend/test_github_parity.py` pins
-the absence; `CAPABILITIES` below is the one inventory of what DOES exist, and
-that same suite pins it against `ACTIONS` and the agent's tool table.
+auto-merge, bypass a required check, push to main/master/release/*, delete or
+close a repository or a branch, or touch a file outside the one isolated copy a
+prepare made. Merge and PR-branch push exist only behind their own cards
+(2026-11-10), and the wave-16B write changes ONE file inside that copy only:
+never the owner's checkout, never another pull request's folder, never a delete,
+rename, move or chmod, never a credential file, and never with a token or a
+socket. Everything in that list has no planner, no endpoint and no tool, and
+`never_words()` is the plain sentence a person gets instead. The absence is the
+control, and `backend/test_github_parity.py` pins the absence; `CAPABILITIES`
+below is the one inventory of what DOES exist, and that same suite pins it
+against `ACTIONS` and the agent's tool table.
 
 THE ONE CREATE (2026-11-09)
 
@@ -123,7 +130,7 @@ loosened setting and no bulk call can run it with nobody looking. Nothing is
 pushed into it and there is no delete action, so the card says plainly that
 Jarvis cannot take it back.
 
-THE TWO 2026-11-10 ACTIONS, AND WHAT IS TRUE ABOUT EACH
+THE 2026-11-10 ACTIONS, AND WHAT IS TRUE ABOUT EACH
 
 `github_merge_pr` and `github_fix_and_push` are their own gate actions at the
 "ask" tier, and both are in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier
@@ -134,15 +141,24 @@ must still be the one on the card), and a push is checked again against the
 live pull request AND the local folder (inside the scratch root, the pull
 request's own branch, a clean tree, no banned flag, no credential file).
 
+Wave 16B added a THIRD carded action, `github_fix_write`, used by the same
+`github_fix_and_push` tool's "write" stage. It is its own action so its card can
+say what it really is ("write one file in the scratch copy"), and it is local:
+no token is read, no socket is opened, and the only thing it can reach is a file
+inside the one prepared copy plus a commit in that copy's own git. It is also in
+`jarvis_agent.NEEDS_A_PERSON`, so a loosened tier line still raises its card.
+
 Standard library only.
 """
 from __future__ import annotations
 
 import base64
+import difflib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import urllib.error
@@ -217,6 +233,14 @@ ACTION_MERGE = "github_merge_pr"
 #: stages: "prepare" reads and copies, "push" writes - and the push stage has
 #: its own card, raised again, every time.
 ACTION_FIX_PUSH = "github_fix_and_push"
+#: Writing ONE file of the fix inside that prepared copy, and making ONE commit
+#: there (wave 16B, 2026-11-10 - the capability the 2026-11-10 record deferred).
+#: Its own action, never `github_fix_and_push`: the write's card must say "write
+#: one file in the scratch copy", not "push a fix", and it must be the line the
+#: owner can find and switch off. It sends NOTHING anywhere and uses no token -
+#: the commit is local to the copy, and only the existing, separately carded
+#: push can send it anywhere.
+ACTION_FIX_WRITE = "github_fix_write"
 
 #: The ONLY merge method this module can send. The owner's ruling of 2026-11-10:
 #: merge-commit only. `squash` and `rebase` are not values this module can put
@@ -256,6 +280,48 @@ MAX_LOG_CHARS = 2_000
 #: at import, so a test can point it somewhere else.
 SCRATCH_ENV = "JARVIS_GITHUB_SCRATCH_ROOT"
 
+#: The largest file the code-authoring stage will read from (or write into) the
+#: prepared copy. A file bigger than this is not one a card can show a change
+#: against, and reading it whole would be a hang with a nicer name.
+MAX_COPY_FILE = 1_000_000
+
+#: The largest text the write stage will put in one file. The diff bound below
+#: is the one a person sees; this is the hard sanity cap so a runaway model
+#: cannot ask this module to write a gigabyte into a scratch folder.
+MAX_WRITE_CHARS = 200_000
+
+#: How many characters of the exact before/after change one write card shows.
+#: The gate keeps 4,000 characters for a whole card (`jarvis_agent.
+#: _GATE_DETAIL_LIMIT`) and a card that would be cut is refused rather than
+#: shown in part, so a bigger change is refused HERE, before a card exists,
+#: with words the owner can act on ("split it into smaller writes"). Measured on
+#: 2026-11-10: the card's own words are about 830 characters, so 2,900 leaves
+#: room for the JSON escaping and stays under the gate's limit.
+MAX_WRITE_DIFF = 2_900
+
+#: The longest one-line commit message the write stage will make. GitHub
+#: itself shows the first line of a commit message everywhere; a long one adds
+#: nothing a person reads and pushes the card's own words off.
+MAX_COMMIT_MESSAGE = 200
+
+#: The identity the wave-16B commit is made with, when the scratch clone has no
+#: usable one. It travels in git's own GIT_AUTHOR_* / GIT_COMMITTER_* environment
+#: variables for that one command - never in argv, never in any file - so a
+#: commit can be made on a PC whose git has no user.name set, and the commit
+#: plainly says an assistant made it.
+COMMIT_NAME = "Jarvis"
+COMMIT_EMAIL = "jarvis@localhost"
+
+#: Arguments that would mean something OTHER than "write this file's text".
+#: There is no delete, rename, move or permission tool in this module, and an
+#: argument naming one is REFUSED with a plain sentence rather than quietly
+#: ignored while the write goes ahead - "delete this file" must never be
+#: answered by writing it. Only the presence of a TRUTHY value counts, so a
+#: schema that sends `"delete": false` is still an ordinary write.
+DESTRUCTIVE_ARGS = ("delete", "remove", "unlink", "rename", "rename_to",
+                    "move", "move_to", "chmod", "mode", "permissions",
+                    "executable", "symlink", "hardlink")
+
 #: How long one git command may take. The clone is the slow one on a cold
 #: network; a dead network should end in a sentence, not a hang.
 GIT_TIMEOUT = 120.0
@@ -288,11 +354,19 @@ SCOPE_WORDS = {
 #: (that would transfer the owner's own sign-off), closing an issue, editing a
 #: comment, dispatching a workflow, and gists (a public-by-default way to carry
 #: anything out of this PC).
+#:
+#: `edit_file` and `write_file` used to be in this set and were REMOVED in wave
+#: 16B (2026-11-10), because they are no longer true: `github_fix_and_push`
+#: stage "write" can now write ONE file, inside the isolated copy only, on its
+#: own card. The bans that make that safe are the module's own `NEVER_WORDS`
+#: sentence plus the write stage's own limits (no delete/rename/move/chmod, no
+#: path outside the prepared copy, no credential file, no network). Removing a
+#: name from this set is the one direction that needs a decision on the record -
+#: `decisions.d/2026-11-10-github-authoring-in-the-copy.md` is that record.
 NEVER = frozenset({"force_push", "squash_merge", "rebase_merge", "admin_bypass",
                    "auto_merge", "bypass_required_checks", "push_to_main",
                    "delete_repository", "close_repository", "delete_branch",
-                   "close_branch", "edit_file", "write_file",
-                   "create_branch",
+                   "close_branch", "create_branch",
                    "approve_pr", "close_issue", "edit_comment",
                    "workflow_dispatch", "gist"})
 #: The owner's ruling of 2026-11-10, word for word, extended the same day to
@@ -316,16 +390,22 @@ NEVER_WORDS = ("Jarvis can never force-push, squash-merge or rebase, use an "
 #: (`default_state`, `absolute_bans`, `card_fields`, `two_stage_kind`) beside the
 #: six the lane-C inventory already had. The fields are:
 #:   tool             the tool's own name, exactly as `jarvis_agent.TOOLS` has it
-#:   kind             "read" | "write" (fix-and-push's two stages are in
-#:                    `two_stage_kind`; it is a write because the carded push is)
+#:   kind             "read" | "write" (fix-and-push's stages are in
+#:                    `two_stage_kind`; the row is a write because it can write)
 #:   gate             the gate action that decides it (`ACTIONS` / the tier table)
+#:   extra_gates      other gate actions the SAME tool's other carded stages use.
+#:                    `github_fix_and_push` has two carded actions (the push and
+#:                    the wave-16B write) because each card must say what it
+#:                    really is; every other row has none.
 #:   words            what it does, in the owner's words
 #:   card_fields      the fields the approval card shows, one phrase each
 #:   limit            the boundary of what one call can do
 #:   default_state    the literal "off": every one ships off until switched on
 #:   absolute_bans    the names from `NEVER` that apply to THIS tool (a subset)
 #:   two_stage_kind   None for a single-stage row; for `github_fix_and_push`,
-#:                    "prepare_then_push" - read+copy on one card, write on the next
+#:                    "prepare_write_then_push" - prepare and push are carded,
+#:                    the write is carded, and a read of the copy is free
+#:                    because it sends nothing
 #:
 #: `capabilities_text()` renders it in plain words, `capabilities_line()` is the
 #: same inventory in one breath, `capabilities_for(tool)` is one row, and
@@ -349,7 +429,7 @@ CAPABILITIES = (
      "card_fields": ("the repository", "the path", "the branch"),
      "limit": "the first 40,000 characters; a directory or a link is said plainly",
      "default_state": "off",
-     "absolute_bans": ("edit_file", "write_file"), "two_stage_kind": None},
+     "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_ci_status", "kind": "read", "gate": ACTION_INSPECT,
      "words": "read how the newest CI run ended for a repository, a branch or a "
               "pull request",
@@ -412,20 +492,28 @@ CAPABILITIES = (
                        "auto_merge", "bypass_required_checks", "approve_pr"),
      "two_stage_kind": None},
     {"tool": "github_fix_and_push", "kind": "write", "gate": ACTION_FIX_PUSH,
+     "extra_gates": (ACTION_FIX_WRITE,),
      "words": "copy a failing pull request into an isolated scratch folder on "
-              "this PC, then push the commits you make there to that pull "
-              "request's OWN branch on a SECOND card",
+              "this PC, write ONE file of the fix there on its own card, then "
+              "push those commits to that pull request's OWN branch on a further "
+              "card",
      "card_fields": ("prepare: the repository, the number and the scratch folder "
                      "it will copy into",
+                     "write: the file's path, its exact before/after change and "
+                     "the one commit's message",
                      "push: the failing checks, every changed file, every commit "
                      "and the exact git command"),
-     "limit": "prepare only reads and copies; push refuses a folder outside the "
-              "scratch root, a branch that is not the pull request's own, "
+     "limit": "prepare only reads and copies; write changes ONE file inside that "
+              "copy and makes ONE commit there - never delete, rename, move or "
+              "change permissions, never a path outside the prepared copy for "
+              "this pull request, never a credential file, and no network or "
+              "token at all; push refuses a folder outside the scratch root, a "
+              "branch that is not the pull request's own, "
               "main/master/release/*/hotfix/*, a fork's branch, a dirty tree, a "
               "changed credential file, or any force/delete/mirror flag",
      "default_state": "off",
      "absolute_bans": ("force_push", "delete_branch", "push_to_main"),
-     "two_stage_kind": "prepare_then_push"},
+     "two_stage_kind": "prepare_write_then_push"},
 )
 
 #: The small operational details that are true of every capability above. This
@@ -680,6 +768,12 @@ class Request:
                       this one, and it is the ref the push command names.
       `worktree`      The scratch folder a push would run in, as the CARD named
                       it. The run stage re-checks it is inside the scratch root.
+      `file_path`     The write stage's file, relative to the prepared copy, as
+                      the card named it. `file_before` is the text the card
+                      showed as the starting point (the TOCTOU pin: the run
+                      stage refuses if it changed), `file_after` is the exact
+                      text to write, and `commit_message` is the one line the
+                      commit is made with.
     """
 
     action: str                   # which gate action decides it
@@ -696,6 +790,10 @@ class Request:
     number: str = ""
     head_ref: str = ""
     worktree: str = ""
+    file_path: str = ""
+    file_before: str = ""
+    file_after: str = ""
+    commit_message: str = ""
 
     def urls(self) -> tuple:
         return tuple(s.url() for s in self.steps)
@@ -721,13 +819,27 @@ FIX_PUSH_TOUCHES = (
     "pushed commit cannot be taken back by Jarvis - only a new commit can undo "
     "it. Nothing else on GitHub changes.")
 
+#: What the write card says (wave 16B). It is wholly LOCAL: no token, no socket,
+#: no GitHub change - one file and one commit inside the isolated copy, and the
+#: separate carded push is still the only thing that can send it anywhere.
+FIX_WRITE_TOUCHES = (
+    "This uses NO GitHub token and sends nothing anywhere. It changes ONE file "
+    "inside the isolated copy of that pull request on this PC and makes ONE "
+    "commit there; the owner's own checkout is never touched and nothing on "
+    "GitHub changes. Nothing is pushed - a SEPARATE card must be approved before "
+    "any commit leaves this PC. Jarvis cannot delete, rename, move or change the "
+    "permissions of anything, and cannot write outside that one copy.")
+
 
 def describe(r: Request) -> str:
     """The approval card's words: what, where, and what changes.
 
     Every address is printed LITERALLY, and the text of a comment or an issue is
     printed in full - the honest version of "may I post this" is to show the
-    thing that will be posted, not a summary of it.
+    thing that will be posted, not a summary of it. The wave-16B write card is
+    the one card that uses no token at all, so it says so instead of the token
+    sentence: a card that claimed a token was spent on a local write would be
+    false.
     """
     if r is None:
         return "Jarvis wants to do something on GitHub."
@@ -742,9 +854,13 @@ def describe(r: Request) -> str:
         lines.append("")
         lines.append(r.touches.rstrip())
     lines.append("")
-    lines.append("The GitHub token saved on this PC is sent to api.github.com and "
-                 "nowhere else; it is never shown.")
-    if r.action not in (ACTION_INSPECT, ACTION_MERGE, ACTION_FIX_PUSH):
+    if r.action == ACTION_FIX_WRITE:
+        lines.append("This card sends nothing anywhere and uses no GitHub token.")
+    else:
+        lines.append("The GitHub token saved on this PC is sent to api.github.com "
+                     "and nowhere else; it is never shown.")
+    if r.action not in (ACTION_INSPECT, ACTION_MERGE, ACTION_FIX_PUSH,
+                        ACTION_FIX_WRITE):
         # The old sentence is still exactly true of these actions: they post or
         # start something, and none of them merges, pushes or deletes.
         lines.append("Nothing is merged, pushed, committed, deleted or closed by "
@@ -809,6 +925,7 @@ def capabilities_for(tool: str) -> dict:
             copy = dict(row)
             copy["card_fields"] = tuple(row["card_fields"])
             copy["absolute_bans"] = tuple(row["absolute_bans"])
+            copy["extra_gates"] = tuple(row.get("extra_gates") or ())
             return copy
     raise KeyError(wanted)
 
@@ -860,10 +977,14 @@ def capabilities_text() -> str:
                  f"until you switch it on):")
     for c in writes:
         stage = ""
-        if c["two_stage_kind"] == "prepare_then_push":
-            stage = (" Two stages: prepare reads and copies on its own card, and "
-                     "push writes on a SECOND card.")
-        lines.append(f"  - {c['words']} ({c['tool']}, card action {c['gate']}; "
+        if c["two_stage_kind"] == "prepare_write_then_push":
+            stage = (" Three cards: prepare reads and copies on its own card, "
+                     "write changes ONE file in that copy on a SECOND card, and "
+                     "push sends the commits on a THIRD. Reading any file in the "
+                     "copy raises no card at all, because it sends nothing "
+                     "anywhere and changes nothing.")
+        lines.append(f"  - {c['words']} ({c['tool']}, card actions "
+                     f"{', '.join((c['gate'],) + tuple(c.get('extra_gates') or ()))}; "
                      f"the card shows {_card_shows(c)}). Limit: {c['limit']}."
                      f"{_bans_words(c)}{stage}")
     lines.append("")
@@ -1014,12 +1135,19 @@ def _check_sha(value, what: str = "head commit") -> str:
 
 
 def _check_stage(value) -> str:
+    """Which half of the fix flow this call is: prepare, read, write or push.
+
+    `read` sends nothing and is answered without a card; `write` is carded under
+    `ACTION_FIX_WRITE`; `prepare` and `push` are carded under
+    `ACTION_FIX_PUSH`. Anything else is refused in words, not guessed at.
+    """
     stage = str(value or "prepare").strip().lower()
-    if stage not in ("prepare", "push"):
-        raise GitHubError('Jarvis fixes a pull request in two stages: "prepare" '
-                          '(the default) copies it into a scratch folder here, and '
-                          '"push" sends the commits you made there. Nothing else is '
-                          'a stage.')
+    if stage not in ("prepare", "read", "write", "push"):
+        raise GitHubError('Jarvis fixes a pull request in four stages: "prepare" '
+                          '(the default) copies it into a scratch folder here, '
+                          '"read" shows one file in that copy, "write" changes '
+                          'ONE file there on its own card, and "push" sends the '
+                          'commits you made there. Nothing else is a stage.')
     return stage
 
 
@@ -1151,6 +1279,312 @@ def _write_marker(worktree: str, doc: dict) -> str:
                 f"that folder ({type(exc).__name__}), so a later push could not "
                 f"tell which pull request the folder is for. Nothing was pushed.")
     return ""
+
+
+# --------------------------------------------------------------------------
+#   ONE file inside the prepared copy (wave 16B, 2026-11-10)
+# --------------------------------------------------------------------------
+#: The wave-16B capability. `github_fix_and_push`'s "write" stage changes ONE
+#: file inside the isolated copy the "prepare" stage made, and makes ONE commit
+#: there, so the existing carded push has something real to carry. Every rule is
+#: enforced HERE, in the module that owns the copy, never by a prompt:
+#:
+#:   * the folder must resolve INSIDE `scratch_root()`, and its `.git` note must
+#:     name the SAME pull request the caller named - so a write can never touch
+#:     the owner's live checkout, another pull request's copy, or any other
+#:     folder on this PC;
+#:   * a path is relative and is resolved; `..`, an absolute path, a drive
+#:     letter, a UNC address, and any symlink/reparse point on the way are
+#:     refused, so the resolved file cannot leave that folder;
+#:   * a file on the credential denylist (the SAME `_credential_path` the push
+#:     stage uses) is refused, as is a path inside `.git`;
+#:   * there is no delete, rename, move, chmod or symlink argument: one naming
+#:     one of those is refused, not quietly ignored;
+#:   * the card shows the file's path, the pull request, and the exact change as
+#:     a real unified diff; the run stage re-reads the file and refuses if it
+#:     changed since the card was shown (the same TOCTOU pin the merge has);
+#:   * NO socket and no token: this stage is wholly local, and the commit it
+#:     makes cannot leave this PC until the separate, carded push is approved.
+#:
+#: `read_copy_file` is the same confinement for a read, and is answered without
+#: a card because it sends nothing anywhere and changes nothing.
+
+
+def _copy_worktree(args: dict) -> str:
+    """The prepared scratch folder for ONE pull request, resolved and checked.
+
+    The folder is either the one named on the call or the canonical
+    `<scratch root>/<owner>__<name>__pr<number>`, and either way it must be
+    inside `scratch_root()` AND carry the prepare stage's note for THIS
+    repository and pull request. That note is what makes "the copy for this
+    pull request" a fact rather than a folder name a model chose.
+    """
+    repo = _check_repo((args or {}).get("repo"))
+    number = _check_number((args or {}).get("number"), "pull request")
+    given = str((args or {}).get("worktree") or "").strip()
+    if given:
+        if not os.path.isabs(given):
+            raise GitHubError(
+                "Jarvis needs that folder's full path, starting with the drive "
+                "letter (the one the prepare stage printed).")
+        worktree = os.path.abspath(given)
+    else:
+        worktree = os.path.join(scratch_root(), scratch_folder_name(repo, number))
+    if not _inside_scratch_root(worktree):
+        raise GitHubError(
+            "That folder is not inside Jarvis's own scratch folder for GitHub "
+            f"fixes ({scratch_root()}), so Jarvis will not touch it. Use the "
+            "folder the prepare stage made.")
+    if not os.path.isdir(worktree):
+        raise GitHubError("There is no prepared scratch folder at that path, so "
+                          "there is nothing to change. Run the prepare stage "
+                          "first.")
+    marker = _read_marker(worktree)
+    if not marker:
+        raise GitHubError(
+            "That folder was not prepared by github_fix_and_push, so Jarvis "
+            "cannot tell which pull request it belongs to. Run the tool with "
+            'stage="prepare" first.')
+    if (str(marker.get("repo") or "") != repo
+            or str(marker.get("number") or "") != number):
+        raise GitHubError("That scratch folder was prepared for a different pull "
+                          "request, so Jarvis will not change anything in it. "
+                          "Prepare this one first.")
+    return worktree
+
+
+def _copy_rel_parts(path) -> list:
+    """The path's own parts, or a plain refusal - never an absolute or `..` path.
+
+    A path is RELATIVE to the prepared copy on purpose: an absolute path, a
+    drive letter, a UNC address and a `..` segment are all refused in words,
+    because each one is a way to name a file somewhere else on this PC.
+    """
+    raw = str(path or "").strip()
+    if not raw:
+        raise GitHubError("Jarvis needs the file's path inside the scratch copy "
+                          '(for example "backend/jarvis_github.py").')
+    text = raw.replace("\\", "/")
+    if (text.startswith("/") or text.startswith("//")
+            or re.match(r"^[A-Za-z]:", raw)):
+        raise GitHubError(
+            "That is a full file address, and Jarvis changes only files INSIDE "
+            "the prepared scratch copy. Give the path inside that folder (for "
+            'example "backend/jarvis_github.py").')
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if not parts:
+        raise GitHubError("That path names the scratch folder itself, not a file "
+                          "inside it, so nothing was changed.")
+    if any(p == ".." for p in parts):
+        raise GitHubError('That path contains "..", which is a way out of the '
+                          "prepared scratch copy, so Jarvis will not use it. "
+                          "Give the path inside that folder.")
+    if any("\x00" in p for p in parts):
+        raise GitHubError("That path has a NUL character in it, so it is not a "
+                          "real file name and nothing was changed.")
+    return parts
+
+
+def _reparse_point(path: str) -> bool:
+    """True for a symlink or any other Windows reparse point (a junction).
+
+    `os.path.islink` does not see a Windows DIRECTORY JUNCTION, and a junction
+    is exactly as good a way out of the copy as a symlink. This asks the file's
+    own attributes as well, so both are refused.
+    """
+    try:
+        looked = os.lstat(path)
+    except OSError:
+        return False
+    if stat.S_ISLNK(looked.st_mode) or os.path.islink(path):
+        return True
+    attrs = getattr(looked, "st_file_attributes", 0)
+    return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+
+
+def _copy_file(worktree: str, path) -> tuple:
+    """(absolute path, shown relative path) for a file in the copy, or raise.
+
+    The resolved path must stay under the resolved folder, and no part of the
+    path may be a symlink or reparse point. Both checks are on RESOLVED paths,
+    so a link that points outside is refused even when its name looks harmless.
+    """
+    parts = _copy_rel_parts(path)
+    root = os.path.abspath(worktree)
+    target = os.path.join(root, *parts)
+    try:
+        resolved_root = _resolved(root)
+        resolved = _resolved(target)
+    except (OSError, ValueError):
+        raise GitHubError("That path could not be read on this PC, so nothing was "
+                          "changed.")
+    try:
+        inside = os.path.commonpath([resolved, resolved_root]) == resolved_root
+    except ValueError:                       # different drives on Windows
+        inside = False
+    if not inside or resolved == resolved_root:
+        raise GitHubError(
+            "That path points outside the prepared scratch copy, so Jarvis will "
+            "not touch it. Give the path of a file inside that folder.")
+    probe = root
+    for part in parts:
+        probe = os.path.join(probe, part)
+        if _reparse_point(probe):
+            raise GitHubError(
+                "That path goes through a link (a symlink or a Windows "
+                "junction), and Jarvis changes only ordinary files inside the "
+                "prepared copy - never through a link that could point "
+                "somewhere else. Nothing was changed.")
+    return target, "/".join(parts)
+
+
+def _read_copy_text(target: str) -> str:
+    """A file's text from the copy, or "" when it does not exist yet.
+
+    Only plain UTF-8 text is ever changed: a binary file, a folder or a file
+    too big for one card is refused in words rather than half-written.
+    """
+    if not os.path.exists(target):
+        return ""
+    if not os.path.isfile(target):
+        raise GitHubError("That path is a folder, not a file, so there is "
+                          "nothing for Jarvis to change there.")
+    try:
+        size = os.path.getsize(target)
+    except OSError:
+        size = 0
+    if size > MAX_COPY_FILE:
+        raise GitHubError(f"That file is bigger than Jarvis changes in one card "
+                          f"({MAX_COPY_FILE} bytes), so nothing was written. Make "
+                          f"the fix in a smaller file, or by hand.")
+    try:
+        with open(target, "r", encoding="utf-8", newline="") as fh:
+            return fh.read()
+    except UnicodeDecodeError:
+        raise GitHubError("That file is not plain UTF-8 text, so Jarvis will not "
+                          "rewrite it. Nothing was written.")
+    except OSError as exc:
+        raise GitHubError(f"Jarvis could not read that file "
+                          f"({type(exc).__name__}), so nothing was written.")
+
+
+def _lf(text: str) -> str:
+    """Line endings made consistent, so a diff shows the change and not the CRs."""
+    return str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _change_diff(rel: str, before: str, after: str) -> str:
+    """A real unified diff between the two texts; "" when they agree.
+
+    This is what the card shows: the exact lines that change, with the file's
+    own path, rather than a summary. A new file is diffed against `/dev/null`,
+    the standard way, so every one of its lines is an addition.
+    """
+    old = _lf(before).splitlines(True)
+    new = _lf(after).splitlines(True)
+    return "".join(difflib.unified_diff(
+        old, new,
+        fromfile=(f"a/{rel}" if before else "/dev/null"),
+        tofile=f"b/{rel}", n=3))
+
+
+def _check_commit_message(value) -> str:
+    """The one-line commit message the write stage makes, bounded."""
+    text = " ".join(str(value or "").split())
+    if not text:
+        raise GitHubError("Jarvis needs a one-line message for the fix's commit "
+                          '(for example "Fix the tray icon test").')
+    if len(text) > MAX_COMMIT_MESSAGE:
+        raise GitHubError(f"That commit message is longer than Jarvis writes in "
+                          f"one line ({MAX_COMMIT_MESSAGE} characters). Shorten it.")
+    return text
+
+
+def _write_arguments(args: dict) -> dict:
+    """Everything the write card shows and the run stage re-checks. No socket.
+
+    Runs the whole confinement here, BEFORE a card exists: the folder, the path,
+    the credential rule, the no-delete rule, the file's current text, and the
+    size of the change. A refused write is a plain sentence and no card.
+    """
+    args = args or {}
+    worktree = _copy_worktree(args)
+    target, rel = _copy_file(worktree, args.get("path"))
+    if _credential_path(rel):
+        raise GitHubError(
+            "That file looks like it holds a key, a password or a token "
+            f"({rel}), and Jarvis never reads or writes a file like that. "
+            "Nothing was changed.")
+    for name in DESTRUCTIVE_ARGS:
+        value = args.get(name)
+        if value not in (None, "", False):
+            raise GitHubError(
+                "Jarvis's fix tool only writes ONE file's text. It cannot "
+                "delete, rename, move, copy or change the permissions of "
+                f"anything, so a request to {name.replace('_', ' ')} was refused "
+                "and nothing was changed.")
+    if "content" not in args or args.get("content") is None:
+        raise GitHubError("Jarvis needs the file's new text in `content` - there "
+                          "was none, so nothing was written.")
+    after = _lf(str(args.get("content") or ""))
+    if "\x00" in after:
+        raise GitHubError("That text has a NUL character in it, so it is not "
+                          "plain text and nothing was written.")
+    if len(after) > MAX_WRITE_CHARS:
+        raise GitHubError(f"That text is longer than Jarvis writes in one file "
+                          f"({MAX_WRITE_CHARS} characters), so nothing was "
+                          f"written. Split the fix into smaller writes.")
+    message = _check_commit_message(args.get("message"))
+    exists = os.path.exists(target)
+    before = _read_copy_text(target)
+    if _lf(before) == after:
+        raise GitHubError("That file already contains exactly that text, so "
+                          "there is nothing to write.")
+    diff = _change_diff(rel, before, after)
+    if len(diff) > MAX_WRITE_DIFF:
+        raise GitHubError(
+            f"That change is bigger than one card can show in full ({len(diff)} "
+            f"characters; Jarvis shows at most {MAX_WRITE_DIFF}), so nothing was "
+            f"written. Split the fix into smaller writes, one file at a time.")
+    marker = _read_marker(worktree)
+    return {"repo": str(marker.get("repo") or ""),
+            "number": str(marker.get("number") or ""),
+            "head_ref": str(marker.get("head_ref") or ""),
+            "worktree": os.path.normpath(worktree), "path": rel,
+            "target": target, "exists": exists, "before": before,
+            "after": after, "diff": diff, "message": message}
+
+
+def read_copy_file(args: Optional[dict] = None) -> str:
+    """Read ONE file from the prepared copy, in plain words - no card, no token.
+
+    It sends nothing to GitHub and changes nothing on this PC, so it raises no
+    approval card (the same rule every other local read follows). It reads only
+    INSIDE the prepared copy for the named pull request, through the same
+    `_copy_file` the write stage uses, so a model cannot point it at the live
+    checkout or at another pull request's folder. The file's own text is fetched
+    code from a pull request, so it is wrapped in the module's data delimiters
+    and it is data, never an instruction.
+    """
+    args = args or {}
+    worktree = _copy_worktree(args)
+    target, rel = _copy_file(worktree, args.get("path"))
+    if _credential_path(rel):
+        raise GitHubError(
+            "That file looks like it holds a key, a password or a token "
+            f"({rel}), and Jarvis never reads or writes a file like that.")
+    if not os.path.exists(target):
+        raise GitHubError(f"There is no file at {rel} in that prepared copy, so "
+                          f"there is nothing to read.")
+    text = _read_copy_text(target)
+    marker = _read_marker(worktree)
+    head = (f'File "{rel}" in the scratch copy of pull request '
+            f'#{marker.get("number")} in {marker.get("repo")} '
+            f'(local read only - nothing was sent anywhere):')
+    if not text:
+        return head + "\n\nThat file is empty."
+    body = _clean_github_text(text, limit=MAX_FILE_CHARS)
+    return head + "\n\n" + (body or "That file is empty.")
 
 
 def _git(git: Callable, args, *, cwd: Optional[str] = None,
@@ -1390,10 +1824,10 @@ def plan_create_repo(args: Optional[dict] = None) -> Request:
     )
 
 
-#: The four actions this module can take, by name - the closed set. A name
+#: The carded actions this module can take, by name - the closed set. A name
 #: outside it is a bug, not a feature: `run()` refuses it.
 ACTIONS = (ACTION_COMMENT, ACTION_OPEN_ISSUE, ACTION_RERUN, ACTION_CREATE_REPO,
-           ACTION_MERGE, ACTION_FIX_PUSH)
+           ACTION_MERGE, ACTION_FIX_PUSH, ACTION_FIX_WRITE)
 
 
 def plan_scan_prs(args: Optional[dict] = None) -> Request:
@@ -1596,16 +2030,55 @@ def _checks_summary(parts: dict) -> str:
 
 
 def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = None) -> Request:
-    """Fix a failing pull request in an isolated folder, then push it - two stages.
+    """Fix a failing pull request in an isolated folder, then push it.
 
     `stage="prepare"` (the default) plans the READ and the copy into the scratch
     folder: its card says where it will be copied and that nothing is pushed.
-    `stage="push"` plans the WRITE and reads only local git state, so the card
-    can show the exact commits, files and command before anything leaves this PC.
+    `stage="write"` plans the ONE file change inside that copy, on its own card
+    (wave 16B): the card shows the exact before/after as a real unified diff and
+    the commit message, and nothing leaves this PC. `stage="push"` plans the push
+    and reads only local git state, so the card can show the exact commits, files
+    and command before anything leaves this PC. `stage="read"` raises here: a
+    read of the copy is answered by `read_copy_file` and raises no card at all,
+    because it sends nothing and changes nothing.
     """
     args = args or {}
     stage = _check_stage(args.get("stage"))
     git = git or _default_git
+    if stage == "read":
+        raise GitHubError("Reading a file in the scratch copy raises no approval "
+                          "card, because it sends nothing anywhere; ask for it "
+                          "with stage \"read\" and a path.")
+    if stage == "write":
+        parts = _write_arguments(args)
+        shown = [
+            f"Repository: {parts['repo']}",
+            f"Pull request: #{parts['number']} (branch {parts['head_ref']})",
+            f"Scratch folder: {parts['worktree']}",
+            f"File: {parts['path']}"
+            + ("" if parts["exists"] else " (a NEW file)"),
+            f"Commit message: {parts['message']}",
+            "",
+            "The exact change:",
+            parts["diff"].rstrip(),
+        ]
+        return Request(
+            ACTION_FIX_WRITE,
+            f"Jarvis will change ONE file inside the scratch copy of pull request "
+            f"#{parts['number']} in {parts['repo']} and make ONE commit there:",
+            (),
+            shows="\n".join(shown),
+            touches=FIX_WRITE_TOUCHES,
+            fix_stage="write",
+            repo=parts["repo"],
+            number=parts["number"],
+            head_ref=parts["head_ref"],
+            worktree=parts["worktree"],
+            file_path=parts["path"],
+            file_before=parts["before"],
+            file_after=parts["after"],
+            commit_message=parts["message"],
+        )
     if stage == "push":
         parts = _push_arguments(args, git)
         command = f"git push origin HEAD:refs/heads/{parts['head_ref']}"
@@ -1891,6 +2364,13 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
         return {"ok": False, "error": "there was nothing to ask GitHub about"}
     if r.action not in (ACTION_INSPECT,) + ACTIONS:
         return {"ok": False, "error": "Jarvis has no way to do that on GitHub."}
+    if r.action == ACTION_FIX_WRITE:
+        # The wave-16B write is LOCAL: it reads no token and opens no socket, so
+        # it is dispatched BEFORE `_need_token()`. A write inside the copy must
+        # still work if the GitHub token was removed after the card was shown -
+        # it changes nothing on GitHub, and the separate carded push is the only
+        # thing that can send a commit anywhere.
+        return _run_fix_write(r, git=git or _default_git)
     try:
         token = _need_token()
     except GitHubError as exc:
@@ -2669,6 +3149,128 @@ def _run_push(r: Request, fetch: Callable, token: str, headers: dict,
     tail = _clean_github_text(_scrub(out, token), wrap=False)
     if tail:
         said += "\n" + _cut(tail, 600)
+    return {"ok": True, "text": said}
+
+
+def _write_atomic(target: str, text: str) -> None:
+    """Write `text` to `target` in one step, so a crash cannot truncate it.
+
+    A temporary file in the same folder is written and then renamed over the
+    target. The target's own text is never half-written: either the old file is
+    still whole, or the new one is.
+    """
+    folder = os.path.dirname(target)
+    os.makedirs(folder, exist_ok=True)
+    handle, temp = tempfile.mkstemp(prefix=".jarvis-write-", dir=folder)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        os.replace(temp, target)
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
+
+
+def _restore_copy_file(target: str, before: str, existed: bool) -> None:
+    """Best-effort undo of a write whose commit failed: the folder is left clean.
+
+    The card approved ONE change; a commit that then failed must not leave the
+    copy with a half-done change that the next push card would show as a dirty
+    tree. A NEW file is removed; an existing one gets its own text back. A
+    failure here says nothing more - the caller's answer already says the commit
+    failed.
+    """
+    try:
+        if existed:
+            _write_atomic(target, before)
+        else:
+            os.unlink(target)
+    except OSError:
+        pass
+
+
+def _run_fix_write(r: Request, git: Callable) -> dict:
+    """Write ONE file inside the prepared copy and make ONE commit there.
+
+    Wholly local: no token, no socket, and no step that could reach GitHub. Every
+    confinement the planner ran is run AGAIN here against the live folder (the
+    path, the credential rule, the note that says which pull request the folder
+    is, and the file's text the card showed), so "the file is still the one the
+    card showed" is true rather than assumed.
+    """
+    def no(why: str) -> dict:
+        return {"ok": False, "error": why + " Nothing was written."}
+
+    if not r.worktree or not r.file_path:
+        return no("Jarvis does not know which folder and file to change.")
+    worktree = os.path.abspath(r.worktree)
+    if not _inside_scratch_root(worktree):
+        return no("That folder is not inside Jarvis's own scratch folder any "
+                  "more, so nothing was written.")
+    marker = _read_marker(worktree)
+    if (not marker or str(marker.get("repo") or "") != r.repo
+            or str(marker.get("number") or "") != r.number):
+        return no("That scratch folder is not the prepared copy of that pull "
+                  "request any more, so nothing was written.")
+    try:
+        target, rel = _copy_file(worktree, r.file_path)
+    except GitHubError as exc:
+        return no(str(exc))
+    if _credential_path(rel):
+        return no("That file looks like it holds a key, a password or a token "
+                  f"({rel}), and Jarvis never writes a file like that.")
+    if _reparse_point(target):
+        return no("That file is a link, and Jarvis writes only ordinary files "
+                  "inside the prepared copy.")
+    try:
+        before = _read_copy_text(target)
+    except GitHubError as exc:
+        return no(str(exc))
+    if _lf(before) != _lf(r.file_before):
+        return no("That file changed since the card was shown, so it is not the "
+                  "file you approved a change to. Read it again, then ask again.")
+    existed = os.path.exists(target)
+    # A file that had Windows line endings keeps them, so the change is the one
+    # the card showed rather than a whole-file rewrite caused by the editor.
+    payload = (r.file_after.replace("\n", "\r\n")
+               if "\r\n" in before else r.file_after)
+    try:
+        _write_atomic(target, payload)
+    except OSError as exc:
+        return {"ok": False,
+                "error": f"Jarvis could not write that file "
+                         f"({type(exc).__name__}), so nothing was written."}
+    code, out, err_text = _git(git, ["add", "--", rel], cwd=worktree)
+    if code != 0:
+        _restore_copy_file(target, before, existed)
+        return {"ok": False,
+                "error": _git_words("Adding the file to its commit",
+                                    err_text or out, "") +
+                         " The file was put back as it was, so nothing changed."}
+    # The identity is passed for THIS commit only, in git's own environment
+    # variables: a fresh scratch clone may have no git identity at all, and a
+    # commit that fails for that reason would make the whole flow unusable. It
+    # is the environment, never argv, and it carries no token.
+    identity = {"GIT_AUTHOR_NAME": COMMIT_NAME, "GIT_AUTHOR_EMAIL": COMMIT_EMAIL,
+                "GIT_COMMITTER_NAME": COMMIT_NAME,
+                "GIT_COMMITTER_EMAIL": COMMIT_EMAIL}
+    code, out, err_text = _git(git, ["commit", "-m", r.commit_message],
+                               cwd=worktree, env=identity)
+    if code != 0:
+        _git(git, ["reset", "--quiet", "--", rel], cwd=worktree)
+        _restore_copy_file(target, before, existed)
+        return {"ok": False,
+                "error": _git_words("Making the commit", err_text or out, "") +
+                         " The change was undone, so nothing changed."}
+    said = (f'Wrote ONE file, "{rel}", inside the prepared copy of pull request '
+            f"#{r.number} in {r.repo}, and made ONE commit there "
+            f'("{_clean_github_text(r.commit_message, wrap=False)}").')
+    said += (" This used no GitHub token and sent nothing anywhere; nothing on "
+             "GitHub changed. Nothing is pushed until you approve the separate "
+             "push card, which shows the exact commits, files and command.")
     return {"ok": True, "text": said}
 
 

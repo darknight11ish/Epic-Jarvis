@@ -250,7 +250,11 @@ github_read               = "auto"
 # spends CI work, `github_create_repo` makes a repository Jarvis has no delete
 # action for, `github_merge_pr` merges a pull request with a merge commit
 # pinned to one commit (never squash, rebase, admin or auto-merge), and
-# `github_fix_and_push` pushes commits to the pull request's own branch.
+# `github_fix_and_push` pushes commits to the pull request's own branch. The
+# seventh, `github_fix_write` (wave 16B), changes ONE file inside that same
+# isolated copy on this PC and makes one commit there: it sends nothing and uses
+# no token, and it is "ask" because a file the owner will push should be seen
+# before it changes.
 #
 # THE SMALL DETAILS, kept here because this is where the switches are
 # explained: the token is saved in Windows Credential Manager by "connect
@@ -293,6 +297,13 @@ github_merge_pr           = "ask"
 # never main/master/release/*, never a delete, and a changed credential file is
 # refused before anything leaves the PC. Also in NEEDS_A_PERSON.
 github_fix_and_push       = "ask"
+# Writing ONE file of a fix inside that isolated copy, and making one commit
+# there (wave 16B, 2026-11-10). "ask", never "auto": it changes a file the owner
+# will later push, so its own card shows the exact before/after change and the
+# commit message first. It sends nothing, uses no token, and cannot reach
+# anything outside that one prepared copy - but it is also in NEEDS_A_PERSON, so
+# a loosened line here still raises its card.
+github_fix_write          = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval

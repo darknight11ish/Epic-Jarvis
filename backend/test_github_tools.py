@@ -1,4 +1,4 @@
-"""test_github_tools.py - the ten GitHub tools, their six gate actions, and the patch.
+"""test_github_tools.py - the ten GitHub tools, their eight gate actions, and the patch.
 
     python3 test_github_tools.py
 
@@ -1072,13 +1072,17 @@ def t_the_gate_knows_the_ten_tools_and_six_actions():
                          ("github_rerun_workflow", GH.ACTION_RERUN),
                          ("github_create_repo", GH.ACTION_CREATE_REPO),
                          ("github_merge_pr", GH.ACTION_MERGE),
-                         ("github_fix_and_push", GH.ACTION_FIX_PUSH)):
+                         ("github_fix_and_push", GH.ACTION_FIX_PUSH),
+                         # Wave 16B: the fix tool's "write" stage is passed to the
+                         # gate under its own ACTION name (never a second tool), so
+                         # the mapping is an action-to-itself row on purpose.
+                         ("github_fix_write", GH.ACTION_FIX_WRITE)):
         check(f"the gate maps {tool} to {action}",
               actions.get(tool) == action, actions.get(tool))
 
     for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
                    GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                   GH.ACTION_FIX_PUSH):
+                   GH.ACTION_FIX_PUSH, GH.ACTION_FIX_WRITE):
         row = risk.get(action)
         check(f"{action} is classified, so its card is not 'unknown'",
               isinstance(row, tuple) and len(row) == 3, row)
@@ -1089,9 +1093,18 @@ def t_the_gate_knows_the_ten_tools_and_six_actions():
                    GH.ACTION_CREATE_REPO, GH.ACTION_MERGE, GH.ACTION_FIX_PUSH):
         check(f"{action} cannot be undone, and is advertised as such",
               risk.get(action, ("",))[0] == "no", risk.get(action))
+    # Wave 16B: the write is LOCAL and reversible - it changes one file and adds
+    # one commit inside a scratch folder that can be thrown away, and the push
+    # is the step that cannot be undone. Calling it "no" or "outbound" would be
+    # a lie in the opposite direction.
+    check("the fix write is reversible and local, and says so",
+          risk.get(GH.ACTION_FIX_WRITE, ("", ""))[0:2] == ("yes", "local"),
+          risk.get(GH.ACTION_FIX_WRITE))
     for action, must_say in ((GH.ACTION_MERGE, ("merge commit", "cannot",
                                                 "undone")),
-                             (GH.ACTION_FIX_PUSH, ("push", "branch", "cannot"))):
+                             (GH.ACTION_FIX_PUSH, ("push", "branch", "cannot")),
+                             (GH.ACTION_FIX_WRITE, ("one file", "no github token",
+                                                    "cannot delete"))):
         words = str(risk.get(action, ("", "", ""))[2]).lower()
         check(f"{action}'s risk words say exactly what changes and that it "
               f"cannot be undone", all(w in words for w in must_say), words)
@@ -1105,7 +1118,7 @@ def t_the_gate_knows_the_ten_tools_and_six_actions():
               tool)
     for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
                    GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                   GH.ACTION_FIX_PUSH):
+                   GH.ACTION_FIX_PUSH, GH.ACTION_FIX_WRITE):
         check(f"the patch's own + line carries the {action} risk row",
               bool(re.search(r'^\+\s*"%s":\s*\(' % action, ptext, re.M)), action)
 
@@ -1120,7 +1133,7 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
         tiers = tomllib.loads(text)["autonomy"]["tiers"]
         for action in (GH.ACTION_INSPECT, GH.ACTION_COMMENT, GH.ACTION_OPEN_ISSUE,
                        GH.ACTION_RERUN, GH.ACTION_CREATE_REPO, GH.ACTION_MERGE,
-                       GH.ACTION_FIX_PUSH):
+                       GH.ACTION_FIX_PUSH, GH.ACTION_FIX_WRITE):
             check(f"{toml_path.parent.name}/{toml_path.name}: {action} ships as ask",
                   tiers.get(action) == "ask", tiers.get(action))
         check(f"{toml_path.name}: github_read stayed 'auto' (the watch needs it)",

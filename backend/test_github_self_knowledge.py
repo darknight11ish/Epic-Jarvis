@@ -131,10 +131,11 @@ def t_the_catalogue_has_the_connected_github_row():
           all(tool in blob for tool in TEN_TOOLS), blob)
     check("it names github_search and the scheduled watch_github job",
           "github_search" in blob and "watch_github" in blob, blob)
-    check("it names the six carded actions",
+    check("it names the seven carded actions",
           all(w in blob for w in ("comment", "open an issue", "re-run a workflow",
                                   "create one new, empty repository",
-                                  "merge one pull request", "push a fix")), blob)
+                                  "merge one pull request", "write the fix",
+                                  "push a fix")), blob)
     check("it says a merge is merge-commit only and pinned to one commit",
           "merge commit" in blob and "pinned to" in blob, blob)
     check("it names the absolute bans that remain",

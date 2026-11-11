@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
- "built_at": "2026-11-10T22:58:01-08:00",
+ "ref": "1ad8ae0f3af6ef826655567bd858349a1e582867",
+ "built_at": "2026-11-10T21:43:53-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -587,10 +587,9 @@
     "backend/jarvis_connect_account_wiring.py",
     "backend/jarvis_github.py",
     "backend/jarvis_google_calendar.py",
-    "backend/jarvis_local_calendar.py",
-    "backend/jarvis_review.py"
+    "backend/jarvis_local_calendar.py"
    ],
-   "file_count": 8,
+   "file_count": 7,
    "key_modules": [
     {
      "path": "backend/jarvis_calendar.py",
@@ -605,10 +604,6 @@
      "summary": "jarvis_github.py - read the owner's GitHub, and take a few small actions on it."
     },
     {
-     "path": "backend/jarvis_review.py",
-     "summary": "jarvis_review.py - look a change over before it is pushed, and check its records."
-    },
-    {
      "path": "backend/jarvis_connect_account.py",
      "summary": "jarvis_connect_account.py - \"connect my calendar\" / \"set up github\", with ONE card that takes the value and puts it in Windows Credential Manager."
     }
@@ -618,8 +613,6 @@
     "backend/test_local_calendar.py",
     "backend/test_google_calendar.py",
     "backend/test_github_tools.py",
-    "backend/test_github_review.py",
-    "backend/test_github_record.py",
     "backend/test_connect_account.py"
    ],
    "docs": [
@@ -3870,9 +3863,8 @@
     "backend/test_gate_tool_actions.py",
     "backend/test_gate_touches.py",
     "backend/test_gate_unknown_risk.py",
+    "backend/test_github_authoring.py",
     "backend/test_github_parity.py",
-    "backend/test_github_record.py",
-    "backend/test_github_review.py",
     "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
@@ -4312,7 +4304,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 686,
+   "file_count": 685,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4587,7 +4579,7 @@
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
-    "changelog.d/2026-11-10-github-review-and-record-gate.md",
+    "changelog.d/2026-11-10-github-authoring-in-the-copy.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
@@ -4738,8 +4730,8 @@
     "decisions.d/2026-11-09-wave-13-reminders-github-creator.md",
     "decisions.d/2026-11-09-wave14-project-read-presets-hud.md",
     "decisions.d/2026-11-10-cockpit-two-column-ships.md",
+    "decisions.d/2026-11-10-github-authoring-in-the-copy.md",
     "decisions.d/2026-11-10-github-card-gated-merge-and-fix-push.md",
-    "decisions.d/2026-11-10-github-review-and-record-gate.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -6139,7 +6131,6 @@
     "jarvis-backend/jarvis_research.py",
     "jarvis-backend/jarvis_retirement.py",
     "jarvis-backend/jarvis_reversible_ui.py",
-    "jarvis-backend/jarvis_review.py",
     "jarvis-backend/jarvis_router.py",
     "jarvis-backend/jarvis_sandbox_exec.py",
     "jarvis-backend/jarvis_sayable.py",
@@ -6241,7 +6232,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 340,
+   "file_count": 339,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6271,19 +6262,9 @@
  ],
  "recent_commits": [
   {
-   "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
+   "sha": "1ad8ae0f3af6ef826655567bd858349a1e582867",
    "date": "2026-11-10",
-   "subject": "fix: the record check's two reasons use plain words (wave 16E)"
-  },
-  {
-   "sha": "8291d0ffc258ad205d87ded537044f970e92f813",
-   "date": "2026-11-10",
-   "subject": "fix(desktop): wave 16E's two switchable rows reach the Rust, desktop and Android pin lists"
-  },
-  {
-   "sha": "aabb72128b27b1e469e786abb4f5ec6749120d4c",
-   "date": "2026-11-10",
-   "subject": "feat(github): wave 16E - a review packet and a record check before a push"
+   "subject": "feat(github): wave 16B - Jarvis writes the fix inside the isolated copy"
   },
   {
    "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
@@ -6369,13 +6350,23 @@
    "sha": "fd9cb5762c021a4b16508a7c0c75c7073db17fa4",
    "date": "2026-11-10",
    "subject": "Merge pull request #1221 from darknight11ish/integration/wave15-2026-11-10"
+  },
+  {
+   "sha": "d66a0a4cf818966a127721049d8698cc628da401",
+   "date": "2026-11-10",
+   "subject": "records: close DEF-063 and DEF-064 on the wave-15 tree, and regenerate the generated files"
+  },
+  {
+   "sha": "2b21e1d1b39ca093279b345c7863823403bf4626",
+   "date": "2026-11-10",
+   "subject": "Merge origin/main into the wave-15 branch (carries the merged wave-14 follow-ups, PR #1220)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1429
+   "files": 1427
   },
   {
    "path": "jarvis-desktop/",
@@ -6395,7 +6386,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 352
+   "files": 351
   },
   {
    "path": "tools/",
@@ -6489,8 +6480,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5608,
-  "covered": 5136,
+  "tracked_files": 5605,
+  "covered": 5133,
   "excluded": 472,
   "subsystems": 27
  },

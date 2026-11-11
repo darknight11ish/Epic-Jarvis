@@ -203,6 +203,10 @@
       "title": "Jarvis wants to push a fix to a pull request's own branch"
     },
     {
+      "action": "github_fix_write",
+      "title": "Jarvis wants to write one file in a pull request's fix copy"
+    },
+    {
       "action": "github_inspect",
       "title": "Jarvis wants to read your GitHub"
     },
@@ -1128,6 +1132,18 @@
         "full": "copies a pull request into an isolated scratch folder on this PC and pushes your commits to that pull request's own branch in your name; never a force-push, never main/master/release/hotfix, never a delete, refuses a changed file that looks like a credential before anything is pushed, and a pushed commit cannot be taken back. nothing has happened yet.",
         "body": "copies a pull request into an isolated scratch folder on this PC and pushes your commits to that pull request's own branch in your name; never a force-push, never main/master/release/hotfix, never a delete, refuses a changed file that looks like a credential before anything is pushed, and a pushed commit cannot be taken back. nothing has happened yet.",
         "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_fix_write",
+      "notice": {
+        "title": "Jarvis wants to write one file in a pull request's fix copy",
+        "summary": "Jarvis wants to write one file in the fix copy.",
+        "full": "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy. nothing has happened yet.",
+        "body": "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }

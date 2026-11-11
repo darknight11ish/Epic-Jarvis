@@ -21699,17 +21699,19 @@ GITHUB_TOOLS_WORDS = (
     "github_create_repo (create ONE new, empty repository on your own account), "
     "github_merge_pr (merge ONE pull request with a merge commit, pinned to the "
     "head commit the card shows) and github_fix_and_push (copy a failing pull "
-    "request into a scratch folder here, then push the fix to its own branch on a "
-    "second card). Plus github_search, which researches a library on GitHub, and "
-    "the scheduled watch_github job behind \"tell me when\" GitHub checks.")
+    "request into a scratch folder here, write ONE file of the fix there on its "
+    "own card, then push the fix to its own branch on a further card). Plus "
+    "github_search, which researches a library on GitHub, and the scheduled "
+    "watch_github job behind \"tell me when\" GitHub checks.")
 
 
 def _github_asks_words() -> str:
     """Which GitHub actions ask first, from the asks-first page's own rows."""
     fallback = ("These GitHub actions ask you first every time: reading your "
                 "GitHub, commenting, opening an issue, re-running a workflow, "
-                "creating a repository, merging a pull request and pushing a fix "
-                "to a pull request's branch.")
+                "creating a repository, merging a pull request, writing one file "
+                "in a pull request's fix copy and pushing a fix to a pull "
+                "request's branch.")
     try:
         import jarvis_asks_first as AF
         view = AF.view(here=False)
@@ -21717,7 +21719,7 @@ def _github_asks_words() -> str:
         return fallback
     wanted = ("github_inspect", "github_comment", "github_open_issue",
               "github_rerun_workflow", "github_create_repo", "github_merge_pr",
-              "github_fix_and_push")
+              "github_fix_and_push", "github_fix_write")
     got = []
     for group in view.get("groups") or ():
         for row in group.get("rows") or ():
@@ -21729,14 +21731,16 @@ def _github_asks_words() -> str:
     said = ("These GitHub actions ask you first every time: " + _self_list(got)
             + ". The reads ask too, because a read sends your token to "
               "api.github.com. That cannot be loosened from an app.")
-    missing = [name for name in ("github_merge_pr", "github_fix_and_push")
+    missing = [name for name in ("github_merge_pr", "github_fix_and_push",
+                                 "github_fix_write")
                if name not in {str((row or {}).get("id") or "")
                                for group in view.get("groups") or ()
                                for row in group.get("rows") or ()}]
     if missing:
         # Said plainly rather than left out: the gate asks for these whatever an
         # older What-asks-first page happens to list (jarvis_github.ACTIONS).
-        said += (" Merging a pull request and pushing a fix to a pull request's "
+        said += (" Merging a pull request, writing one file inside a pull "
+                 "request's fix copy and pushing a fix to a pull request's "
                  "branch each raise their own card as well.")
     return said
 
