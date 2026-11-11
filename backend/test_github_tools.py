@@ -593,19 +593,52 @@ def t_a_read_with_no_token_says_connect_github_and_raises_no_card():
           GH.NOT_CONNECTED)
 
     # The refusal is BEFORE the gate: `_one_call` answers and returns, so no
-    # card is raised. Pinned in the source because driving the whole turn loop
-    # would need a model; the branch is the thing that must stay.
-    src = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
-    branch = re.search(
-        r"if name in GITHUB_TOOLS and isinstance\(state, _GitHubNoToken\):(.*?)return\n",
-        src, re.S)
+    # card is raised. Proved structurally with `ast` nodes - no source text is
+    # read as a string - because driving the whole turn loop would need a model.
+    agent_tree = ast.parse((HERE / "jarvis_agent.py").read_text(encoding="utf-8"))
+    one_call = next((n for n in ast.walk(agent_tree)
+                     if isinstance(n, ast.FunctionDef) and n.name == "_one_call"), None)
+    branch = None
+    if one_call is not None:
+        for node in ast.walk(one_call):
+            if not isinstance(node, ast.If):
+                continue
+            has_github = any(
+                isinstance(n, ast.Compare) and isinstance(n.ops[0], ast.In)
+                and isinstance(n.left, ast.Name) and n.left.id == "name"
+                and any(isinstance(c, ast.Name) and c.id == "GITHUB_TOOLS"
+                        for c in n.comparators)
+                for n in ast.walk(node.test))
+            has_state = any(
+                isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "isinstance" and len(n.args) == 2
+                and isinstance(n.args[1], ast.Name)
+                and n.args[1].id == "_GitHubNoToken"
+                for n in ast.walk(node.test))
+            if has_github and has_state:
+                branch = node
+                break
     check("_one_call answers the no-token case itself", branch is not None)
+
+    def _calls(node, wanted):
+        return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                   and n.func.id == wanted for n in ast.walk(node))
+
     if branch is not None:
-        body = branch.group(1)
         check("... before any gate call in that branch",
-              "jarvis_gate" not in body and "check(" not in body, body[:200])
-        check("... and it says it raised no card",
-              "NO CARD" in body.upper(), body[:200])
+              not _calls(branch, "jarvis_gate") and not _calls(branch, "check"),
+              ast.unparse(branch)[:200])
+        connected_false = False
+        for node in ast.walk(branch):
+            if isinstance(node, ast.Dict):
+                pairs = dict(zip(
+                    [k.value if isinstance(k, ast.Constant) else None for k in node.keys],
+                    node.values))
+                if (isinstance(pairs.get("connected"), ast.Constant)
+                        and pairs["connected"].value is False):
+                    connected_false = True
+        check("... and it says it raised no card", connected_false,
+              ast.unparse(branch)[:200])
 
 
 # --------------------------------------------------------------------------
@@ -740,16 +773,29 @@ def t_nothing_private_is_ever_sent():
 
     # And the module holds no reader for them: it imports no mailbox, memory or
     # file module at all, so there is nothing to read them WITH.
-    src = (HERE / "jarvis_github.py").read_text(encoding="utf-8")
-    imports = re.findall(r"^\s*(?:import|from)\s+([a-zA-Z_][\w.]*)", src, re.M)
+    # And the module holds no reader for them: its real import graph names no
+    # mailbox, memory or file module, so there is nothing to read them WITH.
+    # Structured from `ast` nodes, not a regex over the text: an import is an
+    # AST node, so a docstring that names one is never mistaken for one.
+    gh_tree = ast.parse((HERE / "jarvis_github.py").read_text(encoding="utf-8"))
+    imported = set()
+    for node in ast.walk(gh_tree):
+        if isinstance(node, ast.Import):
+            imported.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
     private = {"jarvis_email", "jarvis_memory", "jarvis_files", "jarvis_notes",
                "jarvis_token_store", "jarvis_web", "jarvis_browser"}
     # jarvis_token_store IS imported, inside _token() - that is the one read of
     # the owner's own secret, and it is named here rather than hidden.
-    bad = sorted(set(imports) & (private - {"jarvis_token_store"}))
+    bad = sorted(imported & (private - {"jarvis_token_store"}))
     check("it imports no mailbox, memory, notes or file module", not bad, bad)
+    token_target_calls = [n for n in ast.walk(gh_tree)
+                          if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                          and n.func.id == "token_target"]
     check("... and the one secret it reads is its own token, by name",
-          "jarvis_token_store" in imports and 'token_target()' in src, imports)
+          "jarvis_token_store" in imported and bool(token_target_calls),
+          (sorted(imported), len(token_target_calls)))
 
 
 # --------------------------------------------------------------------------
@@ -838,17 +884,27 @@ def t_merge_and_push_exist_only_behind_their_own_cards():
 
 def t_no_squash_rebase_admin_or_force_path_exists():
     """The merge method is a constant, and nothing can make it anything else."""
-    src = (HERE / "jarvis_github.py").read_text(encoding="utf-8")
-    # Docstrings talk ABOUT the body (and quote it); the code is what matters.
-    code = re.sub(r'""".*?"""', "", src, flags=re.S)
+    gh_tree = ast.parse((HERE / "jarvis_github.py").read_text(encoding="utf-8"))
+    # Docstrings talk ABOUT the body; the AST is what actually runs.
     check("MERGE_METHOD is merge", GH.MERGE_METHOD == "merge", GH.MERGE_METHOD)
-    # Every place a merge body is written, it is written from the constant.
-    literal = re.findall(r'"merge_method"\s*:\s*([^,}\)\n]+)', code)
+    # Every place a merge body is written, it is written from the constant:
+    # a "merge_method" DICT KEY may only carry the Name MERGE_METHOD.
+    merge_values = []
+    for node in ast.walk(gh_tree):
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and key.value == "merge_method":
+                    merge_values.append(value)
     check("no merge_method literal exists outside the one constant",
-          literal == ["MERGE_METHOD"], literal)
+          len(merge_values) == 1 and isinstance(merge_values[0], ast.Name)
+          and merge_values[0].id == "MERGE_METHOD",
+          [ast.unparse(v) for v in merge_values])
+    const_values = [n.value.value for n in ast.walk(gh_tree)
+                    if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
+                    for t in n.targets if isinstance(t, ast.Name)
+                    and t.id == "MERGE_METHOD"]
     check("the constant's only value is \"merge\"",
-          re.findall(r'^MERGE_METHOD\s*=\s*"([a-z]+)"', src, re.M) == ["merge"],
-          re.findall(r'^MERGE_METHOD\s*=\s*"(.*?)"', src, re.M))
+          const_values == ["merge"], const_values)
     check("no action name or step path mentions squash, rebase, admin or force",
           not [a for a in GH.ACTIONS
                if re.search(r"squash|rebase|admin|force", a)]

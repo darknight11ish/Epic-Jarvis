@@ -10668,6 +10668,16 @@ TOOL_HINTS = {
                               r"\bci\b", r"\bagain\b"),
     "github_create_repo": (r"\bgithub\b", r"\brepos?(?:itory|itories)?\b",
                            r"\bcreate\b", r"\bmake\b", r"\bnew\b", r"\bproject\b"),
+    # The wave-16 GitHub writes and the read-only PR cockpit (2026-11-10):
+    # their own words so `tool_diet` can tell them apart. Every one keeps
+    # `github`, because that word alone must not summon all ten to every
+    # GitHub question - the other words are what actually narrow it.
+    "github_pr_scan": (r"\bgithub\b", r"\bpull requests?\b", r"\bprs?\b",
+                       r"\bcockpit\b", r"\bmerge[- ]ready\b"),
+    "github_merge_pr": (r"\bgithub\b", r"\bmerge\b", r"\bpull requests?\b",
+                        r"\bprs?\b", r"\bmerge commit\b"),
+    "github_fix_and_push": (r"\bgithub\b", r"\bpush\b", r"\bfix\b",
+                            r"\bfailing (?:check|test)s?\b", r"\bbranch\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
                    r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),

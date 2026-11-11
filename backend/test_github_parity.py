@@ -81,6 +81,7 @@ Standard library only.
 """
 from __future__ import annotations
 
+import ast
 import base64
 import json
 import os
@@ -1461,12 +1462,17 @@ def t_the_token_never_rides_a_git_argument():
               all(c["env"].get("GIT_CONFIG_VALUE_0")
                   == f"Authorization: Bearer {TOKEN}" for c in run_git.calls
                   if c["args"][:1] == ["push"]), run_git.calls[-1])
-        src = (HERE / "jarvis_github.py").read_text(encoding="utf-8")
+        gh_tree = ast.parse((HERE / "jarvis_github.py").read_text(encoding="utf-8"))
         check("the module builds no `-c http.extraheader` argument at all",
-              re.search(r'\[\s*"-c"', src) is None)
+              not any(isinstance(n, ast.List) and n.elts
+                      and isinstance(n.elts[0], ast.Constant)
+                      and n.elts[0].value == "-c"
+                      for n in ast.walk(gh_tree)))
+        auth_calls = [n for n in ast.walk(gh_tree)
+                      if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                      and n.func.id == "_git_auth_env"]
         check("... and ONE environment helper is used by both stages",
-              src.count("_git_auth_env(token)") == 2,
-              src.count("_git_auth_env(token)"))
+              len(auth_calls) == 2, len(auth_calls))
     finally:
         restore()
 
@@ -1513,12 +1519,30 @@ def t_no_write_is_sent_without_a_person_saying_yes():
     # Found structurally - `run()`'s own body, then the order of the two lines -
     # so adding an unrelated line above cannot make this pass or fail for the
     # wrong reason (tools/check_position_pins.py: no source-position indexing).
-    src = (HERE / "jarvis_github.py").read_text(encoding="utf-8")
-    run_body = re.search(r"\ndef run\([\s\S]*?(?=\ndef |\Z)", src)
-    body_text = run_body.group(0) if run_body else ""
-    ordered = re.search(r"if not approved[\s\S]*?_need_token", body_text)
+    tree = ast.parse((HERE / "jarvis_github.py").read_text(encoding="utf-8"))
+    run_fn = next((n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "run"), None)
+
+    def _contains(node, pred):
+        return any(pred(n) for n in ast.walk(node))
+
+    refusal_at = token_at = None
+    if run_fn is not None:
+        for i, st in enumerate(run_fn.body):
+            if refusal_at is None and _contains(
+                    st, lambda n: isinstance(n, ast.UnaryOp)
+                    and isinstance(n.op, ast.Not)
+                    and isinstance(n.operand, ast.Name)
+                    and n.operand.id == "approved"):
+                refusal_at = i
+            if token_at is None and _contains(
+                    st, lambda n: isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Name)
+                    and n.func.id == "_need_token"):
+                token_at = i
     check("run() refuses an unapproved request before it builds the token",
-          ordered is not None, body_text[:400])
+          run_fn is not None and refusal_at is not None and token_at is not None
+          and refusal_at <= token_at, (refusal_at, token_at))
 
 
 def t_a_stale_event_stream_holds_the_yes():

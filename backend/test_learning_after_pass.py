@@ -469,9 +469,42 @@ def t_a_learning_pass_backfills_facts_saved_with_no_embedder():
     nothing to learn (the early return this check drives)."""
     st, keep_store, keep_stats = _world("backfill")
     try:
+        # The NO-EMBEDDER fallback is proved separately, on every machine: a
+        # store that cannot load the vector extension must treat the backfill
+        # as a no-op - never raise, never spin. This runs before the honest
+        # skip below, so a CI machine without the extension still exercises
+        # the fallback and the skip cannot hide a regression.
+        real_load_vec = M.MemoryStore.__dict__.get("_load_vec")
+        M.MemoryStore._load_vec = staticmethod(lambda c: None)
+        try:
+            st_plain = M.MemoryStore(path=_TMP / "no-vec.db")
+            st_plain.add("a fact saved with no embedder on this machine")
+            n = st_plain.backfill_embeddings()
+            check("Q6A: with no vector table the backfill is a no-op, not an exception",
+                  n == 0, n)
+            plain_status = st_plain.status()
+            check("Q6A: ... and the fact still reads honestly as unembedded",
+                  plain_status.get("unembedded") == 1, plain_status)
+        finally:
+            if real_load_vec is None:
+                del M.MemoryStore._load_vec
+            else:
+                M.MemoryStore._load_vec = real_load_vec
         ids = [st.add(f"fact number {i} about the owner") for i in range(3)]
         with closing(st._connect()) as c:
             c.execute("UPDATE facts SET embedded=0")
+            # The vec table exists only where the embedding extension is
+            # importable (the owner's PC has it; the CI runner does not). With
+            # no table there is no index to repair, so this check cannot run
+            # there: say so out loud and never count it as a pass.
+            has_vec = c.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='facts_vec'").fetchone()
+            if not has_vec:
+                print("SKIP Q6A: no facts_vec table on this machine (the "
+                      "embedding extension is absent), so the backfill check "
+                      "did NOT run here and is NOT a pass.")
+                return
             c.execute("DELETE FROM facts_vec")
             c.commit()
         before = st.status()
