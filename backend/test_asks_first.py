@@ -1537,12 +1537,17 @@ GITHUB_GATE_ACTIONS = ("github_inspect", "github_comment", "github_open_issue",
                        "github_merge_pr", "github_fix_and_push")
 
 
-def t_the_github_master_switch_speaks_for_exactly_the_ten_tools():
-    check("the ten GitHub tools are the ones this module names, in the ten-tool order",
-          AF.GITHUB_TOOLS == ("github_list", "github_read_file", "github_ci_status",
-                              "github_pr_scan", "github_comment", "github_open_issue",
-                              "github_rerun_workflow", "github_create_repo",
-                              "github_merge_pr", "github_fix_and_push"), AF.GITHUB_TOOLS)
+def t_the_github_master_switch_speaks_for_exactly_the_twenty_tools():
+    check("the twenty union tools are the ones this module names, in order",
+          AF.GITHUB_TOOLS == ("github_search", "github_list", "github_read_file", "github_ci_status",
+                              "github_pr_scan", "github_pr_detail", "github_comment",
+                              "github_open_issue", "github_rerun_workflow",
+                              "github_create_repo", "github_merge_pr",
+                              "github_fix_and_push", "github_open_pr",
+                              "github_workflow", "github_issue_labels",
+                              "github_edit_pr", "github_pr_review",
+                              "github_issue_state", "review_changes",
+                              "check_records"), AF.GITHUB_TOOLS)
     check("each is a real model tool and has its own per-tool switch row",
           all(t in AG.TOOLS and t in AF.TOOLS_SWITCHABLE for t in AF.GITHUB_TOOLS),
           [t for t in AF.GITHUB_TOOLS if t not in AG.TOOLS or t not in AF.TOOLS_SWITCHABLE])
@@ -1560,11 +1565,12 @@ def t_the_github_master_switch_speaks_for_exactly_the_ten_tools():
           AF.GITHUB_TOOLS_GROUP not in ids
           and st["github_group"]["id"] == AF.GITHUB_TOOLS_GROUP)
     g = st["github_group"]
-    check("it names the ten, sits in \"Jarvis's own tools\", and is off on a fresh page",
+    check("it names the twenty, sits in \"Jarvis's own tools\", and the two "
+          "enabled-by-default local review gates make a fresh page partial",
           g["tools"] == list(AF.GITHUB_TOOLS)
           and g["group"] == "Jarvis's own tools"
-          and g["on"] is False and g["partial"] is False
-          and g["on_count"] == 0 and g["total"] == 10, g)
+          and g["on"] is False and g["partial"] is True
+          and g["on_count"] == 2 and g["total"] == 20, g)
     check("it carries the PC's one-sentence honest description",
           g["what"] == AF.GITHUB_TOOLS_GROUP_WHAT
           and "every use is still decided by" in g["what"]
@@ -1573,9 +1579,9 @@ def t_the_github_master_switch_speaks_for_exactly_the_ten_tools():
           AF.GITHUB_TOOLS_GROUP not in st["not_switchable"]["ids"]
           and all(i["id"] not in AF.GITHUB_TOOLS for i in st["new_off"]["items"])
           and all(i["id"] not in AF.GITHUB_TOOLS for i in st["extra"]))
-    check("the tools card's own detail says the one master switch turns ten together",
+    check("the tools card's own detail says the one master switch turns twenty together",
           "Offer GitHub tools to the AI model" in st["detail"]
-          and "ten GitHub abilities" in st["detail"], st["detail"])
+          and "twenty" in st["detail"].lower(), st["detail"])
     # A partial list is truthful: same object, on=False, partial=True, counts.
     keep = AF.tools_enabled_set
     AF.tools_enabled_set = lambda: set(AF.GITHUB_TOOLS[:4])
@@ -1593,8 +1599,8 @@ def t_the_github_master_switch_speaks_for_exactly_the_ten_tools():
     finally:
         AF.tools_enabled_set = keep
     g = st["github_group"]
-    check("all ten on is ON, not partial",
-          g["on"] is True and g["partial"] is False and g["on_count"] == 10, g)
+    check("all twenty on is ON, not partial",
+          g["on"] is True and g["partial"] is False and g["on_count"] == 20, g)
 
 
 def t_the_github_action_rows_name_the_tool_switch_not_a_missing_one():
@@ -1647,13 +1653,13 @@ def _tools_text_with(*enabled) -> str:
         f'[tools]\r\nenabled = [{line}]\r\n\r\n[self_modification]')
 
 
-def t_the_github_master_switch_writes_all_ten_in_one_step():
+def t_the_github_master_switch_writes_all_twenty_in_one_step():
     p = TMP / "tools-master.toml"
     p.write_bytes(_tools_text_with("web_search", "calendar_read").encode("utf-8"))
     out = AF.set_tools_enabled_many(AF.GITHUB_TOOLS, True, path=p)
     text = p.read_bytes().decode("utf-8")
     items = list(AF._parse(text)["tools"]["enabled"])
-    check("ON writes all ten in ONE step", out["changed"] is True
+    check("ON writes all twenty in ONE step", out["changed"] is True
           and [x for x in items if x in AF.GITHUB_TOOLS] == list(AF.GITHUB_TOOLS), items)
     check("... each name exactly once", len(items) == len(set(items)), items)
     check("... and the owner's own names keep their place and order",
@@ -1666,13 +1672,13 @@ def t_the_github_master_switch_writes_all_ten_in_one_step():
                                    "github_fix_and_push").encode("utf-8"))
     AF.set_tools_enabled_many(AF.GITHUB_TOOLS, True, path=p)
     items = list(AF._parse(p.read_text(encoding="utf-8"))["tools"]["enabled"])
-    check("a partial file gets only the missing seven, and no duplicates",
-          len([x for x in items if x in AF.GITHUB_TOOLS]) == 10
+    check("a partial file gets only the missing sixteen, and no duplicates",
+          len([x for x in items if x in AF.GITHUB_TOOLS]) == 20
           and len(items) == len(set(items)), items)
     # OFF: all ten go, everything else stays, and a second OFF writes nothing.
     out = AF.set_tools_enabled_many(AF.GITHUB_TOOLS, False, path=p)
     items = list(AF._parse(p.read_text(encoding="utf-8"))["tools"]["enabled"])
-    check("OFF removes all ten and keeps the owner's own names",
+    check("OFF removes all twenty and keeps the owner's own names",
           out["changed"] is True and items == ["web_search"], items)
     out = AF.set_tools_enabled_many(AF.GITHUB_TOOLS, False, path=p)
     check("... a group that is already off reports changed=False", out["changed"] is False)
@@ -1718,7 +1724,8 @@ def t_the_github_master_switch_is_one_card_and_instant_off():
           tools.writes == [(AF.GITHUB_TOOLS_GROUP, True)]
           and set(AF.GITHUB_TOOLS) <= tools.on, (tools.writes, tools.on))
     check("... and the page says so", AF._T_STATE["last"].get("outcome") == "enabled"
-          and "all ten" in AF._T_STATE["last"].get("message", ""), AF._T_STATE["last"])
+          and "all twenty" in AF._T_STATE["last"].get("message", ""),
+          AF._T_STATE["last"])
     # A HELD card writes nothing until the person answers.
     asked_held = []
     tools = ToolsFile()
@@ -1758,7 +1765,7 @@ def t_the_github_master_switch_is_one_card_and_instant_off():
     _treq({"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, tools, here=True,
           gate=lambda a, d, p: (asked.append(p), Verdict(True, "ask", "approved"))[1])
     check("a partial list's card says how many are on and that the rest are offered",
-          "4 of the ten are already on. This card offers the other 6 and leaves "
+          "4 of the twenty are already on. This card offers the other 16 and leaves "
           "those 4 on." in (asked[0] if asked else ""), asked[0] if asked else "")
     # Refusals that keep the ON half safe: not armed, tier not ask.
     tools = ToolsFile()

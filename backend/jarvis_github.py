@@ -331,6 +331,18 @@ MERGE_METHOD = "merge"
 REQUIRED_CHECKS = ("rust", "frontend", "backend", "backend-windows",
                    "credential-manager", "powershell-5", "phone-unit-tests")
 
+#: The owner's own repository, whose seven required checks are an UNBYPASSABLE
+#: floor (the 2026-11-11 01:40 field-test ruling, Q-C). Matched
+#: case-insensitively: `darknight11ish/epic-jarvis` is the same repository.
+OWN_REPO = "darknight11ish/Epic-Jarvis"
+
+#: How many workflow runs one `github_ci_status` read asks for. It is
+#: deliberately SMALLER than `PER_PAGE` (the 2026-11-11 Q-G ruling): a run list
+#: carries a lot of JSON per run, and a GitHub answer over `MAX_BYTES` cannot be
+#: parsed at all - so the CI read asks for the newest 5 and says plainly if
+#: GitHub still sends too much, rather than showing half an answer.
+CI_PER_PAGE = 5
+
 #: Branches a push may NEVER target, and the prefixes that are the same rule
 #: with a name after them. Compared case-insensitively against the pull
 #: request's head ref, so `Main` and `refs/heads/main` are refused too.
@@ -618,7 +630,10 @@ CAPABILITIES = (
               "already merged or closed, conflicts or is blocked, has a check "
               "still running, has a required check that did not pass, its head "
               "commit moved or it was retargeted to another base branch since "
-              "the card was shown",
+              "the card was shown; on your own Epic-Jarvis repository the seven "
+              "required checks are an unbypassable floor, and on any other "
+              "repository it reads that repository's own branch rules and checks "
+              "and refuses if it cannot read them",
      "default_state": "off",
      "absolute_bans": ("squash_merge", "rebase_merge", "admin_bypass",
                        "auto_merge", "bypass_required_checks", "approve_pr"),
@@ -2188,7 +2203,7 @@ def plan_ci(args: Optional[dict] = None) -> Request:
             f"runs for the commit at its head.",
             (Step("GET", f"{_repo_path(repo)}/pulls/{number}"),
              Step("GET", f"{_repo_path(repo)}/actions/runs?head_sha={{commit}}"
-                         f"&per_page={PER_PAGE}")),
+                         f"&per_page={CI_PER_PAGE}")),
             touches="Nothing on GitHub changes; this only reads which run is newest and how it ended.",
         )
     if branch:
@@ -2198,13 +2213,13 @@ def plan_ci(args: Optional[dict] = None) -> Request:
             f"Jarvis will read the most recent workflow runs for {ref} in {repo}.",
             (Step("GET", f"{_repo_path(repo)}/actions/runs"
                          f"?branch={urllib.parse.quote(ref, safe='')}"
-                         f"&per_page={PER_PAGE}"),),
+                         f"&per_page={CI_PER_PAGE}"),),
             touches="Nothing on GitHub changes; this only reads how the newest run ended.",
         )
     return Request(
         ACTION_INSPECT,
         f"Jarvis will read the most recent workflow runs for {repo}.",
-        (Step("GET", f"{_repo_path(repo)}/actions/runs?per_page={PER_PAGE}"),),
+        (Step("GET", f"{_repo_path(repo)}/actions/runs?per_page={CI_PER_PAGE}"),),
         touches="Nothing on GitHub changes; this only reads how the newest run ended.",
     )
 
@@ -2385,8 +2400,10 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
         "Before it sends anything Jarvis reads the pull request again and stops "
         "if it is a draft, is closed or already merged, has moved to a different "
         "commit, was retargeted to another base branch, conflicts with its base, "
-        "has a check still running, or has any of "
-        f"these required checks not passed: {checks}",
+        "has a check still running, or has any of these required checks not "
+        f"passed on your own Epic-Jarvis repository: {checks} (on any other "
+        f"repository Jarvis reads that repository's own branch rules and its "
+        f"checks, and refuses if it cannot read them)",
         "GitHub is told: merge, and only merge, at this exact commit.",
     ])
     return Request(
@@ -3532,18 +3549,20 @@ def _running(runs: list) -> list:
             if str(r.get("status") or "") != "completed"]
 
 
-def _required_problems(runs: list) -> list:
+def _required_problems(runs: list, required=REQUIRED_CHECKS) -> list:
     """Every required check that is not a concluded success, in plain words.
 
     A check that never reported is named too: a required check that is simply
     absent is not a pass, and a merge must not go ahead on a silent repo.
+    `required` is the seven checks of the owner's own repository by default;
+    for another repository it is that repository's own rules (Q-C, 2026-11-11).
     """
     by_name = {}
     for run_doc in runs:
         name = _check_name(run_doc).lower()
         by_name[name] = run_doc
     problems = []
-    for wanted in REQUIRED_CHECKS:
+    for wanted in required:
         found = by_name.get(wanted.lower())
         if found is None:
             problems.append(f"{wanted} has not reported")
@@ -3677,6 +3696,120 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
 # --------------------------------------------------------------------------
 
 
+def _raw_read(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
+    """(doc, status, error) - the status KEPT, for the merge's rules reads.
+
+    `_read` turns every refusal into words and loses the status; the per-repo
+    merge check (Q-C) has to tell 401/403 ("this token cannot read the rules")
+    from 404/200-empty ("this repo has no required contexts"), so it needs the
+    number. Nothing here follows a redirect or builds a path the module did not
+    write.
+    """
+    try:
+        status, text = fetch("GET", GITHUB_API + path, headers=headers,
+                             body=None, timeout=TIMEOUT)
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return None, 0, (f"api.github.com did not answer "
+                         f"({type(exc).__name__}), so nothing was merged.")
+    if status == 404:
+        return None, 404, ""
+    if status < 200 or status >= 300:
+        return None, int(status), _plain_failure(status, token=token)
+    return _payload(_scrub(text, token)), int(status), ""
+
+
+def _required_context_names(rules) -> tuple:
+    """The status-check contexts a repository's own branch rules require.
+
+    `/repos/{o}/{r}/rules/branches/{base}` answers a LIST of rule objects; the
+    one whose `type` is "required_status_checks" carries each context in
+    `parameters.required_status_checks[].context`. Anything else is ignored,
+    and an empty answer means "no named contexts" - never "no checks at all".
+    """
+    names = []
+    if not isinstance(rules, (list, tuple)):
+        return ()
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        if str(rule.get("type") or "") != "required_status_checks":
+            continue
+        params = rule.get("parameters") or {}
+        for row in (params.get("required_status_checks") or ()):
+            if isinstance(row, dict):
+                name = str(row.get("context") or "").strip()
+                if name and name not in names:
+                    names.append(name)
+    return tuple(names)
+
+
+def _workflow_runs_for_sha(fetch: Callable, headers: dict, token: str,
+                           repo: str, sha: str) -> tuple:
+    """(workflow runs for that commit, status, error) - the fallback checks list."""
+    doc, status, err = _raw_read(
+        fetch, f"{_repo_path(repo)}/actions/runs?head_sha="
+               f"{urllib.parse.quote(str(sha or ''), safe='')}"
+               f"&per_page={CI_PER_PAGE}", headers, token)
+    if err or doc is None:
+        return [], status, err
+    runs = doc.get("workflow_runs") if isinstance(doc, dict) else []
+    return [r for r in (runs or ()) if isinstance(r, dict)], status, ""
+
+
+def _merge_check_plan(r: Request, fetch: Callable, token: str, headers: dict,
+                      runs: list) -> tuple:
+    """(plan, error) - WHICH checks this merge must pass, from Q-C's own order.
+
+    The owner's field-test ruling of 2026-11-11 01:40 (Q-C), exactly:
+
+      * `darknight11ish/Epic-Jarvis` (case-insensitive) ALWAYS enforces the seven
+        `REQUIRED_CHECKS` as an unbypassable floor - no repository rules can
+        lower it and no missing rules can skip it.
+      * Any other repository: read its own branch rules. If the token cannot
+        read them (401/403) the merge is REFUSED plainly rather than silently
+        weakened. If the rules name required status-check contexts, every one of
+        those must have completed successfully on the carded commit. If the
+        rules exist but name no contexts (200 with none), or the rules endpoint
+        is 404, fall back to the commit's own checks: at least one check-run (or
+        workflow run) for that exact commit, all completed with a conclusion in
+        success/neutral/skipped. A 401/403 on those reads is refused the same
+        way.
+    """
+    if str(r.repo or "").strip().lower() == OWN_REPO.lower():
+        return {"mode": "named", "names": tuple(REQUIRED_CHECKS),
+                "runs": runs, "source": "your own Epic-Jarvis repository"}, ""
+    rules, status, err = _raw_read(
+        fetch, f"{_repo_path(r.repo)}/rules/branches/"
+               f"{urllib.parse.quote(r.base_ref, safe='')}", headers, token)
+    if status in (401, 403):
+        return {}, ("This GitHub token cannot read branch protection rules for "
+                    "this repository, so Jarvis will not merge it. Nothing was "
+                    "merged.")
+    if err:
+        return {}, err + " Nothing was merged."
+    names = _required_context_names(rules)
+    if names:
+        return {"mode": "named", "names": names, "runs": runs,
+                "source": "this repository's own branch rules"}, ""
+    if not runs:
+        wf, wstatus, werr = _workflow_runs_for_sha(
+            fetch, headers, token, r.repo, r.expected_sha)
+        if wstatus in (401, 403):
+            return {}, ("This GitHub token cannot read this repository's checks, "
+                        "so Jarvis will not merge it. Nothing was merged.")
+        if werr:
+            return {}, werr + " Nothing was merged."
+        runs = wf
+        source = "this repository's workflow runs"
+    else:
+        source = "this repository's checks"
+    if not runs:
+        return {}, ("GitHub found no checks for that exact commit, and Jarvis "
+                    "will not merge a change whose checks it cannot see. Nothing "
+                    "was merged.")
+    return {"mode": "generic", "runs": runs, "source": source}, ""
+
+
 def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
     """Re-read the pull request, refuse unless it is still exactly as carded, merge.
 
@@ -3731,14 +3864,31 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
     runs, run_err = _check_runs(fetch, headers, token, r.repo, live)
     if run_err:
         return no(run_err)
-    still = _running(runs)
+    plan, plan_err = _merge_check_plan(r, fetch, token, headers, runs)
+    if plan_err:
+        return {"ok": False, "error": plan_err}
+    plan_runs = plan["runs"]
+    still = _running(plan_runs)
     if still:
         return no("A check on that pull request is still running (" +
                   ", ".join(still) + "). Wait for it to finish, then ask again.")
-    problems = _required_problems(runs)
-    if problems:
-        return no("A required check did not pass (" + "; ".join(problems) +
-                  "). Jarvis never merges past a required check.")
+    if plan["mode"] == "named":
+        problems = _required_problems(plan_runs, plan["names"])
+        if problems:
+            return no("A required check of " + plan["source"] +
+                      " did not pass (" + "; ".join(problems) +
+                      "). Jarvis never merges past a required check.")
+    else:
+        bad = [f"{_check_name(x)} finished as "
+               f"{_clean_github_text(x.get('conclusion'), wrap=False) or 'no result'}"
+               for x in plan_runs
+               if str(x.get("status") or "") != "completed"
+               or str(x.get("conclusion") or "") not in
+               ("success", "neutral", "skipped")]
+        if bad:
+            return no("A check of " + plan["source"] +
+                      " did not finish cleanly (" + "; ".join(bad) +
+                      "). Jarvis will not merge past a check that did not pass.")
 
     # The one write: exactly the body the card showed, no field added.
     payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
@@ -4820,6 +4970,12 @@ def _cut(text: str, limit: int = MAX_BYTES) -> str:
 def _said(r: Request, answers: list) -> str:
     """The answer, in plain words, from the last body the requests returned."""
     text = answers[-1][1] if answers else ""
+    if CUT_MARKER in str(text or ""):
+        # Q-G (2026-11-11): an answer over MAX_BYTES cannot be parsed at all.
+        # Say that in words rather than showing half of it as if it were whole.
+        return ("GitHub's answer was longer than Jarvis reads in one go, so "
+                "Jarvis will not guess at it. Nothing on GitHub changed - ask "
+                "again about one thing at a time.")
     doc = _payload(text)
     if r.action == ACTION_COMMENT:
         return "The comment was posted."

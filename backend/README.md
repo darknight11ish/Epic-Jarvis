@@ -3025,7 +3025,11 @@ correctly, formatted by `notice_for()`, with zero HUD-side code.
   `jarvis_research_run`, and `jarvis_research_run_authenticated` - each
   `_plan` tool is `auto` (matches the read-only bucket `model_list` and
   `browser_axtree` are already in - nothing is sent), each `_run` tool maps
-  to a real `_RISK` action.
+  to a real `_RISK` action. (`github_search` moved off those two names on
+  2026-11-11: the Q3/Q4 ruling made the six GitHub reads card-free, so it now
+  resolves to its own `github_search_run` / `github_search_run_authenticated`
+  actions with their own `auto` lines, and the generic research actions stay
+  "ask".)
 - The owner's real `jarvis-framework.toml` already has `control_computer =
   "ask"` (confirmed against the sample in `backend/rebuilt/`) - so
   `jarvis_ui_control_run` needs **no TOML change at all**. `control_phone`
@@ -3233,9 +3237,10 @@ built earlier this session - `control_computer` (native UI control, resolves
 to the `jarvis_ui_control_run` action added by `ui-control-wiring.patch`),
 `control_phone` (adb, resolves to `jarvis_android_control_run`, added by the
 same patch), and `github_search` (wraps `jarvis_research.py`, resolving to
-`jarvis_research_run` or `jarvis_research_run_authenticated` depending on
+`github_search_run` or `github_search_run_authenticated` depending on
 whether a token is configured *at the moment the call actually runs* - not
-decided by the model). These three model-facing names deliberately differ
+decided by the model; since the 2026-11-11 Q3/Q4 ruling both are their own
+"auto" lines because the six GitHub reads are card-free). These three model-facing names deliberately differ
 from the actual `jarvis_gate` action keys - see `Tool.gate_lookup_name` in
 `jarvis_agent.py`'s own docstring for why a static match on `name` was not
 enough, and `test_agent.py`'s

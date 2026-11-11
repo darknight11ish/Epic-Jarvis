@@ -1560,9 +1560,11 @@ def t_every_write_is_ask_and_in_needs_a_person():
           "github_inspect" in _AF.SWITCHABLE)
     check("... with turning it back ON the instant direction",
           _AF.LOOSE.get("github_inspect") == "auto")
-    check("... and the ten GitHub tools are still exactly ten",
+    check("... and the union's GitHub tools are exactly reads + writes",
           set(AG.GITHUB_READ_TOOLS) | set(AG.GITHUB_ACTION_TOOLS)
-          == set(AG.GITHUB_TOOLS) and len(AG.GITHUB_TOOLS) == 10)
+          == set(AG.GITHUB_TOOLS)
+          and len(AG.GITHUB_TOOLS) == (len(AG.GITHUB_READ_TOOLS)
+                                       + len(AG.GITHUB_ACTION_TOOLS)))
     check("the merge and the push are never auto-approvable",
           all(AG.TOOLS[t].name in AG.NEEDS_A_PERSON
               for t in ("github_merge_pr", "github_fix_and_push")))

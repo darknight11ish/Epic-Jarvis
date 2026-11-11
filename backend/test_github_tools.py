@@ -2786,6 +2786,266 @@ def t_open_pr_prepares_then_pushes_and_opens_one_pull_request():
             check("a title over 200 characters is refused before a card", False)
 
 
+# --------------------------------------------------------------------------
+#   18. The 2026-11-11 field-test rulings (Q-C, Q-G, Q3/Q4, Q-D/Q7)
+# --------------------------------------------------------------------------
+
+
+def _other_repo_merge_args(**over):
+    args = {"repo": "other-owner/other-repo", "number": "1116",
+            "head_sha": HEAD_SHA, "title": "Fix the tray icon",
+            "base_ref": "main"}
+    args.update(over)
+    return args
+
+
+def _other_repo_routes(*, rules=None, checks=None, workflow=None,
+                       merge=(200, json.dumps({"merged": True, "sha": MERGED_SHA}))):
+    routes = [("/pulls/1116/merge", merge),
+              ("/pulls/1116", (200, _pr_doc(
+                  head={"sha": HEAD_SHA, "ref": "feature/tray-icon",
+                        "repo": {"full_name": "other-owner/other-repo"}}))),
+              ("/rules/branches/main", rules if rules is not None else (404, "{}")),
+              ("/actions/runs?head_sha=", workflow if workflow is not None
+               else (200, json.dumps({"workflow_runs": []}))),
+              ("/commits/%s/check-runs" % HEAD_SHA,
+               checks if checks is not None else (200, json.dumps({"check_runs": []})))]
+    return routes
+
+
+def _checks(*rows):
+    return (200, json.dumps({"check_runs": [
+        {"name": name, "status": status, "conclusion": conclusion}
+        for name, status, conclusion in rows]}))
+
+
+def _runs(*rows):
+    return (200, json.dumps({"workflow_runs": [
+        {"name": name, "status": status, "conclusion": conclusion}
+        for name, status, conclusion in rows]}))
+
+
+def t_merge_checks_are_per_repository():
+    """Q-C: the seven on Epic-Jarvis are a floor; another repo uses ITS rules."""
+    # 1. The owner's own repository: the seven are enforced and the branch-rules
+    #    endpoint is never asked - no repository rules can lower the floor.
+    fake = Routed([("/pulls/1116/merge", (200, json.dumps(
+        {"merged": True, "sha": MERGED_SHA}))),
+        ("/pulls/1116", (200, _pr_doc())),
+        ("/check-runs", (200, _all_green_runs()))])
+    _r, out = _run("github_merge_pr", fake)
+    check("own repo: the seven required checks pass and the merge happens",
+          out.get("ok") is True, out)
+    check("own repo: branch rules are NOT read (the seven are the floor)",
+          not any("/rules/branches/" in c["url"] for c in fake.calls),
+          [c["url"] for c in fake.calls])
+    # Case-insensitive, exactly as the ruling says.
+    fake = Routed([("/pulls/1116/merge", (200, json.dumps(
+        {"merged": True, "sha": MERGED_SHA}))),
+        ("/pulls/1116", (200, _pr_doc())),
+        ("/check-runs", (200, _all_green_runs()))])
+    _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args(
+        repo="Darknight11ish/epic-jarvis"))
+    check("own repo matches case-insensitively, so the floor still applies",
+          out.get("ok") is True
+          and not any("/rules/branches/" in c["url"] for c in fake.calls), out)
+    # A floor check that is MISSING still refuses, exactly as before.
+    missing = _checks(("frontend", "completed", "success"),
+                      ("backend", "completed", "success"),
+                      ("backend-windows", "completed", "success"),
+                      ("credential-manager", "completed", "success"),
+                      ("powershell-5", "completed", "success"),
+                      ("phone-unit-tests", "completed", "success"))
+    fake = Routed([("/pulls/1116", (200, _pr_doc())),
+                   ("/check-runs", missing)])
+    _r, out = _run("github_merge_pr", fake)
+    check("own repo: one of the seven absent refuses, with no PUT",
+          out.get("ok") is False and "rust has not reported" in out.get("error", "")
+          and not [c for c in fake.calls if c["method"] == "PUT"], out)
+
+    # 2. Another repository whose own rules name required contexts: THOSE names
+    #    are enforced, and the seven are not invented for it.
+    rules = (200, json.dumps([{"type": "required_status_checks", "parameters": {
+        "required_status_checks": [{"context": "alpha"}, {"context": "beta"}]}}]))
+    fake = Routed([("/pulls/1116/merge", (200, json.dumps(
+        {"merged": True, "sha": MERGED_SHA}))),
+        ("/pulls/1116", (200, _pr_doc(
+            head={"sha": HEAD_SHA, "ref": "feature/tray-icon",
+                  "repo": {"full_name": "other-owner/other-repo"}}))),
+        ("/rules/branches/main", rules),
+        ("/check-runs", _checks(("alpha", "completed", "success"),
+                                ("beta", "completed", "failure")))])
+    _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+    check("other repo: a failing context from its own rules refuses",
+          out.get("ok") is False and "beta finished as failure" in out.get("error", ""),
+          out)
+    check("... and nothing is merged", not [c for c in fake.calls
+                                            if c["method"] == "PUT"], out)
+    fake = Routed([("/pulls/1116/merge", (200, json.dumps(
+        {"merged": True, "sha": MERGED_SHA}))),
+        ("/pulls/1116", (200, _pr_doc(
+            head={"sha": HEAD_SHA, "ref": "feature/tray-icon",
+                  "repo": {"full_name": "other-owner/other-repo"}}))),
+        ("/rules/branches/main", rules),
+        ("/check-runs", _checks(("alpha", "completed", "success"),
+                                ("beta", "completed", "success")))])
+    _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+    check("other repo: every context of its own rules passing merges", 
+          out.get("ok") is True, out)
+
+    # 3. 200 [] (no named contexts) / 404 -> the commit's own checks decide:
+    #    at least one, all completed, conclusion in success/neutral/skipped.
+    for label, rules_answer in (("200 []", (200, "[]")), ("404", (404, "{}"))):
+        fake = Routed(_other_repo_routes(
+            rules=rules_answer,
+            checks=_checks(("build", "completed", "success"),
+                           ("lint", "completed", "neutral"),
+                           ("docs", "completed", "skipped"))))
+        _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+        check(f"other repo ({label}): its own passing checks let the merge go",
+              out.get("ok") is True, out)
+        fake = Routed(_other_repo_routes(
+            rules=rules_answer, checks=_checks(("build", "completed", "failure"))))
+        _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+        check(f"other repo ({label}): a failing check refuses",
+              out.get("ok") is False and "did not finish cleanly"
+              in out.get("error", ""), out)
+    # No checks at all -> refused, never a silent merge.
+    fake = Routed(_other_repo_routes(rules=(200, "[]"),
+                                     checks=(200, json.dumps({"check_runs": []})),
+                                     workflow=(200, json.dumps({"workflow_runs": []}))))
+    _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+    check("other repo with no checks at all is refused",
+          out.get("ok") is False and "found no checks" in out.get("error", ""), out)
+    # The workflow-runs fallback is read when check-runs answers empty.
+    fake = Routed(_other_repo_routes(
+        rules=(200, "[]"),
+        checks=(200, json.dumps({"check_runs": []})),
+        workflow=_runs(("CI", "completed", "success"))))
+    _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+    check("the workflow-runs fallback can satisfy the other-repo requirement",
+          out.get("ok") is True, out)
+    check("... and it asked GitHub for the runs of the CARDED commit",
+          any(f"head_sha={HEAD_SHA}" in c["url"] for c in fake.calls),
+          [c["url"] for c in fake.calls])
+    # 4. 401/403 on the rules read: the EXACT refusal, no weaker fallback.
+    exact = ("This GitHub token cannot read branch protection rules for this "
+             "repository, so Jarvis will not merge it")
+    for status in (401, 403):
+        fake = Routed(_other_repo_routes(rules=(status, "{}")))
+        _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+        check(f"other repo: {status} on branch rules refuses, exactly as ruled",
+              out.get("ok") is False and exact in out.get("error", ""), out)
+        check(f"... {status}: nothing is merged and no weaker fallback runs",
+              not [c for c in fake.calls if c["method"] == "PUT"], fake.calls)
+    # 5. The pinned-head TOCTOU still wins over any of the new reads.
+    moved = _other_repo_routes()
+    moved[1] = ("/pulls/1116", (200, _pr_doc(
+        head={"sha": "b" * 40, "ref": "feature/tray-icon",
+              "repo": {"full_name": "other-owner/other-repo"}})))
+    fake = Routed(moved)
+    _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
+    check("other repo: a moved head is refused before any rules read",
+          out.get("ok") is False and "moved since you looked"
+          in out.get("error", "")
+          and not any("/rules/branches/" in c["url"] for c in fake.calls), out)
+
+
+def t_ci_status_reads_five_runs_and_refuses_a_cut():
+    """Q-G: per_page=5 only for github_ci_status, and a cut answer is spoken."""
+    r = _card("github_ci_status")[0]
+    check("the CI read asks for the newest FIVE runs only",
+          all("per_page=5" in u for u in r.urls()
+              if "/actions/runs" in u), r.urls())
+    check("module constants: CI_PER_PAGE is 5 and PER_PAGE is still 20",
+          GH.CI_PER_PAGE == 5 and GH.PER_PAGE == 20,
+          (GH.CI_PER_PAGE, GH.PER_PAGE))
+    other_urls = []
+    other_urls += GH.plan_list({"scope": "pulls", "repo": "o/r"}).urls()
+    other_urls += GH.plan_scan_prs({"repo": "o/r"}).urls()
+    other_urls += GH.plan_pr_detail({"repo": "o/r", "number": "1"}).urls()
+    check("no OTHER planner asked for five runs: the page sizes are unchanged",
+          all("per_page=5" not in u for u in other_urls), other_urls)
+    # No other planner's page size changed: the plain list still asks for 20.
+    list_r = GH.plan_list({"scope": "pulls", "repo": "o/r"})
+    check("every other read keeps the normal page size", 
+          all("per_page=20" in u for u in list_r.urls()), list_r.urls())
+    # A cut JSON answer cannot be parsed at all: say so in plain words.
+    _r, out = _run("github_ci_status", Fake(200, "not json " + GH.CUT_MARKER))
+    text = out.get("text", "")
+    check("a CI answer cut at MAX_BYTES is said plainly, not half-shown",
+          "longer than Jarvis reads in one go" in text
+          and "will not guess" in text, out)
+
+
+def t_the_six_github_reads_are_card_free_and_every_write_asks():
+    """Q3/Q4: six reads out of NEEDS_A_PERSON; all thirteen writes stay in."""
+    READS = ("github_list", "github_read_file", "github_ci_status",
+             "github_pr_scan", "github_pr_detail", "github_search")
+    for read in READS:
+        check(f"{read} is a GitHub read and is card-free (not in NEEDS_A_PERSON)",
+              read not in AG.NEEDS_A_PERSON, read)
+    check("github_search resolves to its OWN card-free action names",
+          AG.TOOLS["github_search"].gate_lookup_name({}) in
+          ("github_search_run", "github_search_run_authenticated"),
+          AG.TOOLS["github_search"].gate_lookup_name({}))
+    WRITES = tuple(AG.GITHUB_ACTION_TOOLS) + ("github_fix_write",)
+    check("there are THIRTEEN GitHub write actions", len(WRITES) == 13, WRITES)
+    missing = [name for name in WRITES if name not in AG.NEEDS_A_PERSON]
+    check("every one of the thirteen write actions still asks its own card",
+          not missing, missing)
+    for toml_path in TOMLS:
+        import tomllib
+        tiers = tomllib.loads(toml_path.read_text(encoding="utf-8"))["autonomy"]["tiers"]
+        check(f"{toml_path.name}: the GitHub read action ships auto (card-free)",
+              tiers.get("github_inspect") == "auto", tiers.get("github_inspect"))
+        check(f"{toml_path.name}: github_read (the scheduled watch) stays auto",
+              tiers.get("github_read") == "auto")
+        check(f"{toml_path.name}: github_search's own two actions ship auto",
+              tiers.get("github_search_run") == "auto"
+              and tiers.get("github_search_run_authenticated") == "auto")
+        check(f"{toml_path.name}: no OTHER research egress was loosened",
+              tiers.get("web_research") == "ask"
+              and tiers.get("research_authenticated", "ask") == "ask"
+              and tiers.get("search_the_web") == "ask")
+
+
+def t_review_tools_are_card_free_and_in_the_master_switch():
+    """Q-D/Q7: both tomls identical, both lines auto, enabled, and in the group."""
+    import tomllib
+    import jarvis_asks_first as AF
+    blobs = [path.read_bytes() for path in TOMLS]
+    check("the two shipped settings files are byte-identical", blobs[0] == blobs[1])
+    tiers = tomllib.loads(blobs[0].decode("utf-8"))["autonomy"]["tiers"]
+    tools_enabled = set(tomllib.loads(blobs[0].decode("utf-8"))
+                        ["tools"]["enabled"])
+    for name in ("review_changes", "check_records"):
+        check(f"{name}: card-free (auto) in the shipped tiers",
+              tiers.get(name) == "auto", tiers.get(name))
+        check(f"{name}: in the shipped enabled list (off-by-default is the switch list)",
+              name in tools_enabled, sorted(tools_enabled))
+    expected = ("github_search", "github_list", "github_read_file",
+                "github_ci_status", "github_pr_scan", "github_pr_detail",
+                "github_comment", "github_open_issue", "github_rerun_workflow",
+                "github_create_repo", "github_merge_pr", "github_fix_and_push",
+                "github_open_pr", "github_workflow", "github_issue_labels",
+                "github_edit_pr", "github_pr_review", "github_issue_state",
+                "review_changes", "check_records")
+    check("the master switch speaks for exactly the TWENTY union tools",
+          AF.GITHUB_TOOLS == expected, AF.GITHUB_TOOLS)
+    check("every one of the twenty is a real model tool",
+          all(name in AG.TOOLS for name in AF.GITHUB_TOOLS),
+          [n for n in AF.GITHUB_TOOLS if n not in AG.TOOLS])
+    check("the group's own words say twenty, plainly",
+          "twenty" in AF.GITHUB_TOOLS_GROUP_WHAT.lower()
+          or "twenty" in AF.GITHUB_TOOLS_GROUP_CARD_TITLE.lower(),
+          (AF.GITHUB_TOOLS_GROUP_WHAT, AF.GITHUB_TOOLS_GROUP_CARD_TITLE))
+    check("removing one name would break the group (equality, not membership)",
+          len(AF.GITHUB_TOOLS) == 20
+          and len(set(AF.GITHUB_TOOLS)) == 20
+          and set(AF.GITHUB_TOOLS) == set(expected))
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {GATE_BASE}")
@@ -2840,7 +3100,11 @@ if __name__ == "__main__":
                    t_edit_pr_shows_before_and_after_and_pins_them,
                    t_pr_review_never_approves,
                    t_issue_state_closes_or_reopens_one_issue,
-                   t_open_pr_prepares_then_pushes_and_opens_one_pull_request):
+                   t_open_pr_prepares_then_pushes_and_opens_one_pull_request,
+                   t_merge_checks_are_per_repository,
+                   t_ci_status_reads_five_runs_and_refuses_a_cut,
+                   t_the_six_github_reads_are_card_free_and_every_write_asks,
+                   t_review_tools_are_card_free_and_in_the_master_switch):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

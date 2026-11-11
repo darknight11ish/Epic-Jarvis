@@ -5289,11 +5289,10 @@ TOOLS: dict = {
             "capabilities": {"type": "array", "items": {"type": "string"}}},
          "required": ["idea"]},
         _prepare_github_search, _run_github_search,
-        # Resolved at call time, not import time: whether a token is
-        # configured can change between two calls in the same conversation,
-        # and jarvis_research.py's own run() already refuses if the token
-        # state changes between its plan() and run() - this only decides
-        # which action name (and therefore which tier) governs THIS call.
+        # Q3/Q4 (the owner's field-test ruling of 2026-11-11): GitHub READS are
+        # card-free, and github_search is one of the six. Its OWN action names
+        # resolve to their OWN "auto" tier lines, so no other research egress
+        # (web_research / research_authenticated) is loosened by this.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
     # GitHub reads and the small GitHub actions (jarvis_github.py, the owner's
@@ -6773,13 +6772,23 @@ def _refuse_stopped(name: str, call: dict, convo: list, steps: list, say_step,
 
 
 def _github_search_action_name() -> str:
+    """The action `github_search` is decided under, named for ITS tier.
+
+    The owner's field-test ruling Q3/Q4 of 2026-11-11 made every GitHub read
+    card-free, and `github_search` is one of the six reads. It therefore gets
+    its OWN action names and its OWN shipped tiers ("auto" in both settings
+    files) rather than riding the generic research ones: `web_research` and
+    `research_authenticated` stay "ask" for every other research egress, and
+    this tool cannot make them looser. The authenticated/unauthenticated split
+    is kept because the token is read at call time, exactly as before.
+    """
     try:
         import jarvis_research
         if jarvis_research.authenticated():
-            return "jarvis_research_run_authenticated"
+            return "github_search_run_authenticated"
     except Exception:
         pass
-    return "jarvis_research_run"
+    return "github_search_run"
 
 
 #: Tools that must never run unless a PERSON said yes on a card, whatever
@@ -6805,16 +6814,19 @@ def _github_search_action_name() -> str:
 #: shaped by outside text, where a note write waits for a person too (see
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
-    "github_search": "sends a search term to GitHub",
+    # The SIX GitHub READS are deliberately NOT here (the owner's field-test
+    # ruling Q3/Q4, 2026-11-11): a read is a GET on api.github.com (or, for
+    # github_search, a read-only library search) and changes nothing, so every
+    # GitHub read is card-free at tier "auto": github_list, github_read_file,
+    # github_ci_status, github_pr_scan, github_pr_detail and github_search.
+    # EVERY GitHub write stays below, in this set.
+    #
     # The GitHub WRITES (jarvis_github.py, the owner's decisions of 2026-11-03
     # and 2026-11-10, plus the one CREATE of 2026-11-09, and the 22:30/23:00
     # Step 2 writes). Each raises its OWN one-shot card, and each is in this
-    # set so a loosened tier line cannot run one with nobody asked. The five
-    # READS ARE NOT HERE since 2026-11-10 23:00 PT: the owner chose "make
-    # GitHub reads card-free" - they are fixed-address GETs to
-    # api.github.com, the token still only goes there and nothing changes, and
-    # the owner's switchable read row (`github_inspect`) is how the card is
-    # put back. Each action's line says what changes.
+    # set so a loosened tier line cannot run one with nobody asked. A read's
+    # own switch still decides whether the tool is offered at all. Each
+    # action's line says what changes.
     "github_comment": "posts a comment on GitHub in the owner's name, which cannot be "
                       "taken back",
     "github_open_issue": "opens a new issue on GitHub in the owner's name",
@@ -6842,6 +6854,12 @@ NEEDS_A_PERSON = {
     "github_pr_review": "posts a review on one pull request on GitHub in the owner's "
                         "name, which cannot be edited or taken back",
     "github_issue_state": "closes or reopens ONE issue on GitHub in the owner's name",
+    # The 13th write action: the fix tool's local "write" stage is dispatched
+    # under its own action name (no token, no socket) and it still raises a
+    # card, so it is in this set like every other carded write (Q3/Q4).
+    "github_fix_write": "writes ONE file inside a pull request's isolated fix copy "
+                        "on this PC and makes ONE commit there, which the owner "
+                        "then approves again before any push",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",

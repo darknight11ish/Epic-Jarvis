@@ -309,8 +309,8 @@ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits fo
 #: names them and where they are, and keeps the one thing that is really true
 #: for this row: its TIER is the ask-first decision, and loosening that is a
 #: hand edit of the settings file.
-NOTE_GITHUB_TOOL = ("One of the ten GitHub abilities. The AI model is offered it by its own "
-                    "switch, and by the master switch that offers all ten at once, in Settings, "
+NOTE_GITHUB_TOOL = ("One of the GitHub tools in the master switch's group. The AI model is offered it by its own "
+                    "switch, and by the master switch that offers all twenty at once, in Settings, "
                     "What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". "
                     "This line only decides whether each use asks you first; going looser "
                     "here is only possible by hand in your PC's settings file "
@@ -692,20 +692,27 @@ SWITCHABLE_GROUPS = tuple((title, tuple(t for t in tools if _app_can_switch(t)))
 SWITCHABLE_GROUPS = tuple((title, tools) for title, tools in SWITCHABLE_GROUPS if tools)
 
 
-#: The seventeen GitHub tools, in one place (2026-11-10, the owner's rulings:
-#: the switch door plus full parity). The per-tool switch rows are these names
-#: (SWITCHABLE_GROUPS); the master group switch below offers/removes exactly
-#: this tuple, and `test_asks_first.py` holds it to jarvis_agent.TOOLS and to
-#: the registry, so the group cannot speak for a tool it does not cover. The two
-#: local review gates (review_changes, check_records) sit in the same group with
-#: their own switches; the master switch's own list is the GitHub tools.
+#: The TWENTY tools the master switch speaks for, in one place (2026-11-11,
+#: the union of the switch door, full parity and the two local review gates):
+#: the eighteen GitHub tools (github_search + five card-free reads + twelve
+#: carded writes) and review_changes + check_records. The per-tool switch rows
+#: are these names (SWITCHABLE_GROUPS); the master group switch below
+#: offers/removes exactly this tuple, and `test_asks_first.py` holds it to
+#: jarvis_agent.TOOLS and to the registry, so the group cannot speak for a tool
+#: it does not cover (Q7 of the 2026-11-11 rulings: one master card switches the
+#: GitHub tools AND both local review gates on together).
 GITHUB_TOOLS = (
-    "github_list", "github_read_file", "github_ci_status", "github_pr_scan",
+    "github_search", "github_list", "github_read_file", "github_ci_status",
+    "github_pr_scan",
     "github_pr_detail", "github_comment", "github_open_issue",
     "github_rerun_workflow", "github_create_repo", "github_merge_pr",
     "github_fix_and_push", "github_open_pr", "github_workflow",
     "github_issue_labels", "github_edit_pr", "github_pr_review",
     "github_issue_state",
+    # Q7 (2026-11-11): the two LOCAL review gates ride the SAME master switch,
+    # so one approved master card offers the GitHub tools AND both of them on
+    # together. They are read-only and card-free; their own switches still exist.
+    "review_changes", "check_records",
 )
 
 #: The master group switch's id. It is sent to POST /api/asks_first/tools
@@ -717,11 +724,11 @@ GITHUB_TOOLS_GROUP = "github_tools_group"
 GITHUB_TOOLS_GROUP_TITLE = "Offer GitHub tools to the AI model"
 #: The group row's one sentence, in the same words both apps draw.
 GITHUB_TOOLS_GROUP_WHAT = (
-    "On: the AI model is offered all seventeen GitHub abilities, and every use is still "
+    "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still "
     "decided by \"Ask me first\" as its own row says. Off: instantly, none of them is "
     "offered.")
 #: The group's own card title, and the sentence the last-answer line prints.
-GITHUB_TOOLS_GROUP_CARD_TITLE = "Offer ALL SEVENTEEN GitHub tools to the AI model?"
+GITHUB_TOOLS_GROUP_CARD_TITLE = "Offer ALL TWENTY GitHub and review tools to the AI model?"
 
 
 
@@ -1930,8 +1937,8 @@ TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separat
                "names that one ability: approve it on the PC with Windows Hello, or on "
                "your phone with its own fingerprint or PIN. Turning it off is instant, "
                "from either app. One master switch, \"Offer GitHub tools to the AI "
-               "model\", turns the seventeen GitHub abilities on or off together - its "
-               "own card says so - and every other switch here changes exactly one tool.")
+               "model\", turns all twenty tools of that group - the GitHub tools and both "
+               "local review gates - on or off together; its own card says so, and every tool.")
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
                  "What asks first). It takes one approval card - approve it on the PC with "
                  "Windows Hello, or on your phone with its own fingerprint or PIN.")
@@ -2078,7 +2085,7 @@ TOOL_ENABLE_LAST_WORDS = {
 #: The same answers for the master GROUP card (2026-11-10). It writes ten
 #: names in one step, so "this tool" would be the wrong words on it.
 GITHUB_TOOLS_GROUP_LAST_WORDS = {
-    "enabled": "You approved the card, so the AI model is offered all ten GitHub tools.",
+    "enabled": "You approved the card, so the AI model is offered all twenty tools of the group.",
     "denied": "The card was turned down, so nothing changed.",
     "timed_out": "Nobody answered the card in time, so nothing changed.",
     "refused": "Your PC's settings do not let this be approved, so nothing changed.",
@@ -2249,14 +2256,14 @@ def github_tools_group_card(*, on_now: Optional[set] = None) -> str:
     lines = [
         GITHUB_TOOLS_GROUP_CARD_TITLE,
         "",
-        "From now on the AI model may use ANY of the ten GitHub abilities: "
+        "From now on the AI model may use ANY of the twenty tools in this group: "
         + ", ".join(GITHUB_TOOLS) + ".",
         "",
         "In plain words: read your GitHub (your repositories, pull requests, issues, CI "
         "status, one file and the pull request cockpit), comment, open an issue, re-run a "
         "workflow, create ONE new empty repository on your own account, merge ONE pull "
         "request with a merge commit, and push a fix to a pull request's own branch from an "
-        "isolated folder on this PC. The ten names are written into your settings file on "
+        "isolated folder on this PC. The twenty names are written into your settings file on "
         "this PC in ONE step; nothing else changes.",
         "",
         "This is separate from whether they ask you first: that is set above, in "
@@ -2268,10 +2275,10 @@ def github_tools_group_card(*, on_now: Optional[set] = None) -> str:
         "",
     ]
     if have:
-        lines += [f"{len(have)} of the ten are already on. This card offers the other "
+        lines += [f"{len(have)} of the twenty are already on. This card offers the other "
                   f"{len(missing)} and leaves those {len(have)} on.", ""]
     lines += [
-        "Approving it needs Windows Hello on this PC. You can turn all ten off again at "
+        "Approving it needs Windows Hello on this PC. You can turn all twenty off again at "
         "any time from either app, and that is instant.",
         "",
         "If you did not just do this, say no.",
@@ -2931,7 +2938,7 @@ def tools_status(*, here: bool = False) -> dict:
         "title": GITHUB_TOOLS_GROUP_TITLE,
         # The group it is drawn in, read from the same table the per-tool rows
         # use, so it can never end up somewhere else than "Jarvis's own tools".
-        "group": GROUP_FOR_TOOL.get(GITHUB_TOOLS[0], "Jarvis's own tools"),
+        "group": GROUP_FOR_TOOL.get("github_list", "Jarvis's own tools"),
         "what": GITHUB_TOOLS_GROUP_WHAT,
         "tools": list(GITHUB_TOOLS),
         "on": len(group_have) == len(GITHUB_TOOLS),

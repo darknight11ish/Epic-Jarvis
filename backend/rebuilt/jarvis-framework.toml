@@ -87,13 +87,13 @@ approval_timeout_seconds = 900
 # stopping one gives it less, so it is instant. Both go through the gate either way.
 docker_service_start = "ask"
 docker_service_stop = "auto"
-# A model-chosen GitHub research search (`github_search`): egress with the
-# owner's own search words, and `jarvis_agent.NEEDS_A_PERSON` already refuses
-# to run that tool unless a person said yes. It shipped "auto" while that belt
-# was the only guard, so the "What asks first" page showed "Always asks" beside
-# a tier of "auto" and a developer diagnostic (measured live 2026-11-07), and
-# the file disagreed with the behaviour. "ask" is what the code really does, so
-# the file, the page and the code now say one thing.
+# A model-chosen WEB research search: egress with the owner's own search
+# words. "ask": it shipped "auto" until 2026-11-07 while a belt in
+# jarvis_agent.NEEDS_A_PERSON was the only guard, so the page and the file
+# disagreed; the shipped line is what the code really does and must stay ask.
+# `github_search` is NOT this action any more (the 2026-11-11 Q3/Q4 ruling):
+# it resolves to its own `github_search_run` / `github_search_run_authenticated`
+# lines just below, both "auto" - see those lines' comment.
 web_research              = "ask"
 read_calendar             = "auto"
 # The five tools of backend/README.md "What each one needs in jarvis_gate.py
@@ -222,6 +222,14 @@ raise_attention_budget    = "ask"
 # page_read above, or a look every 10 minutes would mean a card every 10
 # minutes. Without this line GitHub watches are refused, with the reason.
 github_read               = "auto"
+# The GitHub library search (`github_search`) is a READ (a GET on
+# api.github.com) and the owner's field-test ruling Q3/Q4 of 2026-11-11 made all
+# six GitHub reads card-free. It has its own action names - authenticated when a
+# token is saved, anonymous otherwise - so these two lines can be "auto" WITHOUT
+# loosening any other research egress: `web_research` and
+# `research_authenticated` above and below stay "ask" for every other tool.
+github_search_run         = "auto"
+github_search_run_authenticated = "auto"
 # Reading the owner's own GitHub on demand, and the carded actions on it (the
 # owner's decisions of 2026-11-03: "Read + actions", of 2026-11-09: one carded
 # repository creation, and of 2026-11-10: "Everything at once" - the read-only
@@ -276,8 +284,7 @@ github_read               = "auto"
 # card, and cannot be confirmed while the app's event stream is stale.
 #
 # These WRITE tools ship SWITCHED OFF: they are not in [tools].enabled below,
-# exactly like `github_search`. Add the sixteen names to that list when you want
-# them offered, and save a token with "connect GitHub". The five READ names
+# exactly like `github_search`. Add the seventeen GitHub names to that list when you want them offered, and save a token with "connect GitHub". The five READ names
 # (github_list, github_read_file, github_ci_status, github_pr_scan and
 # github_pr_detail) still need their switch rows too - the read TOOLS are
 # switched off like everything else, it is the read ACTION that never asks.
@@ -358,6 +365,13 @@ github_issue_state        = "ask"
 # in", which is empty until you add a folder on the PC with an approval
 # card). "ask" gives a card for every look.
 read_files_readonly       = "auto"
+# The two LOCAL pre-push review gates (wave 16E; included in the shipped
+# enabled list below and in the one GitHub master switch, Q-D/Q7 of the owner's
+# 2026-11-11 field-test rulings). "auto", deliberately: both are READ-ONLY
+# checks of a git checkout on THIS PC - no token, no network, nothing written -
+# so there is nothing to approve.
+review_changes            = "auto"
+check_records             = "auto"
 # A sandbox run that names files to read: one card per run, showing the
 # script and the resolved files (M7, 2026-10-18).
 sandbox_file_run          = "ask"
@@ -2242,7 +2256,8 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy",
+   "review_changes", "check_records"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)
