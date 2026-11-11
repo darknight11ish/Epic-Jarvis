@@ -1389,10 +1389,10 @@
     "id": "connected-github",
     "group": "Notes and files",
     "title": "Read and act on your own GitHub",
-    "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file. It can also comment on an issue or pull request, open an issue, re-run a workflow, and create one new, empty repository on your own account.",
-    "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue, github_rerun_workflow and github_create_repo. All seven ship off; github_search and the scheduled watch_github job are separate switches.",
-    "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the three reads share one action, and commenting, opening an issue, re-running a workflow and creating a repository each have their own. Creating a repository is one repository per card, on your own account only.",
-    "limit": "There is no merge, push, commit, delete, close or file-write action: it can never merge a pull request, and no card or approval can create one - a pull request is merged on GitHub itself. Creating a repository is the only thing it can make, that repository stays empty (nothing is pushed into it, no code and no files), and Jarvis cannot delete it afterwards - there is no delete action. Private repositories need the token; a read sends it to api.github.com.",
+    "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file, plus a pull request cockpit that says which open pull requests can be merged. It can also comment on an issue or pull request, open an issue, re-run a workflow, create one new, empty repository on your own account, merge ONE pull request with a merge commit pinned to the head commit the card shows, and push a fix to a pull request's own branch from an isolated scratch folder on this PC.",
+    "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr and github_fix_and_push. All ten ship off; github_search and the scheduled watch_github job are separate switches.",
+    "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the four reads share one action, and commenting, opening an issue, re-running a workflow, creating a repository, merging a pull request and pushing a fix to a pull request's branch each have their own. Creating a repository is one repository per card, on your own account only. A merge card names the pull request and its exact head commit, and the merge is refused if that commit has moved, the pull request is a draft, it does not merge cleanly, a check is still running or a required check did not pass. Fix-and-push raises a SECOND card showing the exact commits, changed files and command before anything is pushed.",
+    "limit": "It merges only with a merge commit, only when the pull request is still exactly the commit the card showed and every required check has passed - never squash, rebase, admin bypass, auto-merge or a forced or early merge, and a merge cannot be undone. It pushes only to a pull request's OWN branch, from its own scratch folder, and never to main, master, release/* or hotfix/*, never force-pushes, never deletes or closes anything, and refuses a changed file that looks like a credential. There is no commit, file-write, delete, close or repository-deletion action. Creating a repository is the only thing it can make, and that repository stays empty until you push to it yourself. Private repositories need the token; a read sends it to api.github.com.",
     "surface": "both",
     "covers": [],
     "aliases": [
@@ -1405,7 +1405,9 @@
       "github_comment",
       "github_open_issue",
       "github_rerun_workflow",
-      "github_create_repo"
+      "github_create_repo",
+      "github_merge_pr",
+      "github_fix_and_push"
     ]
   },
   {
@@ -3484,14 +3486,18 @@
     "limit": "It only asks Windows to reconnect to a saved, password-protected network already on this PC; an open, WEP or enterprise network is skipped, and it tries only the top three saved networks actually in range. It never asks for a password and never changes a network's settings.",
     "surface": "desktop",
     "surface_reason": "The feature repairs THIS PC's own Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section 8, owner ruling Q4).",
-    "covers": ["settings.wifi-reconnect"],
+    "covers": [
+      "settings.wifi-reconnect"
+    ],
     "aliases": [
       "wifi reconnect",
       "wi-fi reconnect",
       "auto wifi reconnect",
       "automatic wi-fi reconnection"
     ],
-    "gate": ["change_own_config"]
+    "gate": [
+      "change_own_config"
+    ]
   },
   {
     "id": "creator-mode",

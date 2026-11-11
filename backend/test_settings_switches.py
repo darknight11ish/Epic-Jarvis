@@ -116,16 +116,18 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    # 62 since 2026-11-09 (60 at 2026-11-06, 59 at 2026-11-05): the owner's
-    # decision made EVERY tool the AI model can be offered switchable - the raw
-    # Tier C set and the everyday helpers included - and the on-demand GitHub
-    # tools joined that set with the GitHub branch. The carded
+    # 65 since 2026-11-10 (62 at 2026-11-09, 60 at 2026-11-06, 59 at 2026-11-05):
+    # the owner's decision made EVERY tool the AI model can be offered switchable
+    # - the raw Tier C set and the everyday helpers included - and the on-demand
+    # GitHub tools joined that set with the GitHub branch. The carded
     # `github_create_repo` (wave 13, 2026-11-09) is a model tool like the rest,
     # so it has its row on the PC's Tools page too - the 61st; project_read,
     # the read half of "Jarvis takes over dev work", is the 62nd (a read
-    # decided under file_read's own action, so its row is real). hands-free's
+    # decided under file_read's own action, so its row is real); hands-free's
     # send_text_message joined with that branch, and the four pack-manager
-    # tools (2026-11-05) with the pack manager.
+    # tools (2026-11-05) with the pack manager. Wave 16's three GitHub tools
+    # (2026-11-10: the read-only PR cockpit, the carded merge and the carded
+    # fix-and-push) are the 63rd, 64th and 65th.
     # They are model tools (they run on this PC, in
     # either app's chat), so each one has its row on the PC's Tools page; what
     # the GitHub branch keeps one-sided is a SCREEN (no repo list, no diff, no
@@ -134,13 +136,13 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
     # sandbox, the product check and the two web-search grant tools, which ride
     # with web search); a
     # switch the turn ignored would be a lie. test_asks_first.py carries the
-    # same 62 and the same reason.
-    check("the in-app rows: 62, every tool the model can be offered",
+    # same 65 and the same reason.
+    check("the in-app rows: 65, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 62)
+          and len(AF.TOOLS_SWITCHABLE) == 65)
     # The PC half of the law, proved against the page itself rather than
     # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
     # list (the Tools page's rows), so a tool added on one side alone fails

@@ -629,12 +629,14 @@ FAMILIES: Tuple[Family, ...] = (
         # for four days after the owner's 2026-11-03 "Read + actions" decision
         # added the three carded actions (2026-11-07 audit, BLOCKER 3: this row
         # was the one place `/api/accounts` still described the old surface).
-        # The three reads share `github_inspect`; the four actions each have
-        # their own action in the shipped [autonomy.tiers] - the three of
-        # 2026-11-03 and the one CREATE of 2026-11-09.
+        # The four reads share `github_inspect`; the six actions each have their
+        # own action in the shipped [autonomy.tiers] - the three of 2026-11-03,
+        # the one CREATE of 2026-11-09, and the merge and fix-and-push of
+        # 2026-11-10 (the owner's "Everything at once"). Both new ones are
+        # carded and can never be auto-approved.
         abilities=("github_inspect", "github_comment", "github_open_issue",
-                   "github_rerun_workflow", "github_create_repo", "github_read",
-                   "research_authenticated"),
+                   "github_rerun_workflow", "github_create_repo", "github_merge_pr",
+                   "github_fix_and_push", "github_read", "research_authenticated"),
         verify="connect_account:github",
         change=('Say "connect my GitHub" for the token card, then switch each '
                 'GitHub tool on in Settings, What asks first, under "Let the AI '
@@ -642,18 +644,23 @@ FAMILIES: Tuple[Family, ...] = (
         remove=("Not removable from any screen yet - the next slice adds a Remove "
                 "button; until then only by hand in Windows Credential Manager. Jarvis "
                 "forgetting it does not revoke it: the token stays valid on github.com "
-                "until you delete it there. Switching the seven tools off in Settings, "
+                "until you delete it there. Switching the ten tools off in Settings, "
                 "What asks first, stops it being used without deleting the token."),
-        limit=("Read AND act, each with its own card: three read tools (list, "
-               "read-file, CI status) and four actions (comment, open an issue, "
-               "re-run a workflow, create one new empty repository on your own "
-               "account). It never merges a pull request, never pushes or "
-               "commits and never closes or deletes anything - there is no merge "
-               "action, no merge card and no delete action, even with your approval."),
+        limit=("Read AND act, each with its own card: four read tools (list, "
+               "read-file, CI status and the pull request cockpit) and six actions "
+               "(comment, open an issue, re-run a workflow, create one new empty "
+               "repository on your own account, merge ONE pull request with a merge "
+               "commit pinned to the head commit the card showed, and push a fix to "
+               "a pull request's own branch). It can never force-push, squash, "
+               "rebase, bypass a required check, push to main/master/release/* or "
+               "delete/close a repository or branch, and it has no commit, "
+               "file-write or delete action at all."),
         can=("Read your repositories, open pull requests, issues, CI status and one "
-             "file, and comment, open an issue, re-run a workflow or create one new "
-             "empty repository - each after you say yes on its own card; never "
-             "merge, push or close."),
+             "file, scan the pull requests that can be merged, and comment, open an "
+             "issue, re-run a workflow, create one new empty repository, merge one "
+             "pull request with a merge commit or push a fix to a pull request's own "
+             "branch - each after you say yes on its own card; never a force-push, "
+             "a squash, a rebase, an admin bypass or a delete."),
     ),
     Family(
         id="email",

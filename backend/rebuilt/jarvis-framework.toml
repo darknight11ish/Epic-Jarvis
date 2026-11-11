@@ -222,11 +222,15 @@ raise_attention_budget    = "ask"
 # page_read above, or a look every 10 minutes would mean a card every 10
 # minutes. Without this line GitHub watches are refused, with the reason.
 github_read               = "auto"
-# Reading the owner's own GitHub on demand, and three small actions on it (the
-# owner's decision of 2026-11-03: "Read + actions" - Jarvis may read his repos,
-# open pull requests, issues, CI status and one file, and may comment, open an
-# issue and re-run a workflow, each behind its own card; it may NEVER merge,
-# push, commit, delete or close).
+# Reading the owner's own GitHub on demand, and the carded actions on it (the
+# owner's decisions of 2026-11-03: "Read + actions", of 2026-11-09: one carded
+# repository creation, and of 2026-11-10: "Everything at once" - the read-only
+# PR cockpit, ONE merge-commit-only merge pinned to the head sha the card
+# showed, and ONE fix-and-push into an isolated scratch folder that pushes to
+# the pull request's own branch, each behind its own card). What stays
+# impossible: force-push, squash-merge, rebase-merge, admin bypass, auto-merge,
+# bypassing required checks, pushing to main/master/release/*, and deleting or
+# closing a repository or a branch.
 #
 # WHY A SECOND READ ACTION, and this is the part worth reading before changing
 # anything here: `github_read` above is a SCHEDULED look by a watch the owner
@@ -238,19 +242,30 @@ github_read               = "auto"
 # "auto" - egress with a credential and nobody asked - or force that line to
 # "ask" and break every GitHub watch. Do not merge the two names.
 #
-# All four are also in `jarvis_agent.NEEDS_A_PERSON`, so an owner who loosens a
+# All ten are also in `jarvis_agent.NEEDS_A_PERSON`, so an owner who loosens a
 # line below still gets a card: the config says how much Jarvis asks, and that
-# set says a read like this is never done with nobody asked. The four actions
+# set says a read like this is never done with nobody asked. The six actions
 # cannot be "auto" in any case - `github_comment` and `github_open_issue` post
 # in the owner's name, which cannot be taken back, `github_rerun_workflow`
-# spends CI work, and `github_create_repo` makes a repository Jarvis has no
-# delete action for.
+# spends CI work, `github_create_repo` makes a repository Jarvis has no delete
+# action for, `github_merge_pr` merges a pull request with a merge commit
+# pinned to one commit (never squash, rebase, admin or auto-merge), and
+# `github_fix_and_push` pushes commits to the pull request's own branch.
+#
+# THE SMALL DETAILS, kept here because this is where the switches are
+# explained: the token is saved in Windows Credential Manager by "connect
+# GitHub" and is sent only to api.github.com - never printed, never logged, and
+# a redirect is refused rather than followed. A failing check's log comes from
+# GitHub's own signed *.githubusercontent.com address, fetched with NO
+# Authorization header. Every write above ships OFF, raises its own one-shot
+# card, and cannot be confirmed while the app's event stream is stale.
 #
 # These tools ship SWITCHED OFF: they are not in [tools].enabled below, exactly
-# like `github_search`. Add the seven names (github_list, github_read_file,
-# github_ci_status, github_comment, github_open_issue, github_rerun_workflow,
-# github_create_repo) to that list when you want them offered, and save a token
-# with "connect GitHub".
+# like `github_search`. Add the ten names (github_list, github_read_file,
+# github_ci_status, github_pr_scan, github_comment, github_open_issue,
+# github_rerun_workflow, github_create_repo, github_merge_pr,
+# github_fix_and_push) to that list when you want them offered, and save a
+# token with "connect GitHub".
 github_inspect            = "ask"
 github_comment            = "ask"
 github_open_issue         = "ask"
@@ -260,6 +275,24 @@ github_rerun_workflow     = "ask"
 # it is a write on GitHub in the owner's name that Jarvis cannot undo, and it
 # is also in NEEDS_A_PERSON so a loosened line still raises its card.
 github_create_repo        = "ask"
+# The read-only PR cockpit (2026-11-10): every open pull request, whether it can
+# merge, and which required check is holding it. It is a READ and it shares
+# `github_inspect` above - there is no second read action - so there is no line
+# for it here on purpose.
+#
+# Merging ONE pull request (2026-11-10, the owner's "Everything at once").
+# "ask", never "auto": it is a merge commit pinned to the exact head sha the
+# card showed, refused unless the pull request is still that commit, is clean,
+# has no running check and every required check passed. Jarvis cannot squash,
+# rebase, use an admin bypass or turn on auto-merge, and a merge cannot be
+# undone. It is also in NEEDS_A_PERSON, so a loosened line still raises a card.
+github_merge_pr           = "ask"
+# Fixing a failing pull request in an isolated scratch folder, then pushing to
+# that pull request's own branch (2026-11-10). Its own card, raised again for
+# the push stage, showing the exact commits, files and command. Never a force,
+# never main/master/release/*, never a delete, and a changed credential file is
+# refused before anything leaves the PC. Also in NEEDS_A_PERSON.
+github_fix_and_push       = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval

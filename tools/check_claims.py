@@ -187,10 +187,17 @@ SKIP = {".git", "node_modules", "__pycache__", ".venv", "venv", "target",
 #: inside one of those is not a check anyone can rely on.
 MAX_BYTES = 8 * 1024 * 1024
 
-#: How long a `test:` row may run before it is a failure. The suite this
-#: register names takes about 2 seconds; the ceiling is for a hang, not for a
-#: slow machine.
-TEST_TIMEOUT = 600
+#: How long a `test:` row may run before it is a failure. The ceiling is for a
+#: hang, not for a slow machine.
+#:
+#: RAISED 600 -> 900 s on the owner's 2026-11-10 00:05 PT Gemini ruling (Q2).
+#: `backend/test_live_settings_parity.py` passed all 935 of its checks in
+#: 606.6 s - 6.6 s over the old cap - because Jarvis grew to 62 switchable
+#: tools and 180+ features across waves 8-14. The ruling's other half is that
+#: the suite caches its repeated static reads to get back well under this
+#: ceiling; the two changes together make the desk timeout permanent without
+#: splitting claim row C101 or inventing an "environment-dependent" category.
+TEST_TIMEOUT = 900
 
 #: The explicit opt-in to run each `test:` row's suite against the backend folder
 #: `JARVIS_BACKEND` names - the owner's LIVE folder on this PC. The same flag,

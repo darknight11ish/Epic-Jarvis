@@ -1576,6 +1576,9 @@ _TOOL_TARGETS = {
     'github_open_issue': ('the github open issue tool', 'github open issue tool', 'the github open issue', 'github open issue'),
     'github_rerun_workflow': ('the github rerun workflow tool', 'github rerun workflow tool', 'the github rerun workflow', 'github rerun workflow'),
     'github_create_repo': ('the github create repo tool', 'github create repo tool', 'the github create repo', 'github create repo'),
+    'github_pr_scan': ('the github pr scan tool', 'github pr scan tool', 'the github pr scan', 'github pr scan', 'the github pull request scan tool', 'github pull request scan tool', 'the github pull request scan', 'github pull request scan'),
+    'github_merge_pr': ('the github merge pr tool', 'github merge pr tool', 'the github merge pr', 'github merge pr', 'the github pull request merge tool', 'github pull request merge tool', 'the github pull request merge', 'github pull request merge'),
+    'github_fix_and_push': ('the github fix and push tool', 'github fix and push tool', 'the github fix and push', 'github fix and push', 'the github pull request fix tool', 'github pull request fix tool', 'the github pull request fix', 'github pull request fix'),
     'approval_policy': ('the approval policy tool', 'approval policy tool', 'the approval policy', 'approval policy'),
     'email_read': ('the email tool', 'email', 'my email'),
 }

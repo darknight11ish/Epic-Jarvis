@@ -484,6 +484,10 @@ TIER_EXTRA = (
     # repository called Fitness Band"). In this group because it is the AI
     # model's own GitHub tool: its own switch here, and its own action card.
     "github_create_repo",
+    # The cockpit and the two carded writes of 2026-11-10 (the owner's
+    # "Everything at once"). Same group and same reason: the model's own GitHub
+    # tools, each with its own switch, each still raising its own card.
+    "github_pr_scan", "github_merge_pr", "github_fix_and_push",
     # Changing what needs a card, a second yes or Windows Hello by talking to
     # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). A
     # switch here offers the ability to the model at all; it never changes a
@@ -517,14 +521,16 @@ NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: ones above. 62 at 2026-11-09 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
+#: ones above. 65 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
 #: GitHub tools the tool list had grown without a row of their own, plus
 #: hands-free's send_text_message, plus the approval-policy tool's own row,
 #: plus the four pack tools; 61 was wave 13's carded github_create_repo, a model
-#: tool like the rest, and 62 is project_read, the read half of "Jarvis takes
-#: over dev work"; the product check is the fourth exception rather than a row,
-#: and the cloud escalation switch the fifth - it rides with change_setting, so
-#: the count does not move with it).
+#: tool like the rest, 62 was project_read, the read half of "Jarvis takes over
+#: dev work", and 63-65 are wave 16's three GitHub tools of 2026-11-10 - the
+#: read-only PR cockpit, the carded merge and the carded fix-and-push; the
+#: product check is the fourth exception rather than a row, and the cloud
+#: escalation switch the fifth - it rides with change_setting, so the count does
+#: not move with it).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -863,6 +869,12 @@ GROUPS = (
                       # repository on his own account, one card each. Its own
                       # action, so it has its own row here.
                       "github_create_repo",
+                      # The two carded writes of 2026-11-10 (the owner's
+                      # "Everything at once"): a merge and a PR-branch push both
+                      # raise a card, so both are rows on this page. The cockpit
+                      # (github_pr_scan) is a READ and shares github_inspect
+                      # above, so it has no row of its own here.
+                      "github_merge_pr", "github_fix_and_push",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -2820,6 +2832,13 @@ LOCKDOWN_ACTIONS = frozenset({
     # owner's name, and Jarvis cannot delete it afterwards. It ships as "ask";
     # it is here so a line loosened one day still asks while Lockdown is on.
     "github_create_repo",
+    # The two WRITES of 2026-11-10: a merge changes GitHub in the owner's name,
+    # and a push adds commits to one of his branches. Both leave this PC through
+    # api.github.com with the saved token, and neither can be undone by Jarvis.
+    # They ship as "ask", so Lockdown changes nothing today; they are listed so
+    # that a tier line loosened one day still asks while Lockdown is on, like
+    # every other way out of this PC on this list.
+    "github_merge_pr", "github_fix_and_push",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

@@ -13457,9 +13457,12 @@ def _self_answers(s: str) -> Optional[Intent]:
 # "what is your GitHub repository?" -> "I don't have a public GitHub
 # repository" (false: darknight11ish/Epic-Jarvis is public and the updater
 # downloads its releases from it); "can you merge a pull request?" -> a MERGE
-# APPROVAL CARD was invented ("I can propose the merge to you now"), while
-# jarvis_github.NEVER has merge in it and no merge action, card or endpoint
-# exists anywhere; "how do I disconnect it?" -> "you haven't told me what 'it'
+# APPROVAL CARD was invented ("I can propose the merge to you now"), while no
+# merge action existed to approve it in 2026-11-07. A merge and a
+# pull-request-branch push ARE real since 2026-11-10, but only behind their own
+# cards - never a squash, a rebase, an admin bypass or a force-push (the
+# 2026-11-07 card-answer block below answers that shape from the module now);
+# "how do I disconnect it?" -> "you haven't told me what 'it'
 # is yet", while the true careful sentence already sits in
 # jarvis_accounts.state_words("github").
 #
@@ -13663,6 +13666,18 @@ _GITHUB_CODE_CONTEXT = re.compile(
 _GITHUB_CODE_VERB = re.compile(
     r"\bclone(?:s|d|ing)?\b"
     r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b(?!\s+up\b)")
+#: An imperative SETTINGS sentence, not a question about what Jarvis can do
+#: (added 2026-11-10). The wave-16 tool names carry a code verb inside them -
+#: "the github fix and push tool", and the natural "github pull request …"
+#: names - so the never-list below would otherwise swallow the owner's own
+#: request to switch that tool on ("let the ai model read the github fix and
+#: push tool" answered the clone/push never-list instead of the switch). The
+#: word "tool"/"switch"/"setting" or a leading turn/let/allow verb is what
+#: tells the two apart: a capability question says "can you push", never
+#: "the … push tool". Measured by test_settings_registry's completeness check.
+_GITHUB_SETTINGS_SENTENCE = re.compile(
+    r"\b(?:tools?|switch(?:es)?|settings?)\b"
+    r"|^(?:please\s+)?(?:turn|switch|let|allow|stop|enable|disable|keep)\b")
 
 
 #: "do you have access to my github", "can you read my github" - the capability
@@ -13698,6 +13713,12 @@ def _github_connect_receipt_intent(s: str) -> Optional[Intent]:
     """The post-save receipt shapes, or None. Whole sentences only."""
     low = s.strip()
     if not low:
+        return None
+    # A settings sentence is not a capability question (2026-11-10): the tool
+    # names of this wave contain a code verb ("fix and push", "pull request"),
+    # so without this the never-list below would answer the owner's own request
+    # to switch that tool on. The settings grammar later in `match()` owns it.
+    if _GITHUB_SETTINGS_SENTENCE.search(low):
         return None
     # A "tell me when ..." watch sentence is jarvis_tellme's own, including the
     # PR-URL shape ("tell me when https://github.com/o/r/pull/9 is merged").
@@ -13763,9 +13784,33 @@ def _github_never_words() -> str:
             return str(GH.never_words() or "").strip()
         except Exception:                   # noqa: BLE001 - fall through to words
             pass
-    return ("Jarvis cannot merge, push, commit, delete or close anything on GitHub - "
-            "it can read your GitHub, comment, open an issue and re-run a workflow, "
-            "and nothing else.")
+    return ("Jarvis can never force-push, squash-merge, bypass required checks, "
+            "push directly to main, or delete/close repositories or branches; every "
+            "merge or PR-branch push requires its own approval card.")
+
+
+def _github_capability_inventory() -> str:
+    """The GitHub inventory from its ONE home, `jarvis_github.capabilities_text`.
+
+    The owner's directive of 2026-11-10: Jarvis knows its GitHub abilities and
+    the small details around them. The full text lives in that module's
+    `CAPABILITIES`; this answer renders it rather than keeping a second copy.
+    The fixed fallback is the last one written by hand, used only on a PC whose
+    backend predates the list.
+    """
+    GH = _github_module()
+    if GH is not None:
+        try:
+            text = str(GH.capabilities_text() or "").strip()
+            if text:
+                return (text + " Plus github_search, which researches a library "
+                        "on GitHub, and the scheduled watch_github job behind "
+                        "\"tell me when\" GitHub checks.")
+        except Exception:                   # noqa: BLE001 - fall through to words
+            pass
+    return (GITHUB_TOOLS_WORDS + " All of them are off by default: each has its "
+            "own switch in Settings, What asks first, under \"Let the AI use "
+            "this\" (group \"Jarvis's own tools\").")
 
 
 def _self_github(s: str) -> Optional[Intent]:
@@ -21508,31 +21553,38 @@ def _run_connected(intent: Intent) -> Result:
                   "the AI model.", intent.name)
 
 
-#: The six on-demand tools, named EXACTLY as jarvis_agent.TOOLS registers them,
+#: The ten on-demand tools, named EXACTLY as jarvis_agent.TOOLS registers them,
 #: plus the research tool and the scheduled watch body - so the inventory
 #: answer names the whole real GitHub surface and nothing invented.
 GITHUB_TOOLS_WORDS = (
-    "Seven tools for your own GitHub: github_list (your repositories, a "
+    "Ten tools for your own GitHub: github_list (your repositories, a "
     "repository's pull requests, issues or workflow runs), github_read_file (one "
-    "file), github_ci_status (the newest workflow run), github_comment (one "
-    "comment), github_open_issue (one new issue), github_rerun_workflow (run an "
-    "existing workflow again) and github_create_repo (create ONE new, empty "
-    "repository on your own account). Plus github_search, which researches a "
-    "library on GitHub, and the scheduled watch_github job behind \"tell me "
-    "when\" GitHub checks.")
+    "file), github_ci_status (the newest workflow run), github_pr_scan (the pull "
+    "request cockpit: which open pull requests can be merged, and which check is "
+    "holding them), github_comment (one comment), github_open_issue (one new "
+    "issue), github_rerun_workflow (run an existing workflow again), "
+    "github_create_repo (create ONE new, empty repository on your own account), "
+    "github_merge_pr (merge ONE pull request with a merge commit, pinned to the "
+    "head commit the card shows) and github_fix_and_push (copy a failing pull "
+    "request into a scratch folder here, then push the fix to its own branch on a "
+    "second card). Plus github_search, which researches a library on GitHub, and "
+    "the scheduled watch_github job behind \"tell me when\" GitHub checks.")
 
 
 def _github_asks_words() -> str:
     """Which GitHub actions ask first, from the asks-first page's own rows."""
+    fallback = ("These GitHub actions ask you first every time: reading your "
+                "GitHub, commenting, opening an issue, re-running a workflow, "
+                "creating a repository, merging a pull request and pushing a fix "
+                "to a pull request's branch.")
     try:
         import jarvis_asks_first as AF
         view = AF.view(here=False)
     except Exception:                       # noqa: BLE001 - older PC
-        return ("Five actions ask you first every time: reading your GitHub, "
-                "commenting, opening an issue, re-running a workflow and creating a "
-                "repository.")
+        return fallback
     wanted = ("github_inspect", "github_comment", "github_open_issue",
-              "github_rerun_workflow", "github_create_repo")
+              "github_rerun_workflow", "github_create_repo", "github_merge_pr",
+              "github_fix_and_push")
     got = []
     for group in view.get("groups") or ():
         for row in group.get("rows") or ():
@@ -21540,12 +21592,20 @@ def _github_asks_words() -> str:
             if rid in wanted:
                 got.append(str(row.get("title") or rid))
     if not got:
-        return ("Five actions ask you first every time: reading your GitHub, "
-                "commenting, opening an issue, re-running a workflow and creating a "
-                "repository.")
-    return ("These GitHub actions ask you first every time: " + _self_list(got)
+        return fallback
+    said = ("These GitHub actions ask you first every time: " + _self_list(got)
             + ". The reads ask too, because a read sends your token to "
               "api.github.com. That cannot be loosened from an app.")
+    missing = [name for name in ("github_merge_pr", "github_fix_and_push")
+               if name not in {str((row or {}).get("id") or "")
+                               for group in view.get("groups") or ()
+                               for row in group.get("rows") or ()}]
+    if missing:
+        # Said plainly rather than left out: the gate asks for these whatever an
+        # older What-asks-first page happens to list (jarvis_github.ACTIONS).
+        said += (" Merging a pull request and pushing a fix to a pull request's "
+                 "branch each raise their own card as well.")
+    return said
 
 
 def _github_create_repo_words() -> str:
@@ -21568,7 +21628,7 @@ def _github_create_repo_words() -> str:
     if not exists:
         return ("This PC's Jarvis does not have the create-a-repository action yet - "
                 "run apply-patches.ps1 on the PC. It can read your GitHub, comment, "
-                "open an issue and re-run a workflow, and nothing else.")
+                "open an issue and re-run a workflow.")
     try:
         import jarvis_asks_first as AF
         switched = "github_create_repo" in {str(n) for n in AF.tools_enabled_set()}
@@ -21600,29 +21660,49 @@ def _github_create_repo_words() -> str:
 GITHUB_CAPABILITY_FALLBACK = (
     "A GitHub token saved on the connect card is tested once with one GitHub "
     "request - that proves the token identifies your GitHub account, nothing more. "
-    "It lets me search GitHub, see private repositories and watch CI. With the "
-    "GitHub tools switched on I can also read your repositories, pull requests, "
-    "issues, CI status and one file, comment, open an issue, re-run a workflow and "
-    "create one new empty repository on your own account - each on its own approval "
-    "card. I can never clone, push or pull code, and never merge, commit, close or "
-    "delete anything.")
+    "It lets me search GitHub, see private repositories and watch CI. With the ten "
+    "GitHub tools switched on (all off by default) I can also read your "
+    "repositories, pull requests, issues, CI status, one file and the pull request "
+    "cockpit (whether each open pull request can merge, with its head commit), "
+    "comment, open an issue, re-run a workflow, create one new empty repository on "
+    "your own account, merge ONE pull request with one merge commit pinned to the "
+    "exact head commit on its approval card, and fix-and-push: copy a failing pull "
+    "request into an isolated folder on this PC, then push commits a person made "
+    "there to that pull request's own branch - two stages and two cards, with the "
+    "token sent to api.github.com and nowhere else. It never force-pushes, "
+    "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
+    "checks, pushes to main, deletes or closes a repository or branch, approves a "
+    "pull request, dispatches a workflow or touches gists, and it has no tool that "
+    "edits or commits code.")
 GITHUB_NEVER_FALLBACK = (
-    "No - I never copy a repository to this PC, send code back to GitHub, or change "
-    "code in any way: there is no action, card or endpoint for that, so approving a "
-    "card cannot create one. What a saved token does let me do: search GitHub, see "
-    "private repositories and watch CI; and with the GitHub tools switched on, read "
-    "your repositories, pull requests, issues, CI status and one file, comment, open "
-    "an issue, re-run a workflow and create one new empty repository on your own "
-    "account - each on its own approval card. There is no merge action and no merge "
-    "card at all.")
+    "No - I never copy a repository to this PC, and I have no tool that edits or "
+    "commits code. What a saved token does let me do: search GitHub, see private "
+    "repositories and watch CI; and with the GitHub tools switched on, read your "
+    "repositories, pull requests, issues, CI status, one file and the pull request "
+    "cockpit (whether each open pull request can merge, with its head commit), "
+    "comment, open an issue, re-run a workflow and create one new empty repository "
+    "on your own account - each on its own approval card; and, on its own cards, "
+    "merge ONE pull request with one merge commit pinned to the exact 40-hex head "
+    "commit its card shows, and fix-and-push: copy a failing pull request into an "
+    "isolated folder on this PC, then push commits a person made there to that "
+    "pull request's own branch - two stages and two cards. It never force-pushes, "
+    "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
+    "checks, pushes to main, deletes or closes a repository or branch, approves a "
+    "pull request, dispatches a workflow or touches gists.")
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
-    "GitHub tools switched on, it can also read your repositories, pull requests, "
-    "issues, CI status and one file, comment, open an issue, re-run a workflow and "
-    "create one new empty repository on your own account - each on its own approval "
-    "card. I never copy a repository to this PC, send code back to GitHub, or change "
-    "code in any way: there is no action, card or endpoint for that, and no merge "
-    "action or merge card either.")
+    "GitHub tools switched on - ten of them, all off by default - it can also read "
+    "your repositories, pull requests, issues, CI status, one file and the pull "
+    "request cockpit (whether each open pull request can merge, with its head "
+    "commit), comment, open an issue, re-run a workflow, create one new empty "
+    "repository on your own account, merge ONE pull request with one merge commit "
+    "pinned to the exact head commit on its own approval card, and fix-and-push: "
+    "copy a failing pull request into an isolated folder on this PC, then push "
+    "commits a person made there to that pull request's own branch - two stages and "
+    "two cards. It never force-pushes, squash-merges, rebases, uses an admin bypass "
+    "or auto-merge, bypasses required checks, pushes to main, deletes or closes a "
+    "repository or branch, approves a pull request, dispatches a workflow or "
+    "touches gists, and there is no tool that edits or commits code.")
 
 
 def _github_capability_words(which: str = "sentence") -> str:
@@ -21712,15 +21792,23 @@ def _run_github_self(f: dict) -> Result:
     if shape == "never":
         return Result(never + " " + state, "github_self")
     if shape == "merge":
+        # 2026-11-10, the owner's "Everything at once": merging IS built now, and
+        # a sentence saying there is no merge card would be a lie. The boundary is
+        # the card, the merge commit and the pin.
         return Result(
-            "No. " + never + " There is no merge action and no merge card at all - "
-            "approving a card cannot create one, because merging was never built. "
-            "A pull request is merged on GitHub itself, by you.", "github_self")
+            "Yes - with ONE approval card per merge, and merge commit only. The "
+            "card names the pull request and its exact head commit, and the merge "
+            "is refused with nothing sent if that commit has moved, the pull "
+            "request is a draft, it does not merge cleanly, a check is still "
+            "running, or a required check did not pass. I can never squash, "
+            "rebase, force, use an admin bypass or turn on auto-merge, and a "
+            "merge cannot be undone afterwards. Pushing exists only as the "
+            "fix-and-push flow: one card before the push, and only to a pull "
+            "request's own branch - never main, master, release/* or hotfix/*, "
+            "and never a force-push. " + never + " " + state,
+            "github_self")
     if shape == "tools":
-        return Result(
-            GITHUB_TOOLS_WORDS + " All of them are off by default: each has its own "
-            "switch in Settings, What asks first, under \"Let the AI use this\" "
-            "(group \"Jarvis's own tools\"). " + state, "github_self")
+        return Result(_github_capability_inventory() + " " + state, "github_self")
     if shape == "create_repo":
         return Result((_github_create_repo_words() + " " + state).strip(),
                       "github_self")
@@ -21736,12 +21824,15 @@ def _run_github_self(f: dict) -> Result:
     if shape == "action":
         return Result(
             "Yes - each one waits for its own approval card showing exactly what "
-            "will be posted or re-run. Commenting, opening an issue and re-running "
-            "a workflow are the only three things Jarvis can change on GitHub, and "
-            "nothing happens until you decide that card. Three reads work the same "
-            "way: listing your repositories, pull requests, issues or workflow runs, "
-            "reading one file, and checking the newest CI run - each asks first too, "
-            "because a read sends your token out. " + state, "github_self")
+            "will be posted, merged, pushed or re-run, and nothing happens until "
+            "you decide that card. Six actions can change something on GitHub: "
+            "commenting, opening an issue, re-running a workflow, creating a "
+            "repository, merging a pull request with a merge commit pinned to the "
+            "head commit on the card, and pushing a fix to a pull request's own "
+            "branch on a second card. Four reads work the same way: listing your "
+            "repositories, pull requests, issues or workflow runs, the pull request "
+            "cockpit, reading one file, and checking the newest CI run - each asks "
+            "first too, because a read sends your token out. " + state, "github_self")
     return Result(never + " " + state, "github_self")
 
 

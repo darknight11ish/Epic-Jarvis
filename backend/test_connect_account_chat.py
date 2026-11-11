@@ -29,8 +29,10 @@ WHAT THIS SUITE PROVES, and each check is one of those claims:
      never "connected", never "it works".
   3. NO CAPABILITY OVERCLAIM: the answer never claims cloning, pushing or
      pulling; it names the honest surface (GitHub searches, private
-     repositories, CI watches; and with the GitHub tools on: reads, a comment,
-     an issue, a workflow re-run - each on its own card) and the never-list.
+     repositories, CI watches; and with the ten GitHub tools on: reads, a
+     comment, an issue, a workflow re-run and one repository - each on its own
+     card; plus, since 2026-11-10, the carded merge-commit-only merge and the
+     carded fix-and-push, named WITH their cards) and the never-list.
   4. THE MODEL CAN NEVER INVENT THE RECEIPT: the answer is a pure function of
      the recorded receipt (a different receipt gives a different answer, no
      receipt says "no record"), the record is written by the save route, and the
@@ -275,10 +277,12 @@ def t_the_transcripts_exact_sentences_answer_from_the_receipt():
           said[:400])
     check("... it names the honest surface, not an invented one",
           "search github" in low and "private repositories" in low
-          and "watch ci" in low and "approval card" in low, said[:400])
-    check("... its capability half refuses code changes in plain words, without "
-          "the overclaim words (GH-5)",
-          "never copy a repository" in low and "no merge action or merge card" in low
+          and "watch ci" in low and "approval card" in low and "ten of them" in low,
+          said[:400])
+    check("... its capability half names the real carded surface, with no uncarded "
+          "code change and no old 'no merge action' line (GH-5)",
+          "merge commit" in low and "fix-and-push" in low
+          and "approval card" in low and "no merge action" not in low
           and _ban_free(said), said[:400])
     check("... and NONE of the transcript's invented lines survives",
           _no_claims(said), [bad for bad in OVERCLAIMS if bad in low])
@@ -436,12 +440,17 @@ def t_status_with_a_token_follows_only_the_verifier():
 
 def t_capability_answers_carry_no_overclaim_words():
     """GH-5 + F11: the four phrasings that reached the model, answered
-    deterministically, with the overclaim words absent from every chat answer
-    and the merge refusal naming that no merge action or card exists."""
+    deterministically, with the overclaim words absent from every chat answer.
+    Since 2026-11-10 the clone/push/pull answer names the carded merge and the
+    carded fix-and-push instead of denying they exist, and every ability it
+    names carries its own approval card."""
     _seed()
+    # The verbs still claimed with no card behind them. "merge" is NOT in this
+    # list since 2026-11-10: a merge IS real now, but it is only ever claimed
+    # WITH its card - which the checks below prove on the same sentence.
     positive = re.compile(
         r"\b(?:i|you|jarvis|it)\s+(?:can|could|will|would|is\s+able\s+to)\s+"
-        r"(?:now\s+)?(?:copy|download|send|update|merge)\b", re.I)
+        r"(?:now\s+)?(?:copy|download|edit|delete|close)\b", re.I)
     for sentence in ("can you clone my repo", "can you push to github",
                      "can you pull my repo", "do you have access to my github",
                      "can you read my github", "can you access my github"):
@@ -455,15 +464,20 @@ def t_capability_answers_carry_no_overclaim_words():
         check("... and it names what IS possible, each on its own card",
               "search github" in said.lower() and "private repositories" in said.lower()
               and "approval card" in said.lower(), said[:400])
-        check("... the refusal is in plain words, with no merge action or card",
-              "never copy a repository" in said.lower()
-              and "no merge action" in said.lower(), said[:400])
-    # The merge refusal keeps its own deterministic answer.
+        check("... the answer names the carded merge and the carded fix-and-push, "
+              "never the old 'no merge action' line",
+              "merge commit" in said.lower() and "fix-and-push" in said.lower()
+              and "approval card" in said.lower()
+              and "no merge action" not in said.lower(), said[:400])
+    # The merge question is answered as REAL now (2026-11-10): one card, merge
+    # commit only, pinned - never the old "no merge action and no merge card".
     intent, result = _ran("can you merge a pull request?")
     said = result.reply if result is not None else ""
-    check("the merge refusal says there is no merge action and no merge card",
+    check("the merge answer says a merge IS real, on ONE card and merge commit only",
           intent is not None and intent.name == "github_self"
-          and "no merge action and no merge card" in said.lower(), said[:300])
+          and "one approval card" in said.lower()
+          and "merge commit only" in said.lower()
+          and "no merge action" not in said.lower(), said[:300])
     # A push with no GitHub/code context keeps its own path (not hijacked).
     intent, _r = _ran("can you push a notification to my phone?")
     check("a 'push' that is not about code is not hijacked",
@@ -578,20 +592,24 @@ def t_the_feature_guide_row_carries_the_same_words():
           "github_connect" in FG.SELF_FACT_IDS, FG.SELF_FACT_IDS)
     digest = str((row or {}).get("digest") or "")
     low = digest.lower()
-    check("the model's digest names the never-list",
-          "never clone, push or pull" in low and "never merge, commit, close or delete" in low,
-          digest[:300])
+    check("the model's digest names the real never-list",
+          "never force-pushes" in low and "squash-merges" in low
+          and "approves a pull request" in low
+          and "no tool that edits or commits code" in low, digest[:300])
     check("... and the honest surface, each on its own card",
           "private repositories" in low and "watch ci" in low
-          and "approval card" in low and "search github" in low, digest[:300])
+          and "approval card" in low and "search github" in low
+          and "ten of them" in low and "merge commit" in low, digest[:300])
     check("... and no claim the model could copy into an overclaim",
           not any(bad in low for bad in OVERCLAIMS), digest[:300])
     # The deterministic chat answer uses the SAME capability words: one source.
     short = str((row or {}).get("short") or "")
     never = str((row or {}).get("never") or "")
-    check("the CHAT-facing halves never say cloning/pushing/pulling (GH-5)",
+    check("the CHAT-facing halves never say cloning/pushing/pulling (GH-5) and "
+          "name the carded merge (not the old no-merge line)",
           _ban_free(short) and _ban_free(never)
-          and "no merge action" in never.lower(), (short[:120], never[:120]))
+          and "merge commit" in never.lower() and "approval card" in never.lower()
+          and "no merge action" not in never.lower(), (short[:120], never[:120]))
     _seed()
     _intent, result = _ran("i added a token")
     said = result.reply if result is not None else ""

@@ -110,18 +110,26 @@ A LINE RANGE, AND THE ONE FOOTER
 CREDENTIAL FILES ARE REFUSED BY NAME
   A file whose NAME says it holds a key, a password or a token is refused with
   one plain sentence, even inside a folder the owner listed: `.env` and
-  `.env.*`, `.netrc`, `.git-credentials`, `.npmrc`, `credentials`,
-  `credentials.json`, a private key (`id_rsa`, `id_ed25519`, `id_ecdsa`,
+  `.env.*`, `.envrc`, `.netrc`, `.git-credentials`, `.npmrc`, `.pypirc`,
+  `.htpasswd`, `credentials`, `credentials.json`, `secrets.json`,
+  `api_keys.py`, any `.json` whose name says "credentials"
+  (`*credentials*.json`), a private key (`id_rsa`, `id_ed25519`, `id_ecdsa`,
   `id_dsa`, with or without a suffix), the `.pem`, `.key`, `.pfx`, `.p12`,
-  `.kdbx` and `.jks` extensions, and any path with a `.git` folder in it. The
-  check is the NAME only: it never opens the file, never asks whether it
-  exists, and never lists anything. Ordinary source files that merely contain
-  one of those words - `key.py`, `keys.py`, `env.py`, `credentials_migration.py`
-  - are read exactly as before. It runs when the folder/file boundary has
-  already refused the path (so the sentence says WHY, instead of the broad
-  "only folders on the list" answer that is untrue for a file inside a listed
-  folder) and again after the walk, before the file is opened, so a name the
-  boundary does not know about (`id_dsa`, `credentials.json`) is refused too.
+  `.kdbx`, `.jks` and `.token` extensions, and any path with a `.git` folder
+  in it - `.git/credentials` included. The check is the NAME only: it never
+  opens the file, never asks whether it exists, and never lists anything.
+  Ordinary source files that merely contain one of those words - `key.py`,
+  `keys.py`, `env.py`, `credentials_migration.py`, `tokens.md` - are read
+  exactly as before.
+  THE ONE HELPER, ASKED BY BOTH READ TOOLS (owner's ruling, 2026-11-10 00:05
+  PT, Q3). `credential_path` below is the public name of this ONE check, and
+  `jarvis_agent._run_file_read` - the unbounded `file_read` tool - calls the
+  very same function, so the two read doors cannot disagree about a credential
+  file. It runs when the folder/file boundary has already refused the path (so
+  the sentence says WHY, instead of the broad "only folders on the list" answer
+  that is untrue for a file inside a listed folder) and again after the walk,
+  before the file is opened, so a name the boundary does not know about
+  (`id_dsa`, `secrets.json`) is refused too.
 
 THE HONEST LIMITS
   * The whole-file cap is `jarvis_repomap.MAX_FILE_BYTES` (512 KB), reused so
@@ -296,14 +304,22 @@ def _same(a: str, b: str) -> bool:
 
 
 #: The names that say "this holds a key, a password or a token". Asked of the
-#: NAME only - `_credential` never opens, stats or lists anything.
-_CRED_NAMES = (".env", ".netrc", ".git-credentials", ".npmrc", "credentials",
-               "credentials.json")
+#: NAME only - `_credential` never opens, stats or lists anything. The
+#: 2026-11-10 00:05 PT ruling (Q3) extended this list; `file_read`
+#: (jarvis_agent._run_file_read) asks the SAME helper through
+#: `credential_path` below, so the two read doors cannot drift apart.
+_CRED_NAMES = (".env", ".envrc", ".netrc", ".git-credentials", ".npmrc",
+               ".pypirc", ".htpasswd", "credentials", "credentials.json",
+               "secrets.json", "api_keys.py")
 _CRED_STEMS = ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
-_CRED_EXTS = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".jks")
+_CRED_EXTS = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".jks", ".token")
+#: A `.json` file whose NAME says "credentials" (`*credentials*.json`, the
+#: ruling's pattern). Only the extension is asked, so `credentials_migration.py`
+#: - ordinary source - stays readable.
+_CRED_JSON_WORD = "credential"
 
 
-def _credential(rel, real="") -> bool:
+def _credential(rel, real="", *, git_store=True) -> bool:
     """True when this NAME says the file holds a key, a password or a token.
 
     Asked of the path inside the folder, of the file's own name, and - when a
@@ -312,14 +328,18 @@ def _credential(rel, real="") -> bool:
     and nothing else: no `open`, no `stat`, no `listdir`, so the answer cannot
     depend on the file existing or on being able to read it.
 
-    Deliberately narrow: `key.py`, `keys.py`, `env.py` and
+    Deliberately narrow: `key.py`, `keys.py`, `env.py`, `tokens.md` and
     `credentials_migration.py` are ordinary source files and are NOT refused.
     A `.git` FOLDER anywhere in the path is refused (a git store holds
-    credentials); a file merely called `my.git` is not.
+    credentials); a file merely called `my.git` is not. `git_store=False` turns
+    that one folder rule off for a caller that has its own, older `.git` rules
+    and must keep them - `file_read` does (it may read a repository's
+    `.git/HEAD`, a public half, and refuses `.git/config` for its own reason),
+    while it still refuses `.git/credentials` by NAME.
     """
     parts = [p for p in str(rel or "").replace("\\", "/").split("/")
              if p not in ("", ".")]
-    if any(p.lower() == ".git" for p in parts[:-1]):
+    if git_store and any(p.lower() == ".git" for p in parts[:-1]):
         return True
     names = [parts[-1]] if parts else []
     if real:
@@ -337,7 +357,33 @@ def _credential(rel, real="") -> bool:
             return True
         if os.path.splitext(low)[1] in _CRED_EXTS:
             return True
+        if low.endswith(".json") and _CRED_JSON_WORD in low:
+            return True
     return False
+
+
+#: The public name of the ONE credential check, for any other module that reads
+#: a file: give it a path or a bare filename and it answers True/False. The
+#: owner's 2026-11-10 00:05 PT ruling (Q3) requires ONE shared denylist, so
+#: `jarvis_agent._run_file_read` (the unbounded `file_read` tool) asks THIS, and
+#: so does a lane that must check a file before it writes one out. It is the
+#: same function object as `_credential` - not a second copy of the list.
+def is_credential_path(name: str) -> bool:
+    """True when `name` - a path or a bare filename - says "credential file".
+
+    The published, one-argument form of `_credential` below: no file is opened,
+    no `stat`, no `listdir`, so the answer never depends on the file existing.
+    A `.git` folder in the path is refused (that store holds credentials);
+    `.git/credentials` is caught by NAME as well.
+    """
+    return _credential(name)
+
+
+#: The same function for a caller that also has the RESOLVED target path, or
+#: that has its own older `.git` rules to keep: `jarvis_agent._run_file_read`
+#: asks it with `git_store=False` because it is allowed to read a repository's
+#: `.git/HEAD` (a public half) while still refusing `.git/credentials`.
+credential_path = _credential
 
 
 # --------------------------------------------------------------------------

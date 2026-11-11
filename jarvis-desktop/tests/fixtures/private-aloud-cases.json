@@ -687,6 +687,90 @@
       "read": false
     },
     {
+      "name": "the tool github_pr_scan ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_pr_scan"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_pr_scan"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_merge_pr ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_merge_pr"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_merge_pr"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_fix_and_push ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_fix_and_push"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_fix_and_push"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool web_search ran",
       "heard": {
         "private_aloud": false,

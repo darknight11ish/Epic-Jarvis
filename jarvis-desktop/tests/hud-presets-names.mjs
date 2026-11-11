@@ -185,6 +185,30 @@ await check("one popover at a time is one helper, and this module registers its 
 
 /* ── the real page ─────────────────────────────────────────────────────────── */
 
+/**
+ * The cockpit layout is REALLY two columns since Wave 16 (Gemini ruling Q1):
+ * the left rail is an off-canvas drawer, opened by the page's own
+ * [☰ Controls] button. This page's default layout is cockpit, so a click on
+ * #rail-presets lands on an element that is off the glass and Playwright
+ * refuses it with "element is outside of the viewport". Open the drawer first,
+ * exactly as a person reaches the rail - the same two-line `neededDrawer` shape
+ * tests/hud.mjs uses for its drawer shells.
+ */
+async function openRail(page) {
+  const opened = await page.evaluate(() => {
+    const rail = document.getElementById("rail-left");
+    if (!rail) return false;
+    const r = rail.getBoundingClientRect();
+    if (r.width > 1 && r.left >= -1) return false;   // a layout that keeps it on screen
+    const toggle = document.getElementById("left-toggle");
+    if (!toggle) return false;
+    toggle.click();
+    return true;
+  });
+  if (opened) await page.waitForTimeout(350);
+  return opened;
+}
+
 await check("the real page draws the seven plain names, not the internal labels", async () => {
   const browser = await launch();
   const site = await serve();
@@ -202,6 +226,13 @@ await check("the real page draws the seven plain names, not the internal labels"
     }));
     await page.goto(`${site.base}/jarvis_hud.html`);
     await page.waitForSelector("#hud-layout-badge", { timeout: 15000 });
+    // The plain browser's own layout store answers AFTER the first paint (the
+    // page's preview mirror paints three-column until then), so let the
+    // cockpit document land before asking whether the rail is a drawer.
+    await page.waitForFunction(() => Boolean(window.__jarvisHudLayout),
+      null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    await openRail(page);
     await page.click("#rail-presets");
     await page.waitForSelector("#hud-presets-menu:not([hidden])", { timeout: 5000 });
     const drawn = await page.evaluate(() => [...document.querySelectorAll(
