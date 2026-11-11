@@ -8,6 +8,7 @@ appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a2
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30Z	I invented a NameError, then reported it twice as a finding
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27Z	The backend route, written against the real jarvis_hud.py
 approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50Z	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
+approval-notice.patch	approval-notice/c08d768.patch	c08d768a1a62b1eec61c24d88727642d0c5d753c	2026-10-10T19:59:21-07:00	Approval cards read short: a summary, "Explain more", and a setting
 approval-notice.patch	approval-notice/647f117.patch	647f117105e85fdaacdfce9d4e1e077b97009e6b	2026-09-25T23:33:32Z	Approval cards: one plain card on every screen, "Open the card", voice says a card is waiting
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34Z	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
 apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54Z	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
@@ -23,6 +24,7 @@ auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa37
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10Z	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14Z	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44Z	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
+backup.patch	backup/c7501b4.patch	c7501b43f6e5a3505f93d4317511e2d122ee2300	2026-09-26T22:01:34Z	Add backups: one locked backup file, a recovery code, restore with a card
 bench.patch	bench/d5cf03f.patch	d5cf03f6cdfa36168230309274d47ff975a975b2	2026-11-04T09:37:20-08:00	feat(bench): measure token speed on this PC - phase 1 backend
 big-coder.patch	big-coder/f13d795.patch	f13d795116434212bccbf09fe36402e0f5b750fd	2026-10-11T07:54:49-07:00	the 30B coder: both cards, with Jarvis paused
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14Z	Big model: big-model.patch, the install lists, and parity
@@ -189,6 +191,7 @@ temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a50393
 tool-calling-wiring.patch	tool-calling-wiring/477b7b4.patch	477b7b4383c9d192725f7b8971bfc47a67370e44	2026-09-18T01:45:42Z	backend: fix 5 findings from a second, independent code-review pass
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27Z	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47Z	backend: jarvis_agent.py - the model can finally use a tool, local lane only
+tools-enable.patch	tools-enable/4687f2c.patch	4687f2c669114cf1a6f3ee56393aa3af2f7f1192	2026-09-26T17:30:23Z	Offer reading tools to the model from the PC; search History client-side
 topics.patch	topics/bb25795.patch	bb2579561ee03d659482a2462a3fa56cba841a46	2026-09-30T06:53:12Z	Heatmap and balance chart: phone side (Progress.kt compiled and 16 tests run locally; Compose unverified)
 tutorials.patch	tutorials/d4163ee.patch	d4163eeb59f6b82cc9e43b91f0e41f73f3060f43	2026-10-04T22:28:08-07:00	﻿tutorials.patch anchored on the wrong install block - rebuilt
 tutorials.patch	tutorials/35aad3c.patch	35aad3c61f58f1cf94f4f21cede54cf24489f4e8	2026-10-04T21:12:12-07:00	﻿Two regressions my patch caused, both caught by the full local sweep

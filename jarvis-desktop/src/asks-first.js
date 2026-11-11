@@ -129,11 +129,13 @@ export const TOOLS_DETAIL =
   "asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a " +
   "switch here, the raw and everyday ones included; a few are not switches because their " +
   "own switch decides them, and the page names those. Turning one on shows ONE approval " +
-  "card and asks Windows Hello on this PC; turning it off is instant, from either app. " +
+  "card that names that one ability: approve it on the PC with Windows Hello, or on your " +
+  "phone with its own fingerprint or PIN. Turning it off is instant, from either app. " +
   "Nothing here switches two tools at once.";
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
-  "first). It takes one approval card and Windows Hello.";
+  "first). It takes one approval card - approve it on the PC with Windows Hello, or on " +
+  "your phone with its own fingerprint or PIN.";
 /**
  * D4, the owner, 2026-11-04: every tool that is ON is listed, including one the
  * settings file switched on that this page has no switch row for. Since the

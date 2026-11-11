@@ -7231,8 +7231,9 @@ the reader's own state:
   kept as a password) and that any calendar giving a private `.ics` address
   works the same way. When `[tools].enabled` does not offer `calendar_read` (the
   shipped list does not), it adds the one sentence that raises that card:
-  **"let the AI model read my calendar"** (`enable_reading_tool`, PC only, one
-  card plus Windows Hello). It also carries `open_settings: "account-secrets"`,
+  **"let the AI model read my calendar"** (`enable_reading_tool`, a RISKY card:
+  one card, Windows Hello on the PC or the phone's own fingerprint/PIN). It also
+  carries `open_settings: "account-secrets"`,
   so the desktop jumps its Settings window to that card - the same cardless jump
   "open accounts" makes, and nothing is changed by it.
 * **Already set up**: the reader's own name for the source ("your Google
@@ -11553,16 +11554,17 @@ it stays off by default because the deterministic chat request is the normal
 door, and the card names any other switch that must also be on.
 
 Built into `backend/jarvis_asks_first.py` (shipped whole, no new module), the
-same PC-only, Windows-Hello shape as §32.3's loosening card:
-`jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any
-device but the PC. **Desktop only for changing** (`CLAUDE.md`: no deep config
+RISKY shape (the owner's ruling of 2026-11-10): the PC asks Windows Hello and
+the phone asks for its own fingerprint or PIN, so an approval cannot be given
+without a person. It is NOT in `jarvis_owner_check.PC_ONLY_ACTIONS`.
+**Desktop only for changing** (`CLAUDE.md`: no deep config
 editing on the phone): the phone reads the same list but `can_enable` is false.
 
 ### 43.1 Route
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (60), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: requested from the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2), and that card may be approved on the PC (Windows Hello) or on the phone (its own fingerprint or PIN); a phone with no approval key is refused with `no_approval_key` so it can offer to turn signing on. Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (60), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11658,8 +11660,11 @@ otherwise "offered" would be a promise the card cannot keep.
 `send_file_to_phone` keeps its own paragraph: off by default on purpose, asking
 in chat is the normal door.
 
-Its title: "Jarvis wants to offer a tool to the AI model"
-(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the shipped
+Its title: "Jarvis wants to offer \"<the tool's own label>\" to the AI model"
+(`jarvis_gate.notice_for` names the tool from the card's own `detail.setting`,
+validated as a plain tool id and mapped through `jarvis_reach.TOOL_NAMES`; the
+generic `jarvis_card_words.TITLES["enable_reading_tool"]` phrase is the fallback
+for a malformed row). Tier `ask` in the shipped
 `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`: it
 always asks, and it is never itself on the switchable list.
 
@@ -11927,7 +11932,8 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-14; **rule changed 2026-10-24**). **TWO callers may finish a run** (2026-10-24): (a) **the device that MINTED it** - `prepare` records the caller's `handler._jarvis_device` identity in the live run ("pc", "shared", or a paired device's id: the same identity `jarvis_devices` stamps on every request and `jarvis_chatbot_limits` reads, never a new header), and a `commit` whose identity matches is the phone's own finish press (ONE TAP after the tick, with no step on the PC); or (b) **this PC** typing the same code (`finish_phone_backup`, the fallback for a run left waiting). **Any OTHER paired device that holds or has learned the code is refused 403** `{"ok": false, "other_device": true, "error": "That backup was started on another device, so nothing was written and your folder is unchanged. Finish it on the phone that started it, or on your PC (Settings, Backups)."}` - it writes **NOTHING**, leaves the folder byte-for-byte unchanged, and does **NOT spend the run**, so its real finisher can still use it. The device is checked BEFORE the code, so a device that may not finish a run cannot use 400-vs-403 as a code oracle. **The fallback that must stay, said plainly:** a run whose asker identity was never recorded - a direct in-process call (the tests), or a backend with no `jarvis_devices`, where the token wrapper that stamps `_jarvis_device` never ran - cannot be bound, so possession of the live code still decides for it (`jarvis_backup.request_commit`'s own docstring). The old **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, ..."}` stays GONE: the phone that minted the run is not refused. What does not change is where the write happens - on the PC's disk, by the PC's backend, into the folder the owner chose on the PC. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module, or no folder at commit - **409** `NO_FOLDER`) records `last_attempt.ok: false` and writes nothing. The run is **CLAIMED under the module's lock BEFORE the file is written**: two presses - from one app or from both, or the phone and the PC's fallback at once - write ONE file (the second is the 409 above), where before both could pass the check and write two files with the same code, the second one's retention pass pushing an older, still-openable backup out of the five kept. The `id` is sent but **never compared**, so the PC's fallback needs nothing from the phone but the code the owner wrote down. **The phone's half** (§45.5): after `prepare` showed the code and the owner ticked "I have written this code down somewhere safe", its finish button is this call; the screen says "Nothing has been written yet" until the answer says a file landed, and only then "Your PC wrote the backup". **What the guard does NOT close:** a caller holding a paired token can `prepare` (as itself) and then `commit` as the device that minted that same run, so it can still churn the kept backups (§45.6) - the guard stops a DIFFERENT device finishing a run it did not mint, not a token holder making its own. **Residual risk, accepted by the owner on 2026-10-24:** the tick is a client-side promise inside the phone app, not a check by the PC, so a modified or misused paired phone could commit without the code ever being kept - which writes a backup nobody can open and pushes the oldest of the five kept out. **What stays PC-only:** choosing the folder, restoring, listing files and deleting older copies (§45.5; `tools/check_parity.py` has this route as `ported`). |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
-| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. **Since 2026-10-20 (ruling 8.1, §45.4b): the safety backup must be VERIFIED ON DISK before one live file is touched** - present, not empty, its own `JBAK1` shape, the size that was written, it opens with its code, and its manifest reads back; anything else refuses the restore with nothing changed, `reason: "safety_unverified"` in `last_restore` and in the audit's `backup.restore.card`, and the plain sentence "the safety backup could not be made first, so nothing was restored". The outcome's `restored` block names the EXACT files put back (`databases`, `settings_files`, `notes_files`, `voice_files`, `source_files`, `framework_toml`, `keys`), not just counts. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` uses;
+`enable_reading_tool` LEFT that list on 2026-11-10 and is a RISKY card instead). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. **Since 2026-10-20 (ruling 8.1, §45.4b): the safety backup must be VERIFIED ON DISK before one live file is touched** - present, not empty, its own `JBAK1` shape, the size that was written, it opens with its code, and its manifest reads back; anything else refuses the restore with nothing changed, `reason: "safety_unverified"` in `last_restore` and in the audit's `backup.restore.card`, and the plain sentence "the safety backup could not be made first, so nothing was restored". The outcome's `restored` block names the EXACT files put back (`databases`, `settings_files`, `notes_files`, `voice_files`, `source_files`, `framework_toml`, `keys`), not just counts. |
 
 | `POST /api/backup/restore/dismiss` `{}` | **Clears the last restore's outcome** (2026-10-20, Gemini ruling 8.1, §45.4b) - the ONLY thing that clears it, because reading `last_restore` now never consumes it. **Any paired device** may ask, EXCEPT while this PC has not yet shown the restore's one-time recovery code: the code exists only in the PC's memory, so a device clearing the notice first would destroy the only way to open the safety backup (audit 2026-10-21, M2). That request is **409** `{"ok": false, "code_pending": true, "error": "<plain words: read it on the PC first; the code is shown once>"}`, and **nothing is cleared**; the PC itself may always clear it (the owner can read the code in the same panel first), and once the PC has read it any paired device can. 200 `{"ok": true, "dismissed": <true when there was something to clear>}`; **idempotent** - dismissing an empty record is a 200 with `"dismissed": false`, not an error. Removes `last-restore.json` from the settings folder and clears the in-memory copy; the disk write of a finishing restore and a dismiss cannot interleave to resurrect a cleared record (audit 2026-10-21, LOW-1). Audited as `backup.restore.dismissed {had, from}`, and a refusal as `backup.restore.dismiss_refused`. **No app draws the button yet** (named follow-up in §45.5): the route is the explicit action the persistent record requires. |
 
@@ -13660,30 +13666,34 @@ Every one of these keeps its EXISTING gate exactly:
   still raises that SAME card through this new path - never applies
   silently - whichever app or device asked; turning the same setting OFF
   is still immediate, no card, exactly as the existing route.
-- `loosen_what_asks_first` and `enable_reading_tool`
-  (`jarvis_owner_check.PC_ONLY_ACTIONS` - **the authoritative, current
-  list has three entries**: those two and `restore_backup`; nothing else
-  is on it today) still refuse from a request that did not truly come from
-  this PC (`jarvis_asks_first.request_tier`'s and `request_tool_enable`'s
-  own `_here(here, peer, local)` check, fed `peer`/`local` read off the
-  live TCP connection the same way `owner-check.patch`'s own `do_POST`
-  wrapper reads them - never invented; the rule is the opposite of a
-  default toward "elsewhere", though, not away from "this PC":
+- `loosen_what_asks_first` (on `jarvis_owner_check.PC_ONLY_ACTIONS`, the
+  authoritative list) still refuses from a request that did not truly come
+  from this PC (`jarvis_asks_first.request_tier`'s own
+  `_here(here, peer, local)` check, fed `peer`/`local` read off the live TCP
+  connection the same way `owner-check.patch`'s own `do_POST` wrapper reads
+  them - never invented; the rule is the opposite of a default toward
+  "elsewhere", though, not away from "this PC":
   `jarvis_owner_check.from_this_pc`'s own docstring says plainly "anything
   that cannot be placed counts as this PC", so an address that cannot be
-  read at all is treated as PC-only, never as a stranger) and
-  still need Windows Hello to approve, whichever app or device raised the
-  card. Making one of these settings STRICTER (`"ask": true`) is unaffected
-  by PC_ONLY_ACTIONS - it always was immediate, from anywhere, no card -
-  and turning `enable_reading_tool` OFF is the same.
+  read at all is treated as PC-only, never as a stranger) and still needs
+  Windows Hello to approve, whichever app or device raised the card.
+- `enable_reading_tool` LEFT `PC_ONLY_ACTIONS` on 2026-11-10 (the owner's
+  ruling: the phone may approve tool switches too) and is a RISKY card
+  instead: the card is still only RAISED from the PC
+  (`request_tool_enable`'s own `_here` check), and it is approved with
+  Windows Hello on the PC or with that phone's own fingerprint or PIN on
+  the phone; a phone with no approval key is refused. Making it STRICTER
+  (`"ask": true`) is unaffected by PC_ONLY_ACTIONS - it always was
+  immediate, from anywhere, no card - and turning it OFF is the same.
 - `set_asks_first`/`set_reading_tool` pass `peer`/`local` all the way from
   `jarvis_quick.answer_turn`'s own new keyword-only parameters, which
   `schedule.patch`'s `/api/chat` handler now reads off `self.client_address`
   and `self.connection.getsockname()` before calling in - the SAME two
   values `owner-check.patch`'s wrapper already reads for `POST /api/approve`.
-  `test_settings_registry.py` proves both directions for both
-  PC_ONLY_ACTIONS settings covered here (from the PC: the same card;
-  from a simulated phone request: the same 403, nothing changed) and that
+  `test_settings_registry.py` proves both directions for what remains
+  PC_ONLY_ACTIONS here (from the PC: the same card; from a simulated phone
+  request: the same 403, nothing changed), for the tool-enable route's own
+  PC-only ON, and that
   a card-gated-but-not-device-restricted setting (lights, background
   learning) still raises its card rather than applying at once.
 
@@ -21943,7 +21953,9 @@ the gate as `page_read`. One name for this feature, and it is neither.
 | **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
 | **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
 | **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
-| **Off until switched on** | a one-tool switch in Settings, What asks first, under "Let the AI use this" - ONE PC-only `enable_reading_tool` card plus Windows Hello (§43; switchable since 2026-11-04), or the same line by hand in the owner's `jarvis-framework.toml` `[tools].enabled`. It is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+| **Off until switched on** | a one-tool switch in Settings, What asks first, under "Let the AI use this" - ONE `enable_reading_tool` card - a RISKY one:
+Windows Hello on the PC, the phone's own fingerprint or PIN (§43; switchable
+since 2026-11-04), or the same line by hand in the owner's `jarvis-framework.toml` `[tools].enabled`. It is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
 
 ### 115.2 One card, then one plain GET
 
@@ -33765,8 +33777,8 @@ card either way.
 tool (§115). It is still off by default (not in `[tools].enabled`) and still in
 `jarvis_asks_first.TIER_C`, but the owner's decision of 2026-11-04 put it in
 `TOOLS_SWITCHABLE` with every other tool the model can be offered, so
-`request_tool_enable` accepts ON for it with ONE PC-only `enable_reading_tool`
-card and Windows Hello (§43) - superseding the 2026-11-03 decision
+`request_tool_enable` accepts ON for it with ONE `enable_reading_tool`
+card (a RISKY one: Windows Hello on the PC, the phone's own signature) (§43) - superseding the 2026-11-03 decision
 (`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`) that had kept it
 out. Its tier stays `ask`, and it stays in `HARD_LIMITS` and `MUST_ASK`, so
 nothing in an app can loosen it: offering it and making each read ask are two

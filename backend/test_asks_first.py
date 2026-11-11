@@ -783,8 +783,9 @@ def t_the_tools_enable_patch():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("tools-enable.patch is in apply-patches.ps1's list",
           "'tools-enable.patch'" in ps1[ps1.index("$PATCHES = @("):])
-    check("the risk words entry and the must-stay-ask entry are both there",
-          '"enable_reading_tool": ("yes", "local"' in patch
+    check("the risk words entry (RISKY since 2026-11-10) and the must-stay-ask entry "
+          "are both there",
+          '"enable_reading_tool": ("no", "local"' in patch
           and '"enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask"' in patch)
 
 
@@ -894,8 +895,12 @@ def t_offering_a_tool_is_a_different_thing_from_loosening():
     check("its own action, always 'ask', never loosened by the tier mechanism above",
           AF.ENABLE_TOOL_ACTION in AF.HARD_LIMITS and AF.ENABLE_TOOL_ACTION in AF.MUST_ASK
           and AF.ENABLE_TOOL_ACTION not in AF.SWITCHABLE)
-    check("jarvis_owner_check requires Windows Hello, PC only, for its card too",
-          AF.ENABLE_TOOL_ACTION in OC.PC_ONLY_ACTIONS)
+    check("its card is RISKY, not PC-only (owner's ruling 2026-11-10: the phone may "
+          "approve tool switches too), so the PC still asks Windows Hello and the phone "
+          "needs its own signed approval",
+          AF.ENABLE_TOOL_ACTION not in OC.PC_ONLY_ACTIONS
+          and '"enable_reading_tool": ("no", "local"' in
+          (HERE / "tools-enable.patch").read_text(encoding="utf-8"))
     check("its card has a title in plain words",
           W.title_for(AF.ENABLE_TOOL_ACTION)
           == "Jarvis wants to offer a tool to the AI model")

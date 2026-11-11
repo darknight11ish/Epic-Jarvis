@@ -111,23 +111,21 @@ UNLABELLED = ("Jarvis has no written words for this action yet, so it will not a
 #: Cards that are approved on THIS PC only, and always with Windows Hello,
 #: whatever their risk says: loosening "What asks first" (jarvis_asks_first.
 #: py, the owner's decision of 2026-09-26 - "on the PC only ... one card plus
-#: Windows Hello per change"), offering a reading tool to the AI model at
-#: all (jarvis_asks_first.py, the owner's answer of 2026-09-27 - "each with a
-#: card plus Windows Hello"), and restoring from a locked backup file
+#: Windows Hello per change"), and restoring from a locked backup file
 #: (jarvis_backup.py, the owner's answer of 2026-09-27 - "restore is a card +
 #: Windows Hello": it replaces memory, chat history, settings and notes with
 #: what was saved then, so it always gets both, whatever the gate's risk
 #: table says). An approval of one from another device - the phone, or
 #: anything on the owner's network pretending to be it - is refused (403),
-#: so a stolen token used elsewhere cannot loosen, enable or restore
-#: anything. Also connecting a new device and bringing the old shared key
-#: back for other devices (jarvis_devices.py, docs/PAIRING-DESIGN.md 6.3 and
-#: 6.4, 2026-09-28): a stolen key used elsewhere cannot approve a new device
-#: of its own, and on a PC without Windows Hello pairing waits until it is
-#: set up (the owner's "no lock, no risky approval"). And letting a paired
-#: phone approve risky cards with its own fingerprint or PIN
-#: (register_approval_key, docs/PAIRING-DESIGN.md section 11): a stolen key
-#: used elsewhere must not be able to register a signing key of its own.
+#: so a stolen token used elsewhere cannot loosen or restore anything. Also
+#: connecting a new device and bringing the old shared key back for other
+#: devices (jarvis_devices.py, docs/PAIRING-DESIGN.md 6.3 and 6.4,
+#: 2026-09-28): a stolen key used elsewhere cannot approve a new device of its
+#: own, and on a PC without Windows Hello pairing waits until it is set up
+#: (the owner's "no lock, no risky approval"). And letting a paired phone
+#: approve risky cards with its own fingerprint or PIN (register_approval_key,
+#: docs/PAIRING-DESIGN.md section 11): a stolen key used elsewhere must not be
+#: able to register a signing key of its own.
 #:
 #: And RAISING a chatbot service's monthly money limit (jarvis_chatbot_limits.py;
 #: the owner's approval of 2026-10-06, docs/ACCOUNT-KEYS-DESIGN.md decisions 1
@@ -157,7 +155,21 @@ UNLABELLED = ("Jarvis has no written words for this action yet, so it will not a
 #:     refused with "no_approval_key" so it can offer to turn signing on.
 #: What the owner changed is only WHERE the raise may be confirmed, never
 #: whether a person has to confirm it.
-PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
+#:
+#: `enable_reading_tool` USED to be in this set too, and the owner took it out
+#: on 2026-11-10: a card that offers ONE tool to the AI model appeared on his
+#: phone with only Deny, and he ruled that the phone may approve tool switches
+#: as well. It is still a RISKY card - the gate's own `_RISK` row now says the
+#: choice cannot be taken back once the model has used the ability - so the
+#: two halves of the rule are exactly the raise's above:
+#:   * on the PC it still asks Windows Hello (`is_risky` sends it there);
+#:   * on the phone it needs that phone's signed approval (a fingerprint or PIN
+#:     over a one-use challenge), and a phone with no approval key is refused
+#:     with "no_approval_key" so it can offer to turn signing on.
+#: Turning a tool OFF is still instant, from either app, and needs no card.
+#: Nothing else about the tool-enable card changes: each USE of the tool still
+#: has its own "Ask me first" decision.
+PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "restore_backup",
                              "pair_device", "unretire_shared_key", "register_approval_key",
                              "handoff_keep_offering",
                              "handoff_bring_to_front",

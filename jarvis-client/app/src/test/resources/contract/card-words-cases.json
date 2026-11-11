@@ -1065,9 +1065,9 @@
       "notice": {
         "title": "Jarvis wants to offer a tool to the AI model",
         "summary": "Jarvis wants to offer a tool to the model.",
-        "full": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
-        "body": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
-        "weight": "normal",
+        "full": "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back. nothing has happened yet.",
+        "body": "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -2348,7 +2348,6 @@
   "pc_only_actions": [
     "change_approval_policy",
     "desktop_update",
-    "enable_reading_tool",
     "handoff_bring_to_front",
     "handoff_keep_offering",
     "loosen_what_asks_first",

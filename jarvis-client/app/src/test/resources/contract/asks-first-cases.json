@@ -1769,7 +1769,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -4278,7 +4278,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -6783,7 +6783,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -9283,7 +9283,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -11788,7 +11788,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [
      {
       "group": "Also on in your settings file",
@@ -14304,7 +14304,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [
      {
       "group": "Also on in your settings file",
@@ -16810,7 +16810,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -19323,7 +19323,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -21828,7 +21828,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -22699,11 +22699,11 @@
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
-  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card that names that one ability: approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN. Turning it off is instant, from either app. Nothing here switches two tools at once.",
   "tools_label": "Let the AI use this",
   "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
   "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it.",
-  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
+  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card - approve it on the PC with Windows Hello, or on your phone with its own fingerprint or PIN.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }
 }
