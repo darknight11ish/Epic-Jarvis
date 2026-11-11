@@ -242,16 +242,27 @@ github_read               = "auto"
 # "auto" - egress with a credential and nobody asked - or force that line to
 # "ask" and break every GitHub watch. Do not merge the two names.
 #
-# All ten are also in `jarvis_agent.NEEDS_A_PERSON`, so an owner who loosens a
-# line below still gets a card: the config says how much Jarvis asks, and that
-# set says a read like this is never done with nobody asked. The six actions
+# THE READS DO NOT ASK (the owner's decision of 2026-11-10 23:00 PT): every
+# GitHub read is a GET on api.github.com and changes nothing, so the owner chose
+# "make GitHub reads card-free" and `github_inspect` ships "auto". Every WRITE
+# still asks its own card - each one is its own "ask" line below, and each is in
+# `jarvis_agent.NEEDS_A_PERSON`, so a loosened line still raises its card.
+#
+# `github_read` above STAYS SEPARATE AND "auto": it is the scheduled look a
+# "tell me when" GitHub watch makes. The on-demand reads use `github_inspect`,
+# and the two names must never be merged.
+#
+# All WRITES are ALSO in `jarvis_agent.NEEDS_A_PERSON`, so the config says how much
+# Jarvis asks and that set says a write is never done with nobody asked. They
 # cannot be "auto" in any case - `github_comment` and `github_open_issue` post
 # in the owner's name, which cannot be taken back, `github_rerun_workflow`
 # spends CI work, `github_create_repo` makes a repository Jarvis has no delete
 # action for, `github_merge_pr` merges a pull request with a merge commit
-# pinned to one commit (never squash, rebase, admin or auto-merge), and
-# `github_fix_and_push` pushes commits to the pull request's own branch. The
-# seventh, `github_fix_write` (wave 16B), changes ONE file inside that same
+# pinned to one commit (never squash, rebase, admin or auto-merge),
+# `github_fix_and_push` pushes commits to the pull request's own branch, and the
+# 22:30 Step-2 writes open a pull request, touch a workflow run, change labels,
+# edit a pull request's text, post a review or change an issue's state. The
+# wave-16B `github_fix_write` changes ONE file inside that same
 # isolated copy on this PC and makes one commit there: it sends nothing and uses
 # no token, and it is "ask" because a file the owner will push should be seen
 # before it changes.
@@ -264,13 +275,13 @@ github_read               = "auto"
 # Authorization header. Every write above ships OFF, raises its own one-shot
 # card, and cannot be confirmed while the app's event stream is stale.
 #
-# These tools ship SWITCHED OFF: they are not in [tools].enabled below, exactly
-# like `github_search`. Add the ten names (github_list, github_read_file,
-# github_ci_status, github_pr_scan, github_comment, github_open_issue,
-# github_rerun_workflow, github_create_repo, github_merge_pr,
-# github_fix_and_push) to that list when you want them offered, and save a
-# token with "connect GitHub".
-github_inspect            = "ask"
+# These WRITE tools ship SWITCHED OFF: they are not in [tools].enabled below,
+# exactly like `github_search`. Add the sixteen names to that list when you want
+# them offered, and save a token with "connect GitHub". The five READ names
+# (github_list, github_read_file, github_ci_status, github_pr_scan and
+# github_pr_detail) still need their switch rows too - the read TOOLS are
+# switched off like everything else, it is the read ACTION that never asks.
+github_inspect            = "auto"
 github_comment            = "ask"
 github_open_issue         = "ask"
 github_rerun_workflow     = "ask"
@@ -304,6 +315,44 @@ github_fix_and_push       = "ask"
 # anything outside that one prepared copy - but it is also in NEEDS_A_PERSON, so
 # a loosened line here still raises its card.
 github_fix_write          = "ask"
+# The five carded writes of the 2026-11-10 22:30 ruling's Step 2 (full parity
+# with DeepSeek), and the full pull-request read beside them. "ask", never
+# "auto", for every write: each changes GitHub in the owner's name, and each is
+# also in NEEDS_A_PERSON so a loosened line here still raises its card.
+#
+# `github_pr_detail` is a READ (one pull request's body, files, commits,
+# comments and reviews) and shares `github_inspect` above - there is no second
+# read action - so there is no line for it here on purpose.
+#
+# Opening ONE pull request: prepare copies the repository at a base branch into
+# the isolated scratch root and makes a NEW branch there, then open shows every
+# commit, every changed file, the exact push command, the title and the whole
+# body on one card - and only then pushes that new branch and creates the pull
+# request. Never a force-push, never main/master/release/hotfix as the new
+# branch, never a delete, never a fork's branch.
+github_open_pr            = "ask"
+# Cancel ONE running workflow run, or re-run only the failed jobs of ONE
+# finished run. Never a dispatch - `workflow_dispatch` is permanently banned and
+# no code path can send it.
+github_workflow           = "ask"
+# Add and/or remove labels on ONE issue or pull request, in ONE request, after
+# reading the current labels first. Closing and reopening are not built: the
+# owner's `close_issue` ban still stands.
+github_issue_labels       = "ask"
+# Edit ONE pull request's title and/or body, showing the exact before/after.
+# No other field is editable and the same tool can change it back.
+github_edit_pr            = "ask"
+# Post ONE pull request review: COMMENT or REQUEST_CHANGES only. An APPROVE
+# review is permanently banned - a formal approval would hand the owner's own
+# sign-off to the assistant - and it is refused by name.
+github_pr_review          = "ask"
+# Close ONE issue, or reopen ONE closed issue (the owner's decision of
+# 2026-11-10 23:00 PT, which overturned the old absolute ban on closing an
+# issue). "ask", never "auto": one issue per card, the card shows the issue's
+# title and the direction, never a pull request, never bulk, never a delete,
+# transfer or edit. It is also in NEEDS_A_PERSON, so a loosened line still
+# raises its card.
+github_issue_state        = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval

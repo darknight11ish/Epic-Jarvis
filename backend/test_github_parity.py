@@ -949,18 +949,24 @@ def t_the_capability_inventory_is_the_whole_wired_surface():
               isinstance(c.get("absolute_bans"), tuple)
               and set(c["absolute_bans"]) <= set(GH.NEVER),
               (c.get("absolute_bans"), sorted(GH.NEVER)))
-        check(f"{c['tool']}: two_stage_kind names the fix flow or is None",
+        check(f"{c['tool']}: two_stage_kind names a known flow or is None",
               c.get("two_stage_kind") is None or
-              c.get("two_stage_kind") == "prepare_write_then_push",
+              c.get("two_stage_kind") in ("prepare_write_then_push",
+                                          "prepare_then_open"),
               c.get("two_stage_kind"))
     two_stage = [c for c in caps if c.get("two_stage_kind")]
-    check("exactly ONE row is a multi-stage flow, and it is fix-and-push",
-          [c["tool"] for c in two_stage] == ["github_fix_and_push"]
-          and two_stage[0]["two_stage_kind"] == "prepare_write_then_push",
-          two_stage)
-    check("a multi-stage row's card fields name prepare, write and push",
-          all(w in " ".join(two_stage[0]["card_fields"]).lower()
-              for w in ("prepare", "write", "push")), two_stage[0]["card_fields"])
+    check("TWO rows are multi-stage flows: fix-and-push and open-a-pull-request",
+          [(c["tool"], c["two_stage_kind"]) for c in two_stage]
+          == [("github_fix_and_push", "prepare_write_then_push"),
+              ("github_open_pr", "prepare_then_open")], two_stage)
+    fix_row = next(c for c in caps if c["tool"] == "github_fix_and_push")
+    open_row = next(c for c in caps if c["tool"] == "github_open_pr")
+    check("the fix row's card fields name prepare, write and push",
+          all(w in " ".join(fix_row["card_fields"]).lower()
+              for w in ("prepare", "write", "push")), fix_row["card_fields"])
+    check("the open row's card fields name prepare and open",
+          all(w in " ".join(open_row["card_fields"]).lower()
+              for w in ("prepare", "open")), open_row["card_fields"])
     # Every fact has ONE home: the matrix and the per-row door are derived from
     # the same rows, never retyped.
     matrix = GH.capability_matrix()
@@ -1098,14 +1104,23 @@ def t_the_awareness_text_answers_what_can_you_do_with_github():
               ("force-push", "squash", "bypass required", "main",
                "delete/close", "approval card",
                # Rulings Q3/Q4, added the same day:
-               "approve a pull request", "close an issue", "edit a comment",
-               "dispatch a workflow", "gist")), GH.NEVER_WORDS)
-    check("... and every one of those verbs is named in NEVER too",
+               "approve a pull request", "edit a comment",
+               "dispatch a workflow", "gist",
+               # The 23:00 correction: close_issue was overturned for ONE
+               # carded action, and BULK close became the ban instead.
+               "more than one issue")), GH.NEVER_WORDS)
+    check("... and every one of those bans is named in NEVER too",
           {"force_push", "squash_merge", "rebase_merge", "admin_bypass",
            "auto_merge", "bypass_required_checks", "push_to_main",
            "delete_repository", "close_repository", "delete_branch",
-           "close_branch", "approve_pr", "close_issue", "edit_comment",
-           "workflow_dispatch", "gist"} <= set(GH.NEVER), sorted(GH.NEVER))
+           "close_branch", "approve_pr", "edit_comment",
+           "workflow_dispatch", "gist", "bulk_close"} <= set(GH.NEVER),
+          sorted(GH.NEVER))
+    check("... and close_issue LEFT the never set by the owner's 23:00 decision",
+          "close_issue" not in GH.NEVER, sorted(GH.NEVER))
+    check("... and ONE issue's close/reopen is a real, separate action",
+          GH.ACTION_ISSUE_STATE in GH.ACTIONS
+          and GH.ACTION_ISSUE_STATE in AG.NEEDS_A_PERSON)
 
 
 def t_every_capability_row_is_wired_one_to_one():
@@ -1512,8 +1527,9 @@ def t_the_token_never_rides_a_git_argument():
         auth_calls = [n for n in ast.walk(gh_tree)
                       if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                       and n.func.id == "_git_auth_env"]
-        check("... and ONE environment helper is used by both stages",
-              len(auth_calls) == 2, len(auth_calls))
+        check("... and ONE environment helper is used by every authenticating "
+              "git step (both clones and both pushes)",
+              len(auth_calls) == 4, len(auth_calls))
     finally:
         restore()
 
@@ -1524,11 +1540,14 @@ def t_every_write_is_ask_and_in_needs_a_person():
         for action in GH.ACTIONS:
             check(f"{path.name}: {action} ships as ask",
                   table.get(action) == "ask", table.get(action))
+    for path, table in tiers:
+        check(f"{path.name}: github_inspect ships as auto (card-free reads)",
+              table.get(GH.ACTION_INSPECT) == "auto", table.get(GH.ACTION_INSPECT))
     for tool in AG.GITHUB_ACTION_TOOLS:
         check(f"{tool} is in NEEDS_A_PERSON", tool in AG.NEEDS_A_PERSON)
     for tool in AG.GITHUB_READ_TOOLS:
-        check(f"{tool} asks too, because a read sends the token",
-              tool in AG.NEEDS_A_PERSON)
+        check(f"{tool} is CARD-FREE (not in NEEDS_A_PERSON)",
+              tool not in AG.NEEDS_A_PERSON)
     check("the merge and the push are never auto-approvable",
           all(AG.TOOLS[t].name in AG.NEEDS_A_PERSON
               for t in ("github_merge_pr", "github_fix_and_push")))

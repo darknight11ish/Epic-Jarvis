@@ -874,12 +874,12 @@ def t_offering_a_tool_is_a_different_thing_from_loosening():
     # 2026-11-04), wave 13's carded github_create_repo and project_read. The
     # only ones that are not are the ones whose own switch (or another tool)
     # decides them.
-    check("every tool the model can be offered is switchable in-app, 65 since 2026-11-10",
+    check("every tool the model can be offered is switchable in-app, 72 since 2026-11-10",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 65 and "calendar_read" in AF.TIER_A)
+          and len(AF.TOOLS_SWITCHABLE) == 72 and "calendar_read" in AF.TIER_A)
     check("the tier lists plus the exceptions ARE the model's own tool list",
           set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH) == set(AG.TOOLS),
           sorted(set(AG.TOOLS) ^ (set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH))))
@@ -1089,9 +1089,9 @@ def t_the_tools_status_and_the_page():
         # carded github_create_repo made it 61, project_read's own row made it
         # 62, and wave 16's PR cockpit, carded merge and carded fix-and-push
         # (2026-11-10) make it 65.
-        check("the label, the 65 grouped items, the vault row and the four exceptions",
+        check("the label, the 72 grouped items, the vault row and the four exceptions",
               st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
-              and len(st["items"]) == 65
+              and len(st["items"]) == 72
               and [g["title"] for g in st["groups"]]
               == [title for title, _tools in AF.SWITCHABLE_GROUPS]
               and st["items"][0]["group"] == AF.SWITCHABLE_GROUPS[0][0]

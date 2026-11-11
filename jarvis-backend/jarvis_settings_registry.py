@@ -1579,6 +1579,13 @@ _TOOL_TARGETS = {
     'github_pr_scan': ('the github pr scan tool', 'github pr scan tool', 'the github pr scan', 'github pr scan', 'the github pull request scan tool', 'github pull request scan tool', 'the github pull request scan', 'github pull request scan'),
     'github_merge_pr': ('the github merge pr tool', 'github merge pr tool', 'the github merge pr', 'github merge pr', 'the github pull request merge tool', 'github pull request merge tool', 'the github pull request merge', 'github pull request merge'),
     'github_fix_and_push': ('the github fix and push tool', 'github fix and push tool', 'the github fix and push', 'github fix and push', 'the github pull request fix tool', 'github pull request fix tool', 'the github pull request fix', 'github pull request fix'),
+    'github_pr_detail': ('the github pr detail tool', 'github pr detail tool', 'the github pr detail', 'github pr detail', 'the github pull request detail tool', 'github pull request detail tool', 'the github pull request detail', 'github pull request detail'),
+    'github_open_pr': ('the github open pr tool', 'github open pr tool', 'the github open pr', 'github open pr', 'the github open pull request tool', 'github open pull request tool', 'the github open pull request', 'github open pull request'),
+    'github_workflow': ('the github workflow tool', 'github workflow tool', 'the github workflow', 'github workflow'),
+    'github_issue_labels': ('the github issue labels tool', 'github issue labels tool', 'the github issue labels', 'github issue labels', 'the github labels tool', 'github labels tool'),
+    'github_edit_pr': ('the github edit pr tool', 'github edit pr tool', 'the github edit pr', 'github edit pr', 'the github pull request edit tool', 'github pull request edit tool', 'the github pull request edit', 'github pull request edit'),
+    'github_pr_review': ('the github pr review tool', 'github pr review tool', 'the github pr review', 'github pr review', 'the github pull request review tool', 'github pull request review tool', 'the github pull request review', 'github pull request review'),
+    'github_issue_state': ('the github issue state tool', 'github issue state tool', 'the github issue state', 'github issue state'),
     'approval_policy': ('the approval policy tool', 'approval policy tool', 'the approval policy', 'approval policy'),
     'email_read': ('the email tool', 'email', 'my email'),
 }

@@ -33,10 +33,25 @@ Force-push, squash-merge, rebase-merge, admin bypass, auto-merge, bypassing
 required checks, pushing directly to main/master/release/*, deleting or closing
 repositories or branches - and, from the same day's rulings, approving a pull
 request in the owner's name (a formal APPROVE review would transfer his own
-sign-off), closing an issue, editing a comment, dispatching a workflow, and
-gists. `NEVER` names them and `NEVER_WORDS` is the one plain sentence a person
-gets instead. `backend/test_github_parity.py` pins that every capability row's
-own bans are a subset of that set, so a row cannot invent a permission.
+sign-off), editing a comment, dispatching a workflow, gists, and closing or
+reopening MORE THAN ONE issue at a time (`bulk_close`).
+
+**The 23:00 correction.** The same day, at 23:00 PT, the owner overturned the old
+absolute ban on closing an issue: closing ONE issue, or reopening ONE closed
+issue, is now its own carded action (`github_issue_state`), one issue per card,
+never a pull request, never bulk, never a delete, transfer or edit. The
+`close_issue` name left `NEVER` the same way `edit_file`/`write_file` left it in
+wave 16B, and `decisions.d/2026-11-10-github-parity-actions.md` is that record.
+`NEVER` names the remaining bans and `NEVER_WORDS` is the one plain sentence a
+person gets instead. `backend/test_github_parity.py` pins that every capability
+row's own bans are a subset of that set, so a row cannot invent a permission.
+
+AND THE READS DO NOT ASK (the owner's 23:00 decision)
+
+Every GitHub READ is card-free: a read is a GET on api.github.com and changes
+nothing, so its gate action `github_inspect` ships `"auto"` and the read tools
+are deliberately NOT in `jarvis_agent.NEEDS_A_PERSON`. Every WRITE still raises
+its own one-shot card, is its own `"ask"` action, and IS in NEEDS_A_PERSON.
 
 `jarvis_connect_account.py` already gets the token: "connect GitHub" raises one
 card for a personal access token, checks it with `GET /user`, and stores it in
@@ -65,9 +80,11 @@ WHAT LEAVES THIS PC, EXACTLY
     answered.
   * For a read: the scope name, the repository name, a path inside that
     repository, a branch name, or a pull request / run number - all of which the
-    owner or the model named, and all of which are printed on the card first.
-  * For an action: the comment text, or the issue's title and body, word for
-    word, as it will be posted. Nothing else is ever sent.
+    owner or the model named. A read raises no card (the owner's 2026-11-10 23:00
+    decision); it is a GET and changes nothing.
+  * For an action: the comment text, the issue's title and body, the pull
+    request's title and body, or the labels - word for word, as it will be
+    posted. Nothing else is ever sent.
 
 Nothing from email, files, saved memory, notes or credentials is read here or
 put in a request. This module has no import of `jarvis_email`,
@@ -110,12 +127,16 @@ WHAT THIS MODULE WILL NEVER DO
 
 Force-push, squash-merge, rebase-merge, use an admin bypass, turn on
 auto-merge, bypass a required check, push to main/master/release/*, delete or
-close a repository or a branch, or touch a file outside the one isolated copy a
-prepare made. Merge and PR-branch push exist only behind their own cards
+close a repository or a branch, close or reopen more than one issue at a time,
+or touch a file outside the one isolated copy a prepare made. Merge and
+PR-branch push exist only behind their own cards
 (2026-11-10), and the wave-16B write changes ONE file inside that copy only:
 never the owner's checkout, never another pull request's folder, never a delete,
 rename, move or chmod, never a credential file, and never with a token or a
-socket. Everything in that list has no planner, no endpoint and no tool, and
+socket. Closing ONE issue and reopening ONE closed issue are real now, but only
+through `github_issue_state`'s own card (the owner's 23:00 decision) - every
+other tool still cannot close anything. Everything in the list above has no
+planner, no endpoint and no tool, and
 `never_words()` is the plain sentence a person gets instead. The absence is the
 control, and `backend/test_github_parity.py` pins the absence; `CAPABILITIES`
 below is the one inventory of what DOES exist, and that same suite pins it
@@ -147,6 +168,31 @@ say what it really is ("write one file in the scratch copy"), and it is local:
 no token is read, no socket is opened, and the only thing it can reach is a file
 inside the one prepared copy plus a commit in that copy's own git. It is also in
 `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier line still raises its card.
+
+THE 22:30 STEP-2 ACTIONS (2026-11-10), AND WHAT IS TRUE ABOUT EACH
+
+  * `github_pr_detail` is a READ (five fixed GETs: the pull request, its files,
+    commits, comments and reviews) and shares `github_inspect`, so it is
+    card-free like every read.
+  * `github_open_pr` is a two-stage WRITE: "prepare" copies the repository at a
+    base branch into the scratch root and makes a NEW branch there, "open" shows
+    every commit, every changed file, the exact push command, the title and the
+    WHOLE body on ONE card, then pushes that one new branch and creates the pull
+    request, pinned to the HEAD commit the card showed. The new branch may never
+    be main/master/release/*/hotfix*; a force-push, a delete and a fork are all
+    impossible.
+  * `github_workflow` cancels ONE in-progress workflow run or re-runs only the
+    FAILED jobs of ONE finished run. It never dispatches a workflow.
+  * `github_issue_labels` adds/removes labels on ONE issue or pull request in ONE
+    request, after reading the current labels.
+  * `github_edit_pr` changes ONE pull request's title and/or body, showing the
+    exact before/after, and refuses if the live pull request is not the carded
+    one.
+  * `github_pr_review` posts ONE review with COMMENT or REQUEST_CHANGES only; an
+    APPROVE verdict is refused by name.
+  * `github_issue_state` closes ONE issue or reopens ONE closed issue (the
+    23:00 owner decision), with the issue's title on the card and a live
+    re-read; never bulk, never a pull request, never a delete, transfer or edit.
 
 Standard library only.
 """
@@ -241,6 +287,38 @@ ACTION_FIX_PUSH = "github_fix_and_push"
 #: the commit is local to the copy, and only the existing, separately carded
 #: push can send it anywhere.
 ACTION_FIX_WRITE = "github_fix_write"
+#: The 2026-11-10 22:30 ruling's Step 2 write/read actions. Each is its own
+#: action, for the same reason the merge and the fix are: the card's title, the
+#: tier line and the risk row have to say what the action really is.
+#:
+#: Opening ONE pull request: Jarvis copies a repository at a base branch into
+#: its scratch root, makes a NEW branch there, and after ONE card (which names
+#: the base, the new branch, every commit, every changed file, the exact push
+#: command, the title and the WHOLE body) pushes that branch and creates the
+#: pull request. Two stages, two cards; nothing is ever pushed to main. (By the
+#: tool's own read of the ruling the BASE branch may be the repository's real
+#: base, e.g. main - that is where a pull request must point; see
+#: `plan_open_pr`'s docstring.)
+ACTION_OPEN_PR = "github_open_pr"
+#: Cancelling ONE in-progress workflow run, or re-running only the failed jobs
+#: of ONE finished run. Never a dispatch: `workflow_dispatch` stays in `NEVER`.
+ACTION_WORKFLOW = "github_workflow"
+#: Adding and/or removing labels on ONE issue or pull request. Closing and
+#: reopening are deliberately NOT built - `close_issue` stays in `NEVER` until
+#: the owner rules on it.
+ACTION_ISSUE_LABELS = "github_issue_labels"
+#: Editing ONE pull request's title and/or body. No other field is editable,
+#: and the card shows the exact before/after.
+ACTION_EDIT_PR = "github_edit_pr"
+#: Posting ONE pull request review with event COMMENT or REQUEST_CHANGES only.
+#: APPROVE is refused by name, and `approve_pr` stays in `NEVER`.
+ACTION_PR_REVIEW = "github_pr_review"
+#: Closing ONE issue, or reopening ONE closed issue (the owner's decision of
+#: 2026-11-10 23:00, which overturned the old absolute ban on `close_issue`):
+#: its own one-shot card, one issue, never bulk, and it can never delete,
+#: transfer or edit the issue. `github_open_issue` keeps its own ban - that tool
+#: still cannot close what it opened.
+ACTION_ISSUE_STATE = "github_issue_state"
 
 #: The ONLY merge method this module can send. The owner's ruling of 2026-11-10:
 #: merge-commit only. `squash` and `rebase` are not values this module can put
@@ -304,6 +382,48 @@ MAX_WRITE_DIFF = 2_900
 #: nothing a person reads and pushes the card's own words off.
 MAX_COMMIT_MESSAGE = 200
 
+#: How much of a whole card's `shows` block this module will build. The gate
+#: keeps 4,000 characters for a whole card (`jarvis_agent._GATE_DETAIL_LIMIT`)
+#: and refuses or cuts a bigger one, so a card whose own words and field lists
+#: would not fit is refused HERE, before it exists, with words that say to
+#: shorten it. Measured: the fixed sentences around `shows` are about 700-950
+#: characters, so 2,900 leaves room under the gate's cap.
+MAX_CARD_LENGTH = 2_900
+
+#: The 2026-11-10 22:30 ruling's Step 2 limits. A pull request's title and body
+#: are shown WHOLE on the card, so both are bounded well inside the gate's
+#: 4,000-character card limit: GitHub allows a 256-character title, and this
+#: module refuses over 200 rather than cut it; a body over `MAX_PR_BODY` is
+#: refused BEFORE a card exists, with words that say to shorten it. The card
+#: also lists every commit and every changed file, so the number of each is
+#: capped and a change too large for one card is refused, never summarised.
+MAX_PR_TITLE = 200
+MAX_PR_BODY = 2_000
+MAX_CARD_LISTS = 20
+
+#: How many files / commits / comments / reviews `github_pr_detail` shows per
+#: section, and how much of one comment's or review's text. Counts are always
+#: printed, so a long pull request never reads as a short one.
+MAX_DETAIL_ITEMS = 10
+MAX_DETAIL_TEXT = 800
+
+#: Labels: at most this many in one add or remove set, each at most this long,
+#: from the characters GitHub label names really use. A label outside this is
+#: refused in words before any GitHub request.
+MAX_LABELS = 10
+MAX_LABEL_CHARS = 50
+_LABEL = re.compile(r"^[A-Za-z0-9 ._:/+()&'-]{1,50}$")
+
+#: The longest "why" a carded issue close/reopen will show. It is shown on the
+#: card and reported back; GitHub's REST issue state change has no free-text
+#: reason field, so this module does not pretend to send one.
+MAX_ISSUE_REASON = 400
+
+#: The file the open-pull-request prepare stage leaves in its copy's `.git`
+#: folder. No token: the repository, the base branch, the new branch and the
+#: base commit the copy started from.
+OPEN_MARKER_NAME = "jarvis-open-pr.json"
+
 #: The identity the wave-16B commit is made with, when the scratch clone has no
 #: usable one. It travels in git's own GIT_AUTHOR_* / GIT_COMMITTER_* environment
 #: variables for that one command - never in argv, never in any file - so a
@@ -347,38 +467,40 @@ SCOPE_WORDS = {
     "runs": "the most recent workflow runs on this repository",
 }
 
-#: The absolute bans that remain after 2026-11-10. Merge and PR-branch push are
-#: now real actions behind their own cards, so they are NOT in this set; every
-#: name here is something no planner, endpoint or tool in this module can do.
-#: The last five are the same day's rulings Q3/Q4: approving a pull request
-#: (that would transfer the owner's own sign-off), closing an issue, editing a
-#: comment, dispatching a workflow, and gists (a public-by-default way to carry
-#: anything out of this PC).
+#: The absolute bans that remain after the owner's 2026-11-10 rulings. Merge
+#: and PR-branch push are real actions behind their own cards, so they are NOT in
+#: this set; every name here is something no planner, endpoint or tool in this
+#: module can do.
 #:
-#: `edit_file` and `write_file` used to be in this set and were REMOVED in wave
-#: 16B (2026-11-10), because they are no longer true: `github_fix_and_push`
-#: stage "write" can now write ONE file, inside the isolated copy only, on its
-#: own card. The bans that make that safe are the module's own `NEVER_WORDS`
-#: sentence plus the write stage's own limits (no delete/rename/move/chmod, no
-#: path outside the prepared copy, no credential file, no network). Removing a
-#: name from this set is the one direction that needs a decision on the record -
-#: `decisions.d/2026-11-10-github-authoring-in-the-copy.md` is that record.
+#: The last six are the same day's rulings: approving a pull request (that would
+#: transfer the owner's own sign-off), editing a comment, dispatching a
+#: workflow, gists (a public-by-default way to carry anything out of this PC),
+#: and closing MORE THAN ONE issue (or reopening more than one) - bulk close is
+#: banned even though ONE issue's close/reopen is now a carded action. `close_issue`
+#: itself was REMOVED from this set by the owner's decision of 2026-11-10 23:00:
+#: closing ONE issue is now `github_issue_state`, its own carded action - the same
+#: way `edit_file`/`write_file` left this set in wave 16B when the carded write
+#: landed. Removing a name from here is the one direction that needs a decision
+#: on the record, and `decisions.d/2026-11-10-github-parity-actions.md` is it.
 NEVER = frozenset({"force_push", "squash_merge", "rebase_merge", "admin_bypass",
                    "auto_merge", "bypass_required_checks", "push_to_main",
                    "delete_repository", "close_repository", "delete_branch",
                    "close_branch", "create_branch",
-                   "approve_pr", "close_issue", "edit_comment",
-                   "workflow_dispatch", "gist"})
+                   "approve_pr", "edit_comment",
+                   "workflow_dispatch", "gist", "bulk_close"})
 #: The owner's ruling of 2026-11-10, word for word, extended the same day to
-#: cover the permanently banned verbs from Q3/Q4. One sentence, so a person who
-#: asks "can you merge this?" - or "can you approve it?" - gets the whole
-#: boundary in one breath.
+#: cover the permanently banned verbs from Q3/Q4 - and then corrected at 23:00
+#: the same day, when the owner overturned the close_issue ban for ONE carded
+#: action. So "close an issue" is no longer in the sentence; closing MORE THAN
+#: ONE at a time still is. One sentence, so a person who asks "can you merge
+#: this?" - or "can you approve it?" - gets the whole boundary in one breath.
 NEVER_WORDS = ("Jarvis can never force-push, squash-merge or rebase, use an "
                "admin bypass, turn on auto-merge, bypass required checks, push "
-               "directly to main, approve a pull request in your name, close an "
-               "issue, edit a comment, dispatch a workflow, use a gist, or "
-               "delete/close repositories or branches; every merge or PR-branch "
-               "push requires its own approval card.")
+               "directly to main, approve a pull request in your name, edit a "
+               "comment, dispatch a workflow, use a gist, close or reopen more "
+               "than one issue at a time, or delete/close repositories or "
+               "branches; every merge, push, edit, review, label change or issue "
+               "close requires its own approval card.")
 
 #: ONE source of truth for what Jarvis can do with GitHub - the four reads, the
 #: six carded writes, and the small operational details around them. The owner's
@@ -444,6 +566,16 @@ CAPABILITIES = (
      "card_fields": ("the repository", "at most 10 pull requests"),
      "limit": "read-only by construction: no body, no method but GET",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
+    {"tool": "github_pr_detail", "kind": "read", "gate": ACTION_INSPECT,
+     "words": "read ONE pull request in full: its title, body, state, draft "
+              "and mergeable flags, its head commit and base branch, then its "
+              "changed files, its commits, its comments and its reviews",
+     "card_fields": ("the repository", "the pull request number",
+                     "the five fixed reads it makes"),
+     "limit": "read-only by construction: no body, no method but GET; at most "
+              "10 files, 10 commits, 10 comments and 10 reviews are shown, with "
+              "the real count always printed and every text bounded",
+     "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_comment", "kind": "write", "gate": ACTION_COMMENT,
      "words": "post ONE comment on an issue or pull request, as you",
      "card_fields": ("the repository", "the issue or pull request number",
@@ -456,7 +588,7 @@ CAPABILITIES = (
      "card_fields": ("the repository", "the title", "the whole body"),
      "limit": "title 200 characters, body 2,000; it cannot close or edit it",
      "default_state": "off",
-     "absolute_bans": ("close_issue",), "two_stage_kind": None},
+     "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_rerun_workflow", "kind": "write", "gate": ACTION_RERUN,
      "words": "run ONE existing workflow run again, with the same code and "
               "settings it ran with before",
@@ -514,6 +646,82 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": ("force_push", "delete_branch", "push_to_main"),
      "two_stage_kind": "prepare_write_then_push"},
+    {"tool": "github_open_pr", "kind": "write", "gate": ACTION_OPEN_PR,
+     "words": "copy a repository at a base branch into an isolated scratch "
+              "folder on this PC, make a NEW branch there, then push that branch "
+              "and open ONE pull request from it into the base branch, on a "
+              "second card showing every commit, every changed file, the exact "
+              "push command, the title and the whole body",
+     "card_fields": ("prepare: the repository, the base branch, the new branch "
+                     "and the scratch folder it will copy into",
+                     "open: the base branch, the new branch, every commit, every "
+                     "changed file, the exact git push command, the pull "
+                     "request's title and its whole body"),
+     "limit": "the new branch must not be main/master/release/* or hotfix/*; "
+              "never a force-push, never a delete, never another repository, "
+              "never a fork; the push goes only to the NEW branch and the pull "
+              "request is created from it into the base branch on GitHub; a "
+              "title over 200 characters, a body over 2,000, or a change with "
+              "more than 20 commits or changed files is refused before a card",
+     "default_state": "off",
+     "absolute_bans": ("force_push", "push_to_main", "delete_branch"),
+     "two_stage_kind": "prepare_then_open"},
+    {"tool": "github_workflow", "kind": "write", "gate": ACTION_WORKFLOW,
+     "words": "cancel ONE in-progress workflow run, or re-run only the FAILED "
+              "jobs of ONE finished run",
+     "card_fields": ("the repository", "the run number",
+                     "whether it will cancel the run or re-run only its failed "
+                     "jobs"),
+     "limit": "one existing run only; it never dispatches a workflow, never "
+              "starts a new run from scratch and never changes any code or "
+              "setting",
+     "default_state": "off",
+     "absolute_bans": ("workflow_dispatch",), "two_stage_kind": None},
+    {"tool": "github_issue_labels", "kind": "write", "gate": ACTION_ISSUE_LABELS,
+     "words": "add and/or remove labels on ONE issue or pull request, showing "
+              "the exact add and remove sets",
+     "card_fields": ("the repository", "the issue or pull request number",
+                     "the exact labels to add", "the exact labels to remove"),
+     "limit": "labels only - it never closes or reopens an issue, never edits "
+              "the title or the body, and every label name is checked before a "
+              "card exists; the current labels are read first and the whole set "
+              "is sent in ONE request",
+     "default_state": "off",
+     "absolute_bans": (), "two_stage_kind": None},
+    {"tool": "github_edit_pr", "kind": "write", "gate": ACTION_EDIT_PR,
+     "words": "edit ONE pull request's title and/or body, showing the exact "
+              "before and after",
+     "card_fields": ("the repository", "the pull request number",
+                     "the exact old title and body",
+                     "the exact new title and body"),
+     "limit": "title and body only - no other field is editable, both are "
+              "bounded so the card shows them whole, and it refuses if the live "
+              "pull request is not still the one the card showed",
+     "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
+    {"tool": "github_pr_review", "kind": "write", "gate": ACTION_PR_REVIEW,
+     "words": "post ONE pull request review with the COMMENT or REQUEST_CHANGES "
+              "verdict and the whole review text, never an approval",
+     "card_fields": ("the repository", "the pull request number",
+                     "the verdict: a comment or a request for changes",
+                     "the whole review text"),
+     "limit": "COMMENT or REQUEST_CHANGES only - an APPROVE review is refused "
+              "by name, because a formal approval would transfer your own "
+              "sign-off; the text is capped at 2,000 characters and cannot be "
+              "edited or taken back",
+     "default_state": "off",
+     "absolute_bans": ("approve_pr",), "two_stage_kind": None},
+    {"tool": "github_issue_state", "kind": "write", "gate": ACTION_ISSUE_STATE,
+     "words": "close ONE issue, or reopen ONE closed issue, on its own card "
+              "showing the issue's title and the direction, with an optional "
+              "reason",
+     "card_fields": ("the repository", "the issue number and its title",
+                     "whether it will close it or reopen it",
+                     "an optional reason (shown on the card, not sent as a field)"),
+     "limit": "ONE issue at a time - never a pull request, never a draft, never "
+              "in bulk; no delete, no transfer and no edit; it refuses if the "
+              "issue's live title is not the one on the card",
+     "default_state": "off",
+     "absolute_bans": ("bulk_close",), "two_stage_kind": None},
 )
 
 #: The small operational details that are true of every capability above. This
@@ -548,10 +756,16 @@ CAPABILITY_DETAILS = (
     "token is refused, so it cannot ride a fix out of this PC.",
     "Every mutating action ships OFF. It is switched on under Settings, What "
     "asks first, \"Jarvis's own tools\", and each use raises its own one-shot "
-    "approval card; nothing here can be auto-approved or run in bulk.",
+    "approval card; nothing here can be auto-approved or run in bulk. The READS "
+    "do not ask: the owner's decision of 2026-11-10 23:00 made every GitHub read "
+    "card-free, because a read is a GET on api.github.com and changes nothing.",
     "While the event stream between the app and this PC is stale, both apps "
     "hold the Approve button, so a merge or a push cannot be confirmed on a "
     "stale picture of the world - the same rule every other card follows.",
+    "Closing or reopening ONE issue is its own carded action "
+    "(github_issue_state), by the owner's decision of 2026-11-10 23:00: one "
+    "issue at a time, never a pull request, never bulk, never a delete or a "
+    "transfer, and the card shows the issue's title and the direction.",
     "Every text GitHub sends back - a title, an issue, pull request, comment or "
     "review body, a file, a check annotation, the end of a log, GitHub's own "
     "refusal - goes through ONE sanitizer: HTML comments and invisible or "
@@ -794,6 +1008,17 @@ class Request:
     file_before: str = ""
     file_after: str = ""
     commit_message: str = ""
+    detail: bool = False          # github_pr_detail: the five reads, composed
+    workflow_op: str = ""         # github_workflow: "cancel" | "rerun_failed"
+    open_stage: str = ""          # github_open_pr: "prepare" | "open"
+    pr_title: str = ""            # github_open_pr: the pull request's new title
+    pr_body: str = ""             # github_open_pr: the pull request's whole body
+    label_add: tuple = ()         # github_issue_labels: exact labels to add
+    label_remove: tuple = ()      # github_issue_labels: exact labels to remove
+    issue_state: str = ""         # github_issue_state: "closed" | "open"
+    issue_reason: str = ""        # github_issue_state: the optional why on the card
+    old_title: str = ""           # github_edit_pr: the title the card showed as "before"
+    old_body: str = ""            # github_edit_pr: the body the card showed as "before"
 
     def urls(self) -> tuple:
         return tuple(s.url() for s in self.steps)
@@ -830,6 +1055,54 @@ FIX_WRITE_TOUCHES = (
     "any commit leaves this PC. Jarvis cannot delete, rename, move or change the "
     "permissions of anything, and cannot write outside that one copy.")
 
+#: What an open-pull-request final card says about the two things it does. Both
+#: are real GitHub changes: one new branch pushed, then one pull request created.
+OPEN_PR_TOUCHES = (
+    "This PUSHES one NEW branch to the repository and then opens ONE pull "
+    "request from it into the base branch, in your name. The push is one "
+    "ordinary push of a branch that does not exist yet - never a force-push, "
+    "never a delete, and never main/master/release/* or hotfix/*. A pushed "
+    "branch and an opened pull request cannot be taken back by Jarvis: it has no "
+    "delete-branch and no close-pull-request action. Nothing else on GitHub "
+    "changes.")
+
+#: What a workflow card says: two operational knobs on an EXISTING run.
+WORKFLOW_TOUCHES = (
+    "This changes ONE workflow run that already exists on GitHub - either it "
+    "stops a run that is still going, or it runs only the jobs that failed in a "
+    "run that has finished. It never dispatches a workflow, never starts a run "
+    "that did not exist, and changes no code and no setting. A cancelled run "
+    "cannot be resumed and a re-run cannot be taken back.")
+
+#: What a label card says. One atomic request, and the two verbs it will not do.
+LABEL_TOUCHES = (
+    "This changes ONLY the labels on that one issue or pull request, in ONE "
+    "request, after reading the current labels first. It never closes or reopens "
+    "anything, never edits the title or body, and cannot delete a label from the "
+    "repository - only from this one item.")
+
+#: What an edit card says: two text fields, and nothing else.
+EDIT_PR_TOUCHES = (
+    "This changes ONLY that pull request's title and/or its body. No other "
+    "field is editable, and the change can be edited back with the same tool - "
+    "nothing is deleted and nothing is merged, pushed, closed or approved.")
+
+#: What a review card says. One review, and the verdict that is impossible.
+REVIEW_TOUCHES = (
+    "This posts ONE review on that pull request in your name, with either a "
+    "plain comment or a request for changes; Jarvis can never post the APPROVE "
+    "verdict, because a formal approval would hand your own sign-off to the "
+    "assistant. The review text cannot be edited or taken back afterwards.")
+
+#: What an issue close/reopen card says (the owner's 2026-11-10 23:00 decision,
+#: which overturned the old absolute ban for ONE carded action).
+ISSUE_STATE_TOUCHES = (
+    "This changes ONLY that one issue's open/closed state. It is reversible (the "
+    "same tool reopens a closed issue), it sends ONE request, and it never "
+    "deletes, transfers or edits the issue, never closes a pull request, and "
+    "never touches more than one issue. Closing an issue can still tell whoever "
+    "opened it that it was closed, which the owner is shown first.")
+
 
 def describe(r: Request) -> str:
     """The approval card's words: what, where, and what changes.
@@ -856,11 +1129,15 @@ def describe(r: Request) -> str:
     lines.append("")
     if r.action == ACTION_FIX_WRITE:
         lines.append("This card sends nothing anywhere and uses no GitHub token.")
+    elif r.action == ACTION_OPEN_PR:
+        lines.append("This card uses the GitHub token saved on this PC for the "
+                     "git push and the pull request, and for nothing else.")
     else:
         lines.append("The GitHub token saved on this PC is sent to api.github.com "
                      "and nowhere else; it is never shown.")
     if r.action not in (ACTION_INSPECT, ACTION_MERGE, ACTION_FIX_PUSH,
-                        ACTION_FIX_WRITE):
+                        ACTION_FIX_WRITE, ACTION_OPEN_PR, ACTION_WORKFLOW,
+                        ACTION_ISSUE_LABELS, ACTION_EDIT_PR, ACTION_PR_REVIEW):
         # The old sentence is still exactly true of these actions: they post or
         # start something, and none of them merges, pushes or deletes.
         lines.append("Nothing is merged, pushed, committed, deleted or closed by "
@@ -872,6 +1149,24 @@ def describe(r: Request) -> str:
     elif r.action == ACTION_FIX_PUSH:
         lines.append("Nothing is pushed until you approve a SEPARATE card that "
                      "shows the exact commits, files and command.")
+    elif r.action == ACTION_OPEN_PR:
+        lines.append("Nothing is pushed and no pull request exists until you "
+                     "approve this card; then Jarvis pushes the one new branch, "
+                     "reads it back, and opens the pull request at that commit.")
+    elif r.action == ACTION_WORKFLOW:
+        lines.append("It is refused, changing nothing, if that run is not in the "
+                     "state this card names: still going for a cancel, finished "
+                     "for a re-run.")
+    elif r.action == ACTION_ISSUE_LABELS:
+        lines.append("Jarvis reads the current labels first and stops, changing "
+                     "nothing, if a label it would remove is not there.")
+    elif r.action == ACTION_EDIT_PR:
+        lines.append("Jarvis reads the pull request first and stops, changing "
+                     "nothing, if its title or body is no longer the one on "
+                     "this card.")
+    elif r.action == ACTION_PR_REVIEW:
+        lines.append("The APPROVE verdict is impossible here, on purpose: it is "
+                     "refused by name before any card is shown.")
     return "\n".join(lines)
 
 
@@ -966,8 +1261,10 @@ def capabilities_text() -> str:
     writes = [c for c in CAPABILITIES if c["kind"] == "write"]
     lines = ["With GitHub connected, Jarvis can do these things."]
     lines.append("")
-    lines.append(f"{_count_word(len(reads)).capitalize()} reads (they ask first "
-                 f"too, because a read sends the token out):")
+    lines.append(f"{_count_word(len(reads)).capitalize()} reads (they do NOT ask: "
+                 f"the owner's decision of 2026-11-10 23:00 made every GitHub "
+                 f"read card-free, because a read is a GET on api.github.com and "
+                 f"changes nothing; every write still raises its own card):")
     for c in reads:
         lines.append(f"  - {c['words']} ({c['tool']}). The card shows "
                      f"{_card_shows(c)}. Limit: {c['limit']}.")
@@ -1281,6 +1578,50 @@ def _write_marker(worktree: str, doc: dict) -> str:
     return ""
 
 
+#: The open-pull-request copy's own note. A separate name from the fix copy's
+#: marker, so a folder can never be mistaken for the other flow's: this one has
+#: no pull request to belong to yet - it names the repository, the base branch,
+#: the NEW branch and the base commit the copy started from.
+def _open_marker_path(worktree: str) -> str:
+    return os.path.join(worktree, ".git", OPEN_MARKER_NAME)
+
+
+def _read_open_marker(worktree: str) -> dict:
+    """The open-prepare note, or {} - never a raise, never a guess."""
+    try:
+        with open(_open_marker_path(worktree), "r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _write_open_marker(worktree: str, doc: dict) -> str:
+    """Remember which repository, base and new branch this copy is."""
+    path = _open_marker_path(worktree)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, ensure_ascii=False, indent=1)
+    except OSError as exc:
+        return (f"Jarvis copied the repository, but could not write its note in "
+                f"that folder ({type(exc).__name__}), so a later open stage could "
+                f"not tell what the folder is for. Nothing was pushed.")
+    return ""
+
+
+def _branch_slug(branch: str) -> str:
+    """A folder-name-safe form of a branch, bounded, deterministic."""
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(branch or "")).strip("-.")
+    return (slug or "branch")[:60]
+
+
+def open_pr_folder_name(repo: str, branch: str) -> str:
+    """`<owner>__<name>__new__<branch-slug>`: one folder per new branch."""
+    owner, _, name = str(repo or "").partition("/")
+    return f"{owner}__{name}__new__{_branch_slug(branch)}"
+
+
 # --------------------------------------------------------------------------
 #   ONE file inside the prepared copy (wave 16B, 2026-11-10)
 # --------------------------------------------------------------------------
@@ -1310,17 +1651,37 @@ def _write_marker(worktree: str, doc: dict) -> str:
 #: a card because it sends nothing anywhere and changes nothing.
 
 
-def _copy_worktree(args: dict) -> str:
-    """The prepared scratch folder for ONE pull request, resolved and checked.
+def _copy_marker(worktree: str) -> dict:
+    """The copy's own note plus which flow made it: `{"kind": "fix"|"open", ...}`.
 
-    The folder is either the one named on the call or the canonical
-    `<scratch root>/<owner>__<name>__pr<number>`, and either way it must be
-    inside `scratch_root()` AND carry the prepare stage's note for THIS
-    repository and pull request. That note is what makes "the copy for this
-    pull request" a fact rather than a folder name a model chose.
+    `github_fix_and_push`'s prepare stage writes `jarvis-fix-pr.json` (a pull
+    request's copy); `github_open_pr`'s prepare stage writes
+    `jarvis-open-pr.json` (a new branch's copy, with no pull request yet). BOTH
+    are confined to this PC's scratch root by the same checks; the write and
+    read stages of the fix tool work on either, because both are "one isolated
+    copy Jarvis may change", and the note is what says which folder this is.
+    """
+    fix = _read_marker(worktree)
+    if fix:
+        return dict(fix, kind="fix")
+    opened = _read_open_marker(worktree)
+    if opened:
+        return dict(opened, kind="open")
+    return {}
+
+
+def _copy_worktree(args: dict) -> str:
+    """The prepared scratch folder, resolved and checked - fix OR open copy.
+
+    The folder is either the one named on the call or the canonical one under
+    the scratch root, and either way it must be inside `scratch_root()` AND
+    carry a prepare stage's note for THIS repository: a pull request's number as
+    well for the fix flow, the new branch for the open flow. That note is what
+    makes "the copy for this work" a fact rather than a folder name a model
+    chose.
     """
     repo = _check_repo((args or {}).get("repo"))
-    number = _check_number((args or {}).get("number"), "pull request")
+    number = str((args or {}).get("number") or "").strip()
     given = str((args or {}).get("worktree") or "").strip()
     if given:
         if not os.path.isabs(given):
@@ -1328,28 +1689,45 @@ def _copy_worktree(args: dict) -> str:
                 "Jarvis needs that folder's full path, starting with the drive "
                 "letter (the one the prepare stage printed).")
         worktree = os.path.abspath(given)
+    elif number:
+        worktree = os.path.join(scratch_root(),
+                                scratch_folder_name(repo, _check_number(
+                                    number, "pull request")))
     else:
-        worktree = os.path.join(scratch_root(), scratch_folder_name(repo, number))
+        raise GitHubError("Jarvis needs the scratch folder the prepare stage "
+                          "made, so it can look at it before changing anything.")
     if not _inside_scratch_root(worktree):
         raise GitHubError(
             "That folder is not inside Jarvis's own scratch folder for GitHub "
-            f"fixes ({scratch_root()}), so Jarvis will not touch it. Use the "
+            f"work ({scratch_root()}), so Jarvis will not touch it. Use the "
             "folder the prepare stage made.")
     if not os.path.isdir(worktree):
         raise GitHubError("There is no prepared scratch folder at that path, so "
                           "there is nothing to change. Run the prepare stage "
                           "first.")
-    marker = _read_marker(worktree)
+    marker = _copy_marker(worktree)
     if not marker:
         raise GitHubError(
-            "That folder was not prepared by github_fix_and_push, so Jarvis "
-            "cannot tell which pull request it belongs to. Run the tool with "
-            'stage="prepare" first.')
-    if (str(marker.get("repo") or "") != repo
-            or str(marker.get("number") or "") != number):
-        raise GitHubError("That scratch folder was prepared for a different pull "
-                          "request, so Jarvis will not change anything in it. "
+            "That folder was not prepared by a GitHub tool in this module, so "
+            "Jarvis cannot tell what it is. Run the prepare stage first.")
+    if str(marker.get("repo") or "") != repo:
+        raise GitHubError("That scratch folder was prepared for a different "
+                          "repository, so Jarvis will not change anything in it. "
                           "Prepare this one first.")
+    if marker["kind"] == "fix":
+        if not number:
+            raise GitHubError("Jarvis needs the pull request number that scratch "
+                              "folder was prepared for, so it can check the "
+                              "folder is the one it thinks.")
+        wanted = _check_number(number, "pull request")
+        if str(marker.get("number") or "") != wanted:
+            raise GitHubError("That scratch folder was prepared for a different "
+                              "pull request, so Jarvis will not change anything "
+                              "in it. Prepare this one first.")
+    elif number:
+        raise GitHubError("That scratch folder is a NEW BRANCH's copy, made by "
+                          "github_open_pr, so it has no pull request number. "
+                          "Name the folder alone, without a number.")
     return worktree
 
 
@@ -1500,6 +1878,103 @@ def _check_commit_message(value) -> str:
     return text
 
 
+def _check_pr_title(value, what: str = "pull request") -> str:
+    """A pull request's title, shown WHOLE on one card, so it is bounded."""
+    text = " ".join(str(value or "").split())
+    if not text:
+        raise GitHubError(f"Jarvis needs the {what}'s title - there was none.")
+    if len(text) > MAX_PR_TITLE:
+        raise GitHubError(
+            f"That title is longer than one card can show in full "
+            f"({len(text)} characters; Jarvis shows at most {MAX_PR_TITLE}). "
+            f"Shorten it and ask again - nothing was sent.")
+    return text
+
+
+def _check_pr_body(value, *, required: bool = True) -> str:
+    """A pull request's (or a review's) text, shown whole on one card."""
+    text = _lf(str(value or "")).strip()
+    if not text and required:
+        raise GitHubError("Jarvis needs the body's text - there was none. Write "
+                          "it and ask again; nothing was sent.")
+    if len(text) > MAX_PR_BODY:
+        raise GitHubError(
+            f"That text is longer than one card can show in full "
+            f"({len(text)} characters; Jarvis shows at most {MAX_PR_BODY}). "
+            f"Shorten it and ask again - nothing was sent.")
+    return text
+
+
+def _check_label_list(value, what: str) -> tuple:
+    """A bounded, validated tuple of label names for `github_issue_labels`."""
+    if value in (None, ""):
+        return ()
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        raise GitHubError(f"Jarvis needs the labels to {what} as a list of names, "
+                          f"and that was not one.")
+    out = []
+    for item in value:
+        name = " ".join(str(item or "").split())
+        if not name:
+            raise GitHubError(f"One of the labels to {what} was empty, so nothing "
+                              f"was changed.")
+        if len(name) > MAX_LABEL_CHARS or not _LABEL.match(name):
+            raise GitHubError(
+                f'"{name[:60]}" is not a label name GitHub accepts (up to '
+                f"{MAX_LABEL_CHARS} characters: letters, numbers, space, dot, "
+                f"dash, underscore, colon, slash, plus, brackets, & and '). "
+                f"Nothing was changed.")
+        if name.lower() in [seen.lower() for seen in out]:
+            continue                          # the same label twice is one label
+        out.append(name)
+    if len(out) > MAX_LABELS:
+        raise GitHubError(f"Jarvis changes at most {MAX_LABELS} labels in one "
+                          f"card, and that was {len(out)}. Split it into smaller "
+                          f"changes.")
+    return tuple(out)
+
+
+def _check_review_event(value) -> str:
+    """The review verdict: COMMENT or REQUEST_CHANGES, and APPROVE refused by name."""
+    event = " ".join(str(value or "").split()).upper()
+    if event == "APPROVE":
+        raise GitHubError(
+            "Jarvis can never post an APPROVE review - a formal approval would "
+            "hand your own sign-off to the assistant, so it is permanently "
+            "banned. It can post a COMMENT review or a REQUEST_CHANGES review "
+            "instead; nothing was sent.")
+    if event not in ("COMMENT", "REQUEST_CHANGES"):
+        raise GitHubError(
+            'A GitHub review has to be either a comment ("COMMENT") or a '
+            'request for changes ("REQUEST_CHANGES"); APPROVE is refused. '
+            "Nothing was sent.")
+    return event
+
+
+def _check_new_branch(value) -> str:
+    """A branch Jarvis will CREATE and PUSH - never a protected one."""
+    ref = _check_ref(value)
+    if _protected_branch(ref):
+        raise GitHubError(
+            f'"{ref}" is a protected branch, and Jarvis never creates or pushes '
+            f"main, master, release/* or hotfix/*. Give the new branch another "
+            f"name; nothing was changed.")
+    return ref
+
+
+def _check_base_branch(value) -> str:
+    """The branch a pull request is opened INTO, which Jarvis only READS.
+
+    The repository's real base may be `main`: a pull request has to point at the
+    branch it should merge into, and Jarvis never writes to it - the push goes
+    only to the NEW branch. So this is a normal branch-name check, not the
+    protected-branch refusal the NEW branch gets.
+    """
+    return _check_ref(value)
+
+
 def _write_arguments(args: dict) -> dict:
     """Everything the write card shows and the run stage re-checks. No socket.
 
@@ -1546,10 +2021,11 @@ def _write_arguments(args: dict) -> dict:
             f"That change is bigger than one card can show in full ({len(diff)} "
             f"characters; Jarvis shows at most {MAX_WRITE_DIFF}), so nothing was "
             f"written. Split the fix into smaller writes, one file at a time.")
-    marker = _read_marker(worktree)
+    marker = _copy_marker(worktree)
     return {"repo": str(marker.get("repo") or ""),
             "number": str(marker.get("number") or ""),
-            "head_ref": str(marker.get("head_ref") or ""),
+            "head_ref": str(marker.get("head_ref") or marker.get("branch") or ""),
+            "open_copy": marker.get("kind") == "open",
             "worktree": os.path.normpath(worktree), "path": rel,
             "target": target, "exists": exists, "before": before,
             "after": after, "diff": diff, "message": message}
@@ -1577,10 +2053,15 @@ def read_copy_file(args: Optional[dict] = None) -> str:
         raise GitHubError(f"There is no file at {rel} in that prepared copy, so "
                           f"there is nothing to read.")
     text = _read_copy_text(target)
-    marker = _read_marker(worktree)
-    head = (f'File "{rel}" in the scratch copy of pull request '
-            f'#{marker.get("number")} in {marker.get("repo")} '
-            f'(local read only - nothing was sent anywhere):')
+    marker = _copy_marker(worktree)
+    if marker.get("kind") == "open":
+        head = (f'File "{rel}" in the scratch copy of the new branch '
+                f'"{marker.get("branch")}" in {marker.get("repo")} '
+                f'(local read only - nothing was sent anywhere):')
+    else:
+        head = (f'File "{rel}" in the scratch copy of pull request '
+                f'#{marker.get("number")} in {marker.get("repo")} '
+                f'(local read only - nothing was sent anywhere):')
     if not text:
         return head + "\n\nThat file is empty."
     body = _clean_github_text(text, limit=MAX_FILE_CHARS)
@@ -1827,7 +2308,9 @@ def plan_create_repo(args: Optional[dict] = None) -> Request:
 #: The carded actions this module can take, by name - the closed set. A name
 #: outside it is a bug, not a feature: `run()` refuses it.
 ACTIONS = (ACTION_COMMENT, ACTION_OPEN_ISSUE, ACTION_RERUN, ACTION_CREATE_REPO,
-           ACTION_MERGE, ACTION_FIX_PUSH, ACTION_FIX_WRITE)
+           ACTION_MERGE, ACTION_FIX_PUSH, ACTION_FIX_WRITE, ACTION_OPEN_PR,
+           ACTION_WORKFLOW, ACTION_ISSUE_LABELS, ACTION_EDIT_PR,
+           ACTION_PR_REVIEW, ACTION_ISSUE_STATE)
 
 
 def plan_scan_prs(args: Optional[dict] = None) -> Request:
@@ -2051,9 +2534,13 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
                           "with stage \"read\" and a path.")
     if stage == "write":
         parts = _write_arguments(args)
+        where = (f"New branch in {parts['repo']}: {parts['head_ref']}"
+                 if parts.get("open_copy")
+                 else f"Pull request: #{parts['number']} "
+                      f"(branch {parts['head_ref']})")
         shown = [
             f"Repository: {parts['repo']}",
-            f"Pull request: #{parts['number']} (branch {parts['head_ref']})",
+            where,
             f"Scratch folder: {parts['worktree']}",
             f"File: {parts['path']}"
             + ("" if parts["exists"] else " (a NEW file)"),
@@ -2062,10 +2549,16 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
             "The exact change:",
             parts["diff"].rstrip(),
         ]
+        what = (f"Jarvis will change ONE file inside the scratch copy of the new "
+                f"branch \"{parts['head_ref']}\" in {parts['repo']} and make ONE "
+                f"commit there:"
+                if parts.get("open_copy") else
+                f"Jarvis will change ONE file inside the scratch copy of pull "
+                f"request #{parts['number']} in {parts['repo']} and make ONE "
+                f"commit there:")
         return Request(
             ACTION_FIX_WRITE,
-            f"Jarvis will change ONE file inside the scratch copy of pull request "
-            f"#{parts['number']} in {parts['repo']} and make ONE commit there:",
+            what,
             (),
             shows="\n".join(shown),
             touches=FIX_WRITE_TOUCHES,
@@ -2128,6 +2621,540 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
         fix_stage="prepare",
         repo=repo,
         number=number,
+    )
+
+
+#: What each `github_workflow` operation does, in the owner's words.
+WORKFLOW_OPS = {
+    "cancel": "cancel ONE in-progress workflow run",
+    "rerun_failed": "re-run only the FAILED jobs of ONE finished workflow run",
+}
+
+
+def plan_pr_detail(args: Optional[dict] = None) -> Request:
+    """Read ONE pull request in full: five fixed GETs, one card, no method but GET.
+
+    The five reads are a closed, module-written set - that pull request, its
+    files, its commits, its comments and its reviews - so the model cannot name
+    a different address. Every answer is bounded by `run()`; the card says what
+    it will read and nothing on GitHub can change.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"))
+    number = _check_number(args.get("number"), "pull request")
+    steps = (
+        Step("GET", f"{_repo_path(repo)}/pulls/{number}"),
+        Step("GET", f"{_repo_path(repo)}/pulls/{number}/files?per_page=100"),
+        Step("GET", f"{_repo_path(repo)}/pulls/{number}/commits?per_page=100"),
+        Step("GET", f"{_repo_path(repo)}/issues/{number}/comments?per_page=100"),
+        Step("GET", f"{_repo_path(repo)}/pulls/{number}/reviews?per_page=100"),
+    )
+    return Request(
+        ACTION_INSPECT,
+        f"Jarvis will read pull request #{number} in {repo} in full: its title, "
+        f"body, state and merge flags, its head commit and base branch, and then "
+        f"its changed files, its commits, its comments and its reviews.",
+        steps,
+        detail=True,
+        repo=repo,
+        number=number,
+        touches=("Nothing on GitHub changes; this only reads that one pull "
+                 "request and the lists GitHub keeps beside it."),
+    )
+
+
+def plan_workflow(args: Optional[dict] = None) -> Request:
+    """Cancel ONE in-progress run, or re-run a finished run's failed jobs only.
+
+    The action is a closed set of two names, and each has its own fixed address
+    under the run the model named. `dispatch` is not a value this module can
+    put here - it is in `NEVER`, and there is no code path that sends it.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"))
+    run_id = _check_number(args.get("run_id"), "workflow run")
+    op = str(args.get("action") or "").strip().lower()
+    if op not in WORKFLOW_OPS:
+        raise GitHubError('Jarvis can do one of two things to an existing '
+                          'workflow run: "cancel" a run that is still going, or '
+                          '"rerun_failed" to run only the failed jobs of a '
+                          'finished run. It cannot dispatch a workflow.')
+    tail = "cancel" if op == "cancel" else "rerun-failed-jobs"
+    return Request(
+        ACTION_WORKFLOW,
+        f"Jarvis will {WORKFLOW_OPS[op]} ({run_id}) in {repo}, as you:",
+        (Step("GET", f"{_repo_path(repo)}/actions/runs/{run_id}"),
+         Step("POST", f"{_repo_path(repo)}/actions/runs/{run_id}/{tail}")),
+        shows="\n".join([
+            f"Repository: {repo}",
+            f"Workflow run: {run_id}",
+            f"Action: {WORKFLOW_OPS[op]}",
+        ]),
+        touches=WORKFLOW_TOUCHES,
+        repo=repo,
+        number=run_id,
+        workflow_op=op,
+    )
+
+
+def _check_open_stage(value) -> str:
+    stage = str(value or "prepare").strip().lower()
+    if stage not in ("prepare", "open"):
+        raise GitHubError(
+            'Jarvis opens a pull request in two stages: "prepare" copies the '
+            'repository into a scratch folder and makes the new branch there, '
+            'and "open" shows every commit and file on ONE card, then pushes the '
+            "branch and opens the pull request. Nothing else is a stage.")
+    return stage
+
+
+def _open_worktree(args: dict) -> str:
+    """The prepared open-pull-request copy for THIS repository and branch.
+
+    Like `_copy_worktree` for the fix flow: inside the scratch root, the folder
+    exists, and its own note names the same repository, base branch and new
+    branch. A folder prepared for another branch is refused, not guessed at.
+    """
+    repo = _check_repo(args.get("repo"))
+    base = _check_base_branch(args.get("base"))
+    branch = _check_new_branch(args.get("branch"))
+    given = str(args.get("worktree") or "").strip()
+    if given:
+        if not os.path.isabs(given):
+            raise GitHubError("Jarvis needs that folder's full path, starting "
+                              "with the drive letter (the one the prepare stage "
+                              "printed).")
+        worktree = os.path.abspath(given)
+    else:
+        worktree = os.path.join(scratch_root(), open_pr_folder_name(repo, branch))
+    if not _inside_scratch_root(worktree):
+        raise GitHubError(
+            "That folder is not inside Jarvis's own scratch folder for GitHub "
+            f"work ({scratch_root()}), so Jarvis will not touch it. Use the "
+            "folder the prepare stage made.")
+    if not os.path.isdir(worktree):
+        raise GitHubError("There is no prepared copy at that path, so there is "
+                          "nothing to push. Run the prepare stage first.")
+    marker = _read_open_marker(worktree)
+    if not marker:
+        raise GitHubError(
+            "That folder was not prepared by github_open_pr, so Jarvis cannot "
+            "tell which repository and new branch it is. Run the tool with "
+            'stage="prepare" first.')
+    if (str(marker.get("repo") or "") != repo
+            or str(marker.get("base") or "") != base
+            or str(marker.get("branch") or "") != branch):
+        raise GitHubError("That scratch folder was prepared for a different "
+                          "repository, base branch or new branch, so Jarvis will "
+                          "not push from it. Prepare this one first.")
+    return worktree
+
+
+def _open_arguments(args: dict, git: Callable) -> dict:
+    """Everything the open card shows, read from the LOCAL folder only.
+
+    No socket: the folder's own git state (clean tree, branch, commits, changed
+    files, HEAD commit) plus the note the prepare stage left in `.git`. The
+    title and body are the model's arguments, bounded so the card shows them
+    whole; the HEAD commit is the pin the run stage re-reads.
+    """
+    repo = _check_repo(args.get("repo"))
+    base = _check_base_branch(args.get("base"))
+    branch = _check_new_branch(args.get("branch"))
+    title = _check_pr_title(args.get("title"))
+    body = _check_pr_body(args.get("body"), required=False)
+    worktree = _open_worktree(args)
+    marker = _read_open_marker(worktree)
+    base_sha = str(marker.get("base_sha") or "").strip()
+    if not _SHA.match(base_sha):
+        raise GitHubError("That scratch folder's note does not name the base "
+                          "commit the copy started from, so Jarvis cannot tell "
+                          "what the pull request would contain. Prepare it again.")
+    code, out, err = _git(git, ["branch", "--show-current"], cwd=worktree)
+    current = str(out or "").strip()
+    if code != 0 or current != branch:
+        raise GitHubError(f'That folder is on branch "{current}", not the new '
+                          f'branch "{branch}", so Jarvis will not push it. '
+                          f"Nothing was pushed.")
+    code, out, err = _git(git, ["status", "--porcelain"], cwd=worktree)
+    if code != 0:
+        raise GitHubError(_git_words("Looking at that folder", err or out, ""))
+    if str(out or "").strip():
+        raise GitHubError("That folder still has changes that are not committed. "
+                          "Commit the change there first (Jarvis only pushes "
+                          "commits), then ask again. Nothing was pushed.")
+    code, changes_text, err = _git(git, ["diff", "--name-status", base_sha],
+                                   cwd=worktree)
+    if code != 0:
+        raise GitHubError(_git_words("Reading that folder's changed files",
+                                     err or changes_text, ""))
+    changes = []
+    for line in str(changes_text or "").splitlines():
+        pieces = line.split("\t")
+        if len(pieces) >= 2 and pieces[1].strip():
+            changes.append((pieces[0].strip()[:1] or "M", pieces[-1].strip()))
+    if not changes:
+        raise GitHubError("There is nothing to open a pull request for: that "
+                          "folder has no change against the base branch. Make "
+                          "the change and commit it there first.")
+    if len(changes) > MAX_CARD_LISTS:
+        raise GitHubError(
+            f"That change touches {len(changes)} files, more than one card can "
+            f"show in full (Jarvis shows at most {MAX_CARD_LISTS}). Split it "
+            f"into smaller pull requests. Nothing was pushed.")
+    bad = [rel for _status, rel in changes if _credential_path(rel)]
+    if bad:
+        raise GitHubError("One of the changed files looks like it holds a key, a "
+                          f"password or a token ({bad[0]}), and that must never "
+                          "be pushed to GitHub. Remove it from the commits "
+                          "first; nothing was pushed.")
+    code, commits_text, err = _git(git, ["log", "--oneline", f"{base_sha}..HEAD"],
+                                   cwd=worktree)
+    if code != 0:
+        raise GitHubError(_git_words("Reading that folder's commits",
+                                     err or commits_text, ""))
+    commits = [line.strip() for line in str(commits_text or "").splitlines()
+               if line.strip()]
+    if not commits:
+        raise GitHubError("There is nothing to open a pull request for: that "
+                          "folder has no commits after the base branch. Make the "
+                          "change and commit it there first.")
+    if len(commits) > MAX_CARD_LISTS:
+        raise GitHubError(
+            f"That branch has {len(commits)} commits, more than one card can "
+            f"show in full (Jarvis shows at most {MAX_CARD_LISTS}). Squash them "
+            f"into fewer commits into the copy by hand. Nothing was pushed.")
+    code, out, err = _git(git, ["rev-parse", "HEAD"], cwd=worktree)
+    head_sha = str(out or "").strip().lower()
+    if code != 0 or not _SHA.match(head_sha):
+        raise GitHubError("Jarvis could not read the folder's HEAD commit, so it "
+                          "cannot pin the pull request to it. Nothing was pushed.")
+    command = f"git push origin HEAD:refs/heads/{branch}"
+    return {"repo": repo, "base": base, "branch": branch, "worktree":
+            os.path.normpath(worktree), "commits": commits, "changes": changes,
+            "head_sha": head_sha, "title": title, "body": body,
+            "command": command}
+
+
+def plan_open_pr(args: Optional[dict] = None, *,
+                 git: Optional[Callable] = None) -> Request:
+    """Open ONE pull request for a branch Jarvis prepares - two stages, two cards.
+
+    `stage="prepare"` copies the repository at the named base branch into the
+    isolated scratch root and makes the NEW branch there; its card says exactly
+    where and that nothing is pushed. `stage="open"` reads the LOCAL folder only
+    and its card shows the repository, the base branch, the new branch, EVERY
+    commit, EVERY changed file, the exact `git push` command, the pull request's
+    title and its WHOLE body - then, after one yes, Jarvis pushes the branch and
+    creates the pull request, pinned to the HEAD commit the card showed.
+
+    The NEW branch may never be main/master/release/* or hotfix/*. The BASE
+    branch may be the repository's real base (`main` included): a pull request
+    has to point at the branch it should merge into, Jarvis only READS that
+    branch, and the push goes only to the new one. Refusing `main` as the base
+    would make the tool unable to open the one pull request the owner wants.
+    """
+    args = args or {}
+    stage = _check_open_stage(args.get("stage"))
+    git = git or _default_git
+    if stage == "open":
+        parts = _open_arguments(args, git)
+        shown = [
+            f"Repository: {parts['repo']}",
+            f"Base branch (the pull request merges INTO this): {parts['base']}",
+            f"New branch (Jarvis pushes this one): {parts['branch']}",
+            f"Scratch folder: {parts['worktree']}",
+            f"It will be pushed at this exact commit: {parts['head_sha']}",
+            f"Commits ({len(parts['commits'])}):",
+        ]
+        shown += [f"  {line}" for line in parts["commits"]]
+        shown.append(f"Changed files ({len(parts['changes'])}):")
+        shown += [f"  {status} {rel}" for status, rel in parts["changes"]]
+        shown.append(f"The exact command: {parts['command']}")
+        shown.append("")
+        shown.append(f"Pull request title: {parts['title']}")
+        shown.append("Pull request body:")
+        shown.append(parts["body"] if parts["body"] else "(no body)")
+        shown.append("")
+        shown.append(f"Then GitHub is told: create ONE pull request from "
+                     f"\"{parts['branch']}\" into \"{parts['base']}\".")
+        card = "\n".join(shown)
+        if len(card) > MAX_CARD_LENGTH:
+            raise GitHubError(
+                f"This pull request's card would be {len(card)} characters, "
+                f"more than one card can show (Jarvis shows at most "
+                f"{MAX_CARD_LENGTH}). Shorten the body or split the change. "
+                f"Nothing was pushed.")
+        return Request(
+            ACTION_OPEN_PR,
+            f"Jarvis will PUSH the new branch \"{parts['branch']}\" to "
+            f"{parts['repo']} and then open ONE pull request from it into "
+            f"\"{parts['base']}\", as you:",
+            (Step("POST", f"{_repo_path(parts['repo'])}/pulls"),),
+            body={"title": parts["title"], "body": parts["body"],
+                  "head": parts["branch"], "base": parts["base"]},
+            shows=card,
+            touches=OPEN_PR_TOUCHES,
+            open_stage="open",
+            repo=parts["repo"],
+            base_ref=parts["base"],
+            head_ref=parts["branch"],
+            expected_sha=parts["head_sha"],
+            worktree=parts["worktree"],
+            pr_title=parts["title"],
+            pr_body=parts["body"],
+        )
+    repo = _check_repo(args.get("repo"))
+    base = _check_base_branch(args.get("base"))
+    branch = _check_new_branch(args.get("branch"))
+    if branch == base:
+        raise GitHubError("A pull request cannot be opened from a branch into "
+                          "itself. Give the new branch a different name.")
+    target = os.path.join(scratch_root(), open_pr_folder_name(repo, branch))
+    return Request(
+        ACTION_OPEN_PR,
+        f"Jarvis will copy {repo} at the base branch \"{base}\" into its own "
+        f"scratch folder on this PC and make the NEW branch \"{branch}\" there:",
+        (Step("GET", f"{_repo_path(repo)}"),),
+        shows="\n".join([
+            f"Repository: {repo}",
+            f"Base branch: {base}",
+            f"New branch: {branch}",
+            f"Scratch folder: {target}",
+            "Stage: prepare (nothing is pushed in this stage)",
+        ]),
+        touches=("Nothing on GitHub changes: this reads the repository and copies "
+                 "it into a folder on this PC. Nothing is pushed and no pull "
+                 "request exists until you approve a SEPARATE card."),
+        open_stage="prepare",
+        repo=repo,
+        base_ref=base,
+        head_ref=branch,
+    )
+
+
+def plan_issue_labels(args: Optional[dict] = None) -> Request:
+    """Add and/or remove labels on ONE issue or pull request, in ONE request.
+
+    The current labels are read first by `run()`; the card shows the exact add
+    and remove sets, and the run refuses - changing nothing - if a label it
+    would remove is not there. The whole final set is sent with ONE
+    `PUT .../issues/{n}/labels`, so a half-applied label change cannot happen.
+    Closing and reopening are deliberately NOT built: `close_issue` stays in
+    `NEVER` until the owner rules on it.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"))
+    number = _check_number(args.get("number"), "issue or pull request")
+    add = _check_label_list(args.get("add"), "add")
+    remove = _check_label_list(args.get("remove"), "remove")
+    if not add and not remove:
+        raise GitHubError("Jarvis needs at least one label to add or remove - "
+                          'there was none (give "add" and/or "remove"). Nothing '
+                          "was changed.")
+    overlap = [name for name in add
+               if name.lower() in [r.lower() for r in remove]]
+    if overlap:
+        raise GitHubError(f'"{overlap[0]}" is in both the add and the remove set, '
+                          f"so nothing was changed. Put it in one of them.")
+    shown = [f"Repository: {repo}", f"Issue or pull request: #{number}"]
+    shown.append("Labels to add: " + (", ".join(add) if add else "(none)"))
+    shown.append("Labels to remove: " + (", ".join(remove) if remove else "(none)"))
+    return Request(
+        ACTION_ISSUE_LABELS,
+        f"Jarvis will change the labels on #{number} in {repo}, as you:",
+        (Step("GET", f"{_repo_path(repo)}/issues/{number}"),
+         Step("PUT", f"{_repo_path(repo)}/issues/{number}/labels")),
+        shows="\n".join(shown),
+        touches=LABEL_TOUCHES,
+        repo=repo,
+        number=number,
+        label_add=add,
+        label_remove=remove,
+    )
+
+
+def plan_edit_pr(args: Optional[dict] = None) -> Request:
+    """Edit ONE pull request's title and/or body, showing the exact before/after.
+
+    The OLD values are the caller's arguments (copied from `github_pr_detail`'s
+    answer), and they are the pin: `run()` re-reads the pull request and refuses,
+    changing nothing, if either is no longer that value. Only `title` and `body`
+    are ever put in the request body - there is no code path that can send
+    another field.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"))
+    number = _check_number(args.get("number"), "pull request")
+    title = args.get("title")
+    body = args.get("body")
+    want_title = title not in (None, "")
+    want_body = "body" in args and body is not None
+    if not want_title and not want_body:
+        raise GitHubError("Jarvis needs a new title and/or a new body to edit - "
+                          "there was neither, so nothing was changed.")
+    old_title = _clean_github_text(args.get("old_title"), limit=MAX_PR_TITLE,
+                                   wrap=False) if want_title else ""
+    new_title = _check_pr_title(title) if want_title else ""
+    old_body = _lf(str(args.get("old_body") or ""))
+    new_body = _check_pr_body(body, required=False) if want_body else ""
+    if want_title and not old_title:
+        raise GitHubError("Jarvis needs the pull request's CURRENT title as "
+                          '`old_title`, exactly as github_pr_detail printed it - '
+                          "the card shows the before and after, and the run "
+                          "refuses if it changed. Nothing was changed.")
+    if want_body and "old_body" not in args:
+        raise GitHubError("Jarvis needs the pull request's CURRENT body as "
+                          "`old_body`, exactly as github_pr_detail printed it - "
+                          "the card shows the before and after, and the run "
+                          "refuses if it changed. Nothing was changed.")
+    if want_title and not want_body and old_title == new_title:
+        raise GitHubError("The new title is the same as the current one, so "
+                          "there is nothing to change.")
+    if want_body and not want_title and old_body == new_body:
+        raise GitHubError("The new body is the same as the current one, so "
+                          "there is nothing to change.")
+    payload = {}
+    if want_title:
+        payload["title"] = new_title
+    if want_body:
+        payload["body"] = new_body
+    shown = [f"Repository: {repo}", f"Pull request: #{number}"]
+    if want_title:
+        shown.append(f"Title before: {old_title}")
+        shown.append(f"Title after:  {new_title}")
+    if want_body:
+        shown.append("Body before:")
+        shown.append(old_body if old_body else "(empty)")
+        shown.append("Body after:")
+        shown.append(new_body if new_body else "(empty)")
+    card = "\n".join(shown)
+    if len(card) > MAX_CARD_LENGTH:
+        raise GitHubError(
+            f"This edit's card would be {len(card)} characters, more than one "
+            f"card can show (Jarvis shows at most {MAX_CARD_LENGTH}). Shorten "
+            f"the new body. Nothing was changed.")
+    return Request(
+        ACTION_EDIT_PR,
+        f"Jarvis will edit the "
+        f"{'title and body' if want_title and want_body else ('title' if want_title else 'body')} "
+        f"of pull request #{number} in {repo}, as you:",
+        (Step("GET", f"{_repo_path(repo)}/pulls/{number}"),
+         Step("PATCH", f"{_repo_path(repo)}/pulls/{number}")),
+        body=payload,
+        shows=card,
+        touches=EDIT_PR_TOUCHES,
+        repo=repo,
+        number=number,
+        old_title=old_title,
+        old_body=old_body,
+        pr_title=new_title,
+        pr_body=new_body,
+    )
+
+
+def plan_pr_review(args: Optional[dict] = None) -> Request:
+    """Post ONE pull request review: COMMENT or REQUEST_CHANGES, never APPROVE.
+
+    `_check_review_event` refuses APPROVE by name BEFORE any card exists, and
+    `approve_pr` stays in `NEVER`. The body is shown whole on the card and is
+    the only text sent.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"))
+    number = _check_number(args.get("number"), "pull request")
+    event = _check_review_event(args.get("event"))
+    body = _check_pr_body(args.get("body"))
+    verdict = ("a comment on it" if event == "COMMENT"
+               else "a request for changes")
+    shown = [f"Repository: {repo}", f"Pull request: #{number}",
+             f"Verdict: {event} - {verdict}", "", "The whole review text:"]
+    shown.append(body)
+    card = "\n".join(shown)
+    if len(card) > MAX_CARD_LENGTH:
+        raise GitHubError(
+            f"This review's card would be {len(card)} characters, more than one "
+            f"card can show (Jarvis shows at most {MAX_CARD_LENGTH}). Shorten "
+            f"the review. Nothing was sent.")
+    return Request(
+        ACTION_PR_REVIEW,
+        f"Jarvis will post ONE review on pull request #{number} in {repo}, as "
+        f"you, with the verdict {event}:",
+        (Step("POST", f"{_repo_path(repo)}/pulls/{number}/reviews"),),
+        body={"event": event, "body": body},
+        shows=card,
+        touches=REVIEW_TOUCHES,
+        repo=repo,
+        number=number,
+    )
+
+
+#: The two directions `github_issue_state` accepts, and the GitHub state each is.
+ISSUE_STATES = {"close": "closed", "reopen": "open"}
+
+
+def plan_issue_state(args: Optional[dict] = None) -> Request:
+    """Close ONE issue, or reopen ONE closed issue - its own card, one issue only.
+
+    The owner's decision of 2026-11-10 23:00 overturned the old absolute ban on
+    `close_issue`: closing and reopening an issue is allowed now, through THIS
+    action's own one-shot card, on one issue, with the title the card shows and
+    a live re-read before the PATCH. It can never delete, transfer or edit the
+    issue, and can never touch more than one - `github_open_issue` keeps its own
+    "cannot close" boundary, and bulk close/reopen is in `NEVER` (`bulk_close`).
+
+    The card shows the repository, the issue number and its title, the direction
+    and an optional reason. GitHub's REST issue state change has no free-text
+    reason field, so the reason is shown on the card and reported in the answer
+    and is NOT sent as a field - the body is exactly `{"state": ...}`.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"))
+    number = _check_number(args.get("number"), "issue")
+    direction = " ".join(str(args.get("action") or args.get("direction")
+                             or "").split()).lower()
+    if direction not in ISSUE_STATES:
+        raise GitHubError('Jarvis can do one of two things to ONE issue: "close" '
+                          'it, or "reopen" it. Nothing else is an issue state '
+                          "change.")
+    state = ISSUE_STATES[direction]
+    title = _clean_github_text(args.get("title"), limit=MAX_PR_TITLE, wrap=False)
+    if not title:
+        raise GitHubError("Jarvis needs the issue's title, exactly as github_list "
+                          "or github_pr_detail printed it, so the card can name "
+                          "which issue it will change. Nothing was changed.")
+    reason = " ".join(str(args.get("reason") or "").split())
+    if len(reason) > MAX_ISSUE_REASON:
+        raise GitHubError(f"That reason is longer than one card shows "
+                          f"({len(reason)} characters; Jarvis shows at most "
+                          f"{MAX_ISSUE_REASON}). Shorten it and ask again - "
+                          f"nothing was changed.")
+    shown = [
+        f"Repository: {repo}",
+        f"Issue: #{number}",
+        f"Title: {title}",
+        f"Action: {direction} it" + (" (set its state to closed)" if state == "closed"
+                                     else " (set its state back to open)"),
+    ]
+    if reason:
+        shown.append("")
+        shown.append("Why (shown on this card, and in the answer afterwards; "
+                     "GitHub's own issue state change has no free-text reason "
+                     "field, so it is not sent as one):")
+        shown.append(reason)
+    return Request(
+        ACTION_ISSUE_STATE,
+        f"Jarvis will {direction} issue #{number} in {repo}, as you:",
+        (Step("GET", f"{_repo_path(repo)}/issues/{number}"),
+         Step("PATCH", f"{_repo_path(repo)}/issues/{number}")),
+        body={"state": state},
+        shows="\n".join(shown),
+        touches=ISSUE_STATE_TOUCHES,
+        repo=repo,
+        number=number,
+        pr_title=title,
+        issue_state=state,
+        issue_reason=reason,
     )
 
 
@@ -2383,8 +3410,20 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
     # refusals that must happen BEFORE the step `r.steps` names would send.
     if r.cockpit:
         return _run_cockpit(r, fetch, token, headers)
+    if r.detail:
+        return _run_pr_detail(r, fetch, token, headers)
     if r.action == ACTION_MERGE:
         return _run_merge(r, fetch, token, headers)
+    if r.action == ACTION_OPEN_PR:
+        return _run_open_pr(r, fetch, token, headers, git=git or _default_git)
+    if r.action == ACTION_WORKFLOW:
+        return _run_workflow(r, fetch, token, headers)
+    if r.action == ACTION_ISSUE_LABELS:
+        return _run_issue_labels(r, fetch, token, headers)
+    if r.action == ACTION_EDIT_PR:
+        return _run_edit_pr(r, fetch, token, headers)
+    if r.action == ACTION_ISSUE_STATE:
+        return _run_issue_state(r, fetch, token, headers)
     if r.action == ACTION_FIX_PUSH:
         return _run_fix(r, fetch, token, headers, git=git or _default_git, log=log)
 
@@ -3210,11 +4249,18 @@ def _run_fix_write(r: Request, git: Callable) -> dict:
     if not _inside_scratch_root(worktree):
         return no("That folder is not inside Jarvis's own scratch folder any "
                   "more, so nothing was written.")
-    marker = _read_marker(worktree)
-    if (not marker or str(marker.get("repo") or "") != r.repo
-            or str(marker.get("number") or "") != r.number):
-        return no("That scratch folder is not the prepared copy of that pull "
-                  "request any more, so nothing was written.")
+    marker = _copy_marker(worktree)
+    if not marker or str(marker.get("repo") or "") != r.repo:
+        return no("That scratch folder is not the prepared copy of that work any "
+                  "more, so nothing was written.")
+    if marker.get("kind") == "fix":
+        if str(marker.get("number") or "") != r.number:
+            return no("That scratch folder is not the prepared copy of that pull "
+                      "request any more, so nothing was written.")
+    elif r.number:
+        return no("That scratch folder is a new branch's copy, made by "
+                  "github_open_pr, so it has no pull request number. Nothing "
+                  "was written.")
     try:
         target, rel = _copy_file(worktree, r.file_path)
     except GitHubError as exc:
@@ -3265,12 +4311,481 @@ def _run_fix_write(r: Request, git: Callable) -> dict:
         return {"ok": False,
                 "error": _git_words("Making the commit", err_text or out, "") +
                          " The change was undone, so nothing changed."}
-    said = (f'Wrote ONE file, "{rel}", inside the prepared copy of pull request '
-            f"#{r.number} in {r.repo}, and made ONE commit there "
+    if marker.get("kind") == "open":
+        where = (f'the new branch "{marker.get("branch")}" in '
+                 f'{marker.get("repo")}')
+    else:
+        where = f'pull request #{r.number} in {r.repo}'
+    said = (f'Wrote ONE file, "{rel}", inside the prepared copy of {where}, and '
+            f"made ONE commit there "
             f'("{_clean_github_text(r.commit_message, wrap=False)}").')
     said += (" This used no GitHub token and sent nothing anywhere; nothing on "
              "GitHub changed. Nothing is pushed until you approve the separate "
              "push card, which shows the exact commits, files and command.")
+    return {"ok": True, "text": said}
+
+
+def _pr_author(doc: dict) -> str:
+    return _clean_github_text((doc.get("user") or {}).get("login"),
+                              wrap=False) or "someone"
+
+
+def _detail_section(title: str, rows: list, total: int, render) -> list:
+    """One bounded section of the pr_detail answer: the real count, then rows."""
+    lines = [f"{title} ({total}):"]
+    if not rows:
+        lines.append("  (none)")
+        return lines
+    for row in rows[:MAX_DETAIL_ITEMS]:
+        lines.append(render(row))
+    if total > MAX_DETAIL_ITEMS:
+        lines.append(f"  ... and {total - MAX_DETAIL_ITEMS} more, not shown")
+    return lines
+
+
+def _run_pr_detail(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
+    """Read the five fixed lists and compose ONE bounded answer. GETs only.
+
+    Every text is fetched GitHub text, so every text goes through the one
+    sanitizer; every list keeps its REAL count and shows at most
+    `MAX_DETAIL_ITEMS` rows, each text at most `MAX_DETAIL_TEXT` characters.
+    """
+    docs = []
+    for step in r.steps:
+        doc, err = _read(fetch, step.path, headers, token)
+        if err:
+            return {"ok": False, "error": err}
+        docs.append(doc)
+    pr = docs[0] if isinstance(docs[0], dict) else {}
+    if not pr:
+        return {"ok": False, "error": "GitHub answered without the pull request, "
+                                      "so there is nothing to show."}
+    title = _clean_github_text(pr.get("title"), limit=MAX_PR_TITLE, wrap=False)
+    head = pr.get("head") or {}
+    base = pr.get("base") or {}
+    head_sha = str(head.get("sha") or "").strip()
+    head_ref = _clean_github_text(head.get("ref"), wrap=False)
+    base_ref = _clean_github_text(base.get("ref"), wrap=False)
+    state = _clean_github_text(pr.get("state"), wrap=False)
+    flags = []
+    if pr.get("draft") is True:
+        flags.append("draft")
+    if pr.get("merged") is True:
+        flags.append("already merged")
+    if pr.get("mergeable") is True:
+        flags.append("mergeable")
+    elif pr.get("mergeable") is False:
+        flags.append("not mergeable")
+    if pr.get("mergeable_state"):
+        flags.append("merge state: " + _state_words(pr.get("mergeable_state")))
+    lines = [
+        f'Pull request #{r.number} "{title}" in {r.repo}: {state}'
+        + (", " + ", ".join(flags) if flags else ""),
+        f"Its address: https://github.com/{r.repo}/pull/{r.number}",
+        f"Author: {_pr_author(pr)}",
+        f"Head commit: {head_sha}" + (f" (branch {head_ref})" if head_ref else "")
+        + (f"; base branch: {base_ref}" if base_ref else ""),
+    ]
+    body = _clean_github_text(pr.get("body"), limit=MAX_TEXT)
+    lines.append("")
+    lines.append("Body:" if body else "Body: (empty)")
+    if body:
+        lines.append(body)
+    files = docs[1] if isinstance(docs[1], list) else []
+    commits = docs[2] if isinstance(docs[2], list) else []
+    comments = docs[3] if isinstance(docs[3], list) else []
+    reviews = docs[4] if isinstance(docs[4], list) else []
+    lines.append("")
+    lines += _detail_section(
+        "Changed files", files, len(files),
+        lambda f: ("  " + str(f.get("status") or "modified") + " "
+                   + _clean_github_text(f.get("filename"), wrap=False)
+                   + f" (+{f.get('additions', 0)} -{f.get('deletions', 0)})"))
+    lines.append("")
+    lines += _detail_section(
+        "Commits", commits, len(commits),
+        lambda c: ("  " + str(c.get("sha") or "")[:7] + " "
+                   + _clean_github_text((c.get("commit") or {}).get("message"),
+                                        limit=MAX_DETAIL_TEXT, wrap=False)))
+    lines.append("")
+    lines += _detail_section(
+        "Comments", comments, len(comments),
+        lambda c: ("  by " + _pr_author(c) + ":\n"
+                   + "\n".join("    " + ln for ln in _clean_github_text(
+                       c.get("body"), limit=MAX_DETAIL_TEXT).splitlines())))
+    lines.append("")
+    lines += _detail_section(
+        "Reviews", reviews, len(reviews),
+        lambda rv: ("  by " + _pr_author(rv) + ": "
+                    + _clean_github_text(rv.get("state"), wrap=False)
+                    + ("\n" + "\n".join(
+                        "    " + ln for ln in _clean_github_text(
+                            rv.get("body"), limit=MAX_DETAIL_TEXT).splitlines())
+                       if _clean_github_text(rv.get("body"), limit=8,
+                                             wrap=False) else "")))
+    lines.append("")
+    lines.append("Nothing on GitHub changed; this only read.")
+    return {"ok": True, "text": _cut("\n".join(lines), MAX_BYTES)}
+
+
+def _run_workflow(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
+    """Re-read the run, refuse unless it is in the state the card named, then act."""
+    path = f"{_repo_path(r.repo)}/actions/runs/{r.number}"
+    doc, err = _read(fetch, path, headers, token)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(doc, dict):
+        return {"ok": False, "error": "GitHub answered without the workflow run, "
+                                      "so nothing was changed."}
+    status = str(doc.get("status") or "")
+    conclusion = str(doc.get("conclusion") or "")
+    if r.workflow_op == "cancel":
+        if status not in ("queued", "in_progress", "requested", "waiting",
+                          "pending"):
+            return {"ok": False, "error": (
+                "That workflow run is not running any more ("
+                f"{_clean_github_text(status, wrap=False) or 'finished'}), so "
+                "there was nothing to cancel. Nothing was changed.")}
+        tail = "cancel"
+        said = f"Cancelled workflow run {r.number} in {r.repo}."
+    elif r.workflow_op == "rerun_failed":
+        if status != "completed":
+            return {"ok": False, "error": (
+                "That workflow run has not finished yet, so only its failed jobs "
+                "cannot be re-run. Nothing was changed.")}
+        if conclusion in ("success", "neutral", "skipped", ""):
+            return {"ok": False, "error": (
+                "That workflow run has no failed jobs to re-run (it finished as "
+                f"{_clean_github_text(conclusion, wrap=False) or 'nothing'}). "
+                "Nothing was changed.")}
+        tail = "rerun-failed-jobs"
+        said = (f"Asked GitHub to re-run only the failed jobs of workflow run "
+                f"{r.number} in {r.repo}. It starts in a moment.")
+    else:
+        return {"ok": False, "error": "Jarvis does not know which workflow "
+                                      "action to take, so nothing was sent."}
+    url = GITHUB_API + f"{path}/{tail}"
+    try:
+        status_code, text = fetch("POST", url, headers=headers, body=None,
+                                  timeout=TIMEOUT)
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return {"ok": False,
+                "error": f"api.github.com did not answer "
+                         f"({type(exc).__name__}), so nothing was changed."}
+    if status_code < 200 or status_code >= 300:
+        said_err = _scrub(_github_message(text), token)
+        return {"ok": False, "error": _plain_failure(status_code, token=token)
+                + (" GitHub said: " + said_err + "." if said_err else "")
+                + " Nothing was changed."}
+    return {"ok": True, "text": said}
+
+
+def _run_open_prepare(r: Request, fetch: Callable, token: str, headers: dict,
+                      git: Callable) -> dict:
+    """Read the repository, then copy it at the base branch and make the new one."""
+    doc, err = _read(fetch, f"{_repo_path(r.repo)}", headers, token)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(doc, dict):
+        return {"ok": False, "error": "GitHub answered without the repository, so "
+                                      "nothing was copied."}
+    target = os.path.join(scratch_root(),
+                          open_pr_folder_name(r.repo, r.head_ref))
+    if os.path.lexists(target):
+        return {"ok": False, "error": (
+            f"A scratch folder for that branch already exists at {target}, and it "
+            f"may hold work from last time. Remove or rename that folder, then "
+            f"prepare again. Nothing was copied.")}
+    try:
+        os.makedirs(scratch_root(), exist_ok=True)
+        os.makedirs(target)
+    except OSError as exc:
+        return {"ok": False, "error": (
+            f"Jarvis could not make its scratch folder ({type(exc).__name__}), "
+            f"so nothing was copied.")}
+
+    def failed(error: str) -> dict:
+        shutil.rmtree(target, ignore_errors=True)
+        if os.path.lexists(target):
+            error += (f" Jarvis could not remove its half-made scratch folder at "
+                      f"{target}; remove that folder by hand before preparing "
+                      f"again.")
+        return {"ok": False, "error": error}
+
+    clone = ["clone", "--no-checkout", f"https://github.com/{r.repo}.git", target]
+    code, out, err_text = _git(git, clone, env=_git_auth_env(token))
+    if code != 0:
+        return failed(_git_words("Copying the repository", err_text or out, token))
+    code, out, err_text = _git(
+        git, ["checkout", "-b", r.head_ref, f"origin/{r.base_ref}"], cwd=target)
+    if code != 0:
+        return failed(_git_words(f"Making the new branch (is \"{r.base_ref}\" a "
+                                 f"real branch?)", err_text or out, token))
+    code, out, err_text = _git(git, ["rev-parse", f"origin/{r.base_ref}"],
+                               cwd=target)
+    base_sha = str(out or "").strip().lower()
+    if code != 0 or not _SHA.match(base_sha):
+        return failed("Jarvis could not read the base branch's commit, so it "
+                      "cannot pin what the pull request would contain. Nothing "
+                      "was copied.")
+    bad = _write_open_marker(target, {"repo": r.repo, "base": r.base_ref,
+                                      "branch": r.head_ref,
+                                      "base_sha": base_sha})
+    if bad:
+        return failed(bad)
+    said = [
+        f"Copied {r.repo} at the base branch \"{r.base_ref}\" into its own "
+        f"scratch folder, and made the NEW branch \"{r.head_ref}\" there.",
+        "The copy is ready at:",
+        f"  {os.path.normpath(target)}",
+        f"It starts from base commit {base_sha}.",
+        "",
+        "Next steps:",
+        "  1. Make the change in that folder and commit it there (Jarvis only "
+        "pushes commits; the fix tool's own write stage can change ONE file in "
+        "this copy too).",
+        "  2. Run the repository's own checks.",
+        f'  3. Ask again with stage="open", that folder, a title and a body; '
+        f"Jarvis shows every commit, every changed file, the exact command, the "
+        f"title and the whole body before anything is pushed.",
+        "",
+        "Nothing has been pushed and no pull request exists.",
+    ]
+    return {"ok": True, "text": "\n".join(said)}
+
+
+def _run_open_final(r: Request, fetch: Callable, token: str, headers: dict,
+                    git: Callable) -> dict:
+    """Re-read the folder, pin HEAD, push ONE new branch, then open the pull request."""
+    def no(why: str) -> dict:
+        return {"ok": False, "error": why + " Nothing was pushed and no pull "
+                                            "request was opened."}
+
+    try:
+        parts = _open_arguments({
+            "repo": r.repo, "base": r.base_ref, "branch": r.head_ref,
+            "worktree": r.worktree, "title": r.pr_title, "body": r.pr_body,
+        }, git)
+    except GitHubError as exc:
+        return {"ok": False, "error": str(exc) + " Nothing was pushed and no "
+                                                  "pull request was opened."}
+    if parts["head_sha"] != r.expected_sha:
+        return no("That folder's HEAD commit moved since the card was shown, so "
+                  "it is not the commit you approved. Ask again from the current "
+                  "folder.")
+    code, out, err_text = _git(
+        git, ["push", "origin", f"HEAD:refs/heads/{r.head_ref}"],
+        cwd=parts["worktree"], env=_git_auth_env(token))
+    if code != 0:
+        detail = _cut(_scrub(str(err_text or out).strip(), token), 400)
+        low = detail.lower()
+        if ("already exists" in low or "rejected" in low
+                or "non-fast-forward" in low):
+            return no(f"GitHub refused the push because a branch named "
+                      f"\"{r.head_ref}\" already exists there, or the push "
+                      f"conflicts with it - Jarvis never forces a branch over "
+                      f"another one. Pick a new branch name.")
+        return no(f"GitHub refused the push: {detail}" if detail
+                  else "GitHub refused the push.")
+    payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
+    write_headers = dict(headers, **{"Content-Type": "application/json"})
+    try:
+        status, text = fetch("POST", GITHUB_API
+                             + f"{_repo_path(r.repo)}/pulls",
+                             headers=write_headers, body=payload,
+                             timeout=TIMEOUT)
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return {"ok": False,
+                "error": f"The branch was pushed, but api.github.com did not "
+                         f"answer when asked to open the pull request "
+                         f"({type(exc).__name__}). The branch is on GitHub; no "
+                         f"other change was made."}
+    if status < 200 or status >= 300:
+        said = _scrub(_github_message(text), token).rstrip(".")
+        return {"ok": False, "error": (
+            "The branch was pushed, but GitHub refused to open the pull request"
+            + (" and said: " + said + "." if said else ".")
+            + " The branch is on GitHub; no other change was made.")}
+    answer = _payload(_scrub(text, token))
+    number = ""
+    url = ""
+    if isinstance(answer, dict):
+        number = str(answer.get("number") or "")
+        url = _clean_github_text(answer.get("html_url"), wrap=False)
+    said = (f"Pushed the new branch \"{r.head_ref}\" to {r.repo} at commit "
+            f"{r.expected_sha}, then opened pull request "
+            + (f"#{number}" if number else "ONE pull request")
+            + (f": {url}" if url else " on GitHub") + ".")
+    said += (" It was one ordinary push of a new branch - never a force-push, "
+             "never main, and nothing was deleted.")
+    return {"ok": True, "text": said}
+
+
+def _run_open_pr(r: Request, fetch: Callable, token: str, headers: dict,
+                 git: Callable) -> dict:
+    """Which stage of opening a pull request this request is."""
+    if r.open_stage == "prepare":
+        return _run_open_prepare(r, fetch, token, headers, git)
+    if r.open_stage == "open":
+        return _run_open_final(r, fetch, token, headers, git)
+    return {"ok": False, "error": "Jarvis does not know which stage of opening "
+                                  "a pull request to run, so nothing was sent."}
+
+
+def _run_issue_labels(r: Request, fetch: Callable, token: str,
+                      headers: dict) -> dict:
+    """Read the current labels, refuse a bad remove, then send the WHOLE set once."""
+    doc, err = _read(fetch, f"{_repo_path(r.repo)}/issues/{r.number}",
+                     headers, token)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(doc, dict):
+        return {"ok": False, "error": "GitHub answered without the issue, so "
+                                      "nothing was changed."}
+    current = [str(label.get("name") or "") for label in
+               (doc.get("labels") or []) if isinstance(label, dict)]
+    current_low = [name.lower() for name in current]
+    working = list(current)
+    for name in r.label_remove:
+        if name.lower() not in current_low:
+            return {"ok": False, "error": (
+                f'That issue does not have the label "{name}", and Jarvis will '
+                f"not pretend to remove something that is not there. Nothing "
+                f"was changed.")}
+        working = [item for item in working if item.lower() != name.lower()]
+    for name in r.label_add:
+        if name.lower() not in [item.lower() for item in working]:
+            working.append(name)
+    if working == current:
+        return {"ok": True, "text": ("Those labels are already exactly the set "
+                                     "asked for, so nothing needed changing.")}
+    payload = json.dumps({"labels": working},
+                         ensure_ascii=False).encode("utf-8")
+    write_headers = dict(headers, **{"Content-Type": "application/json"})
+    try:
+        status, text = fetch(
+            "PUT", GITHUB_API + f"{_repo_path(r.repo)}/issues/{r.number}/labels",
+            headers=write_headers, body=payload, timeout=TIMEOUT)
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return {"ok": False,
+                "error": f"api.github.com did not answer "
+                         f"({type(exc).__name__}), so nothing was changed."}
+    if status < 200 or status >= 300:
+        said = _scrub(_github_message(text), token)
+        return {"ok": False, "error": _plain_failure(status, token=token)
+                + (" GitHub said: " + said + "." if said else "")
+                + " Nothing was changed."}
+    answer = _payload(_scrub(text, token))
+    final = []
+    if isinstance(answer, list):
+        final = [_clean_github_text((row or {}).get("name"), wrap=False)
+                 for row in answer if isinstance(row, dict)]
+    return {"ok": True, "text": (
+        f"Changed the labels on #{r.number} in {r.repo}. It now has: "
+        + (", ".join(final) if final else "(no labels)")
+        + ". Nothing else about it changed.")}
+
+
+def _run_edit_pr(r: Request, fetch: Callable, token: str,
+                 headers: dict) -> dict:
+    """Re-read the pull request, refuse unless it is still the carded one, PATCH."""
+    doc, err = _read(fetch, f"{_repo_path(r.repo)}/pulls/{r.number}",
+                     headers, token)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(doc, dict):
+        return {"ok": False, "error": "GitHub answered without the pull request, "
+                                      "so nothing was changed."}
+    if "title" in (r.body or {}):
+        live_title = _clean_github_text(doc.get("title"), limit=MAX_PR_TITLE,
+                                        wrap=False)
+        if live_title != r.old_title:
+            return {"ok": False, "error": (
+                "That pull request's title is no longer the one on the card, so "
+                "it is not the pull request you approved an edit to. Nothing was "
+                "changed.")}
+    if "body" in (r.body or {}):
+        live_body = _lf(str(doc.get("body") or ""))
+        if live_body != r.old_body:
+            return {"ok": False, "error": (
+                "That pull request's body is no longer the one on the card, so "
+                "it is not the pull request you approved an edit to. Nothing was "
+                "changed.")}
+    payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
+    write_headers = dict(headers, **{"Content-Type": "application/json"})
+    try:
+        status, text = fetch("PATCH", GITHUB_API
+                             + f"{_repo_path(r.repo)}/pulls/{r.number}",
+                             headers=write_headers, body=payload,
+                             timeout=TIMEOUT)
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return {"ok": False,
+                "error": f"api.github.com did not answer "
+                         f"({type(exc).__name__}), so nothing was changed."}
+    if status < 200 or status >= 300:
+        said = _scrub(_github_message(text), token)
+        return {"ok": False, "error": _plain_failure(status, token=token)
+                + (" GitHub said: " + said + "." if said else "")
+                + " Nothing was changed."}
+    parts = []
+    if r.pr_title:
+        parts.append("title")
+    if "body" in (r.body or {}):
+        parts.append("body")
+    return {"ok": True, "text": (
+        f"Edited the {' and '.join(parts) or 'text'} of pull request "
+        f"#{r.number} in {r.repo} to exactly what the card showed. Nothing else "
+        f"about it changed.")}
+
+
+def _run_issue_state(r: Request, fetch: Callable, token: str,
+                     headers: dict) -> dict:
+    """Re-read the issue, refuse a wrong title / a pull request / no change, PATCH."""
+    def no(why: str) -> dict:
+        return {"ok": False, "error": why + " Nothing was changed."}
+
+    doc, err = _read(fetch, f"{_repo_path(r.repo)}/issues/{r.number}",
+                     headers, token)
+    if err:
+        return no(err)
+    if not isinstance(doc, dict):
+        return no("GitHub answered without the issue, so nothing was changed.")
+    if "pull_request" in doc:
+        return no("That number is a pull request, not an issue, and "
+                  "github_issue_state closes and reopens issues only.")
+    live_title = _clean_github_text(doc.get("title"), limit=MAX_PR_TITLE,
+                                    wrap=False)
+    if live_title != r.pr_title:
+        return no("That issue's title is no longer the one on the card, so it is "
+                  "not the issue you approved a change to.")
+    live_state = str(doc.get("state") or "")
+    if live_state == r.issue_state:
+        return no(f"That issue is already {live_state}, so there was nothing to "
+                  f"change.")
+    payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
+    write_headers = dict(headers, **{"Content-Type": "application/json"})
+    try:
+        status, text = fetch("PATCH", GITHUB_API
+                             + f"{_repo_path(r.repo)}/issues/{r.number}",
+                             headers=write_headers, body=payload,
+                             timeout=TIMEOUT)
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return no(f"api.github.com did not answer ({type(exc).__name__}).")
+    if status < 200 or status >= 300:
+        said = _scrub(_github_message(text), token)
+        return no(_plain_failure(status, token=token)
+                  + (" GitHub said: " + said + "." if said else ""))
+    answer = _payload(_scrub(text, token))
+    number = r.number
+    if isinstance(answer, dict) and answer.get("number"):
+        number = str(answer.get("number"))
+    direction = "Closed" if r.issue_state == "closed" else "Reopened"
+    said = f"{direction} issue #{number} in {r.repo}."
+    if r.issue_reason:
+        said += (' The reason on the card was: "'
+                 + _clean_github_text(r.issue_reason, wrap=False) + '".')
+    said += (" This changed only that one issue's state; it can be changed back "
+             "with the same tool.")
     return {"ok": True, "text": said}
 
 
@@ -3315,6 +4830,12 @@ def _said(r: Request, answers: list) -> str:
     if r.action == ACTION_RERUN:
         return ("GitHub accepted the re-run. It starts in a moment, and the newest "
                 "run's result is what github_ci_status will show.")
+    if r.action == ACTION_PR_REVIEW:
+        verdict = ""
+        if isinstance(doc, dict):
+            verdict = _clean_github_text(doc.get("state"), wrap=False)
+        return ("The review was posted" + (f" as {verdict}" if verdict else "")
+                + ". It cannot be edited or taken back by Jarvis.")
     if r.action == ACTION_CREATE_REPO:
         return _created_repo_words(doc)
     if r.action != ACTION_INSPECT:

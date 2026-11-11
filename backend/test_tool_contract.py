@@ -159,9 +159,11 @@ CATALOGUE = [
     # read-only PR cockpit, the carded merge and the carded fix-and-push - sit
     # in their sorted places, so a swap reads as a change.
     "github_ci_status", "github_comment", "github_create_repo",
-    "github_fix_and_push", "github_list", "github_merge_pr", "github_open_issue",
-    "github_pr_scan", "github_read_file", "github_rerun_workflow",
-    "github_search",
+    "github_edit_pr", "github_fix_and_push", "github_issue_labels",
+    "github_issue_state", "github_list", "github_merge_pr",
+    "github_open_issue", "github_open_pr", "github_pr_detail",
+    "github_pr_review", "github_pr_scan", "github_read_file",
+    "github_rerun_workflow", "github_search", "github_workflow",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
     "notes_search",

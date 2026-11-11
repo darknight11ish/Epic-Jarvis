@@ -1360,6 +1360,34 @@
      "name": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)"
     },
     {
+     "id": "github_pr_detail",
+     "name": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)"
+    },
+    {
+     "id": "github_open_pr",
+     "name": "Opening one pull request for a new branch Jarvis copies and prepares here (one card each)"
+    },
+    {
+     "id": "github_workflow",
+     "name": "Cancelling one running workflow run, or re-running only its failed jobs (one card each)"
+    },
+    {
+     "id": "github_issue_labels",
+     "name": "Adding or removing labels on one issue or pull request (one card each)"
+    },
+    {
+     "id": "github_edit_pr",
+     "name": "Editing one pull request's title and/or body (one card each)"
+    },
+    {
+     "id": "github_pr_review",
+     "name": "Posting one pull request review, a comment or a request for changes - never an approval (one card each)"
+    },
+    {
+     "id": "github_issue_state",
+     "name": "Closing one issue, or reopening one closed issue (one card each)"
+    },
+    {
      "id": "web_search",
      "name": "Web search"
     },

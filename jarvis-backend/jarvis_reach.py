@@ -129,6 +129,21 @@ TOOL_NAMES = {
     "github_fix_and_push": "Writing one file of a fix inside a pull request's own "
                            "scratch copy here, then pushing it to that pull "
                            "request's branch (one card for each change)",
+    # The 2026-11-10 22:30 ruling's Step 2 surface: one full pull-request read
+    # and five more carded writes.
+    "github_pr_detail": "Reading one pull request in full: its body, files, "
+                        "commits, comments and reviews (one card each)",
+    "github_open_pr": "Opening one pull request for a new branch Jarvis copies "
+                      "and prepares here (one card each)",
+    "github_workflow": "Cancelling one running workflow run, or re-running only "
+                       "its failed jobs (one card each)",
+    "github_issue_labels": "Adding or removing labels on one issue or pull "
+                           "request (one card each)",
+    "github_edit_pr": "Editing one pull request's title and/or body (one card each)",
+    "github_pr_review": "Posting one pull request review, a comment or a request "
+                        "for changes - never an approval (one card each)",
+    "github_issue_state": "Closing one issue, or reopening one closed issue "
+                          "(one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",

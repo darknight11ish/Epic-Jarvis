@@ -91,9 +91,11 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # spoken answer gives - because
                    # `backend/test_github_parity.py` pins that the model reads it.
                    # Measured on this tree with this module's own 3-chars-a-token
-                   # rule: 890, 949 and 900 tokens. The first pin here was 850; the
-                   # 2026-11-10 polish pass raised it, and this is the decision the
-                   # note above asks for, with the two causes named:
+                   # rule on 2026-11-10 (the 22:30/23:00 ruling): 1308 and 1437
+                   # for the two that carry the whole-surface sentence, and 474
+                   # for github_fix_and_push. The first pin here was 850; the
+                   # polish pass and then the 17-tool inventory grew the sentence,
+                   # and this is the decision the note above asks for:
                    #   (a) `NEVER_WORDS` grew to cover five permanently banned verbs
                    #       the owner's Q3/Q4 rulings added (approve a PR, close an
                    #       issue, edit a comment, dispatch a workflow, gists), and
@@ -113,8 +115,16 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # opened, never on every turn (they are group members, not core
                    # tools), and it buys one inventory with one home instead of a
                    # second copy that drifts.
-                   "github_pr_scan": 960, "github_merge_pr": 1080,
-                   "github_fix_and_push": 960,
+                   "github_pr_scan": 1340, "github_merge_pr": 1480,
+                   "github_fix_and_push": 480,
+                   # The 2026-11-10 22:30 ruling's actions carry no whole-surface
+                   # sentence, but three are a little over the 300 default legitimately:
+                   # open_pr names stage/base/branch/body semantics (433), edit_pr
+                   # shows the old/new title/body pin (345) and issue_state pins the
+                   # title and the close/reopen direction (359). Measured on this
+                   # tree; each is its own action with its own one-shot card.
+                   "github_open_pr": 440, "github_edit_pr": 355,
+                   "github_issue_state": 370,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six
                    # format names and two "use that" lines. Measured 329 with

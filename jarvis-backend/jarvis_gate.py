@@ -2983,8 +2983,9 @@ def review(days: int = 7) -> int:
     return 0
 
 # --------------------------------------------------------------------------
-#   github-tools.patch (2026-11-03, extended 2026-11-10 and by wave 16B) - the
-#   ten GitHub tools, and EIGHT actions
+#   github-tools.patch (2026-11-03, extended 2026-11-10, by wave 16B and by the
+#   2026-11-10 22:30/23:00 rulings) - the seventeen GitHub tools, and FOURTEEN
+#   actions
 # --------------------------------------------------------------------------
 # The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
 # open pull requests, issues, CI status, one file) and take three small ACTIONS
@@ -2995,10 +2996,17 @@ def review(days: int = 7) -> int:
 # an isolated scratch folder that pushes to the pull request's own branch.
 # Wave 16B (2026-11-10) added the eighth action, `github_fix_write`: the fix
 # tool's "write" stage, which changes ONE file inside that same isolated copy and
-# makes ONE commit there, with no token and no socket. The absolute bans that
+# makes ONE commit there, with no token and no socket.
+# The 2026-11-10 22:30 ruling's Step 2 (full parity with DeepSeek) added five
+# more carded writes - `github_open_pr`, `github_workflow`,
+# `github_issue_labels`, `github_edit_pr` and `github_pr_review` - and the full
+# pull-request read `github_pr_detail`, which is decided under `github_inspect`
+# like the other reads. The absolute bans that
 # remain: force-push, squash-merge, rebase-merge, admin bypass, auto-merge,
 # bypassing required checks, pushing directly to main/master/release/*, and
-# deleting or closing a repository or a branch.
+# deleting or closing a repository or a branch; a formal APPROVE review, closing
+# an issue, editing a comment, dispatching a workflow and gists stay permanently
+# banned too.
 #
 # WHY IT SITS HERE, IN THE MIDDLE OF THE FILE, AND NOT AT THE END OF IT: two
 # measured reasons, and the second is a break this patch caused before it moved.
@@ -3040,6 +3048,9 @@ _TOOL_ACTIONS.update({
     # The read-only PR cockpit (2026-11-10) is a READ, so it is decided under the
     # same read action as the other three - never under the merge it suggests.
     "github_pr_scan": "github_inspect",
+    # The full pull-request read of the 22:30 ruling's Step 2 (2026-11-10): five
+    # fixed GETs, so a read, decided under the same read action.
+    "github_pr_detail": "github_inspect",
     "github_comment": "github_comment",
     "github_open_issue": "github_open_issue",
     "github_rerun_workflow": "github_rerun_workflow",
@@ -3062,6 +3073,19 @@ _TOOL_ACTIONS.update({
     # does not know, and an unclassified action would raise a card that says
     # nothing true about what is being changed.
     "github_fix_write": "github_fix_write",
+    # The five carded writes of the 22:30 ruling's Step 2 (2026-11-10). Each is
+    # its own action: the card has to say what it really is, and the tier line
+    # has to be the one the owner can find and switch off.
+    "github_open_pr": "github_open_pr",
+    "github_workflow": "github_workflow",
+    "github_issue_labels": "github_issue_labels",
+    "github_edit_pr": "github_edit_pr",
+    "github_pr_review": "github_pr_review",
+    # Closing/reopening ONE issue (the owner's 2026-11-10 23:00 decision, which
+    # overturned the old absolute ban on close_issue for this one carded
+    # action). Its own action, so its card says "close or reopen an issue"
+    # rather than "open an issue".
+    "github_issue_state": "github_issue_state",
 })
 _RISK.update({
     # Reading only. Reversible "yes" and reach "outbound" is the same pair
@@ -3096,6 +3120,18 @@ _RISK.update({
     # will later push, and because a file is a thing a person should see before
     # it changes.
     "github_fix_write": ("yes", "local", "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy"),
+    # The five carded writes of the 2026-11-10 22:30 ruling's Step 2. A pull
+    # request being opened cannot be taken back by Jarvis (no close action), a
+    # label change and a title/body edit CAN be changed back by the same tool,
+    # and a review cannot be edited or withdrawn.
+    "github_open_pr": ("no", "outbound", "pushes ONE new branch to GitHub and opens ONE pull request from it into a base branch in your name; never a force-push, never main/master/release/hotfix, never a delete; a pushed branch and an opened pull request cannot be taken back by Jarvis"),
+    "github_workflow": ("no", "outbound", "cancels ONE running workflow run or re-runs only the failed jobs of ONE finished run on GitHub; a cancelled run cannot be resumed and a started run cannot be taken back, and it never dispatches a workflow"),
+    "github_issue_labels": ("yes", "outbound", "adds and/or removes labels on ONE GitHub issue or pull request in your name; no other field changes, nothing is closed or reopened, and the whole new label set is sent in ONE request"),
+    "github_edit_pr": ("yes", "outbound", "changes ONE pull request's title and/or body on GitHub in your name; no other field is editable and the same tool can change it back"),
+    "github_pr_review": ("no", "outbound", "posts ONE review on a pull request on GitHub in your name - a comment or a request for changes, never an APPROVE; the review text cannot be edited or taken back afterwards"),
+    # ONE issue's state (the owner's 2026-11-10 23:00 decision): reversible, so
+    # "yes"; one issue, never a pull request, never bulk, never a delete.
+    "github_issue_state": ("yes", "outbound", "closes ONE issue or reopens ONE closed issue on GitHub in your name; the same tool changes it back, and it never touches a pull request, more than one issue, a delete or a transfer"),
 })
 
 
