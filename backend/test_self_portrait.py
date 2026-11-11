@@ -288,13 +288,14 @@ def tool_counts_are_the_real_tools():
     # rather than adding a switch of its own - so the registered count was 65,
     # wave 13's carded github_create_repo (2026-11-09) made it 66,
     # project_read (2026-11-09, the read half of "Jarvis takes over dev work",
-    # shipped OFF like file_read) made it 67, and wave 16's three GitHub tools
+    # shipped OFF like file_read) made it 67, wave 16's three GitHub tools
     # (2026-11-10: the PR cockpit, the carded merge and the carded fix-and-push,
-    # all shipped OFF) make it 70. The enabled count stays 19. Both numbers are
-    # still read from the registries, never typed.
+    # all shipped OFF) made it 70, and wave 16E's two tools (2026-11-10: the
+    # review packet and the record check before a push) make it 72. The enabled
+    # count stays 19. Both numbers are still read from the registries, never typed.
     inv = SP.tool_inventory()
     check("the registered count is jarvis_agent.TOOLS' own length",
-          inv["registered"] == len(A.TOOLS) == 70, str(inv["registered"]))
+          inv["registered"] == len(A.TOOLS) == 72, str(inv["registered"]))
     check("the enabled count is the settings file's own list",
           inv["enabled"] == len(AF.tools_enabled_set()) == 19,
           f"{inv['enabled']} vs {len(AF.tools_enabled_set())}")
@@ -304,18 +305,18 @@ def tool_counts_are_the_real_tools():
     c = SP.counts(SP.build(refresh=True))
     check("counts()['tools'] is the enabled tool count, not the asks-first rows",
           c["tools"] == 19 and c["tools"] == c["tools_enabled"]
-          and c["tools_registered"] == 70 and c["asks_first_rows"] > 100, str(c))
+          and c["tools_registered"] == 72 and c["asks_first_rows"] > 100, str(c))
     check("the old number kept its true name and its true size",
           c["asks_first_rows"]
           == sum(len(g["rows"]) for g in SP.asks_first()["groups"]))
     counted = A._run_self_portrait({})
     check("the model tool's dict carries both true counts, never 136",
           counted["counts"]["tools"] == 19
-          and counted["counts"]["tools_registered"] == 70
+          and counted["counts"]["tools_registered"] == 72
           and counted["counts"]["asks_first_rows"] > 100, str(counted["counts"]))
     said = SP.refresh_sentence({}, c)
     check("the refresh sentence names tools as tools, not as ask-first actions",
-          "70 tools (19 switched on in your settings)" in said
+          "72 tools (19 switched on in your settings)" in said
           and f"{c['asks_first_rows']} ask-first actions" in said, said)
     # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
     # the file the reader really opens, clear the caches, and watch both
