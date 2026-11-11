@@ -227,8 +227,8 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
 
 await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {
   const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 65,
-    "every tool the model can be offered is a switch (65 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65)");
+  assert.equal(pc.tools.items.length, 67,
+    "every tool the model can be offered is a switch (67 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65, and wave 16E's review packet and record check make 66 and 67)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));

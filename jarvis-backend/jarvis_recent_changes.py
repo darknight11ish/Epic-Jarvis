@@ -22,8 +22,8 @@ BULLETS = (
     'The two-column Cockpit, a faster claims check, a shared credential denylist, two memory fixes, the everyday-lane guard, and GitHub merge / fix-and-push behind one card each',
     "The vault organizer's switch now says the approval card is waiting instead of claiming the organizer is already on",
     "The HUD's way back from Face Only and Mini View, one navigation, two wording fixes, and the third lane's prompt-cache cap kept",
+    'Review a branch, and check the records, before a push',
     "Wave 14: Jarvis reads one file of a project without asking, the HUD's Memory tab can keep a plain new fact, Edit Layout picks the card instead of running it, and a tenth Medical preset joins the nine",
-    'Wave 13: Reminders hear the date you meant, one carded GitHub repository create, Creator mode, a memory fault banner, and the pooled window held after a cold turn',
 )
 
 

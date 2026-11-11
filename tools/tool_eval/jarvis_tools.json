@@ -718,6 +718,68 @@
  {
   "type": "function",
   "function": {
+   "name": "review_changes",
+   "description": "Review a change on this PC before a push: the base and head commits, the line counts, files by area, and the risk flags with the evidence, then the owner's audit checklist. Read-only: writes nothing, no network, no token. Give the folder, or a branch or pull request number. For whether the records CI demands are in place, use check_records.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "the repository folder"
+     },
+     "base": {
+      "type": "string",
+      "description": "ref to compare with (default origin/main)"
+     },
+     "branch": {
+      "type": "string",
+      "description": "review this branch instead"
+     },
+     "pr": {
+      "type": "integer",
+      "description": "a pull request number"
+     },
+     "limit_files": {
+      "type": "integer",
+      "description": "files to list (default 40)"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "check_records",
+   "description": "Check a change's records before a push and get READY or NEEDS-RECORDS: one changelog.d fragment, no CHANGELOG.md edit, the docs count, the jarvis-backend twin, one decision record, claims and defect rows, and the repository's own checkers. A checker that cannot run is NOT-RUN, never a pass. Read-only: writes nothing, no network, no token. For what changed and what to look at, use review_changes.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "the repository folder"
+     },
+     "base": {
+      "type": "string",
+      "description": "ref to compare with (default origin/main)"
+     },
+     "branch": {
+      "type": "string",
+      "description": "check this branch instead"
+     },
+     "pr": {
+      "type": "integer",
+      "description": "a pull request number"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "web_search",
    "description": "Search the public web for current or outside information. Returns up to 5 results: title, link, snippet. Use a few plain search words; never put private details in them. For what Jarvis knows about the owner, use memory_search. For the owner's own notes, use notes_search. To grade GitHub libraries for a coding idea, use github_search.",
    "parameters": {

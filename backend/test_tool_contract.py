@@ -132,7 +132,7 @@ CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
     "approval_policy",
     "approve_web_search_for_conversation", "browser_control",
-    "calculator", "calendar_read", "change_setting",
+    "calculator", "calendar_read", "change_setting", "check_records",
     # The standing cloud escalation switch (2026-11-06, the 0-of-6 action-card
     # run): the only door in chat to the PRESETS menu's Cloud row. Like the
     # web-search ask and its stop, `[tools].enabled` never names it - it rides
@@ -158,9 +158,16 @@ CATALOGUE = [
     # The three of the owner's 2026-11-10 "Everything at once" decision - the
     # read-only PR cockpit, the carded merge and the carded fix-and-push - sit
     # in their sorted places, so a swap reads as a change.
+    #
+    # The two LOCAL review gates (2026-11-10, wave 16E) are here too, and they
+    # are the pair worth noticing: `review_changes` and `check_records`
+    # read a checkout on this PC, never GitHub, so they are in neither
+    # FULL_ENABLED nor OFFERED_FRESH (both ship off - their own switch is the
+    # only way in) and they are the only GitHub-group tools that raise NO card.
     "github_ci_status", "github_comment", "github_create_repo",
     "github_fix_and_push", "github_list", "github_merge_pr", "github_open_issue",
-    "github_pr_scan", "github_read_file", "github_rerun_workflow",
+    "github_pr_scan", "github_read_file",
+    "github_rerun_workflow",
     "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
@@ -190,7 +197,7 @@ CATALOGUE = [
     "refresh_abilities",
     # What Jarvis is made of (2026-11-03: "be aware of every setting, function
     # and ability it has"): read-only under `skill_list`, no card.
-    "retirement_whatif", "run_data_script",
+    "retirement_whatif", "review_changes", "run_data_script",
     "self_portrait",
     "send_email", "send_file_to_phone",
     # Texting a contact (2026-11-04, hands-free mode): a REAL message from the

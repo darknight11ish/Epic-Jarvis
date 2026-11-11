@@ -953,6 +953,80 @@ def _run_github(args: dict, plan_obj, **_) -> dict:
     return GH.run(plan_obj, approved=True)
 
 
+# --------------------------------------------------------------------------
+#   The two LOCAL review gates (wave 16E, 2026-11-10) - no card, no token
+# --------------------------------------------------------------------------
+#: The review packet and the repository record check, in `jarvis_review.py`.
+#:
+#: NEITHER IS A GITHUB-API TOOL, and that is why they are their own tuple
+#: rather than two more entries in `GITHUB_READ_TOOLS`: they read a git checkout
+#: on THIS PC and nothing else - no token, no socket, no repository on
+#: github.com - so they do not carry a card, are not in `NEEDS_A_PERSON`, and do
+#: not appear in `jarvis_github.CAPABILITIES` (whose every row is an action that
+#: sends the token and therefore asks). What decides them is the line a local
+#: read already uses: `file_read`'s action, `read_files_readonly`, at tier
+#: "auto" - the same line `project_read` sits on - so `gate_lookup_name` below
+#: is what puts them there, and `jarvis_asks_first.TOOLS_SWITCHABLE` gives each
+#: one its own switch. Both ship OFF, because they are not in the shipped
+#: `[tools].enabled` list; the switch is the only way in, and nothing else in
+#: the program can call them.
+#:
+#: WHY THEY LIVE IN THE `github` GROUP anyway: they are about a change on
+#: GitHub, the owner reaches them in the same breath as "review my branch", and
+#: a group's MEMBERS cost nothing in `more_tools`'s own description on every
+#: turn (a NEW group name would). They are the github group's two local,
+#: cardless members and the group's own description says so.
+LOCAL_REVIEW_TOOLS = ("review_changes", "check_records")
+
+
+def _review_module():
+    """`jarvis_review` when it can be imported, else None - an older backend is
+    a state, and the tool then answers with a sentence instead of a traceback."""
+    try:
+        import jarvis_review
+        return jarvis_review
+    except Exception:                        # noqa: BLE001 - absent is a state
+        return None
+
+
+def _prepare_review_changes(args: dict):
+    """What the turn says it is about to look at. No card is raised for it.
+
+    Nothing is planned here beyond the sentence: the review only reads, so
+    there is no request to approve and no state to carry into `execute`.
+    """
+    path = str((args or {}).get("path") or "").strip()
+    where = f" in {path}" if path else ""
+    return None, (f"Review the change{where} with the read-only review packet "
+                  f"(it writes nothing)")
+
+
+def _run_review_changes(args: dict, plan_obj=None, **_) -> dict:
+    """The review packet, from `jarvis_review.review` (read-only)."""
+    RV = _review_module()
+    if RV is None:
+        return {"ok": False, "error": "the review packet is not available in this "
+                                      "backend (jarvis_review.py is missing)"}
+    return RV.review(args or {})
+
+
+def _prepare_check_records(args: dict):
+    """What the turn says it is about to check. No card is raised for it."""
+    path = str((args or {}).get("path") or "").strip()
+    where = f" in {path}" if path else ""
+    return None, (f"Check the records{where} before a push, with the read-only "
+                  f"record check (it writes nothing)")
+
+
+def _run_check_records(args: dict, plan_obj=None, **_) -> dict:
+    """The repository record check, from `jarvis_review.record_check`."""
+    RV = _review_module()
+    if RV is None:
+        return {"ok": False, "error": "the record check is not available in this "
+                                      "backend (jarvis_review.py is missing)"}
+    return RV.record_check(args or {})
+
+
 def _prepare_web_search(args: dict):
     """Only for the tool test and for a caller outside _one_call: the chat
     loop handles web_search itself (_web_search_call), because when it asks
@@ -5299,6 +5373,47 @@ TOOLS: dict = {
         _prepare_github_fix_and_push, _run_github,
         instead={"github_pr_scan": "To see what is failing, use github_pr_scan.",
                  "github_merge_pr": "To merge a ready one, use github_merge_pr."}),
+    # The two LOCAL review gates (wave 16E, 2026-11-10; LOCAL_REVIEW_TOOLS
+    # above says why they are cardless and not in the capability inventory).
+    # Both read a git checkout on THIS PC and write nothing, so both are decided
+    # under file_read's own "auto" line and neither raises a card.
+    "review_changes": Tool(
+        "review_changes",
+        "Review a change on this PC before a push: the base and head commits, the "
+        "line counts, files by area, and the risk flags with the evidence, then the "
+        "owner's audit checklist. Read-only: writes nothing, no network, no token. "
+        "Give the folder, or a branch or pull request number.",
+        {"type": "object", "properties": {
+            "path": {"type": "string", "description": "the repository folder"},
+            "base": {"type": "string",
+                     "description": "ref to compare with (default origin/main)"},
+            "branch": {"type": "string", "description": "review this branch instead"},
+            "pr": {"type": "integer", "description": "a pull request number"},
+            "limit_files": {"type": "integer",
+                            "description": "files to list (default 40)"}},
+         "required": []},
+        _prepare_review_changes, _run_review_changes,
+        gate_lookup_name=lambda args: "file_read",
+        instead={"check_records": "For whether the records CI demands are in "
+                                        "place, use check_records."}),
+    "check_records": Tool(
+        "check_records",
+        "Check a change's records before a push and get READY or NEEDS-RECORDS: one "
+        "changelog.d fragment, no CHANGELOG.md edit, the docs count, the "
+        "jarvis-backend twin, one decision record, claims and defect rows, and the "
+        "repository's own checkers. A checker that cannot run is NOT-RUN, never a "
+        "pass. Read-only: writes nothing, no network, no token.",
+        {"type": "object", "properties": {
+            "path": {"type": "string", "description": "the repository folder"},
+            "base": {"type": "string",
+                     "description": "ref to compare with (default origin/main)"},
+            "branch": {"type": "string", "description": "check this branch instead"},
+            "pr": {"type": "integer", "description": "a pull request number"}},
+         "required": []},
+        _prepare_check_records, _run_check_records,
+        gate_lookup_name=lambda args: "file_read",
+        instead={"review_changes": "For what changed and what to look at, use "
+                                  "review_changes."}),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -10410,13 +10525,13 @@ TOOL_GROUPS = (
     # NEW group name costs tokens in more_tools' own description on every turn,
     # and a group's MEMBERS cost nothing extra there. They belong together
     # anyway - every one of them is about GitHub, and all ten ship switched off.
-    ("github", "search GitHub for a library, or read and act on your own GitHub: "
-               "four reads and six carded writes, all off by default, never a "
+    ("github", "search GitHub, read and act on your own GitHub (all off by "
+               "default), or review a change here before a push - never a "
                "force-push or a merge past a required check",
      ("github_search", "github_list", "github_read_file", "github_ci_status",
       "github_comment", "github_open_issue", "github_rerun_workflow",
       "github_create_repo", "github_pr_scan", "github_merge_pr",
-      "github_fix_and_push")),
+      "github_fix_and_push", "review_changes", "check_records")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single
@@ -10678,6 +10793,13 @@ TOOL_HINTS = {
                         r"\bprs?\b", r"\bmerge commit\b"),
     "github_fix_and_push": (r"\bgithub\b", r"\bpush\b", r"\bfix\b",
                             r"\bfailing (?:check|test)s?\b", r"\bbranch\b"),
+    # The two local review gates (2026-11-10, wave 16E): their own words, and
+    # `branch`/`records` are what actually narrow them - "review my branch" and
+    # "check the records before I push" are the sentences the owner uses.
+    "review_changes": (r"\breview\b", r"\bbranch\b", r"\bchange set\b",
+                      r"\brisk flags?\b", r"\bpull request\b", r"\bpacket\b"),
+    "check_records": (r"\brecords?\b", r"\bchangelog\b", r"\bready to push\b",
+                            r"\bbookkeeping\b", r"\bcheck(?:s)? (?:the|my) records\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
                    r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
@@ -17804,6 +17926,10 @@ _PROTECTION_READ_ONLY_TOOLS = frozenset({
     # 2026-11-09): a folder the owner marked read-only may be read, and a
     # blocked one is refused by jarvis_documents.allowed_path() anyway.
     "project_read",
+    # The two local review gates (2026-11-10, wave 16E) are pure reads of a
+    # checkout on this PC: a read-only protected folder may be looked at, and a
+    # blocked one is refused by the module's own path guard.
+    "review_changes", "check_records",
 })
 
 

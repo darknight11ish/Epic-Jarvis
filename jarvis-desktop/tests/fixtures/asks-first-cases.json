@@ -1835,7 +1835,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -2168,6 +2170,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -4344,7 +4362,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -4677,6 +4697,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -6849,7 +6885,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -7182,6 +7220,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -9349,7 +9403,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -9682,6 +9738,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -11869,7 +11941,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -12202,6 +12276,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -14380,7 +14470,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -14713,6 +14805,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -16876,7 +16984,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -17209,6 +17319,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -19389,7 +19515,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -19722,6 +19850,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -21894,7 +22038,9 @@
        "propose_plan",
        "change_setting",
        "feature_guide",
-       "project_read"
+       "project_read",
+       "review_changes",
+       "check_records"
       ],
       "title": "Everyday helpers"
      },
@@ -22227,6 +22373,22 @@
       "last": null,
       "on": false,
       "title": "Reading one file of code, config or notes in a folder you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "review_changes",
+      "last": null,
+      "on": false,
+      "title": "Reviewing a change on this PC before it is pushed (read-only, no card)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "check_records",
+      "last": null,
+      "on": false,
+      "title": "Checking a change's records before a push (read-only, no card)",
       "waiting": false
      },
      {
@@ -22635,6 +22797,8 @@
   "change_setting",
   "feature_guide",
   "project_read",
+  "review_changes",
+  "check_records",
   "goals_list",
   "goal_add",
   "goal_progress",

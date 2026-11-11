@@ -79,10 +79,11 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 65 at
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 67 at
 /// 2026-11-10 (62 at 2026-11-09; Wave 13 added the carded repository create,
 /// wave 14 the cardless `project_read`; Wave 16 added the read-only PR
-/// cockpit, the carded merge and the carded fix-and-push)
+/// cockpit, the carded merge and the carded fix-and-push, and wave 16E the
+/// two local review gates - the review packet and the record check)
 /// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
 /// pack-manager tools that ship ON, hands-free's send_text_message and the
 /// approval-policy tool's own row): the
@@ -91,7 +92,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 65] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 67] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -134,6 +135,12 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 65] = [
     "change_setting",
     "feature_guide",
     "project_read",
+    // The two local, cardless pre-push gates (2026-11-10, wave 16E): the
+    // review packet and the repository record check. The switch is the only
+    // way in, and neither raises a card of its own - they only read a checkout
+    // on this PC and write nothing.
+    "review_changes",
+    "check_records",
     // Jarvis's own tools, which had no switch row before 2026-11-04 (23: the
     // original 12, plus the four pack-manager tools, hands-free's
     // send_text_message and the six on-demand GitHub tools)
