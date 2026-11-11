@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 f2f4e5f91217f1b8a606312c5afeba8e1acf4f543bf8106a26d4b8358337f1f4); the apps' Features pages read their own
+`features/features.json` (sha256 72a4d0f3bab6ed1c30c7b761eb749e13b99d5d53ae4c8be81fb063a67dbab839); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "f2f4e5f91217f1b8a606312c5afeba8e1acf4f543bf8106a26d4b8358337f1f4"
+SOURCE_SHA256 = "72a4d0f3bab6ed1c30c7b761eb749e13b99d5d53ae4c8be81fb063a67dbab839"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -820,7 +820,7 @@ FEATURES = (
         "group": "Notes and files",
         "title": "Read and act on your own GitHub",
         "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file, plus a pull request cockpit that says which open pull requests can be merged. It can also comment on an issue or pull request, open an issue, re-run a workflow, create one new, empty repository on your own account, merge ONE pull request with a merge commit pinned to the head commit the card shows, and push a fix to a pull request's own branch from an isolated scratch folder on this PC.",
-        "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr and github_fix_and_push. All ten ship off; github_search and the scheduled watch_github job are separate switches.",
+        "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_pr_scan, github_comment, github_open_issue, github_rerun_workflow, github_create_repo, github_merge_pr and github_fix_and_push. All ten ship off; github_search and the scheduled watch_github job are separate switches. The review packet and the record check (review_changes and check_records) are in the same group and ship off too; they read a folder on this PC and write nothing, so they raise no card.",
         "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the four reads share one action, and commenting, opening an issue, re-running a workflow, creating a repository, merging a pull request and pushing a fix to a pull request's branch each have their own. Creating a repository is one repository per card, on your own account only. A merge card names the pull request and its exact head commit, and the merge is refused if that commit has moved, the pull request is a draft, it does not merge cleanly, a check is still running or a required check did not pass. Fix-and-push raises a SECOND card showing the exact commits, changed files and command before anything is pushed.",
         "limit": "It merges only with a merge commit, only when the pull request is still exactly the commit the card showed and every required check has passed - never squash, rebase, admin bypass, auto-merge or a forced or early merge, and a merge cannot be undone. It pushes only to a pull request's OWN branch, from its own scratch folder, and never to main, master, release/* or hotfix/*, never force-pushes, never deletes or closes anything, and refuses a changed file that looks like a credential. There is no commit, file-write, delete, close or repository-deletion action. Creating a repository is the only thing it can make, and that repository stays empty until you push to it yourself. Private repositories need the token; a read sends it to api.github.com.",
         "surface": "both",

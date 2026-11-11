@@ -1360,6 +1360,14 @@
      "name": "Pushing a fix to one pull request's own branch from a scratch folder (one card each)"
     },
     {
+     "id": "review_changes",
+     "name": "Reviewing a change on this PC before it is pushed (read-only, no card)"
+    },
+    {
+     "id": "check_records",
+     "name": "Checking a change's records before a push (read-only, no card)"
+    },
+    {
      "id": "web_search",
      "name": "Web search"
     },

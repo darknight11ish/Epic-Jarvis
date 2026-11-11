@@ -70,13 +70,14 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 65 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
+ * 67 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
  * GitHub tools that landed with the GitHub tools branch, the four pack-manager
  * tools, hands-free's send_text_message and the approval-policy tool's own
  * row; wave 13's carded github_create_repo made it 61, 62 added project_read's
- * own row, the read half of "Jarvis takes over dev work", and wave 16's three
+ * own row, the read half of "Jarvis takes over dev work", wave 16's three
  * GitHub tools of 2026-11-10 - the read-only PR cockpit, the carded merge and
- * the carded fix-and-push - made it 65). A DIFFERENT thing from SWITCHABLE
+ * the carded fix-and-push - made it 65, and wave 16E's two local review gates
+ * made it 67). A DIFFERENT thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -107,6 +108,11 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // Reading one file of code inside a folder you listed (2026-11-09): the read
   // half of "Jarvis takes over dev work", decided under file_read's own action
   "project_read",
+  // The two local, cardless pre-push gates (2026-11-10, wave 16E): the review
+  // packet and the repository record check. The switch is the only way in -
+  // neither is in the shipped enabled list - and once on, neither raises a card
+  // of its own: they only read a checkout on this PC and write nothing.
+  "review_changes", "check_records",
   // Jarvis's own tools, which had no switch row at all before 2026-11-04 (25:
   // the original 12, plus the four pack-manager tools, hands-free's
   // send_text_message, the ten on-demand GitHub tools and the approval row)
@@ -121,7 +127,8 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
   "github_create_repo", "github_pr_scan", "github_merge_pr",
-  "github_fix_and_push", "approval_policy",
+  "github_fix_and_push",
+  "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

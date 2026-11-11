@@ -1920,6 +1920,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _self_accounts(s)
     if got is not None:
         return got
+    # --- the two pre-push review gates (2026-11-10, wave 16E) ----------------
+    # "review my branch" and "check the records before I push" are answered from
+    # `jarvis_review` and never by the model: a review the model narrates is a
+    # description of a review. Both are read-only, both are switched off until
+    # the owner turns on their own switch, and both names are in
+    # READ_ONLY_INTENTS. Placed after the GitHub self-answers so the older
+    # questions keep their own words.
+    got = _self_review(s)
+    if got is not None:
+        return got
 
     # --- the twelve pair rules (2026-11-04) ----------------------------------
     # A sentence that names TWO things and asks what they do together. Before
@@ -13891,6 +13901,129 @@ def _accounts_module():
         return None
 
 
+# --------------------------------------------------------------------------
+#   The two local review gates, answered here and not by the model (16E)
+# --------------------------------------------------------------------------
+# "review my branch" and "check the records before I push" are the two
+# sentences the owner actually says before a push, and a review the MODEL
+# narrates is not a review: it would be a description of a review. So both are
+# deterministic: `jarvis_review.review` and `jarvis_review.record_check` do the
+# measuring, and the answer is their own bounded text.
+#
+# BOTH ARE READ-ONLY AND BOTH ARE OFF UNTIL SWITCHED ON (`review_changes` and
+# `check_records` in [tools].enabled, each with its own row on "What asks
+# first"). The switch is checked here BEFORE anything runs, so a switched-off
+# tool cannot be used through chat: the answer names the switch instead.
+# Neither raises a card, because neither writes anything - no file, no network,
+# no GitHub token - and both names are in READ_ONLY_INTENTS so this answer can
+# never take away what "cancel that" would undo.
+_REVIEW_SENT = re.compile(
+    r"(?:please\s+)?(?:can|could|would)\s+you\s+(?:please\s+)?review\s+"
+    r"(?:my|this|the)\s+(?:branch|changes?|work|diff|code)\b.*"
+    r"|(?:please\s+)?review\s+(?:my|this|the)\s+"
+    r"(?:branch|changes?|work|diff|code|pull\s+request)\b.*"
+    r"|(?:what|which)\s+(?:has\s+)?changed\s+(?:on|in)\s+(?:my|this|the)\s+"
+    r"(?:branch|changes?|work|diff)\b.*"
+    r"|(?:give\s+me|show\s+me|let\s+me\s+see)\s+(?:a\s+|the\s+)?review\s+"
+    r"(?:packet|report)\b.*"
+    r"|(?:please\s+)?review\s+(?:pull\s+request|pr)\s*#?\d{1,6}\b.*")
+_RECORD_CHECK_SENT = re.compile(
+    r"(?:please\s+)?(?:can|could|would)\s+you\s+(?:please\s+)?"
+    r"(?:check|verify)\s+(?:the|my|this)\s+(?:change'?s?\s+)?records?\b.*"
+    r"|(?:please\s+)?(?:check|verify)\s+(?:the|my|this)\s+"
+    r"(?:change'?s?\s+)?records?\b.*"
+    r"|(?:are|is)\s+(?:my|the|this)\s+(?:change'?s?\s+)?records?\s+"
+    r"(?:ready|in order|in place)\b.*"
+    r"|(?:am\s+i|is\s+(?:this|it))\s+ready\s+to\s+push\b.*"
+    r"|(?:do|run)\s+(?:a\s+)?record\s+check\b.*"
+    r"|check\s+(?:the\s+)?bookkeeping\b.*")
+_REVIEW_PR = re.compile(
+    r"review\s+(?:pull\s+request|pr)\s*#?(\d{1,6})\b"
+    r"|review\s+(?:the\s+)?branch\s+(?:for\s+)?(?:pull\s+request|pr)\s*#?(\d{1,6})\b")
+
+
+def _review_gate_module():
+    """`jarvis_review`, or None on a backend that predates it."""
+    try:
+        import jarvis_review as RV
+        return RV
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _review_tool_on(tool: str) -> bool:
+    """Whether the owner's own switch for one of the two gates is ON.
+
+    Read from the live turn's own source (`[tools].enabled`), never remembered,
+    so turning the switch off stops the chat answer at the next sentence.
+    """
+    return tool in _enabled_tools_turn()
+
+
+def _review_off_words(tool: str) -> str:
+    """The one sentence a switched-off gate gets - and it names the switch."""
+    return (f"The {('review packet' if tool == 'review_changes' else 'record check')} "
+            f"is switched off, so nothing was looked at. Turn on {tool} in Settings, "
+            f"What asks first, under \"Let the AI use this\" (group \"Jarvis's own "
+            f"tools\"), then ask again. It raises no card - it only reads a folder "
+            f"on this PC and writes nothing.")
+
+
+def _review_args(s: str) -> dict:
+    """The arguments both gates take from a spoken sentence: none but the PR.
+
+    The folder comes from `JARVIS_REVIEW_REPO` (or the answer says how to give
+    it); the base defaults to origin/main, then main. A pull request number in
+    the sentence is passed through so `review pr 1222` finds the local branch.
+    """
+    args: dict = {}
+    match = _REVIEW_PR.search(s or "")
+    if match:
+        number = match.group(1) or match.group(2)
+        if number:
+            args["pr"] = int(number)
+    return args
+
+
+def _self_review(s: str) -> Optional[Intent]:
+    """The two pre-push sentences, matched before the model can narrate them."""
+    if _RECORD_CHECK_SENT.fullmatch(s):
+        return Intent("record_check", dict(_review_args(s), short=True))
+    if _REVIEW_SENT.fullmatch(s):
+        return Intent("review_packet", dict(_review_args(s), short=True))
+    return None
+
+
+def _run_self_review(intent: Intent, *, live: bool = False) -> Result:
+    """Answer the review packet or the record check from `jarvis_review`.
+
+    Read-only and cardless: nothing is planned, nothing is approved, and the
+    module it calls writes no file and opens no socket. A switched-off gate, a
+    missing module and a folder it cannot use are each one plain sentence -
+    never a traceback, and never a claim that something was checked.
+    """
+    tool = "review_changes" if intent.name == "review_packet" else "check_records"
+    RV = _review_gate_module()
+    if RV is None:
+        return Result("Your PC's Jarvis has no review module yet - run "
+                      "apply-patches.ps1 on the PC.", intent.name)
+    if not _review_tool_on(tool):
+        return Result(_review_off_words(tool), intent.name)
+    args = dict(intent.f or {})
+    # A spoken answer is the summary, not the 7,000-character report: Live reads
+    # its answers aloud, and a wall of file names is not an answer by voice.
+    args["max_chars"] = RV.SHORT_MAX_TEXT if live else RV.REVIEW_MAX_TEXT
+    if intent.name == "review_packet":
+        out = RV.review(args)
+    else:
+        out = RV.record_check(args)
+    if not out.get("ok"):
+        return Result(str(out.get("error") or "that could not be worked out."),
+                      intent.name, read=["review_changes"])
+    return Result(str(out.get("text") or ""), intent.name,
+                  read=["review_changes"])
+
+
 ACCOUNTS_MISSING = ("Your PC's Jarvis cannot read its accounts list yet - run "
                     "apply-patches.ps1 on the PC.")
 
@@ -25785,6 +25918,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     here is a carded setting change, which says one calm line instead of the
     setter's own sentence, because Live speaks the answer aloud."""
     n, f = intent.name, intent.f
+    # The two pre-push review gates (2026-11-10, wave 16E): the review packet
+    # and the record check. Read-only and cardless - `jarvis_review` writes no
+    # file, opens no socket and reads no token - so nothing is planned and
+    # nothing is asked. `live` only changes the length: Live speaks its answer.
+    if n in ("review_packet", "record_check"):
+        return _run_self_review(intent, live=live)
     # The measured self-facts and the six hard safety sentences (2026-11-06).
     # Each is a fixed answer from the module that owns the value: no model, no
     # card, no write. A private chat's gate decides about the self-facts on its
@@ -26937,6 +27076,10 @@ _ADDING_INTENTS = frozenset({
 })
 
 READ_ONLY_INTENTS = frozenset({
+    # The two pre-push review gates (2026-11-10, wave 16E): the review packet
+    # and the record check read a checkout on this PC and write nothing, so
+    # neither may take away what "cancel that" would undo.
+    "review_packet", "record_check",
     # "what am I watching?" (2026-11-07): a read of the scheduler's watch store,
     # so it must not take away what "cancel that" would undo. It is NOT a
     # dispatch mark - see the _REMINDER_INTENTS comment for the cost of
