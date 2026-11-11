@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "4126e49744f5c6ee67597772bf223fd5ae7b316e",
- "built_at": "2026-11-10T22:14:18-08:00",
+ "ref": "80df89fd2ff639885f8c21e22f5016e708b59d6a",
+ "built_at": "2026-11-11T01:12:13-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6262,9 +6262,19 @@
  ],
  "recent_commits": [
   {
+   "sha": "80df89fd2ff639885f8c21e22f5016e708b59d6a",
+   "date": "2026-11-11",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-claims-2026-11-10"
+  },
+  {
    "sha": "4126e49744f5c6ee67597772bf223fd5ae7b316e",
    "date": "2026-11-10",
    "subject": "fix(records): the generated files follow this branch, so the claims register passes again"
+  },
+  {
+   "sha": "1087d81c11f59f35059032c54d84da81c18b02a1",
+   "date": "2026-11-10",
+   "subject": "Merge pull request #1222 from darknight11ish/integration/wave16-2026-11-10"
   },
   {
    "sha": "a577d460e097a3c0c449b647492b3a8e9c8571fa",
@@ -6272,94 +6282,84 @@
    "subject": "feat(phone): the top strip splits - safety stays on Home, the rest opens from More, and History gets a row"
   },
   {
-   "sha": "fd9cb5762c021a4b16508a7c0c75c7073db17fa4",
+   "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
    "date": "2026-11-10",
-   "subject": "Merge pull request #1221 from darknight11ish/integration/wave15-2026-11-10"
+   "subject": "test(ci): the wave-16 CI catch - diet hints, AST source pins, a real probe, and the no-vec skip"
   },
   {
-   "sha": "d66a0a4cf818966a127721049d8698cc628da401",
+   "sha": "9694ff26fcf96c6dbc620051101fad2a4e9f54c6",
    "date": "2026-11-10",
-   "subject": "records: close DEF-063 and DEF-064 on the wave-15 tree, and regenerate the generated files"
+   "subject": "test(live-parity): drive the Q2 probe cache instead of counting turns (CI catch)"
   },
   {
-   "sha": "2b21e1d1b39ca093279b345c7863823403bf4626",
+   "sha": "b2b8f67ad020c982132047f65a848956f81f0392",
    "date": "2026-11-10",
-   "subject": "Merge origin/main into the wave-15 branch (carries the merged wave-14 follow-ups, PR #1220)"
+   "subject": "fix: the second more_tools budget pin moves with the wave-16 GitHub group (482, measured)"
   },
   {
-   "sha": "455765eb5d406d5c5d531c23b75bd952c30b5b35",
-   "date": "2026-11-09",
-   "subject": "Merge pull request #1220 from darknight11ish/integration/wave14-followups-2026-11-10"
+   "sha": "a9b9e8f35aed464064c9f453d0dcc51e0718a7c6",
+   "date": "2026-11-10",
+   "subject": "fix: the wave-16 GitHub tools reach the private-aloud table and the desktop Rust tool list"
   },
   {
-   "sha": "4c7a8a13041eff4e29b23306425acaadc588f2a9",
-   "date": "2026-11-09",
-   "subject": "chore(repo): carry the Q3 prompt-cache cap into the big-coder module, and regenerate the recent-changes module and self-code map"
+   "sha": "e7544e21a691beb4c9880f5945492668e3ce4c50",
+   "date": "2026-11-10",
+   "subject": "fix: wave-16 desk catches - scratch cleanup, merge card fields, phone feature directory, doc accuracy"
   },
   {
-   "sha": "b97a8a76fb6c3cc2e1ceb5394ebc9b2b17e1e533",
-   "date": "2026-11-09",
-   "subject": "fix(hud): the HUD's new CSS uses the theme's tokens, never a literal colour fallback (the frontend shard's check-tokens step)"
+   "sha": "1acd8758c98659902730b19ce95055cb2268f362",
+   "date": "2026-11-10",
+   "subject": "fix: the desktop Tools page suites pin 65 switches, because wave 16 adds the PR cockpit, the carded merge and the carded fix-and-push"
   },
   {
-   "sha": "c00ebf63e310952e337eb1abc831d170adffe2f4",
-   "date": "2026-11-09",
-   "subject": "fix(hud): the live-read-aloud stage slice covers wave 15 taller stage, where the refused-start popup lives"
+   "sha": "f0620475ea1bd2cd816ffb9de5787e7a29c2c9ef",
+   "date": "2026-11-10",
+   "subject": "fix: the pooled-preload suite's non-pooled-lane case uses an everyday model, because Q7 now refuses the 30B on a one-card lane before anything is sent"
   },
   {
-   "sha": "1fc0b4a40614fc07478d10a1dfa17794b6f299e1",
-   "date": "2026-11-09",
-   "subject": "fix(ci): the generated recent-changes module and self-code map follow this branch, and the audit record notes are answered"
+   "sha": "b2273d3ad2e923e77cb628d79d2eb8bcae966473",
+   "date": "2026-11-10",
+   "subject": "fix: keep the wave-16 additions inside the project's own ratchets - the phone test pins 65 tools, and the parity suite's ordering check is found structurally instead of by source index"
   },
   {
-   "sha": "9d45c2f4dbf6a41fcb653515f94623f364944929",
-   "date": "2026-11-09",
-   "subject": "records: the wave-15 changelog and decision fragments, and the self-code map regenerated last"
+   "sha": "4e6865f25ec5c5c76d54e3f0b44a4ad43201cdb5",
+   "date": "2026-11-10",
+   "subject": "wave 16: two-column Cockpit, claims cap 900 s + memoized parity, shared credential denylist, memory fixes, pooled-lane guard, and GitHub merge / fix-and-push behind one card each"
   },
   {
-   "sha": "47e0ff1f5490e172a26b9cd659170cc3525a755d",
-   "date": "2026-11-09",
-   "subject": "fix(hud): the Presets note names Medical, and the memory door keeps its own Keep (DEF-063, DEF-064)"
+   "sha": "a3d2bbd2dd205e7d050bb59f79b016e555b5614a",
+   "date": "2026-11-10",
+   "subject": "Merge lane C (wave16-github 58446374): the GitHub PR cockpit, card-gated merge-commit-only merge pinned to the 40-hex head, and card-gated fix-and-push in an isolated scratch worktree, with one CAPABILITIES inventory behind them"
   },
   {
-   "sha": "f2e321a82e7fb240b91f6da8a3fca47157ac38db",
-   "date": "2026-11-09",
-   "subject": "feat(hud): the way back from Face Only / Mini View, and ONE stage header (Q5/Q6)"
+   "sha": "58446374acf3554e343a6995fed326f0bbabc399",
+   "date": "2026-11-10",
+   "subject": "feat(github): full parity behind one card per action - cockpit, merge, fix-and-push"
   },
   {
-   "sha": "132e45330147f34399c2e67448770c6a869b2433",
-   "date": "2026-11-09",
-   "subject": "chore(hud): the self code map is regenerated for the folded tree"
+   "sha": "953f9a3ef4711799d739576bc51fa8608c0f0cb6",
+   "date": "2026-11-10",
+   "subject": "records: one combined wave-16 changelog bullet, and the cockpit-ships decision that reverses the wave-15 withholding by its own stated condition"
   },
   {
-   "sha": "0ea3b77b846c33f1ea5f7ea1081fa5123633c0dd",
-   "date": "2026-11-09",
-   "subject": "fix(hud-edit): the field and toggle tests learn the wave-15 Cockpit composition"
+   "sha": "b07223f2663bd3aecaed2a6b365505c7bcbc18fc",
+   "date": "2026-11-10",
+   "subject": "Merge lane B (wave16-hud 98d8b2a0): ship the two-column Cockpit 'Just Talk' (Q1 Option A), recovered from the withdrawn wave-15 build; three HUD copies byte-identical; rail suites adapted with neededDrawer"
   },
   {
-   "sha": "fc92fea2332e2b0cc08e95b8ef83cb97988156ef",
-   "date": "2026-11-09",
-   "subject": "fix(hud): the two telemetry headings wear the redesign's plain words (Q9)"
+   "sha": "2819da4bd48710830e56a8ea50d63f05fc0e07d5",
+   "date": "2026-11-10",
+   "subject": "Merge lane A (wave16-backend e93d05f5): claims cap 900 + memoized parity (Q5), shared credential denylist (Q3), memory backfill + last_error (Q6), pooled-lane 30B/27B refusal (Q7)"
   },
   {
-   "sha": "bea8ab421652401efa8bf36225d4a33525b232d2",
-   "date": "2026-11-09",
-   "subject": "feat(wave15-brain): Q13 - one chosen shape, plain empty states, Model pane switches"
+   "sha": "e93d05f5400758d4715c588f6bdf7a288b44f56e",
+   "date": "2026-11-10",
+   "subject": "wave16 backend lane: Q2 claims cap+memoization, Q3 shared credential denylist, Q6A/Q6B memory bugs, Q7 everyday-lane guard"
   },
   {
-   "sha": "3412236b98fdae6a9fdc1499292acd2499291e69",
-   "date": "2026-11-09",
-   "subject": "feat(hud): the seven layouts carry the redesign's compositions (spec 1.2, Q2, Q10)"
-  },
-  {
-   "sha": "9c61c23059aa4a9a340b306464237e46f5cbe7f5",
-   "date": "2026-11-09",
-   "subject": "feat(hud): the seven screen layouts wear plain words in the one Presets menu (spec §1.2, Q2-Q3, Q9)"
-  },
-  {
-   "sha": "ded92c020ebcd225d5d0855d922d007263457922",
-   "date": "2026-11-09",
-   "subject": "feat(hud-edit): dock Edit HUD as a top ribbon with one plain-words inspector (spec Q6-Q9)"
+   "sha": "98d8b2a01763bfd419e350d9a348a42b6e5995bd",
+   "date": "2026-11-10",
+   "subject": "feat(hud): ship the two-column Cockpit, \"Just Talk\" (Q1 Option A)"
   }
  ],
  "top_level": [
