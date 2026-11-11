@@ -927,9 +927,31 @@ def t_zzz_the_static_read_cache_is_behaviour_preserving():
     """
     check("Q2: the framework read was really served from the cache (hundreds of times)",
           _STATIC_CACHE_COUNTS["framework"] > 100, _STATIC_CACHE_COUNTS)
-    check("Q2: the hardware probe was asked more than once and cached",
-          _STATIC_CACHE_COUNTS["smi"] > 10 and len(_SMI_CACHE) >= 2,
-          (_STATIC_CACHE_COUNTS, sorted(_SMI_CACHE)))
+    # THE PROBE'S CACHE IS DRIVEN HERE, NOT COUNTED FROM THE TURNS (2026-11-11).
+    # This check used to require the ~500 turns to have reached `_run_smi` more
+    # than ten times. That is not a property of the cache: `jarvis_compute`'s
+    # `_gpu_rows` already caches the probe for 30 SECONDS, so how often a turn
+    # reaches the cache below it depends on how long the whole suite takes on
+    # the machine. The first CI run of PR #1222 failed this check for exactly
+    # that reason - Ubuntu ran the suite fast enough to reach the probe only a
+    # handful of times - while the same code passed at the Windows desk. The
+    # mechanism is the thing to prove, so this check asks the same key twice
+    # itself and proves the second answer came from the dict, never from
+    # nvidia-smi. It is machine- and duration-independent by construction.
+    _probe_key = next(iter(_SMI_CACHE), None) or ("--query-gpu=index",)
+    _probe_before = _STATIC_CACHE_COUNTS["smi"]
+    _probe_first = _run_smi_cached(list(_probe_key))
+    _probe_second = _run_smi_cached(list(_probe_key))
+    check("Q2: a repeated hardware query is answered by the cache, not by nvidia-smi",
+          _STATIC_CACHE_COUNTS["smi"] >= _probe_before + 1
+          and _probe_first is _probe_second,
+          (_STATIC_CACHE_COUNTS, _probe_key))
+    # Reported for the record, deliberately NOT a pass/fail: how many times the
+    # real turns reached the probe is a fact about this machine and this run's
+    # duration (see above), not about the cache being correct.
+    print("      note  the real turns were served from the hardware cache %d "
+          "time(s) on this machine; that count is duration-dependent and is "
+          "not a check." % _STATIC_CACHE_COUNTS["smi"])
     # A FRESH read of the TOML as it is NOW (the tool switches in this suite
     # legitimately edit it, which is why the cache keys on its mtime/size): if
     # any turn had mutated the cached dict, these two would differ.
