@@ -266,9 +266,9 @@ def t_governance_and_safety_checks():
     check("project_obfuscate is registered in SUMMARY", "project_obfuscate" in CW.SUMMARY)
 
     # Check _where.py and apply-patches.ps1
-    where_text = (HERE / "_where.py").read_text(encoding="utf-8")
+    import _where
     check("jarvis_obfuscation.py is in backend/_where.py SHIPPED list",
-          '"jarvis_obfuscation.py"' in where_text)
+          "jarvis_obfuscation.py" in _where.SHIPPED)
 
     ps_text = (ROOT / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("jarvis_obfuscation.py is in scripts/apply-patches.ps1 $SHIPPED list",
