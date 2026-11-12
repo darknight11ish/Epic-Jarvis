@@ -199,7 +199,7 @@ def detect_project(project_path: str | Path) -> Dict[str, Any]:
         return {
             "valid": False,
             "error": f"Path is not a valid directory: '{root}'.",
-            "stack": "unknown",
+            "language": "unknown",
             "source_files": [],
             "files_count": 0,
             "recommended_tool": None,
