@@ -1793,6 +1793,12 @@ SHIPPED = (
     # position, is in scripts/apply-patches.ps1's $SHIPPED - above
     # jarvis_bench.py, which stays last.
     "jarvis_review.py",
+    # Desktop companion and screen guidance capabilities (jarvis_companion.py,
+    # 2026-11-12; Roamies-inspired multi-modal sidekick integration):
+    # holographic 3D LED wave sphere avatar, step-by-step visual screen guidance,
+    # non-blocking Windows UI Automation, native WinRT OCR, and transient cursor ask bar.
+    # The same entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED.
+    "jarvis_companion.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

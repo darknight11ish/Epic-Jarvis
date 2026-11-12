@@ -26160,6 +26160,20 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_bench_progress()
     if n == "bench_stop":
         return _run_bench_stop()
+    if n == "companion_overview":
+        return _run_companion_overview()
+    if n == "companion_avatar_info":
+        return _run_companion_avatar_info()
+    if n == "companion_guidance_info":
+        return _run_companion_guidance_info()
+    if n == "companion_askbar_info":
+        return _run_companion_askbar_info()
+    if n == "companion_settings_show":
+        return _run_companion_settings_show()
+    if n == "companion_toggle":
+        return _run_companion_toggle(intent.f)
+    if n == "companion_set_style":
+        return _run_companion_set_style(intent.f)
     if n == "self_changes":
         return _run_self_changes(f)
     if n == "changeable_overview":
@@ -27013,6 +27027,9 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # so a private chat answers these from the local code, never the model.
     "preset_current", "bench_history", "bench_progress", "self_changes",
     "preset_models", "preset_best", "preset_best_all", "model_before", "bench_how",
+    "companion_overview", "companion_avatar_info", "companion_guidance_info",
+    "companion_askbar_info", "companion_settings_show", "companion_toggle",
+    "companion_set_style",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -27227,7 +27244,8 @@ READ_ONLY_INTENTS = frozenset({
     # advice, the model history, and how to start a benchmark - every one reads
     # this PC's own rows and changes nothing, so none may clear "cancel that".
     "preset_models", "preset_best", "preset_best_all", "model_before",
-    "bench_how",
+    "bench_how", "companion_overview", "companion_avatar_info",
+    "companion_guidance_info", "companion_askbar_info", "companion_settings_show",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
@@ -28505,6 +28523,48 @@ _AW_BENCH_HELP = re.compile(
     r"(?:measure|do|test|check)\s*\??$"
     r"|what\s+is\s+(?:a\s+|the\s+)?benchmark\s*\??$", re.I)
 
+#: Desktop companion & Roamies capabilities self-awareness regexes (2026-11-12)
+_AW_COMPANION_OVERVIEW = re.compile(
+    r"(?:what\s+are\s+your\s+)?desktop\s+companion\s+capabilities\s*\??$"
+    r"|(?:what\s+are\s+your\s+)?companion\s+tools\s*\??$"
+    r"|tell\s+me\s+about\s+(?:your\s+)?desktop\s+sidekick\s*\??$"
+    r"|(?:what\s+are\s+your\s+)?roamies\s+capabilities\s*\??$"
+    r"|show\s+(?:me\s+)?companion\s+capabilities\s*\??$"
+    r"|what\s+companion\s+features\s+do\s+you\s+have\s*\??$", re.I)
+
+_AW_COMPANION_AVATAR = re.compile(
+    r"(?:what\s+is\s+the\s+|tell\s+me\s+about\s+(?:your\s+)?|explain\s+(?:the\s+|your\s+)?)holographic\s+avatar\s*\??$"
+    r"|explain\s+the\s+wave\s+sphere\s*\??$"
+    r"|how\s+does\s+your\s+avatar\s+work\s*\??$"
+    r"|what\s+is\s+the\s+wave\s+sphere\s*\??$", re.I)
+
+_AW_COMPANION_GUIDANCE = re.compile(
+    r"how\s+does\s+screen\s+guidance\s+work\s*\??$"
+    r"|explain\s+screen\s+guidance\s*\??$"
+    r"|tell\s+me\s+about\s+screen\s+guidance\s*\??$"
+    r"|how\s+does\s+(?:your\s+)?screen\s+pointing\s+work\s*\??$"
+    r"|explain\s+screen\s+pointing\s*\??$", re.I)
+
+_AW_COMPANION_ASKBAR = re.compile(
+    r"what\s+is\s+the\s+(?:cursor\s+)?ask\s+bar\s*\??$"
+    r"|explain\s+the\s+(?:cursor\s+)?ask\s+bar\s*\??$"
+    r"|tell\s+me\s+about\s+the\s+(?:cursor\s+)?ask\s+bar\s*\??$"
+    r"|how\s+does\s+the\s+(?:cursor\s+)?ask\s+bar\s+work\s*\??$", re.I)
+
+_AW_COMPANION_SETTINGS = re.compile(
+    r"show\s+companion\s+settings\s*\??$"
+    r"|what\s+are\s+my\s+companion\s+settings\s*\??$"
+    r"|show\s+desktop\s+sidekick\s+settings\s*\??$", re.I)
+
+_AW_COMPANION_TOGGLE = re.compile(
+    r"(?P<action>turn\s+on|turn\s+off|enable|disable)\s+(?:the\s+)?"
+    r"(?P<feature>holographic\s+avatar|avatar|wave\s+sphere|screen\s+guidance|"
+    r"screen\s+pointing|cursor\s+ask\s+bar|ask\s+bar|askbar|3d\s+cards|voice\s+reactive)\s*\??$", re.I)
+
+_AW_COMPANION_STYLE = re.compile(
+    r"set\s+(?P<setting>avatar\s+style|avatar\s+size|guidance\s+tone|style|size|tone)\s+to\s+"
+    r"(?P<value>[a-zA-Z0-9_\-]+)\s*\??$", re.I)
+
 #: "What changed about you?" is the JOURNAL's. A question about the shipped
 #: update ("what changed in your last update?") stays `recent_changes`' - it
 #: is a different question about a different record, and jarvis_recent_changes
@@ -29229,6 +29289,91 @@ def _run_bench_stop() -> Result:
                            "I could not stop that benchmark run."), "bench_stop")
 
 
+def _run_companion_overview() -> Result:
+    """Return an in-depth overview of Jarvis desktop companion capabilities."""
+    try:
+        import jarvis_companion as C
+        text = C.format_companion_overview()
+    except Exception as exc:
+        text = f"Companion capabilities could not be loaded: {exc}"
+    return Result(text, "companion_overview")
+
+
+def _run_companion_avatar_info() -> Result:
+    """Explain the holographic 3D wave sphere avatar in depth."""
+    try:
+        import jarvis_companion as C
+        text = C.format_avatar_explanation()
+    except Exception as exc:
+        text = f"Avatar guidance could not be loaded: {exc}"
+    return Result(text, "companion_avatar_info")
+
+
+def _run_companion_guidance_info() -> Result:
+    """Explain the step-by-step screen guidance engine in depth."""
+    try:
+        import jarvis_companion as C
+        text = C.format_guidance_explanation()
+    except Exception as exc:
+        text = f"Screen guidance information could not be loaded: {exc}"
+    return Result(text, "companion_guidance_info")
+
+
+def _run_companion_askbar_info() -> Result:
+    """Explain the transient cursor micro-ask bar in depth."""
+    try:
+        import jarvis_companion as C
+        text = C.format_askbar_explanation()
+    except Exception as exc:
+        text = f"Ask bar information could not be loaded: {exc}"
+    return Result(text, "companion_askbar_info")
+
+
+def _run_companion_settings_show() -> Result:
+    """Show active desktop companion and sidekick settings."""
+    try:
+        import jarvis_companion as C
+        text = C.format_settings_summary()
+    except Exception as exc:
+        text = f"Companion settings could not be loaded: {exc}"
+    return Result(text, "companion_settings_show")
+
+
+def _run_companion_toggle(f: dict) -> Result:
+    """Toggle a desktop companion feature on or off."""
+    feature = str(f.get("feature") or "").strip()
+    action = str(f.get("action") or "").strip().lower()
+    want_on = action in ("turn on", "enable", "on", "activate")
+    try:
+        import jarvis_companion as C
+        ok, msg = C.toggle_feature(feature, want_on=want_on)
+        return Result(msg, "companion_toggle")
+    except Exception as exc:
+        return Result(f"Could not change companion setting: {exc}", "companion_toggle")
+
+
+def _run_companion_set_style(f: dict) -> Result:
+    """Set a desktop companion style, size, or tone."""
+    setting = str(f.get("setting") or "").strip().lower()
+    value = str(f.get("value") or "").strip().lower()
+    key_map = {
+        "avatar style": "avatar_style",
+        "style": "avatar_style",
+        "avatar size": "avatar_size",
+        "size": "avatar_size",
+        "guidance tone": "guidance_tone",
+        "tone": "guidance_tone",
+        "color": "guidance_tone",
+    }
+    key = key_map.get(setting, setting)
+    try:
+        import jarvis_companion as C
+        ok, msg = C.set_setting(key, value)
+        return Result(msg, "companion_set_style")
+    except Exception as exc:
+        return Result(f"Could not update companion setting: {exc}", "companion_set_style")
+
+
 def _run_self_changes(f: dict) -> Result:
     """What changed about this PC's Jarvis, from the local change journal."""
     _awareness_note()
@@ -29518,6 +29663,24 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         return Intent("bench_history")
     if _AW_BENCH_HELP.fullmatch(low):
         return Intent("bench_how")
+    if _AW_COMPANION_OVERVIEW.fullmatch(low):
+        return Intent("companion_overview")
+    if _AW_COMPANION_AVATAR.fullmatch(low):
+        return Intent("companion_avatar_info")
+    if _AW_COMPANION_GUIDANCE.fullmatch(low):
+        return Intent("companion_guidance_info")
+    if _AW_COMPANION_ASKBAR.fullmatch(low):
+        return Intent("companion_askbar_info")
+    if _AW_COMPANION_SETTINGS.fullmatch(low):
+        return Intent("companion_settings_show")
+    m = _AW_COMPANION_TOGGLE.fullmatch(low)
+    if m:
+        d = m.groupdict()
+        return Intent("companion_toggle", {"action": d.get("action") or "", "feature": d.get("feature") or ""})
+    m = _AW_COMPANION_STYLE.fullmatch(low)
+    if m:
+        d = m.groupdict()
+        return Intent("companion_set_style", {"setting": d.get("setting") or "", "value": d.get("value") or ""})
     m = _AW_CHANGES.fullmatch(low)
     if m:
         d = m.groupdict()
