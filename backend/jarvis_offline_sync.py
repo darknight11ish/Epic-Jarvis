@@ -389,7 +389,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
                 res = register_mobile_lane(body)
                 return self._send(200, res)
             else:
-                return self._send(404, {"error": "not found"})
+                return self._send(404, {"error": "The requested sync endpoint was not found on this machine."})
         except Exception as exc:
             return self._send(500, {"error": str(exc)})
 
