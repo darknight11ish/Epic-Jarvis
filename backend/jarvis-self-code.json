@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "095f554c0e3c5be936e95f393ebda91185cef1cc",
- "built_at": "2026-11-11T02:15:53-08:00",
+ "ref": "4f12cf3f7e5e2311f07aa9ff1ad1fbe8fc63e752",
+ "built_at": "2026-11-12T05:32:57+00:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4948,6 +4948,8 @@
     "docs/MEMORY-SCOREBOARD.md",
     "docs/MEMORY-SCORES-2026-10-04.md",
     "docs/MENU-VISIBILITY-DESIGN.md",
+    "docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md",
+    "docs/MOBILE HARNESS WORK/SECURITY-AUDIT-2026-11-12.md",
     "docs/MODEL-TOPOLOGY.md",
     "docs/MODELS-ON-D-2026-10-10.md",
     "docs/MULTI-DEVICE-DESIGN.md",
@@ -5212,7 +5214,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 839,
+   "file_count": 841,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6296,6 +6298,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "4f12cf3f7e5e2311f07aa9ff1ad1fbe8fc63e752",
+   "date": "2026-11-12",
+   "subject": "fix(mobile): resolve kotlin compile issues and zero-jargon config keys in feature guide"
+  },
+  {
+   "sha": "c1f8cab1e6522f813d9ee4c871dfd00667cde5e0",
+   "date": "2026-11-12",
+   "subject": "fix(offline-sync): expand 404 refusal message to pass zero-jargon audit"
+  },
+  {
+   "sha": "4ab4b28cc4bbaeb86e213b742cc2330eaee2f47b",
+   "date": "2026-11-12",
+   "subject": "feat(mobile): on-device AI, offline two-way sync, and Mobile-Harness workspace integrations"
+  },
+  {
    "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
    "date": "2026-11-11",
    "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
@@ -6379,21 +6396,6 @@
    "sha": "b2273d3ad2e923e77cb628d79d2eb8bcae966473",
    "date": "2026-11-10",
    "subject": "fix: keep the wave-16 additions inside the project's own ratchets - the phone test pins 65 tools, and the parity suite's ordering check is found structurally instead of by source index"
-  },
-  {
-   "sha": "4e6865f25ec5c5c76d54e3f0b44a4ad43201cdb5",
-   "date": "2026-11-10",
-   "subject": "wave 16: two-column Cockpit, claims cap 900 s + memoized parity, shared credential denylist, memory fixes, pooled-lane guard, and GitHub merge / fix-and-push behind one card each"
-  },
-  {
-   "sha": "a3d2bbd2dd205e7d050bb59f79b016e555b5614a",
-   "date": "2026-11-10",
-   "subject": "Merge lane C (wave16-github 58446374): the GitHub PR cockpit, card-gated merge-commit-only merge pinned to the 40-hex head, and card-gated fix-and-push in an isolated scratch worktree, with one CAPABILITIES inventory behind them"
-  },
-  {
-   "sha": "58446374acf3554e343a6995fed326f0bbabc399",
-   "date": "2026-11-10",
-   "subject": "feat(github): full parity behind one card per action - cockpit, merge, fix-and-push"
   }
  ],
  "top_level": [
@@ -6415,7 +6417,7 @@
   {
    "path": "docs/",
    "line": "the documentation, the audits and the records",
-   "files": 491
+   "files": 493
   },
   {
    "path": "jarvis-backend/",
@@ -6514,8 +6516,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5632,
-  "covered": 5160,
+  "tracked_files": 5634,
+  "covered": 5162,
   "excluded": 472,
   "subsystems": 27
  },

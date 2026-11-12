@@ -25,7 +25,7 @@ MOBILE_LANE_REGISTER_PATH = "/api/models/mobile-lane/register"
 MOBILE_LANE_STATUS_PATH = "/api/models/mobile-lane/status"
 MODELS_TRANSFER_AVAILABLE_PATH = "/api/models/transfer/available"
 
-_DB_NAME = "offline_sync.db"
+_DB_NAME = "sync_state.db"
 _ARMED = False
 _ACTIVE_MOBILE_LANE: dict = {}
 

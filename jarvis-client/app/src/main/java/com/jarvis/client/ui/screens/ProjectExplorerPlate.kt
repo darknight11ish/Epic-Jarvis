@@ -66,25 +66,24 @@ fun ProjectExplorerPlate(
         selectedFile = null
         scope.launch {
             val path = ProjectExplorer.mapPath(pid)
-            when (val res = JarvisRuntime.api.getJson(path)) {
-                is ApiResult.Success -> {
+            when (val res = JarvisRuntime.api.probe(path)) {
+                is ApiResult.Ok -> {
                     isLoading = false
                     runCatching {
-                        val obj = JarvisJson.parseToJsonElement(res.value).jsonObject
-                        repoMap = ProjectExplorer.parseMap(obj)
+                        repoMap = ProjectExplorer.parseMap(res.value)
                     }.onFailure {
                         errorMessage = "Failed to parse repository map: ${it.message}"
                     }
                 }
-                is ApiResult.Failure -> {
+                is ApiResult.Failed -> {
                     isLoading = false
-                    errorMessage = "Server error ${res.code}: ${res.error}"
+                    errorMessage = "Server error: ${res.error}"
                 }
             }
         }
     }
 
-    Section("Project explorer", "Mobile codebase inspector") {
+    Section("Project explorer") {
         Plate {
             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                 // Project input row
@@ -98,22 +97,22 @@ fun ProjectExplorerPlate(
                         modifier = Modifier.weight(1f),
                         placeholder = "Project ID (e.g. default)",
                     )
-                    Gap(8.dp)
+                    Gap(8)
                     Primary(if (isLoading) "Loading..." else "Load Map", enabled = !isLoading, onClick = { fetchMap() })
                     if (onClose != null) {
-                        Gap(4.dp)
+                        Gap(4)
                         Quiet("Close", onClick = onClose)
                     }
                 }
 
                 if (errorMessage != null) {
-                    Gap(8.dp)
+                    Gap(8)
                     Text(errorMessage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = chrome.badInk)
                 }
 
                 val current = repoMap
                 if (current != null) {
-                    Gap(8.dp)
+                    Gap(8)
                     // Summary row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -128,7 +127,7 @@ fun ProjectExplorerPlate(
                         Pill("${current.files.size} mapped", color = chrome.okInk)
                     }
 
-                    Gap(8.dp)
+                    Gap(8)
                     // Search Filter
                     TextInput(
                         value = filterQuery,
@@ -137,7 +136,7 @@ fun ProjectExplorerPlate(
                         placeholder = "Filter files (e.g. .kt, .py, api)",
                     )
 
-                    Gap(8.dp)
+                    Gap(8)
                     val filtered = current.files.filter {
                         filterQuery.isBlank() || it.path.contains(filterQuery, ignoreCase = true)
                     }
@@ -147,7 +146,7 @@ fun ProjectExplorerPlate(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(280.dp)
-                            .background(chrome.cardMuted)
+                            .background(chrome.surface1)
                             .padding(4.dp),
                     ) {
                         if (filtered.isEmpty()) {
@@ -159,7 +158,7 @@ fun ProjectExplorerPlate(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(if (isSelected) chrome.cardOver else chrome.cardMuted)
+                                            .background(if (isSelected) chrome.surface2 else chrome.surface1)
                                             .clickable { selectedFile = file }
                                             .padding(vertical = 4.dp, horizontal = 6.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -194,16 +193,16 @@ fun ProjectExplorerPlate(
                     // Detail drawer for selected file
                     val active = selectedFile
                     if (active != null) {
-                        Gap(8.dp)
+                        Gap(8)
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(chrome.cardOver)
+                                .background(chrome.surface2)
                                 .padding(8.dp),
                         ) {
                             Text("Selected File Details", style = MaterialTheme.typography.labelMedium, color = chrome.textHi)
                             Text(active.path, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-                            Gap(4.dp)
+                            Gap(4)
                             if (active.classes.isNotEmpty()) {
                                 Text("Classes: ${active.classes.joinToString(", ")}", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                             }

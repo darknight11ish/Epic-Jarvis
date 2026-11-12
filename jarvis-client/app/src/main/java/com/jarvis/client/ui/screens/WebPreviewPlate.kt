@@ -94,7 +94,7 @@ fun WebPreviewPlate(
         }
     }
 
-    Section("Web preview", "Mobile developer preview") {
+    Section("Web preview") {
         Plate {
             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                 // Top control bar
@@ -118,7 +118,7 @@ fun WebPreviewPlate(
                     }
                 }
 
-                Gap(6.dp)
+                Gap(6)
 
                 // Quick Port Selector chips
                 Row(
@@ -139,7 +139,7 @@ fun WebPreviewPlate(
                 }
 
                 if (securityWarning != null) {
-                    Gap(8.dp)
+                    Gap(8)
                     Text(
                         text = securityWarning.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
@@ -147,7 +147,7 @@ fun WebPreviewPlate(
                     )
                 }
 
-                Gap(8.dp)
+                Gap(8)
 
                 // Status info
                 Row(
@@ -168,7 +168,7 @@ fun WebPreviewPlate(
                     )
                 }
 
-                Gap(6.dp)
+                Gap(6)
 
                 // Sandboxed WebView container
                 Box(
@@ -238,14 +238,14 @@ fun WebPreviewPlate(
 
                 // Collapsible console logs
                 if (showConsole) {
-                    Gap(8.dp)
+                    Gap(8)
                     Text("Console Telemetry", style = MaterialTheme.typography.labelMedium, color = chrome.textHi)
-                    Gap(4.dp)
+                    Gap(4)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
-                            .background(chrome.cardMuted)
+                            .background(chrome.surface1)
                             .padding(6.dp),
                     ) {
                         if (consoleLogs.isEmpty()) {
@@ -267,7 +267,7 @@ fun WebPreviewPlate(
                             }
                         }
                     }
-                    Gap(4.dp)
+                    Gap(4)
                     Quiet("Clear logs", onClick = { consoleLogs.clear() })
                 }
             }

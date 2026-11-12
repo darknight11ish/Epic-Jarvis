@@ -102,7 +102,7 @@ fun OnDeviceModelPlate() {
                 Text(
                     "Active model: ${activeModel?.name}",
                     style = MaterialTheme.typography.titleSmall,
-                    color = chrome.textHigh
+                    color = chrome.textHi
                 )
                 val sizeMb = (activeModel?.sizeBytes ?: 0L) / (1024 * 1024)
                 Text(
@@ -164,7 +164,7 @@ fun OnDeviceModelPlate() {
             Text(
                 "Hardware & Inference Settings",
                 style = MaterialTheme.typography.titleSmall,
-                color = chrome.textHigh
+                color = chrome.textHi
             )
             Gap(6)
 
@@ -175,7 +175,7 @@ fun OnDeviceModelPlate() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text("Vulkan GPU acceleration", style = MaterialTheme.typography.bodyMedium, color = chrome.textHigh)
+                    Text("Vulkan GPU acceleration", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                     Text("Offloads layers to phone GPU (Pixel Mali-G715 / Adreno). Falls back to CPU when disabled.", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
                 Toggle(
@@ -187,7 +187,7 @@ fun OnDeviceModelPlate() {
             Gap(10)
 
             // CPU Thread Count
-            Text("CPU threads (NEON cores)", style = MaterialTheme.typography.bodyMedium, color = chrome.textHigh)
+            Text("CPU threads (NEON cores)", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
             Text("Balance inference speed against thermal output and battery drain.", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
             Gap(4)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -203,7 +203,7 @@ fun OnDeviceModelPlate() {
             Gap(10)
 
             // Context Size
-            Text("Context window size", style = MaterialTheme.typography.bodyMedium, color = chrome.textHigh)
+            Text("Context window size", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
             Text("Maximum token context preserved in memory for conversation turns.", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
             Gap(4)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -224,7 +224,7 @@ fun OnDeviceModelPlate() {
             Text(
                 "Two-Way Sync & Memory",
                 style = MaterialTheme.typography.titleSmall,
-                color = chrome.textHigh
+                color = chrome.textHi
             )
             Gap(6)
 
@@ -235,7 +235,7 @@ fun OnDeviceModelPlate() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text("Auto-sync on reconnect", style = MaterialTheme.typography.bodyMedium, color = chrome.textHigh)
+                    Text("Auto-sync on reconnect", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                     Text("Automatically uploads pending offline turns and memories when reconnected.", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
                 Toggle(
@@ -253,7 +253,7 @@ fun OnDeviceModelPlate() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text("Capture offline memories", style = MaterialTheme.typography.bodyMedium, color = chrome.textHigh)
+                    Text("Capture offline memories", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                     Text("Queues facts and details stated while offline to ingest into desktop brain.", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
                 Toggle(
@@ -271,7 +271,7 @@ fun OnDeviceModelPlate() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text("Battery saver guard", style = MaterialTheme.typography.bodyMedium, color = chrome.textHigh)
+                    Text("Battery saver guard", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                     Text("Suspends heavy on-device model execution when battery is below 15%.", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
                 Toggle(
@@ -309,7 +309,7 @@ fun OnDeviceModelPlate() {
                 Text(
                     msg,
                     style = MaterialTheme.typography.bodySmall,
-                    color = chrome.textHigh
+                    color = chrome.textHi
                 )
             }
         }
