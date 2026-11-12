@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
- "built_at": "2026-11-10T22:58:01-08:00",
+ "ref": "095f554c0e3c5be936e95f393ebda91185cef1cc",
+ "built_at": "2026-11-11T02:15:53-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6271,6 +6271,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
+   "date": "2026-11-11",
+   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
+  },
+  {
+   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
+   "date": "2026-11-11",
+   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
+  },
+  {
+   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
+   "date": "2026-11-10",
+   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
+  },
+  {
+   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
+   "date": "2026-11-10",
+   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
+  },
+  {
+   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
+   "date": "2026-11-10",
+   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
+  },
+  {
    "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
    "date": "2026-11-10",
    "subject": "fix: the record check's two reasons use plain words (wave 16E)"
@@ -6284,6 +6309,11 @@
    "sha": "aabb72128b27b1e469e786abb4f5ec6749120d4c",
    "date": "2026-11-10",
    "subject": "feat(github): wave 16E - a review packet and a record check before a push"
+  },
+  {
+   "sha": "1087d81c11f59f35059032c54d84da81c18b02a1",
+   "date": "2026-11-10",
+   "subject": "Merge pull request #1222 from darknight11ish/integration/wave16-2026-11-10"
   },
   {
    "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
@@ -6339,36 +6369,6 @@
    "sha": "58446374acf3554e343a6995fed326f0bbabc399",
    "date": "2026-11-10",
    "subject": "feat(github): full parity behind one card per action - cockpit, merge, fix-and-push"
-  },
-  {
-   "sha": "953f9a3ef4711799d739576bc51fa8608c0f0cb6",
-   "date": "2026-11-10",
-   "subject": "records: one combined wave-16 changelog bullet, and the cockpit-ships decision that reverses the wave-15 withholding by its own stated condition"
-  },
-  {
-   "sha": "b07223f2663bd3aecaed2a6b365505c7bcbc18fc",
-   "date": "2026-11-10",
-   "subject": "Merge lane B (wave16-hud 98d8b2a0): ship the two-column Cockpit 'Just Talk' (Q1 Option A), recovered from the withdrawn wave-15 build; three HUD copies byte-identical; rail suites adapted with neededDrawer"
-  },
-  {
-   "sha": "2819da4bd48710830e56a8ea50d63f05fc0e07d5",
-   "date": "2026-11-10",
-   "subject": "Merge lane A (wave16-backend e93d05f5): claims cap 900 + memoized parity (Q5), shared credential denylist (Q3), memory backfill + last_error (Q6), pooled-lane 30B/27B refusal (Q7)"
-  },
-  {
-   "sha": "e93d05f5400758d4715c588f6bdf7a288b44f56e",
-   "date": "2026-11-10",
-   "subject": "wave16 backend lane: Q2 claims cap+memoization, Q3 shared credential denylist, Q6A/Q6B memory bugs, Q7 everyday-lane guard"
-  },
-  {
-   "sha": "98d8b2a01763bfd419e350d9a348a42b6e5995bd",
-   "date": "2026-11-10",
-   "subject": "feat(hud): ship the two-column Cockpit, \"Just Talk\" (Q1 Option A)"
-  },
-  {
-   "sha": "fd9cb5762c021a4b16508a7c0c75c7073db17fa4",
-   "date": "2026-11-10",
-   "subject": "Merge pull request #1221 from darknight11ish/integration/wave15-2026-11-10"
   }
  ],
  "top_level": [

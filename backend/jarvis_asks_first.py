@@ -683,7 +683,7 @@ HARD_LIMITS = frozenset({
     # The app builder's last two steps (2026-10-30): a Gradle build on this PC
     # and an install on the phone. Both refuse any tier but "ask", and a "no"
     # must never become a standing rule (jarvis_gate._NO_RULE_FROM_DENIAL).
-    "app_build_android", "app_install_android",
+    "app_build_android", "app_install_android", "project_obfuscate",
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "conversation_clear",
@@ -736,7 +736,7 @@ MUST_ASK = frozenset({
     "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
-    "app_build_android", "app_install_android",
+    "app_build_android", "app_install_android", "project_obfuscate",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
     # The owner's uncensored opt-ins (2026-10-10, Decision 5): each module's
@@ -916,7 +916,7 @@ GROUPS = (
                                 # The app builder's last two steps (2026-10-30):
                                 # ONE card each, on this PC only, and the card
                                 # carries the exact command it will run.
-                                "app_build_android", "app_install_android",
+                                "app_build_android", "app_install_android", "project_obfuscate",
                                 # Recording a phone call (jarvis_call_notes.py,
                                 # 2026-11-04): the owner's own keyword asks the
                                 # PHONE to record, and the start route raises

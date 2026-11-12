@@ -26160,6 +26160,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_bench_progress()
     if n == "bench_stop":
         return _run_bench_stop()
+    if n == "obfuscate_tools_info":
+        return _run_obfuscation_tools()
+    if n == "project_obfuscate_ask":
+        return _run_obfuscate_project(f)
     if n == "self_changes":
         return _run_self_changes(f)
     if n == "changeable_overview":
@@ -27013,6 +27017,7 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # so a private chat answers these from the local code, never the model.
     "preset_current", "bench_history", "bench_progress", "self_changes",
     "preset_models", "preset_best", "preset_best_all", "model_before", "bench_how",
+    "obfuscate_tools_info",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -27227,7 +27232,7 @@ READ_ONLY_INTENTS = frozenset({
     # advice, the model history, and how to start a benchmark - every one reads
     # this PC's own rows and changes nothing, so none may clear "cancel that".
     "preset_models", "preset_best", "preset_best_all", "model_before",
-    "bench_how",
+    "bench_how", "obfuscate_tools_info",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
@@ -28550,6 +28555,28 @@ _AW_DESKTOP_ROW = re.compile(
 _AW_SETTING_READ = re.compile(
     r"what\s+is\s+(?:the\s+)?(?P<name>.+?)\s+set\s+to\s*", re.I)
 
+#: Code obfuscation queries (2026-11-12): tools, guidance, and project protection.
+_AW_OBFUSCATE_TOOLS = re.compile(
+    r"^(?:"
+    r"(?:what|which)\s+(?:code\s+)?(?:obfuscation|hardening|protect(?:ion)?)"
+    r"(?:\s+tools?|\s+options?|\s+abilities|\s+do\s+you\s+(?:have|support)|[a-z\s])*"
+    r"|how\s+(?:do|can|would|should)\s+i\s+(?:obfuscate|harden|protect)\s+(?:code|a\s+project|projects?|apps?)"
+    r"|(?:can\s+you\s+)?(?:obfuscate|harden|protect)\s+code"
+    r"|(?:can\s+you\s+)?(?:obfuscate|harden)\s+(?:a\s+)?(?:project|app)s?"
+    r"|(?:list|show)\s+(?:all\s+)?(?:code\s+)?(?:obfuscation|hardening)\s+tools?"
+    r"|(?:code\s+)?obfuscation(?:\s+tools?)?"
+    r")\??$",
+    re.I,
+)
+
+_AW_OBFUSCATE_PROJECT = re.compile(
+    r"(?:obfuscate|apply\s+(?:code\s+)?obfuscation\s+to|harden(?:\s+code\s+for)?)\s+"
+    r"(?:the\s+|my\s+)?(?:project|app)\s+['\"]?(?P<name>[a-zA-Z0-9_\-\.]+)['\"]?"
+    r"(?:\s+with\s+(?P<tool>[a-zA-Z0-9_\-]+))?"
+    r"(?:\s+(?:profile\s+)?(?P<profile>light|standard|hardened))?\s*\??$",
+    re.I,
+)
+
 #: "Which folders may you look in?" - the read of jarvis_documents.folders().
 _AW_FOLDER_LIST = re.compile(
     r"(?:(?:can|could|would)\s+you\s+|please\s+)?"
@@ -29483,6 +29510,53 @@ def _run_setting_named_read(f: dict) -> Result:
     return Result(said, "setting_named_read")
 
 
+def _run_obfuscation_tools() -> Result:
+    """List code obfuscation tools, profiles, and instructions on this PC."""
+    try:
+        import jarvis_obfuscation as O
+        text = O.format_tool_guidance()
+    except Exception as exc:
+        text = f"Obfuscation guidance could not be loaded: {exc}"
+    return Result(text, "obfuscate_tools_info")
+
+
+def _run_obfuscate_project(f: dict) -> Result:
+    """Create an obfuscation plan and approval card for a project or app."""
+    name = str(f.get("name") or "").strip()
+    tool = f.get("tool")
+    profile = str(f.get("profile") or "standard").strip().lower()
+    try:
+        import jarvis_obfuscation as O
+        target_path = Path(name)
+        if not target_path.is_dir():
+            candidates = [
+                Path.cwd() / name,
+                Path.cwd() / "apps" / name,
+            ]
+            for c in candidates:
+                if c.is_dir():
+                    target_path = c
+                    break
+
+        plan_res = O.create_plan(target_path, profile=profile, tool=tool)
+        if plan_res.get("ok"):
+            p = plan_res["plan"]
+            reply = (
+                f"I've prepared a plan to obfuscate project '{p['project_name']}' "
+                f"using {p['tool']} with the {p['profile']} profile ({p['files_count']} file(s)). "
+                f"Outputs will be written to '{p['output_dir']}'. "
+                f"Your original source code remains untouched. "
+                f"Please review and approve the approval card to proceed."
+            )
+            return Result(reply, "project_obfuscate_ask")
+        return Result(
+            f"Cannot prepare obfuscation for '{name}': {plan_res.get('error')}",
+            "project_obfuscate_ask",
+        )
+    except Exception as exc:
+        return Result(f"Obfuscation planning failed: {exc}", "project_obfuscate_ask")
+
+
 def _awareness_chat(s: str, text: str) -> Optional[Intent]:
     """The full self-awareness sentences, matched before the older lanes."""
     low = str(s or "").strip()
@@ -29518,6 +29592,16 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         return Intent("bench_history")
     if _AW_BENCH_HELP.fullmatch(low):
         return Intent("bench_how")
+    if _AW_OBFUSCATE_TOOLS.fullmatch(low):
+        return Intent("obfuscate_tools_info")
+    m = _AW_OBFUSCATE_PROJECT.fullmatch(low)
+    if m:
+        d = m.groupdict()
+        return Intent("project_obfuscate_ask", {
+            "name": d.get("name") or "",
+            "tool": d.get("tool") or None,
+            "profile": d.get("profile") or "standard",
+        })
     m = _AW_CHANGES.fullmatch(low)
     if m:
         d = m.groupdict()

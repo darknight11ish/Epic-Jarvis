@@ -1793,6 +1793,12 @@ SHIPPED = (
     # position, is in scripts/apply-patches.ps1's $SHIPPED - above
     # jarvis_bench.py, which stays last.
     "jarvis_review.py",
+    # Code obfuscation and binary hardening for projects and apps (2026-11-12):
+    # multi-language project detection (JS/TS, Python, Android, Rust, Go),
+    # profile management (light, standard, hardened), safe non-destructive staging,
+    # and Ask-First approval card gating (project_obfuscate). Standard library only.
+    # The same entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED.
+    "jarvis_obfuscation.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

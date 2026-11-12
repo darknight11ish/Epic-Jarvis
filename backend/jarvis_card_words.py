@@ -305,6 +305,7 @@ TITLES = {
     # ONE card, and the card's own text carries the exact command and folder.
     "app_build_android": "build its Android app with Gradle",
     "app_install_android": "put that app on your phone",
+    "project_obfuscate": "obfuscate and harden code for a project",
     # --- action receipts (2026-10-14): putting one recorded change back
     "undo_action": "put back a change it made",
     # --- the blind credential vault (2026-10-14): keeping ONE secret under a
@@ -546,6 +547,7 @@ SUMMARY = {
     "app_merge_change": "add its change to one of your apps",
     "app_build_android": "build its Android app",
     "app_install_android": "put it on your phone",
+    "project_obfuscate": "obfuscate its code",
     # --- action receipts (2026-10-14): putting one recorded change back
     "undo_action": "put back the change shown",
     # --- the blind credential vault (2026-10-14)
