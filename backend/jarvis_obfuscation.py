@@ -41,6 +41,10 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
+#: The gate action this module asks under, so test_card_words.py's known_actions()
+#: scan finds it (it has no patch of its own to register it with the gate).
+OBFUSCATE_ACTION = "project_obfuscate"
+
 # Profile definitions mapping to CLI arguments for supported tools
 PROFILES: Dict[str, Dict[str, Any]] = {
     "light": {
@@ -448,7 +452,9 @@ def execute_plan(
             args = PROFILES.get(plan.get("profile", "standard"), PROFILES["standard"]).get("js_args", [])
             cmd = [tool_info["path"], str(output_dir), "--output", str(output_dir)] + args
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+                import jarvis_child_env
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False,
+                                     env=jarvis_child_env.inherited())
                 if res.returncode != 0:
                     return {
                         "ok": False,
