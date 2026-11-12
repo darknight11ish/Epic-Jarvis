@@ -176,7 +176,7 @@ def test_mobile_offline_tools_self_knowledge():
         assert got.f.get("family") == "mobile_offline_tools", (ask, got.f)
     out = Q._run_self_knowledge({"family": "mobile_offline_tools"})
     words = str(out.reply)
-    for need in ("mobile agent tool dispatcher", "take_note", "remember_fact", "device_status", "rule 4"):
+    for need in ("mobile agent tool dispatcher", "take note", "remember fact", "device status", "rule 4"):
         assert need.lower() in words.lower(), (need, words)
 
 

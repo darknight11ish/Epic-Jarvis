@@ -104,12 +104,14 @@ class OnDeviceModelTest {
     fun engineConfigurationCarriesConfigValues() {
         val config = MobileLlamaEngine.Config(
             modelPath = "/path/to/model.gguf",
+            modelName = "test-model",
             contextSize = 4096,
             threads = 6,
             useVulkan = true,
             temperature = 0.7f
         )
         assertEquals("/path/to/model.gguf", config.modelPath)
+        assertEquals("test-model", config.modelName)
         assertEquals(4096, config.contextSize)
         assertEquals(6, config.threads)
         assertTrue(config.useVulkan)

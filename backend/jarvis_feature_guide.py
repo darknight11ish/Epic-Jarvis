@@ -4260,14 +4260,14 @@ SELF_FACTS = {
     "mobile_offline_tools": {
         "family": "mobile_offline_tools",
         "digest": ("The Mobile Agent Tool Dispatcher executes bounded tools locally on Android when offline "
-                   "or untethered. Approved offline tools include take_note, remember_fact, device_status, "
-                   "and list_offline_queue. Under Rule 4, potentially risky actions such as shell command "
+                   "or untethered. Approved offline tools include take note, remember fact, device status, "
+                   "and list offline queue. Under Rule 4, potentially risky actions such as shell command "
                    "execution, arbitrary file deletion, or unapproved network requests are refused offline with "
                    "a clear security explanation."),
         "sentence": ("The Mobile Agent Tool Dispatcher executes safe, bounded tools locally on your Android "
-                     "phone even when offline. You can use tools such as take_note to record notes, remember_fact "
-                     "to store local memories, device_status to inspect battery and network status, and "
-                     "list_offline_queue to view items pending sync. Under Rule 4 of Jarvis, risky actions like "
+                     "phone even when offline. You can use tools such as take note to record notes, remember fact "
+                     "to store local memories, device status to inspect battery and network status, and "
+                     "list offline queue to view items pending sync. Under Rule 4 of Jarvis, risky actions like "
                      "running terminal shell commands, code deletion, or external network queries cannot be auto-approved "
                      "and are safely refused while offline, keeping your device secure."),
     },

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "4f12cf3f7e5e2311f07aa9ff1ad1fbe8fc63e752",
- "built_at": "2026-11-12T05:32:57+00:00",
+ "ref": "a2f86d00548cd683b19845c0f709bf5c68a1183f",
+ "built_at": "2026-11-12T06:48:29+00:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6298,6 +6298,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "a2f86d00548cd683b19845c0f709bf5c68a1183f",
+   "date": "2026-11-12",
+   "subject": "fix(mobile): resolve Kotlin UI plate compile errors, self-code map, and backup twin parity"
+  },
+  {
    "sha": "4f12cf3f7e5e2311f07aa9ff1ad1fbe8fc63e752",
    "date": "2026-11-12",
    "subject": "fix(mobile): resolve kotlin compile issues and zero-jargon config keys in feature guide"
@@ -6391,11 +6396,6 @@
    "sha": "f0620475ea1bd2cd816ffb9de5787e7a29c2c9ef",
    "date": "2026-11-10",
    "subject": "fix: the pooled-preload suite's non-pooled-lane case uses an everyday model, because Q7 now refuses the 30B on a one-card lane before anything is sent"
-  },
-  {
-   "sha": "b2273d3ad2e923e77cb628d79d2eb8bcae966473",
-   "date": "2026-11-10",
-   "subject": "fix: keep the wave-16 additions inside the project's own ratchets - the phone test pins 65 tools, and the parity suite's ordering check is found structurally instead of by source index"
   }
  ],
  "top_level": [

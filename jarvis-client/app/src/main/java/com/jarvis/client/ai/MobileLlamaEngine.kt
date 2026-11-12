@@ -27,7 +27,7 @@ object MobileLlamaEngine {
 
     data class Config(
         val modelPath: String,
-        val modelName: String,
+        val modelName: String = "",
         val threads: Int = 4,
         val useVulkan: Boolean = true,
         val contextSize: Int = 2048,
