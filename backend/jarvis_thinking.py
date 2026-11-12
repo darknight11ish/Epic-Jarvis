@@ -230,7 +230,12 @@ def model_capabilities(model: str, ollama_url: Optional[str] = None) -> List[str
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
+        try:
+            import jarvis_local_http
+            _open = jarvis_local_http.urlopen
+        except Exception:
+            _open = urllib.request.urlopen
+        with _open(req, timeout=3.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if isinstance(data, dict) and "capabilities" in data:
                 c = data.get("capabilities")

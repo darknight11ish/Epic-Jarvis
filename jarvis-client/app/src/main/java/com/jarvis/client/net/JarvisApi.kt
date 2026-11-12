@@ -3417,6 +3417,38 @@ class JarvisApi(
         postForJob(Tutorials.PROGRESS_PATH, bodyJson)
 
     /**
+     * `POST /api/sync/offline-batch` - upload offline turns and memories captured
+     * while the phone was disconnected.
+     */
+    suspend fun syncOfflineBatch(bodyJson: String): ApiResult<JsonObject> =
+        postObject(OfflineSync.BATCH_PATH, bodyJson)
+
+    /**
+     * `GET /api/sync/status` - synchronization stats between phone and desktop.
+     */
+    suspend fun syncStatus(): ApiResult<JsonObject> =
+        probe(OfflineSync.STATUS_PATH)
+
+    /**
+     * `POST /api/models/mobile-lane/register` - registers this phone's local AI model
+     * as an available mobile edge lane with desktop Jarvis.
+     */
+    suspend fun registerMobileLane(bodyJson: String): ApiResult<JsonObject> =
+        postObject("/api/models/mobile-lane/register", bodyJson)
+
+    /**
+     * `GET /api/models/mobile-lane/status` - queries status of the mobile edge lane.
+     */
+    suspend fun mobileLaneStatus(): ApiResult<JsonObject> =
+        probe("/api/models/mobile-lane/status")
+
+    /**
+     * `GET /api/models/transfer/available` - lists recommended GGUF models available on desktop.
+     */
+    suspend fun transferModelsAvailable(): ApiResult<JsonObject> =
+        probe("/api/models/transfer/available")
+
+    /**
      * One of the hardware POSTs: choosing a setup ([Hardware.APPLY_PATH]),
      * measuring ([Hardware.MEASURE_PATH]), or ONE step of the chosen setup -
      * a route read from the PC's own answer, one of [Hardware.STEP_ROUTES]

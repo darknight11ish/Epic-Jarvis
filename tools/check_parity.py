@@ -993,6 +993,16 @@ PHONE_ONLY = {
     # (the data the phone draws). ARCHITECTURE.md section 8 records why.
     "/api/notification-styles": ("phone-only", "The saved notification styles, the previews waiting for Add, and which style is live for each kind (JARVIS-API section 167; the owner's ask of 2026-10-30). Phone: net/NotificationStyle.kt, ui/screens/NotificationStylesPlate.kt, and the notifiers via service/StyledNotification.kt. Desktop: nothing to draw them on - Windows draws a toast from its own template - so the desktop only answers the chat preview (docs/ARCHITECTURE.md section 8)."),
     "/api/notification-styles/draft": ("phone-only", "A style PREVIEW from the owner's own typed words: the PC's local model answers JSON on a closed menu and plain code checks it; nothing is applied (JARVIS-API section 167). Same phone-only reason as GET /api/notification-styles: what is being styled is the phone's notification. The chat path reaches the same route's data from both apps."),
+    # On-device AI companion and offline two-way synchronization (2026-11-12; docs/JARVIS-API.md section 216).
+    # Enables the phone to run autonomous offline tasks (turns, notes, memories) using local GGUF models,
+    # and sync them upstream upon reconnecting over private mesh. Phone-only because the desktop has no
+    # offline client queue or mobile edge registration to report.
+    "/api/projects/{id}/map": ("phone-only", "Mobile Project Explorer: the phone queries the project repository tree and file token estimates over the private mesh (docs/JARVIS-API.md section 188, docs/ARCHITECTURE.md section 8). The desktop reads the repository map through the PC local model tools."),
+    "/api/sync/offline-batch": ("phone-only", "Uploads pending offline conversation turns, memories, and tasks captured while disconnected from the PC (docs/ARCHITECTURE.md §8, docs/JARVIS-API.md §216). Desktop has no offline client queue."),
+    "/api/sync/status": ("phone-only", "Queries offline synchronization statistics between companion phone and desktop (docs/ARCHITECTURE.md §8, docs/JARVIS-API.md §216)."),
+    "/api/models/mobile-lane/register": ("phone-only", "Registers phone's local on-device AI model with desktop Jarvis as an available edge worker lane (docs/ARCHITECTURE.md §8, docs/JARVIS-API.md §216)."),
+    "/api/models/mobile-lane/status": ("phone-only", "Queries status of registered mobile edge lane from phone (docs/ARCHITECTURE.md §8, docs/JARVIS-API.md §216)."),
+    "/api/models/transfer/available": ("phone-only", "Queries compact GGUF models available on desktop for peer-to-peer mesh transfer to phone (docs/ARCHITECTURE.md §8, docs/JARVIS-API.md §216)."),
     "/api/notification-styles/add": ("phone-only", "Keep ONE preview exactly as shown, so the style becomes live for its kinds (JARVIS-API section 167). Phone: NotificationStylesPlate's Add, held on a stale link. No approval card: a style shows nothing new and grants nothing. Phone-only for the same reason as GET /api/notification-styles."),
     "/api/notification-styles/discard": ("phone-only", "Drop ONE style preview (JARVIS-API section 167). Not held on a stale link - it only drops. Phone-only for the same reason as GET /api/notification-styles."),
     "/api/notification-styles/delete": ("phone-only", "Delete ONE saved style, at once (JARVIS-API section 167). Phone: NotificationStylesPlate's Delete, held on a stale link. Phone-only for the same reason as GET /api/notification-styles."),
@@ -1213,14 +1223,6 @@ BACKEND_ONLY = {
     # own route table). A map is a table of contents for the LOCAL MODEL - the
     # owner reaches it through chat ("map this project") when my_files is
     # offered - so neither app calls it yet, and BACKEND_ONLY is the exact case
-    # rule 7 exists for. It is deliberately NOT `deliberate`: that classification
-    # means "the PC calls it and the phone must not", and rule 4 fails a
-    # `deliberate` route the desktop does not call. It is not `planned` either -
-    # that is for a route a client is actively being built against. When a screen
-    # is built it goes on BOTH apps on this same route and store (ARCHITECTURE
-    # section 8, "One-sided on purpose", has the row), and this line moves out.
-    "/api/projects/{id}/map": "the read-only repository map of one project's folder (JARVIS-API section 188; jarvis_repomap.py): the files, classes, functions and imports inside \"Folders Jarvis may look in\", ranked for the question by a documented deterministic formula and packed to at most 2,000 tokens by the project's own 3-characters-a-token count. It writes nothing at all - no index, no cache, no temp file - runs no program, opens no socket and calls no model, and it lists names and signatures only, never a function's body. No app screen is added in this slice: a map is read by the local model, not drawn for a person, and the owner's path is chat (the existing my_files action `map`), which works from BOTH apps already because the chat turn and the tool run on the PC. Nothing here is pc_only: the route is a plain project read with no card of its own (it rides the existing read_files_readonly line) and adds no gate action.",
-
     # The self-benchmark's five phase-1 routes (2026-11-04; jarvis_bench.py,
     # bench.patch, JARVIS-API section 185). BACKEND-ONLY TODAY, and each reason
     # says which lane builds the caller: the project's own phase plan puts the

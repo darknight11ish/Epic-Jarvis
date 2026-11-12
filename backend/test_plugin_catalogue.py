@@ -144,6 +144,11 @@ NO_PATCH = {
     # drop-in loader, so the folder is the whole of its wiring and no patch is
     # added to `jarvis_hud.py`.
     "creator-mode",
+    # Two-way offline sync and mobile edge lane for the Android companion (2026-11-12,
+    # jarvis_offline_sync.py): its routes come from jarvis_offline_sync.install(),
+    # called by the drop-in loader, so the folder is the whole of its wiring and
+    # no patch is added to jarvis_hud.py.
+    "offline-sync",
 }
 
 

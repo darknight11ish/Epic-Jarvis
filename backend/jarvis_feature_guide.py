@@ -3962,7 +3962,14 @@ SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_histo
                  # web search was ON, and answered "I cannot create a repository"
                  # to "create a repository called Fitness Band". Four different
                  # things reach the internet, and the model conflated them.
-                 "internet_access")
+                 "internet_access",
+                 # On-device AI companion & offline two-way sync (2026-11-12)
+                 "offline_companion",
+                 # Mobile-Harness integrations: project explorer, web preview, offline tools, keystore vault (2026-11-12)
+                 "mobile_project_explorer",
+                 "mobile_web_preview",
+                 "mobile_offline_tools",
+                 "mobile_keystore_vault")
 
 SELF_FACTS = {
     "approval_policy": {
@@ -4196,6 +4203,85 @@ SELF_FACTS = {
                      "its own tools switched on, and every GitHub use raises its own card. "
                      "So \"I cannot browse the web\" is never the whole true answer - the "
                      "honest answer names which of the four is off and what turns it on."),
+    },
+    "offline_companion": {
+        "family": "offline_companion",
+        "digest": ("On-device AI runs locally on your Android phone using GGUF models "
+                   "via llama.cpp with optional Vulkan GPU acceleration. The phone operates "
+                   "completely offline without internet or PC connection, capturing "
+                   "conversations, notes, and memories in a local encrypted SQLite database. "
+                   "When reconnected to this PC over your private mesh network, an automatic "
+                   "or manual two-way sync reconciles notes and memories without cloud servers. "
+                   "Adjustable settings include Vulkan GPU acceleration, CPU threads (2, 4, 6), "
+                   "context size (1024, 2048, 4096), auto-sync on reconnect, offline memory "
+                   "capture, and battery saver guard."),
+        "sentence": ("Yes. I can run locally on your Android phone using on-device GGUF language "
+                     "models accelerated by llama.cpp and Vulkan GPU compute. When you are away "
+                     "or offline, you can chat, record notes, and capture memories locally on "
+                     "your phone without any internet or PC connection. Everything is stored "
+                     "securely in your phone's encrypted offline store. When you reconnect to "
+                     "this PC across your private mesh network, a two-way sync transfers your "
+                     "offline notes and memories to the PC and syncs active status, keeping all "
+                     "data private under the Five Rules of Jarvis without any cloud servers. "
+                     "You can adjust model settings, threads, context size, and sync preferences "
+                     "in Settings > On-device AI model on your phone."),
+    },
+    "mobile_project_explorer": {
+        "family": "mobile_project_explorer",
+        "digest": ("Mobile Project Explorer allows browsing and inspecting software projects "
+                   "and codebases directly on your Android phone. It maps codebase file trees, "
+                   "symbol tables (classes, functions, methods), token budget metrics, and "
+                   "syntax-highlighted code files over your private mesh network using the local "
+                   "GET /api/projects/{id}/map route. Code stays private on your local devices "
+                   "under the Five Rules of Jarvis, never transmitted to external cloud servers."),
+        "sentence": ("Yes. The Mobile Project Explorer lets you browse and inspect software projects "
+                     "and codebases directly on your Android phone. It provides an interactive file "
+                     "tree, code viewer, symbol maps showing classes and functions, and token budget "
+                     "metrics. It communicates locally with your PC over your private mesh network "
+                     "using the GET /api/projects/{id}/map endpoint. All codebase data stays private on "
+                     "your own hardware under the Five Rules of Jarvis without sending code to any "
+                     "external cloud service."),
+    },
+    "mobile_web_preview": {
+        "family": "mobile_web_preview",
+        "digest": ("Sandboxed Mobile Web Preview allows live previewing of local web development servers "
+                   "(such as ports 3000, 5173, and 8080) directly inside the Android app. Under Rule 1 "
+                   "and Rule 2, external web domains are blocked; previewing is strictly confined to "
+                   "private mesh and local addresses. Live console telemetry (log, warn, error) is "
+                   "captured safely for debugging without network telemetry exfiltration."),
+        "sentence": ("Yes. Sandboxed Mobile Web Preview enables you to preview web applications running on "
+                     "local development servers (such as Vite, Next.js, or React on ports 3000, 5173, or 8080) "
+                     "directly within the Jarvis Android app. For strict security under Rules 1 and 2 of Jarvis, "
+                     "external web domains and public internet navigation are blocked; it only connects to your "
+                     "private mesh and local dev servers. In addition, it safely captures in-app console logs, "
+                     "warnings, and errors so you can debug frontend issues on mobile without sending telemetry "
+                     "anywhere."),
+    },
+    "mobile_offline_tools": {
+        "family": "mobile_offline_tools",
+        "digest": ("The Mobile Agent Tool Dispatcher executes bounded tools locally on Android when offline "
+                   "or untethered. Approved offline tools include take_note, remember_fact, device_status, "
+                   "and list_offline_queue. Under Rule 4, potentially risky actions such as shell command "
+                   "execution, arbitrary file deletion, or unapproved network requests are refused offline with "
+                   "a clear security explanation."),
+        "sentence": ("The Mobile Agent Tool Dispatcher executes safe, bounded tools locally on your Android "
+                     "phone even when offline. You can use tools such as take_note to record notes, remember_fact "
+                     "to store local memories, device_status to inspect battery and network status, and "
+                     "list_offline_queue to view items pending sync. Under Rule 4 of Jarvis, risky actions like "
+                     "running terminal shell commands, code deletion, or external network queries cannot be auto-approved "
+                     "and are safely refused while offline, keeping your device secure."),
+    },
+    "mobile_keystore_vault": {
+        "family": "mobile_keystore_vault",
+        "digest": ("Mobile security uses a hardware-backed Android KeyStore vault with AES-256-GCM encryption. "
+                   "Cryptographic keys are generated inside the device's hardware Trusted Execution Environment (TEE) "
+                   "or StrongBox. It encrypts all offline SQLite databases, credentials, and pairing tokens at rest, "
+                   "ensuring secrets cannot be extracted even if the device storage is inspected."),
+        "sentence": ("Your mobile credentials, offline database, and tokens are protected by a hardware-backed "
+                     "Android KeyStore vault using AES-256-GCM authenticated encryption. Encryption keys reside in the "
+                     "phone's hardware Trusted Execution Environment (TEE) or StrongBox security chip and never leave "
+                     "hardware. This ensures all offline notes, memories, and communication tokens remain securely "
+                     "encrypted at rest under Rule 3 of Jarvis."),
     },
 }
 

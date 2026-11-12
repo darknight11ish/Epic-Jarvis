@@ -38548,3 +38548,131 @@ cannot take away what "cancel that" would undo, and a private chat hands them to
 its own gate like every other read. The model also has the two tools, in the
 `github` group, and both ship off until their own switch is turned on under
 Settings, What asks first, "Jarvis's own tools".
+
+
+## 216. On-Device AI & Offline Two-Way Sync (2026-11-12)
+
+Enables the companion phone to run autonomous offline tasks (chat turns, notes, offline memory queue) using compact on-device GGUF models (e.g. Qwen 2.5 1.5B or Llama 3.2 1B with ARM64 Vulkan GPU acceleration or ARM NEON CPU), and seamlessly sync with the desktop PC over Tailscale or NordVPN Meshnet upon reconnection.
+
+### 216.1 POST /api/sync/offline-batch
+
+Ingests a batch of offline turns, memories, and tasks captured while disconnected.
+- Authentication: `X-Jarvis-Token`
+- Method: `POST`
+- Path: `/api/sync/offline-batch`
+- Request Body (JSON):
+  ```json
+  {
+    "device_id": "pixel9_phone",
+    "client_version": "0.2.1300",
+    "sync_timestamp": 1731375000000,
+    "turns": [
+      {
+        "turn_id": "uuid",
+        "conversation_id": "default",
+        "timestamp": 1731374500000,
+        "user_query": "What is the capital of France?",
+        "model_response": "The capital of France is Paris.",
+        "model_name": "ondevice:qwen2.5-1.5b",
+        "sync_status": "PENDING"
+      }
+    ],
+    "memories": [
+      {
+        "memory_id": "uuid",
+        "timestamp": 1731374600000,
+        "fact_text": "Favorite coffee is cold brew",
+        "category": "preference",
+        "sensitive": false,
+        "sync_status": "PENDING"
+      }
+    ],
+    "tasks": []
+  }
+  ```
+- Response (JSON, 200 OK):
+  ```json
+  {
+    "ok": true,
+    "accepted_turns": ["uuid"],
+    "accepted_memories": ["uuid"],
+    "accepted_tasks": [],
+    "server_sync_time": 1731375010000
+  }
+  ```
+- Safety Gates (Rule 4): Sensitive memories raise an approval card on desktop rather than auto-approving. Idempotent: duplicates are safely ignored.
+
+### 216.2 GET /api/sync/status
+
+Queries offline sync status and totals.
+- Authentication: `X-Jarvis-Token`
+- Method: `GET`
+- Path: `/api/sync/status`
+- Response (JSON, 200 OK):
+  ```json
+  {
+    "ok": true,
+    "total_synced_turns": 42,
+    "total_synced_memories": 12,
+    "last_sync": {
+      "device": "pixel9_phone",
+      "at": 1731375010.0
+    }
+  }
+  ```
+
+### 216.3 POST /api/models/mobile-lane/register
+
+Registers the phone's local AI model as an available mobile edge lane with desktop Jarvis.
+- Authentication: `X-Jarvis-Token`
+- Method: `POST`
+- Path: `/api/models/mobile-lane/register`
+- Request Body: `{"device_id": "pixel9_phone", "model_name": "qwen2.5-1.5b", "vulkan": true, "context_size": 2048}`
+- Response: `{"ok": true, "lane": "mobile-edge", "device_id": "pixel9_phone", "model_name": "qwen2.5-1.5b", "status": "registered"}`
+
+### 216.4 GET /api/models/mobile-lane/status
+
+Queries mobile edge lane availability on desktop.
+- Method: `GET`
+- Path: `/api/models/mobile-lane/status`
+- Response: `{"available": true, "lane": "mobile-edge", "active": true, "info": {}}`
+
+### 216.5 GET /api/models/transfer/available
+
+Lists recommended compact GGUF models available for peer-to-peer mesh transfer to phone.
+- Method: `GET`
+- Path: `/api/models/transfer/available`
+- Response: `{"models": [{"id": "qwen2.5-1.5b-instruct-q4", "name": "Qwen 2.5 1.5B Instruct (Q4_K_M)", "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf", "size_bytes": 1084227584, "recommended": true}]}`
+
+---
+
+## 217. Mobile-Harness Workspace Integrations (2026-11-12)
+
+Architecture and API integrations adapted from the open-source `techjarves/Mobile-Harness` mobile development workspace for Android:
+
+### 217.1 Mobile Project Explorer (`ProjectExplorer.kt` & `ProjectExplorerPlate.kt`)
+- Calls `GET /api/projects/{id}/map` over private Tailscale/Meshnet link.
+- Renders hierarchical project tree, estimated token budget per file, line counts, and class/function symbol tables.
+- Filterable on mobile device with instant search queries.
+- Classified as `phone-only` in `tools/check_parity.py` and `docs/ARCHITECTURE.md` §8.
+
+### 217.2 Sandboxed Mobile Web & Dev Server Preview (`WebPreviewPlate.kt`)
+- Provides a mobile-optimized sandboxed `WebView` for live-previewing local web development servers (e.g. Vite on `:5173`, Next.js on `:3000`, Express on `:8080`) running on the PC or loopback over the private mesh.
+- Security constraints:
+  - Enforces Rule 1 & Rule 2: strictly permits loopback (`127.0.0.1`, `localhost`), mesh (`*.ts.net`, `*.nord`), and private subnets (`192.168.*`, `10.*`, `100.*`). Blocks external public internet requests.
+  - File access and ContentProvider access are disabled (`allowFileAccess = false`, `allowContentAccess = false`).
+- Telemetry: captures `console.log`, `console.warn`, and `console.error` via `WebChromeClient.onConsoleMessage` into an interactive developer console tray.
+
+### 217.3 Mobile Agent Dispatcher (`MobileAgentDispatcher.kt`)
+- Autonomous tool execution loop on mobile during Offline Companion Mode.
+- Supported safe tools:
+  - `take_note`: queues offline note in `OfflineStore`.
+  - `remember_fact`: queues offline memory in `OfflineStore`.
+  - `device_status`: inspects battery percentage, free storage, and pending sync counts.
+  - `list_offline_queue`: returns counts of un-synced turns and memories.
+- Rule 4 Enforcement: risky tools (`shell_exec`, `run_command`, `send_email`, `delete_file`, `git_push`) are rejected offline and flagged as requiring desktop connection and human approval.
+
+### 217.4 Hardware-Backed Keystore Vault (`KeystoreVault.kt`)
+- General-purpose AndroidKeyStore AES-256-GCM cipher utility for encrypting offline tokens and sensitive records.
+- Standard 12-byte IV prepended to ciphertext with 128-bit authentication tag.
+

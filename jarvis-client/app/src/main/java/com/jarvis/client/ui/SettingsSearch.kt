@@ -448,6 +448,14 @@ object SettingsSearch {
             source = JUMP + listOf("ui/screens/ModelLaneSection.kt", "net/ModelLane.kt"),
         ),
         Row(
+            key = "on-device-model", title = "On-device AI model",
+            label = "On-device AI model; local model on phone; offline sync; GGUF; Vulkan; llama.cpp; " +
+                "offline companion; mobile edge lane; run offline; phone model",
+            titles = listOf("Load model (.gguf)", "Unload", "Sync now", "Check PC for models"),
+            quotes = listOf("Run a compact language model directly on your phone when away from your PC."),
+            source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
+        ),
+        Row(
             // "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to
             // run at while Jarvis is on screen (ui/screens/ScreenRatePlate.kt,
             // data/ScreenRate.kt). Phone-only - the panel's own modes come from

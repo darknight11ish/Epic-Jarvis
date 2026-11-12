@@ -1187,8 +1187,13 @@ def _lane_answers(url: str, timeout: float = 2.0) -> bool:
     import urllib.error
     import urllib.request
     try:
-        with urllib.request.urlopen(url.rstrip("/") + "/api/version",
-                                    timeout=float(timeout)) as resp:
+        try:
+            import jarvis_local_http
+            _open = jarvis_local_http.urlopen
+        except Exception:
+            _open = urllib.request.urlopen
+        with _open(url.rstrip("/") + "/api/version",
+                   timeout=float(timeout)) as resp:
             return int(getattr(resp, "status", 0) or 0) == 200
     except Exception:
         return False

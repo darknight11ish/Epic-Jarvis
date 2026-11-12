@@ -94,6 +94,11 @@ def test_four_false_denial_families_answer():
         "watches_ci": "do you have watches?",
         "spending_limits": "do you have spending limits?",
         "chat_history": "how long do you keep my chat history, and can I change that by asking?",
+        "offline_companion": "can you work offline?",
+        "mobile_project_explorer": "what is mobile project explorer?",
+        "mobile_web_preview": "what is mobile web preview?",
+        "mobile_offline_tools": "what tools can you run offline?",
+        "mobile_keystore_vault": "how are my mobile credentials secured?",
     }
     for family, ask in cases.items():
         got = Q.match(ask)
@@ -104,6 +109,92 @@ def test_four_false_denial_families_answer():
         assert len(words) > 80, (family, words)
         for denial in ("i don't have", "i do not have", "isn't a feature", "not a feature i have"):
             assert denial not in words.lower(), (family, denial)
+
+
+def test_offline_companion_self_knowledge():
+    Q = _quick()
+    for ask in (
+        "can you work offline?",
+        "can you run on my phone?",
+        "do you have an on-device model?",
+        "how does offline sync work?",
+        "what is your mobile edge lane?",
+    ):
+        got = Q.match(ask)
+        assert got is not None and got.name == "self_knowledge", (ask, got)
+        assert got.f.get("family") == "offline_companion", (ask, got.f)
+    out = Q._run_self_knowledge({"family": "offline_companion"})
+    words = str(out.reply)
+    for need in ("on-device", "gguf", "llama.cpp", "offline store", "two-way sync", "settings"):
+        assert need.lower() in words.lower(), (need, words[:200])
+
+
+def test_mobile_project_explorer_self_knowledge():
+    Q = _quick()
+    for ask in (
+        "can you explore projects on my phone?",
+        "what is mobile project explorer?",
+        "how does project explorer work?",
+        "can i browse code on my phone?",
+    ):
+        got = Q.match(ask)
+        assert got is not None and got.name == "self_knowledge", (ask, got)
+        assert got.f.get("family") == "mobile_project_explorer", (ask, got.f)
+    out = Q._run_self_knowledge({"family": "mobile_project_explorer"})
+    words = str(out.reply)
+    for need in ("project explorer", "codebase", "symbol", "get /api/projects/{id}/map", "five rules of jarvis"):
+        assert need.lower() in words.lower(), (need, words)
+
+
+def test_mobile_web_preview_self_knowledge():
+    Q = _quick()
+    for ask in (
+        "can you preview dev servers on my phone?",
+        "what is mobile web preview?",
+        "how does web preview work?",
+        "is web preview sandboxed?",
+    ):
+        got = Q.match(ask)
+        assert got is not None and got.name == "self_knowledge", (ask, got)
+        assert got.f.get("family") == "mobile_web_preview", (ask, got.f)
+    out = Q._run_self_knowledge({"family": "mobile_web_preview"})
+    words = str(out.reply)
+    for need in ("web preview", "ports 3000, 5173, or 8080", "rules 1 and 2", "console logs"):
+        assert need.lower() in words.lower(), (need, words)
+
+
+def test_mobile_offline_tools_self_knowledge():
+    Q = _quick()
+    for ask in (
+        "what tools can you run offline?",
+        "what is the mobile agent dispatcher?",
+        "how does mobile agent dispatcher work?",
+        "can you run tools offline?",
+    ):
+        got = Q.match(ask)
+        assert got is not None and got.name == "self_knowledge", (ask, got)
+        assert got.f.get("family") == "mobile_offline_tools", (ask, got.f)
+    out = Q._run_self_knowledge({"family": "mobile_offline_tools"})
+    words = str(out.reply)
+    for need in ("mobile agent tool dispatcher", "take_note", "remember_fact", "device_status", "rule 4"):
+        assert need.lower() in words.lower(), (need, words)
+
+
+def test_mobile_keystore_vault_self_knowledge():
+    Q = _quick()
+    for ask in (
+        "how are my mobile credentials secured?",
+        "what is keystore vault?",
+        "how does the keystore vault work?",
+        "is my mobile data encrypted?",
+    ):
+        got = Q.match(ask)
+        assert got is not None and got.name == "self_knowledge", (ask, got)
+        assert got.f.get("family") == "mobile_keystore_vault", (ask, got.f)
+    out = Q._run_self_knowledge({"family": "mobile_keystore_vault"})
+    words = str(out.reply)
+    for need in ("keystore", "aes-256-gcm", "trusted execution environment", "strongbox", "rule 3"):
+        assert need.lower() in words.lower(), (need, words)
 
 
 def test_recent_changes_answer_and_generator():
@@ -260,6 +351,11 @@ def main():
     checks = [
         ("approval policy is deterministic", test_approval_policy_is_deterministic),
         ("four false-denial families answer", test_four_false_denial_families_answer),
+        ("offline companion self-knowledge", test_offline_companion_self_knowledge),
+        ("mobile project explorer self-knowledge", test_mobile_project_explorer_self_knowledge),
+        ("mobile web preview self-knowledge", test_mobile_web_preview_self_knowledge),
+        ("mobile offline tools self-knowledge", test_mobile_offline_tools_self_knowledge),
+        ("mobile keystore vault self-knowledge", test_mobile_keystore_vault_self_knowledge),
         ("recent changes answer and generator", test_recent_changes_answer_and_generator),
         ("explain door shapes", test_explain_door_shapes),
         ("scoped anti-slop honesty", test_scoped_antislop_never_claims_on_while_filter_off),

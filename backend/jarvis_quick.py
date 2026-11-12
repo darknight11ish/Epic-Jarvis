@@ -5728,7 +5728,38 @@ _SELF_KNOWLEDGE = (
         r"|do\s+you\s+have\s+(?:a\s+)?chat\s+histor(?:y|ies)(?:[\s,;]+.*)?"
         r"|is\s+(?:my\s+)?chat\s+history\s+(?:kept|saved|on|stored)(?:[\s,;]+.*)?"
         r"|how\s+long\s+do\s+you\s+keep\s+(?:my\s+)?(?:chat|conversation)\s+"
-        r"histor(?:y|ies)(?:[\s,;]+.*)?"))
+        r"histor(?:y|ies)(?:[\s,;]+.*)?")),
+    ("offline_companion", re.compile(
+        r"(?:(?:can|could)\s+you\s+)?(?:work|run|operate|function)\s+(?:offline|without\s+internet|without\s+wifi|without\s+(?:the\s+)?pc|locally)(?:\s+.*)?"
+        r"|(?:(?:can|could)\s+you\s+)?run\s+on\s+(?:my\s+)?(?:phone|mobile|android)(?:\s+.*)?"
+        r"|(?:do|can|could)\s+you\s+have\s+(?:an?\s+)?(?:on-device|local|offline|mobile)\s+(?:ai|model|llm)(?:\s+.*)?"
+        r"|how\s+does\s+(?:offline\s+sync|on-device\s+ai|mobile\s+sync|the\s+offline\s+companion)\s+work(?:\s+.*)?"
+        r"|what\s+is\s+(?:your\s+)?(?:mobile\s+lane|mobile\s+edge\s+lane|on-device\s+model|offline\s+companion)(?:\s+.*)?"
+        r"|what\s+settings\s+(?:can\s+i|are\s+there\s+to)\s+adjust\s+for\s+(?:on-device|offline|mobile)\s+(?:ai|model)(?:\s+.*)?")),
+    ("mobile_project_explorer", re.compile(
+        r"(?:(?:can|could)\s+you\s+|can\s+i\s+)?(?:explore|browse|view|inspect)\s+(?:my\s+)?(?:projects?|code|codebases?|repositories)(?:\s+on\s+(?:my\s+)?(?:phone|mobile|android))?(?:\s+.*)?"
+        r"|what\s+is\s+(?:the\s+)?(?:mobile\s+)?project\s+explorer(?:\s+.*)?"
+        r"|how\s+does\s+(?:the\s+)?(?:mobile\s+)?project\s+explorer\s+work(?:\s+.*)?"
+        r"|tell\s+me\s+about\s+(?:the\s+)?(?:mobile\s+)?project\s+explorer(?:\s+.*)?")),
+    ("mobile_web_preview", re.compile(
+        r"(?:(?:can|could)\s+you\s+|can\s+i\s+)?preview\s+(?:web|local|websites?|web\s*apps?|dev\s*servers?)(?:\s+on\s+(?:my\s+)?(?:phone|mobile|android))?(?:\s+.*)?"
+        r"|what\s+is\s+(?:the\s+)?(?:mobile\s+|sandboxed\s+)?web\s+preview(?:\s+.*)?"
+        r"|how\s+does\s+(?:the\s+)?(?:mobile\s+|sandboxed\s+)?web\s+preview\s+work(?:\s+.*)?"
+        r"|tell\s+me\s+about\s+(?:the\s+)?(?:mobile\s+|sandboxed\s+)?web\s+preview(?:\s+.*)?"
+        r"|is\s+(?:the\s+)?(?:mobile\s+)?web\s+preview\s+sandboxed(?:\s+.*)?")),
+    ("mobile_offline_tools", re.compile(
+        r"what\s+tools\s+(?:can\s+you|do\s+you)\s+run\s+offline(?:\s+.*)?"
+        r"|what\s+tools\s+(?:work|run)\s+on\s+(?:my\s+)?(?:phone|mobile)(?:\s+when\s+offline)?(?:\s+.*)?"
+        r"|what\s+is\s+(?:the\s+)?(?:mobile\s+agent\s+)?(?:tool\s+)?dispatcher(?:\s+.*)?"
+        r"|how\s+does\s+(?:the\s+)?mobile\s+agent(?:\s+tool)?\s+dispatcher\s+work(?:\s+.*)?"
+        r"|tell\s+me\s+about\s+(?:the\s+)?mobile\s+(?:agent|tools?)(?:\s+dispatcher)?(?:\s+.*)?"
+        r"|(?:(?:can|could)\s+you\s+)?run\s+tools\s+offline(?:\s+.*)?")),
+    ("mobile_keystore_vault", re.compile(
+        r"how\s+(?:are|is)\s+(?:my\s+)?(?:mobile\s+)?(?:credentials|passwords|tokens|data|storage|database)\s+secured(?:\s+.*)?"
+        r"|what\s+is\s+(?:the\s+)?(?:hardware[- ]backed\s+)?(?:keystore|android\s+keystore|keystore\s+vault)(?:\s+.*)?"
+        r"|how\s+does\s+(?:the\s+)?(?:hardware[- ]backed\s+)?keystore\s+vault\s+work(?:\s+.*)?"
+        r"|tell\s+me\s+about\s+(?:the\s+)?(?:mobile\s+)?keystore\s+vault(?:\s+.*)?"
+        r"|is\s+(?:my\s+)?(?:mobile|offline)\s+(?:storage|database|data)\s+encrypted(?:\s+.*)?")),
 )
 
 

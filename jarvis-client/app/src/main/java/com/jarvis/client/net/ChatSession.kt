@@ -726,6 +726,9 @@ class ChatSession(
             screen = screen, think = asThought, file = attachment,
         )
         if (c == null) {
+            if (com.jarvis.client.ai.MobileLlamaEngine.isAvailable) {
+                return sendOffline(asking, onDelta, askedIn)
+            }
             // No address to send to: none saved, or a saved one off the
             // owner's own networks (OwnNetwork), which says why in its own
             // sentence rather than "not paired".
@@ -1096,6 +1099,9 @@ class ChatSession(
                 // working, not a failure, so it is not reported as one.
                 if (c.isCanceled()) {
                     Log.d(TAG, "chat interrupted by the user")
+                } else if (com.jarvis.client.ai.MobileLlamaEngine.isAvailable) {
+                    Log.i(TAG, "network call failed; falling back to on-device model")
+                    return sendOffline(asking, onDelta, askedIn)
                 } else {
                     Log.w(TAG, "chat failed", t)
                     // The app's own sentence, never the platform's: this
@@ -1167,6 +1173,53 @@ class ChatSession(
             }
         }
         return mine
+    }
+
+    /**
+     * Executes local on-device inference when disconnected from desktop Jarvis.
+     * Records the turn into OfflineStore for automatic syncing when reconnected.
+     */
+    private suspend fun sendOffline(
+        asking: List<ChatHistory.UserTurn>,
+        onDelta: ((String) -> Unit)?,
+        askedIn: Int
+    ): String? {
+        val promptText = asking.lastOrNull()?.text.orEmpty()
+        _streaming.value = true
+        _waiting.value = "Thinking on-device…"
+        val tid = java.util.UUID.randomUUID().toString()
+        _turnId.value = tid
+        val modelName = com.jarvis.client.ai.MobileLlamaEngine.currentModelName() ?: "ondevice:local"
+
+        val replyText = com.jarvis.client.ai.MobileLlamaEngine.generateStream(promptText) { token ->
+            _reply.value += token
+            onDelta?.invoke(_reply.value)
+        }
+        _streaming.value = false
+        _waiting.value = null
+        _answerNote.value = "Answered by on-device model ($modelName). Saved offline."
+
+        runCatching {
+            val turn = com.jarvis.client.data.OfflineTurn(
+                turnId = tid,
+                conversationId = conversationId,
+                timestamp = System.currentTimeMillis(),
+                userQuery = promptText,
+                modelResponse = replyText,
+                modelName = modelName,
+                syncStatus = "PENDING"
+            )
+            com.jarvis.client.JarvisRuntime.offlineStore.recordTurn(turn)
+        }
+
+        if (replyText.isNotBlank() && conversation == askedIn) {
+            _history.update { ChatHistory.commit(it, asking, replyText) }
+            _thread.update { ChatHistory.addToThread(it, asking, replyText) }
+            val finishedAt = System.currentTimeMillis()
+            _answerAt.value = finishedAt
+            lastTurnAt = finishedAt
+        }
+        return replyText
     }
 
     /**

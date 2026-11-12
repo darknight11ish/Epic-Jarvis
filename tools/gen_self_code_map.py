@@ -429,7 +429,7 @@ SUBSYSTEMS = (
         "modules": (
             "jarvis_android_control", "jarvis_android_builder", "jarvis_phone_apps",
             "jarvis_phone_notifications", "jarvis_devices", "jarvis_find_phone",
-            "jarvis_token_store",
+            "jarvis_token_store", "jarvis_offline_sync",
         ),
         "paths": ("jarvis-client/*", "jarvis-android/*", "server/*",
                   "backend/jarvis-android-gradlew.bat"),
@@ -437,7 +437,7 @@ SUBSYSTEMS = (
                         "jarvis_phone_notifications", "jarvis_find_phone"),
         "tests": ("backend/test_android_control.py", "backend/test_devices.py",
                   "backend/test_find_phone.py", "backend/test_phone_app_allowlist.py",
-                  "backend/test_token_store.py"),
+                  "backend/test_token_store.py", "backend/test_offline_sync.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/JARVIS-API.md",
                  "docs/ANDROID-TOUR-2026-10-09.md"),
     },
