@@ -150,7 +150,9 @@ export const TOOLS_DETAIL =
   "own switch decides them, and the page names those. Turning one on shows ONE approval " +
   "card that names that one ability: approve it on the PC with Windows Hello, or on your " +
   "phone with its own fingerprint or PIN. Turning it off is instant, from either app. " +
-  "Nothing here switches two tools at once.";
+  'One master switch, "Offer GitHub tools to the AI model", turns all twenty tools of ' +
+  "that group - the GitHub tools and both local review gates - on or off together; its " +
+  "own card says so, and every tool.";
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
   "first). It takes one approval card - approve it on the PC with Windows Hello, or on " +

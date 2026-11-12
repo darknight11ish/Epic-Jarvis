@@ -202,6 +202,10 @@ TITLES = {
     "github_edit_pr": "edit a pull request's title or body",
     "github_pr_review": "post a pull request review, never an approval",
     "github_issue_state": "close or reopen one issue",
+    "github_search_run": "search GitHub",
+    "github_search_run_authenticated": "search GitHub signed in as you",
+    "check_records": "check repository records before a push",
+    "review_changes": "review code changes before a push",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -491,6 +495,10 @@ SUMMARY = {
     "github_edit_pr": "edit a pull request's text",
     "github_pr_review": "post a review, never an approval",
     "github_issue_state": "close or reopen an issue",
+    "github_search_run": "search GitHub",
+    "github_search_run_authenticated": "search GitHub signed in as you",
+    "check_records": "check repository records before a push",
+    "review_changes": "review code changes before a push",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

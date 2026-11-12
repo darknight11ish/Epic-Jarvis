@@ -3139,8 +3139,8 @@ def plan_issue_state(args: Optional[dict] = None) -> Request:
     state = ISSUE_STATES[direction]
     title = _clean_github_text(args.get("title"), limit=MAX_PR_TITLE, wrap=False)
     if not title:
-        raise GitHubError("Jarvis needs the issue's title, exactly as github_list "
-                          "or github_pr_detail printed it, so the card can name "
+        raise GitHubError("Jarvis needs the issue's title, exactly as shown in "
+                          "the issues list or details, so the card can name "
                           "which issue it will change. Nothing was changed.")
     reason = " ".join(str(args.get("reason") or "").split())
     if len(reason) > MAX_ISSUE_REASON:

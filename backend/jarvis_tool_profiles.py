@@ -1186,7 +1186,7 @@ PROFILES: dict = {
         "id": "github_workflow",
         "title": "Cancel one run, or re-run only its failed jobs",
         "what": "Does ONE thing to ONE existing workflow run: \"cancel\" a run "
-                "that is still going, or \"rerun_failed\" to run only the jobs "
+                "that is still going, or re-run to run only the jobs "
                 "that failed in a finished run. It re-reads the run first and "
                 "refuses, changing nothing, if it is not in the state the card "
                 "named.",

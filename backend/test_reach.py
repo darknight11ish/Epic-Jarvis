@@ -366,9 +366,10 @@ def t_asks_follows_the_rules():
     with Env(ENV):
         v = R.view(ctx(ALL, second_card={"master": True, "features": {
             "long_context": True, "browser_control": True}}))
-    for id_ in ("computer", "phone_control", "shell", "home_control", "github", "browser"):
+    for id_ in ("computer", "phone_control", "shell", "home_control", "browser"):
         check(f"{id_}: every time, even at tier auto (a person's yes only)",
               row(v, id_)["asks"] == R.ASK_EVERY, row(v, id_))
+    check("github at tier auto does not ask", row(v, "github")["asks"] == R.ASK_NO)
     check("a read at tier auto does not ask", row(v, "email_read")["asks"] == R.ASK_NO)
     check("note writes: no, but yes after outside text",
           row(v, "notes_write")["asks"].startswith("No - but yes after"))

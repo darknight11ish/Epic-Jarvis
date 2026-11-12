@@ -1360,6 +1360,14 @@
      "name": "Writing one file of a fix inside a pull request's own scratch copy here, then pushing it to that pull request's branch (one card for each change)"
     },
     {
+     "id": "review_changes",
+     "name": "The review packet: what changed, and what usually goes wrong"
+    },
+    {
+     "id": "check_records",
+     "name": "The record check before a push: READY, or what is missing"
+    },
+    {
      "id": "github_pr_detail",
      "name": "Reading one pull request in full: its body, files, commits, comments and reviews (one card each)"
     },

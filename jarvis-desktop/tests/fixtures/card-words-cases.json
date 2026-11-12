@@ -87,6 +87,10 @@
       "title": "Jarvis wants to hold a conversation with an AI chatbot for you"
     },
     {
+      "action": "check_records",
+      "title": "Jarvis wants to check repository records before a push"
+    },
+    {
       "action": "check_tool_updates",
       "title": "Jarvis wants to check online for tool updates"
     },
@@ -245,6 +249,14 @@
     {
       "action": "github_rerun_workflow",
       "title": "Jarvis wants to run a GitHub workflow again"
+    },
+    {
+      "action": "github_search_run",
+      "title": "Jarvis wants to search GitHub"
+    },
+    {
+      "action": "github_search_run_authenticated",
+      "title": "Jarvis wants to search GitHub signed in as you"
     },
     {
       "action": "github_workflow",
@@ -441,6 +453,10 @@
     {
       "action": "restore_backup",
       "title": "Jarvis wants to restore from a backup, replacing what it knows now"
+    },
+    {
+      "action": "review_changes",
+      "title": "Jarvis wants to review code changes before a push"
     },
     {
       "action": "revoke_web_search_grant",
@@ -807,6 +823,18 @@
         "summary": "Jarvis wants to talk to an AI chatbot for you.",
         "full": "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back. nothing has happened yet.",
         "body": "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "check_records",
+      "notice": {
+        "title": "Jarvis wants to check repository records before a push",
+        "summary": "Jarvis wants to check repository records before a push.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1287,6 +1315,30 @@
         "summary": "Jarvis wants to run a workflow again.",
         "full": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
         "body": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_search_run",
+      "notice": {
+        "title": "Jarvis wants to search GitHub",
+        "summary": "Jarvis wants to search GitHub.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_search_run_authenticated",
+      "notice": {
+        "title": "Jarvis wants to search GitHub signed in as you",
+        "summary": "Jarvis wants to search GitHub signed in as you.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1876,6 +1928,18 @@
         "full": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
         "body": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "review_changes",
+      "notice": {
+        "title": "Jarvis wants to review code changes before a push",
+        "summary": "Jarvis wants to review code changes before a push.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }

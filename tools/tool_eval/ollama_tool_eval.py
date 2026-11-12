@@ -212,7 +212,11 @@ def ask_once(model, messages, tools):
     try:
         r = read_reply(model(messages, tools))
     except urllib.error.HTTPError as exc:
-        return {"crash": exc.read().decode("utf-8", "replace")[:300], "calls": [],
+        try:
+            body = exc.read().decode("utf-8", "replace")[:300] if getattr(exc, "fp", None) is not None else str(exc)
+        except Exception:
+            body = str(exc)
+        return {"crash": body, "calls": [],
                 "content": "", "secs": time.time() - t0}
     r["secs"] = time.time() - t0
     return r

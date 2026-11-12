@@ -277,6 +277,8 @@ TOOL_NAMES = {
     # read-only in jarvis_claims.py.
     "setup_quiz": "Explaining your Personalize Jarvis quiz and staging a "
                   "choice in it (read-only; you press Apply on the PC)",
+    "review_changes": "The review packet: what changed, and what usually goes wrong",
+    "check_records": "The record check before a push: READY, or what is missing",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
@@ -330,18 +332,19 @@ def _inherited_config() -> dict:
     if not path.exists():
         return {}
     try:
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
         with open(path, "rb") as fh:
             return tomllib.load(fh)
-    except ImportError:
-        pass
     except Exception:
-        return {}
+        pass
     try:
         raw = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return {}
-    block = re.search(r"^\[tools\]\s*$(.*?)(?=^\[)", raw, re.M | re.S)
+    block = re.search(r"^\[tools\]\s*$(.*?)(?=^\[|\Z)", raw, re.M | re.S)
     names = re.findall(r'"([a-z0-9_]+)"', block.group(1)) if block else []
     return {"tools": {"enabled": names}}
 
