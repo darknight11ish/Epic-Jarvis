@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "095f554c0e3c5be936e95f393ebda91185cef1cc",
- "built_at": "2026-11-11T02:15:53-08:00",
+ "ref": "0076d8624917a5caa93eeb3d4309fdf625d9d185",
+ "built_at": "2026-11-12T15:20:36+00:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -395,6 +395,7 @@
     "backend/jarvis_handoff_mode.py",
     "backend/jarvis_home.py",
     "backend/jarvis_media.py",
+    "backend/jarvis_obfuscation.py",
     "backend/jarvis_open.py",
     "backend/jarvis_pc_facts.py",
     "backend/jarvis_pc_help.py",
@@ -410,7 +411,7 @@
     "backend/jarvis_tool_updates.py",
     "backend/jarvis_ui_control.py"
    ],
-   "file_count": 26,
+   "file_count": 27,
    "key_modules": [
     {
      "path": "backend/jarvis_ui_control.py",
@@ -435,7 +436,8 @@
     "backend/test_app_control.py",
     "backend/test_sandbox_exec.py",
     "backend/test_pc_facts.py",
-    "backend/test_repomap.py"
+    "backend/test_repomap.py",
+    "backend/test_obfuscation.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -4008,6 +4010,7 @@
     "backend/test_notify_prefs.py",
     "backend/test_notion_answer.py",
     "backend/test_notion_obsidian.py",
+    "backend/test_obfuscation.py",
     "backend/test_obscura.py",
     "backend/test_obsidian_notes.py",
     "backend/test_ocr_words.py",
@@ -4312,7 +4315,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 686,
+   "file_count": 687,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6079,6 +6082,7 @@
     "jarvis-backend/jarvis_notification_styles.py",
     "jarvis-backend/jarvis_notify_prefs.py",
     "jarvis-backend/jarvis_notion_obsidian.py",
+    "jarvis-backend/jarvis_obfuscation.py",
     "jarvis-backend/jarvis_obscura.py",
     "jarvis-backend/jarvis_ocr.py",
     "jarvis-backend/jarvis_ollama_contract.py",
@@ -6241,7 +6245,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 340,
+   "file_count": 341,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6270,6 +6274,11 @@
   }
  ],
  "recent_commits": [
+  {
+   "sha": "0076d8624917a5caa93eeb3d4309fdf625d9d185",
+   "date": "2026-11-12",
+   "subject": "feat(obfuscation): integrate multi-language code obfuscation and hardening with Ask-First governance"
+  },
   {
    "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
    "date": "2026-11-11",
@@ -6364,18 +6373,13 @@
    "sha": "a3d2bbd2dd205e7d050bb59f79b016e555b5614a",
    "date": "2026-11-10",
    "subject": "Merge lane C (wave16-github 58446374): the GitHub PR cockpit, card-gated merge-commit-only merge pinned to the 40-hex head, and card-gated fix-and-push in an isolated scratch worktree, with one CAPABILITIES inventory behind them"
-  },
-  {
-   "sha": "58446374acf3554e343a6995fed326f0bbabc399",
-   "date": "2026-11-10",
-   "subject": "feat(github): full parity behind one card per action - cockpit, merge, fix-and-push"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1429
+   "files": 1431
   },
   {
    "path": "jarvis-desktop/",
@@ -6395,7 +6399,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 352
+   "files": 353
   },
   {
    "path": "tools/",
@@ -6489,8 +6493,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5608,
-  "covered": 5136,
+  "tracked_files": 5611,
+  "covered": 5139,
   "excluded": 472,
   "subsystems": 27
  },
