@@ -448,14 +448,6 @@ object SettingsSearch {
             source = JUMP + listOf("ui/screens/ModelLaneSection.kt", "net/ModelLane.kt"),
         ),
         Row(
-            key = "on-device-model", title = "On-device AI model",
-            label = "On-device AI model; local model on phone; offline sync; GGUF; Vulkan; llama.cpp; " +
-                "offline companion; mobile edge lane; run offline; phone model",
-            titles = emptyList(),
-            quotes = listOf("Run a compact language model directly on your phone when away from your PC."),
-            source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
-        ),
-        Row(
             // "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to
             // run at while Jarvis is on screen (ui/screens/ScreenRatePlate.kt,
             // data/ScreenRate.kt). Phone-only - the panel's own modes come from
@@ -668,6 +660,14 @@ object SettingsSearch {
             // are two of this module's constants rather than a literal in the
             // plate, and the switch-name walk only covers the rows it lists.
             source = listOf("net/Handsfree.kt") + SCREEN,
+        ),
+        Row(
+            key = "on-device-model", title = "On-device AI model",
+            label = "On-device AI model; local model on phone; offline sync; GGUF; Vulkan; llama.cpp; " +
+                "offline companion; mobile edge lane; run offline; phone model",
+            titles = emptyList(),
+            quotes = listOf("Run a compact language model directly on your phone when away from your PC."),
+            source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
         ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "78d1488ce2913ae07bae3c3d76eb87a0d8ddd2dd",
- "built_at": "2026-11-12T07:01:14+00:00",
+ "ref": "860e34311b67ecae5c35fb4bdf6df7b32cbb3743",
+ "built_at": "2026-11-12T07:15:52+00:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6298,6 +6298,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "860e34311b67ecae5c35fb4bdf6df7b32cbb3743",
+   "date": "2026-11-12",
+   "subject": "fix(mobile): resolve unit test failures in Settings index, MenuPlaces, and ProjectExplorer mapPath"
+  },
+  {
    "sha": "78d1488ce2913ae07bae3c3d76eb87a0d8ddd2dd",
    "date": "2026-11-12",
    "subject": "fix(mobile): resolve OnDeviceModelTest Config param and zero-jargon plain text phrasing"
@@ -6391,11 +6396,6 @@
    "sha": "e7544e21a691beb4c9880f5945492668e3ce4c50",
    "date": "2026-11-10",
    "subject": "fix: wave-16 desk catches - scratch cleanup, merge card fields, phone feature directory, doc accuracy"
-  },
-  {
-   "sha": "1acd8758c98659902730b19ce95055cb2268f362",
-   "date": "2026-11-10",
-   "subject": "fix: the desktop Tools page suites pin 65 switches, because wave 16 adds the PR cockpit, the carded merge and the carded fix-and-push"
   }
  ],
  "top_level": [
