@@ -53,12 +53,12 @@ fun OnDeviceModelPlate() {
         mutableStateOf(modelStore?.activeModel())
     }
 
-    val useVulkan by (modelStore?.useVulkan ?: remember { mutableStateOf(true) }).collectAsState()
-    val threads by (modelStore?.threads ?: remember { mutableStateOf(4) }).collectAsState()
-    val contextSize by (modelStore?.contextSize ?: remember { mutableStateOf(2048) }).collectAsState()
-    val autoSync by (modelStore?.autoSyncOnReconnect ?: remember { mutableStateOf(true) }).collectAsState()
-    val captureMemories by (modelStore?.captureOfflineMemories ?: remember { mutableStateOf(true) }).collectAsState()
-    val batteryGuard by (modelStore?.batteryGuard ?: remember { mutableStateOf(true) }).collectAsState()
+    val useVulkan = modelStore?.useVulkan?.collectAsState()?.value ?: true
+    val threads = modelStore?.threads?.collectAsState()?.value ?: 4
+    val contextSize = modelStore?.contextSize?.collectAsState()?.value ?: 2048
+    val autoSync = modelStore?.autoSyncOnReconnect?.collectAsState()?.value ?: true
+    val captureMemories = modelStore?.captureOfflineMemories?.collectAsState()?.value ?: true
+    val batteryGuard = modelStore?.batteryGuard?.collectAsState()?.value ?: true
 
     val pendingTurns = remember(activeModel, engineStatus) {
         offlineStore?.pendingTurns()?.size ?: 0

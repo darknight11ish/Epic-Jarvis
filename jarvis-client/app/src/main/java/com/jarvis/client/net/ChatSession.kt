@@ -1101,7 +1101,7 @@ class ChatSession(
                     Log.d(TAG, "chat interrupted by the user")
                 } else if (com.jarvis.client.ai.MobileLlamaEngine.isAvailable) {
                     Log.i(TAG, "network call failed; falling back to on-device model")
-                    return sendOffline(asking, onDelta, askedIn)
+                    return@withContext sendOffline(asking, onDelta, askedIn)
                 } else {
                     Log.w(TAG, "chat failed", t)
                     // The app's own sentence, never the platform's: this

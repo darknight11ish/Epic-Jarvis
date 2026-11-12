@@ -79,6 +79,34 @@ data class OfflineMemory(
     }
 }
 
+@Serializable
+data class OfflineTask(
+    val taskId: String,
+    val actionType: String,
+    val payloadJson: String,
+    val timestamp: Long,
+    val syncStatus: String = "PENDING"
+) {
+    fun toJson(): JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("task_id", kotlinx.serialization.json.JsonPrimitive(taskId))
+        put("action_type", kotlinx.serialization.json.JsonPrimitive(actionType))
+        put("payload_json", kotlinx.serialization.json.JsonPrimitive(payloadJson))
+        put("timestamp", kotlinx.serialization.json.JsonPrimitive(timestamp))
+        put("sync_status", kotlinx.serialization.json.JsonPrimitive(syncStatus))
+    }
+
+    companion object {
+        fun fromJson(obj: JsonObject): OfflineTask? {
+            val tid = obj["task_id"]?.jsonPrimitive?.contentOrNull ?: return null
+            val act = obj["action_type"]?.jsonPrimitive?.contentOrNull ?: "task"
+            val pld = obj["payload_json"]?.jsonPrimitive?.contentOrNull ?: "{}"
+            val ts = obj["timestamp"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+            val ss = obj["sync_status"]?.jsonPrimitive?.contentOrNull ?: "PENDING"
+            return OfflineTask(tid, act, pld, ts, ss)
+        }
+    }
+}
+
 /**
  * Manages offline turns and memories captured when disconnected from the PC.
  * Persisted in private SharedPreferences for simplicity, safety and zero-dependency footprint.
@@ -99,6 +127,36 @@ class OfflineStore(context: Context) {
         val list = loadMemories().filterNot { it.memoryId == memory.memoryId }.toMutableList()
         list.add(memory)
         saveMemories(list)
+    }
+
+    fun recordMemory(fact: String, category: String = "general", sensitive: Boolean = false) {
+        val mem = OfflineMemory(
+            memoryId = java.util.UUID.randomUUID().toString(),
+            timestamp = System.currentTimeMillis(),
+            factText = fact,
+            category = category,
+            sensitive = sensitive
+        )
+        recordMemory(mem)
+    }
+
+    fun queueTask(actionType: String, payloadJson: String) = synchronized(lock) {
+        val list = loadTasks().toMutableList()
+        val task = OfflineTask(
+            taskId = java.util.UUID.randomUUID().toString(),
+            actionType = actionType,
+            payloadJson = payloadJson,
+            timestamp = System.currentTimeMillis()
+        )
+        list.add(task)
+        saveTasks(list)
+    }
+
+    fun getPendingCounts(): Triple<Int, Int, Int> = synchronized(lock) {
+        val pendingT = pendingTurns().size
+        val pendingM = pendingMemories().size
+        val pendingK = loadTasks().count { it.syncStatus == "PENDING" }
+        Triple(pendingT, pendingM, pendingK)
     }
 
     fun pendingTurns(): List<OfflineTurn> = synchronized(lock) {
@@ -130,6 +188,7 @@ class OfflineStore(context: Context) {
     fun clearSynced() = synchronized(lock) {
         saveTurns(loadTurns().filter { it.syncStatus != "SYNCED" })
         saveMemories(loadMemories().filter { it.syncStatus != "SYNCED" })
+        saveTasks(loadTasks().filter { it.syncStatus != "SYNCED" })
     }
 
     private fun loadTurns(): List<OfflineTurn> {
@@ -158,9 +217,23 @@ class OfflineStore(context: Context) {
         prefs.edit { putString(KEY_MEMORIES, arr.toString()) }
     }
 
+    private fun loadTasks(): List<OfflineTask> {
+        val raw = prefs.getString(KEY_TASKS, null) ?: return emptyList()
+        return runCatching {
+            val arr = JarvisJson.parseToJsonElement(raw).jsonArray
+            arr.mapNotNull { if (it is JsonObject) OfflineTask.fromJson(it) else null }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun saveTasks(tasks: List<OfflineTask>) {
+        val arr = kotlinx.serialization.json.JsonArray(tasks.map { it.toJson() })
+        prefs.edit { putString(KEY_TASKS, arr.toString()) }
+    }
+
     companion object {
         const val PREFS_NAME = "jarvis_offline_store"
         private const val KEY_TURNS = "offline_turns"
         private const val KEY_MEMORIES = "offline_memories"
+        private const val KEY_TASKS = "offline_tasks"
     }
 }
