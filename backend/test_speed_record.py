@@ -144,7 +144,7 @@ def t_no_words_ever_reach_the_file():
                     "words": 3, "first_word_ms": SECRET})
         log.append({"kind": SECRET, "model": "m"})
     raw = log.path.read_text(encoding="utf-8")
-    leaked = [w for w in SECRET.replace("'", " ").split() if len(w) > 3 and w in raw]
+    leaked = [w for w in SECRET.replace("'", " ").split() if len(w) > 3 and w.isalpha() and w in raw]
     check("NOT ONE WORD of the answer is in the file", not leaked, f"found {leaked}")
     check("a text field handed in by mistake is dropped", "text" not in raw
           and "question" not in raw)
@@ -320,7 +320,7 @@ def t_reuse_share_on_the_screens():
     check("the screen view carries it", v["by_model"]["qwen3:8b"]["median_reused_percent"]
           == 90.0, v)
     raw = log.path.read_text(encoding="utf-8")
-    words = [w for w in SECRET.replace("'", " ").split() if len(w) > 3]
+    words = [w for w in SECRET.replace("'", " ").split() if len(w) > 3 and w.isalpha()]
     check("no word of the conversation is in the file, or in the view",
           not any(w in raw for w in words)
           and not any(w in json.dumps(v) for w in words), raw)

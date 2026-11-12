@@ -393,12 +393,7 @@ def _live_int(key: str, default: int, lo: int, hi: int) -> int:
 def _installed_models(url: Optional[str] = None) -> set:
     """Names Ollama reports, or an empty set when it cannot be asked."""
     try:
-        try:
-            import jarvis_local_http
-            _open = jarvis_local_http.urlopen
-        except Exception:
-            _open = urllib.request.urlopen
-        with _open((url or lane_url()) + "/api/tags", timeout=2.0) as resp:
+        with urllib.request.urlopen((url or lane_url()) + "/api/tags", timeout=2.0) as resp:
             doc = json.loads(resp.read().decode("utf-8"))
         return {str(m.get("name") or "") for m in (doc.get("models") or [])
                 if isinstance(m, dict)} | {str(m.get("model") or "") for m in (doc.get("models") or [])}

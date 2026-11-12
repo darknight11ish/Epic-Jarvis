@@ -448,12 +448,7 @@ class LocalRuntime:
         req = urllib.request.Request(url, data=data, headers=headers,
                                      method=method)
         try:
-            try:
-                import jarvis_local_http
-                _open = jarvis_local_http.urlopen
-            except Exception:
-                _open = urllib.request.urlopen
-            with _open(req, timeout=timeout or self.timeout) as r:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as r:
                 body = r.read()
         except urllib.error.HTTPError as exc:
             detail = ""
@@ -763,12 +758,7 @@ class ComfyUI(LocalRuntime):
                          urllib.parse.quote(str(first.get("type") or "output"), safe="")))
         url = self.address + query
         try:
-            try:
-                import jarvis_local_http
-                _open = jarvis_local_http.urlopen
-            except Exception:
-                _open = urllib.request.urlopen
-            with _open(url, timeout=self.timeout) as r:
+            with urllib.request.urlopen(url, timeout=self.timeout) as r:
                 png = r.read()
         except Exception as exc:
             raise DrawingFailed(type(exc).__name__)

@@ -779,12 +779,7 @@ def _run(prompt: str, *, model: Optional[str] = None, url: Optional[str] = None,
         request = urllib.request.Request(
             f"{where}/api/generate", data=body,
             headers={"Content-Type": "application/json"}, method="POST")
-        try:
-            import jarvis_local_http
-            _open = jarvis_local_http.urlopen
-        except Exception:
-            _open = urllib.request.urlopen
-        with _open(request, timeout=timeout) as answer:
+        with urllib.request.urlopen(request, timeout=timeout) as answer:
             payload = json.loads(answer.read().decode("utf-8"))
     except Exception:                                          # noqa: BLE001
         return ""

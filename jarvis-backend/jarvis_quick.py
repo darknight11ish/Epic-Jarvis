@@ -8767,6 +8767,7 @@ PLUGIN_CATALOGUE = (
     ('news', 'news headlines in the morning briefing, from RSS/Atom feed addresses the owner names.'),
     ('notes-edit', 'browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and t...'),
     ('notion-obsidian', 'bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attac...'),
+    ('offline-sync', 'Two-way offline sync for mobile companion: POST /api/sync/offline-batch and GET /api/sync/status.'),
     ('photo-reminder', '"Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here.'),
     ('picture-card', '"which card draws the pictures, and what the chat does about it".'),
     ('pictures', '"ask for a picture, and keep it" (the owner\'s decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and maki...'),
