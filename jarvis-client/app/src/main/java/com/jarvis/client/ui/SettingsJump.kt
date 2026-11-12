@@ -102,7 +102,6 @@ object SettingsJump {
         // automatic-restart sentence and switch moved out of Home's status area
         // into this Settings card.
         Entry("The local model", "model-lane"),
-        Entry("On-device AI model", "on-device-model"),
         // "Screen refresh rate" (2026-10-09): its own Settings row, right after
         // Quick Settings tiles on the screen (SettingsScreen.kt), so it is next
         // to it here too. Phone-only: the desktop draws on a monitor, so no
@@ -162,5 +161,6 @@ object SettingsJump {
         // arrives with that lane's half of the feature, so there is no desktop
         // jump entry to copy words from yet.
         Entry("Hands-free", "handsfree"),
+        Entry("On-device AI model", "on-device-model"),
     )
 }

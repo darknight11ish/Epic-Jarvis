@@ -33,7 +33,10 @@ object ProjectExplorer {
     )
 
     fun mapPath(projectId: String, question: String = ""): String {
-        val q = if (question.isNotBlank()) "?q=${question.trim()}" else ""
+        val q = if (question.isNotBlank()) {
+            val encoded = java.net.URLEncoder.encode(question.trim(), "UTF-8").replace("+", "%20")
+            "?q=$encoded"
+        } else ""
         return "/api/projects/$projectId/map$q"
     }
 
