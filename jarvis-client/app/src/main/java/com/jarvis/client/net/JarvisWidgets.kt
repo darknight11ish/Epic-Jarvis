@@ -46,18 +46,18 @@ object JarvisWidgets {
 
     const val TITLE = "Widgets"
     const val DETAIL =
-        "Describe a small widget and Jarvis makes a preview: a heading, numbers, short lists, a bar " +
+        "Describe a small widget and Atlas makes a preview: a heading, numbers, short lists, a bar " +
             "and up to four buttons, from a fixed menu. You see the preview first, and nothing is added " +
             "until you tap Add. Delete removes one at once."
     const val PHONE_HINT =
         "For example: \"my next 3 reminders, my to-do count and a 10-minute timer button\". You can " +
-            "also say \"make me a widget showing ...\" to Jarvis, or ask for an arrangement like " +
+            "also say \"make me a widget showing ...\" to Atlas, or ask for an arrangement like " +
             "\"put my reminders at the top\" or \"make the count big\". Then give it a home-screen " +
             "slot below and tap \"Put it on my home screen\". If your home screen will not add a " +
-            "widget by itself, touch and hold it, choose Widgets, then Jarvis, then " +
-            "\"Jarvis widget 1\", \"2\" or \"3\"."
+            "widget by itself, touch and hold it, choose Widgets, then Atlas, then " +
+            "\"Atlas widget 1\", \"2\" or \"3\"."
     const val EMPTY = "No widgets yet."
-    const val MISSING = "Your PC's Jarvis cannot make widgets yet - run apply-patches.ps1 on the PC."
+    const val MISSING = "Your PC's Atlas cannot make widgets yet - run apply-patches.ps1 on the PC."
     const val PREVIEW_TITLE = "Preview - not added yet"
     const val MAKE_LABEL = "Make a preview"
     const val MAKING_LABEL = "Making…"
@@ -71,10 +71,10 @@ object JarvisWidgets {
     const val SLOTS_TITLE = "On your home screen"
     const val NOTHING = "Nothing"
     const val SLOT_NOTE =
-        "The home screen can be seen without unlocking Jarvis: with App lock or \"Hide memory lists " +
+        "The home screen can be seen without unlocking Atlas: with App lock or \"Hide memory lists " +
             "and chat history\" on, a home-screen widget shows counts but not the words of your " +
             "reminders, to-do items or what is playing. With App lock on, its buttons only open " +
-            "Jarvis, which asks you to unlock it first - except Stop everything. Nothing but " +
+            "Atlas, which asks you to unlock it first - except Stop everything. Nothing but " +
             "Stop everything works while the connection is catching up."
 
     /**
@@ -104,24 +104,24 @@ object JarvisWidgets {
     fun pinSentence(requested: Boolean, alreadyThere: Boolean, slot: Int): String {
         val n = slot + 1
         return when {
-            alreadyThere -> "Jarvis widget $n is already on your home screen."
+            alreadyThere -> "Atlas widget $n is already on your home screen."
             requested ->
-                "Your home screen was asked to add Jarvis widget $n. If it asks you to confirm, say yes."
+                "Your home screen was asked to add Atlas widget $n. If it asks you to confirm, say yes."
             else ->
                 "Your home screen will not add a widget by itself. Touch and hold the home screen, " +
-                    "choose Widgets, then Jarvis, then \"Jarvis widget $n\"."
+                    "choose Widgets, then Atlas, then \"Atlas widget $n\"."
         }
     }
 
     // The home-screen widget's own lines.
-    const val W_NOT_STARTED = "Jarvis could not start"
+    const val W_NOT_STARTED = "Atlas could not start"
     const val W_NOT_STARTED_SUB = "Tap to open and see why"
     const val W_NOT_PAIRED = "Not paired"
-    const val W_NOT_PAIRED_SUB = "Tap to open Jarvis and pair"
+    const val W_NOT_PAIRED_SUB = "Tap to open Atlas and pair"
     const val W_NONE = "No widget chosen"
     const val W_NONE_SUB = "Tap, then choose one under Brain, Widgets"
     const val W_STALE = "Not up to date"
-    const val W_STALE_SUB = "Tap to open Jarvis and connect"
+    const val W_STALE_SUB = "Tap to open Atlas and connect"
     const val W_GONE = "This widget was deleted"
     const val W_FAILED = "Could not read this widget"
 
@@ -132,7 +132,7 @@ object JarvisWidgets {
     const val MAX_LABEL = 40
 
     /**
-     * How many "Jarvis widget" slots the app ships: THREE, because Android
+     * How many "Atlas widget" slots the app ships: THREE, because Android
      * cannot add a widget type while the app runs, so a slot is a widget class
      * and a `<receiver>` declared in the manifest. This number is the slot
      * picker's list, so it must equal the receivers declared there -
@@ -405,7 +405,7 @@ object JarvisWidgets {
             code in 200..299 -> true to (str(obj?.get("said")) ?: "Done.")
             error != null && obj?.get("ok")?.let { isFalse(it) } == true -> false to error
             code == 404 || code == 501 -> false to MISSING
-            else -> false to "Jarvis could not do that just now."
+            else -> false to "Atlas could not do that just now."
         }
     }
 }

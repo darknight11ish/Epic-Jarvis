@@ -217,7 +217,7 @@ class ApprovalNotificationPolicyTest {
 
     @Test
     fun `the public version says exactly what the owner asked for`() {
-        assertEquals("Jarvis: 1 approval waiting", ApprovalNotificationPolicy.PUBLIC_WORDS)
+        assertEquals("Atlas: 1 approval waiting", ApprovalNotificationPolicy.PUBLIC_WORDS)
     }
 
     @Test

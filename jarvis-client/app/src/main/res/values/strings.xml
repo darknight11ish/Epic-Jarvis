@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Jarvis</string>
+    <string name="app_name">Atlas</string>
 
     <!-- App-icon shortcuts (feasibility I125, docs/FEASIBILITY-AUDIT-
          2026-09-26.md: "Talk, Note, Brief me, What did I miss; still meets
@@ -13,9 +13,9 @@
          launch - MainActivity.kt's own "the app lock outranks everything"
          composes nothing else until it is unlocked. -->
     <string name="shortcut_talk_short">Talk</string>
-    <string name="shortcut_talk_long">Talk to Jarvis</string>
+    <string name="shortcut_talk_long">Talk to Atlas</string>
     <string name="shortcut_live_short">Live</string>
-    <string name="shortcut_live_long">Jarvis Live</string>
+    <string name="shortcut_live_long">Atlas Live</string>
     <string name="shortcut_note_short">Note</string>
     <string name="shortcut_note_long">Quick note</string>
     <string name="shortcut_brief_short">Brief me</string>
@@ -38,11 +38,11 @@
       apply here.
     -->
     <string name="fgs_special_use_reason">Holds the live event connection to the
-        user\'s own Jarvis backend, running on their own machine, so approval
+        user\'s own Atlas backend, running on their own machine, so approval
         requests arrive while the screen is off.</string>
 
-    <string name="channel_link_name">Jarvis link</string>
-    <string name="channel_link_desc">Ongoing connection to your Jarvis backend.</string>
+    <string name="channel_link_name">Atlas link</string>
+    <string name="channel_link_desc">Ongoing connection to your Atlas backend.</string>
     <string name="channel_approval_name">Approvals</string>
     <string name="channel_approval_desc">A decision is waiting. This channel makes
         a sound: it is the only thing that tells you an approval arrived while the
@@ -56,7 +56,7 @@
         Rings and vibrates until you look. It uses the alarm sound, so Do Not Disturb
         lets it through if your phone allows alarms then.</string>
     <string name="channel_schedule_name">Reminders and timers</string>
-    <string name="channel_schedule_desc">Timers, scheduled reminders, and morning briefings from your Jarvis.</string>
+    <string name="channel_schedule_desc">Timers, scheduled reminders, and morning briefings from your Atlas.</string>
     <!-- Hands-free (the owner's request, 2026-11-04): its own channel, because
          whether it interrupts is a property of the channel and the owner may
          want cards read out without every one of them also making a noise. -->
@@ -72,33 +72,33 @@
     <string name="approvals_waiting">%1$d approvals waiting</string>
     <string name="approval_deny_action">Deny</string>
     <!-- The notification's Approve (owner's ask of 2026-11-02). "Approve" on a
-         write/config card still opens Jarvis for the fingerprint; the label is
+         write/config card still opens Atlas for the fingerprint; the label is
          what the owner means, not a promise that the tap alone decides. -->
     <string name="approval_approve_action">Approve</string>
     <!-- Shown instead of Approve when the card's own words are too long for the
          notification, or it cannot be approved from the phone. -->
-    <string name="approval_review_action">Review in Jarvis</string>
+    <string name="approval_review_action">Review in Atlas</string>
 
-    <string name="widget_approval_name">Jarvis approvals</string>
+    <string name="widget_approval_name">Atlas approvals</string>
     <string name="widget_approval_desc">The oldest pending approval, at a glance.
         Deny answers it directly; approving always opens the app.</string>
 
-    <!-- What every Jarvis widget draws until its first Glance update lands
+    <!-- What every Atlas widget draws until its first Glance update lands
          (res/layout/widget_initial.xml). NOT a spinner on purpose: a spinner
          promises an update is coming, and the failure this replaces was that no
          update ever came. One string for all five widgets - they all need the
          same sentence, and the difference belongs in the drawn states, not
          here. -->
-    <string name="widget_initial_headline">Jarvis</string>
-    <string name="widget_initial_words">No update yet — open Jarvis to connect.</string>
+    <string name="widget_initial_headline">Atlas</string>
+    <string name="widget_initial_words">No update yet — open Atlas to connect.</string>
 
-    <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
+    <!-- "Hey Atlas" on this phone (service/WakeWordService.kt). -->
     <!-- The three Quick Settings tile slots, as Android's tile editor lists
          them (data/QuickTiles.kt). Android's editor reads the MANIFEST, and
          the manifest cannot know which of the five actions the owner has given
          a slot - so a slot that has not been given one yet is named for the one
          thing that tap does: opens the chooser (QuickTiles.UNASSIGNED_LABEL).
-         Before 2026-10-11 these were "Jarvis tile 1" to "3", which told the
+         Before 2026-10-11 these were "Atlas tile 1" to "3", which told the
          owner nothing at all about the tile he was picking. Once a slot HAS an
          action, the tile in the shade draws that action's own name
          (QuickTiles.tileLabel). All three carry the same words on purpose:
@@ -116,58 +116,58 @@
     <string name="wake_heard_text">Heard \"hey Jarvis\" - listening to what you say next.</string>
     <string name="wake_stop">Stop listening</string>
 
-    <string name="widget_quicklink_name">Jarvis quick link</string>
+    <string name="widget_quicklink_name">Atlas quick link</string>
     <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the
         app with the hold-to-talk mic ready - it does not record from the widget itself.</string>
 
     <!-- "Widgets you describe" (widget/JarvisBoardWidget.kt; JARVIS-API.md section 86). -->
-    <string name="widget_board_name_1">Jarvis widget 1</string>
-    <string name="widget_board_name_2">Jarvis widget 2</string>
-    <string name="widget_board_name_3">Jarvis widget 3</string>
-    <string name="widget_board_desc">A widget you described to Jarvis - choose which under Brain,
+    <string name="widget_board_name_1">Atlas widget 1</string>
+    <string name="widget_board_name_2">Atlas widget 2</string>
+    <string name="widget_board_name_3">Atlas widget 3</string>
+    <string name="widget_board_desc">A widget you described to Atlas - choose which under Brain,
         Widgets. Its buttons are the small Quick Settings tile actions only.</string>
 
-    <!-- "Jarvis Calendar" (widget/CalendarWidget.kt; JARVIS-API.md section 163): the
+    <!-- "Atlas Calendar" (widget/CalendarWidget.kt; JARVIS-API.md section 163): the
          sixth widget, and the only one that shows the plan for the day. Under App
          lock, or with "Hide memory lists and chat history" on, it draws one
          sentence and no title at all - the home screen is public. -->
-    <string name="widget_calendar_name">Jarvis Calendar</string>
-    <string name="widget_calendar_desc">Today\'s date and your next three events, from Jarvis\'s own
+    <string name="widget_calendar_name">Atlas Calendar</string>
+    <string name="widget_calendar_desc">Today\'s date and your next three events, from Atlas\'s own
         calendar on your PC. Hidden while App lock or \"Hide memory lists\" is on. Tap to open the
         calendar.</string>
 
-    <!-- "Floating Jarvis": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
-    <string name="fgs_avatar_overlay_reason">Draws the small "Floating Jarvis" avatar
+    <!-- "Floating Atlas": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
+    <string name="fgs_avatar_overlay_reason">Draws the small "Floating Atlas" avatar
         the owner turned on, over other apps, so it stays reachable by voice
-        without switching back to Jarvis.</string>
-    <string name="channel_avatar_name">Floating Jarvis</string>
+        without switching back to Atlas.</string>
+    <string name="channel_avatar_name">Floating Atlas</string>
     <string name="channel_avatar_desc">Shown for as long as the floating avatar is on
         screen.</string>
-    <string name="avatar_overlay_title">Floating Jarvis</string>
+    <string name="avatar_overlay_title">Floating Atlas</string>
     <string name="avatar_overlay_text">The small avatar is on your screen. Tap "Turn off"
-        below, or turn "Floating Jarvis" off in Settings.</string>
+        below, or turn "Floating Atlas" off in Settings.</string>
     <string name="avatar_overlay_stop">Turn off</string>
 
-    <!-- The Jarvis Live extras (2026-09-28): the Quick Settings tile, and the
+    <!-- The Atlas Live extras (2026-09-28): the Quick Settings tile, and the
          second Share entry (activity-alias ShareToLive). -->
-    <string name="live_tile_label">Jarvis Live</string>
+    <string name="live_tile_label">Atlas Live</string>
     <string name="share_to_live_label">Talk about this in Live</string>
 
     <!-- The link tile's own label (service/LinkTileService.kt draws
          data/QuickTiles.kt's LINK_TILE_LABEL into the shade; the manifest gives
          this same string to that service, so the tile editor and the shade
-         agree). It NAMES THE TAP: this tile mutes and unmutes Jarvis's spoken
+         agree). It NAMES THE TAP: this tile mutes and unmutes Atlas's spoken
          interruptions. Before 2026-10-10 the manifest said @string/app_name and
-         the shade drew "Jarvis", so a tile with Jarvis's own name on it
-         silently muted Jarvis. -->
-    <string name="link_tile_label">Mute Jarvis</string>
+         the shade drew "Atlas", so a tile with Atlas's own name on it
+         silently muted Atlas. -->
+    <string name="link_tile_label">Mute Atlas</string>
 
     <!-- App control's accessibility service (service/JarvisAccessibilityService.kt;
          res/xml/accessibility_service_config.xml; the owner's decision of
          2026-10-19). Android shows these words on ITS OWN Accessibility screen,
          so they say plainly what the service may do, that it is off unless the
          owner turns it on, and that the PC asks before every step. -->
-    <string name="accessibility_service_label">Jarvis app control</string>
-    <string name="accessibility_service_summary">Let Jarvis read the screen and perform one approved step</string>
-    <string name="accessibility_service_description">Off unless you turn it on here. When on, Jarvis can read the controls in the app in front - never a password field - and send a masked copy to your own PC, so your PC can show you ONE step to approve. Nothing is tapped, typed or swiped until you approve that step on your PC, and a screen that changes stops the run. Jarvis never decides anything by itself.</string>
+    <string name="accessibility_service_label">Atlas app control</string>
+    <string name="accessibility_service_summary">Let Atlas read the screen and perform one approved step</string>
+    <string name="accessibility_service_description">Off unless you turn it on here. When on, Atlas can read the controls in the app in front - never a password field - and send a masked copy to your own PC, so your PC can show you ONE step to approve. Nothing is tapped, typed or swiped until you approve that step on your PC, and a screen that changes stops the run. Atlas never decides anything by itself.</string>
 </resources>
