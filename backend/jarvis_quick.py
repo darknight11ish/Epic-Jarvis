@@ -27027,9 +27027,17 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # so a private chat answers these from the local code, never the model.
     "preset_current", "bench_history", "bench_progress", "self_changes",
     "preset_models", "preset_best", "preset_best_all", "model_before", "bench_how",
+    # The desktop companion's READS (2026-11-12): each answers from this PC's
+    # own preferences file in fixed local words and writes nothing, so a private
+    # chat gets the real answer rather than a model's guess about a feature it
+    # cannot see. The two CHANGES (`companion_toggle`, `companion_set_style`)
+    # are deliberately NOT here: each one SAVES a preference to disk, and a
+    # private chat refuses a change like every other action - the same rule the
+    # read-aloud and Wi-Fi switches below are listed under. They were on this
+    # list in the PR's first version, which let a private chat write settings
+    # (review finding C1, 2026-11-13).
     "companion_overview", "companion_avatar_info", "companion_guidance_info",
-    "companion_askbar_info", "companion_settings_show", "companion_toggle",
-    "companion_set_style",
+    "companion_askbar_info", "companion_settings_show",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -28562,7 +28570,7 @@ _AW_COMPANION_TOGGLE = re.compile(
     r"screen\s+pointing|cursor\s+ask\s+bar|ask\s+bar|askbar|3d\s+cards|voice\s+reactive)\s*\??$", re.I)
 
 _AW_COMPANION_STYLE = re.compile(
-    r"set\s+(?P<setting>avatar\s+style|avatar\s+size|guidance\s+tone|style|size|tone)\s+to\s+"
+    r"set\s+(?P<setting>avatar\s+style|avatar\s+size|guidance\s+tone)\s+to\s+"
     r"(?P<value>[a-zA-Z0-9_\-]+)\s*\??$", re.I)
 
 #: "What changed about you?" is the JOURNAL's. A question about the shipped
