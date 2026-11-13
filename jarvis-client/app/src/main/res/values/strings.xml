@@ -92,7 +92,7 @@
     <string name="widget_initial_headline">Atlas</string>
     <string name="widget_initial_words">No update yet — open Atlas to connect.</string>
 
-    <!-- "Hey Atlas" on this phone (service/WakeWordService.kt). -->
+    <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
     <!-- The three Quick Settings tile slots, as Android's tile editor lists
          them (data/QuickTiles.kt). Android's editor reads the MANIFEST, and
          the manifest cannot know which of the five actions the owner has given
