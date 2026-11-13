@@ -100,6 +100,16 @@ by agents that had no shared view of what the others were doing:
 Every one of those was paid for twice. That is the whole reason this register
 exists: one line in one file, before the work starts.
 
+## Closed in this change (history, not an open defect)
+
+**DEF-065** - the phone's settings backup carried the desktop's address
+(`host`), so a restore wrote that address into `jarvis_client` while the
+existing pairing token stayed in `jarvis_secure`: the token the phone already
+held would then be used against whatever host the backup named. Found and fixed
+on 2026-11-13; the closed row and its proof are in `docs/defect-register.tsv`,
+and the id is deliberately not in the table below because nothing about it is
+open.
+
 ## Open defects
 
 | id | owner | claimed_at | status | files | evidence | checkout |

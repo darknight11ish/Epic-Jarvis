@@ -39074,9 +39074,13 @@ they were.
   notification allow-list. `EXCLUDED_FILES` names every other preferences
   file with its reason: `jarvis_secure` (the pairing token, behind the
   Android Keystore), the models cache, captured notification content, pinned
-  chats and the crash log. A restored phone therefore PAIRS AGAIN, exactly as
-  after a reinstall - that is the property that makes the file safe to keep
-  anywhere.
+  chats and the crash log. `EXCLUDED_KEYS` also keeps the desktop's ADDRESS
+  out of the one listed file that could carry it: the token stays in
+  `jarvis_secure`, so restoring an address over the stored one would send a
+  credential the phone already holds to whatever host the backup names. The
+  address is typed again when the phone pairs. A restored phone therefore
+  PAIRS AGAIN, exactly as after a reinstall - that is the property that makes
+  the file safe to keep anywhere.
 - **The token is not an input field.** The Android half asks for the listed
   files by name and never opens the token's file; the pure snapshot writer
   walks the allow-list even if a caller hands it every preference file, and the
@@ -39087,11 +39091,14 @@ they were.
 - **Fail closed, with plain words.** A wrong password or a tampered first
   segment is one answer (GCM cannot tell them apart): "Either the password is
   wrong or this file has been damaged. It was not opened, and nothing on this
-  phone was changed." A truncated file, a foreign file, an unencrypted file and
-  a newer format each have their own sentence. The whole file authenticates
-  BEFORE any preference is written, so no partial restore exists. A password
-  shorter than 8 characters is refused when SAVING; restoring accepts whatever
-  password the file was made with.
+  phone was changed." A truncated file, a foreign file and an unencrypted file
+  share the one "damaged" sentence; a newer format has its own "update the app
+  first" sentence. The whole file authenticates BEFORE any preference is
+  written, so a file that fails to authenticate changes nothing. The write
+  itself is one preferences file at a time, so a write that fails partway is
+  reported as such, and settings restored before it may already be in place.
+  A password shorter than 8 characters is refused when SAVING; restoring
+  accepts whatever password the file was made with.
 - **No route and no PC.** The PC's own backup is a different feature on the
   "Backups" card (section 45), with its own recovery code; the phone cannot
   read or write it, and nothing from this file is sent anywhere. The file goes
