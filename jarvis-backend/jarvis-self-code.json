@@ -2,13 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
-<<<<<<< HEAD
- "ref": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
- "built_at": "2026-11-12T20:01:37-08:00",
-=======
- "ref": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
- "built_at": "2026-11-12T18:48:06-08:00",
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+ "ref": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
+ "built_at": "2026-11-12T20:03:51-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4599,11 +4594,8 @@
     "changelog.d/2026-11-10-github-review-and-record-gate.md",
     "changelog.d/2026-11-10-github-switch-door.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
-<<<<<<< HEAD
-    "changelog.d/2026-11-10-phone-top-strip-in-more-and-history.md",
-=======
     "changelog.d/2026-11-10-phone-approves-tool-switches.md",
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+    "changelog.d/2026-11-10-phone-top-strip-in-more-and-history.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/2026-11-11-github-union-0-2-448.md",
@@ -4760,12 +4752,9 @@
     "decisions.d/2026-11-10-github-review-and-record-gate.md",
     "decisions.d/2026-11-10-github-switch-door.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
-<<<<<<< HEAD
-    "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
-=======
     "decisions.d/2026-11-10-phone-approves-tool-switches.md",
+    "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/2026-11-11-github-union-0-2-448.md",
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5213,11 +5202,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-<<<<<<< HEAD
-   "file_count": 837,
-=======
-   "file_count": 845,
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+   "file_count": 847,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6300,55 +6285,29 @@
  ],
  "recent_commits": [
   {
-<<<<<<< HEAD
+   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
+   "date": "2026-11-12",
+   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the main merge"
+  },
+  {
    "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
    "date": "2026-11-12",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
   },
   {
-   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
-   "date": "2026-11-11",
-   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
+   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
+   "date": "2026-11-12",
+   "subject": "fix(union): make the gate base the state the patch stack really installs"
   },
   {
-   "sha": "7f11e73afd14dba487344f1477214cc0479b66eb",
-   "date": "2026-11-11",
-   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the main merge"
-  },
-  {
-   "sha": "80df89fd2ff639885f8c21e22f5016e708b59d6a",
-   "date": "2026-11-11",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-claims-2026-11-10"
-  },
-  {
-   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
-   "date": "2026-11-11",
-   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
-  },
-  {
-   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
-  },
-  {
-   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
-  },
-  {
-   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
-   "date": "2026-11-10",
-   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
-  },
-  {
-   "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
-   "date": "2026-11-10",
-   "subject": "fix: the record check's two reasons use plain words (wave 16E)"
-=======
    "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
    "date": "2026-11-12",
    "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
   },
   {
    "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
@@ -6361,30 +6320,9 @@
    "subject": "fix(union): 0.2.448 pins, records and the two 2026-11-11 field-test defects"
   },
   {
-<<<<<<< HEAD
-   "sha": "4126e49744f5c6ee67597772bf223fd5ae7b316e",
-   "date": "2026-11-10",
-   "subject": "fix(records): the generated files follow this branch, so the claims register passes again"
-  },
-  {
-   "sha": "1087d81c11f59f35059032c54d84da81c18b02a1",
-   "date": "2026-11-10",
-   "subject": "Merge pull request #1222 from darknight11ish/integration/wave16-2026-11-10"
-  },
-  {
-   "sha": "a577d460e097a3c0c449b647492b3a8e9c8571fa",
-   "date": "2026-11-10",
-   "subject": "feat(phone): the top strip splits - safety stays on Home, the rest opens from More, and History gets a row"
-  },
-  {
-   "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
-   "date": "2026-11-10",
-   "subject": "test(ci): the wave-16 CI catch - diet hints, AST source pins, a real probe, and the no-vec skip"
-=======
    "sha": "8475a145e864e64fa899ae32bd178acaca568b86",
    "date": "2026-11-11",
    "subject": "fix(base): the base README is its own document, not a copy of backend/README.md"
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
   },
   {
    "sha": "543d12b2b06d27e866f246ade04421ce5d0930e9",
@@ -6407,11 +6345,6 @@
    "subject": "fix(union): repair two merge-resolution artifacts (a missing profile brace and an orphaned test check)"
   },
   {
-<<<<<<< HEAD
-   "sha": "1acd8758c98659902730b19ce95055cb2268f362",
-   "date": "2026-11-10",
-   "subject": "fix: the desktop Tools page suites pin 65 switches, because wave 16 adds the PR cockpit, the carded merge and the carded fix-and-push"
-=======
    "sha": "53a424509ebe786a7d4e2e5e23cb60c3a3030810",
    "date": "2026-11-11",
    "subject": "Merge commit '9f0d947abce618f050f494583b45f283dd60a852' into integration/github-union-02447-2026-11-11"
@@ -6432,6 +6365,11 @@
    "subject": "assemble: github parity step 2 - nine actions"
   },
   {
+   "sha": "7f11e73afd14dba487344f1477214cc0479b66eb",
+   "date": "2026-11-11",
+   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the main merge"
+  },
+  {
    "sha": "30e8c6ab7166f2243bd17317e95b26fca3f5738f",
    "date": "2026-11-11",
    "subject": "assemble: 16B - github authoring lane (PR #1224)"
@@ -6442,42 +6380,16 @@
    "subject": "assemble: 16E - github review tools lane (PR #1225)"
   },
   {
-   "sha": "a922fb4a466b635aa1ff41e4c01d9892a9a23dce",
+   "sha": "80df89fd2ff639885f8c21e22f5016e708b59d6a",
    "date": "2026-11-11",
-   "subject": "feat(github): the 2026-11-10 Step 2 parity - nine actions, card-free reads, carded issue close/reopen"
-  },
-  {
-   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
-   "date": "2026-11-11",
-   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
-  },
-  {
-   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
-  },
-  {
-   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
-  },
-  {
-   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
-   "date": "2026-11-10",
-   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
-  },
-  {
-   "sha": "b7341af45432cb076505ebc9366508a01fd9e9c1",
-   "date": "2026-11-10",
-   "subject": "feat(asks-first): the GitHub switch door - one master switch, a switchable read row, and card-free GitHub reads (2026-11-10)"
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-claims-2026-11-10"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1434
+   "files": 1436
   },
   {
    "path": "jarvis-desktop/",
@@ -6507,11 +6419,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-<<<<<<< HEAD
-   "files": 234
-=======
-   "files": 238
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+   "files": 239
   },
   {
    "path": "videos/",
@@ -6521,11 +6429,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-<<<<<<< HEAD
-   "files": 151
-=======
-   "files": 155
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+   "files": 156
   },
   {
    "path": "plugins/",
@@ -6599,21 +6503,15 @@
   }
  ],
  "coverage": {
-<<<<<<< HEAD
-  "tracked_files": 5611,
-  "covered": 5139,
-  "excluded": 472,
-=======
-  "tracked_files": 5623,
-  "covered": 5147,
-  "excluded": 476,
->>>>>>> 264484aee5a411f26b2bb013e4fcbb9fa5096e32
+  "tracked_files": 5628,
+  "covered": 5150,
+  "excluded": 478,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 220,
+   "count": 222,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
