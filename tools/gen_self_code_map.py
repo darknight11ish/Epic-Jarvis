@@ -271,7 +271,7 @@ SUBSYSTEMS = (
             "jarvis_support", "jarvis_support_widget", "jarvis_tool_updates",
             "jarvis_repomap", "jarvis_handoff", "jarvis_handoff_front",
             "jarvis_handoff_mode", "jarvis_rea", "jarvis_form_review",
-            "jarvis_obfuscation",
+            "jarvis_companion", "jarvis_obfuscation",
         ),
         "paths": (),
         "key_modules": ("jarvis_ui_control", "jarvis_screen", "jarvis_open",
@@ -279,7 +279,7 @@ SUBSYSTEMS = (
         "tests": ("backend/test_ui_control.py", "backend/test_screen_turn.py",
                   "backend/test_app_control.py", "backend/test_sandbox_exec.py",
                   "backend/test_pc_facts.py", "backend/test_repomap.py",
-                  "backend/test_obfuscation.py"),
+                  "backend/test_companion.py", "backend/test_obfuscation.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/JARVIS-API.md"),
     },
     {
