@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
- "built_at": "2026-11-13T13:51:00-08:00",
+ "ref": "206eb0e09be58d6701d5095230abc6919cf0acd7",
+ "built_at": "2026-11-13T14:29:07-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6314,6 +6314,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
+   "date": "2026-11-13",
+   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
+  },
+  {
+   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
    "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
@@ -6402,16 +6412,6 @@
    "sha": "50a2db3dbe65abff2b2b1b6d2b2460884180bd2c",
    "date": "2026-11-13",
    "subject": "Merge origin/main (ad895ed) into feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "ad895ed1c013bda37904357bc77e63fef22a3ae6",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1234 from darknight11ish/fix/patch-history-rebuild-2026-11-13"
-  },
-  {
-   "sha": "06832e9ce9b3ab72992777c72c0ee4daf844f85a",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the recent-changes module and the self-code map"
   }
  ],
  "top_level": [
