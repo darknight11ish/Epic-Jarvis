@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b2bf4e79656dd6e308112eaed37bec154180a684",
- "built_at": "2026-11-13T04:32:33-08:00",
+ "ref": "d98f63866aaaa3be1a0230b4678558db52bfa8a4",
+ "built_at": "2026-11-13T05:03:02-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6293,6 +6293,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "d98f63866aaaa3be1a0230b4678558db52bfa8a4",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the feature catalogue, recent changes and self-code map"
+  },
+  {
    "sha": "b2bf4e79656dd6e308112eaed37bec154180a684",
    "date": "2026-11-13",
    "subject": "feat(phone): encrypted settings backup and a sha256-pinned update manifest"
@@ -6386,11 +6391,6 @@
    "sha": "543d12b2b06d27e866f246ade04421ce5d0930e9",
    "date": "2026-11-11",
    "subject": "Merge remote-tracking branch 'origin/main' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "2034e45c2e751602a8e6f69b43744f9164670f55",
-   "date": "2026-11-11",
-   "subject": "feat(github): the 2026-11-11 field-test rulings - Q-C per-repo merge checks, Q-G ci_status reads, Q3/Q4 card-free reads, Q-D/Q7 review tools"
   }
  ],
  "top_level": [
