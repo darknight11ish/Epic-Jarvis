@@ -245,7 +245,7 @@
   },
 
   "known_limitations": [
-    "Functional evidence comes from the probe harness, not from the real jarvis-client app. The probe mirrors Kotlin's instance-method calling shape and passed, but the Kotlin LlamaNative/TokenSink integration, R8 keep rules, UI, switch-off default and the 5 s idle / 180 s cap policy are the integration lane's work.",
+    "Functional evidence comes from the probe harness, not from the real jarvis-client app. The probe mirrors Kotlin's instance-method calling shape and passed, but the Kotlin LlamaNative/TokenSink integration, R8 keep rules, UI, switch-off default and the idle-unload / 180 s cap policy are the integration lane's work.",
     "The probe's LlamaNative class is a Java stand-in with the same binary name and signatures; the actual Kotlin object, its packaging and R8-minified build were not executed on the phone in this lane.",
     "The library is a baseline arm64-v8a build: ggml's dotprod/fp16/i8mm/SVE feature checks did not enable those paths (no -march or per-CPU-variant backends), so it is portable but not the fastest possible CPU build. 19.92 tokens/s on a 0.5B Q4_K_M (repeat runs 19.66-20.00) is the measured baseline. Runtime CPU variants (PrivateLM's approach) or -march tuning are E3 follow-ups.",
     "The x86_64 library is built and statically checked (8 symbols, 0x4000 alignment) but was not executed: no Android emulator was started in this lane.",

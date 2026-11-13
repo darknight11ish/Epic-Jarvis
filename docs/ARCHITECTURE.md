@@ -5184,22 +5184,38 @@ what is missing is only the Settings screen agreeing about who turned it off.
   the model is brought by the owner as a file (E1 has no in-app download;
   that is E2). It adds no permission, raises no approval card and logs
   nothing; the phone does no speech-to-text on this path or any other. The
-  two time rules are the engine's own: 5 seconds with nothing asked unloads
-  the model, and one reply is hard-capped at 180 seconds, so a slow model
-  cannot hold the phone's memory or the screen forever. **Honest limits, on
-  the record:** the native `libjarvis_llama.so` is the native lane's prebuilt
+  time rules are the engine's own: **five minutes** with nothing asked (or
+  typed) unloads the model, one reply is hard-capped at 180 seconds, and
+  leaving the Local AI screen frees the model immediately, so a slow model
+  cannot hold the phone's memory or the screen forever. **The idle window was
+  5 seconds, and the field test changed it (2026-11-13):** on the owner's
+  phone the first build unloaded the model 16 seconds after Load, before a
+  person could start typing (logcat `model loaded` at 06:15:04.976, `model
+  unloaded` at 06:15:20.870), so the measured correction is five minutes; the
+  180-second reply cap is unchanged. **Honest limits, on the record:** the
+  native `libjarvis_llama.so` is the native lane's prebuilt
   artefact (CPU-only llama.cpp, both 64-bit ABIs, 16 KB page aligned, with
   provenance and MIT licences in `jarvis-client/native/`) and is integrated
   into the same pull request; it was proven on the owner's own phone by that
   lane's standalone probe - a small Qwen2.5-0.5B Q4_K_M model loaded in
   262 ms and generated 24 tokens in 1.2 s, about 19.92 tokens/s, with
   cancellation, unload and destroy passing. **That is a PASS for the LIBRARY,
-  not for the app.** The in-app Local AI screen has not been driven on a real
-  phone, so the screen's own tokens/s line says "not measured", a field-test
-  row for the app is BLOCKED rather than PASS, and no number from the probe is
-  shown in the UI; `features/features.json` is deliberately unchanged until
-  that measurement exists, and `tools/check_parity.py` has nothing to classify
-  because no route is added.
+  not for the app.** The app itself was then driven on the same phone on
+  2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B Q4_K_M
+  each produced a real reply to `Hello, who are you?`, at 27.1, 13.8 and
+  7.7 tokens/s as shown on the screen and matched by the engine's own
+  `generated N token(s) in M ms` line, and the 3B model was accepted by the
+  RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The in-app
+  **Import** (SAF picker) was not exercised - the models were `adb push`ed -
+  so that row is NOT-TESTED, not PASS. Screenshots are black because the
+  activity sets `FLAG_SECURE`, which is correct, so the evidence is
+  uiautomator XML and logcat. Two usability defects the test found are fixed
+  in the same pull request: the composer (draft, Send, Clear) is pinned above
+  the keyboard inset instead of being a list item the keyboard clipped out of
+  the accessibility tree, and the draft gained a Clear action.
+  `features/features.json` stays unchanged until a feature row is measured on
+  the real screen; `tools/check_parity.py` has nothing to classify because no
+  route is added.
 
 ## 9. Where the backend lives
 

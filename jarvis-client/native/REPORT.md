@@ -267,7 +267,7 @@ still available at `build\arm64-v8a\lib\libjarvis_llama.so`, and
 
 * **The app-level integration is not tested.** The probe mirrors the Kotlin
   object’s instance-method shape and passed, but the real Kotlin `LlamaNative`
-  class, `LocalEnginePolicy` (5 s idle unload / 180 s cap), UI, R8 build and APK
+  class, `LocalEnginePolicy` (idle unload / 180 s hard cap), UI, R8 build and APK
   packaging are the integration lane’s work.
 * **x86_64 was built and statically checked but not executed** (no emulator was
   started). If emulator smoke matters before merge, run
