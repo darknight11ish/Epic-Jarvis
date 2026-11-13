@@ -38954,3 +38954,93 @@ history of their own days.
   twelve writes) plus the two local review gates. An EXISTING PC's settings file
   is never overwritten: the two appear on its "New - currently off" pill and the
   master switch offers them in the same one card.
+
+## 219. The desktop companion: seven chat answers that say what is NOT built (2026-11-12)
+
+**What it is.** `backend/jarvis_companion.py` (a shipped module, with its
+byte-identical `jarvis-backend/` twin) is the settings store and the answer text
+behind the desktop companion, plus two pure data helpers that shape a plain
+description: one for a step-by-step guidance workflow and one for a 3D card.
+Nothing in the product draws any of it. **The avatar's point set and its
+sound-reactive wave formula are deliberately absent:** both were line-for-line
+translations of AGPL-3.0-licensed code in the Roamies showcase, and this
+MIT-licensed project may not carry them, so both were deleted on 2026-11-13.
+
+**What it is not, and why the words matter.** No window of the desktop app and
+no screen of either app draws an avatar, a guidance overlay, a cursor ask bar or
+a 3D card, and the module does not read another program's controls, recognise
+text in a picture, click, type or take a screenshot. The first version of this
+feature said all of those things in Jarvis's own voice - in the reachable
+overview and in a function no caller reached - and its review of 2026-11-13 (PR
+#1229) is why every sentence now starts from the truth: **the visual and screen
+half is NOT BUILT in this build.** A thing that is not built is reported as not
+built, never as a success and never as a maybe.
+
+**The seven intents.** All seven are answered by `jarvis_quick.py`'s own fast
+path in fixed local words - never by the model, which cannot know what this PC's
+preferences file says:
+
+| said in chat | intent | what it answers |
+|---|---|---|
+| "what are your desktop companion capabilities", "companion tools", "roamies capabilities", "show companion capabilities" | `companion_overview` | what exists (four saved preferences and the two description shapers) and what does not |
+| "explain your holographic avatar", "how does your avatar work", "explain the wave sphere" | `companion_avatar_info` | the saved style and size, and that the avatar's geometry and wave are not here |
+| "how does screen guidance work", "explain screen pointing", "explain screen guidance" | `companion_guidance_info` | what a guidance description holds, and that nothing is highlighted and nothing waits for a click |
+| "what is the cursor ask bar", "how does the ask bar work" | `companion_askbar_info` | the saved preference, and that no floating box exists |
+| "show companion settings", "what are my companion settings" | `companion_settings_show` | the saved preferences, each labelled as a preference |
+| "turn on/off avatar, screen guidance, cursor ask bar, 3D cards, voice reactive" | `companion_toggle` | saves the switch and says it saved it |
+| "set avatar style / avatar size / guidance tone to <word>" | `companion_set_style` | saves the value and says it saved it |
+
+The style grammar deliberately needs its noun: a bare "set style to ..." is
+**not** this feature's sentence, so it cannot swallow an ordinary setting that
+happens to be called style, size or tone (review finding L1, 2026-11-13).
+
+**Reads and changes, and the private chat.** The five READ intents are on
+`_PRIVATE_DETERMINISTIC_READS` - so a private chat gets this PC's real answer
+instead of a model's guess - and on `READ_ONLY_INTENTS`, so none of them can
+take away what "cancel that" would undo. The two CHANGE intents are on neither:
+each writes a settings file, so a private chat answers them with the one private
+refusal ("A private chat can read, search, and answer, but it doesn't change
+settings, save items, or run actions...") and the file does not move. That is
+the same rule `read_aloud_set` and `wifi_reconnect_set` are listed under. Both
+were on the read whitelist in the pull request's first version, which is what
+let a private chat write settings (review finding C1).
+
+**The preference file.** `companion_settings.json` in Jarvis's own settings
+folder - `OPENJARVIS_HOME` when set, else `OPENJARVIS_CONFIG_DIR` /
+`JARVIS_CONFIG_DIR`, else `~/.openjarvis` - because that is the folder the test
+runner points at a throwaway directory for every suite, so the suite is
+hermetic. It holds ten values (five on/off switches, a style, a size, a tone, a
+shortcut) and it is the only thing this feature writes. Every switch ships OFF:
+nothing draws them, so a switch reading ON would be a presence the product does
+not have. A value the file holds that is not one of the allowed words is shown
+as "not set", never echoed into an answer (review finding L3).
+
+**No route, and no app surface.** The feature adds no HTTP route and no HUD,
+desktop or phone screen, so `tools/check_parity.py` has nothing to classify and
+`docs/ARCHITECTURE.md` section 8 records the one-sided absence and why.
+`features/features.json` gains no row for the same reason: the Features screen
+lists what the owner can use, and there is nothing to use here beyond a saved
+preference.
+
+**The safety list is the shared one.** `jarvis_companion.denied_app_reason()`
+asks `jarvis_ui_control.denied_process_refusal()` - the ONE enforced desktop
+hard denylist that already refuses a click or a keystroke in a password vault, a
+terminal, the sign-in and UAC prompts, Task Manager, Registry Editor and the
+security-settings windows - and keeps no list of its own. A full path is reduced
+to the program's own file name first: the list this feature first shipped
+compared the whole lowercased string, so `C:\Windows\System32\cmd.exe` was
+allowed while `cmd.exe` was refused. When the list cannot be read the answer is
+a refusal, never "allowed". Nothing calls it today because nothing here clicks
+or types; it is the door any future screen control must come through, and it
+cannot drift from the gate that will enforce it. The module's own ten-word
+"risky action" list was removed for the same reason: no caller consulted it, so
+it is not presented as a guard.
+
+**Tests.** `backend/test_companion.py` proves, with checks that fail on the
+first version of the code: a saved switch is reported as saved and a failed save
+as a failure; the point set is on the unit sphere and a louder sound really
+moves a point further; a full-path `cmd.exe`, `wt.exe` and the password vaults
+are refused by the shared list while Notepad is allowed; no answer contains any
+of the dropped claims and every answer says the visual half is not built; a
+corrupt settings value is never echoed into an answer; and a private chat's
+"turn off avatar" returns the one refusal with the file on disk unchanged.
