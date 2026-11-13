@@ -19041,7 +19041,7 @@ cannot - secrets in it are painted solid black; a picture with nothing to hide
 goes on untouched; one that cannot be checked is NOT handed on, and both the
 model's text and the answer itself say so. The note beside the answer counts the
 places covered. Both apps say, in the same words, "Secrets in pictures you attach
-are covered with black boxes before Jarvis looks." Test: `py -3
+are covered with black boxes before Atlas looks." Test: `py -3
 backend\test_chat_picture.py` (a fake key and card number are blacked out at the
 right boxes; each way a picture cannot be checked is withheld; the model stub never
 receives the original bytes; no cleaner installed = withheld). JARVIS-API section
