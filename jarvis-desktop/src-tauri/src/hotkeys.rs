@@ -57,7 +57,7 @@ pub struct Action {
 pub const ACTIONS: &[Action] = &[
     Action {
         id: "toggle_quickbar",
-        label: "Show or hide the Jarvis bar",
+        label: "Show or hide the Atlas bar",
         default: "Alt+Space",
         hint: "From anywhere, whatever program is in front.",
     },
@@ -894,7 +894,7 @@ mod tests {
             .collect();
         set.insert("quick_note".into(), "Alt+Space".into());
         let err = validate(&set).expect_err("two actions on one combination were accepted");
-        assert!(err.contains("Show or hide the Jarvis bar"), "{err}");
+        assert!(err.contains("Show or hide the Atlas bar"), "{err}");
         assert!(err.contains("Quick note"), "{err}");
     }
 
@@ -1139,7 +1139,7 @@ mod tests {
         // moved Alt+Space is retried on the key they actually chose.
         let spec = action(SUMMON_ID).expect("the summon action exists");
         assert_eq!(spec.default, "Alt+Space");
-        assert_eq!(spec.label, "Show or hide the Jarvis bar");
+        assert_eq!(spec.label, "Show or hide the Atlas bar");
     }
 
     #[test]

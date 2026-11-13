@@ -74,7 +74,7 @@ pub(crate) const SETUP_PATH: &str = "/api/setup";
 pub(crate) const PROGRESS_PATH: &str = "/api/setup/progress";
 
 /// The toast's title, and the tray row's opening words.
-pub const TITLE: &str = "Personalize Jarvis";
+pub const TITLE: &str = "Personalize Atlas";
 
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const POST_TIMEOUT: Duration = Duration::from_secs(15);

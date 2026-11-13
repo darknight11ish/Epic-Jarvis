@@ -2581,8 +2581,8 @@ await check("a refused HUD decision says so on the card, in the command's own wo
   // Windows Hello not set up, a stale link, App lock: the command refuses and
   // writes the sentence. The card must carry it rather than the button going
   // quiet, which is the "i have no idea what happens" the owner reported.
-  const refusal = "App lock is on, so approvals are made in the Jarvis bar, not the Jarvis HUD. "
-    + "The Jarvis bar is opening - approve it there";
+  const refusal = "App lock is on, so approvals are made in the Atlas bar, not the Atlas HUD. "
+    + "The Atlas bar is opening - approve it there";
   const { page, problems } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false, decideFails: refusal,
       pending: [{ id: "7", action: "send_email", tier: "ask", replaces: false }] });
@@ -2602,7 +2602,7 @@ await check("a refused HUD decision says so on the card, in the command's own wo
   }));
   await page.close();
   assert.match(out.why, /App lock is on/, `the card said "${out.why}"`);
-  assert.match(out.why, /not the Jarvis HUD/, "the card did not say which window refused");
+  assert.match(out.why, /not the Atlas HUD/, "the card did not say which window refused");
   assert.equal(out.settled, false, "the card is still dimmed after a refusal");
   assert.equal(out.yesDisabled, false, "Approve stayed dead after a refusal, so it cannot be retried");
   assert.equal(out.stillThere, true, "a refused card was taken off screen");
@@ -4666,7 +4666,7 @@ await check("P0.6: Windows is asked for the monochrome presentation of the two d
 const GALAXY_GRAPH = {
   counts: { models: 2, tools: 3, facts: 2, documents: 1, knowledge: 1, skills: 1 },
   nodes: [
-    { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+    { id: "core", label: "Atlas", group: "core", weight: 6 },
     { id: "model:local", label: "qwen3.5:9b", group: "model", weight: 3 },
     { id: "model:jarvis-escalate", label: "jarvis-escalate", group: "model", weight: 3 },
     { id: "cluster:reason", label: "Reasoning", group: "cluster", weight: 3 },
@@ -4937,7 +4937,7 @@ await check("GALAXY v2: the lens is remembered, like the other cosmetic view cho
 
 function bigGalaxyGraph(){
   const nodes = [
-    { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+    { id: "core", label: "Atlas", group: "core", weight: 6 },
     { id: "model:local", label: "qwen3.5:9b", group: "model", weight: 3 },
   ];
   for(let i = 0; i < 294; i += 1){
@@ -6716,7 +6716,7 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
   // What the page read while the reveal was in force.
   const whole = {
     nodes: [
-      { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+      { id: "core", label: "Atlas", group: "core", weight: 6 },
       { id: "model:local", label: "qwen3.5:9b", group: "model" },
       { id: "fact:1", label: FACT_SENTENCE, group: "fact" },
       { id: "entity:1", label: "Priya", group: "entity" },
@@ -6728,7 +6728,7 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
   // own Rust test pins it - fact and entity gone, the counts kept, `hidden`).
   const redacted = {
     nodes: [
-      { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+      { id: "core", label: "Atlas", group: "core", weight: 6 },
       { id: "model:local", label: "qwen3.5:9b", group: "model" },
     ],
     links: [],

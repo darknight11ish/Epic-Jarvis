@@ -1,5 +1,5 @@
 <meta charset="utf-8" />
-<title>Jarvis Faces</title>
+<title>Atlas Faces</title>
 <!-- The fonts are the same three the kit asked Google for, bundled. The
      content security policy blocks a remote stylesheet, so the original
      link silently fell back to system fonts. -->
@@ -142,7 +142,7 @@ html.display-mode #display-canvas{display:block;width:100%;height:100%}
        this is the first thing Tab lands on. -->
   <a class="skip" href="#grid" id="skip-to-faces">Skip to the faces</a>
   <div class="lbl"><span id="face-n">24</span> faces · 50 colours · 12 patterns</div>
-  <h1>Choose Jarvis's face</h1>
+  <h1>Choose Atlas's face</h1>
   <p class="lede">Click a face to see it large, then press <b>Use this face</b>. It is saved at once — the phone wears it too — and <b>Undo</b> puts the old one back. The controls just below change the colour and pattern Jarvis shows for each thing it is doing; press <b>Save</b> after changing those.</p>
 </header>
 
@@ -5217,7 +5217,7 @@ function drawStateOverlay(g, w, h, s, fx, col){
   }
 }
 
-/* THE TWO STILL RINGS ROUND A FACE: "Jarvis isn't connected" and "something
+/* THE TWO STILL RINGS ROUND A FACE: "Atlas isn't connected" and "something
  * went wrong". Both are drawn by the app OVER the face (not in the shader),
  * outside its own transforms, so the shake and the tap flinch never move
  * them; both are STATIC on purpose - no pulse, no fade, nothing that could
@@ -7021,7 +7021,7 @@ async function bootDisplay() {
   const describe = () => {
     const words = wordsOf
       ? wordsOf({ state: LIVE_STATE, offline: LIVE_OFFLINE, focus: LIVE_FOCUS })
-      : (LIVE_OFFLINE ? "Jarvis isn't connected" : "Jarvis's face: " + LIVE_STATE);
+      : (LIVE_OFFLINE ? "Atlas isn't connected" : "Atlas's face: " + LIVE_STATE);
     if(words !== spoken){ spoken = words; canvas.setAttribute("aria-label", words); }
     document.documentElement.setAttribute("data-face-offline", String(LIVE_OFFLINE));
   };
@@ -7576,7 +7576,7 @@ async function loadAppearance() {
       ? JSON.parse(JSON.stringify(loaded.bindings)) : {};
     applyDocument(loaded);
     if (loaded.source === "default") saveState("nothing saved yet");
-    else if (loaded.shared) saveState("loaded from Jarvis — the phone sees this too", "ok");
+    else if (loaded.shared) saveState("loaded from Atlas — the phone sees this too", "ok");
     else saveState(loaded.note || "loaded from this machine only");
   } catch (error) {
     LOAD_FAILED = true;
@@ -7628,7 +7628,7 @@ function saveDocument(doc, words) {
 async function saveAppearance() {
   const doc = currentDocument();
   const ok = await saveDocument(doc, loaded => loaded.shared
-    ? "saved to Jarvis — the phone sees this too"
+    ? "saved to Atlas — the phone sees this too"
     : (loaded.note || "saved on this machine only"));
   if (ok && IS_TAURI) SAVED_BINDINGS = JSON.parse(JSON.stringify(doc.bindings));
 }
@@ -7642,7 +7642,7 @@ function faceName(id) {
 function saveFace(undone) {
   const face = SOLO_FACE || null;
   return saveDocument({ face, bindings: SAVED_BINDINGS }, loaded => {
-    const what = face ? `${faceName(face)} is Jarvis's face now` : "No face chosen — each device uses its own";
+    const what = face ? `${faceName(face)} is Atlas's face now` : "No face chosen — each device uses its own";
     const where = loaded.shared ? " — the phone wears it too" : ` — ${loaded.note || "saved on this machine only"}`;
     return `${undone ? "Undone. " : ""}${what}${where}`;
   });
@@ -7709,7 +7709,7 @@ async function answerOffer(answer) {
   try {
     const r = await TAURI.core.invoke("answer_face_voice_offer", { face, answer });
     if (!r || r.ok !== true) {
-      saveState(String((r && r.error) || "Jarvis did not say whether it changed."), "bad");
+      saveState(String((r && r.error) || "Atlas did not say whether it changed."), "bad");
       buttons.forEach(b => { b.disabled = false; });
       return;
     }

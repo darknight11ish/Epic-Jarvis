@@ -1142,7 +1142,7 @@
    * 2c-bis. The answer's own open door (2026-10-31)
    *
    * THE BUG THIS FIXES (the owner's own words, reproduced in the HUD):
-   * typing "open settings" here answered "Opening Jarvis settings on this PC."
+   * typing "open settings" here answered "Opening Atlas settings on this PC."
    * and no window opened; "open the second brain" was answered as if "second
    * brain" were a program on this PC, and nothing opened either. The backend
    * was telling the truth about a door THIS window never walked through: the
@@ -2606,7 +2606,7 @@
    *
    * AND IT IS ONE BUTTON THAT TOGGLES (the owner's ask of 2026-10-09, with a
    * screenshot): its label follows what is on screen - "Open the Jarvis bar"
-   * while the bar is hidden, "Hide the Jarvis bar" while it is shown - and
+   * while the bar is hidden, "Hide the Atlas bar" while it is shown - and
    * clicking it again hides the bar. The state reaches this page from the
    * shell, never from the click: see `barOnScreen` below.
    *
@@ -2643,7 +2643,7 @@
    * and fails unless the two agree - value by value, by running this code.
    * ---------------------------------------------------------------- */
   var OPEN_BAR = "Open the Jarvis bar";
-  var HIDE_BAR = "Hide the Jarvis bar";
+  var HIDE_BAR = "Hide the Atlas bar";
 
   /* The localStorage key src/hud-window.js exports as OPEN_BAR_KEY. */
   var OPEN_BAR_KEY = "jarvis.hud.openBar";
@@ -2653,7 +2653,7 @@
    * and pushes it on the feed's own "bar" channel, because the bar can also
    * go away by itself - losing focus, its X, an open-a-chat call from another
    * window - and a label that only followed this button's own clicks would go
-   * on saying "Hide the Jarvis bar" with nothing on screen to hide.
+   * on saying "Hide the Atlas bar" with nothing on screen to hide.
    *
    * A page that has just loaded has heard nothing yet, and a bar summoned
    * before it loaded is already up, so the shell pushes the state again on
@@ -2816,7 +2816,7 @@
    * what the Jarvis bar's gear and the widget's gear call - plain_errors.rs's
    * `open_fix_place {place: "settings"}`, navigation only, through the app
    * lock like every other way in - so there is NO new Tauri command and no
-   * new Rust code. It keeps the same "Jarvis settings" name for a screen
+   * new Rust code. It keeps the same "Atlas settings" name for a screen
    * reader as the bar's and the widget's gears, and since 2026-10-27 it draws
    * the PAGE's own stroke gear (24-unit grid, fill none, currentColor,
    * stroke-width 1.8) instead of the bar's filled 16-unit one: the owner
@@ -2843,7 +2843,7 @@
    * the widget's offline card stayed dead. tests/bar-chrome.mjs holds both
    * halves.
    * ---------------------------------------------------------------- */
-  var GEAR_SAID = "Jarvis settings";
+  var GEAR_SAID = "Atlas settings";
 
   function settingsFromHud() {
     var tauri = window.__TAURI__;
@@ -2855,7 +2855,7 @@
       })
       .catch(function (err) {
         hudMicNote(
-          "Could not open Jarvis settings: " +
+          "Could not open Atlas settings: " +
             String((err && err.message) || err) +
             ". Open them from the Jarvis tray icon."
         );

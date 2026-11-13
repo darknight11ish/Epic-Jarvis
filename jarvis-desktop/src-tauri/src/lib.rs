@@ -599,12 +599,12 @@ fn ingest_clipboard(app: &AppHandle) {
             emit_quickbar(app, events::CLIPBOARD_INJECT, payload);
         }
         Ok(_) => {
-            commands::notify(app, "Jarvis", "The clipboard holds no text to ingest.");
+            commands::notify(app, "Atlas", "The clipboard holds no text to ingest.");
         }
         Err(err) => {
             commands::notify_failed(
                 app,
-                "Jarvis",
+                "Atlas",
                 "The clipboard could not be read.",
                 &err.to_string(),
                 commands::Details::Log,
@@ -850,7 +850,7 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
         eprintln!("[jarvis] {message}");
         commands::notify_failed(
             app,
-            "Jarvis — HUD misconfigured",
+            "Atlas — HUD misconfigured",
             "The HUD window could not start.",
             &message,
             commands::Details::Log,
@@ -902,7 +902,7 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
         HUD_LABEL,
         tauri::WebviewUrl::App("jarvis_hud.html".into()),
     )
-    .title("Jarvis")
+    .title("Atlas")
     .inner_size(1280.0, 820.0)
     .min_inner_size(960.0, 640.0)
     .center()
@@ -2054,7 +2054,7 @@ pub fn run() {
                             crate::crash_notes::record("backend", "start", &err);
                             commands::notify_failed(
                                 &supervisor,
-                                "Jarvis — backend",
+                                "Atlas — backend",
                                 "The backend could not be started.",
                                 &err,
                                 commands::Details::CrashNotes,
@@ -2174,7 +2174,7 @@ pub fn run() {
                          reaches everything.",
                         if refused.len() == 1 { "it" } else { "them" }
                     );
-                    commands::notify(&handle, "Jarvis Desktop: hotkeys in use", &body);
+                    commands::notify(&handle, "Atlas Desktop: hotkeys in use", &body);
                 }
                 // R6 (2026-10-21): the Alt+Space race is now SELF-HEALING for the
                 // first minute of logon. The summon key refused above is retried
