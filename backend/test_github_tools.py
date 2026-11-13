@@ -375,6 +375,26 @@ def _json_object(raw):
     return json.loads(raw.decode("utf-8"))
 
 
+def _auth_header_is_basic(value, token):
+    """True only for the header git's ENDPOINT accepts - measured 2026-11-13.
+
+    GitHub's REST API takes `Authorization: Bearer <token>`; its GIT endpoint
+    rejects that form (`remote: invalid credentials`, `fatal: Authentication
+    failed`, rc 128) and accepts
+    `Authorization: Basic base64("x-access-token:" + token)` (rc 0, refs
+    listed). So the check DECODES what git is really handed and compares it to
+    the literal `x-access-token:<token>`, rather than rebuilding the expected
+    string the same way the module does.
+    """
+    prefix = "Authorization: Basic "
+    if not isinstance(value, str) or not value.startswith(prefix):
+        return False
+    try:
+        raw = base64.b64decode(value[len(prefix):].encode("ascii"), validate=True)
+    except (ValueError, UnicodeEncodeError):
+        return False
+    return raw == ("x-access-token:" + token).encode("utf-8")
+
 
 class _Token:
     """The saved token, for the length of one block. Always restored."""
@@ -1964,11 +1984,13 @@ def t_fix_prepare_copies_the_pr_into_its_own_scratch_folder():
               len(clone) == 1 and "https://github.com/darknight11ish/"
               "Epic-Jarvis.git" in clone[0]["args"]
               and str(target) in clone[0]["args"], clone)
-        check("the token rides in git's own environment config, never the argv",
+        check("the token rides in git's own environment config - in the BASIC "
+              "form git's endpoint accepts - never the argv",
               clone[0]["env"].get("GIT_CONFIG_COUNT") == "1"
               and clone[0]["env"].get("GIT_CONFIG_KEY_0") == "http.extraheader"
-              and clone[0]["env"].get("GIT_CONFIG_VALUE_0")
-              == f"Authorization: Bearer {TOKEN}", clone[0]["env"])
+              and _auth_header_is_basic(
+                  clone[0]["env"].get("GIT_CONFIG_VALUE_0"), TOKEN),
+              clone[0]["env"])
         check("... and no argument on the clone command line says -c or carries "
               "the token",
               "-c" not in clone[0]["args"]
@@ -2263,8 +2285,8 @@ def t_the_push_run_rechecks_everything_then_pushes_once():
         check("the token is passed in the ENVIRONMENT, never the command line",
               push["env"].get("GIT_CONFIG_COUNT") == "1"
               and push["env"].get("GIT_CONFIG_KEY_0") == "http.extraheader"
-              and push["env"].get("GIT_CONFIG_VALUE_0")
-              == f"Authorization: Bearer {TOKEN}", push["env"])
+              and _auth_header_is_basic(
+                  push["env"].get("GIT_CONFIG_VALUE_0"), TOKEN), push["env"])
         check("... and is in none of the push arguments",
               not any(TOKEN in a for a in push["args"]), push["args"])
         check("... and no word of the answer prints it",
@@ -2364,9 +2386,87 @@ def t_the_push_run_rechecks_everything_then_pushes_once():
               not any(TOKEN in " ".join(c["args"]) for c in git.calls),
               [c["args"] for c in git.calls if TOKEN in " ".join(c["args"])])
         check("... and the push itself carried it in the environment",
-              all(c["env"].get("GIT_CONFIG_VALUE_0") ==
-                  f"Authorization: Bearer {TOKEN}" for c in git.calls
-                  if c["args"][:1] == ["push"]), git.calls[-1] if git.calls else {})
+              all(_auth_header_is_basic(c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
+                  for c in git.calls if c["args"][:1] == ["push"]),
+              git.calls[-1] if git.calls else {})
+
+
+def t_git_auth_is_basic_and_one_helper_serves_both_git_stages():
+    """GitHub's GIT endpoint needs Basic, not Bearer - measured 2026-11-13.
+
+    The live field test failed with "authentication issue". The cause was not the
+    token: the REST API takes `Authorization: Bearer <token>` (so every read
+    worked), while `git ls-remote` against the SAME repository exited **128**
+    with `remote: invalid credentials` / `fatal: Authentication failed`. The same
+    command with `Authorization: Basic base64("x-access-token:" + token)`
+    exited **0** and listed the refs. So the value git is handed must DECODE to
+    exactly `x-access-token:<token>`, must not say Bearer, and BOTH stages (the
+    prepare clone and the push) must get it from the one `_git_auth_env` - a
+    second copy is what would drift back.
+    """
+    env = GH._git_auth_env(TOKEN)
+    check("one config entry is set, as git's env config, and it is http.extraheader",
+          env.get("GIT_CONFIG_COUNT") == "1"
+          and env.get("GIT_CONFIG_KEY_0") == "http.extraheader"
+          and set(env) == {"GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0",
+                           "GIT_CONFIG_VALUE_0"}, env)
+    value = env.get("GIT_CONFIG_VALUE_0") or ""
+    check("the header starts with `Authorization: Basic `",
+          value.startswith("Authorization: Basic "), value[:40])
+    check("... it does not say Bearer anywhere - the form git refuses",
+          "bearer" not in value.lower(), value[:40])
+    decoded = base64.b64decode(value[len("Authorization: Basic "):].encode("ascii"))
+    check("... and it decodes to `x-access-token:<token>`, the user name git wants",
+          decoded == ("x-access-token:" + TOKEN).encode("utf-8"), decoded[:24])
+
+    # BOTH authenticating stages, through their real seams: the prepare clone,
+    # then the push. A recorder around the one helper shows each stage asked it.
+    seen = []
+    real = GH._git_auth_env
+
+    def recorded(token):
+        seen.append(token)
+        return real(token)
+
+    GH._git_auth_env = recorded
+    try:
+        with _Scratch() as box:
+            prepare_git = FakeGit()
+            r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+            out = _run_request(r, Routed([
+                ("/pulls/1116", (200, _pr_doc())),
+                ("/check-runs", (200, json.dumps({"check_runs": []}))),
+            ]), git=prepare_git)
+            check("the prepare stage runs", out.get("ok") is True, out)
+            folder = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+            check("... and made the scratch folder the push stage uses",
+                  folder.is_dir(), str(folder))
+            push_git = _push_git()
+            push = GH.plan_fix_and_push({"repo": "darknight11ish/Epic-Jarvis",
+                                         "number": "1116", "stage": "push",
+                                         "worktree": str(folder)}, git=push_git)
+            out2 = _run_request(push, Routed(
+                [("/pulls/1116", (200, _pr_doc()))]), git=push_git)
+            check("the push stage runs", out2.get("ok") is True, out2)
+    finally:
+        GH._git_auth_env = real
+    check("both authenticating stages asked the ONE helper for the header",
+          len(seen) == 2, seen)
+    check("... the prepare clone carried the Basic header, not Bearer",
+          bool([c for c in prepare_git.calls if c["args"][:1] == ["clone"]])
+          and all(_auth_header_is_basic(c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
+                  for c in prepare_git.calls if c["args"][:1] == ["clone"]),
+          [c["env"] for c in prepare_git.calls])
+    check("... and so did the push",
+          bool(push_git.pushes())
+          and all(_auth_header_is_basic(c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
+                  for c in push_git.pushes()),
+          [c["env"] for c in push_git.pushes()])
+    check("... and neither stage put the header or the token in an argument",
+          not any(TOKEN in " ".join(c["args"])
+                  or "Authorization" in " ".join(c["args"])
+                  for c in prepare_git.calls + push_git.calls),
+          prepare_git.commands() + push_git.commands())
 
 
 def t_fix_and_push_run_refuses_unapproved_and_unknown_stages():
@@ -2690,8 +2790,8 @@ def t_open_pr_prepares_then_pushes_and_opens_one_pull_request():
         check("prepare copies the repository and makes the new branch",
               out.get("ok") is True, out)
         check("... the clone carries the token in the ENVIRONMENT, not argv",
-              any(c["env"].get("GIT_CONFIG_VALUE_0")
-                  == f"Authorization: Bearer {TOKEN}" for c in git.calls)
+              any(_auth_header_is_basic(c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
+                  for c in git.calls)
               and not any(TOKEN in " ".join(c["args"]) for c in git.calls),
               git.commands())
         marker = json.loads(Path(GH._open_marker_path(target)).read_text(
@@ -3169,6 +3269,7 @@ if __name__ == "__main__":
                    t_the_push_card_shows_the_commits_files_and_exact_command,
                    t_the_push_plan_refuses_every_unsafe_folder,
                    t_the_push_run_rechecks_everything_then_pushes_once,
+                   t_git_auth_is_basic_and_one_helper_serves_both_git_stages,
                    t_fix_and_push_run_refuses_unapproved_and_unknown_stages,
                    t_the_twins_are_byte_identical,
                    t_the_two_shipped_tomls_are_one_file,

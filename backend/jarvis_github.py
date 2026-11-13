@@ -2100,10 +2100,26 @@ def _git_auth_env(token: str) -> dict:
     `Get-CimInstance Win32_Process` and ps can read) and never in the folder's
     own config file. Both the clone (prepare) and the push use this one function,
     so the two stages cannot drift apart.
+
+    WHY BASIC AND NOT BEARER - measured on the owner's PC, 2026-11-13. GitHub's
+    REST API accepts `Authorization: Bearer <token>`, which is why every GitHub
+    read here worked. GitHub's GIT endpoint does not: a direct
+    `git ls-remote https://github.com/darknight11ish/jarvis-coding-field-test.git`
+    with the Bearer form exited **128** with `remote: invalid credentials` and
+    `fatal: Authentication failed`, and the SAME command with
+    `Authorization: Basic base64("x-access-token:" + token)` exited **0** and
+    listed the refs. So the prepare clone and the push could never authenticate
+    while this said Bearer - that is what failed the live field test with
+    "authentication issue". Git wants the Basic form, `x-access-token` as the
+    user name and the token as the password (GitHub's documented shape for a
+    token over git). The token still stays in this environment config and out of
+    `argv`; it is never logged, and this is the only place the header is built.
     """
+    basic = base64.b64encode(
+        ("x-access-token:" + token).encode("utf-8")).decode("ascii")
     return {"GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "http.extraheader",
-            "GIT_CONFIG_VALUE_0": f"Authorization: Bearer {token}"}
+            "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}"}
 
 
 def _default_git(args, *, cwd: Optional[str] = None,

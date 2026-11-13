@@ -57,7 +57,8 @@ def check(name, cond, detail=""):
 
 def write(p: Path, text: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text, encoding="utf-8", newline="")
+    with p.open("w", encoding="utf-8", newline="") as f:
+        f.write(text)
 
 
 def t_the_tool_is_ascii_only():

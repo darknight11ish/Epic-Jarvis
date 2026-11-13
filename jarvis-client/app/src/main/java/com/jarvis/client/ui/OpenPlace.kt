@@ -87,6 +87,7 @@ object OpenPlace {
         // "The local model" (2026-10-31): the automatic-restart sentence and
         // switch moved off Home into this Settings card.
         "model-lane" to Where.Go(Screen.SETTINGS, "model-lane"),
+        "on-device-model" to Where.Go(Screen.SETTINGS, "on-device-model"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,
@@ -408,6 +409,7 @@ object OpenPlace {
         // are rows this app already has under the same name.
         "notifications" to Where.Go(Screen.SETTINGS, "jarvis-notify"),
         "model-lane" to Where.Go(Screen.SETTINGS, "model-lane"),
+        "on-device-model" to Where.Go(Screen.SETTINGS, "on-device-model"),
     )
 
     /**
