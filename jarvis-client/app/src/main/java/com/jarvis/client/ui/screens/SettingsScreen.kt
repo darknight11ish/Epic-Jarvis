@@ -168,33 +168,40 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // like "App control" above - and every index below it moved down by one.
     "protection" to 18,
     "backup" to 19,
-    "watch-notify" to 20,
-    "phone-notify" to 21,
+    // "Phone settings backup" (2026-11-13, the copy-over wave): THIS
+    // phone's own settings, sealed into one password-locked file. It sits
+    // right under the PC's "Backups" card so the two are read together and
+    // neither is mistaken for the other; every index below it moved down by
+    // one. It is always drawn (no catalogue menu id), and restoring a wiped
+    // phone must never be hideable, so MenuVisibilityTest lists it too.
+    "phone-backup" to 20,
+    "watch-notify" to 21,
+    "phone-notify" to 22,
     // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
     // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
     // Android's own per-app notification screen, not a second copy of the PC's
     // Notifications card. It sits with the two other notification rows, which
     // moved every index below it down by one on that day.
-    "jarvis-notify" to 22,
-    "screen-look" to 23,
-    "browser-engine" to 24,
+    "jarvis-notify" to 23,
+    "screen-look" to 24,
+    "browser-engine" to 25,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day,
     // and by one more when the search box landed above the jump list.
-    "handoff" to 25,
+    "handoff" to 26,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
     // captcha rows are together; every index below it moved down by one - and
     // by one more for "Notifications from Jarvis" above it.
-    "handoff-front" to 26,
-    "devices" to 27,
-    "quick-tiles" to 28,
+    "handoff-front" to 27,
+    "devices" to 28,
+    "quick-tiles" to 29,
     // "The local model" (2026-10-31, the owner's screenshot): the
     // automatic-restart sentence and switch moved here from the top of Home.
     // It sits right after Quick Settings tiles and before the screen's own
     // phone-display rows, so every number below it moved down by one.
-    "model-lane" to 29,
+    "model-lane" to 30,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
@@ -203,53 +210,57 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // screen, item by item`, which reads this map against the screen's real row
     // order - and by backend/test_settings_registry.py, which does the same from
     // the Python side. Both moved down one more for "Approval cards" above.
-    "screen-rate" to 30,
+    "screen-rate" to 31,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 31,
+    "limits" to 32,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
-    "idle-new" to 32,
+    "idle-new" to 33,
     // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
-    "sandbox" to 33,
+    "sandbox" to 34,
     // "Learning" (2026-10-28, the settings audit's G1): the two learning
     // switches, which had no Settings row on either app before this. It sits
     // after the sandbox and before Personalize Jarvis; every index below it
     // moved down by one.
-    "learning" to 34,
+    "learning" to 35,
     // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03; JARVIS-API
     // section 147): the PC's twenty-five questions in seven sections and its
     // READ-ONLY plan, drawn by SetupQuestionnairePlate.kt. A row added at the
     // end moves no other number.
-    "setup-questionnaire" to 35,
+    "setup-questionnaire" to 36,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
-    "all-features" to 36,
+    "all-features" to 37,
     // "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
     // Jarvis's own, ON by default, and "disableable in Settings"). One switch:
     // the PC's own `calendar-settings.json`, read and written through
     // GET /api/calendar and POST /api/calendar/settings, so the phone and the
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
-    "calendar" to 37,
+    "calendar" to 38,
     // "Home screen" (2026-11-02): the phone's own Edit HUD. A row added at the
     // end of the screen moves no other number - the same reason the two above
     // it were added there.
-    "edit-hud" to 38,
+    "edit-hud" to 39,
     // "Hands-free" (the owner's request, 2026-11-04): the mode that reads each
     // approval card out loud and takes a spoken "confirm" or "deny", and writes
     // a text message to a contact. A row added at the END of the screen moves no
     // other number, which is why it is here rather than beside Voice or Approval
     // cards where it would read more naturally - the same reason the three rows
     // above it were added at the end. The jump list carries it last too.
-    "handsfree" to 39,
+    "handsfree" to 40,
+    // "On-device AI model" (2026-11-12): the row whose plate says plainly that
+    // the on-device model and the offline two-way sync are DESIGN ONLY and not
+    // built in this copy. Added at the END to preserve all preceding index pins.
+    "on-device-model" to 41,
 )
 
 /**
@@ -351,9 +362,30 @@ fun SettingsScreen(
      * rather than drawn doing nothing.
      */
     onPairWithPc: (() -> Unit)? = null,
+    /**
+     * "Phone settings backup" (2026-11-13, the copy-over wave): this phone's
+     * OWN settings, sealed into one password-locked file and restored from
+     * one. The row is always drawn, like "File from your PC" and "Protected
+     * from Jarvis", because there is no catalogue menu id for it: the phone's
+     * settings are not a PC switch, and hiding the row that restores them
+     * would leave a wiped phone with no way back in.
+     *
+     * [onSavePhoneBackup] / [onRestorePhoneBackup] are `MainActivity`'s,
+     * because the file chooser is Android's own document picker; the plate
+     * only collects the password. Null in previews and tests, where the
+     * buttons then do nothing rather than pretend.
+     *
+     * [backupLine] is the one sentence the last save or restore produced -
+     * success or a refusal with its reason - and [backupLineIsWarning] says
+     * which colour it is drawn in.
+     */
+    backupLine: String? = null,
+    backupLineIsWarning: Boolean = false,
+    backupBusy: Boolean = false,
+    onSavePhoneBackup: ((CharArray) -> Unit)? = null,
+    onRestorePhoneBackup: ((CharArray) -> Unit)? = null,
     /** "Floating Jarvis" - saved on this phone only, so it needs no `canAct` gate. */
-    floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,
-    onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
+    floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,    onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
     /**
      * "Picture-in-picture" (2026-10-30, `docs/PIP-DESIGN.md`): the small window
      * that stays on screen while the owner uses other apps. Saved on this phone
@@ -793,6 +825,21 @@ fun SettingsScreen(
             // catalogue yet, so it is always drawn, like "App control" above.
             if (drawn("protection")) item(key = "protection") { ProtectedSection(canAct = canAct) }
             if (menus.shows("settings.backup")) if (drawn("backup")) if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection(canAct = canAct) } }
+            // "Phone settings backup" (2026-11-13, the copy-over wave): the
+            // phone's OWN settings, not the PC's - so the row sits right under
+            // "Backups" where the owner would look, and says plainly which is
+            // which. Always drawn and never menu-hidden: restoring is the one
+            // way back onto a wiped phone, and there is no menu id for a
+            // phone-only preference (MenuVisibilityTest lists it as such).
+            if (drawn("phone-backup")) item(key = "phone-backup") {
+                PhoneBackupSection(
+                    busy = backupBusy,
+                    line = backupLine,
+                    lineIsWarning = backupLineIsWarning,
+                    onSave = onSavePhoneBackup ?: {},
+                    onRestore = onRestorePhoneBackup ?: {},
+                )
+            }
             if (menus.shows("settings.watch-notify")) if (drawn("watch-notify")) if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
             if (menus.shows("settings.phone-notify")) if (drawn("phone-notify")) if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {
                 MenuFrame(menus, "settings.phone-notify") {
@@ -1111,6 +1158,9 @@ fun SettingsScreen(
             // this phone's row has no menu id in the PC's own catalogue yet.
             if (drawn("handsfree")) item(key = "handsfree") {
                 HandsfreeSection(canAct = canAct)
+            }
+            if (drawn("on-device-model")) item(key = "on-device-model") {
+                OnDeviceModelPlate()
             }
             item(key = "tail") { Gap(24) }
         }

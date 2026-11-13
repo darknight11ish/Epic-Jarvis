@@ -164,6 +164,21 @@ enum class Screen {
      * and no approval card (`tools/check_parity.py` has nothing to classify).
      */
     REMINDERS,
+
+    /**
+     * "Local AI" (ui/screens/LocalAiScreen.kt in the `com.jarvis.client.localai`
+     * package, 2026-11-13): a small GGUF model running on THIS PHONE, with no
+     * PC and no internet. Opened from Home's More menu. Last, for the same
+     * reason as every entry above it: the back stack is saved as names, so a
+     * new screen must never be inserted in the middle.
+     *
+     * It adds no backend route and no permission, raises no approval card and
+     * sends nothing anywhere: the engine is local, the model file is local, and
+     * the screen ships behind a switch that is OFF. The desktop gets nothing on
+     * purpose (`docs/ARCHITECTURE.md` section 8), because there is no on-device
+     * engine there - the PC already has Ollama.
+     */
+    LOCAL_AI,
 }
 
 /**
