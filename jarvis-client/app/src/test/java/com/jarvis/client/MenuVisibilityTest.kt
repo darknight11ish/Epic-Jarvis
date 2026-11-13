@@ -487,7 +487,8 @@ class MenuVisibilityTest {
         // restores a wiped phone must not be possible.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "files", "protection", "model-lane", "edit-hud", "handsfree", "phone-backup")
+                "files", "protection", "model-lane", "edit-hud", "handsfree", "phone-backup",
+                "on-device-model")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

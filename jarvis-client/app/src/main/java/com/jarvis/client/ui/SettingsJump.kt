@@ -166,5 +166,6 @@ object SettingsJump {
         // arrives with that lane's half of the feature, so there is no desktop
         // jump entry to copy words from yet.
         Entry("Hands-free", "handsfree"),
+        Entry("On-device AI model", "on-device-model"),
     )
 }

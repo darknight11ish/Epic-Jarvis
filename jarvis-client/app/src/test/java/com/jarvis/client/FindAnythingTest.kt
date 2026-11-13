@@ -415,6 +415,7 @@ class FindAnythingTest {
                 // this entry becomes a `SETTINGS` place in MenuPlaces and both
                 // this test and MenuVisibilityTest say so.
                 "settings-row.handsfree",
+                "settings-row.on-device-model",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )

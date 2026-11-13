@@ -257,6 +257,10 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // cards where it would read more naturally - the same reason the three rows
     // above it were added at the end. The jump list carries it last too.
     "handsfree" to 40,
+    // "On-device AI model" (2026-11-12): the row whose plate says plainly that
+    // the on-device model and the offline two-way sync are DESIGN ONLY and not
+    // built in this copy. Added at the END to preserve all preceding index pins.
+    "on-device-model" to 41,
 )
 
 /**
@@ -1154,6 +1158,9 @@ fun SettingsScreen(
             // this phone's row has no menu id in the PC's own catalogue yet.
             if (drawn("handsfree")) item(key = "handsfree") {
                 HandsfreeSection(canAct = canAct)
+            }
+            if (drawn("on-device-model")) item(key = "on-device-model") {
+                OnDeviceModelPlate()
             }
             item(key = "tail") { Gap(24) }
         }
