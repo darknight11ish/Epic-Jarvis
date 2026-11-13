@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "4e71da569b3bb018c5440ea33babd62a70207c32",
- "built_at": "2026-11-13T08:16:55-08:00",
+ "ref": "61b44d6181e23a49442d023f98a3ce84edc365d5",
+ "built_at": "2026-11-13T12:28:45-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4610,6 +4610,7 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
+    "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
@@ -4772,6 +4773,7 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
+    "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
@@ -5222,7 +5224,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 860,
+   "file_count": 862,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6309,9 +6311,69 @@
  ],
  "recent_commits": [
   {
+   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
+  },
+  {
+   "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
+   "date": "2026-11-13",
+   "subject": "fix(github): a free-plan 403 on branch rules means no rules, not a blind token"
+  },
+  {
+   "sha": "379e106a094818492c11987146dea40e4b45863e",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
+  },
+  {
+   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
+  },
+  {
+   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
+  },
+  {
+   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
+  },
+  {
+   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
+  },
+  {
+   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
+   "date": "2026-11-13",
+   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
+  },
+  {
+   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
+   "date": "2026-11-13",
+   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
+  },
+  {
    "sha": "4e71da569b3bb018c5440ea33babd62a70207c32",
    "date": "2026-11-13",
    "subject": "Merge origin/main (ad895ed) into fix/reconcile-github-tools-deltas-2026-11-13"
+  },
+  {
+   "sha": "0eb5d93124b5ae7b7df13b851c5b525b1fd391e1",
+   "date": "2026-11-13",
+   "subject": "Merge H2 (PR #1228 at 5da9ba6) and H1 (PR #1227 at 50a2db3), with origin/main (ad895ed), into feature/roamies-capabilities"
+  },
+  {
+   "sha": "5da9ba6759d2ffa6113a44f2ba4685447177439e",
+   "date": "2026-11-13",
+   "subject": "Merge H1 (PR #1227 at 50a2db3) and origin/main (ad895ed) into feature/code-obfuscation-tools"
+  },
+  {
+   "sha": "50a2db3dbe65abff2b2b1b6d2b2460884180bd2c",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main (ad895ed) into feature/on-device-ai-and-mobile-harness"
   },
   {
    "sha": "ad895ed1c013bda37904357bc77e63fef22a3ae6",
@@ -6344,69 +6406,9 @@
    "subject": "chore(records): regenerate the self-code map and recent-changes module for the patch-history fragments"
   },
   {
-   "sha": "2b63ae5c986e0c03a239cca4efd08d528163bcb2",
+   "sha": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
    "date": "2026-11-13",
-   "subject": "chore: keep the PR body out of the tree (it belongs in the PR, not the repository)"
-  },
-  {
-   "sha": "8e275dd30082af426196b14a6b869095da568813",
-   "date": "2026-11-13",
-   "subject": "fix(patch-history): rebuild the history the union's patch edits left out - main's required backend jobs were red"
-  },
-  {
-   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
-  },
-  {
-   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
-   "date": "2026-11-12",
-   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
-  },
-  {
-   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
-   "date": "2026-11-12",
-   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
-  },
-  {
-   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
-   "date": "2026-11-12",
-   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
-  },
-  {
-   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
-  },
-  {
-   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
-   "date": "2026-11-12",
-   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
-   "date": "2026-11-12",
-   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
-  },
-  {
-   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
-  },
-  {
-   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
-   "date": "2026-11-12",
-   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the main merge"
+   "subject": "Merge H2d (PR #1228 at a90eace36), the self-code map rebuilt on its head"
   }
  ],
  "top_level": [
@@ -6443,7 +6445,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 245
+   "files": 246
   },
   {
    "path": "videos/",
@@ -6453,7 +6455,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 162
+   "files": 163
   },
   {
    "path": "plugins/",
@@ -6527,8 +6529,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5654,
-  "covered": 5172,
+  "tracked_files": 5656,
+  "covered": 5174,
   "excluded": 482,
   "subsystems": 27
  },

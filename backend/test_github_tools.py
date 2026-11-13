@@ -3056,6 +3056,96 @@ def t_merge_checks_are_per_repository():
           and not any("/rules/branches/" in c["url"] for c in fake.calls), out)
 
 
+def _plan_limit_body(message=None):
+    """GitHub's measured 2026-11-13 body for a rules read on a Free-plan repo.
+
+    The live field test's 403 carried exactly
+    "Upgrade to GitHub Pro or make this repository public to enable this
+    feature." - a paid-feature refusal, NOT an auth refusal.
+    """
+    return json.dumps({
+        "message": message if message is not None else
+                   ("Upgrade to GitHub Pro or make this repository public to "
+                    "enable this feature."),
+        "documentation_url": "https://docs.github.com/rest/branches/rules",
+        "status": "403"})
+
+
+def t_merge_plan_limited_rules_are_no_rules():
+    """The 2026-11-13 field test: a free-plan 403 is "no rules", not a refusal.
+
+    On the live 0.2.448 install, `github_merge_pr` refused the owner-approved
+    merge of `darknight11ish/jarvis-coding-field-test` PR #1 (head 75044fb,
+    green ci, clean) with "This GitHub token cannot read branch protection rules
+    for this repository ...". The rules endpoint had answered 403 "Upgrade to
+    GitHub Pro or make this repository public to enable this feature." - the
+    owner's plan has no branch rules for a private repository. That is the same
+    fact as a 200 naming no required contexts, so the generic rule must decide.
+    A 401, and a 403 with any other message, must still refuse exactly as ruled.
+    """
+    field_repo = "darknight11ish/jarvis-coding-field-test"
+    # 1. The measured answer: the generic rule judges the commit's own check.
+    fake = Routed(_other_repo_routes(
+        rules=(403, _plan_limit_body()),
+        checks=_checks(("ci", "completed", "success"))))
+    _r, out = _run("github_merge_pr", fake,
+                   args=_other_repo_merge_args(repo=field_repo))
+    check("free-plan 403 on branch rules: the generic rule merges a green commit",
+          out.get("ok") is True, out)
+    check("... and the answer says plainly why the generic rule applied",
+          "owner's plan does not include branch rules" in out.get("text", ""),
+          out)
+    check("... and no token refusal is printed",
+          "cannot read branch protection rules" not in out.get("text", ""), out)
+
+    # The generic rule is really JUDGING: a failing check refuses in its words,
+    # not in the token refusal's.
+    fake = Routed(_other_repo_routes(
+        rules=(403, _plan_limit_body()),
+        checks=_checks(("ci", "completed", "failure"))))
+    _r, out = _run("github_merge_pr", fake,
+                   args=_other_repo_merge_args(repo=field_repo))
+    check("... a failing check refuses with the generic rule's own words",
+          out.get("ok") is False
+          and "did not finish cleanly" in out.get("error", "")
+          and "cannot read branch protection rules" not in out.get("error", ""),
+          out)
+    check("... and nothing is merged",
+          not [c for c in fake.calls if c["method"] == "PUT"], out)
+
+    # Case-insensitive, and either documented phrase.
+    for label, message in (
+            ("lower case", "upgrade to github pro or make this repository "
+                           "public to enable this feature."),
+            ("public phrase only", "Make this repository public to use rules.")):
+        fake = Routed(_other_repo_routes(
+            rules=(403, _plan_limit_body(message)),
+            checks=_checks(("ci", "completed", "success"))))
+        _r, out = _run("github_merge_pr", fake,
+                       args=_other_repo_merge_args(repo=field_repo))
+        check(f"free-plan 403 ({label}) still reaches the generic rule",
+              out.get("ok") is True, out)
+
+    # 2. A REAL auth failure still refuses, with the exact ruled sentence.
+    exact = ("This GitHub token cannot read branch protection rules for this "
+             "repository, so Jarvis will not merge it")
+    for label, answer in (
+            ("401 bad token", (401, json.dumps({
+                "message": "Bad credentials", "status": "401"}))),
+            ("403 unrelated message", (403, json.dumps({
+                "message": "Resource not accessible by integration",
+                "status": "403"}))),
+            ("401 empty body", (401, "{}")),
+            ("403 empty body", (403, "{}"))):
+        fake = Routed(_other_repo_routes(rules=answer))
+        _r, out = _run("github_merge_pr", fake,
+                       args=_other_repo_merge_args(repo=field_repo))
+        check(f"other repo: {label} still refuses, exactly as ruled",
+              out.get("ok") is False and exact in out.get("error", ""), out)
+        check(f"... {label}: nothing is merged and no PUT is sent",
+              not [c for c in fake.calls if c["method"] == "PUT"], out)
+
+
 def t_pr_scan_classifies_a_foreign_repo_with_its_own_checks():
     """Q-C read side: a foreign repo is judged by ITS checks, never Epic's seven.
 
@@ -3282,6 +3372,7 @@ if __name__ == "__main__":
                    t_issue_state_closes_or_reopens_one_issue,
                    t_open_pr_prepares_then_pushes_and_opens_one_pull_request,
                    t_merge_checks_are_per_repository,
+                   t_merge_plan_limited_rules_are_no_rules,
                    t_pr_scan_classifies_a_foreign_repo_with_its_own_checks,
                    t_ci_status_reads_five_runs_and_refuses_a_cut,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
