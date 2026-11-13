@@ -190,7 +190,7 @@ fun LocalAiScreen(
                         }
                         Toggle(
                             checked = state.switchOn,
-                            enabled = !state.generating,
+                            enabled = !state.generating && !state.busy,
                             onCheckedChange = { on -> scope.launch { controller.setSwitch(on) } },
                         )
                     }
@@ -437,7 +437,7 @@ private fun ChatPlate(
         Gap(6)
         if (state.lines.isEmpty() && state.streamingText.isEmpty() && !state.generating) {
             Text(
-                "Nothing asked yet. Type below, then tap Send.",
+                LocalAiWords.CHAT_EMPTY,
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )
@@ -447,7 +447,7 @@ private fun ChatPlate(
         }
         if (state.generating || state.streamingText.isNotEmpty()) {
             Text(
-                if (state.streamingText.isEmpty()) "Thinking…" else state.streamingText,
+                if (state.streamingText.isEmpty()) LocalAiWords.THINKING else state.streamingText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.textHi,
             )

@@ -119,7 +119,10 @@ class LocalAiController(
      */
     suspend fun setSwitch(on: Boolean) {
         if (closed) return
-        if (!on && _state.value.generating) {
+        if (!on && (_state.value.generating || _state.value.busy)) {
+            // A load, a copy or a reply is still running. Turning the switch
+            // off would destroy the handle underneath it; the screen disables
+            // the toggle in this state too.
             notice(WAIT_FOR_ANSWER_WORDS, problem = true)
             return
         }
@@ -206,6 +209,11 @@ class LocalAiController(
             }
         }
 
+        if (closed || closeDeferred) {
+            shutdownEngine()
+            return false
+        }
+
         return when (result) {
             is ModelStore.ImportResult.Ok -> {
                 refreshModels()
@@ -241,6 +249,7 @@ class LocalAiController(
     /** Deletes one model from this phone, and says so. */
     suspend fun deleteModel(name: String) {
         if (closed) return
+        if (_state.value.busy || _state.value.generating) return
         if (_state.value.loadedModel == name) unload()
         val deleted = withContext(dispatcher) { store.delete(name) }
         refreshModels()
@@ -309,6 +318,14 @@ class LocalAiController(
             }
         }
 
+        // The screen may have been left, or the switch flipped by a path that
+        // got past the guard, while the native load was still running. Settle
+        // it to OFF rather than claiming a READY engine that was destroyed.
+        if (closed || closeDeferred) {
+            shutdownEngine()
+            return
+        }
+
         when (result) {
             EngineResult.Ok -> {
                 policy.reset()
@@ -348,6 +365,7 @@ class LocalAiController(
         if (closed) return
         val current = engine
         withContext(dispatcher) { current?.unload() }
+        if (closed) return
         policy.reset()
         _state.update {
             it.copy(
@@ -552,7 +570,7 @@ class LocalAiController(
     fun close() {
         closed = true
         stopRequested.set(true)
-        if (_state.value.generating) {
+        if (_state.value.generating || _state.value.busy) {
             closeDeferred = true
             return
         }
@@ -625,6 +643,6 @@ class LocalAiController(
             "The model answered with nothing. Try a shorter or simpler question."
 
         const val WAIT_FOR_ANSWER_WORDS =
-            "Wait for the answer to finish, then turn it off. Nothing was unloaded."
+            "Wait for that to finish, then turn it off. Nothing was unloaded."
     }
 }

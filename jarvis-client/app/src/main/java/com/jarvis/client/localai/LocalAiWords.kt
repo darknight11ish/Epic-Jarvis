@@ -104,6 +104,12 @@ object LocalAiWords {
     /** The chat box's placeholder. */
     const val ASK_PLACEHOLDER = "Ask something small"
 
+    /** The chat's first line, before anything is asked. */
+    const val CHAT_EMPTY = "Nothing asked yet. Type below, then tap Send."
+
+    /** Shown where the answer will appear, while the phone works on it. */
+    const val THINKING = "Thinking…"
+
     /** The send action. */
     const val SEND = "Send"
 

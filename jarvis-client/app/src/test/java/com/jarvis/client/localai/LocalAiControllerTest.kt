@@ -450,6 +450,46 @@ class LocalAiControllerTest {
     }
 
     @Test
+    fun turningTheSwitchOffDuringALoadIsRefusedInWords() = runBlocking {
+        val engine = FakeLocalEngine(loadDelayMillis = 150L)
+        val controller = controller(engine = engine)
+        try {
+            controller.setSwitch(true)
+            val loading = launch(Dispatchers.Default) { controller.load("small.gguf") }
+            withTimeout(2_000L) {
+                while (!controller.state.value.busy) delay(2L)
+            }
+            controller.setSwitch(false)
+            assertTrue("the switch must stay on until the load ends", controller.state.value.switchOn)
+            assertEquals(LocalAiController.WAIT_FOR_ANSWER_WORDS, controller.state.value.notice)
+            loading.join()
+            assertEquals(EngineState.READY, controller.state.value.engine)
+            assertEquals(0, engine.destroyCalls)
+            controller.setSwitch(false)
+            assertEquals(1, engine.destroyCalls)
+        } finally {
+            controller.close()
+        }
+    }
+
+    @Test
+    fun leavingTheScreenDuringALoadDestroysTheHandleOnlyAfterItReturns() = runBlocking {
+        val engine = FakeLocalEngine(loadDelayMillis = 150L)
+        val controller = controller(engine = engine)
+        controller.setSwitch(true)
+        val loading = launch(Dispatchers.Default) { controller.load("small.gguf") }
+        withTimeout(2_000L) {
+            while (!controller.state.value.busy) delay(2L)
+        }
+        controller.close()
+        assertEquals("the handle must not be destroyed underneath the load", 0, engine.destroyCalls)
+        loading.join()
+        assertEquals(1, engine.destroyCalls)
+        assertEquals(EngineState.OFF, controller.state.value.engine)
+        assertNull(controller.state.value.loadedModel)
+    }
+
+    @Test
     fun theSettingSurvivesButTheEngineStillWaitsForATap() = runBlocking {
         val flags = MapFlags()
         val sharedStore = storeWith()

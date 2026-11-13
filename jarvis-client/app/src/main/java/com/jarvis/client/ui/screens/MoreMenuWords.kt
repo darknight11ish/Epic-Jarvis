@@ -41,7 +41,7 @@ internal object MoreMenuWords {
     const val SUBTITLE =
         "The Home cards that are not safety controls, then the chat's own " +
             "controls, the modes, and what you can send with a question. Only " +
-            "what this PC offers is listed. The last row is the phone's own " +
+            "what this PC offers is listed. The Local AI row is the phone's own " +
             "model, which needs no PC at all."
 
     /**

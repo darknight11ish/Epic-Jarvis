@@ -15,6 +15,7 @@ class FakeLocalEngine(
     private val pieces: List<String> = listOf("Hello", " from", " the", " phone."),
     private val stats: EngineStats? = EngineStats(promptTokens = 5, generatedTokens = 4, generateMillis = 500),
     private val emitDelayMillis: Long = 0L,
+    private val loadDelayMillis: Long = 0L,
 ) : LocalEngine {
 
     var createCalls: Int = 0
@@ -52,6 +53,7 @@ class FakeLocalEngine(
         loadCalls++
         lastPath = modelPath
         lastPlan = plan
+        if (loadDelayMillis > 0L) Thread.sleep(loadDelayMillis)
         if (failLoad != null) {
             modelLoaded = false
             return EngineResult.Failed(failLoad)
