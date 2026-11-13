@@ -39165,10 +39165,18 @@ The switch that turns it on ships **OFF**, no model is loaded until the owner
 taps Load, and the screen's permanent label is the honest one: *"On-device model:
 runs on this phone, not your PC."* The desktop has no counterpart on purpose -
 `docs/ARCHITECTURE.md` section 8 records why (it already has Ollama on the same
-PC, and a second on-device engine there would duplicate it) - and the public
-feature list is deliberately not changed until this screen has been driven on a
-phone, so no row claims an ability that is still unmeasured. The native library
-itself was proven on the owner's phone by the native lane's standalone probe
-(a small Qwen2.5-0.5B Q4_K_M model, about 19.92 tokens/s, with cancellation,
-unload and destroy passing); that is a PASS for the library, and the in-app
-screen's own tokens/s row stays BLOCKED until the screen itself is driven.
+PC, and a second on-device engine there would duplicate it) - and
+`features/features.json` is not regenerated in this pull request. That is no
+longer a claim that the screen is unmeasured, because the screen itself **has**
+been driven on a phone, so the words here are measured rather than designed. The
+native library itself was proven on the owner's phone by the native lane's
+standalone probe (a small Qwen2.5-0.5B Q4_K_M model, about 19.92 tokens/s, with
+cancellation, unload and destroy passing); that is a PASS for the library, and
+the app now has its own PASS too. The screen was driven on the OnePlus
+`f0a5b32b` on 2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B
+Q4_K_M each answered `Hello, who are you?` at **27.1, 13.8 and 7.7 tokens per
+second on screen**, matched by the engine's own `generated N token(s) in M ms`
+line. With the keyboard up, two further sends measured **34.5 and 34.3** tokens
+per second. The in-app **Import** (system file picker) row stays **NOT-TESTED**:
+the test models were `adb push`ed rather than imported, and a NOT-TESTED row is
+never a pass.

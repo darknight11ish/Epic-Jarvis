@@ -5256,18 +5256,20 @@ what is missing is only the Settings screen agreeing about who turned it off.
   2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B Q4_K_M
   each produced a real reply to `Hello, who are you?`, at 27.1, 13.8 and
   7.7 tokens/s as shown on the screen and matched by the engine's own
-  `generated N token(s) in M ms` line, and the 3B model was accepted by the
-  RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The in-app
-  **Import** (SAF picker) was not exercised - the models were `adb push`ed -
-  so that row is NOT-TESTED, not PASS. Screenshots are black because the
-  activity sets `FLAG_SECURE`, which is correct, so the evidence is
-  uiautomator XML and logcat. Two usability defects the test found are fixed
-  in the same pull request: the composer (draft, Send, Clear) is pinned above
-  the keyboard inset instead of being a list item the keyboard clipped out of
-  the accessibility tree, and the draft gained a Clear action.
-  `features/features.json` stays unchanged until a feature row is measured on
-  the real screen; `tools/check_parity.py` has nothing to classify because no
-  route is added.
+  `generated N token(s) in M ms` line; with the keyboard up, two further sends
+  measured 34.5 and 34.3 tokens/s on the same screen. The 3B model was accepted
+  by the RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The
+  in-app **Import** (SAF picker) was not exercised - the models were `adb
+  push`ed - so that row is NOT-TESTED, not PASS. Screenshots are black because
+  the activity sets `FLAG_SECURE`, which is correct, so the evidence is
+  uiautomator XML and logcat, and a screenshot row stays BLOCKED rather than
+  PASS. Two usability defects the test found are fixed in the same pull
+  request: the composer (draft, Send, Clear) is pinned above the keyboard inset
+  instead of being a list item the keyboard clipped out of the accessibility
+  tree, and the draft gained a Clear action. `features/features.json` is
+  unchanged in this pull request - the screen has now been measured, but the
+  measurement lives in this paragraph, not in that list; `tools/check_parity.py`
+  has nothing to classify because no route is added.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

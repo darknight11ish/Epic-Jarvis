@@ -2,7 +2,9 @@ package com.jarvis.client.localai
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,9 +77,9 @@ data class LocalAiState(
  *
  * ## Why every heavy call goes through a dispatcher
  *
- * `create`, `load`, `generate`, the model list and a file copy are all
- * blocking. They run on [dispatcher] (IO in the app, unconfined in tests), so
- * the UI thread only ever updates state.
+ * `create`, `load`, `generate`, `destroy`, the model list and a file copy are
+ * all blocking. They run on [dispatcher] (IO in the app, unconfined in tests),
+ * so the UI thread only ever updates state.
  *
  * The controller is plain Kotlin: no Android, no Compose. `LocalAiScreen` owns
  * one, calls [refreshModels] on open, [tick] about twice a second, and
@@ -99,6 +101,15 @@ class LocalAiController(
     val state: StateFlow<LocalAiState> = _state.asStateFlow()
 
     private var engine: LocalEngine? = null
+
+    /**
+     * Owns the one-off `destroy()` calls. `close()` runs on the Compose main
+     * thread when the screen leaves, and freeing a loaded multi-gigabyte model
+     * there would stall the frame; so the handle is handed to this scope and
+     * freed on [dispatcher]. A supervisor job keeps one failed free from
+     * cancelling the scope.
+     */
+    private val engineScope = CoroutineScope(SupervisorJob() + dispatcher)
 
     private var stopRequested = AtomicBoolean(false)
 
@@ -266,9 +277,9 @@ class LocalAiController(
     }
 
     /**
-     * Loads [name]. Refuses a model the tier said is too big, and refuses
-     * anything when the switch is off. This is the only method that creates
-     * the engine.
+     * Loads [name]. Refuses any model the tier did not accept - too big, or a
+     * header it could not read - and refuses anything when the switch is off.
+     * This is the only method that creates the engine.
      */
     suspend fun load(name: String) {
         if (closed) return
@@ -285,8 +296,15 @@ class LocalAiController(
             notice(NOT_HERE_WORDS, problem = true)
             return
         }
-        if (model.verdict is DeviceTiers.ModelVerdict.TooBig) {
-            notice(model.verdict.words + " " + LocalAiWords.TOO_BIG_ACTION, problem = true)
+        if (!model.verdict.fits) {
+            // Not only TooBig: an unreadable header is Unknown with fits = false,
+            // and the UI's `enabled = fits` must not be the only thing standing
+            // between that file and a native load.
+            val action = LocalAiWords.refusalLine(model.verdict)
+            notice(
+                text = if (action == null) model.verdict.words else model.verdict.words + " " + action,
+                problem = true,
+            )
             return
         }
 
@@ -564,9 +582,9 @@ class LocalAiController(
 
     /**
      * Releases the engine. If a reply is still running, only the stop flag is
-     * set here: [send] destroys the handle after the native loop returns,
-     * because destroying it underneath a running generation is a
-     * use-after-free in C++.
+     * set here: [send] hands the handle to the engine dispatcher after the
+     * native loop returns, because destroying it underneath a running
+     * generation is a use-after-free in C++.
      */
     fun close() {
         closed = true
@@ -578,11 +596,20 @@ class LocalAiController(
         shutdownEngine()
     }
 
+    /**
+     * Drops the engine and frees it on [dispatcher], never on the caller's
+     * thread: `close()` is called from `onDispose` on the Compose main thread
+     * and the end of [send] runs there too, and destroying a multi-gigabyte
+     * model inline stalls that frame. The state is settled here at once, so
+     * the screen still shows OFF; the native free itself is queued.
+     */
     private fun shutdownEngine() {
         val current = engine
         engine = null
         policy.reset()
-        runCatching { current?.destroy() }
+        if (current != null) {
+            engineScope.launch { runCatching { current.destroy() } }
+        }
         _state.update {
             it.copy(
                 engine = EngineState.OFF,

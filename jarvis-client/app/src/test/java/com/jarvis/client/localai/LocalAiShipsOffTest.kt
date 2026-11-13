@@ -4,6 +4,7 @@ import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.screens.MoreMenuWords
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -95,6 +96,43 @@ class LocalAiShipsOffTest {
         assertTrue(
             "the screen must destroy the engine when it leaves the composition",
             source("LocalAiScreen.kt").contains("onDispose { controller.close() }"),
+        )
+    }
+
+    @Test
+    fun aRefusedModelGetsTheRightSentenceAndAnUnreadableHeaderItsOwn() {
+        val tooBig = DeviceTiers.ModelVerdict.TooBig(
+            estimatedBytes = 9L,
+            budgetBytes = 1L,
+            words = "Too big for this phone.",
+        )
+        val unreadable = DeviceTiers.ModelVerdict.Unknown("Jarvis could not read this model's header.")
+        val fits = DeviceTiers.ModelVerdict.Fits(
+            contextTokens = 4096,
+            estimatedBytes = 1L,
+            shortened = false,
+            words = "Fits on this phone.",
+        )
+
+        assertEquals(LocalAiWords.TOO_BIG_ACTION, LocalAiWords.refusalLine(tooBig))
+        assertEquals(LocalAiWords.UNREADABLE_ACTION, LocalAiWords.refusalLine(unreadable))
+        assertNull("a model that fits has no refusal line", LocalAiWords.refusalLine(fits))
+        assertFalse(
+            "an unreadable header must not borrow the too-big sentence",
+            LocalAiWords.UNREADABLE_ACTION == LocalAiWords.TOO_BIG_ACTION,
+        )
+
+        // The screen asks the one helper for the line. It must not draw the
+        // too-big sentence for every refusal, which is the old `if (!fits)`
+        // branch this replaced.
+        val screen = source("LocalAiScreen.kt")
+        assertTrue(
+            "the screen must draw the per-verdict line",
+            screen.contains("LocalAiWords.refusalLine(model.verdict)"),
+        )
+        assertFalse(
+            "the screen must not draw the too-big line for every refusal",
+            screen.contains("LocalAiWords.TOO_BIG_ACTION"),
         )
     }
 

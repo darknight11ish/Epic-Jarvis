@@ -427,10 +427,11 @@ private fun ModelRow(
             style = MaterialTheme.typography.bodySmall,
             color = if (fits) chrome.textMid else chrome.warnInk,
         )
-        if (!fits) {
+        val refusal = LocalAiWords.refusalLine(model.verdict)
+        if (refusal != null) {
             Gap(2)
             Text(
-                LocalAiWords.TOO_BIG_ACTION,
+                refusal,
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textLo,
             )

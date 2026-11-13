@@ -385,7 +385,8 @@ fun SettingsScreen(
     onSavePhoneBackup: ((CharArray) -> Unit)? = null,
     onRestorePhoneBackup: ((CharArray) -> Unit)? = null,
     /** "Floating Jarvis" - saved on this phone only, so it needs no `canAct` gate. */
-    floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,    onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
+    floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,
+    onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
     /**
      * "Picture-in-picture" (2026-10-30, `docs/PIP-DESIGN.md`): the small window
      * that stays on screen while the owner uses other apps. Saved on this phone
