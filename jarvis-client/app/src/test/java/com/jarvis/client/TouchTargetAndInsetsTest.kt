@@ -113,6 +113,23 @@ class TouchTargetAndInsetsTest {
             val own = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/$screen.kt").readText()
             assertTrue("$screen keeps its own imePadding", own.contains("imePadding()"))
         }
+        // A2b, the mode underneath the inset (2026-11-13, Local AI field
+        // test): with no `windowSoftInputMode` named, Android chose
+        // `adjustPan` for this window on the owner's phone - `dumpsys window
+        // windows` read `mAttrs={(0,0)(fillxfill) sim={adjust=pan ...}}` - and
+        // panned the whole surface up when the keyboard opened. That moved the
+        // Local AI header AND its permanent "runs on this phone, not your PC"
+        // label to `[0,0][0,0]` while the keyboard was up, and it is why the
+        // old chat plate was clipped. The root's `imePadding()` cannot help
+        // against a pan: it is a second handler for the same inset. Naming
+        // resize makes the window stay put. CI runs this, and only a phone
+        // shows the pan - so the source pin is the nearest gate there is.
+        val manifest = repoFile("jarvis-client/app/src/main/AndroidManifest.xml").readText()
+        assertTrue(
+            "the activity must name adjustResize, or the system pans the whole " +
+                "window when the keyboard opens and the header leaves the screen:\n$manifest",
+            manifest.contains("android:windowSoftInputMode=\"adjustResize\""),
+        )
     }
 
     @Test
