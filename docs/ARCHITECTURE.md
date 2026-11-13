@@ -5117,10 +5117,17 @@ what is missing is only the Settings screen agreeing about who turned it off.
   own recent-changes record - the same bullets the chat's "what changed in your
   last update?" answer reads - and its one control opens Settings at the Updates
   card (`open_fix_place` with `place: "updates"`, a navigation only). **The
-  phone shows no such pane because it has nowhere for the door to go:** the
-  phone does not install or update Jarvis (the desktop's updater runs on this
-  PC), so a "What's new" pane there could describe a change and then offer
-  nothing to act on. The phone's Tutorials tab keeps the shared catalogue
+  phone shows no such pane because it has nowhere for the door to go:** that
+  pane's one control opens the PC's own Updates card, which is the desktop's
+  updater, while the phone's own updates live on Platform checks -> "This app"
+  (`net/UpdateCheck.kt`), where the published release's changes are already
+  drawn beside its own Download button. A second "What's new" pane on the phone
+  would duplicate that rather than lead anywhere the phone cannot already go.
+  (This paragraph used to say "the phone does not install or update Jarvis",
+  which stopped being true on 2026-10-11 when the phone gained its own
+  download-and-install door, and is plainly false since the 2026-11-13
+  checksum manifest - corrected here rather than left as a reason that is not
+  one.) The phone's Tutorials tab keeps the shared catalogue
   (`JARVIS-API` section 114). `tools/check_parity.py` classifies
   `/api/recent-changes` `deliberate` with this reason. The pane invents nothing:
   a module that is missing, empty or unreadable answers with a sentence saying
@@ -5163,6 +5170,31 @@ what is missing is only the Settings screen agreeing about who turned it off.
   there. Neither app gained a GitHub screen, and `tools/check_parity.py` is
   unchanged because no route was added: a GitHub screen would be deep
   configuration, which the standing rule keeps off the phone.
+
+- **The phone's own settings backup and the checksum-pinned update manifest
+  are the phone's, and that is one-sided on purpose** (2026-11-13, the
+  owner-approved copy-over wave; `docs/JARVIS-API.md` section 219;
+  `COPY-OVER-SPEC-2026-11-13.md` sections A1-A2). **Backup:** Settings ->
+  "Phone settings backup" seals THIS PHONE'S OWN settings - the face and
+  colours, the menus shown, the voice and display switches, which apps Jarvis
+  may open, and which apps may tell Jarvis about a notification - into one
+  PBKDF2 -> AES-256-GCM file (`data/EncryptedBackup.kt`,
+  `data/SettingsBackup.kt`, adapted from Mobile-Harness under MIT, credited in
+  THIRD-PARTY-NOTICES.txt), and restores them on a new or wiped phone. The
+  desktop has no counterpart and none is wanted: the PC's own backup is the
+  "Backups" card one row above, a different file with a different recovery
+  code, and the phone cannot read or write it. The pairing token is
+  deliberately NOT in the file - it stays in the Android Keystore and a
+  restored phone pairs again - and neither are chats, saved memories, pictures
+  or logs, so the file is safe to keep on a USB stick. **Update manifest:** the
+  rolling `client-latest` release now also carries `client-latest.json`,
+  holding the APK's SHA-256 and size, and the phone checks a download against
+  it before its existing pinned-certificate gate (`update/ApkUpdater.kt`,
+  adapted from Mobile-Harness under MIT; the download and certificate check
+  were already there, added 2026-10-11). The desktop's updater is a different
+  program with a different installer, so nothing is ported to it. Neither
+  feature adds a route - the backup is a file the owner chooses, the update
+  comes from GitHub - so `tools/check_parity.py` classifies nothing new.
 
 ## 9. Where the backend lives
 

@@ -457,7 +457,11 @@ class HudEditScreenTest {
             "the jump list carries the row",
             SettingsJump.ENTRIES.any { it.key == "edit-hud" && it.label == "Home screen" },
         )
-        assertTrue("\"edit-hud\" to 38", settingsSrc.contains("\"edit-hud\" to 38"))
+        // 39, not 38, since 2026-11-13: "Phone settings backup" (the copy-over
+        // wave) sits right under Backups, above this row, so every number below
+        // it moved down by one; SettingsJumpTest holds the map to the order the
+        // screen really draws.
+        assertTrue("\"edit-hud\" to 39", settingsSrc.contains("\"edit-hud\" to 39"))
         // The search index can find it by the words on the row.
         val search = source("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsSearch.kt")
         assertTrue("the search index has the row", search.contains("key = \"edit-hud\""))

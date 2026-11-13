@@ -481,9 +481,13 @@ class MenuVisibilityTest {
         // mode is phone-only in this slice - the PC's half of the feature is the
         // other lane's - so there is no catalogue menu id to hide it under and
         // its row is always drawn.
+        // "Phone settings backup" (2026-11-13, the copy-over wave) is the same
+        // shape again: it backs up THIS phone's settings, so there is no PC
+        // switch and no catalogue menu id for it, and hiding the row that
+        // restores a wiped phone must not be possible.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "files", "protection", "model-lane", "edit-hud", "handsfree")
+                "files", "protection", "model-lane", "edit-hud", "handsfree", "phone-backup")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

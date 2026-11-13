@@ -77,6 +77,11 @@ object SettingsJump {
         // may not touch, right beside the folder allow-list it outranks.
         Entry("Protected from Jarvis", "protection"),
         Entry("Backups", "backup"),
+        // "Phone settings backup" (2026-11-13, the copy-over wave): THIS
+        // phone's own settings, sealed into one password-locked file, right
+        // under the PC's Backups card. Phone-only, so the label is the
+        // section's own title - the desktop has no row of the same name.
+        Entry("Phone settings backup", "phone-backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),
         // "Notifications from Jarvis" (the owner's decision of 2026-10-09): the

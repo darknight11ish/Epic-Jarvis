@@ -351,6 +351,13 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "BackupPlate.kt"),
         ),
         Row(
+            key = "phone-backup", title = "Phone settings backup",
+            label = "Back up this phone; save settings to a file; restore settings; password; " +
+                "pairing token not included",
+            quotes = listOf("Phone settings backup"),
+            source = JUMP + listOf(PLATES + "PhoneBackupPlate.kt"),
+        ),
+        Row(
             key = "watch-notify", title = "Smartwatch notifications",
             label = "Smartwatch; watch; notifications on a watch",
             quotes = listOf("Smartwatch notifications"),
