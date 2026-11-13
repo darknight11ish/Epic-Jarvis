@@ -29,14 +29,17 @@ internal object MoreMenuWords {
      * suddenly the only door to the chat's controls is worth opening with an
      * explanation: only the controls this PC really offers are listed.
      *
-     * Since the owner's choice of 2026-10-30 this sheet is short on purpose:
+     * Since the owner's choice of 2026-10-30 the chat half is short on purpose:
      * five rows at most. The three chat modes (Think, Coach this, Incognito)
-     * moved one tap further, behind [MODES], and Earlier chats and Pinned
-     * messages moved to History, where the chats already are.
+     * moved one tap further, behind [MODES]. Since 2026-11-10 the Home screen's
+     * top strip is split: its informational cards are the section above these
+     * rows, and its two safety cards stay on Home (drawn compact there), which
+     * is why the sentence names the two halves it has.
      */
     const val SUBTITLE =
-        "The chat's own controls, the modes, and what you can send with a " +
-            "question. Only what this PC offers is listed."
+        "The Home cards that are not safety controls, then the chat's own " +
+            "controls, the modes, and what you can send with a question. Only " +
+            "what this PC offers is listed."
 
     /**
      * "New chat" - starts a fresh conversation, the same mechanism the idle
@@ -47,6 +50,18 @@ internal object MoreMenuWords {
 
     /** Under "New chat": what a new chat does to the one before it. */
     const val NEW_CHAT_DETAIL = "A fresh conversation. The last one stays in History."
+
+    /**
+     * "History" - past conversations, one tap away (the owner's ask of
+     * 2026-11-10: the phone should be able to reach old chats easily). It opens
+     * the SAME HistoryScreen the status line's own "History" link opens; the
+     * status line's one-tap door is kept, so this is a second, more discoverable
+     * way to the one surface, not a second list.
+     */
+    const val HISTORY = "History"
+
+    /** Under "History": what the screen holds, and that it is the PC's own list. */
+    const val HISTORY_DETAIL = "Every chat your PC kept."
 
     /**
      * The one row that holds the chat's three modes now (the owner's choice of

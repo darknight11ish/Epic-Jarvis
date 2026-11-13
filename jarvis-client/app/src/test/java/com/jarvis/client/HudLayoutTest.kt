@@ -46,6 +46,99 @@ class HudLayoutTest {
     }
 
     @Test
+    fun `the top strip is split - the safety pair stays on Home, the rest opens from More`() {
+        // The owner's ask of 2026-11-10: the five cards that sat on top of Home
+        // took the whole card tray, so the strip is split. The two SAFETY cards
+        // must keep the app's promise never to hide them, so they stay on Home
+        // (drawn compact); the three informational ones open from More.
+        assertEquals(
+            "the Home screen's full-width sections, in draw order",
+            listOf(HudLayout.HERO, HudLayout.BODY, HudLayout.COMPOSER),
+            HudLayout.HOME_SECTIONS,
+        )
+        assertFalse("the strip is a full-width Home section again", HudLayout.TOP_STRIP in HudLayout.HOME_SECTIONS)
+        assertEquals(
+            "a section is forgotten or drawn twice",
+            HudLayout.SECTIONS.toSet(),
+            (HudLayout.HOME_SECTIONS + HudLayout.TOP_STRIP).toSet(),
+        )
+        // The strip's own cards, in the owner's order - the five he named.
+        assertEquals(
+            listOf(
+                HudLayout.APPROVALS,
+                HudLayout.EMERGENCY_STOP,
+                "brain.now.right-now",
+                "brain.now.budget",
+                "brain.now.trace",
+            ),
+            HudLayout.defaultSection(HudLayout.TOP_STRIP),
+        )
+        val shown = HudLayout.visible(HudLayout.defaults(), MenuView())
+        // The split the two surfaces draw from: safety on Home, the rest in More.
+        assertEquals(
+            "the safety pair no longer stays on Home",
+            listOf(HudLayout.APPROVALS, HudLayout.EMERGENCY_STOP),
+            HudLayout.homeStrip(HudLayout.defaults(), MenuView()),
+        )
+        assertEquals(
+            "the informational cards are not the More menu's strip",
+            listOf("brain.now.right-now", "brain.now.budget", "brain.now.trace"),
+            HudLayout.moreStrip(HudLayout.defaults(), MenuView()),
+        )
+        assertTrue("the shown map still holds the whole strip", shown.containsKey(HudLayout.TOP_STRIP))
+        // Every card in the strip is drawn on exactly one of the two surfaces -
+        // nothing is lost between them, and nothing is drawn twice.
+        for (id in HudLayout.defaultSection(HudLayout.TOP_STRIP)) {
+            val onHome = id in HudLayout.homeStrip(HudLayout.defaults(), MenuView())
+            val inMore = id in HudLayout.moreStrip(HudLayout.defaults(), MenuView())
+            assertEquals("$id is drawn on both surfaces or neither", 1, listOf(onHome, inMore).count { it })
+        }
+        // ...and hiding an ordinary strip card still empties it, while the
+        // safety pair ignores hiding exactly as it did when it was on Home.
+        // (Attention budget cannot be hidden at all - it is in NEVER_HIDE
+        // because pending attention is counted there - so the hide test names
+        // "Right now", which can.)
+        val hidden = MenuView(MenuState(hidden = setOf("brain.now.right-now")))
+        assertFalse("a hidden card is still offered from More", "brain.now.right-now" in HudLayout.moreStrip(HudLayout.defaults(), hidden))
+        assertTrue(
+            "a hidden card takes its neighbour with it",
+            "brain.now.trace" in HudLayout.moreStrip(HudLayout.defaults(), hidden),
+        )
+        assertEquals(
+            "a hidden card took the safety pair with it",
+            listOf(HudLayout.APPROVALS, HudLayout.EMERGENCY_STOP),
+            HudLayout.homeStrip(HudLayout.defaults(), hidden),
+        )
+        assertTrue("the shown map still holds the whole strip", shown.containsKey(HudLayout.TOP_STRIP))
+    }
+
+    @Test
+    fun `every preset keeps the safety pair on Home and the rest in More`() {
+        for (preset in HudLayout.BUILT_IN_PRESETS) {
+            val safe = HudLayout.normalize(preset.layout)
+            assertEquals(
+                "${preset.id} loses a safety card from Home",
+                listOf(HudLayout.APPROVALS, HudLayout.EMERGENCY_STOP),
+                HudLayout.homeStrip(safe, MenuView()),
+            )
+            val more = HudLayout.moreStrip(safe, MenuView())
+            for (id in more) {
+                assertFalse("${preset.id} puts a safety card in More: $id", HudLayout.isProtected(id))
+            }
+            // Every card the preset really holds in the strip is drawn on one of
+            // the two surfaces - a preset that leaves a card out is not tested
+            // here, because it is in the editor's "Not on your Home screen" list
+            // rather than lost.
+            for (id in safe.items(HudLayout.TOP_STRIP)) {
+                assertTrue(
+                    "${preset.id} loses $id from both strip surfaces",
+                    id in HudLayout.homeStrip(safe, MenuView()) || id in more,
+                )
+            }
+        }
+    }
+
+    @Test
     fun `the sanitizer is a closed world - unknown ids, other-app menus and indicators are dropped`() {
         val hostile = HudLayout.Layout(
             HudLayout.VERSION,

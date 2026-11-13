@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
- "built_at": "2026-11-12T21:37:43-08:00",
+ "ref": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
+ "built_at": "2026-11-12T20:16:01-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1590,6 +1590,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/HistoryViewTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HoldEntryTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HomeLinkWordingTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/HomeMoreMenuTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HomeNavRowTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HudEditScreenTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HudLayoutTest.kt",
@@ -1878,7 +1879,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 968,
+   "file_count": 969,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4594,6 +4595,7 @@
     "changelog.d/2026-11-10-github-switch-door.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
     "changelog.d/2026-11-10-phone-approves-tool-switches.md",
+    "changelog.d/2026-11-10-phone-top-strip-in-more-and-history.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/2026-11-11-github-union-0-2-448.md",
@@ -4751,6 +4753,7 @@
     "decisions.d/2026-11-10-github-switch-door.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
     "decisions.d/2026-11-10-phone-approves-tool-switches.md",
+    "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/2026-11-11-github-union-0-2-448.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5199,7 +5202,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 845,
+   "file_count": 847,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6282,14 +6285,39 @@
  ],
  "recent_commits": [
   {
-   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
    "date": "2026-11-12",
-   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
+  },
+  {
+   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
+   "date": "2026-11-12",
+   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
   },
   {
    "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
    "date": "2026-11-12",
    "subject": "records(union): regenerate the self-code map after the patch-history index landed"
+  },
+  {
+   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
+  },
+  {
+   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
+   "date": "2026-11-12",
+   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the main merge"
+  },
+  {
+   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
+   "date": "2026-11-12",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
   },
   {
    "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
@@ -6355,31 +6383,6 @@
    "sha": "23745c116fa4fcaa6789a1d5eb4082ba17507159",
    "date": "2026-11-11",
    "subject": "assemble: github parity step 2 - nine actions"
-  },
-  {
-   "sha": "30e8c6ab7166f2243bd17317e95b26fca3f5738f",
-   "date": "2026-11-11",
-   "subject": "assemble: 16B - github authoring lane (PR #1224)"
-  },
-  {
-   "sha": "49b4fcad6e659039f4b3b0b2c7e348a2be8515d5",
-   "date": "2026-11-11",
-   "subject": "assemble: 16E - github review tools lane (PR #1225)"
-  },
-  {
-   "sha": "a922fb4a466b635aa1ff41e4c01d9892a9a23dce",
-   "date": "2026-11-11",
-   "subject": "feat(github): the 2026-11-10 Step 2 parity - nine actions, card-free reads, carded issue close/reopen"
-  },
-  {
-   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
-   "date": "2026-11-11",
-   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
-  },
-  {
-   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
   }
  ],
  "top_level": [
@@ -6396,7 +6399,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 928
+   "files": 929
   },
   {
    "path": "docs/",
@@ -6416,7 +6419,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 238
+   "files": 239
   },
   {
    "path": "videos/",
@@ -6426,7 +6429,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 155
+   "files": 156
   },
   {
    "path": "plugins/",
@@ -6500,8 +6503,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5625,
-  "covered": 5147,
+  "tracked_files": 5628,
+  "covered": 5150,
   "excluded": 478,
   "subsystems": 27
  },

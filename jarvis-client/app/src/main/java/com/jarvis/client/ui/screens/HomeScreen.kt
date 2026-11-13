@@ -1234,8 +1234,8 @@ fun HomeScreen(
     // empties its settings row.
     val hudLayout by com.jarvis.client.JarvisRuntime.menus.hudLayout.collectAsState()
     val hudMenus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
-    // The emergency stop is an ACTION, not a door: the HUD's own card runs the
-    // same `onStopEverything` the Stop plate below already runs.
+    // The emergency stop is an ACTION, not a door: the HUD's compact safety row
+    // runs the same `onStopEverything` the Stop plate below already runs.
     val stopScope = rememberCoroutineScope()
 
     // The one slot both conversation lists draw: the list is built twice (the
@@ -1736,6 +1736,11 @@ fun HomeScreen(
         HomeMoreMenu(
             state = state,
             actions = actions,
+            // The Home HUD's top strip is split since 2026-11-10: the More menu
+            // draws its informational cards, from the same saved layout and hide
+            // rules Home reads, so a card cannot say two different things.
+            layout = hudLayout,
+            menus = hudMenus,
             onDismiss = { moreOpen = false },
             onCoachThis = { coachTick += 1 },
         )
@@ -2527,11 +2532,23 @@ internal fun hudCardPlace(id: String): Pair<Screen, String?>? {
  * The owner's own Home cards, drawn from the layout they chose (the Android
  * `A2` slice of the editable-HUD design, 2026-11-02).
  *
- * Four ordered sections, each card in its section and in its order, and the body
- * in one column below [HudLayout.TWO_COLUMN_DP] dp and two at or above it -
- * [HudLayout.columnsAt] is the one answer to that, shared with the editor's own
- * note. The layout only decides WHERE and IN WHICH ORDER a card draws: what each
- * card says and where its tap goes is [hudCardPlace]'s, exactly as before.
+ * THE TOP STRIP IS SPLIT (2026-11-10). The owner asked for the room the
+ * five-card strip took on Home to come back, so:
+ *  - its two SAFETY cards - Waiting for your yes and the emergency stop - stay
+ *    here, drawn as ONE compact row at the top ([SafetyChip], from
+ *    [HudLayout.homeStrip]). A safety control is never hidden behind a menu, and
+ *    it is never a full card's height either;
+ *  - its other cards open from the More menu ([HomeMoreMain], from
+ *    [HudLayout.moreStrip]), one tap from the composer.
+ * The three full-card sections below are [HudLayout.HOME_SECTIONS]. Both
+ * surfaces read the SAME saved layout through the SAME [HudLayout.visible]
+ * answer, so they cannot disagree about which cards exist or what they say.
+ *
+ * Each card in its section and in its order, and the body in one column below
+ * [HudLayout.TWO_COLUMN_DP] dp and two at or above it - [HudLayout.columnsAt] is
+ * the one answer to that, shared with the editor's own note. The layout only
+ * decides WHERE and IN WHICH ORDER a card draws: what each card says and where
+ * its tap goes is [hudCardPlace]'s, exactly as before.
  *
  * THE HIDE RULES STILL WIN. [HudLayout.visible] is applied on top of the layout
  * with the same [MenuView] the rest of the screen reads, so a menu hidden by
@@ -2539,11 +2556,13 @@ internal fun hudCardPlace(id: String): Pair<Screen, String?>? {
  * hiding altogether - that rule lives in [HudLayout.visible] and is not repeated
  * here - and the three indicators are not cards, so no layout can move them.
  *
- * WHY IT IS BOUNDED. A first-run layout holds every card the phone has, and a
- * fixed block that tall would push the conversation off Home. The tray is capped
- * at [HUD_TRAY_MAX] and scrolls inside itself, and the conversation list scrolls
- * it away like any other row. It draws nothing at all when every card in it is
- * hidden, so a Home with no cards carries no empty frame.
+ * WHY THE TRAY IS BOUNDED. A first-run layout holds every card the phone has,
+ * and a fixed block that tall would push the conversation off Home. The tray is
+ * capped at [HUD_TRAY_MAX] and scrolls inside itself, and the conversation list
+ * scrolls it away like any other row. The safety row is deliberately OUTSIDE
+ * that tray, so it is on screen even while the cards are scrolled or hidden. It
+ * all draws nothing at all when every card in it is hidden, so a Home with no
+ * cards carries no empty frame.
  */
 @Composable
 private fun HomeHud(
@@ -2555,23 +2574,44 @@ private fun HomeHud(
 ) {
     val chrome = LocalChrome.current
     val shown = HudLayout.visible(layout, menus)
-    val total = shown.values.sumOf { it.size }
+    // The strip's safety pair: still on Home, one row (2026-11-10).
+    val safety = HudLayout.homeStrip(layout, menus)
+    // Only the cards Home really draws are counted: the strip's other cards are
+    // in More now, and a header that counted them would be a lie about what is
+    // on the screen.
+    val total = safety.size + HudLayout.HOME_SECTIONS.sumOf { shown.getValue(it).size }
     if (total == 0) return
     val columns = HudLayout.columnsAt(LocalConfiguration.current.screenWidthDp)
     Column(modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Kicker(if (total == 1) "Your Home screen · 1 card" else "Your Home screen · $total cards")
-            Spacer(Modifier.weight(1f))
-            Text(
-                "Rearrange it in Settings, Home screen",
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textLo,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Kicker(if (total == 1) "Your Home screen · 1 card" else "Your Home screen · $total cards")
+        // "Rearrange it in Settings, Home screen" used to share one row with the
+        // kicker and was ellipsised into it on a narrow phone ("30 CARDS
+        // Rearrange…", the owner's screenshot of 2026-11-10). It has its own line
+        // now, so neither word can eat the other.
+        Text(
+            "Rearrange it in Settings, Home screen",
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // The safety pair, on Home always - never inside the bounded tray, so a
+        // scrolled or hidden card layout can never take it off the screen.
+        if (safety.isNotEmpty()) {
+            Gap(8)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (id in safety) {
+                    SafetyChip(
+                        id = id,
+                        onOpen = onOpen,
+                        onStop = onStop,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
         Column(
             Modifier
@@ -2579,14 +2619,14 @@ private fun HomeHud(
                 .heightIn(max = HUD_TRAY_MAX)
                 .verticalScroll(rememberScrollState()),
         ) {
-            for (section in HudLayout.SECTIONS) {
+            for (section in HudLayout.HOME_SECTIONS) {
                 val ids = shown.getValue(section)
                 if (ids.isEmpty()) continue
                 Gap(8)
                 Kicker(HUD_SECTION_WORDS.getValue(section), color = chrome.textLo)
-                // Only the body is a grid; the strip, the hero and the composer
-                // are columns of full-width cards in the layout's sense, and a
-                // 2-column hero would be a second, different layout.
+                // Only the body is a grid; the hero and the composer are columns
+                // of full-width cards in the layout's sense, and a 2-column hero
+                // would be a second, different layout.
                 val perRow = if (section == HudLayout.BODY) columns else 1
                 for (row in ids.chunked(perRow)) {
                     Row(
@@ -2609,6 +2649,46 @@ private fun HomeHud(
                 }
             }
         }
+    }
+}
+
+/**
+ * One of the top strip's safety cards, drawn COMPACT on Home (2026-11-10).
+ *
+ * It is the same card id, the same words, the same place and the same tap the
+ * full card had: the approvals card opens the approvals queue and the emergency
+ * stop runs the stop. It draws its title on one line and takes the 48dp touch
+ * minimum, so the two safety controls cost the Home screen one thin row instead
+ * of two full cards - the room the owner asked for back. TalkBack still hears
+ * the card's own about line, which the visible row no longer has space for.
+ */
+@Composable
+private fun SafetyChip(
+    id: String,
+    onOpen: (String) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val card = HudLayout.card(id) ?: return
+    val isStop = id == HudLayout.EMERGENCY_STOP
+    Box(
+        modifier
+            .heightIn(min = HANDLE_HEIGHT)
+            .clip(LocalRadii.current.insetShape)
+            .background(chrome.surface1)
+            .pressable(onClick = { if (isStop) onStop() else onOpen(id) })
+            .padding(horizontal = 10.dp)
+            .semantics { contentDescription = "${card.title}. ${card.about}" },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            card.title,
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.warnInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -6134,21 +6214,39 @@ private fun TemporaryChatMarker(empty: Boolean) {
  * "More" - the one menu the chat bar and the full-screen face bar both open
  * (the owner's ask of 2026-10-25: one shared menu, not two that can drift).
  *
- * SHORT ON PURPOSE since the owner's choice of 2026-10-30. He photographed the
- * old sheet ("these both screenshots need further simplification, too many
- * options") and chose to tuck the rare ones away: it now lists at most four
- * rows - New chat, Attach a file, Modes and Quick note - then Close. (It was
- * five until 2026-11-01, when the owner asked for the Photo row to go: the one
- * Attach row offers a photo too, through the same picker.)
+ * THE HOME SCREEN'S TOP STRIP IS SPLIT SINCE 2026-11-10. The owner asked for the
+ * room the five-card strip took on Home back, so the strip's cards moved like
+ * this:
+ * - the three INFORMATIONAL cards - Right now, Attention budget and What Jarvis
+ *   is doing - are drawn here, as rows in the menu's own "Top strip" section
+ *   ([HudLayout.moreStrip] over the saved layout, so the editor's order and the
+ *   app's hide rules still decide). They are things to check, not things to act
+ *   on in a hurry, so one tap from the composer is the right distance.
+ * - the two SAFETY cards - Waiting for your yes and the emergency stop - do NOT
+ *   come here. They stay on the Home screen as one compact row of their own
+ *   (`HomeHud`'s [SafetyChip], from [HudLayout.homeStrip]): a safety control is
+ *   never hidden behind a menu, and the strip's height was the owner's
+ *   complaint, not its safety.
+ *
+ * THE CHAT HALF IS SHORT ON PURPOSE, and stays so. The owner's choice of
+ * 2026-10-30 was "too many options" - the chat's own controls are New chat,
+ * Attach a file, Modes and Quick note, then Close. (It was five until
+ * 2026-11-01, when the owner asked for the Photo row to go: the one Attach row
+ * offers a photo too, through the same picker.)
  *
  * Nothing was dropped, only relocated:
  * - "Photo" went into "Attach a file" (2026-11-01): the picker offers a
  *   document AND, while the PC's Pictures feature works, a photo. A photo
  *   picked there still goes down its own picture path, never the document
  *   one. See [HomeMoreMain]'s Attach row.
- * - "Earlier chats" left because it opened History, and History IS the list
- *   (Home's status line opens it in one tap) - so the row said nothing the
- *   screen did not.
+ * - "Earlier chats" left on 2026-10-30 because it opened History, and History
+ *   IS the list (Home's status line opens it in one tap). A plain **History**
+ *   row is back on 2026-11-10, because the owner asked for past conversations
+ *   to be easy to reach from the phone and this is the door he named; it opens
+ *   the SAME [com.jarvis.client.ui.screens.HistoryScreen] through the same
+ *   `onEarlierChats` the status line uses. The status line's one-tap door
+ *   stays, and the History screen's own "Hidden. Tap Show and confirm it is
+ *   you." gate is untouched - that is a security decision, not discoverability.
  * - "Pinned messages" moved into History's own header as one compact "Pinned"
  *   action: the same PinnedScreen, one tap from where the chats are.
  * - "Jarvis Presets" left for Home's one-tap "Presets ->" door in
@@ -6175,6 +6273,10 @@ private fun TemporaryChatMarker(empty: Boolean) {
 private fun HomeMoreMenu(
     state: HomeState,
     actions: HomeActions,
+    /** The saved Home layout: the strip's informational cards are drawn here. */
+    layout: HudLayout.Layout,
+    /** The same hide rules the rest of the screen reads. */
+    menus: MenuView,
     onDismiss: () -> Unit,
     onCoachThis: () -> Unit,
 ) {
@@ -6195,6 +6297,8 @@ private fun HomeMoreMenu(
             HomeMoreMain(
                 state = state,
                 actions = actions,
+                layout = layout,
+                menus = menus,
                 onDismiss = onDismiss,
                 onOpenModes = { modesOpen = true },
             )
@@ -6202,11 +6306,16 @@ private fun HomeMoreMenu(
     }
 }
 
-/** The short menu itself: at most four content rows, then Close. */
+/**
+ * The menu itself: the top strip's informational cards, then the chat's short
+ * list of controls, then Close.
+ */
 @Composable
 private fun HomeMoreMain(
     state: HomeState,
     actions: HomeActions,
+    layout: HudLayout.Layout,
+    menus: MenuView,
     onDismiss: () -> Unit,
     onOpenModes: () -> Unit,
 ) {
@@ -6233,12 +6342,44 @@ private fun HomeMoreMain(
         Rule()
         Gap(4)
 
+        // ---- the top strip's informational cards (moved here 2026-11-10) --
+        //
+        // The SAME layout Home reads, through the SAME hide rules, so the strip
+        // the owner arranged in Settings, Home screen is the strip this menu
+        // offers. Only the ordinary cards come here: the two safety cards stay on
+        // Home, compact, and are deliberately not a menu row.
+        val strip = HudLayout.moreStrip(layout, menus)
+        if (strip.isNotEmpty()) {
+            Kicker(HUD_SECTION_WORDS.getValue(HudLayout.TOP_STRIP), color = chrome.textLo)
+            Gap(6)
+            for (id in strip) {
+                val card = HudLayout.card(id) ?: continue
+                // Every one of them is a door, and where it opens is
+                // `hudCardPlace`'s answer - the same one Home's card used.
+                MoreRow(
+                    card.title,
+                    detail = card.about,
+                ) { onDismiss(); actions.onOpenHudCard(id) }
+            }
+            Gap(8)
+            Rule()
+            Gap(4)
+        }
+
         // New chat: the chat's own reset, the same mechanism the idle timer
         // uses - nothing is sent and no conversation is minted here.
         MoreRow(
             MoreMenuWords.NEW_CHAT,
             detail = MoreMenuWords.NEW_CHAT_DETAIL,
         ) { onDismiss(); actions.onNewConversation() }
+
+        // History (the owner's ask of 2026-11-10: past chats easy to reach from
+        // the phone). It opens the SAME screen the status line's "History" opens,
+        // through the same action - not a second history surface.
+        MoreRow(
+            MoreMenuWords.HISTORY,
+            detail = MoreMenuWords.HISTORY_DETAIL,
+        ) { onDismiss(); actions.onEarlierChats() }
 
         // ONE row for everything sent with a question - the owner's ask of
         // 2026-11-01: "remove the photo option because ATTach a file on my

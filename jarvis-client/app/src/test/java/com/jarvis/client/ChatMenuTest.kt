@@ -187,12 +187,15 @@ class ChatMenuTest {
     // ---- 4. Old chats and new chats, where the owner now looks -------------
 
     @Test
-    fun `the menu is four doors, and the modes live one tap deeper`() {
+    fun `the menu's chat doors keep their order, and the modes live one tap deeper`() {
         // The owner's choice of 2026-10-30, after he photographed the old
         // sheet ("too many options"): the More menu is short now, and the
         // three chat modes are one tap deeper behind ONE "Modes" row. He
         // shortened it again on 2026-11-01: the Photo row went, because the
-        // one Attach row brings up photos too.
+        // one Attach row brings up photos too. On 2026-11-10 the Home screen's
+        // top strip moved into the menu (its own section, above these doors),
+        // and a plain History row joined them - neither changes the chat
+        // doors' order.
         val shell = bodyOf("private fun HomeMoreMenu(")
         val menu = bodyOf("private fun HomeMoreMain(")
         val modes = bodyOf("private fun HomeMoreModes(")
@@ -201,10 +204,11 @@ class ChatMenuTest {
         assertTrue("the More shell does not open the short menu", shell.contains("HomeMoreMain("))
         assertTrue("the More shell does not open the modes sub-sheet", shell.contains("HomeMoreModes("))
         assertTrue("the modes page has no way back", shell.contains("modesOpen = false"))
-        // The four doors, in the order the owner reads them.
+        // The chat doors, in the order the owner reads them. History sits with
+        // New chat, where the chat's own reset and the old chats belong.
         val order = listOf(
-            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.FILE",
-            "MoreMenuWords.MODES", "MoreMenuWords.QUICK_NOTE",
+            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.HISTORY",
+            "MoreMenuWords.FILE", "MoreMenuWords.MODES", "MoreMenuWords.QUICK_NOTE",
         )
         val at = order.map { menu.indexOf(it) }
         assertTrue("the short menu lost a door: $at", at.all { it >= 0 })
@@ -234,12 +238,20 @@ class ChatMenuTest {
             "the Attach row does not say a photo can be picked there",
             words.contains("or a photo"),
         )
-        // Earlier chats opened History; History IS the list, so the words come
-        // back nowhere in Home and the status-line control is the one door.
+        // Earlier chats opened History and its old words left on 2026-10-30.
+        // The owner asked on 2026-11-10 for old chats to be easy to reach from
+        // the phone, so a plain History row is back - the SAME HistoryScreen
+        // through the SAME `onEarlierChats` action the status line's one-tap
+        // door uses, not a second history. The removed row's words stay gone.
         assertEquals(
-            "Earlier chats is drawn in Home again",
+            "the removed Earlier chats words are drawn in Home again",
             0,
             Regex("ChatHistory\\.EARLIER_CHATS").findAll(home).count(),
+        )
+        assertTrue("the More menu has no History row", menu.contains("MoreMenuWords.HISTORY"))
+        assertTrue(
+            "the History row does not open the one History screen",
+            menu.contains("actions.onEarlierChats()"),
         )
         // The three modes behave exactly as they did as rows: same words, same
         // gates, same one-shot / coach / incognito actions.
