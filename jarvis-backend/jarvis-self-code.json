@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "875d3cb51be13b2e5d15ec6600a7e87e1914c78e",
- "built_at": "2026-11-12T20:33:00-08:00",
+ "ref": "938492a0cff389925968b14b6a570a59c84a7bcb",
+ "built_at": "2026-11-12T20:37:54-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6277,6 +6277,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "938492a0cff389925968b14b6a570a59c84a7bcb",
+   "date": "2026-11-12",
+   "subject": "chore: regenerate the recent-changes module for this branch's entry"
+  },
+  {
+   "sha": "60e9ae10395be8276ca20e69b781e9707b82fa64",
+   "date": "2026-11-12",
+   "subject": "chore: regenerate the self-code maps for the companion fixes"
+  },
+  {
    "sha": "875d3cb51be13b2e5d15ec6600a7e87e1914c78e",
    "date": "2026-11-12",
    "subject": "docs(companion): say it is not built in the API doc and section 8, and record it"
@@ -6365,16 +6375,6 @@
    "sha": "b2b8f67ad020c982132047f65a848956f81f0392",
    "date": "2026-11-10",
    "subject": "fix: the second more_tools budget pin moves with the wave-16 GitHub group (482, measured)"
-  },
-  {
-   "sha": "a9b9e8f35aed464064c9f453d0dcc51e0718a7c6",
-   "date": "2026-11-10",
-   "subject": "fix: the wave-16 GitHub tools reach the private-aloud table and the desktop Rust tool list"
-  },
-  {
-   "sha": "e7544e21a691beb4c9880f5945492668e3ce4c50",
-   "date": "2026-11-10",
-   "subject": "fix: wave-16 desk catches - scratch cleanup, merge card fields, phone feature directory, doc accuracy"
   }
  ],
  "top_level": [
