@@ -1,25 +1,51 @@
 #!/usr/bin/env python3
-"""test_obfuscation.py - Unit and integration tests for code obfuscation integration.
+"""test_obfuscation.py - the code-protection tool CHECK, and the honest refusal.
 
-Pins:
-  1. Multi-language stack detection (JS/TS, Python, Android, Rust, Go).
-  2. Ignored directory filtering (node_modules, __pycache__, .git, dist, etc.).
-  3. Tool inspection and friendly install commands when missing.
-  4. Non-destructive safety guarantees: source code is never overwritten in-place.
-  5. Profile configurations (light, standard, hardened).
-  6. Ask-First approval card structure (`project_obfuscate`, tier "ask").
-  7. Injected test execution runner and output verification.
-  8. Natural language intent routing in jarvis_quick.py.
-  9. Governance registrations (MUST_ASK, NO_AUTO_APPROVE, card words, SHIPPED list).
+This is the salvaged half of PR #1228 (2026-11-12). The pull request claimed a
+multi-language obfuscation engine with an Ask-First card; what it actually had
+was a read-only "is this program installed?" probe, a chat reply that promised a
+card nobody raised, and six fake toolchains that copied files and reported
+success. The fake parts are gone. This suite pins what is left, and it is
+written so the fake parts cannot come back quietly.
+
+WHAT IS CHECKED
+
+  1. The check knows the seven code-protection programs, reports a stack and a
+     spoken label for each, and lists them in a stable order.
+  2. A name it does not know starts NO program.
+  3. The one version probe is given `jarvis_child_env.inherited()` - the
+     allowlisted child environment - and NEVER the backend's own environment.
+     When that safe environment cannot be built, no program is started at all
+     (there is no fallback to the whole environment).
+  4. No obfuscation, minification, hardening, plan, card or verification exists:
+     the module has no `detect_project`, `create_plan`, `build_card`,
+     `execute_plan`, `verify_obfuscated_output` or `PROFILES`, and no project
+     file is read, copied or written by anything this suite calls.
+  5. The chat answer says plainly what is real: the tools are checked, and
+     nothing is run.
+  6. "obfuscate project X" gets a fixed honest refusal - no plan, no card - and
+     the tool answer is answered from local code, never from a model.
+  7. The fake gate surface is gone: `project_obfuscate` is in no shadow
+     registry, no card-word table and neither shipped tier table.
+  8. The module is shipped, in both SHIPPED lists, and byte-equal to the
+     published-base twin.
+
+WHY THE ENVIRONMENT CHECK IS THE IMPORTANT ONE
+`backend/jarvis_child_env.py` exists because Jarvis's own environment holds the
+pairing token, the Joplin token, the Obsidian key and every `*_KEY` /
+`*_PASSWORD` / `*_SECRET` the owner has set. The old probe handed that whole
+environment to each third-party binary it found. CLAUDE.md rule 3 says a key is
+sent only to the one service it authenticates against, so the probe now gets the
+allowlist or does not run.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 import sys
-import tempfile
+import types
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -65,236 +91,291 @@ def ask(text: str, surface: str = "hud"):
     )
 
 
-def t_tool_availability_and_guidance():
-    tools = OBF.list_available_tools()
-    check("list_available_tools returns a non-empty list", len(tools) >= 5, str(len(tools)))
+# --------------------------------------------------------------------------
+# 1. The inventory itself
+# --------------------------------------------------------------------------
 
-    expected_tools = {"javascript-obfuscator", "pyarmor", "terser", "python-minifier", "r8", "strip", "garble"}
-    found_names = {t["name"] for t in tools}
-    check("all standard tools are registered", expected_tools.issubset(found_names), str(found_names))
+EXPECTED_TOOLS = {
+    "javascript-obfuscator", "terser", "pyarmor", "python-minifier",
+    "r8", "strip", "garble",
+}
+
+
+def t_tool_inventory():
+    tools = OBF.list_available_tools()
+    check("the check knows all seven code-protection programs",
+          {t["name"] for t in tools} == EXPECTED_TOOLS,
+          str(sorted(t["name"] for t in tools)))
+    check("the list is in a stable (sorted) order",
+          [t["name"] for t in tools] == sorted(t["name"] for t in tools))
 
     for t in tools:
-        check(f"tool {t['name']} has required fields",
-              all(k in t for k in ("name", "available", "path", "install_hint", "description")))
+        check(f"{t['name']} carries a status, path, hint and description",
+              all(k in t for k in ("available", "path", "version",
+                                   "install_hint", "description")))
+        check(f"{t['name']} carries a spoken language label",
+              bool(t["stack_label"]) and t["stack_label"] != t["stack"],
+              f"{t['name']}: {t['stack']} -> {t['stack_label']}")
 
-    # Guidance formatting
     guidance = OBF.format_tool_guidance()
-    check("guidance mentions profiles", "light" in guidance and "standard" in guidance and "hardened" in guidance)
-    check("guidance mentions safety guarantee", "never modifies your original code in-place" in guidance)
+    check("the tool answer opens with what is NOT done", OBF.NOT_RUN in guidance)
+    check("the tool answer says it cannot obfuscate or harden",
+          "cannot obfuscate" in guidance and "harden" in guidance)
+    check("the tool answer names each program it checks",
+          all(t["name"] in guidance for t in tools))
+    check("the tool answer names the languages it can SEE, not run",
+          "Languages this check covers" in guidance
+          and "JavaScript and TypeScript" in guidance)
+    check("the tool answer never claims a profile or a ready run",
+          "profile" not in guidance.lower()
+          and "ready" not in guidance.lower()
+          and "approval card" in guidance)
 
-    single_guidance = OBF.format_tool_guidance("pyarmor")
-    check("single tool guidance mentions pyarmor and install hint",
-          "pyarmor" in single_guidance.lower() and "pip install" in single_guidance)
+    single = OBF.format_tool_guidance("pyarmor")
+    check("one tool's answer is honest with and without the program",
+          "pyarmor" in single.lower() and "in this build" in single
+          and ("--version" in single or "does not install it" in single))
+    unknown = OBF.format_tool_guidance("not-a-real-obfuscator")
+    check("an unknown tool is named as unknown, not guessed",
+          "does not know" in unknown and "Nothing was run" in unknown)
 
 
-def t_project_stack_detection():
-    temp_dir = Path(tempfile.mkdtemp(prefix="jarvis-obf-test-"))
+# --------------------------------------------------------------------------
+# 2. No program is started when there is nothing to start
+# --------------------------------------------------------------------------
+
+def t_unknown_tool_starts_nothing():
+    boom = AssertionError("an unknown tool must start no program")
+    with mock.patch.object(OBF.shutil, "which", side_effect=boom) as which_mock, \
+         mock.patch.object(OBF.subprocess, "run", side_effect=boom) as run_mock:
+        info = OBF.check_tool("not-a-real-obfuscator")
+    check("an unknown name reports unavailable", info["available"] is False)
+    check("... with no path and no version",
+          info["path"] is None and info["version"] is None)
+    check("... and starts neither a lookup nor a program",
+          which_mock.call_count == 0 and run_mock.call_count == 0)
+
+
+# --------------------------------------------------------------------------
+# 3. The environment boundary - the leak this module exists to not repeat
+# --------------------------------------------------------------------------
+
+def t_safe_child_env_is_an_allowlist():
+    secret_name = "JARVIS_OBF_TEST_PAIRING_TOKEN"
+    os.environ[secret_name] = "never-send-me-to-a-third-party-program"
     try:
-        # 1. JavaScript / Web project
-        js_proj = temp_dir / "my_web_app"
-        js_proj.mkdir()
-        (js_proj / "package.json").write_text('{"name": "test"}', encoding="utf-8")
-        (js_proj / "src").mkdir()
-        (js_proj / "src" / "index.js").write_text("console.log('hello');", encoding="utf-8")
-        (js_proj / "src" / "app.ts").write_text("const x: number = 42;", encoding="utf-8")
-        # Ignored dir
-        (js_proj / "node_modules").mkdir()
-        (js_proj / "node_modules" / "dep.js").write_text("// dep", encoding="utf-8")
-
-        det_js = OBF.detect_project(js_proj)
-        check("JS project detected as javascript stack", det_js["stack"] == "javascript", str(det_js["stack"]))
-        check("JS project recommends javascript-obfuscator",
-              det_js["recommended_tool"] == "javascript-obfuscator", det_js["recommended_tool"])
-        check("node_modules excluded from source files",
-              len(det_js["source_files"]) == 2 and not any("node_modules" in f for f in det_js["source_files"]),
-              str(det_js["source_files"]))
-
-        # 2. Python project
-        py_proj = temp_dir / "my_py_tool"
-        py_proj.mkdir()
-        (py_proj / "pyproject.toml").write_text("[project]\nname='pytool'", encoding="utf-8")
-        (py_proj / "main.py").write_text("print('test')", encoding="utf-8")
-        (py_proj / "__pycache__").mkdir()
-        (py_proj / "__pycache__" / "main.cpython-312.pyc").write_text("bin", encoding="utf-8")
-
-        det_py = OBF.detect_project(py_proj)
-        check("Python project detected as python stack", det_py["stack"] == "python", str(det_py["stack"]))
-        check("Python project recommends pyarmor", det_py["recommended_tool"] == "pyarmor", det_py["recommended_tool"])
-        check("__pycache__ excluded from source files",
-              len(det_py["source_files"]) == 1 and "__pycache__" not in det_py["source_files"][0],
-              str(det_py["source_files"]))
-
-        # 3. Android project
-        android_proj = temp_dir / "my_android_app"
-        android_proj.mkdir()
-        (android_proj / "build.gradle").write_text("plugins { id 'com.android.application' }", encoding="utf-8")
-        (android_proj / "MainActivity.kt").write_text("class MainActivity", encoding="utf-8")
-
-        det_android = OBF.detect_project(android_proj)
-        check("Android project detected as android stack", det_android["stack"] == "android", str(det_android["stack"]))
-        check("Android project recommends r8", det_android["recommended_tool"] == "r8", det_android["recommended_tool"])
-
-        # 4. Rust project
-        rust_proj = temp_dir / "my_rust_service"
-        rust_proj.mkdir()
-        (rust_proj / "Cargo.toml").write_text("[package]\nname = 'rustsvc'", encoding="utf-8")
-        (rust_proj / "src").mkdir()
-        (rust_proj / "src" / "main.rs").write_text("fn main() {}", encoding="utf-8")
-
-        det_rust = OBF.detect_project(rust_proj)
-        check("Rust project detected as rust stack", det_rust["stack"] == "rust", str(det_rust["stack"]))
-        check("Rust project recommends strip", det_rust["recommended_tool"] == "strip", det_rust["recommended_tool"])
-
+        env = OBF._safe_child_env()
     finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        os.environ.pop(secret_name, None)
+
+    check("the safe child environment can be built here", isinstance(env, dict))
+    upper = {k.upper() for k in (env or {})}
+    check("a secret-looking name from the backend environment is NOT inherited",
+          secret_name not in upper, str(sorted(upper))[:200])
+    check("the telemetry switches ride along on every child",
+          (env or {}).get("DO_NOT_TRACK") == "1"
+          and (env or {}).get("HF_HUB_DISABLE_TELEMETRY") == "1")
 
 
-def t_create_plan_and_safety_checks():
-    temp_dir = Path(tempfile.mkdtemp(prefix="jarvis-obf-plan-"))
+def t_probe_uses_the_safe_environment():
+    sentinel = {"PATH": r"C:\Windows\System32", "DO_NOT_TRACK": "1"}
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen["argv"] = argv
+        seen["env"] = kwargs.get("env")
+        return types.SimpleNamespace(returncode=0, stdout="1.2.3\n", stderr="")
+
+    with mock.patch.object(OBF.shutil, "which", return_value=r"C:\fake\pyarmor.exe"), \
+         mock.patch.object(OBF, "_safe_child_env", return_value=sentinel), \
+         mock.patch.object(OBF.subprocess, "run", side_effect=fake_run):
+        info = OBF.check_tool("pyarmor")
+
+    check("a found program is reported installed", info["available"] is True)
+    check("the probe is given the allowlisted environment, not os.environ",
+          seen.get("env") is sentinel, repr(seen.get("env")))
+    check("the probe passes argv, not a shell string",
+          seen.get("argv") == [r"C:\fake\pyarmor.exe", "--version"],
+          repr(seen.get("argv")))
+    check("the program's own version line is what is reported",
+          info["version"] == "1.2.3", repr(info.get("version")))
+
+
+def t_no_safe_environment_means_no_program():
+    calls = []
+
+    def fake_run(*a, **k):
+        calls.append(a)
+        return types.SimpleNamespace(returncode=0, stdout="1.0\n", stderr="")
+
+    with mock.patch.object(OBF.shutil, "which", return_value=r"C:\fake\pyarmor.exe"), \
+         mock.patch.object(OBF, "_safe_child_env", return_value=None), \
+         mock.patch.object(OBF.subprocess, "run", side_effect=fake_run):
+        info = OBF.check_tool("pyarmor")
+
+    check("a missing safe environment still reports the program as installed",
+          info["available"] is True)
+    check("... but does not start it, and does not fall back to os.environ",
+          calls == [], repr(calls))
+    check("... so no version is claimed", info["version"] is None)
+
+
+def t_safe_environment_fails_closed_when_helper_is_missing():
+    saved = sys.modules.get("jarvis_child_env", "absent")
+    sys.modules["jarvis_child_env"] = None
     try:
-        proj = temp_dir / "sample_project"
-        proj.mkdir()
-        (proj / "index.js").write_text("var secretKey = 'private-token-123';", encoding="utf-8")
-
-        # Plan creation with default output
-        plan_res = OBF.create_plan(proj, profile="hardened")
-        check("create_plan returns ok=True", plan_res.get("ok") is True, str(plan_res))
-        plan = plan_res["plan"]
-
-        check("plan action is project_obfuscate", plan["action"] == "project_obfuscate")
-        check("plan tier is ask", plan["tier"] == "ask")
-        check("plan profile is hardened", plan["profile"] == "hardened")
-        check("plan output is in dist/obfuscated", "dist" in plan["output_dir"] and "obfuscated" in plan["output_dir"])
-
-        # Safety Check: Disallow in-place overwrite
-        bad_plan_res = OBF.create_plan(proj, output_dir=proj)
-        check("in-place overwrite is strictly refused", bad_plan_res.get("ok") is False)
-        check("refusal explains why", "cannot be the project source directory" in bad_plan_res.get("error", ""))
-
-        # Non-existent project
-        missing_res = OBF.create_plan(temp_dir / "does_not_exist")
-        check("non-existent directory returns error", missing_res.get("ok") is False)
-
+        failed = OBF._safe_child_env()
     finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        if saved == "absent":
+            sys.modules.pop("jarvis_child_env", None)
+        else:
+            sys.modules["jarvis_child_env"] = saved
+    check("without jarvis_child_env the answer is None (start nothing), not os.environ",
+          failed is None, repr(failed))
 
 
-def t_approval_card_generation():
-    fake_plan = {
-        "project_name": "alpha",
-        "tool": "pyarmor",
-        "profile": "standard",
-        "output_dir": "/tmp/dist/obfuscated",
-        "files_count": 5,
-    }
-    card = OBF.build_card(fake_plan)
-    check("card has action project_obfuscate", card["action"] == "project_obfuscate")
-    check("card has tier ask", card["tier"] == "ask")
-    check("card title names project", "alpha" in card["title"])
-    check("card prompt mentions non-destructive safety", "will not be modified" in card["prompt"])
-    check("card has approve and cancel buttons",
-          len(card["buttons"]) == 2 and any(b["value"] == "approve" for b in card["buttons"]))
+# --------------------------------------------------------------------------
+# 4. The fake machinery is gone, not merely unregistered
+# --------------------------------------------------------------------------
+
+def t_no_obfuscation_machinery():
+    for name in ("PROFILES", "detect_project", "create_plan", "build_card",
+                 "execute_plan", "verify_obfuscated_output", "OBFUSCATE_ACTION"):
+        check(f"{name} does not exist on the module", not hasattr(OBF, name))
+    for name in ("check_tool", "list_available_tools", "format_tool_guidance"):
+        check(f"{name} is the small real surface that remains", hasattr(OBF, name))
 
 
-def t_execution_runner_and_verification():
-    temp_dir = Path(tempfile.mkdtemp(prefix="jarvis-obf-exec-"))
-    try:
-        proj = temp_dir / "target_app"
-        proj.mkdir()
-        src_file = proj / "app.js"
-        src_original_content = "function compute() { return 42; }"
-        src_file.write_text(src_original_content, encoding="utf-8")
+# --------------------------------------------------------------------------
+# 5/6. The chat lane: fixed local words, no plan, no card, nothing run
+# --------------------------------------------------------------------------
 
-        plan_res = OBF.create_plan(proj, profile="light")
-        plan = plan_res["plan"]
-
-        # Mock runner simulating CLI tool execution
-        def mock_runner(cmd, out_dir):
-            # Create simulated obfuscated file in output dir
-            obf_file = out_dir / "app.js"
-            obf_file.parent.mkdir(parents=True, exist_ok=True)
-            obf_file.write_text("eval(function(p,a,c,k,e,d){...})", encoding="utf-8")
-            return 0, "Obfuscated successfully", ""
-
-        exec_res = OBF.execute_plan(plan, runner=mock_runner)
-        check("execution succeeds", exec_res.get("ok") is True, str(exec_res))
-        check("original source file is COMPLETELY UNTOUCHED",
-              src_file.read_text(encoding="utf-8") == src_original_content)
-
-        out_path = Path(exec_res["output_dir"]) / "app.js"
-        check("output artifact exists in destination directory", out_path.is_file())
-        check("output artifact has transformed content", "eval" in out_path.read_text(encoding="utf-8"))
-
-        verification = exec_res.get("verification") or {}
-        check("verification reports valid output", verification.get("valid") is True)
-        check("verification counts artifacts", verification.get("artifacts_count") == 1)
-
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-def t_chat_intent_routing():
-    # 1. Tools info query
+def t_chat_tool_answer():
     r1 = ask("what obfuscation tools do you support?")
-    check("'what obfuscation tools do you support' matches obfuscate_tools_info",
-          r1 is not None and r1.intent == "obfuscate_tools_info", getattr(r1, "intent", None))
-    check("tools info reply lists supported tools",
-          r1 is not None and "javascript-obfuscator" in r1.reply and "pyarmor" in r1.reply)
+    check("'what obfuscation tools do you support' is answered locally",
+          r1 is not None and r1.intent == "obfuscate_tools_info",
+          getattr(r1, "intent", None))
+    check("the answer starts with what is NOT done",
+          r1 is not None and OBF.NOT_RUN in r1.reply, r1.reply[:120] if r1 else "")
+    check("the answer lists the real programs",
+          r1 is not None and "javascript-obfuscator" in r1.reply
+          and "pyarmor" in r1.reply)
 
     r2 = ask("list code obfuscation tools")
-    check("'list code obfuscation tools' matches obfuscate_tools_info",
+    check("'list code obfuscation tools' is the same local answer",
           r2 is not None and r2.intent == "obfuscate_tools_info")
 
-    r3 = ask("can you obfuscate code?")
-    check("'can you obfuscate code?' matches obfuscate_tools_info",
-          r3 is not None and r3.intent == "obfuscate_tools_info")
-
-    # 2. Project obfuscation request
-    r4 = ask("obfuscate project sample-dashboard")
-    check("'obfuscate project sample-dashboard' matches project_obfuscate_ask",
-          r4 is not None and r4.intent == "project_obfuscate_ask", getattr(r4, "intent", None))
-
-    r5 = ask("harden project analytics with pyarmor hardened")
-    check("'harden project analytics with pyarmor hardened' matches project_obfuscate_ask",
-          r5 is not None and r5.intent == "project_obfuscate_ask")
+    r3 = ask("which hardening tools are installed?")
+    check("'which hardening tools are installed?' is the same local answer",
+          r3 is not None and r3.intent == "obfuscate_tools_info",
+          getattr(r3, "intent", None))
 
 
-def t_governance_and_safety_checks():
-    check("project_obfuscate is registered in MUST_ASK", "project_obfuscate" in AF.MUST_ASK)
-    check("project_obfuscate is registered in HARD_LIMITS", "project_obfuscate" in AF.HARD_LIMITS)
-    check("project_obfuscate is registered in TITLES", "project_obfuscate" in CW.TITLES)
-    check("project_obfuscate is registered in SUMMARY", "project_obfuscate" in CW.SUMMARY)
+def t_chat_refusal_never_promises_a_card():
+    for text in ("obfuscate project sample-dashboard",
+                 "harden project analytics with pyarmor hardened",
+                 "apply code obfuscation to my project",
+                 "protect my app"):
+        r = ask(text)
+        check(f"'{text}' gets the honest refusal",
+              r is not None and r.intent == "project_obfuscate_unavailable",
+              getattr(r, "intent", None))
+        check(f"'{text}' says nothing was run",
+              r is not None and "nothing was run" in r.reply.lower())
+        check(f"'{text}' says no card was raised",
+              r is not None and "no approval card" in r.reply.lower())
+        check(f"'{text}' never asks the owner to approve anything",
+              r is not None and "approve the approval card" not in r.reply.lower()
+              and "please review" not in r.reply.lower())
 
-    # Check _where.py and apply-patches.ps1
+    r = ask("obfuscate project ..")
+    check("a path-shaped name ('..') is answered, not resolved",
+          r is not None and r.intent == "project_obfuscate_unavailable")
+
+
+def t_privacy_question_is_not_hijacked():
+    r = ask("what protection do I have?")
+    check("a privacy question is not answered by the code-protection lane",
+          getattr(r, "intent", None) not in
+          ("obfuscate_tools_info", "project_obfuscate_unavailable"),
+          getattr(r, "intent", None))
+
+
+def t_the_lane_is_a_deterministic_read():
+    check("the tool answer is a private-chat read",
+          "obfuscate_tools_info" in Q._PRIVATE_DETERMINISTIC_READS)
+    check("the refusal is a private-chat read too",
+          "project_obfuscate_unavailable" in Q._PRIVATE_DETERMINISTIC_READS)
+    check("neither answer may clear 'cancel that'",
+          "obfuscate_tools_info" in Q.READ_ONLY_INTENTS
+          and "project_obfuscate_unavailable" in Q.READ_ONLY_INTENTS)
+
+
+# --------------------------------------------------------------------------
+# 7. The fake gate surface is gone
+# --------------------------------------------------------------------------
+
+def t_no_fake_gate_surface():
+    row_ids = [a for _group, rows in AF.GROUPS for a in rows]
+    check("project_obfuscate is in no asks-first group",
+          "project_obfuscate" not in row_ids)
+    check("project_obfuscate is not a MUST_ASK action",
+          "project_obfuscate" not in AF.MUST_ASK)
+    check("project_obfuscate is not a HARD_LIMITS action",
+          "project_obfuscate" not in AF.HARD_LIMITS)
+    check("project_obfuscate has no card title",
+          "project_obfuscate" not in CW.TITLES)
+    check("project_obfuscate has no card summary",
+          "project_obfuscate" not in CW.SUMMARY)
+
+    tomls = [ROOT / "backend" / "rebuilt" / "jarvis-framework.toml",
+             ROOT / "jarvis-backend" / "jarvis-framework.toml"]
+    for path in tomls:
+        text = path.read_text(encoding="utf-8")
+        check(f"no {path.parent.parent.name} tier line for a non-existent action",
+              "project_obfuscate" not in text, str(path))
+
+
+# --------------------------------------------------------------------------
+# 8. Shipped, and the twin is the same file
+# --------------------------------------------------------------------------
+
+def t_shipped_and_twin():
     import _where
-    check("jarvis_obfuscation.py is in backend/_where.py SHIPPED list",
-          "jarvis_obfuscation.py" in _where.SHIPPED)
 
+    check("jarvis_obfuscation.py is in backend/_where.py SHIPPED",
+          "jarvis_obfuscation.py" in _where.SHIPPED)
     ps_text = (ROOT / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
-    check("jarvis_obfuscation.py is in scripts/apply-patches.ps1 $SHIPPED list",
+    check("jarvis_obfuscation.py is in scripts/apply-patches.ps1 $SHIPPED",
           "'jarvis_obfuscation.py'" in ps_text)
 
-    # Check twin parity
     backend_obf = (HERE / "jarvis_obfuscation.py").read_text(encoding="utf-8")
     base_obf = (ROOT / "jarvis-backend" / "jarvis_obfuscation.py").read_text(encoding="utf-8")
-    check("jarvis_obfuscation.py matches jarvis-backend twin exactly", backend_obf == base_obf)
+    check("jarvis_obfuscation.py is byte-equal to its published-base twin",
+          backend_obf == base_obf)
 
 
 def main():
     tests = [
-        t_tool_availability_and_guidance,
-        t_project_stack_detection,
-        t_create_plan_and_safety_checks,
-        t_approval_card_generation,
-        t_execution_runner_and_verification,
-        t_chat_intent_routing,
-        t_governance_and_safety_checks,
+        t_tool_inventory,
+        t_unknown_tool_starts_nothing,
+        t_safe_child_env_is_an_allowlist,
+        t_probe_uses_the_safe_environment,
+        t_no_safe_environment_means_no_program,
+        t_safe_environment_fails_closed_when_helper_is_missing,
+        t_no_obfuscation_machinery,
+        t_chat_tool_answer,
+        t_chat_refusal_never_promises_a_card,
+        t_privacy_question_is_not_hijacked,
+        t_the_lane_is_a_deterministic_read,
+        t_no_fake_gate_surface,
+        t_shipped_and_twin,
     ]
     for t in tests:
-        print(f"\n--- {t.__name__} " + "-" * (50 - len(t.__name__)))
+        print(f"\n--- {t.__name__} " + "-" * max(1, 56 - len(t.__name__)))
         try:
             t()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - report, never hide a crash
             check(f"{t.__name__} threw exception", False, repr(exc))
 
     print("\n" + "=" * 60)
@@ -304,9 +385,8 @@ def main():
         for f in FAILED:
             print(f"  - {f}")
         sys.exit(1)
-    else:
-        print("ALL TESTS PASSED!")
-        sys.exit(0)
+    print("ALL TESTS PASSED!")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

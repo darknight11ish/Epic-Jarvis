@@ -396,8 +396,6 @@ modify_own_code           = "ask"        # additional gate — see [self_modific
 # jarvis_owner_check.PC_ONLY_ACTIONS, which adds Windows Hello and refuses any
 # device but this PC whatever this line says.
 desktop_update            = "ask"
-# Code obfuscation and multi-language hardening (jarvis_obfuscation.py)
-project_obfuscate          = "ask"
 post_to_external_service  = "never"
 open_public_tunnel        = "never"      # see [security].allow_public_tunnel
 

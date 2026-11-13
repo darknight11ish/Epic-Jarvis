@@ -1060,17 +1060,6 @@
        "windows_hello": false
       },
       {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
-       "windows_hello": false
-      },
-      {
        "action": "record_call",
        "confirmations": 1,
        "fixed": false,
@@ -3598,17 +3587,6 @@
        "windows_hello": false
       },
       {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
-       "windows_hello": false
-      },
-      {
        "action": "record_call",
        "confirmations": 1,
        "fixed": false,
@@ -6133,17 +6111,6 @@
        "windows_hello": false
       },
       {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
-       "windows_hello": false
-      },
-      {
        "action": "record_call",
        "confirmations": 1,
        "fixed": false,
@@ -8659,17 +8626,6 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone",
-       "windows_hello": false
-      },
-      {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
        "windows_hello": false
       },
       {
@@ -11193,17 +11149,6 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone",
-       "windows_hello": false
-      },
-      {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
        "windows_hello": false
       },
       {
@@ -13741,17 +13686,6 @@
        "windows_hello": false
       },
       {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
-       "windows_hello": false
-      },
-      {
        "action": "record_call",
        "confirmations": 1,
        "fixed": false,
@@ -16273,17 +16207,6 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone",
-       "windows_hello": false
-      },
-      {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
        "windows_hello": false
       },
       {
@@ -18817,17 +18740,6 @@
        "windows_hello": false
       },
       {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
-       "windows_hello": false
-      },
-      {
        "action": "record_call",
        "confirmations": 1,
        "fixed": false,
@@ -21349,17 +21261,6 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone",
-       "windows_hello": false
-      },
-      {
-       "action": "project_obfuscate",
-       "confirmations": 1,
-       "fixed": false,
-       "id": "project_obfuscate",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
-       "tier": "ask",
-       "title": "Obfuscate and harden code for a project",
        "windows_hello": false
       },
       {

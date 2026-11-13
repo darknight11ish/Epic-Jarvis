@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "0076d8624917a5caa93eeb3d4309fdf625d9d185",
- "built_at": "2026-11-12T15:20:36+00:00",
+ "ref": "f05530bf8f5ef6f009f0f5814b11821fbd09ba9d",
+ "built_at": "2026-11-13T00:55:54Z",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6275,6 +6275,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "f05530bf8f5ef6f009f0f5814b11821fbd09ba9d",
+   "date": "2026-11-13",
+   "subject": "fix(framework): register project_obfuscate in autonomy.tiers to pass test_gate_names"
+  },
+  {
+   "sha": "d567a8ba7fbf4e3f934d6c54d5c66ac67b797d2d",
+   "date": "2026-11-12",
+   "subject": "fix(obfuscation): resolve CI failures for PR #1228"
+  },
+  {
+   "sha": "2f8d6eef3616ed97c58400dc4cc7df580968dab2",
+   "date": "2026-11-12",
+   "subject": "test(obfuscation): import _where directly to eliminate source-text pin"
+  },
+  {
+   "sha": "a1bfdcf0367df86da640c5f8e79dc96649792027",
+   "date": "2026-11-12",
+   "subject": "fix(obfuscation): replace internal key name to avoid zero-jargon trigger"
+  },
+  {
+   "sha": "e5c4afa890f83466c722b9109828e4b9cd1346de",
+   "date": "2026-11-12",
+   "subject": "chore(map): register jarvis_obfuscation and test_obfuscation in self code map"
+  },
+  {
    "sha": "0076d8624917a5caa93eeb3d4309fdf625d9d185",
    "date": "2026-11-12",
    "subject": "feat(obfuscation): integrate multi-language code obfuscation and hardening with Ask-First governance"
@@ -6348,31 +6373,6 @@
    "sha": "e7544e21a691beb4c9880f5945492668e3ce4c50",
    "date": "2026-11-10",
    "subject": "fix: wave-16 desk catches - scratch cleanup, merge card fields, phone feature directory, doc accuracy"
-  },
-  {
-   "sha": "1acd8758c98659902730b19ce95055cb2268f362",
-   "date": "2026-11-10",
-   "subject": "fix: the desktop Tools page suites pin 65 switches, because wave 16 adds the PR cockpit, the carded merge and the carded fix-and-push"
-  },
-  {
-   "sha": "f0620475ea1bd2cd816ffb9de5787e7a29c2c9ef",
-   "date": "2026-11-10",
-   "subject": "fix: the pooled-preload suite's non-pooled-lane case uses an everyday model, because Q7 now refuses the 30B on a one-card lane before anything is sent"
-  },
-  {
-   "sha": "b2273d3ad2e923e77cb628d79d2eb8bcae966473",
-   "date": "2026-11-10",
-   "subject": "fix: keep the wave-16 additions inside the project's own ratchets - the phone test pins 65 tools, and the parity suite's ordering check is found structurally instead of by source index"
-  },
-  {
-   "sha": "4e6865f25ec5c5c76d54e3f0b44a4ad43201cdb5",
-   "date": "2026-11-10",
-   "subject": "wave 16: two-column Cockpit, claims cap 900 s + memoized parity, shared credential denylist, memory fixes, pooled-lane guard, and GitHub merge / fix-and-push behind one card each"
-  },
-  {
-   "sha": "a3d2bbd2dd205e7d050bb59f79b016e555b5614a",
-   "date": "2026-11-10",
-   "subject": "Merge lane C (wave16-github 58446374): the GitHub PR cockpit, card-gated merge-commit-only merge pinned to the 40-hex head, and card-gated fix-and-push in an isolated scratch worktree, with one CAPABILITIES inventory behind them"
   }
  ],
  "top_level": [

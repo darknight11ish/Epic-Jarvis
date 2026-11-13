@@ -351,10 +351,6 @@
       "title": "Jarvis wants to read a product page in your own browser"
     },
     {
-      "action": "project_obfuscate",
-      "title": "Jarvis wants to obfuscate and harden code for a project"
-    },
-    {
       "action": "protect_item",
       "title": "Jarvis wants to protect a folder, file or program from Jarvis"
     },
@@ -1575,18 +1571,6 @@
         "summary": "Jarvis wants to read a product page in your own browser.",
         "full": "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored. nothing has happened yet.",
         "body": "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored. nothing has happened yet.",
-        "weight": "heavy",
-        "deny_ok": true,
-        "approve_ok": false
-      }
-    },
-    {
-      "action": "project_obfuscate",
-      "notice": {
-        "title": "Jarvis wants to obfuscate and harden code for a project",
-        "summary": "Jarvis wants to obfuscate its code.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
