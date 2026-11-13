@@ -3214,6 +3214,12 @@ $SHIPPED = @(
     # the same position, is in backend/_where.py's SHIPPED, above
     # jarvis_bench.py, which stays last.
     'jarvis_review.py'
+    # The code-protection tool check (2026-11-12): reports which obfuscator and
+    # hardening programs are installed on this PC, and says plainly that it does
+    # not run them. Read-only: no project file is read, copied or changed, no
+    # approval card exists, and it is not a gate action or a tool Jarvis offers.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_obfuscation.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

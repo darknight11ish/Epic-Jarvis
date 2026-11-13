@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
- "built_at": "2026-11-13T06:14:10-08:00",
+ "ref": "a90eace36cea9cce2bbaf19f25ad3f66fef2f1e1",
+ "built_at": "2026-11-13T06:23:14-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -395,6 +395,7 @@
     "backend/jarvis_handoff_mode.py",
     "backend/jarvis_home.py",
     "backend/jarvis_media.py",
+    "backend/jarvis_obfuscation.py",
     "backend/jarvis_open.py",
     "backend/jarvis_pc_facts.py",
     "backend/jarvis_pc_help.py",
@@ -410,7 +411,7 @@
     "backend/jarvis_tool_updates.py",
     "backend/jarvis_ui_control.py"
    ],
-   "file_count": 26,
+   "file_count": 27,
    "key_modules": [
     {
      "path": "backend/jarvis_ui_control.py",
@@ -435,7 +436,8 @@
     "backend/test_app_control.py",
     "backend/test_sandbox_exec.py",
     "backend/test_pc_facts.py",
-    "backend/test_repomap.py"
+    "backend/test_repomap.py",
+    "backend/test_obfuscation.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -4011,6 +4013,7 @@
     "backend/test_notify_prefs.py",
     "backend/test_notion_answer.py",
     "backend/test_notion_obsidian.py",
+    "backend/test_obfuscation.py",
     "backend/test_obscura.py",
     "backend/test_obsidian_notes.py",
     "backend/test_ocr_words.py",
@@ -4315,7 +4318,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 687,
+   "file_count": 688,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4600,6 +4603,7 @@
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/2026-11-11-github-union-0-2-448.md",
+    "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/README.md",
@@ -4758,6 +4762,7 @@
     "decisions.d/2026-11-10-phone-approves-tool-switches.md",
     "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/2026-11-11-github-union-0-2-448.md",
+    "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/README.md",
@@ -5208,7 +5213,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 852,
+   "file_count": 854,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6099,6 +6104,7 @@
     "jarvis-backend/jarvis_notification_styles.py",
     "jarvis-backend/jarvis_notify_prefs.py",
     "jarvis-backend/jarvis_notion_obsidian.py",
+    "jarvis-backend/jarvis_obfuscation.py",
     "jarvis-backend/jarvis_obscura.py",
     "jarvis-backend/jarvis_ocr.py",
     "jarvis-backend/jarvis_ollama_contract.py",
@@ -6261,7 +6267,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 340,
+   "file_count": 341,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6291,6 +6297,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "a90eace36cea9cce2bbaf19f25ad3f66fef2f1e1",
+   "date": "2026-11-13",
+   "subject": "chore: rebuild the self-code map from this head"
+  },
+  {
+   "sha": "32245326249985ff5bd6a3f369f6308aaf1d841e",
+   "date": "2026-11-13",
+   "subject": "Merge H1d (PR #1227 at b5e5718be), the patch-history fix and its map"
+  },
+  {
+   "sha": "4fbcb44e24735e2586e28c789917f04418dce0d7",
+   "date": "2026-11-13",
+   "subject": "Merge commit '444d7e5c6dad01e688b91f4e4556dac67baf8f1e' into feature/code-obfuscation-tools"
+  },
+  {
    "sha": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
    "date": "2026-11-13",
    "subject": "chore: regenerate the self-code map for the added patch-history files"
@@ -6301,9 +6322,24 @@
    "subject": "fix(records): store the four patch versions main's history was missing"
   },
   {
+   "sha": "30006a2f09fdb0ef9d793358af00fc6900e323df",
+   "date": "2026-11-13",
+   "subject": "Re-stack on H1b (5efc9f444), the regeneration fix for PR #1227"
+  },
+  {
    "sha": "5efc9f444d150e2ed584b6eb7a1dd6faa933c888",
    "date": "2026-11-13",
    "subject": "chore: regenerate the self-code map and recent-changes module"
+  },
+  {
+   "sha": "825f93662b83a07fee217c6674cde96fde8ba8f1",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main and H1 (PR #1227) into the obfuscation branch"
+  },
+  {
+   "sha": "5b6b2da8d588da84dcc605fc4a5b11015d0713f2",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into feature/code-obfuscation-tools"
   },
   {
    "sha": "7ba6e650aebef0717efd6aeec3fea2c1d67909ca",
@@ -6341,6 +6377,11 @@
    "subject": "fix(mobile): remove the fake on-device engine and offline sync, keep the design and an honest plate"
   },
   {
+   "sha": "ebda7ff0a0b402e7f4eefde7a80622297d073f11",
+   "date": "2026-11-12",
+   "subject": "fix(obfuscation): the only program this check starts is a tool's own --version, and every answer now says exactly that"
+  },
+  {
    "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
    "date": "2026-11-12",
    "subject": "records(pr1223): regenerate the self-code map after the union map fix"
@@ -6354,48 +6395,13 @@
    "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
    "date": "2026-11-12",
    "subject": "records(union): regenerate the self-code map after the patch-history index landed"
-  },
-  {
-   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
-  },
-  {
-   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
-   "date": "2026-11-12",
-   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the main merge"
-  },
-  {
-   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
-   "date": "2026-11-12",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the gate base the state the patch stack really installs"
-  },
-  {
-   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
-  },
-  {
-   "sha": "8ef4acf0c691f7785d368eece72347c00a9e5f60",
-   "date": "2026-11-12",
-   "subject": "fix(ci): resolve backend and backend-windows test failures across topics leaks, plugins honesty, urlopen regexes, and speed record timestamp collision"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1440
+   "files": 1442
   },
   {
    "path": "jarvis-desktop/",
@@ -6415,7 +6421,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 352
+   "files": 353
   },
   {
    "path": "tools/",
@@ -6425,7 +6431,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 241
+   "files": 242
   },
   {
    "path": "videos/",
@@ -6435,7 +6441,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 158
+   "files": 159
   },
   {
    "path": "plugins/",
@@ -6509,8 +6515,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5638,
-  "covered": 5156,
+  "tracked_files": 5643,
+  "covered": 5161,
   "excluded": 482,
   "subsystems": 27
  },

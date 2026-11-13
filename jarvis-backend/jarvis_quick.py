@@ -26189,6 +26189,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_bench_progress()
     if n == "bench_stop":
         return _run_bench_stop()
+    if n == "obfuscate_tools_info":
+        return _run_obfuscation_tools()
+    if n == "project_obfuscate_unavailable":
+        return _run_obfuscate_unavailable()
     if n == "self_changes":
         return _run_self_changes(f)
     if n == "changeable_overview":
@@ -27042,6 +27046,11 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # so a private chat answers these from the local code, never the model.
     "preset_current", "bench_history", "bench_progress", "self_changes",
     "preset_models", "preset_best", "preset_best_all", "model_before", "bench_how",
+    # The code-protection tool check and its honest "this build cannot run it"
+    # answer (2026-11-12): fixed local words, no plan, no card and no file
+    # touched. A private chat gets the same honest answer instead of a model
+    # that would invent a card or a run.
+    "obfuscate_tools_info", "project_obfuscate_unavailable",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -27257,6 +27266,10 @@ READ_ONLY_INTENTS = frozenset({
     # this PC's own rows and changes nothing, so none may clear "cancel that".
     "preset_models", "preset_best", "preset_best_all", "model_before",
     "bench_how",
+    # The code-protection tool check and its honest "this build cannot run it"
+    # answer (2026-11-12): fixed local words, no plan, no card and no file
+    # touched, so neither may clear what "cancel that" would take back.
+    "obfuscate_tools_info", "project_obfuscate_unavailable",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
@@ -28579,6 +28592,37 @@ _AW_DESKTOP_ROW = re.compile(
 _AW_SETTING_READ = re.compile(
     r"what\s+is\s+(?:the\s+)?(?P<name>.+?)\s+set\s+to\s*", re.I)
 
+#: The code-protection tool check (2026-11-12). Read-only, and deliberately
+#: NARROW: it answers what is installed on this PC and says plainly that
+#: nothing is run. It must not claim a privacy question - "what protection do
+#: I have?" is about the owner's data, not about code - so "protect" and
+#: "protection" are not words this lane accepts on their own. A bare
+#: "obfuscate code" / "obfuscate project" is a REQUEST, not this question: it
+#: belongs to `_AW_OBFUSCATE_PROJECT` below, whose answer is the honest
+#: refusal. (The regex used to accept it here, so "obfuscate project .." was
+#: answered with the tool list before it could reach the refusal.)
+_AW_OBFUSCATE_TOOLS = re.compile(
+    r"(?:what|which)\s+(?:code\s+)?(?:obfuscation|obfuscator|hardening)\s+"
+    r"(?:tools?|options?)"
+    r"(?:\s+(?:do\s+(?:you|i|we)\s+(?:have|support|use)"
+    r"|are\s+(?:there|available|installed)))?"
+    r"|(?:list|show)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?(?:code\s+)?"
+    r"(?:obfuscation|hardening)\s+(?:tools?|options?)"
+    r"|(?:code\s+)?(?:obfuscation|hardening)\s+tools?"
+)
+
+#: A request to obfuscate, harden or protect something. The answer is a fixed
+#: honest refusal (`_run_obfuscate_unavailable`): no plan, no card, no run.
+#: An optional name after "project"/"app" is accepted and ignored - this lane
+#: never resolves a folder or touches a file, so a name can never reach the
+#: filesystem (the old path accepted ".." and planned the parent directory).
+_AW_OBFUSCATE_PROJECT = re.compile(
+    r"(?:obfuscate|harden|protect)\s+"
+    r"(?:the\s+|my\s+|this\s+|our\s+)?"
+    r"(?:code|source(?:\s+code)?|project|app)\b.*"
+    r"|apply\s+(?:code\s+)?(?:obfuscation|hardening)\s+to\s+.*"
+)
+
 #: "Which folders may you look in?" - the read of jarvis_documents.folders().
 _AW_FOLDER_LIST = re.compile(
     r"(?:(?:can|could|would)\s+you\s+|please\s+)?"
@@ -29512,6 +29556,32 @@ def _run_setting_named_read(f: dict) -> Result:
     return Result(said, "setting_named_read")
 
 
+#: The honest answer to "obfuscate project X" (2026-11-12). Fixed words, no
+#: plan, no card and no file touched. The path this replaces said an approval
+#: card was waiting when no card had been raised and nothing could run.
+OBFUSCATE_UNAVAILABLE = (
+    "Jarvis cannot obfuscate or harden code in this build, so nothing was run "
+    "and no approval card was raised. It can tell you which code-protection "
+    "tools are installed on this PC - ask \"what obfuscation tools do you "
+    "support?\" - but it does not run them.")
+
+
+def _run_obfuscation_tools() -> Result:
+    """The read-only inventory: which tools are installed, and the limit."""
+    try:
+        import jarvis_obfuscation as O
+        text = O.format_tool_guidance()
+    except Exception:                       # noqa: BLE001 - module absent
+        text = ("The code-protection tool list could not be read on this PC, so "
+                "I cannot say which tools are installed. Nothing was run.")
+    return Result(text, "obfuscate_tools_info")
+
+
+def _run_obfuscate_unavailable() -> Result:
+    """Say plainly that this build cannot obfuscate, and change nothing."""
+    return Result(OBFUSCATE_UNAVAILABLE, "project_obfuscate_unavailable")
+
+
 def _awareness_chat(s: str, text: str) -> Optional[Intent]:
     """The full self-awareness sentences, matched before the older lanes."""
     low = str(s or "").strip()
@@ -29547,6 +29617,12 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         return Intent("bench_history")
     if _AW_BENCH_HELP.fullmatch(low):
         return Intent("bench_how")
+    if _AW_OBFUSCATE_TOOLS.fullmatch(low):
+        return Intent("obfuscate_tools_info")
+    if _AW_OBFUSCATE_PROJECT.fullmatch(low):
+        # The old regex captured a project name here and then planned a folder.
+        # This lane now changes nothing, so no name is read and none is kept.
+        return Intent("project_obfuscate_unavailable")
     m = _AW_CHANGES.fullmatch(low)
     if m:
         d = m.groupdict()
