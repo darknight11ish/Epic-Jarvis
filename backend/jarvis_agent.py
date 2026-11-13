@@ -805,15 +805,17 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: worktree (`github_fix_and_push`). Each mutating one raises its OWN one-shot
 #: card; neither can be auto-approved.
 #:
-#: ALL SIXTEEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the
-#: point: a fixed-endpoint read still sends the owner's own GitHub token to
-#: api.github.com, so it is egress with a credential attached. `github_read` is
-#: the action a "tell me when" GitHub watch already uses, and it MUST stay
-#: `"auto"` in the shipped config (a look every 30 minutes cannot raise a card
-#: every 30 minutes), which is exactly why these tools do NOT reuse that name.
-#: Every carded action is its own `"ask"` tier line; being in NEEDS_A_PERSON as
-#: well means an owner who loosens that line still cannot make a GitHub read,
-#: merge, push or edit run with nobody asked.
+#: The reads and writes USED TO all be in `NEEDS_A_PERSON`, reads included: a
+#: fixed-endpoint read still sends the owner's own GitHub token to
+#: api.github.com, so it is egress with a credential attached. The owner
+#: overturned that for the reads on 2026-11-10 23:00 PT and again in the
+#: 2026-11-11 Q3/Q4 ruling (see below); every WRITE is still in the set.
+#: `github_read` is the action a "tell me when" GitHub watch already uses, and
+#: it MUST stay `"auto"` in the shipped config (a look every 30 minutes cannot
+#: raise a card every 30 minutes), which is exactly why these tools do NOT
+#: reuse that name. Every carded action is its own `"ask"` tier line; being in
+#: NEEDS_A_PERSON as well means an owner who loosens that line still cannot
+#: make a merge, push or edit run with nobody asked.
 #:
 #: The 2026-11-10 22:30 ruling's Step 2 added the last six: a full pull-request
 #: read (`github_pr_detail`), opening a pull request for a branch Jarvis
@@ -869,10 +871,18 @@ GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_work
                        "github_issue_state")
 GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
 
-#: The reads are CARD-FREE (the owner's decision of 2026-11-10 23:00): a read is
-#: a GET on api.github.com and changes nothing, so the gate runs it at "auto"
-#: and it is NOT in NEEDS_A_PERSON. Every WRITE above still asks its own card.
-GITHUB_CARD_FREE_READS = GITHUB_READ_TOOLS
+#: The reads are CARD-FREE (the owner's decisions of 2026-11-10 23:00 and the
+#: 2026-11-11 Q3/Q4 ruling): a read changes nothing, so the gate runs it at
+#: "auto" and it is NOT in NEEDS_A_PERSON. Every WRITE above still asks its own
+#: card.
+#:
+#: There are SIX, and `github_search` is the sixth: it is deliberately NOT in
+#: `GITHUB_READ_TOOLS` above, because that tuple is the five fixed-address
+#: api.github.com GETs the GitHub parity inventory owns one row each for.
+#: `github_search` plans and runs the read-only research library search
+#: instead, so it carries its own two action names
+#: (`github_search_run` / `github_search_run_authenticated`), both "auto".
+GITHUB_CARD_FREE_READS = GITHUB_READ_TOOLS + ("github_search",)
 
 
 def _github_capabilities_words() -> str:
