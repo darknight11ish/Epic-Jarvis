@@ -38909,17 +38909,31 @@ history of their own days.
   unbypassable floor, and its branch rules are never read - no repository rule can
   lower the floor. Any OTHER repository is judged by its OWN branch rules: every
   required status-check context they name must have completed successfully on the
-  carded head commit. When the rules name no contexts (200 with none) or the rules
-  endpoint answers 404, the commit's own check-runs decide (falling back to its
-  workflow runs when there are none): at least one check, all completed, every
-  conclusion in success/neutral/skipped. A 401/403 on the rules read or on the
-  checks read refuses the merge in plain words and appends the module's standing
-  sentence " Nothing was merged." - the rule is never silently weakened. The
+  carded head commit. When the rules name no contexts (200 with none), the rules
+  endpoint answers 404, or the 403 is the free-plan one below, the commit's own
+  check-runs decide (falling back to its workflow runs when there are none): at
+  least one check, all completed, every conclusion in success/neutral/skipped.
+  A 401, or a 403 with any other message, on the rules read or on the checks
+  read refuses the merge in plain words and appends the module's standing
+  sentence " Nothing was merged." - the rule is never silently weakened, and a
+  real token failure is never swallowed. **The free-plan 403 is the one
+  exception (measured 2026-11-13 on the live 0.2.448 install):** GitHub answers
+  a private repository whose owner's plan does not include branch rules with 403
+  "Upgrade to GitHub Pro or make this repository public to enable this
+  feature." That means the repository has NO rules, not that the token is
+  blind, so it is treated exactly like a 200 naming none - the generic rule
+  decides - and the merge answer says plainly that the repository has no
+  required-check rules because its owner's plan does not include branch rules.
+  Measured on `darknight11ish/jarvis-coding-field-test` PR #1 (head `75044fb`,
+  green `ci`, mergeable clean): the owner-approved merge card `92d7445a479a`
+  was refused with "This GitHub token cannot read branch protection rules for
+  this repository, so Jarvis will not merge it. Nothing was merged." The
   READ-ONLY cockpit `github_pr_scan` uses the SAME plan for its rows (one
   function, `_check_plan`, behind both doors), so a green pull request in another
   repository reads "merge-ready" under its own rule and no longer prints
-  "blocked - rust has not reported". `backend/test_github_tools.py` pins both
+  "blocked - rust has not reported". `backend/test_github_tools.py` pins the
   halves (`t_merge_checks_are_per_repository`,
+  `t_merge_plan_limited_rules_are_no_rules`,
   `t_pr_scan_classifies_a_foreign_repo_with_its_own_checks`). Honest residual,
   recorded rather than hidden: the generic rule reads ONE page of check-runs /
   workflow runs (page 1 only, `per_page=100` and the Q-G `per_page=5` fallback are
