@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
- "built_at": "2026-11-12T20:16:01-08:00",
+ "ref": "ba742a9b82efcfb83376227ab9af1f87efd56f0a",
+ "built_at": "2026-11-13T06:29:13-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4599,6 +4599,7 @@
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/2026-11-11-github-union-0-2-448.md",
+    "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4755,6 +4756,7 @@
     "decisions.d/2026-11-10-phone-approves-tool-switches.md",
     "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/2026-11-11-github-union-0-2-448.md",
+    "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5202,7 +5204,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 847,
+   "file_count": 849,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5627,6 +5629,8 @@
     "tools/hud-deltas/gate-final-helpers-old.txt",
     "tools/hud-deltas/gate-final-pending-new.txt",
     "tools/hud-deltas/gate-final-pending-old.txt",
+    "tools/hud-deltas/gate-github-tools-new.txt",
+    "tools/hud-deltas/gate-github-tools-old.txt",
     "tools/hud-deltas/gate-guards-dedup-new.txt",
     "tools/hud-deltas/gate-guards-dedup-old.txt",
     "tools/hud-deltas/gate-guards-helpers-new.txt",
@@ -5733,7 +5737,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 507,
+   "file_count": 509,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6285,6 +6289,46 @@
  ],
  "recent_commits": [
   {
+   "sha": "ba742a9b82efcfb83376227ab9af1f87efd56f0a",
+   "date": "2026-11-13",
+   "subject": "docs(records): record the 2026-11-13 github-tools delta false green"
+  },
+  {
+   "sha": "e929b7c18b5db886c75d17f4306c92661ec2dbd6",
+   "date": "2026-11-13",
+   "subject": "test(deploy): pin the extended github-tools false green and the in-place upgrade"
+  },
+  {
+   "sha": "a695fca361e5e80f91e5161f70592ff75f005378",
+   "date": "2026-11-13",
+   "subject": "fix(deploy): detect an extended github-tools block and upgrade it in place"
+  },
+  {
+   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+  },
+  {
+   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+  },
+  {
+   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
+   "date": "2026-11-12",
+   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+  },
+  {
+   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+  },
+  {
+   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "date": "2026-11-12",
+   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+  },
+  {
    "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
    "date": "2026-11-12",
    "subject": "records(pr1223): regenerate the self-code map after the union map fix"
@@ -6343,46 +6387,6 @@
    "sha": "8475a145e864e64fa899ae32bd178acaca568b86",
    "date": "2026-11-11",
    "subject": "fix(base): the base README is its own document, not a copy of backend/README.md"
-  },
-  {
-   "sha": "543d12b2b06d27e866f246ade04421ce5d0930e9",
-   "date": "2026-11-11",
-   "subject": "Merge remote-tracking branch 'origin/main' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "2034e45c2e751602a8e6f69b43744f9164670f55",
-   "date": "2026-11-11",
-   "subject": "feat(github): the 2026-11-11 field-test rulings - Q-C per-repo merge checks, Q-G ci_status reads, Q3/Q4 card-free reads, Q-D/Q7 review tools"
-  },
-  {
-   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
-   "date": "2026-11-11",
-   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
-  },
-  {
-   "sha": "213d35f9276aed80b11804f908a6850e320b7045",
-   "date": "2026-11-11",
-   "subject": "fix(union): repair two merge-resolution artifacts (a missing profile brace and an orphaned test check)"
-  },
-  {
-   "sha": "53a424509ebe786a7d4e2e5e23cb60c3a3030810",
-   "date": "2026-11-11",
-   "subject": "Merge commit '9f0d947abce618f050f494583b45f283dd60a852' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "40875bd0677c959aabcfbac04a38fcfb0ba62985",
-   "date": "2026-11-11",
-   "subject": "Merge commit 'b7341af45432cb076505ebc9366508a01fd9e9c1' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "9f0d947abce618f050f494583b45f283dd60a852",
-   "date": "2026-11-11",
-   "subject": "fix(approvals): the phone may approve tool switches, and the card names the tool"
-  },
-  {
-   "sha": "23745c116fa4fcaa6789a1d5eb4082ba17507159",
-   "date": "2026-11-11",
-   "subject": "assemble: github parity step 2 - nine actions"
   }
  ],
  "top_level": [
@@ -6414,12 +6418,12 @@
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 264
+   "files": 266
   },
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 239
+   "files": 240
   },
   {
    "path": "videos/",
@@ -6429,7 +6433,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 156
+   "files": 157
   },
   {
    "path": "plugins/",
@@ -6503,8 +6507,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5628,
-  "covered": 5150,
+  "tracked_files": 5632,
+  "covered": 5154,
   "excluded": 478,
   "subsystems": 27
  },
