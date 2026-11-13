@@ -20,10 +20,10 @@ from pathlib import Path
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
     "The patch history is rebuilt after the union's patch edits, so the required `backend` and `backend-windows` jobs pass again",
+    'On-device AI and offline sync are a design, not a shipped mock',
     "GitHub's union ships in 0.2.448: merge checks are judged per repository, the CI read refuses a cut answer, six GitHub reads are card-free, and the review gates are ON by default",
     'The two-column Cockpit, a faster claims check, a shared credential denylist, two memory fixes, the everyday-lane guard, and GitHub merge / fix-and-push behind one card each',
     "The vault organizer's switch now says the approval card is waiting instead of claiming the organizer is already on",
-    "The phone's Home screen gets its room back: the top strip's three information cards are in More, its two safety cards stay on Home as one thin row, and past chats are easy to reach",
 )
 
 
