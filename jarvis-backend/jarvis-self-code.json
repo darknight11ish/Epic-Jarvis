@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
- "built_at": "2026-11-12T20:03:51-08:00",
+ "ref": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
+ "built_at": "2026-11-12T20:15:28-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6285,6 +6285,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
+   "date": "2026-11-12",
+   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
+  },
+  {
+   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
+  },
+  {
    "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
    "date": "2026-11-12",
    "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
@@ -6368,21 +6383,6 @@
    "sha": "7f11e73afd14dba487344f1477214cc0479b66eb",
    "date": "2026-11-11",
    "subject": "records(pr1223): regenerate recent-changes and the self-code map after the main merge"
-  },
-  {
-   "sha": "30e8c6ab7166f2243bd17317e95b26fca3f5738f",
-   "date": "2026-11-11",
-   "subject": "assemble: 16B - github authoring lane (PR #1224)"
-  },
-  {
-   "sha": "49b4fcad6e659039f4b3b0b2c7e348a2be8515d5",
-   "date": "2026-11-11",
-   "subject": "assemble: 16E - github review tools lane (PR #1225)"
-  },
-  {
-   "sha": "80df89fd2ff639885f8c21e22f5016e708b59d6a",
-   "date": "2026-11-11",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-claims-2026-11-10"
   }
  ],
  "top_level": [
