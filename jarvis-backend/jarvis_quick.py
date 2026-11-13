@@ -29308,7 +29308,7 @@ def _run_companion_overview() -> Result:
 
 
 def _run_companion_avatar_info() -> Result:
-    """Explain the holographic 3D wave sphere avatar in depth."""
+    """Explain the holographic avatar's design, and say it is not built."""
     try:
         import jarvis_companion as C
         text = C.format_avatar_explanation()

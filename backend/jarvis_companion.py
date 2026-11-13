@@ -1,10 +1,11 @@
 """jarvis_companion.py - the desktop companion's settings and its honest answers.
 
 WHAT IS HERE. The settings store behind the desktop-companion chat answers, plus
-the pure data helpers a renderer would need if the companion's visual half were
-ever built: the golden-spiral point set for the avatar sphere, the wave formula
-for a sound-reactive surface, a shaper for a step-by-step guidance description,
-and a shaper for a 3D card.
+two pure data helpers that shape a plain description: one for a step-by-step
+guidance workflow, one for a 3D card. The avatar's point set and its
+sound-reactive wave formula are deliberately NOT here: both were line-for-line
+translations of AGPL-3.0-licensed code in the Roamies showcase, and this
+MIT-licensed project may not carry them (removed 2026-11-13).
 
 WHAT IS NOT HERE, AND IS NOT CLAIMED (corrected 2026-11-12, the PR #1229 review).
 This module does not draw anything, does not open a window, does not read another
@@ -22,8 +23,10 @@ security-settings windows) and the ONE approval-card path. A second, shorter lis
 here is exactly the shape that lets a program through the moment the two
 disagree, so there is not one (review finding H1, 2026-11-13).
 
-Provenance: the design was inspired by the open-source Roamies system. The
-numbers and the words are ours; the drawing is not built.
+Provenance: the design was inspired by the open-source Roamies system
+(AGPL-3.0). No line of its code is carried here - neither the geometry nor the
+wave formula, both deleted on 2026-11-13 - so only the preference names and the
+plain-word answers are ours, and the drawing is not built.
 
 Standard library only. All state changes are non-destructive.
 """
@@ -31,7 +34,6 @@ Standard library only. All state changes are non-destructive.
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 from pathlib import Path
@@ -230,69 +232,35 @@ def toggle_feature(feature: str, want_on: Optional[bool] = None) -> Tuple[bool, 
 
 
 # -----------------------------------------------------------------------------
-# 1. The avatar's numbers - not a drawn avatar
+# 1. The avatar's saved preferences - not a drawn avatar
 # -----------------------------------------------------------------------------
 
-def generate_sphere_points(count: int = 520) -> List[Tuple[float, float, float]]:
-    """Evenly distributed 3D points on a unit sphere (the golden spiral).
-
-    The numbers a renderer would draw. Nothing draws them in this build.
-    """
-    n = max(32, min(count, 2000))
-    points: List[Tuple[float, float, float]] = []
-    for i in range(n):
-        y = 1.0 - (2.0 * (i + 0.5)) / n
-        r = math.sqrt(max(0.0, 1.0 - y * y))
-        a = i * 2.399963229728653  # golden angle in radians
-        x = math.cos(a) * r
-        z = math.sin(a) * r
-        points.append((round(x, 4), round(y, 4), round(z, 4)))
-    return points
-
-
-def calculate_wave_displacement(
-    point: Tuple[float, float, float],
-    time_sec: float,
-    audio_level: float,
-    is_talking: bool = False
-) -> float:
-    """The outward ripple a renderer would apply at one point, from sound.
-
-    A pure number between -0.16 and 0.16: louder sound moves a point further,
-    and nothing plays, draws or hears it here.
-    """
-    x, y, z = point
-    azimuth = math.atan2(z, x)
-    freq_y = 7.0
-    speed = 9.0 if is_talking else 3.0
-    band = math.sin(y * freq_y - time_sec * speed) * 0.5 + math.sin(azimuth * 5.0 + time_sec * 4.0) * 0.5
-    wavy = max(0.12, min(1.0, audio_level))
-    displacement = wavy * 0.16 * band
-    return displacement
+#: The dot count the design names for each avatar size. A number from the
+#: design, not a point set: nothing computes the points in this build.
+_AVATAR_DOT_COUNTS = {"default": 520, "small": 260}
 
 
 def get_avatar_config() -> Dict[str, Any]:
-    """The numbers a renderer would need, plus the saved preferences.
+    """The saved avatar preferences, plus the design's dot count.
 
     `enabled` is the owner's saved preference, not a statement that anything is
-    drawn: nothing is (see NOT_BUILT).
+    drawn: nothing is (see NOT_BUILT). The point set itself is NOT here and is
+    not computed - it was AGPL-3.0-derived code this project may not carry.
     """
     cfg = load_settings()
     style = _known(cfg.get("avatar_style"), AVATAR_STYLES)
     size = _known(cfg.get("avatar_size"), AVATAR_SIZES)
-    dot_count = 260 if size == "small" else 520
     return {
         "enabled": bool(cfg.get("avatar_enabled")),
         "style": style,
         "size": size,
         "voice_reactive": bool(cfg.get("avatar_voice_reactive")),
-        "point_count": dot_count,
-        "points": generate_sphere_points(dot_count),
+        "point_count": _AVATAR_DOT_COUNTS.get(size, 520),
     }
 
 
 # -----------------------------------------------------------------------------
-# 2. Screen guidance - a description, not a drawn overlay
+# 1. Screen guidance - a description, not a drawn overlay
 # -----------------------------------------------------------------------------
 
 def create_guidance_workflow(title: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -353,7 +321,7 @@ def create_guidance_workflow(title: str, steps: List[Dict[str, Any]]) -> Dict[st
 
 
 # -----------------------------------------------------------------------------
-# 3. The ONE safety list - asked, never copied
+# 2. The ONE safety list - asked, never copied
 # -----------------------------------------------------------------------------
 
 def denied_app_reason(app_or_exe: str) -> Optional[str]:
@@ -387,7 +355,7 @@ def denied_app_reason(app_or_exe: str) -> Optional[str]:
 
 
 # -----------------------------------------------------------------------------
-# 4. Interactive 3D cards - a description, not a rendered card
+# 3. Interactive 3D cards - a description, not a rendered card
 # -----------------------------------------------------------------------------
 
 def create_3d_card(
@@ -421,7 +389,7 @@ def create_3d_card(
 
 
 # -----------------------------------------------------------------------------
-# 5. The chat answers - honest first, every time
+# 4. The chat answers - honest first, every time
 # -----------------------------------------------------------------------------
 
 def format_companion_overview() -> str:
@@ -442,10 +410,10 @@ def format_companion_overview() -> str:
         f"{sg_state}, cursor ask bar {ab_state}, 3D cards {cards_state}). Saying "
         "*'turn on avatar'* saves the preference; it does not turn anything on "
         "on screen, because there is nothing to turn on yet.\n"
-        "2. **The avatar's numbers** (the Holographic 3D LED Wave Sphere): 520 "
-        "points on a golden spiral around a sphere, 260 in small mode, plus the "
-        "wave formula a renderer would use for sound-reactive ripples. Nothing "
-        "draws them.\n"
+        "2. **The avatar's saved preferences:** a style (sphere, reticle, "
+        "classic, off) and a size (default, small, cursor). The avatar itself "
+        "- its geometry and its sound-reactive formula - is not built and is "
+        "not computed here.\n"
         "3. **A guidance description:** a title, numbered steps, marks with a "
         "colour and a wait mode. It is plain words only - nothing is "
         "highlighted and nothing waits for your click.\n"
@@ -462,21 +430,21 @@ def format_companion_overview() -> str:
 
 
 def format_avatar_explanation() -> str:
-    """Return the design of the wave sphere, and say it is not drawn."""
+    """Return the avatar's saved preferences, and say the avatar is not built."""
     return (
-        "### Holographic 3D LED Wave Sphere Avatar\n\n"
-        f"**{NOT_BUILT}** What follows is the design and its geometry, not a "
-        "working avatar.\n\n"
-        "- **The geometry:** 520 points (260 in small mode) evenly spaced on a "
-        "golden spiral around a 3D sphere. The points are computed here; "
-        "nothing draws them.\n"
-        "- **The wave:** a formula gives each point a small outward ripple, and "
-        "a louder sound moves it further. It is never played or drawn.\n"
+        "### Holographic Avatar (design only)\n\n"
+        f"**{NOT_BUILT}** What follows is the name of a design and the "
+        "preferences that save it, not a working avatar.\n\n"
+        "- **What is saved:** a style (sphere, reticle, classic, off) and a "
+        "size (default, small, cursor). Each is a preference, not a drawn "
+        "thing.\n"
+        "- **The geometry and the sound-reactive formula:** deliberately not "
+        "in this build at all. Nothing computes a point set, nothing applies a "
+        "wave, and nothing is played or drawn.\n"
         "- **Gaze, the glowing core and reticle mode:** described in the design "
         "and not built. No window follows your cursor, and no reticle appears.\n\n"
-        "The two preferences that exist are the style (sphere, reticle, classic, "
-        "off) and the size (default, small, cursor). Say *'set avatar style to "
-        "sphere'* or *'set avatar size to small'* to save one."
+        "The two preferences that exist are the style and the size. Say *'set "
+        "avatar style to sphere'* or *'set avatar size to small'* to save one."
     )
 
 

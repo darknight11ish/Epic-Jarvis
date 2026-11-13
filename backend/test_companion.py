@@ -6,9 +6,10 @@ behaviour):
 
   1. A SAVED PREFERENCE is reported as a preference, never as a working
      feature, and a save that fails says so instead of a fake success.
-  2. The avatar's geometry is really on the unit sphere, and a louder sound
-     really moves a point further (a strict comparison - the old check passed
-     even when the function returned 0.0 for everything).
+  2. The AGPL-3.0-derived point set and wave formula are GONE (deleted
+     2026-11-13, they were line-for-line translations of the Roamies showcase),
+     and the avatar helper hands back saved preferences and the design's dot
+     count only - never a computed point, never a wave.
   3. The guidance and 3D-card helpers shape plain descriptions and nothing
      else.
   4. The ONE hard denylist is the screen-control module's, and a FULL PATH
@@ -24,7 +25,6 @@ behaviour):
 
 from __future__ import annotations
 
-import math
 import os
 import sys
 import tempfile
@@ -134,46 +134,32 @@ def t_a_preference_is_a_preference():
 
 
 # --------------------------------------------------------------------------
-# 2. The avatar's numbers
+# 2. No AGPL-derived geometry, and no claim of one
 # --------------------------------------------------------------------------
 
-def t_the_avatar_numbers():
-    print("\n--- t_the_avatar_numbers -------------------------------")
-    pts_520 = C.generate_sphere_points(520)
-    check("generated 520 sphere points", len(pts_520) == 520)
-
-    pts_260 = C.generate_sphere_points(260)
-    check("generated 260 sphere points", len(pts_260) == 260)
-
-    all_on_sphere = True
-    for x, y, z in pts_520[:30]:
-        dist = math.sqrt(x * x + y * y + z * z)
-        if abs(dist - 1.0) > 0.05:
-            all_on_sphere = False
-            break
-    check("points lie on unit sphere radius 1.0", all_on_sphere)
-
-    # A STRICT comparison: the old check (`abs(loud) >= abs(quiet) or
-    # abs(loud) > 0`) passed for any output at all, including 0.0 everywhere.
-    quiet = C.calculate_wave_displacement((1.0, 0.0, 0.0), time_sec=1.0,
-                                          audio_level=0.0, is_talking=False)
-    loud = C.calculate_wave_displacement((1.0, 0.0, 0.0), time_sec=1.0,
-                                         audio_level=1.0, is_talking=False)
-    check("a much louder sound moves the point much further",
-          abs(loud) > 2.0 * abs(quiet), (quiet, loud))
-    check("the ripple stays inside its stated 0.16 limit", abs(loud) <= 0.16 + 1e-9, loud)
+def t_no_agpl_geometry_is_carried():
+    print("\n--- t_no_agpl_geometry_is_carried -----------------------")
+    # `generate_sphere_points()` and `calculate_wave_displacement()` were
+    # line-for-line translations of AGPL-3.0 code from the Roamies showcase.
+    # This MIT project may not carry them, so both are deleted and must stay
+    # deleted - and nothing may hand a caller the numbers they used to compute.
+    check("the AGPL-derived point set is gone",
+          not hasattr(C, "generate_sphere_points"))
+    check("the AGPL-derived wave formula is gone",
+          not hasattr(C, "calculate_wave_displacement"))
 
     av_cfg = C.get_avatar_config()
-    check("avatar config contains points", "points" in av_cfg and len(av_cfg["points"]) > 0)
+    check("the avatar helper computes no points", "points" not in av_cfg)
     check("avatar config reports a known style", av_cfg.get("style") in C.AVATAR_STYLES)
     check("avatar config reports the saved preference, not a working avatar",
           av_cfg.get("enabled") is True)   # saved above by this suite, still a preference
-    check("the default size asks for 520 points", av_cfg["point_count"] == 520)
+    check("the default size still names the design's 520 dots",
+          av_cfg["point_count"] == 520)
 
     C.set_setting("avatar_size", "small")
     small_cfg = C.get_avatar_config()
-    check("small mode asks for 260 points", small_cfg["point_count"] == 260)
-    check("...and hands back 260 points", len(small_cfg["points"]) == 260)
+    check("small mode names the design's 260 dots", small_cfg["point_count"] == 260)
+    check("...and still computes no points", "points" not in small_cfg)
     C.set_setting("avatar_size", "default")
 
 
@@ -280,6 +266,12 @@ FALSE_CLAIMS = (
     "draws spotlights",
     "hand-drawn glowing loops",
     "waits for your real click",
+    # The AGPL-derived geometry and wave (deleted 2026-11-13). No answer may
+    # offer them as something this build computes or holds.
+    "golden spiral",
+    "520 points",
+    "wave formula",
+    "sphere point",
 )
 
 
@@ -445,7 +437,7 @@ def t_governance_and_integrity():
 
 def main():
     t_a_preference_is_a_preference()
-    t_the_avatar_numbers()
+    t_no_agpl_geometry_is_carried()
     t_guidance_description_shaper()
     t_3d_card_shaper()
     t_the_one_denylist_is_the_shared_one()

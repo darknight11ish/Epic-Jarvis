@@ -1794,10 +1794,12 @@ SHIPPED = (
     # jarvis_bench.py, which stays last.
     "jarvis_review.py",
     # The desktop companion's settings and its honest chat answers
-    # (jarvis_companion.py, 2026-11-12; a Roamies-inspired design): the avatar
-    # sphere's geometry, a guidance-description shaper, a 3D card shaper, and
-    # the saved preferences behind the companion chat answers. It draws
-    # nothing, reads no screen and controls no window - see its own docstring.
+    # (jarvis_companion.py, 2026-11-12; a Roamies-inspired design): guidance and
+    # 3D-card description shapers, and the saved preferences behind the
+    # companion chat answers. The avatar's geometry and its wave formula are
+    # deliberately NOT here - AGPL-3.0-derived code this MIT project may not
+    # carry (deleted 2026-11-13). It draws nothing, reads no screen and controls
+    # no window - see its own docstring.
     # The same entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED.
     "jarvis_companion.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
