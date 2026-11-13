@@ -6,8 +6,8 @@ package com.jarvis.client.localai
  *
  * It hands out [pieces] one at a time, asks [stopped] before each, and reports
  * [stats] for the generation. That is exactly the seam the real [LlamaEngine]
- * exposes, so `LocalAiControllerTest` can prove the state machine, the 5-second
- * idle unload and the 180-second cap without a phone.
+ * exposes, so `LocalAiControllerTest` can prove the state machine, the
+ * five-minute idle unload and the 180-second cap without a phone.
  */
 class FakeLocalEngine(
     private val failCreate: String? = null,

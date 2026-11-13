@@ -113,6 +113,13 @@ object LocalAiWords {
     /** The send action. */
     const val SEND = "Send"
 
+    /**
+     * Discards the draft. The draft is `rememberSaveable`, so it survives
+     * leaving the screen; before this there was no way to throw a stale or
+     * half-typed question away except killing the app (field test, 2026-11-13).
+     */
+    const val CLEAR = "Clear"
+
     /** Where the chat lives. */
     const val CHAT_NOTE =
         "This chat stays on this phone. It is not saved, and it is not the chat that uses your PC."
@@ -142,9 +149,14 @@ object LocalAiWords {
     /** The short line under the reply itself, when the cap ended it. */
     const val HARD_CAP_SHORT = "Stopped at the 3-minute limit for one reply."
 
-    /** Said after the 5-second idle rule frees the model. */
+    /**
+     * Said after the five-minute idle rule frees the model. The window was
+     * 5 seconds until the 2026-11-13 field test measured it unloading the
+     * model before a person could start typing; five minutes is the session
+     * window now.
+     */
     const val IDLE_UNLOAD_NOTE =
-        "Jarvis unloaded the model after 5 seconds with nothing asked, to give the phone its " +
+        "Jarvis unloaded the model after 5 minutes with nothing asked, to give the phone its " +
             "memory back."
 
     /** Said when the native library is not in this build. */

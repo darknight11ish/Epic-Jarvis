@@ -527,8 +527,9 @@ class LocalAiController(
     }
 
     /**
-     * The screen's twice-a-second heartbeat: applies the 5-second idle unload
-     * and makes sure a running generation has been asked to stop at the cap.
+     * The screen's twice-a-second heartbeat: applies the five-minute idle
+     * unload and makes sure a running generation has been asked to stop at the
+     * cap.
      */
     suspend fun tick() {
         if (closed) return
@@ -553,7 +554,7 @@ class LocalAiController(
 
     /**
      * The owner is typing. This is not an engine request and it never creates
-     * or loads anything; it only restarts the 5-second idle window, so
+     * or loads anything; it only restarts the five-minute idle window, so
      * composing a question cannot race the unload that frees the model. A
      * phone that is being typed into is a phone using the model.
      */

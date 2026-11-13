@@ -7,9 +7,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The 5-second idle rule and the 180-second hard cap, on a clock the test moves
- * by hand: no sleeps, no flakes, and the exact millisecond on both sides of
- * every boundary.
+ * The five-minute idle rule and the 180-second hard cap, on a clock the test
+ * moves by hand: no sleeps, no flakes, and the exact millisecond on both sides
+ * of every boundary.
+ *
+ * The idle window was **5 seconds** until the 2026-11-13 field test on the
+ * owner's phone: the model unloaded 16 seconds after Load, before a person
+ * could start typing (loaded `06:15:04.976`, unloaded `06:15:20.870`). The
+ * measured correction is **5 minutes**, and this test pins that number and its
+ * exact boundary instead of the old one. The 180-second hard cap is unchanged.
  */
 class LocalEnginePolicyTest {
 
@@ -21,8 +27,8 @@ class LocalEnginePolicyTest {
     ) = LocalEnginePolicy(clock = { now }, idleMillis = idle, hardCapMillis = cap)
 
     @Test
-    fun theTwoWindowsAreFiveSecondsAndThreeMinutes() {
-        assertEquals(5_000L, LocalEnginePolicy.IDLE_UNLOAD_MILLIS)
+    fun theTwoWindowsAreFiveMinutesAndThreeMinutes() {
+        assertEquals(300_000L, LocalEnginePolicy.IDLE_UNLOAD_MILLIS)
         assertEquals(180_000L, LocalEnginePolicy.HARD_CAP_MILLIS)
     }
 
@@ -30,10 +36,10 @@ class LocalEnginePolicyTest {
     fun theIdleWindowStartsOnTheLoadRequest() {
         val rules = policy()
         rules.requested()
-        now += 4_999L
+        now += LocalEnginePolicy.IDLE_UNLOAD_MILLIS - 1L
         assertFalse(rules.idleDue())
         now += 1L
-        assertTrue("5,000 ms exactly must unload", rules.idleDue())
+        assertTrue("300,000 ms exactly must unload", rules.idleDue())
         assertEquals(LocalEnginePolicy.Decision.UnloadAfterIdle, rules.decide())
     }
 
@@ -48,12 +54,23 @@ class LocalEnginePolicyTest {
     fun aNewRequestRestartsTheIdleWindow() {
         val rules = policy()
         rules.requestedAt(1_000)
-        now = 5_500
+        now = 1_000 + LocalEnginePolicy.IDLE_UNLOAD_MILLIS - 1L
         rules.requested()
         assertFalse(rules.idleDue())
-        now = 10_499
+        now += LocalEnginePolicy.IDLE_UNLOAD_MILLIS - 1L
         assertFalse(rules.idleDue())
-        now = 10_500
+        now += 1L
+        assertTrue(rules.idleDue())
+    }
+
+    @Test
+    fun typingRestartsTheIdleWindowLikeAnyOtherRequest() {
+        val rules = policy()
+        rules.requestedAt(1_000)
+        now = 1_000 + LocalEnginePolicy.IDLE_UNLOAD_MILLIS - 1L
+        rules.touched()
+        assertFalse("a person typing must not lose the model", rules.idleDue())
+        now += LocalEnginePolicy.IDLE_UNLOAD_MILLIS
         assertTrue(rules.idleDue())
     }
 
@@ -95,9 +112,9 @@ class LocalEnginePolicyTest {
         now = 151_000 // 150 seconds of thinking
         rules.generationFinished()
         assertFalse(rules.isGenerating())
-        now = 155_999
+        now = 151_000 + LocalEnginePolicy.IDLE_UNLOAD_MILLIS - 1L
         assertFalse(rules.idleDue())
-        now = 156_000
+        now += 1L
         assertTrue(rules.idleDue())
     }
 

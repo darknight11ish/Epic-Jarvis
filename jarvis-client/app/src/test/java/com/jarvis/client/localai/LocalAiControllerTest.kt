@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * The Local AI state machine, driven with a fake engine and a clock the test
  * moves: switch off by default, no engine before a Load tap, a model refused
- * when the tier says it is too big, the 5-second idle unload, and a reply cut
- * off at the hard cap.
+ * when the tier says it is too big, the five-minute idle unload, and a reply
+ * cut off at the hard cap.
  */
 class LocalAiControllerTest {
 
@@ -185,7 +185,7 @@ class LocalAiControllerTest {
     }
 
     @Test
-    fun fiveSecondsWithNothingAskedUnloadsTheModel() = runBlocking {
+    fun fiveMinutesWithNothingAskedUnloadsTheModel() = runBlocking {
         val engine = FakeLocalEngine()
         val controller = controller(engine = engine)
         try {
@@ -204,7 +204,7 @@ class LocalAiControllerTest {
     }
 
     @Test
-    fun theIdleRuleDoesNotFireBeforeFiveSeconds() = runBlocking {
+    fun theIdleRuleDoesNotFireBeforeFiveMinutes() = runBlocking {
         val controller = controller()
         try {
             controller.setSwitch(true)
