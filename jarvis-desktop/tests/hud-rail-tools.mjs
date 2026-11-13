@@ -229,7 +229,7 @@ check("the gear is added to the rail toolbar, and the stage-bar road is gone", (
 });
 
 check("the gear keeps its name, its command, its rail box and its shell-only rule", () => {
-  assert.match(BOOT, /var GEAR_SAID = "Jarvis settings";/,
+  assert.match(BOOT, /var GEAR_SAID = "Atlas settings";/,
     "the HUD's gear must keep the bar's and the widget's name");
   assert.match(BOOT, /gear\.setAttribute\("aria-label", GEAR_SAID\)/,
     "the gear needs a name for a screen reader");
