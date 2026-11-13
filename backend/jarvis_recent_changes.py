@@ -20,10 +20,10 @@ from pathlib import Path
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
     "The patch history is rebuilt after the union's patch edits, so the required `backend` and `backend-windows` jobs pass again",
+    "GitHub's git endpoint needs Basic auth, not Bearer - so the prepare clone and the fix push can authenticate again",
     'On-device AI and offline sync are a design, not a shipped mock',
     'The desktop companion says what it is, and it is not the drawing',
     'A code-protection tool check that says what it does not do',
-    "GitHub's union ships in 0.2.448: merge checks are judged per repository, the CI read refuses a cut answer, six GitHub reads are card-free, and the review gates are ON by default",
 )
 
 

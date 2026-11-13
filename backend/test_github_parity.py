@@ -1467,6 +1467,26 @@ def t_fetched_github_text_is_data_not_instructions():
           and not isinstance(result, GH.Request), type(result))
 
 
+def _auth_header_is_basic(value, token):
+    """True only for the header git's ENDPOINT accepts - measured 2026-11-13.
+
+    GitHub's REST API takes `Authorization: Bearer <token>`; its GIT endpoint
+    rejects that form (`remote: invalid credentials`, `fatal: Authentication
+    failed`, rc 128) and accepts
+    `Authorization: Basic base64("x-access-token:" + token)` (rc 0, refs
+    listed). So this DECODES what git is really handed and compares it to the
+    literal `x-access-token:<token>` rather than rebuilding the module's string.
+    """
+    prefix = "Authorization: Basic "
+    if not isinstance(value, str) or not value.startswith(prefix):
+        return False
+    try:
+        raw = base64.b64decode(value[len(prefix):].encode("ascii"), validate=True)
+    except (ValueError, UnicodeEncodeError):
+        return False
+    return raw == ("x-access-token:" + token).encode("utf-8")
+
+
 def t_the_token_never_rides_a_git_argument():
     """Ruling Q1 item 6: the clone's token moved off the command line.
 
@@ -1486,11 +1506,13 @@ def t_the_token_never_rides_a_git_argument():
         check("prepare: the token is in NO git argument",
               not any(TOKEN in " ".join(c["args"]) for c in prepare_git.calls),
               [c["args"] for c in prepare_git.calls if TOKEN in " ".join(c["args"])])
-        check("prepare: the clone carries the token in its ENVIRONMENT config",
+        check("prepare: the clone carries the token in its ENVIRONMENT config, "
+              "in the BASIC form git's endpoint accepts",
               any(c["env"].get("GIT_CONFIG_COUNT") == "1"
                   and c["env"].get("GIT_CONFIG_KEY_0") == "http.extraheader"
-                  and c["env"].get("GIT_CONFIG_VALUE_0")
-                  == f"Authorization: Bearer {TOKEN}" for c in prepare_git.calls),
+                  and _auth_header_is_basic(
+                      c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
+                  for c in prepare_git.calls),
               [c["env"] for c in prepare_git.calls])
         target = os.path.join(root, GH.scratch_folder_name(REPO_NAME, PR_NUMBER))
         push_git_plan = FakeGit([
@@ -1514,10 +1536,10 @@ def t_the_token_never_rides_a_git_argument():
         check("push: the token is in NO git argument",
               not any(TOKEN in " ".join(c["args"]) for c in run_git.calls),
               [c["args"] for c in run_git.calls if TOKEN in " ".join(c["args"])])
-        check("push: the token is in the push's ENVIRONMENT config",
-              all(c["env"].get("GIT_CONFIG_VALUE_0")
-                  == f"Authorization: Bearer {TOKEN}" for c in run_git.calls
-                  if c["args"][:1] == ["push"]), run_git.calls[-1])
+        check("push: the token is in the push's ENVIRONMENT config, Basic form",
+              all(_auth_header_is_basic(c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
+                  for c in run_git.calls if c["args"][:1] == ["push"]),
+              run_git.calls[-1])
         gh_tree = ast.parse((HERE / "jarvis_github.py").read_text(encoding="utf-8"))
         check("the module builds no `-c http.extraheader` argument at all",
               not any(isinstance(n, ast.List) and n.elts

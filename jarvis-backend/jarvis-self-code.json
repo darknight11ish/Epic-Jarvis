@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
- "built_at": "2026-11-13T06:24:00-08:00",
+ "ref": "993c4863a4cddadef772fb2af7e82a090c414572",
+ "built_at": "2026-11-13T06:08:38-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4609,6 +4609,7 @@
     "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
+    "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4769,6 +4770,7 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5218,7 +5220,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 856,
+   "file_count": 858,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6303,104 +6305,104 @@
  ],
  "recent_commits": [
   {
-   "sha": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
+   "sha": "993c4863a4cddadef772fb2af7e82a090c414572",
    "date": "2026-11-13",
-   "subject": "Merge H2d (PR #1228 at a90eace36), the self-code map rebuilt on its head"
+   "subject": "chore(self-code): regenerate the map and the recent-changes bullets"
   },
   {
-   "sha": "a90eace36cea9cce2bbaf19f25ad3f66fef2f1e1",
+   "sha": "0c5c5605240e93831f1ccdbd9125d6138c4387f7",
    "date": "2026-11-13",
-   "subject": "chore: rebuild the self-code map from this head"
+   "subject": "records: the measured Bearer-vs-Basic finding, one fragment each"
   },
   {
-   "sha": "337d8bb4b94dbed536f1ede87c784b4260dc0ce4",
+   "sha": "f050c644aa6729b3f6529575bd5d35d81679d6f8",
    "date": "2026-11-13",
-   "subject": "Merge H2c (PR #1228 at 322453262), the patch-history fix and its map"
+   "subject": "docs(github): JARVIS-API 190.10 states the Basic header form and why"
   },
   {
-   "sha": "32245326249985ff5bd6a3f369f6308aaf1d841e",
+   "sha": "c6e7982bcc9502dc7475a481b17e42976a5e2ab3",
    "date": "2026-11-13",
-   "subject": "Merge H1d (PR #1227 at b5e5718be), the patch-history fix and its map"
+   "subject": "test(github): decode git's auth header - it must be Basic, not Bearer"
   },
   {
-   "sha": "4fbcb44e24735e2586e28c789917f04418dce0d7",
+   "sha": "b32ed184d5379fad2a7b7895c1f221b8ff7fa48d",
    "date": "2026-11-13",
-   "subject": "Merge commit '444d7e5c6dad01e688b91f4e4556dac67baf8f1e' into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
-   "date": "2026-11-13",
-   "subject": "chore: regenerate the self-code map for the added patch-history files"
-  },
-  {
-   "sha": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
-   "date": "2026-11-13",
-   "subject": "fix(records): store the four patch versions main's history was missing"
-  },
-  {
-   "sha": "5256d6c20c94ad9d2bb268bfb8b49a8791e6b657",
-   "date": "2026-11-13",
-   "subject": "Merge commit '30006a2f09fdb0ef9d793358af00fc6900e323df' into feature/roamies-capabilities"
-  },
-  {
-   "sha": "30006a2f09fdb0ef9d793358af00fc6900e323df",
-   "date": "2026-11-13",
-   "subject": "Re-stack on H1b (5efc9f444), the regeneration fix for PR #1227"
-  },
-  {
-   "sha": "5efc9f444d150e2ed584b6eb7a1dd6faa933c888",
-   "date": "2026-11-13",
-   "subject": "chore: regenerate the self-code map and recent-changes module"
-  },
-  {
-   "sha": "79935082edf0a7c25c4a6edadb5f92dfca442c75",
-   "date": "2026-11-13",
-   "subject": "Merge H2 (PR #1228) into the companion branch"
-  },
-  {
-   "sha": "3b0442a328e494af46e176aa2b3b1cb484225bed",
-   "date": "2026-11-13",
-   "subject": "Merge commit '7ba6e650aebef0717efd6aeec3fea2c1d67909ca' into feature/roamies-capabilities"
-  },
-  {
-   "sha": "e026613ec0b7c3ae73253d67ab0f926edea2ff24",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into feature/roamies-capabilities"
-  },
-  {
-   "sha": "825f93662b83a07fee217c6674cde96fde8ba8f1",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main and H1 (PR #1227) into the obfuscation branch"
-  },
-  {
-   "sha": "5b6b2da8d588da84dcc605fc4a5b11015d0713f2",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "7ba6e650aebef0717efd6aeec3fea2c1d67909ca",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "7f3efe9bd085541c87a37c9a879590cfa4813284",
-   "date": "2026-11-13",
-   "subject": "chore: regenerate the self-code maps for the AGPL removal"
-  },
-  {
-   "sha": "87f2617d045903ad1f47957e69bd226c984fd7ad",
-   "date": "2026-11-13",
-   "subject": "docs(companion): record that the AGPL-derived geometry and wave are gone"
-  },
-  {
-   "sha": "a7b4f7e2ab5ebbc7fc7808ace7f2977723c6c5d3",
-   "date": "2026-11-13",
-   "subject": "fix(companion): delete the AGPL-3.0-derived sphere and wave code"
+   "subject": "fix(github): git needs Basic auth, not Bearer - measured 2026-11-13"
   },
   {
    "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
    "date": "2026-11-12",
    "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+  },
+  {
+   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+  },
+  {
+   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
+   "date": "2026-11-12",
+   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+  },
+  {
+   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+  },
+  {
+   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "date": "2026-11-12",
+   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+  },
+  {
+   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
+  },
+  {
+   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
+   "date": "2026-11-12",
+   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
+  },
+  {
+   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
+  },
+  {
+   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
+   "date": "2026-11-12",
+   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the main merge"
+  },
+  {
+   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
+   "date": "2026-11-12",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
+   "date": "2026-11-12",
+   "subject": "fix(union): make the gate base the state the patch stack really installs"
+  },
+  {
+   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
+   "date": "2026-11-12",
+   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
+  },
+  {
+   "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
+   "date": "2026-11-12",
+   "subject": "fix(union): resolve CI audit zero-jargon, asks-first frontend test, and backend Windows test failures"
   }
  ],
  "top_level": [
@@ -6437,7 +6439,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 243
+   "files": 244
   },
   {
    "path": "videos/",
@@ -6447,7 +6449,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 160
+   "files": 161
   },
   {
    "path": "plugins/",
@@ -6521,8 +6523,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5648,
-  "covered": 5166,
+  "tracked_files": 5650,
+  "covered": 5168,
   "excluded": 482,
   "subsystems": 27
  },
