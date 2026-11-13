@@ -1552,6 +1552,8 @@ _TOOL_TARGETS = {
     'change_setting': ('the change setting tool', 'change setting tool', 'the change setting', 'change setting'),
     'feature_guide': ('the feature guide tool', 'feature guide tool', 'the feature guide', 'feature guide'),
     'project_read': ('the project read tool', 'project read tool', 'the project read', 'project read'),
+    'review_changes': ('the review changes tool', 'review changes tool', 'the review changes', 'review changes'),
+    'check_records': ('the check records tool', 'check records tool', 'the check records', 'check records'),
     'goals_list': ('the goals list tool', 'goals list tool', 'the goals list', 'goals list'),
     'goal_add': ('the goal add tool', 'goal add tool', 'the goal add', 'goal add'),
     'goal_progress': ('the goal progress tool', 'goal progress tool', 'the goal progress', 'goal progress'),

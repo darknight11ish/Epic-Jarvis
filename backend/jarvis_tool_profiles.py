@@ -106,6 +106,7 @@ PLUGINS           = "backend/jarvis_plugins.py"
 BROWSER_CONTROL   = "backend/jarvis_browser_control.py"
 BROWSER_ENGINE    = "backend/jarvis_browser_engine.py"
 PRODUCT_CHECK     = "backend/jarvis_product_check.py"
+REVIEW            = "backend/jarvis_review.py"
 SECOND_CARD       = "backend/jarvis_second_card.py"
 RESEARCH          = "backend/jarvis_research.py"
 SEARCH            = "backend/jarvis_search.py"
@@ -161,6 +162,17 @@ GITHUB_TOOL_ENABLE_HINT = (
     'Turn on its own switch in Settings, "What asks first", under "Let the AI '
     'use this" ("Jarvis\'s own tools" holds one switch per GitHub tool): ON asks '
     'one card and Windows Hello on the PC.')
+
+#: The two LOCAL review gates (2026-11-10, wave 16E) ship off with their own
+#: switch, but they raise NO card: they read a checkout on this PC and write
+#: nothing, so there is nothing to approve. Saying "one card and Windows Hello"
+#: here would be false, which is why they get their own hint rather than the one
+#: above.
+REVIEW_TOOL_ENABLE_HINT = (
+    'Turn on its own switch in Settings, "What asks first", under "Let the AI '
+    'use this" (group "Jarvis\'s own tools"). It raises NO card, because it only '
+    'reads a folder on this PC and writes nothing; it needs JARVIS_REVIEW_REPO '
+    'set to your checkout, or the folder named when you ask.')
 
 PROFILES: dict = {
 
@@ -1021,6 +1033,78 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    # The two LOCAL review gates (2026-11-10, wave 16E). They read a git
+    # checkout on this PC and nothing else - no token, no network - so both are
+    # decided under file_read's own "auto" line and neither raises a card. Their
+    # own switch is the only way in, and both ship off.
+    "review_changes": {
+        "id": "review_changes",
+        "title": "The review packet: what changed, and what usually goes wrong",
+        "what": "Reads one git checkout on this PC and lays a change out in plain "
+                "words: the base and head commits, the line counts, every changed "
+                "file grouped by the part of the program it belongs to, and the "
+                "risk flags with the evidence - a one-sided backend twin, a backend "
+                "change with no test, a new document without the docs count, a tool "
+                "or route changed without docs/JARVIS-API.md, tracked scratch, a "
+                "dirty tree and the size of the change - then the owner's "
+                "three-part audit checklist.",
+        "gives": [
+            "See what is actually in a branch, or in this checkout, before a push",
+            "See the bookkeeping mistakes this repository's CI usually catches",
+            "Get the exact folder, branch and commit the answer measured",
+        ],
+        "touches": "files, process",
+        "limits": [
+            "Read-only: it writes no file, opens no socket and reads no GitHub "
+            "token; every command is a fixed read-only git command",
+            "It never fetches, so a stale origin/main is said to be stale rather "
+            "than silently updated",
+            "A check it could not run is reported as not run, never as a pass",
+        ],
+        "combines": {
+            "check_records": "The review says what changed and what to look "
+                                   "at; check_records says whether the "
+                                   "records CI demands are already in place.",
+        },
+        "tier": "switchable",
+        "enable_hint": REVIEW_TOOL_ENABLE_HINT,
+        "sources": [AGENT, REVIEW, ASKS_FIRST],
+    },
+
+    "check_records": {
+        "id": "check_records",
+        "title": "The record check before a push: READY, or what is missing",
+        "what": "Checks the records this repository's CI demands of a pull request, "
+                "at the desk instead of after a red run: ONE changelog.d fragment "
+                "and no CHANGELOG.md edit, the docs/README.md count when a document "
+                "was added, every changed backend file carried to jarvis-backend, "
+                "ONE decision record, well-shaped claims and defect rows, and this "
+                "repository's own twelve read-only checkers - ending in READY, "
+                "NEEDS-RECORDS, CHECKER-FAILED or INCOMPLETE.",
+        "gives": [
+            "Know whether a change can be pushed without a CI round trip",
+            "See exactly which record is missing, and the next step for it",
+            "See which checkers really ran, and which did not run at all",
+        ],
+        "touches": "files, process",
+        "limits": [
+            "Read-only: it writes no file and keeps no log; a checker's output "
+            "rides in the answer and is dropped afterwards",
+            "A checker that cannot run, times out, or says a check was skipped is "
+            "NOT-RUN, never a pass",
+            "It runs only its twelve fixed commands - no caller's words ever "
+            "become part of one",
+        ],
+        "combines": {
+            "review_changes": "The record check says whether the bookkeeping is in "
+                             "place; review_changes says what changed and what to "
+                             "look at.",
+        },
+        "tier": "switchable",
+        "enable_hint": REVIEW_TOOL_ENABLE_HINT,
+        "sources": [AGENT, REVIEW, ASKS_FIRST],
     },
 
     "web_search": {
@@ -2650,7 +2734,8 @@ FAMILIES: dict = {
                   "github_list", "github_read_file", "github_ci_status",
                   "github_pr_scan", "github_comment", "github_open_issue",
                   "github_rerun_workflow", "github_create_repo",
-                  "github_merge_pr", "github_fix_and_push"],
+                  "github_merge_pr", "github_fix_and_push",
+                  "review_changes", "check_records"],
         "impact": "This is the family the owner uses to actually build things with "
                   "Jarvis: it answers \"has someone already built this?\" with a "
                   "graded verdict, runs the installer or the build, and can inspect "
@@ -2664,7 +2749,10 @@ FAMILIES: dict = {
                   "commit pinned to the commit the card showed, and push a fix to "
                   "a pull request's own branch from an isolated scratch folder - "
                   "each on its own card, never a squash, rebase, force-push, "
-                  "delete or a push to main.",
+                  "delete or a push to main. The two local review gates read a "
+                  "checkout on this PC and write nothing: the review packet says "
+                  "what changed and what usually goes wrong, and the record check "
+                  "says whether the bookkeeping CI demands is already in place.",
         "limits": ["Every way out of the PC here is carded: shell commands always "
                    "ask, GitHub research needs an approved plan, a look at your "
                    "own GitHub asks every time, each of its six actions has its "
