@@ -321,10 +321,6 @@ object JarvisRuntime {
         private set
     lateinit var api: JarvisApi
         private set
-    lateinit var offlineStore: com.jarvis.client.data.OfflineStore
-        private set
-    lateinit var modelStore: com.jarvis.client.data.ModelStore
-        private set
     private lateinit var stream: EventStream
 
     private val _link = MutableStateFlow(LinkState.OFFLINE)
@@ -1235,10 +1231,6 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
-        offlineStore = com.jarvis.client.data.OfflineStore(app)
-        val localModelStore = com.jarvis.client.data.ModelStore(app)
-        modelStore = localModelStore
-        localModelStore.applyCurrentConfig()
         menus = com.jarvis.client.data.MenuPrefs(app)
         modelsCacheStore = modelsStore
         // Read once, at startup - so a cold start with Jarvis off has
@@ -1963,44 +1955,6 @@ object JarvisRuntime {
         // clears this flag when the fetch failed, and approving against a queue
         // that could not be confirmed is the exact hazard the gate is for.
         if (refreshedSinceOpen) _stale.value = false
-        if (modelStore.autoSyncOnReconnect.value) {
-            triggerOfflineSync()
-        }
-        registerMobileLaneIfConfigured()
-    }
-
-    /**
-     * Pushes pending turns and memories captured while offline to the desktop PC.
-     */
-    fun triggerOfflineSync() {
-        if (!started) return
-        scope.launch {
-            runCatching {
-                com.jarvis.client.net.OfflineSync.performSync(api, offlineStore)
-            }.onFailure {
-                Log.w(TAG, "Offline sync failed: ${it.message}")
-            }
-        }
-    }
-
-    /**
-     * Registers the on-device AI model with desktop Jarvis as an available edge worker.
-     */
-    fun registerMobileLaneIfConfigured() {
-        if (!started) return
-        val active = modelStore.activeModel() ?: return
-        scope.launch {
-            runCatching {
-                com.jarvis.client.net.MobileLaneClient.registerMobileLane(
-                    api = api,
-                    deviceId = com.jarvis.client.net.OfflineSync.defaultDeviceId(),
-                    modelName = active.name,
-                    useVulkan = active.isVulkanCapable
-                )
-            }.onFailure {
-                Log.w(TAG, "Failed to register mobile edge lane: ${it.message}")
-            }
-        }
     }
 
     /**

@@ -1804,10 +1804,6 @@ SHIPPED = (
     # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
     # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    # The two-way offline sync module for Android companion (jarvis_offline_sync.py, 2026-11-12).
-    # Handles POST /api/sync/offline-batch, GET /api/sync/status, and mobile edge lane routes.
-    # The same entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED, above jarvis_bench.py.
-    "jarvis_offline_sync.py",
     # It is the LAST entry, and it stays last: a new module goes above it, so
     # the two lists cannot disagree about any other module's position.
     "jarvis_bench.py"

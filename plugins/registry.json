@@ -7,8 +7,8 @@
     "core": 149,
     "missing": 0
   },
-  "folder_count": 30,
-  "ready_count": 59,
+  "folder_count": 29,
+  "ready_count": 58,
   "folders": [
     {
       "name": "skill-hub",
@@ -240,14 +240,6 @@
       "install": "handler",
       "stack_order": 190,
       "summary": "Creator mode: ONE waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card is opened, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in the pack manager's own words in this slice.",
-      "why": "born as a folder: it replaces no patch"
-    },
-    {
-      "name": "offline-sync",
-      "module": "jarvis_offline_sync",
-      "install": "handler",
-      "stack_order": 195,
-      "summary": "Two-way offline sync for mobile companion: POST /api/sync/offline-batch and GET /api/sync/status.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

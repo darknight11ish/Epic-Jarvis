@@ -250,8 +250,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // cards where it would read more naturally - the same reason the three rows
     // above it were added at the end. The jump list carries it last too.
     "handsfree" to 39,
-    // "On-device AI model" (2026-11-12): on-device GGUF execution and offline
-    // two-way sync. Added at the END to preserve all preceding index pins.
+    // "On-device AI model" (2026-11-12): the row whose plate says plainly that
+    // the on-device model and the offline two-way sync are DESIGN ONLY and not
+    // built in this copy. Added at the END to preserve all preceding index pins.
     "on-device-model" to 40,
 )
 

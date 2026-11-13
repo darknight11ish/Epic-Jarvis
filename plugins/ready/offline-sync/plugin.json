@@ -1,7 +1,0 @@
-{
-  "name": "offline-sync",
-  "summary": "Two-way offline sync for mobile companion: POST /api/sync/offline-batch and GET /api/sync/status.",
-  "module": "jarvis_offline_sync",
-  "install": "handler",
-  "stack_order": 195
-}

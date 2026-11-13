@@ -1,5 +1,0 @@
-- **2026-11-12 — Mobile-Harness workspace integrations for Android:** Integrated core mobile development and execution patterns from `techjarves/Mobile-Harness`:
-  1. **Mobile Project Explorer:** Inspects repository maps (`GET /api/projects/{id}/map`), file trees, token counts, and class/function symbols from Android over Tailscale/Meshnet.
-  2. **Sandboxed Mobile Web Preview:** Embeds a sandboxed `WebView` strictly bound to private mesh and local dev servers (ports 3000, 5173, 8080) with console telemetry capture; public web navigation is hard-blocked (Rule 1 & Rule 2).
-  3. **Mobile Agent Dispatcher:** Provides bounded offline tool calling (`take_note`, `remember_fact`, `device_status`, `list_offline_queue`) for the on-device AI companion while strictly rejecting risky tools (`shell_exec`, `send_email`, `git_push`) under Rule 4.
-  4. **Hardware-Backed Keystore Vault:** General-purpose AES-256-GCM encryption with AndroidKeyStore hardware-backed master keys for sensitive offline records (Rule 3).

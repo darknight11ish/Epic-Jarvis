@@ -128,7 +128,6 @@ READERS = {
     # stores block - no fact text, no fact id, no search, so nothing from a
     # private topic can reach a model, a screen or a voice through it.
     "jarvis_self_portrait.py": ("mentions", "store().status() counts only; reads no fact"),
-    "jarvis_offline_sync.py": ("mentions", "offline companion sync writes facts captured offline into the store; reads no fact"),
 }
 
 SEARCH_RECEIVER = re.compile(r"(?:^|\.)(?:store|st|_store)(?:\(\))?$|store\(\)$")

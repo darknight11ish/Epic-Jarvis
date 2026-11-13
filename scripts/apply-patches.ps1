@@ -3223,10 +3223,6 @@ $SHIPPED = @(
     # and its own `bench.jsonl` (never `speed.jsonl`). `bench.patch` is the
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
-    # The two-way offline sync module for Android companion (jarvis_offline_sync.py, 2026-11-12).
-    # Handles POST /api/sync/offline-batch, GET /api/sync/status, and mobile edge lane routes.
-    # The same entry, in the same position, is in backend/_where.py's SHIPPED, above jarvis_bench.py.
-    'jarvis_offline_sync.py'
     # It is the LAST entry, and it stays last.
     'jarvis_bench.py'
 )

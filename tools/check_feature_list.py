@@ -164,10 +164,7 @@ import ast
 import json
 import re
 import sys
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent

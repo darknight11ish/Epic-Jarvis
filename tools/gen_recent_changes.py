@@ -41,7 +41,6 @@ REPO = HERE.parent
 CHANGELOG = REPO / "CHANGELOG.md"
 FRAGMENTS = REPO / "changelog.d"
 TARGET = REPO / "backend" / "jarvis_recent_changes.py"
-TARGET_TWIN = REPO / "jarvis-backend" / "jarvis_recent_changes.py"
 
 #: How many bullets the module carries. The answer shows two or three; a
 #: couple more are kept so the fixed phrases have something to say without a
@@ -230,9 +229,7 @@ def main(argv=None) -> int:
             return 1
         print(f"ok - backend/jarvis_recent_changes.py carries {len(found)} newest bullets")
         return 0
-    TARGET.write_bytes(text.encode("utf-8"))
-    if TARGET_TWIN.parent.exists():
-        TARGET_TWIN.write_bytes(text.encode("utf-8"))
+    TARGET.write_text(text, encoding="utf-8", newline="\n")
     print(f"wrote {TARGET.relative_to(REPO)} with {len(found)} newest bullets")
     return 0
 

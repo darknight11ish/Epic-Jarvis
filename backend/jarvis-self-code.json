@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9b0ef63d64e61a5cfc676409381bf56d34071ff2",
- "built_at": "2026-11-12T07:28:27+00:00",
+ "ref": "8ef4acf0c691f7785d368eece72347c00a9e5f60",
+ "built_at": "2026-11-12T14:53:49Z",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -746,8 +746,6 @@
     "plugins/ready/notes-edit/README.md",
     "plugins/ready/notes-edit/plugin.json",
     "plugins/ready/notion-obsidian/plugin.json",
-    "plugins/ready/offline-sync/README.md",
-    "plugins/ready/offline-sync/plugin.json",
     "plugins/ready/photo-reminder/README.md",
     "plugins/ready/photo-reminder/plugin.json",
     "plugins/ready/picture-card/README.md",
@@ -809,7 +807,7 @@
     "skills/pdf-workflow/SKILL.md",
     "skills/reverse-engineer-anything/SKILL.md"
    ],
-   "file_count": 125,
+   "file_count": 123,
    "key_modules": [
     {
      "path": "backend/jarvis_plugins.py",
@@ -916,7 +914,6 @@
     "backend/jarvis_android_control.py",
     "backend/jarvis_devices.py",
     "backend/jarvis_find_phone.py",
-    "backend/jarvis_offline_sync.py",
     "backend/jarvis_phone_apps.py",
     "backend/jarvis_phone_notifications.py",
     "backend/jarvis_token_store.py",
@@ -1014,8 +1011,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ModelWords.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/PendingRefreshOrder.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/QueueBeat.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/ai/MobileAgentDispatcher.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/ai/MobileLlamaEngine.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/assistant/AssistReader.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/assistant/JarvisRecognitionServiceStub.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/assistant/JarvisVoiceInteractionService.kt",
@@ -1043,15 +1038,12 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FaceTuning.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FloatingAvatar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/HistoryViewPrefs.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/KeystoreVault.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/MenuPrefs.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/ModelStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ModelsCacheStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/NotificationAllowList.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/NotificationAllowListStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/NotificationGate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/NotificationRedactor.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/OfflineStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/OwnNetwork.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/PairWords.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/PairingKey.kt",
@@ -1171,7 +1163,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/MenuState.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/MenuVisibility.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/net/MobileLaneClient.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/ModelChat.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/ModelLane.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/ModelsCache.kt",
@@ -1181,7 +1172,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/net/NotificationStyle.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/NotifyRows.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/NotionImport.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/net/OfflineSync.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/OpenChatPhrase.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Pairing.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/PairingFlow.kt",
@@ -1195,7 +1185,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Pictures.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/PlainErrors.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Progress.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/net/ProjectExplorer.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Projects.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/PromptCoach.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Protected.kt",
@@ -1384,7 +1373,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PipPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/ProfilePlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/ProgressPlate.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/ProjectExplorerPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/ProjectsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PromptCoachBar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PromptCoachPlate.kt",
@@ -1426,7 +1414,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/VoicesScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WatchNotifyPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WatchPlate.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WebPreviewPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WebSearchPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WikiPlate.kt",
@@ -1644,7 +1631,6 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/MicHandsfreeRulesTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicOwnerTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicWordsTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/MobileAgentDispatcherTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ModelChatContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ModelDoorTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ModelLaneSettingsTest.kt",
@@ -1669,8 +1655,6 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/NotificationsStayLocalTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/NotifyRowsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/NotionImportTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/OfflineSyncTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/OnDeviceModelTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/OpenChatPhraseContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/OpenChatPhraseTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/OpenPlaceAreasTest.kt",
@@ -1705,7 +1689,6 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/PrivateAloudContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PrivateAloudTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ProgressTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/ProjectExplorerTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ProjectsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PromptCoachGateTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PromptCoachTest.kt",
@@ -1896,7 +1879,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 984,
+   "file_count": 969,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -1920,8 +1903,7 @@
     "backend/test_devices.py",
     "backend/test_find_phone.py",
     "backend/test_phone_app_allowlist.py",
-    "backend/test_token_store.py",
-    "backend/test_offline_sync.py"
+    "backend/test_token_store.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -4030,7 +4012,6 @@
     "backend/test_obscura.py",
     "backend/test_obsidian_notes.py",
     "backend/test_ocr_words.py",
-    "backend/test_offline_sync.py",
     "backend/test_ollama_capability_contract.py",
     "backend/test_ollama_contract.py",
     "backend/test_ollama_direct.py",
@@ -4332,7 +4313,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 687,
+   "file_count": 686,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4611,8 +4592,6 @@
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
-    "changelog.d/2026-11-12-mobile-harness-integrations.md",
-    "changelog.d/2026-11-12-on-device-ai-offline-sync.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4763,8 +4742,6 @@
     "decisions.d/2026-11-10-github-card-gated-merge-and-fix-push.md",
     "decisions.d/2026-11-10-github-review-and-record-gate.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
-    "decisions.d/2026-11-12-mobile-harness-integrations.md",
-    "decisions.d/2026-11-12-on-device-ai-and-offline-sync.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -4949,7 +4926,6 @@
     "docs/MEMORY-SCORES-2026-10-04.md",
     "docs/MENU-VISIBILITY-DESIGN.md",
     "docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md",
-    "docs/MOBILE HARNESS WORK/SECURITY-AUDIT-2026-11-12.md",
     "docs/MODEL-TOPOLOGY.md",
     "docs/MODELS-ON-D-2026-10-10.md",
     "docs/MULTI-DEVICE-DESIGN.md",
@@ -5214,7 +5190,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 841,
+   "file_count": 836,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6107,7 +6083,6 @@
     "jarvis-backend/jarvis_notion_obsidian.py",
     "jarvis-backend/jarvis_obscura.py",
     "jarvis-backend/jarvis_ocr.py",
-    "jarvis-backend/jarvis_offline_sync.py",
     "jarvis-backend/jarvis_ollama_contract.py",
     "jarvis-backend/jarvis_open.py",
     "jarvis-backend/jarvis_optin_models.py",
@@ -6268,7 +6243,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 341,
+   "file_count": 340,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6297,6 +6272,11 @@
   }
  ],
  "recent_commits": [
+  {
+   "sha": "8ef4acf0c691f7785d368eece72347c00a9e5f60",
+   "date": "2026-11-12",
+   "subject": "fix(ci): resolve backend and backend-windows test failures across topics leaks, plugins honesty, urlopen regexes, and speed record timestamp collision"
+  },
   {
    "sha": "9b0ef63d64e61a5cfc676409381bf56d34071ff2",
    "date": "2026-11-12",
@@ -6391,18 +6371,13 @@
    "sha": "b2b8f67ad020c982132047f65a848956f81f0392",
    "date": "2026-11-10",
    "subject": "fix: the second more_tools budget pin moves with the wave-16 GitHub group (482, measured)"
-  },
-  {
-   "sha": "a9b9e8f35aed464064c9f453d0dcc51e0718a7c6",
-   "date": "2026-11-10",
-   "subject": "fix: the wave-16 GitHub tools reach the private-aloud table and the desktop Rust tool list"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1431
+   "files": 1429
   },
   {
    "path": "jarvis-desktop/",
@@ -6412,17 +6387,17 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 943
+   "files": 929
   },
   {
    "path": "docs/",
    "line": "the documentation, the audits and the records",
-   "files": 493
+   "files": 492
   },
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 353
+   "files": 352
   },
   {
    "path": "tools/",
@@ -6432,7 +6407,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 235
+   "files": 233
   },
   {
    "path": "videos/",
@@ -6442,12 +6417,12 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 152
+   "files": 150
   },
   {
    "path": "plugins/",
    "line": "drop-in features installed by putting a folder in place",
-   "files": 117
+   "files": 115
   },
   {
    "path": "jarvis-android/",
@@ -6516,8 +6491,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5634,
-  "covered": 5162,
+  "tracked_files": 5610,
+  "covered": 5138,
   "excluded": 472,
   "subsystems": 27
  },

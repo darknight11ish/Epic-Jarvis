@@ -18,6 +18,7 @@ Four parts:
 """
 import ast
 import json
+import re
 import socket
 import sys
 import tempfile
@@ -42,6 +43,22 @@ SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
 SKIPPED = []
 SECRET = "Mario's bank PIN is 4471 and his sister lives on Rua Augusta"
+
+
+def _leaks(text):
+    """The words of SECRET that appear in `text` as WHOLE tokens.
+
+    A plain substring search is flaky here, not weak: a number the speed record
+    legitimately writes (a timestamp, a rate) can contain "4471" inside a
+    longer number, and being inside another number is not the PIN. Matching
+    whole tokens checks the PIN and the name the fixture is built around,
+    while never flagging a digit run that merely contains those four digits.
+    """
+    found = []
+    for word in SECRET.replace("'", " ").split():
+        if len(word) > 3 and re.search(r"(?<!\w)" + re.escape(word) + r"(?!\w)", text):
+            found.append(word)
+    return found
 
 
 def check(name, cond, detail=""):
@@ -144,7 +161,7 @@ def t_no_words_ever_reach_the_file():
                     "words": 3, "first_word_ms": SECRET})
         log.append({"kind": SECRET, "model": "m"})
     raw = log.path.read_text(encoding="utf-8")
-    leaked = [w for w in SECRET.replace("'", " ").split() if len(w) > 3 and w.isalpha() and w in raw]
+    leaked = _leaks(raw)
     check("NOT ONE WORD of the answer is in the file", not leaked, f"found {leaked}")
     check("a text field handed in by mistake is dropped", "text" not in raw
           and "question" not in raw)
@@ -320,10 +337,8 @@ def t_reuse_share_on_the_screens():
     check("the screen view carries it", v["by_model"]["qwen3:8b"]["median_reused_percent"]
           == 90.0, v)
     raw = log.path.read_text(encoding="utf-8")
-    words = [w for w in SECRET.replace("'", " ").split() if len(w) > 3 and w.isalpha()]
     check("no word of the conversation is in the file, or in the view",
-          not any(w in raw for w in words)
-          and not any(w in json.dumps(v) for w in words), raw)
+          not _leaks(raw) and not _leaks(json.dumps(v)), raw)
 
 
 def t_the_other_stream_shapes():

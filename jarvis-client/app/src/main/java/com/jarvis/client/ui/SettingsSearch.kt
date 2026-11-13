@@ -663,10 +663,10 @@ object SettingsSearch {
         ),
         Row(
             key = "on-device-model", title = "On-device AI model",
-            label = "On-device AI model; local model on phone; offline sync; GGUF; Vulkan; llama.cpp; " +
-                "offline companion; mobile edge lane; run offline; phone model",
+            label = "On-device AI model; local model on phone; offline mode; run offline; " +
+                "phone model; not available",
             titles = emptyList(),
-            quotes = listOf("Run a compact language model directly on your phone when away from your PC."),
+            quotes = listOf("Not available in this build."),
             source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
         ),
         Row(

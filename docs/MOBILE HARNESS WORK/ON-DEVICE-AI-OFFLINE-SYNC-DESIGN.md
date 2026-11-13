@@ -1,9 +1,20 @@
 # On-Device AI & Offline Two-Way Sync: Design (Slice 1)
 
-**Status:** DESIGN SPECIFICATION  
+**Status:** DESIGN ONLY - NOTHING IN THIS DOCUMENT IS BUILT  
 **Target Module:** `jarvis-client` (Android companion) & `backend` (Desktop Python server)  
 **Reference Architecture:** [`orailnoor/cross-platform-llm-client`](https://github.com/orailnoor/cross-platform-llm-client) (C++ `llama.cpp` ARM64 + Vulkan engine)  
 **Location:** `docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md`
+
+> **What exists today: nothing.** This is a specification for future work, not a
+> description of the shipped app. The Android app has no model runtime, no
+> offline queue and no sync: it cannot answer while the PC is unreachable, and
+> its Settings plate says so (`OnDeviceModelPlate.kt`). An earlier revision of
+> this feature shipped a mock - a "native" load that always failed, a fixed
+> sentence presented as the model's answer, invented model-transfer inventory
+> and three screens with no call site. All of it was removed rather than
+> shipped, and the tests that pinned those claims were removed with it. The
+> rest of this document is the plan for building the real thing; read every
+> present-tense sentence below as "will", not "does".
 
 ---
 
@@ -83,9 +94,9 @@ This document specifies the complete design for **running local AI directly on t
 
 ## 4. Subsystem Specifications
 
-### 4.1 On-Device LLM Runtime (`MobileLlamaEngine`)
+### 4.1 On-Device LLM Runtime (`MobileLlamaEngine`) - planned, absent
 Adapted from the core native layer in `orailnoor/cross-platform-llm-client`:
-- **Native Binaries:** Precompiled `libllama.so` and `libggml.so` for `arm64-v8a`, linked with Android NDK 26+.
+- **Native Binaries (not in this project):** Precompiled `libllama.so` and `libggml.so` for `arm64-v8a`, linked with Android NDK 26+. No `.so`, `jniLibs` folder or NDK build exists in `jarvis-client` today, so there is no engine to call.
 - **Hardware Acceleration:**
   - **Vulkan Backend:** Detects GPU compute capability via Vulkan API. If compatible, offloads transformer layers to the phone's GPU (e.g. Pixel 9 Mali-G715).
   - **ARM NEON CPU Fallback:** If Vulkan is unavailable or system thermal throttling is active, falls back to multi-threaded ARM NEON execution (utilizing 4 high-efficiency/performance CPU cores).
@@ -107,8 +118,10 @@ The user can provide or update the on-device model in two simple ways:
    - In phone **Settings -> Model -> Load On-Device Model**, the user can use the Android document picker to select an existing `.gguf` file stored in their Downloads or device storage.
    - The app verifies header magic (`GGUF`), architecture, and quantization compatibility before registering it.
 
-### 4.3 Offline Storage Schema (`OfflineStore.kt`)
-Stored in private SQLite on the phone (`offline_jarvis.db`):
+### 4.3 Offline Storage Schema (`OfflineStore.kt`) - planned, absent
+Planned to be stored in private SQLite on the phone (`offline_jarvis.db`). No
+offline store ships today: an earlier revision used plaintext SharedPreferences
+and has been removed.
 
 ```sql
 -- Offline conversation turns

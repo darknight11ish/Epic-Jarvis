@@ -611,7 +611,7 @@ def main() -> int:
         # defect was already fixed once in tools/gen_picture_card_patch.py,
         # whose comment says it in one line: "LF, not CRLF: this repository is
         # LF everywhere (.gitattributes says so)".
-        path.write_bytes(text.encode("utf-8"))
+        path.write_text(text, encoding="utf-8", newline="\n")
 
     print(f"wrote plugins/registry.json - {data['patch_count']} patches: "
           f"{data['counts']['plug-in']} drop-in, {data['counts']['core']} core"
