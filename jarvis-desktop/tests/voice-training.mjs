@@ -48,7 +48,7 @@ const PY = pythonFor(BACKEND_DIR);
 const T = K.TRAINING;
 const S = T.statuses;
 const A = (name) => K.TRAINING.answer(T.enroll[name]);
-const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 /** An older PC: today's status without the flags 2026-09-24 added. */
 const older = (st) => {
   const c = JSON.parse(JSON.stringify(st));
@@ -1229,7 +1229,7 @@ await check("someone else reads 3 sentences; the PC compares; the stricter bar i
   assert.match(said, /Good: none of their 3 clips would pass as you now\. A stricter setting, 0\.47 \(now 0\.35\)/);
   assert.match(said, /Nothing changes until you approve the card\./);
   assert.deepEqual(proposed, [{ threshold: 0.47, model: "strong" }]);
-  assert.match(after, /Waiting for your approval\. Approve it in the Jarvis bar/);
+  assert.match(after, /Waiting for your approval\. Approve it in the Atlas bar/);
 });
 
 await check("on a stale link the check still runs, but the stricter bar's card is held", async () => {

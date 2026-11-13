@@ -247,7 +247,7 @@ await check("the button is in the Help tab, and pressing it asks for the window"
     status: document.getElementById("features-status").textContent,
   }));
   await page.close();
-  assert.equal(label, "Everything Jarvis can do");
+  assert.equal(label, "Everything Atlas can do");
   assert.equal(out.calls, 1, "the button did not call open_features");
   assert.ok(out.status.trim().length > 0, "the button said nothing about what happened");
 });
@@ -274,7 +274,7 @@ await check("the token FAQ says Credential Manager and the Show button, not plai
 // and it names the phone. The FAQ's copy of it is a string in desktop-help.js
 // now (it is drawn with textContent), so it is read from there and held to the
 // same constant the other two surfaces use.
-const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 await check("every desktop surface says where to approve in the same words, phone included", async () => {
   assert.ok(src("src/jarvis-link.js").includes(`export const APPROVE_WHERE = "${WHERE}";`));
   const page = await brainHelp();

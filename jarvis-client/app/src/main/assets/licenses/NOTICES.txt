@@ -120,12 +120,38 @@ Inigo Quilez's distance formulas -
   capsule, the smooth minimum and the distance to a 2D ellipse, each named
   in a comment beside it.
 
+ADAPTED FROM MOBILE-HARNESS (MIT)
+----------------------------------
+
+Two files in this app are adapted from Mobile-Harness
+(https://github.com/techjarves/Mobile-Harness), MIT License,
+Copyright (c) 2026 Mobile Harness Contributors. Each file's own header also
+says so:
+
+  data/EncryptedBackup.kt - adapted from its backup/BackupCrypto.kt: the
+  versioned backup header, PBKDF2-HMAC-SHA256 from a typed password and
+  AES-256-GCM in segments, with the per-segment marker that makes a
+  truncated or reordered file fail.
+
+  update/ApkUpdater.kt - adapted from its update/AppUpdater.kt and the
+  shape of its update JSON: the version + sha256 + size manifest, and the
+  rule that a download which does not match it is refused. Jarvis only adds
+  this check to the download it already had; nothing installs itself.
+
+Jarvis's versions are narrower on purpose: the backup carries this phone's
+SETTINGS ONLY - never the pairing token, chats, saved memories, pictures or
+logs - and a restore still ends at Android's own installer, opened by the
+owner's tap. No Mobile Harness name or branding is used, and no other part
+of that project is included.
+
+
 LICENCE TEXTS
 =============
 
 --- MIT License ---
 (for ONNX Runtime: Copyright (c) Microsoft Corporation; for stream2sentence:
-Copyright (c) Kolja Beigel)
+Copyright (c) Kolja Beigel; for the two adapted files above: Copyright (c)
+2026 Mobile Harness Contributors)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -13,7 +13,7 @@
      that script's text no longer matches the sha256 Tauri computed from the
      UTF-8 file at build time - so the header CSP refuses to run it at all.
      No Send button, no status, no error on screen. tests/hud.mjs holds it. -->
-<title>Jarvis HUD</title>
+<title>Atlas HUD</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- PWA slice 3b (2026-10-23): the home-screen manifest and the browser
      chrome colour, matching the manifest's own theme_color token. Served by
@@ -3121,7 +3121,7 @@ html[data-cal-view="day"] .cal-side{display:none;}
 .memory-door-note{color:var(--text);}
 .memory-door-note[hidden]{display:none;}
 
-/* ---- "Personalize Jarvis" (Wave B, 2026-11-03) -------------------------- *
+/* ---- "Personalize Atlas" (Wave B, 2026-11-03) -------------------------- *
  * The one offer that the setup quiz is unfinished. It sits in the right rail
  * as its own section, so it is visible from every tab (the memory door above
  * is a Memory-tab list; this one is not). "Finish now" is navigation -
@@ -3444,7 +3444,7 @@ html[data-hud-shell="split-stage"] .dock-label{
     <button class="ghost left-close" id="left-close" type="button"
             aria-label="Close navigation">&#215;</button>
     <div class="brand rail-brand">
-      <h1>J.A.R.V.I.S.</h1>
+      <h1>ATLAS</h1>
       <div class="sub" id="brand-sub">local · standing by</div>
     </div>
 
@@ -3531,7 +3531,7 @@ html[data-hud-shell="split-stage"] .dock-label{
               aria-haspopup="dialog" aria-expanded="false">
         <span aria-hidden="true">&#10023;&#xFE0E;</span>
       </button>
-      <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
+      <button type="button" class="dock-btn" id="dock-quickbar" title="Atlas bar" hidden>
         <span aria-hidden="true">&#9889;&#xFE0E;</span>
       </button>
     </nav>
@@ -3591,8 +3591,8 @@ html[data-hud-shell="split-stage"] .dock-label{
            plain browser has no microphone path from this page - the same
            reason the "Jarvis bar" pill at the foot of this rail stays hidden. -->
       <button type="button" class="rail-toolbar-btn" id="rail-live"
-              title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
-              aria-label="Jarvis Live" aria-pressed="false" hidden>
+              title="Atlas Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
+              aria-label="Atlas Live" aria-pressed="false" hidden>
         <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
           <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/>
@@ -3620,8 +3620,8 @@ html[data-hud-shell="split-stage"] .dock-label{
            has no command to send (the page holds no token), so the door would
            open a menu whose every row failed. `mountFacePicker` reveals it. -->
       <button type="button" class="rail-toolbar-btn" id="rail-faces"
-              title="Jarvis faces: all the face models, and the one it wears"
-              aria-label="Jarvis faces: all the face models, and the one it wears"
+              title="Atlas faces: all the face models, and the one it wears"
+              aria-label="Atlas faces: all the face models, and the one it wears"
               aria-haspopup="dialog" aria-expanded="false" hidden>
         <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
@@ -3749,7 +3749,7 @@ html[data-hud-shell="split-stage"] .dock-label{
     <div class="rail-foot">
       <button class="quickbar-pill" id="rail-quickbar" type="button" hidden>
         <span class="qp-glyph" aria-hidden="true">&#9889;&#xFE0E;</span>
-        <span class="qp-label">Jarvis bar</span>
+        <span class="qp-label">Atlas bar</span>
       </button>
     </div>
   </aside>
@@ -3773,7 +3773,7 @@ html[data-hud-shell="split-stage"] .dock-label{
         <div class="sh-value" id="sh-target"></div>
       </div>
       <div class="sh-box sh-purpose">
-        <div class="sh-label">Jarvis's note (unverified):</div>
+        <div class="sh-label">Atlas's note (unverified):</div>
         <div class="sh-value" id="sh-purpose"></div>
       </div>
       <label class="sh-field"><span>Secret (typed by this PC; never shown to the model)</span>
@@ -3802,7 +3802,7 @@ html[data-hud-shell="split-stage"] .dock-label{
         <div class="sh-value" id="ca-summary"></div>
       </div>
       <div class="sh-box sh-purpose" id="ca-note-box" hidden>
-        <div class="sh-label">Jarvis's note (unverified):</div>
+        <div class="sh-label">Atlas's note (unverified):</div>
         <div class="sh-value" id="ca-note"></div>
       </div>
       <div id="ca-fields"></div>
@@ -3836,7 +3836,7 @@ html[data-hud-shell="split-stage"] .dock-label{
 
     <div id="banner">
       <span id="banner-text"><b>Demo data.</b>
-      Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.</span>
+      Atlas is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.</span>
       <!-- The PC is answering and only its model is missing: the one action
            that starts the lane Jarvis talks to. Painted from the PC's own
            reading (lane-connect below), never from a guess, and it is the
@@ -3871,13 +3871,13 @@ html[data-hud-shell="split-stage"] .dock-label{
          keyboard or mouse user in Ambient could not open the panel at all).
          The brand and the separators stay decorative and aria-hidden. -->
     <div id="ambient-status">
-      <div class="as-brand" aria-hidden="true">J.A.R.V.I.S.</div>
+      <div class="as-brand" aria-hidden="true">ATLAS</div>
       <div class="as-line">
         <span class="as-dot" aria-hidden="true"></span>
         <button class="as-model-door" id="chip-model-door-ambient" type="button"
                 aria-haspopup="dialog" aria-expanded="false"
-                aria-label="Current Models: what Jarvis is using and has loaded"
-                title="Current Models: what Jarvis is using and has loaded"><span id="as-model">local</span></button>
+                aria-label="Current Models: what Atlas is using and has loaded"
+                title="Current Models: what Atlas is using and has loaded"><span id="as-model">local</span></button>
         <span class="as-sep" aria-hidden="true">&middot;</span>
         <span id="as-latency">&mdash;</span>
       </div>
@@ -3905,8 +3905,8 @@ html[data-hud-shell="split-stage"] .dock-label{
            so the panel is reachable in every shell. -->
       <button class="chip-door" id="chip-model-door" type="button"
               aria-haspopup="dialog" aria-expanded="false"
-              aria-label="Current Models: what Jarvis is using and has loaded"
-              title="Current Models: what Jarvis is using and has loaded"><span class="chip" id="chip-model">local</span><svg class="chip-door-caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M2 4l3 3 3-3"/></svg></button>
+              aria-label="Current Models: what Atlas is using and has loaded"
+              title="Current Models: what Atlas is using and has loaded"><span class="chip" id="chip-model">local</span><svg class="chip-door-caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M2 4l3 3 3-3"/></svg></button>
       <span class="chip" id="chip-state">standing by</span>
       <!-- §2.1 ZONE B - the WINDOW-LEVEL actions (2026-11-09). These open a
            window or a mode menu and choose no stage pane; the five plain-word
@@ -4244,7 +4244,7 @@ html[data-hud-shell="split-stage"] .dock-label{
         <div class="meta" id="insp-meta"></div>
         <div class="detail" id="insp-detail"></div>
         <div class="links">
-          <button class="ghost" id="insp-ask">Ask Jarvis about this</button>
+          <button class="ghost" id="insp-ask">Ask Atlas about this</button>
         </div>
       </div>
     </section>
@@ -4262,7 +4262,7 @@ html[data-hud-shell="split-stage"] .dock-label{
          and Close, Escape and a click outside all dismiss it. -->
     <div id="live-refusal" class="stage-toast" role="alert" tabindex="-1" hidden>
       <div class="lr-head">
-        <strong class="lr-title">Jarvis Live didn't start</strong>
+        <strong class="lr-title">Atlas Live didn't start</strong>
         <button class="lr-close" id="live-refusal-close" type="button">Close</button>
       </div>
       <p id="live-refusal-why"></p>
@@ -4563,18 +4563,18 @@ html[data-hud-shell="split-stage"] .dock-label{
         <p class="memory-door-hidden" id="memory-door-hidden" hidden></p>
         <ul class="memory-door-list" id="memory-door-list"></ul>
         <p class="memory-door-note" id="memory-door-note" role="status" hidden></p>
-        <p class="memory-door-empty" id="memory-door-empty" hidden>No memory cards are waiting. New facts Jarvis wants to remember will show up here.</p>
+        <p class="memory-door-empty" id="memory-door-empty" hidden>No memory cards are waiting. New facts Atlas wants to remember will show up here.</p>
         <p class="memory-door-where" id="memory-door-where">Keep a plain new fact here; anything else is decided in the Memory tab in the Brain window.</p>
       </div>
     </div>
 
-    <!-- "Personalize Jarvis" (Wave B, 2026-11-03): the one offer that the setup
+    <!-- "Personalize Atlas" (Wave B, 2026-11-03): the one offer that the setup
          quiz is unfinished. A rail section of its own so it is visible from
          every tab, not only Memory. `paintSetupOffer` fills the words from the
          PC's own counts; both buttons are navigation or a dismissal and
          neither answers a question - see setup_offer.rs and js below. -->
     <div class="rail-section" id="setup-offer" hidden>
-      <div class="hud-label">Personalize Jarvis</div>
+      <div class="hud-label">Personalize Atlas</div>
       <p class="setup-offer-words" id="setup-offer-words"></p>
       <div class="setup-offer-btns">
         <button type="button" class="primary" id="setup-offer-finish">Finish now</button>
@@ -5151,7 +5151,7 @@ function demoGraph(){
   const add = (id,label,group,extra={}) => { n.push(Object.assign({id,label,group},extra)); return id; };
   const link = (a,b,kind="") => l.push({source:a,target:b,kind});
 
-  add("core","J.A.R.V.I.S.","core",{weight:6});
+  add("core","Atlas","core",{weight:6});
   ["qwen3:8b","jarvis-escalate","jarvis-critic","jarvis-bulk"].forEach((m,i)=>{
     add("model:"+m,m,"model",{weight:3,meta:i?"cloud lane · via proxy":"local · ollama"});
     link("core","model:"+m,"runs");
@@ -7853,7 +7853,7 @@ async function send(){
         const modelDoor = $("chip-model-door");
         if(modelDoor) modelDoor.title = secondCard
           ? "Answered on the second graphics card"
-          : "Current Models: what Jarvis is using and has loaded";
+          : "Current Models: what Atlas is using and has loaded";
         $("r-gate").textContent = route.gate || "—";
         $("r-why").textContent = route.reason || "—";
         $("r-complexity").textContent = (route.complexity ?? 0).toFixed(2);
@@ -8945,7 +8945,7 @@ async function boot(){
     $("banner-text").innerHTML = status
       ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
         + 'Replies below are sample data.'
-      : '<b>Demo data.</b> Jarvis is not answering yet — start '
+      : '<b>Demo data.</b> Atlas is not answering yet — start '
         + '<span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.';
     addMessage("system", status
       ? "The PC is up, but its local model is not running yet. Everything below is sample data until it is."
@@ -10733,14 +10733,14 @@ window.__hudMemoryDoor = {
 /* == memory door end == */
 
 /* == setup offer begin == */
-/* "Personalize Jarvis" (Wave B, 2026-11-03; Gemini's rulings Q1, Q3 and Q4).
+/* "Personalize Atlas" (Wave B, 2026-11-03; Gemini's rulings Q1, Q3 and Q4).
  *
  * The one offer that the setup quiz is unfinished, read from the SAME
  * GET /api/setup both apps read (hud_proxy.rs `allowed_get` carries it). It is
  * a banner, not a quiz: this page answers no question and changes no setting.
  *
  *  - "Finish now" is navigation through the HUD's already-granted
- *    `open_fix_place` - Settings, at the "Personalize Jarvis" card. The same
+ *    `open_fix_place` - Settings, at the "Personalize Atlas" card. The same
  *    door the settings gear beside this page uses.
  *  - "Not now" hides the banner for the WHOLE launch (a page variable, like the
  *    memory banner's own dismissal) AND records the dismissal on the PC through

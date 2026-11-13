@@ -658,7 +658,7 @@ pub async fn install_from_tray(app: AppHandle) {
         crate::logfile::log(&format!("[jarvis] tray update held by the App lock: {why}"));
         commands::notify(
             &app,
-            "Jarvis Desktop update",
+            "Atlas Desktop update",
             &format!("The update was not started. {why}."),
         );
         return;
@@ -670,7 +670,7 @@ pub async fn install_from_tray(app: AppHandle) {
         // something, and silence reads as a broken row.
         commands::notify(
             &app,
-            "Jarvis Desktop update",
+            "Atlas Desktop update",
             "There is no newer version to install now, so nothing was changed.",
         );
         return;
@@ -697,7 +697,7 @@ pub async fn install_from_tray(app: AppHandle) {
 async fn update_both_from_tray(app: AppHandle, version: &str) {
     commands::notify(
         &app,
-        "Jarvis update",
+        "Atlas update",
         &format!(
             "Updating both halves: the backend is patched first, then Jarvis Desktop \
              {version} installs. This can take several minutes. {INSTALL_CLOSES_AND_RESTARTS}"
@@ -713,7 +713,7 @@ async fn update_both_from_tray(app: AppHandle, version: &str) {
         Ok(outcome) if outcome.updated_both => {
             commands::notify(
                 &app,
-                "Jarvis updated",
+                "Atlas updated",
                 "Both halves are updated. Restart Jarvis to run the new version.",
             );
         }
@@ -751,7 +751,7 @@ async fn update_both_from_tray(app: AppHandle, version: &str) {
                 .collect();
             commands::notify_failed(
                 &app,
-                "Jarvis update",
+                "Atlas update",
                 &plain,
                 &detail.join(" "),
                 commands::Details::Log,
@@ -759,7 +759,7 @@ async fn update_both_from_tray(app: AppHandle, version: &str) {
         }
         Err(err) => commands::notify_failed(
             &app,
-            "Jarvis update",
+            "Atlas update",
             "The update was not started.",
             &err,
             commands::Details::Log,
@@ -779,7 +779,7 @@ async fn update_both_from_tray(app: AppHandle, version: &str) {
 async fn install_desktop_alone(app: AppHandle, why: String) {
     commands::notify_guarded(
         &app,
-        "Jarvis Desktop update",
+        "Atlas Desktop update",
         &format!(
             "The backend half cannot run on this PC ({why}). Installing Jarvis Desktop on \
              its own - the two may differ until the backend update is finished. \
@@ -794,7 +794,7 @@ async fn install_desktop_alone(app: AppHandle, why: String) {
             let _ = check_for_update(app.clone()).await;
             commands::notify_guarded(
                 &app,
-                "Jarvis Desktop updated",
+                "Atlas Desktop updated",
                 &format!(
                     "{installed} installed on the desktop. The BACKEND was NOT updated: \
                      {why}. Finish it from \"Update both halves\" once the folders are in \
@@ -806,7 +806,7 @@ async fn install_desktop_alone(app: AppHandle, why: String) {
         Err(err) => {
             commands::notify_failed(
                 &app,
-                "Jarvis Desktop update",
+                "Atlas Desktop update",
                 "The update did not install.",
                 &err,
                 commands::Details::Log,
@@ -1336,11 +1336,11 @@ fn backend_missing_sentence(backend: &Option<BackendHalf>) -> &'static str {
 /// The notification's title: never "updated" about a half that did not.
 fn ending_title(ending: &DesktopEnding) -> &'static str {
     match ending {
-        DesktopEnding::Finished { .. } => "Jarvis Desktop is updated",
+        DesktopEnding::Finished { .. } => "Atlas Desktop is updated",
         DesktopEnding::NotLaunched { .. } | DesktopEnding::NotInstalled { .. } => {
-            "Jarvis Desktop was not updated"
+            "Atlas Desktop was not updated"
         }
-        DesktopEnding::OtherVersion { .. } => "Jarvis Desktop update: check what happened",
+        DesktopEnding::OtherVersion { .. } => "Atlas Desktop update: check what happened",
     }
 }
 
@@ -2181,7 +2181,7 @@ pub fn spawn_startup_check(app: &AppHandle) {
             // button, that Jarvis closes while the install runs.
             commands::notify(
                 &handle,
-                "Jarvis Desktop update available",
+                "Atlas Desktop update available",
                 &format!("Version {version} is ready to install from Settings. {INSTALL_CLOSES_AND_RESTARTS}"),
             );
         }

@@ -421,6 +421,15 @@ LESSON_EXEMPT = {
     # first slice deliberately cannot finish. The lesson lands with the
     # plug-in-install slice, or with the Skills lesson, whichever comes first.
     "creator-mode": "one block inside Settings -> Skills whose own lines say the whole of it, and the plug-in half installs nothing yet: a lesson would teach a flow this slice cannot finish",
+    # The phone's own settings backup (2026-11-13, the copy-over wave) is ONE
+    # Settings card whose own lines say the whole of it: what goes in, what
+    # never goes in (the pairing token above all), and that the password is the
+    # only way back in. The save and restore dialogs repeat the one warning the
+    # card gives. There is no multi-step flow to teach and the phone has no
+    # tutorial page for a lesson to live on yet, so a lesson now would
+    # paraphrase the card the owner is already reading; it lands with the
+    # phone's field-test pass, if it is still wanted then.
+    "phone-settings-backup": "one Settings card whose own lines say what goes in, what never goes in and that the password is the only way back; the dialogs repeat the one warning, so a lesson would paraphrase the card",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

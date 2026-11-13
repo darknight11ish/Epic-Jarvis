@@ -239,11 +239,11 @@ class JarvisWidgetsTest {
         }
         // The hint the owner reads must not promise a slot that does not
         // exist either - that is how "5" was found in the first place.
-        assertTrue(JarvisWidgets.PHONE_HINT.contains("\"Jarvis widget 1\""))
+        assertTrue(JarvisWidgets.PHONE_HINT.contains("\"Atlas widget 1\""))
         for (n in (JarvisWidgets.SLOTS + 1)..8) {
             assertFalse(
                 "the hint must not name slot $n",
-                JarvisWidgets.PHONE_HINT.contains("Jarvis widget $n"),
+                JarvisWidgets.PHONE_HINT.contains("Atlas widget $n"),
             )
             assertFalse("the hint must not quote slot $n", JarvisWidgets.PHONE_HINT.contains("\"$n\""))
         }
@@ -261,17 +261,17 @@ class JarvisWidgetsTest {
         for (slot in 0 until JarvisWidgets.SLOTS) {
             val n = slot + 1
             val asked = JarvisWidgets.pinSentence(requested = true, alreadyThere = false, slot = slot)
-            assertTrue("slot $n must name its widget:\n$asked", asked.contains("Jarvis widget $n"))
+            assertTrue("slot $n must name its widget:\n$asked", asked.contains("Atlas widget $n"))
             assertTrue("slot $n must say it was ASKED:\n$asked", asked.contains("was asked"))
             assertFalse("slot $n must not claim the widget is there:\n$asked", asked.contains("was added"))
 
             val already = JarvisWidgets.pinSentence(requested = true, alreadyThere = true, slot = slot)
             assertTrue(already.contains("already"))
-            assertTrue(already.contains("Jarvis widget $n"))
+            assertTrue(already.contains("Atlas widget $n"))
 
             val cannot = JarvisWidgets.pinSentence(requested = false, alreadyThere = false, slot = slot)
             assertTrue("slot $n needs the manual route:\n$cannot", cannot.contains("Touch and hold"))
-            assertTrue(cannot.contains("Jarvis widget $n"))
+            assertTrue(cannot.contains("Atlas widget $n"))
             assertFalse("slot $n must not pretend it asked:\n$cannot", cannot.contains("was asked"))
         }
         assertTrue(

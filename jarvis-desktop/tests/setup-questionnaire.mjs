@@ -962,7 +962,7 @@ await check("the wiring is real: the card, the command, its permissions and the 
   assert.match(settingsHtml, /id="sq-keep"/);
   assert.match(settingsHtml, /id="sq-again"/);
   assert.match(settingsHtml, /<script type="module" src="setup-settings.js"><\/script>/);
-  assert.match(settingsHtml, /href="#setup-questionnaire">Personalize Jarvis</);
+  assert.match(settingsHtml, /href="#setup-questionnaire">Personalize Atlas</);
   // The notification switch's page row comes from the generated catalogue
   // (`tools/gen_settings_cases.py`, from the backend registry). Wave B's
   // backend half landed the registry row, so the row is on the page now: what

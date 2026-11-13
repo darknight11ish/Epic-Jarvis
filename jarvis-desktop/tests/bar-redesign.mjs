@@ -260,9 +260,9 @@ await check("the mode ids and their names are the ones the suites know", async (
     pin: document.querySelector("#pin"),
   }));
   await page.close();
-  assert.equal(got.liveAria, "Jarvis Live");
+  assert.equal(got.liveAria, "Atlas Live");
   assert.equal(got.watchAria, "Watch with me");
-  assert.match(got.micName, /Hold to talk to Jarvis/);
+  assert.match(got.micName, /Hold to talk to Atlas/);
   assert.equal(got.incognitoName, "Incognito");
   assert.match(got.incognitoTitle, /incognito chat/i,
     "the one chip's tooltip must say what its name says");

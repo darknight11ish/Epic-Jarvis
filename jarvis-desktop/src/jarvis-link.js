@@ -520,7 +520,7 @@ function normaliseSaid(text) {
  * same card waits on the Home screen. voice.rs has the same words for its
  * two wake-word sentences; tests/faq.mjs holds the two together.
  */
-export const APPROVE_WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+export const APPROVE_WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 
 /** The link as last reported. */
 export function currentLink() {

@@ -439,8 +439,12 @@ class SettingsSearchTest {
             SettingsSearch.matching("packup").contains("backup"),
         )
         // ...and a real word keeps matching exactly, once more, so this test
-        // cannot pass by the matcher simply refusing everything.
-        assertEquals(listOf("backup"), SettingsSearch.matching("backup"))
+        // cannot pass by the matcher simply refusing everything. TWO rows now
+        // answer "backup": the PC's Backups card and - since the copy-over
+        // wave of 2026-11-13 - this phone's own settings backup. Both are real
+        // answers, drawn in screen order with the PC's first, which is the
+        // same order "backup" puts them in on the screen.
+        assertEquals(listOf("backup", "phone-backup"), SettingsSearch.matching("backup"))
     }
 
     @Test

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jarvis Widget</title>
+    <title>Atlas Widget</title>
     <!--
       Theme before first paint. Synchronous from localStorage rather than
       waiting for the IPC round trip, because a window that paints deep-space
@@ -38,7 +38,7 @@
       <!-- The window had no heading, so its heading list was empty and there
            was nothing to tell a screen reader which of the four Jarvis windows
            it had landed in. -->
-      <h1 class="sr-only">Jarvis widget</h1>
+      <h1 class="sr-only">Atlas widget</h1>
       <!-- ── Compact bar: always visible, doubles as the drag handle ────── -->
       <header class="widget-bar" data-tauri-drag-region>
         <div class="status-indicator" data-tauri-drag-region>
@@ -85,12 +85,12 @@
                The compact bar is a fixed 320px, and the route pill between the
                two groups is `flex: 1 1 auto; min-width: 0`, so it gives up the
                room and the gear is never pushed off the end. -->
-          <button class="icon-btn" id="btn-settings" title="Jarvis settings">
+          <button class="icon-btn" id="btn-settings" title="Atlas settings">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
               <path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />
             </svg>
-            <span class="sr-only">Jarvis settings</span>
+            <span class="sr-only">Atlas settings</span>
           </button>
         </div>
       </header>
@@ -116,7 +116,7 @@
            everything key. No step's words and no window's name: the widget
            sits outside App lock. -->
       <div class="screen-strip" id="screen-strip" hidden>
-        <span class="screen-word" id="screen-word">Jarvis is working on your screen</span>
+        <span class="screen-word" id="screen-word">Atlas is working on your screen</span>
         <span class="screen-clock mono" id="screen-clock" aria-label="How long it has been working">0:00</span>
         <button class="btn btn-quiet" type="button" id="screen-stop">Stop</button>
       </div>
@@ -139,7 +139,7 @@
         <div class="face-wrap" id="face-wrap">
           <iframe
             id="face-frame"
-            title="Jarvis"
+            title="Atlas"
             tabindex="-1"
             aria-hidden="true"
           ></iframe>
@@ -157,7 +157,7 @@
           <div class="board-pick-row">
             <label for="board-pick" class="board-pick-label">Your widget</label>
             <select id="board-pick" class="board-pick">
-              <option value="">Jarvis's face</option>
+              <option value="">Atlas's face</option>
             </select>
           </div>
           <div class="board-blocks" id="board-blocks" hidden></div>
@@ -172,7 +172,7 @@
              all. `data-tone` is red for offline, amber for stale or
              connecting (jarvis-link.js linkWords). -->
         <div class="widget-offline" id="widget-offline" data-tone="bad" hidden>
-          <span id="widget-offline-text">Jarvis is not answering.</span>
+          <span id="widget-offline-text">Atlas is not answering.</span>
           <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
         </div>
 
@@ -245,7 +245,7 @@
               type="button"
               class="btn btn-quiet"
               id="btn-task-pause"
-              title="Pause the task Jarvis is currently running"
+              title="Pause the task Atlas is currently running"
             >Pause</button>
             <button
               type="button"
@@ -258,7 +258,7 @@
               type="button"
               class="btn btn-deny"
               id="btn-task-stop"
-              title="Stop the task Jarvis is currently running"
+              title="Stop the task Atlas is currently running"
             >Stop</button>
           </div>
           <div class="task-note-row">
@@ -273,7 +273,7 @@
             <button
               class="icon-btn"
               id="btn-task-note-send"
-              title="Send this note - it applies to what Jarvis does next, not what is already running"
+              title="Send this note - it applies to what Atlas does next, not what is already running"
               aria-label="Send note"
             >↵</button>
           </div>
@@ -330,7 +330,7 @@
                  only: there is no control here that acts on more than one. -->
             <span class="appr-count mono" id="appr-count" hidden></span>
           </div>
-          <p class="appr-title" id="appr-action">Jarvis is asking for your approval</p>
+          <p class="appr-title" id="appr-action">Atlas is asking for your approval</p>
           <!-- Outside text tried to rush the reader and the tier went up.
                The chip and the quote; the surrounding context stays on the
                quickbar's card, because this window is 320px wide and a
@@ -378,7 +378,7 @@
             <button
               class="icon-btn"
               id="btn-appr-note-send"
-              title="Send this note - Jarvis will propose again"
+              title="Send this note - Atlas will propose again"
               aria-label="Send note"
             >↵</button>
           </div>
