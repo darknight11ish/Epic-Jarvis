@@ -1,0 +1,256 @@
+{
+  "schema": "epic-jarvis.native-provenance/v1",
+  "generated_at_utc": "2026-11-13T12:29Z",
+  "lane": "engine-native",
+  "purpose": "E1 on-device GGUF engine: one CPU-only JNI shared library for jarvis-client (com.jarvis.client.localai.LlamaNative)",
+  "write_scope": "D:/jarvis-scratch/android-engine-native-2026-11-13",
+
+  "source": {
+    "llama_cpp": {
+      "project": "llama.cpp / ggml",
+      "version": "0.5.0-dev",
+      "version_evidence": "vendor/llama.cpp/CMakeLists.txt: LLAMA_VERSION_MAJOR 0, MINOR 5, PATCH 0, LLAMA_BUILD_IS_DEV ON; llama_version() returns that string at runtime",
+      "ggml_version": "0.25.1",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2023-2026 The ggml authors",
+      "license_file": "licenses/LICENSE-llama.cpp",
+      "vendored_from": {
+        "repository": "https://github.com/orailnoor/cross-platform-llm-client",
+        "commit": "8a5f3b0c0ca8c2108b76ac9619fe5faf6a6a098e",
+        "commit_measured_with": "git -C D:/jarvis-scratch/repos/cross-platform-llm-client rev-parse HEAD",
+        "path": "local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp",
+        "upstream_commit": null,
+        "upstream_commit_note": "The vendored snapshot does not record which upstream llama.cpp commit it was taken from. The PrivateLM commit and the tree hash below are the strongest provenance available; the PLAN records the same limitation."
+      },
+      "copied_to": "vendor/llama.cpp",
+      "copy_excluded": [
+        ".git",
+        "examples",
+        "tests",
+        "tools",
+        "docs",
+        "python",
+        "scripts",
+        "compiled binaries (*.o, *.a, *.so, *.dll, *.exe, *.bin, *.gguf, *.zip)"
+      ],
+      "tree_hash": {
+        "method": "sha256 over UTF-8 lines '<path relative to vendor/llama.cpp, forward slashes>\\t<sha256 of file bytes>\\n', files sorted by full path",
+        "sha256": "9ecc1ed57a9e235f4e7a5c94840ab32a6ec7b7badb2bed390d34ab2dd8d40b51",
+        "file_count": 1738,
+        "manifest": "licenses/llama.cpp-tree.sha256"
+      }
+    },
+    "adapted_wrapper": {
+      "project": "PrivateLM llama_flutter_android Android plugin",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2025 dragneel2074",
+      "license_file": "licenses/LICENSE-PrivateLM-plugin",
+      "repository": "https://github.com/orailnoor/cross-platform-llm-client",
+      "repository_license_file": "licenses/LICENSE-PrivateLM-repo",
+      "commit": "8a5f3b0c0ca8c2108b76ac9619fe5faf6a6a098e",
+      "upstream_files": [
+        "local_plugins/llama_flutter_android/android/src/main/cpp/jni_wrapper.cpp",
+        "local_plugins/llama_flutter_android/android/CMakeLists.txt"
+      ],
+      "adapted_files": [
+        "jni/jarvis_llama_jni.cpp",
+        "CMakeLists.txt"
+      ],
+      "what_changed": [
+        "process-wide globals replaced by one Engine allocated per Java long handle, so unload/destroy are well defined",
+        "Flutter plugin entry points replaced by exactly eight com.jarvis.client.localai.LlamaNative JNI functions",
+        "cancellation is the TokenSink.stopped() poll checked once per token, not a separate nativeStop() entry point",
+        "mtmd/vision, Vulkan, RPC/phone-cluster and runtime backend loading removed (CPU only, one library)",
+        "UTF-8 to UTF-16 via NewString(jchar) and UTF-16 to UTF-8 via GetStringChars; a token piece ending mid-code-point is buffered and prepended to the next piece instead of becoming U+FFFD",
+        "greedy sampler when temperature <= 0, temp + dist otherwise; seed is LLAMA_DEFAULT_SEED for the stochastic path",
+        "per-generation stats [promptTokens, genTokens, genMillis] measured with std::chrono::steady_clock",
+        "GGUF pre-flight, batched prompt evaluation and KV-cache prefix reuse kept from the wrapper"
+      ]
+    }
+  },
+
+  "toolchain": {
+    "toolchain_marker": "D:/Android/tools/TOOLCHAIN-READY.txt (contains DONE=1)",
+    "ndk": {
+      "path": "D:/Android/ndk/android-ndk-r27c",
+      "revision": "27.2.12479018",
+      "clang": "Android (12470979, based on r522817c) clang version 18.0.3 (https://android.googlesource.com/toolchain/llvm-project d8003a456d14a3deb8054cdaa529ffbf02d9b262)"
+    },
+    "cmake": {
+      "path": "D:/Android/cmake/bin/cmake.exe",
+      "version": "3.31.6"
+    },
+    "ninja": {
+      "path": "D:/Android/ninja/ninja.exe",
+      "version": "1.12.1"
+    }
+  },
+
+  "build_configuration": {
+    "reproduce": "pwsh -NoProfile -File build-native.ps1            # arm64-v8a\npwsh -NoProfile -File build-native.ps1 -Abi x86_64  # optional emulator ABI",
+    "network_required": false,
+    "git_required": false,
+    "configure_command": "cmake -S <root> -B build/<abi> -G Ninja -DCMAKE_TOOLCHAIN_FILE=<ndk>/build/cmake/android.toolchain.cmake -DANDROID_ABI=<abi> -DANDROID_PLATFORM=android-33 -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=<ninja>",
+    "build_command": "cmake --build build/<abi> --target jarvis_llama --parallel <cpus>",
+    "cpp_standard": "C++17",
+    "stl": "c++_static (self-contained library: no libc++_shared.so dependency)",
+    "link_flags": [
+      "-Wl,-z,max-page-size=16384",
+      "-Wl,-z,common-page-size=16384",
+      "-Wl,--exclude-libs,ALL"
+    ],
+    "cmake_options": {
+      "BUILD_SHARED_LIBS": "OFF - llama/ggml are static archives linked into the single .so",
+      "GGML_STATIC": "OFF - it would add a bare -static, invalid for Android",
+      "GGML_BACKEND_DL": "OFF - CPU backend compiled in and registered statically",
+      "GGML_CPU_ALL_VARIANTS": "OFF - no per-Arm-generation backend modules",
+      "GGML_VULKAN": "OFF",
+      "GGML_RPC": "OFF",
+      "GGML_OPENMP": "OFF - the NDK ships no libomp",
+      "GGML_NATIVE": "OFF - cross-compiling, never tune for the build host",
+      "LLAMA_BUILD_COMMON": "OFF",
+      "LLAMA_BUILD_TOOLS": "OFF",
+      "LLAMA_BUILD_TESTS": "OFF",
+      "LLAMA_BUILD_EXAMPLES": "OFF",
+      "LLAMA_BUILD_SERVER": "OFF",
+      "LLAMA_BUILD_APP": "OFF",
+      "LLAMA_BUILD_MTMD": "OFF - no vision in E1",
+      "LLAMA_CURL": "OFF",
+      "LLAMA_OPENSSL": "OFF",
+      "LLAMA_SUBPROCESS": "OFF"
+    },
+    "post_processing": "llvm-strip --strip-unneeded on the published copy (the Release build carries 42,764,331 bytes / 40.8 MB of .debug_* sections and symbol tables). The unstripped library remains in build/<abi>/lib/."
+  },
+
+  "artifacts": [
+    {
+      "abi": "arm64-v8a",
+      "path": "dist/arm64-v8a/libjarvis_llama.so",
+      "size_bytes": 4381104,
+      "size_unstripped_bytes": 47146048,
+      "stripped": true,
+      "sha256": "3de1334045f8f4deb716d2c828faaa4a84fcfa0dc8fa2468c544cf3156e882da",
+      "elf_machine": "AArch64",
+      "elf_type": "DYN (shared object)",
+      "soname": "libjarvis_llama.so",
+      "jni_symbols": [
+        "Java_com_jarvis_client_localai_LlamaNative_nativeCreate",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeLoad",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeGenerate",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeUnload",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeDestroy",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeLastError",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeVersion",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeStats"
+      ],
+      "load_segments": 4,
+      "load_align": "0x4000",
+      "needed": ["libandroid.so", "liblog.so", "libm.so", "libdl.so", "libc.so"],
+      "depends_on_libcxx_shared": false,
+      "text_relocations": false,
+      "bind_now": true
+    },
+    {
+      "abi": "x86_64",
+      "path": "dist/x86_64/libjarvis_llama.so",
+      "size_bytes": 4791688,
+      "size_unstripped_bytes": 46068368,
+      "stripped": true,
+      "sha256": "dd4b5c35cd19c2838d8a5ed21c8e5cba4bf19cf39a16daf31daa92e83d205511",
+      "elf_machine": "Advanced Micro Devices X86-64",
+      "elf_type": "DYN (shared object)",
+      "soname": "libjarvis_llama.so",
+      "jni_symbols": [
+        "Java_com_jarvis_client_localai_LlamaNative_nativeCreate",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeLoad",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeGenerate",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeUnload",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeDestroy",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeLastError",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeVersion",
+        "Java_com_jarvis_client_localai_LlamaNative_nativeStats"
+      ],
+      "load_segments": 4,
+      "load_align": "0x4000",
+      "needed": ["libandroid.so", "liblog.so", "libm.so", "libdl.so", "libc.so"],
+      "depends_on_libcxx_shared": false,
+      "text_relocations": false,
+      "bind_now": true
+    }
+  ],
+
+  "verification": {
+    "static": {
+      "jni_symbols_expected": 8,
+      "jni_symbols_found_arm64": 8,
+      "jni_symbols_found_x86_64": 8,
+      "load_segment_alignment": "all 4 LOAD segments in both ABIs are 0x4000 (16384) aligned - Android 15 16 KB page requirement",
+      "clean_rebuild_bit_identical": {
+        "abi": "arm64-v8a",
+        "sha256_first_build": "3de1334045f8f4deb716d2c828faaa4a84fcfa0dc8fa2468c544cf3156e882da",
+        "sha256_clean_rebuild": "3de1334045f8f4deb716d2c828faaa4a84fcfa0dc8fa2468c544cf3156e882da",
+        "identical": true,
+        "command": "build-native.ps1 -Clean"
+      },
+      "build_info_files": [
+        "dist/arm64-v8a/BUILD-INFO.txt",
+        "dist/x86_64/BUILD-INFO.txt"
+      ]
+    },
+    "on_device": {
+      "device_serial": "f0a5b32b",
+      "device_model": "CPH2419 (the owner's phone named in the PLAN)",
+      "android_version": "15",
+      "device_abi": "arm64-v8a",
+      "method": "Java probe classes with the same binary names/signatures as the Kotlin contract (com.jarvis.client.localai.LlamaNative + TokenSink), dexed with d8 and run through app_process; the library was loaded with System.load from /data/local/tmp. The native methods are declared as INSTANCE methods (jobject second argument), the same shape Kotlin's `object LlamaNative` compiles to. No APK and no root required.",
+      "probe_source": "probe/src",
+      "model": {
+        "file": "D:/jarvis-scratch/android-models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "size_bytes": 491400032,
+        "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "quantisation": "Q4_K_M",
+        "pushed_to": "/data/local/tmp/jarvis-probe/model.gguf"
+      },
+      "result": "PASS (all 15 probe checks, device exit code 0)",
+      "checks": [
+        "System.load",
+        "nativeVersion -> 'llama.cpp 0.5.0-dev / jarvis_llama 1 / arm64-v8a / CPU'",
+        "nativeCreate returns a non-zero handle",
+        "nativeLoad(missing file) fails with rc=-4 and a readable nativeLastError",
+        "nativeLoad ok in 242 ms (ctx=2048, 4 threads)",
+        "nativeGenerate rc=0, 107-character reply",
+        "nativeStats = [5 prompt tokens, 24 generated, 1205 ms]",
+        "second nativeGenerate on the same prompt (KV-cache prefix reuse) rc=0",
+        "Unicode prompt/reply: CJK code points U+5DF4 U+9ECE ... (correct UTF-8 -> UTF-16 conversion)",
+        "stopped()=true before the first token cancels with rc=0 and no emits",
+        "nativeUnload resets stats to [0,0,0]",
+        "nativeDestroy succeeds"
+      ],
+      "measurements": {
+        "load_ms": 270,
+        "prompt_tokens": 5,
+        "generated_tokens": 24,
+        "generation_ms": 1205,
+        "tokens_per_second": 19.92,
+        "tokens_per_second_range_across_runs": "19.66 - 20.00",
+        "config": "Qwen2.5-0.5B-Instruct Q4_K_M, ctx 2048, 4 threads, greedy (temperature 0), CPU"
+      },
+      "generated_text": " Paris. It is the largest city in Europe and the second largest in the world. It is also the capital of the",
+      "logs": [
+        "probe/probe-20261113-042920.log",
+        "probe-run-instance-console.log"
+      ],
+      "probe_build_note": "javac must be given -encoding UTF-8 (run-probe.ps1 does): the probe contains a Chinese prompt literal and javac's Windows default charset silently compiled it as Latin-1. The first run of the Unicode check failed for that reason, not because of the library; after the fix the same .so passed."
+    }
+  },
+
+  "known_limitations": [
+    "Functional evidence comes from the probe harness, not from the real jarvis-client app. The probe mirrors Kotlin's instance-method calling shape and passed, but the Kotlin LlamaNative/TokenSink integration, R8 keep rules, UI, switch-off default and the 5 s idle / 180 s cap policy are the integration lane's work.",
+    "The probe's LlamaNative class is a Java stand-in with the same binary name and signatures; the actual Kotlin object, its packaging and R8-minified build were not executed on the phone in this lane.",
+    "The library is a baseline arm64-v8a build: ggml's dotprod/fp16/i8mm/SVE feature checks did not enable those paths (no -march or per-CPU-variant backends), so it is portable but not the fastest possible CPU build. 19.92 tokens/s on a 0.5B Q4_K_M (repeat runs 19.66-20.00) is the measured baseline. Runtime CPU variants (PrivateLM's approach) or -march tuning are E3 follow-ups.",
+    "The x86_64 library is built and statically checked (8 symbols, 0x4000 alignment) but was not executed: no Android emulator was started in this lane.",
+    "Only the owner's CPH2419 on Android 15 was tested; other devices/Android versions are unverified.",
+    "No Vulkan/GPU, no RPC/phone-cluster and no mtmd/vision in this build, by design for E1.",
+    "The 0.4 GB test GGUF is a local test asset and is not part of the deliverable."
+  ]
+}
