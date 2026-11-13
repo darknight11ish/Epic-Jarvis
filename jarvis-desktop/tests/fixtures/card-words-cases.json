@@ -833,8 +833,8 @@
       "notice": {
         "title": "Jarvis wants to check repository records before a push",
         "summary": "Jarvis wants to check repository records before a push.",
-        "full": "checks this PC's record files against the tree before a push; it reads only, sends nothing and changes nothing. nothing has happened yet.",
-        "body": "checks this PC's record files against the tree before a push; it reads only, sends nothing and changes nothing. nothing has happened yet.",
+        "full": "reads this PC's own record files and runs the repository's read-only checkers; nothing is written or sent. nothing has happened yet.",
+        "body": "reads this PC's own record files and runs the repository's read-only checkers; nothing is written or sent. nothing has happened yet.",
         "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
@@ -1325,8 +1325,8 @@
       "notice": {
         "title": "Jarvis wants to search GitHub",
         "summary": "Jarvis wants to search GitHub.",
-        "full": "searches GitHub for existing libraries using your search words; it reads only and nothing on GitHub changes. nothing has happened yet.",
-        "body": "searches GitHub for existing libraries using your search words; it reads only and nothing on GitHub changes. nothing has happened yet.",
+        "full": "searches GitHub's public library index with the words the model chose; GitHub sees this PC's address and nothing on GitHub changes. nothing has happened yet.",
+        "body": "searches GitHub's public library index with the words the model chose; GitHub sees this PC's address and nothing on GitHub changes. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1337,8 +1337,8 @@
       "notice": {
         "title": "Jarvis wants to search GitHub signed in as you",
         "summary": "Jarvis wants to search GitHub signed in as you.",
-        "full": "searches GitHub for existing libraries using your search words, signed in with the token saved on this PC; it reads only and nothing on GitHub changes. nothing has happened yet.",
-        "body": "searches GitHub for existing libraries using your search words, signed in with the token saved on this PC; it reads only and nothing on GitHub changes. nothing has happened yet.",
+        "full": "searches GitHub signed in with the token saved on this PC, so GitHub sees which account asked; nothing on GitHub changes. nothing has happened yet.",
+        "body": "searches GitHub signed in with the token saved on this PC, so GitHub sees which account asked; nothing on GitHub changes. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1937,8 +1937,8 @@
       "notice": {
         "title": "Jarvis wants to review code changes before a push",
         "summary": "Jarvis wants to review code changes before a push.",
-        "full": "reviews the changes in a checkout on this PC and the records that should describe them; it reads only, sends nothing and changes nothing. nothing has happened yet.",
-        "body": "reviews the changes in a checkout on this PC and the records that should describe them; it reads only, sends nothing and changes nothing. nothing has happened yet.",
+        "full": "reads one change on this PC - the base and head commits, the files it touches and the risk notes - and writes nothing. nothing has happened yet.",
+        "body": "reads one change on this PC - the base and head commits, the files it touches and the risk notes - and writes nothing. nothing has happened yet.",
         "weight": "normal",
         "deny_ok": true,
         "approve_ok": false

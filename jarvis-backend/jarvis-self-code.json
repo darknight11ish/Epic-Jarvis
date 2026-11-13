@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
- "built_at": "2026-11-12T06:05:38Z",
+ "ref": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
+ "built_at": "2026-11-12T18:48:06-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6282,6 +6282,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
+   "date": "2026-11-12",
+   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
+  },
+  {
    "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
    "date": "2026-11-12",
    "subject": "fix(union): resolve CI audit zero-jargon, asks-first frontend test, and backend Windows test failures"
@@ -6375,11 +6380,6 @@
    "sha": "b7341af45432cb076505ebc9366508a01fd9e9c1",
    "date": "2026-11-10",
    "subject": "feat(asks-first): the GitHub switch door - one master switch, a switchable read row, and card-free GitHub reads (2026-11-10)"
-  },
-  {
-   "sha": "e5524c6ae5d6d8e0ae6303cd39f88f3c63bae553",
-   "date": "2026-11-10",
-   "subject": "chore(records): regenerate the shipped recent-changes module for the wave 16B bullet"
   }
  ],
  "top_level": [

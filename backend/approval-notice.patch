@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -319,6 +319,167 @@
+@@ -319,6 +319,160 @@
      }
  
  
@@ -104,21 +104,14 @@
 +    heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
 +
 +    bits = [r["why"]]
++    if tool_name:
++        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
 +    if raised:
 +        # Said, never quoted. That something tried to rush you is the fact that
 +        # changes your decision; its actual words are not needed to convey it,
 +        # and are the one thing that must not travel.
 +        bits.append("something in the text it read tried to hurry you, so this "
 +                    "was raised for a closer look")
-+    # The named ability goes FIRST in the body (insert(0)) but is placed in the
-+    # code AFTER the raised block on purpose: unknown-risk-approvable.patch
-+    # (2026-10-30) adds its "nobody has written down what it does" line directly
-+    # between `bits = [r["why"]]` and `if raised:`, and that patch is the LAST
-+    # writer of jarvis_gate.py. Inserting this block inside that window stopped
-+    # the later patch applying (and reversing) at all - measured 2026-11-12 by
-+    # test_gate_unknown_risk.py and test_reconcile_live_backend.py.
-+    if tool_name:
-+        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
 +    bits.append("nothing has happened yet")
 +
 +    # The WHOLE card: why it matters, that outside text pushed it up, and that

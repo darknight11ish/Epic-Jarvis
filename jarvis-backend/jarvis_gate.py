@@ -860,6 +860,8 @@ def notice_for(item: dict) -> dict:
     heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
 
     bits = [r["why"]]
+    if tool_name:
+        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
     if not r["classified"]:
         # The warning line above is the headline; this says WHY the worst case
         # was chosen, in the plainest words there are. Both are this file's own
@@ -873,12 +875,6 @@ def notice_for(item: dict) -> dict:
         # and are the one thing that must not travel.
         bits.append("something in the text it read tried to hurry you, so this "
                     "was raised for a closer look")
-    # The named ability goes FIRST in the body (insert(0)) but sits AFTER the
-    # raised block on purpose: unknown-risk-approvable.patch adds its line
-    # directly between `bits = [r["why"]]` and `if raised:`, and it must keep
-    # applying and reversing out of this base (test_gate_unknown_risk.py).
-    if tool_name:
-        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
     bits.append("nothing has happened yet")
 
     return {
@@ -3101,6 +3097,14 @@ _TOOL_ACTIONS.update({
     # The full pull-request read of the 22:30 ruling's Step 2 (2026-11-10): five
     # fixed GETs, so a read, decided under the same read action.
     "github_pr_detail": "github_inspect",
+    # github_search (Q3/Q4, 2026-11-11) hands the gate its OWN action name -
+    # `_github_search_action_name()`: `github_search_run` with no token saved,
+    # `github_search_run_authenticated` with one. Both are actions of their own
+    # so their `auto` tier lines can be found and switched off; with no entry
+    # here `action_for_tool()` answers "unclassified_tool" and the card is
+    # never the one the tool raises.
+    "github_search_run": "github_search_run",
+    "github_search_run_authenticated": "github_search_run_authenticated",
     "github_comment": "github_comment",
     "github_open_issue": "github_open_issue",
     "github_rerun_workflow": "github_rerun_workflow",
@@ -3136,30 +3140,18 @@ _TOOL_ACTIONS.update({
     # action). Its own action, so its card says "close or reopen an issue"
     # rather than "open an issue".
     "github_issue_state": "github_issue_state",
-    # The library search's own gate actions (2026-11-11, Q3/Q4). The tool hands
-    # the gate one of these two names at call time (signed in or not), so the
-    # table needs the ACTION names as keys; without them action_for_tool()
-    # answers "unclassified_tool" on a PC with no GitHub token - which is how CI
-    # runs - and the card and the Reach page would name the wrong thing.
-    "github_search_run": "github_search_run",
-    "github_search_run_authenticated": "github_search_run_authenticated",
 })
 _RISK.update({
     # Reading only. Reversible "yes" and reach "outbound" is the same pair
     # `github_read`, `page_read` and `news_read` already carry: nothing on
     # GitHub changes, but the request leaves this PC, so it is never "local".
     "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
-    # The library search's two actions (2026-11-11, Q3/Q4). GET-only searches on
-    # api.github.com, card-free by the owner's ruling, so they carry the same
-    # "yes"/"outbound" pair as github_inspect: nothing on GitHub changes, but
-    # the search words do leave this PC.
-    "github_search_run": ("yes", "outbound", "searches GitHub for existing libraries using your search words; it reads only and nothing on GitHub changes"),
-    "github_search_run_authenticated": ("yes", "outbound", "searches GitHub for existing libraries using your search words, signed in with the token saved on this PC; it reads only and nothing on GitHub changes"),
-    # The two local review gates (2026-11-11, Q-D/Q7). Local and read-only: they
-    # read this PC's own changes and record files, send nothing and change
-    # nothing; card-free by default, so "yes"/"local" is the honest pair.
-    "review_changes": ("yes", "local", "reviews the changes in a checkout on this PC and the records that should describe them; it reads only, sends nothing and changes nothing"),
-    "check_records": ("yes", "local", "checks this PC's record files against the tree before a push; it reads only, sends nothing and changes nothing"),
+    # github_search's own two actions (Q3/Q4, 2026-11-11). A library search is
+    # a read, so "yes"/"outbound" is the same pair `github_inspect` carries:
+    # GitHub sees this PC's address, and with a token saved it also sees which
+    # account asked. Nothing on GitHub changes.
+    "github_search_run": ("yes", "outbound", "searches GitHub's public library index with the words the model chose; GitHub sees this PC's address and nothing on GitHub changes"),
+    "github_search_run_authenticated": ("yes", "outbound", "searches GitHub signed in with the token saved on this PC, so GitHub sees which account asked; nothing on GitHub changes"),
     # Posting in the owner's name. "no" for the same reason `send_email` is:
     # Jarvis cannot edit or withdraw a comment once GitHub has it.
     "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),
@@ -3200,6 +3192,14 @@ _RISK.update({
     # ONE issue's state (the owner's 2026-11-10 23:00 decision): reversible, so
     # "yes"; one issue, never a pull request, never bulk, never a delete.
     "github_issue_state": ("yes", "outbound", "closes ONE issue or reopens ONE closed issue on GitHub in your name; the same tool changes it back, and it never touches a pull request, more than one issue, a delete or a transfer"),
+    # The two LOCAL pre-push review gates (Q-D/Q7, 2026-11-11). They ride the
+    # same master switch as the GitHub tools and ship "auto" in both settings
+    # files because both are read-only checks of a checkout on THIS PC - no
+    # token, no network, nothing written. The row is here because an "auto"
+    # action with no row is exactly what the CI half of Gemini's Q2 ruling
+    # refuses (backend/test_gate_unknown_risk.py).
+    "review_changes": ("yes", "local", "reads one change on this PC - the base and head commits, the files it touches and the risk notes - and writes nothing"),
+    "check_records": ("yes", "local", "reads this PC's own record files and runs the repository's read-only checkers; nothing is written or sent"),
 })
 
 

@@ -1139,6 +1139,11 @@ def t_the_gate_knows_the_ten_tools_and_six_actions():
         "github_edit_pr": GH.ACTION_EDIT_PR,
         "github_pr_review": GH.ACTION_PR_REVIEW,
         "github_issue_state": GH.ACTION_ISSUE_STATE,
+        # github_search hands the gate its OWN action name (Q3/Q4, 2026-11-11):
+        # `_github_search_action_name()` answers with one of these two, so each
+        # is an action-to-itself row exactly as github_fix_write's is.
+        "github_search_run": "github_search_run",
+        "github_search_run_authenticated": "github_search_run_authenticated",
     }
     for tool, action in EXPECTED.items():
         check(f"the gate maps {tool} to {action}",
