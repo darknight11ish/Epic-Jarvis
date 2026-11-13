@@ -633,8 +633,10 @@ CAPABILITIES = (
               "commit moved or it was retargeted to another base branch since "
               "the card was shown; on your own Epic-Jarvis repository the seven "
               "required checks are an unbypassable floor, and on any other "
-              "repository it reads that repository's own branch rules and checks "
-              "and refuses if it cannot read them",
+              "repository it reads that repository's own branch rules and checks; "
+              "a repository with no branch rules on its owner's plan is judged by "
+              "its checks, and a token that really cannot read them refuses the "
+              "merge",
      "default_state": "off",
      "absolute_bans": ("squash_merge", "rebase_merge", "admin_bypass",
                        "auto_merge", "bypass_required_checks", "approve_pr"),
@@ -2100,10 +2102,26 @@ def _git_auth_env(token: str) -> dict:
     `Get-CimInstance Win32_Process` and ps can read) and never in the folder's
     own config file. Both the clone (prepare) and the push use this one function,
     so the two stages cannot drift apart.
+
+    WHY BASIC AND NOT BEARER - measured on the owner's PC, 2026-11-13. GitHub's
+    REST API accepts `Authorization: Bearer <token>`, which is why every GitHub
+    read here worked. GitHub's GIT endpoint does not: a direct
+    `git ls-remote https://github.com/darknight11ish/jarvis-coding-field-test.git`
+    with the Bearer form exited **128** with `remote: invalid credentials` and
+    `fatal: Authentication failed`, and the SAME command with
+    `Authorization: Basic base64("x-access-token:" + token)` exited **0** and
+    listed the refs. So the prepare clone and the push could never authenticate
+    while this said Bearer - that is what failed the live field test with
+    "authentication issue". Git wants the Basic form, `x-access-token` as the
+    user name and the token as the password (GitHub's documented shape for a
+    token over git). The token still stays in this environment config and out of
+    `argv`; it is never logged, and this is the only place the header is built.
     """
+    basic = base64.b64encode(
+        ("x-access-token:" + token).encode("utf-8")).decode("ascii")
     return {"GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "http.extraheader",
-            "GIT_CONFIG_VALUE_0": f"Authorization: Bearer {token}"}
+            "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}"}
 
 
 def _default_git(args, *, cwd: Optional[str] = None,
@@ -2404,7 +2422,9 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
         "has a check still running, or has any of these required checks not "
         f"passed on your own Epic-Jarvis repository: {checks} (on any other "
         f"repository Jarvis reads that repository's own branch rules and its "
-        f"checks, and refuses if it cannot read them)",
+        f"checks; a repository whose owner's GitHub plan has no branch rules is "
+        f"judged by its checks, and a token that really cannot read them stops "
+        f"the merge)",
         "GitHub is told: merge, and only merge, at this exact commit.",
     ])
     return Request(
@@ -3756,25 +3776,55 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
 
 
 def _raw_read(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
-    """(doc, status, error) - the status KEPT, for the merge's rules reads.
+    """(doc, status, error, said) - the status and GitHub's own words KEPT.
 
-    `_read` turns every refusal into words and loses the status; the per-repo
-    merge check (Q-C) has to tell 401/403 ("this token cannot read the rules")
-    from 404/200-empty ("this repo has no required contexts"), so it needs the
-    number. Nothing here follows a redirect or builds a path the module did not
-    write.
+    `_read` turns every refusal into words and loses both the status and the
+    body; the per-repo merge check (Q-C) has to tell 401/403 ("this token cannot
+    read the rules") from 404/200-empty ("this repo has no required contexts"),
+    and since the 2026-11-13 field test also a 403 whose body says the owner's
+    GitHub plan has no branch rules ("Upgrade to GitHub Pro or make this
+    repository public ...") from a real auth refusal. `said` is that scrubbed
+    body, read by `_plan_limited_rules` only and never printed. Nothing here
+    follows a redirect or builds a path the module did not write.
     """
     try:
         status, text = fetch("GET", GITHUB_API + path, headers=headers,
                              body=None, timeout=TIMEOUT)
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return None, 0, (f"api.github.com did not answer "
-                         f"({type(exc).__name__}), so nothing was merged.")
+                         f"({type(exc).__name__}), so nothing was merged."), ""
+    said = _scrub(str(text or ""), token)
     if status == 404:
-        return None, 404, ""
+        return None, 404, "", said
     if status < 200 or status >= 300:
-        return None, int(status), _plain_failure(status, token=token)
-    return _payload(_scrub(text, token)), int(status), ""
+        return None, int(status), _plain_failure(status, token=token), said
+    return _payload(said), int(status), "", said
+
+
+#: GitHub's own words when a PRIVATE repository's owner is on a plan without
+#: branch rules (Free). The rules endpoint answers 403 with this message, which
+#: is NOT "the token cannot read rules" - the plan has no rules to read. Measured
+#: 2026-11-13 on the live 0.2.448 install: repository
+#: darknight11ish/jarvis-coding-field-test, PR #1, head 75044fb.
+_PLAN_LIMITED_RULES = ("upgrade to github pro",
+                       "make this repository public")
+
+
+def _plan_limited_rules(status: int, text: str) -> bool:
+    """True when a 403 means "no branch rules on this plan", not "blind token".
+
+    GitHub answers a private repository on the Free plan with a 403 and
+    `{"message": "Upgrade to GitHub Pro or make this repository public to
+    enable this feature."}`. That is the SAME fact as a 200 naming no required
+    contexts - the repository has no rules - so it must reach the generic rule
+    instead of the token refusal. A 401 (bad token) and a 403 with any other
+    message stay refusals: this reads GitHub's own JSON `message` through
+    `_github_message` and invents nothing.
+    """
+    if int(status or 0) != 403:
+        return False
+    said = _github_message(text).lower()
+    return any(phrase in said for phrase in _PLAN_LIMITED_RULES)
 
 
 def _required_context_names(rules) -> tuple:
@@ -3805,7 +3855,7 @@ def _required_context_names(rules) -> tuple:
 def _workflow_runs_for_sha(fetch: Callable, headers: dict, token: str,
                            repo: str, sha: str) -> tuple:
     """(workflow runs for that commit, status, error) - the fallback checks list."""
-    doc, status, err = _raw_read(
+    doc, status, err, _said = _raw_read(
         fetch, f"{_repo_path(repo)}/actions/runs?head_sha="
                f"{urllib.parse.quote(str(sha or ''), safe='')}"
                f"&per_page={CI_PER_PAGE}", headers, token)
@@ -3827,13 +3877,18 @@ def _check_plan(repo: str, base_ref: str, sha: str, fetch: Callable,
         `REQUIRED_CHECKS` as an unbypassable floor - no repository rules can
         lower it and no missing rules can skip it.
       * Any other repository: read its own branch rules. If the token cannot
-        read them (401/403) the answer is a refusal. If the rules name required
-        status-check contexts, every one of those must have completed
-        successfully on the carded commit. If the rules exist but name no
-        contexts (200 with none), or the rules endpoint is 404, fall back to the
-        commit's own checks: at least one check-run (or workflow run) for that
-        exact commit, all completed with a conclusion in success/neutral/skipped.
-        A 401/403 on those reads is refused the same way.
+        read them (401, or a 403 that is not the plan limit) the answer is a
+        refusal. A 403 whose body says the owner's GitHub plan has no branch
+        rules ("Upgrade to GitHub Pro or make this repository public ...") is
+        NOT a refusal: it means there are no rules, exactly like a 200 naming
+        none, so the generic rule below decides (measured 2026-11-13). If the
+        rules name required status-check contexts, every one of those must have
+        completed successfully on the carded commit. If the rules exist but name
+        no contexts (200 with none), the plan-limited 403, or the rules endpoint
+        404, fall back to the commit's own checks: at least one check-run (or
+        workflow run) for that exact commit, all completed with a conclusion in
+        success/neutral/skipped. A 401/403 on those reads is refused the same
+        way.
 
     The caller supplies the sentence its own door needs: the merge gate adds
     "Nothing was merged."; the cockpit adds nothing (its footer already says it
@@ -3842,15 +3897,23 @@ def _check_plan(repo: str, base_ref: str, sha: str, fetch: Callable,
     if str(repo or "").strip().lower() == OWN_REPO.lower():
         return {"mode": "named", "names": tuple(REQUIRED_CHECKS),
                 "runs": runs, "source": "your own Epic-Jarvis repository"}, "", ""
-    rules, status, err = _raw_read(
+    rules, status, err, said = _raw_read(
         fetch, f"{_repo_path(repo)}/rules/branches/"
                f"{urllib.parse.quote(base_ref, safe='')}", headers, token)
-    if status in (401, 403):
+    plan_limited = _plan_limited_rules(status, said)
+    if status in (401, 403) and not plan_limited:
         return {}, "token-rules", (
             "This GitHub token cannot read branch protection rules for this "
             "repository, so Jarvis cannot judge its checks.")
-    if err:
+    if err and not plan_limited:
         return {}, "rules-read", err
+    if plan_limited:
+        # GitHub's Free plan has no branch rules for a private repository. That
+        # is "this repository has no rules", the same answer as a 200 naming no
+        # contexts - NOT "the token is blind" - so the generic rule decides
+        # below. Measured 2026-11-13 (darknight11ish/jarvis-coding-field-test
+        # PR #1, head 75044fb): the old code refused the owner-approved merge.
+        rules = []
     names = _required_context_names(rules)
     if names:
         return {"mode": "named", "names": names, "runs": runs,
@@ -3872,7 +3935,11 @@ def _check_plan(repo: str, base_ref: str, sha: str, fetch: Callable,
         return {}, "no-checks", (
             "GitHub found no checks for that exact commit, so Jarvis will not "
             "judge a change whose checks it cannot see.")
-    return {"mode": "generic", "runs": runs, "source": source}, "", ""
+    plan = {"mode": "generic", "runs": runs, "source": source}
+    if plan_limited:
+        # The merge answer says this plainly; the cockpit's word stays generic.
+        plan["plan_limited"] = True
+    return plan, "", ""
 
 
 def _merge_check_plan(r: Request, fetch: Callable, token: str, headers: dict,
@@ -3881,7 +3948,10 @@ def _merge_check_plan(r: Request, fetch: Callable, token: str, headers: dict,
 
     The refusal sentences are kept exactly as they read before this refactor
     (the merge gate's own tests pin them); only the DECISION moved into
-    `_check_plan`, so the cockpit cannot drift from the gate.
+    `_check_plan`, so the cockpit cannot drift from the gate. Since 2026-11-13 a
+    403 that says the owner's GitHub plan has no branch rules is NOT a
+    `token-rules` refusal: `_check_plan` answers with a generic plan and the
+    merge answer names the free-plan reason in plain words.
     """
     plan, kind, problem = _check_plan(r.repo, r.base_ref, r.expected_sha,
                                       fetch, headers, token, runs)
@@ -4008,8 +4078,18 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
                           (f" GitHub said: {said}." if said else ""))}
     sha = str(answer.get("sha") or "").strip()
     said = f"Pull request #{r.number} in {r.repo} was merged with a merge commit"
-    return {"ok": True, "text": (said + f" as {sha}." if sha else
-                                 said + "; GitHub did not send the merge commit back.")}
+    if sha:
+        said += f" as {sha}."
+    else:
+        said += "; GitHub did not send the merge commit back."
+    if plan.get("plan_limited"):
+        # The 2026-11-13 field test: say plainly WHY the generic rule applied,
+        # so the owner can check the reasoning, not just the outcome.
+        said += (" This repository has no required-check rules - GitHub says "
+                 "its owner's plan does not include branch rules - so Jarvis "
+                 "judged it by the generic rule: at least one check on that "
+                 "commit, and every check finished cleanly.")
+    return {"ok": True, "text": said}
 
 
 # --------------------------------------------------------------------------

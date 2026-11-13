@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
- "built_at": "2026-11-13T11:17:47-08:00",
+ "ref": "61b44d6181e23a49442d023f98a3ce84edc365d5",
+ "built_at": "2026-11-13T12:28:45-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3837,7 +3837,6 @@
     "backend/test_failure_detail.py",
     "backend/test_fault_probes.py",
     "backend/test_feature_answers.py",
-    "backend/test_feature_control_phrases.py",
     "backend/test_feature_controls.py",
     "backend/test_feature_detail.py",
     "backend/test_feature_guide.py",
@@ -4322,7 +4321,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 690,
+   "file_count": 689,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4610,8 +4609,10 @@
     "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
-    "changelog.d/2026-11-13-awareness-of-new-features.md",
+    "changelog.d/2026-11-13-github-git-auth-basic.md",
+    "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4771,8 +4772,10 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
-    "decisions.d/2026-11-13-awareness-of-new-features.md",
+    "decisions.d/2026-11-13-github-git-auth-basic.md",
+    "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5221,7 +5224,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 858,
+   "file_count": 862,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5646,6 +5649,8 @@
     "tools/hud-deltas/gate-final-helpers-old.txt",
     "tools/hud-deltas/gate-final-pending-new.txt",
     "tools/hud-deltas/gate-final-pending-old.txt",
+    "tools/hud-deltas/gate-github-tools-new.txt",
+    "tools/hud-deltas/gate-github-tools-old.txt",
     "tools/hud-deltas/gate-guards-dedup-new.txt",
     "tools/hud-deltas/gate-guards-dedup-old.txt",
     "tools/hud-deltas/gate-guards-helpers-new.txt",
@@ -5752,7 +5757,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 507,
+   "file_count": 509,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6306,9 +6311,24 @@
  ],
  "recent_commits": [
   {
-   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
+   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
    "date": "2026-11-13",
-   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
+  },
+  {
+   "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
+   "date": "2026-11-13",
+   "subject": "fix(github): a free-plan 403 on branch rules means no rules, not a blind token"
+  },
+  {
+   "sha": "379e106a094818492c11987146dea40e4b45863e",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
+  },
+  {
+   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
   },
   {
    "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
@@ -6324,6 +6344,21 @@
    "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
    "date": "2026-11-13",
    "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
+  },
+  {
+   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
+   "date": "2026-11-13",
+   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
+  },
+  {
+   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
+   "date": "2026-11-13",
+   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
+  },
+  {
+   "sha": "4e71da569b3bb018c5440ea33babd62a70207c32",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main (ad895ed) into fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
    "sha": "0eb5d93124b5ae7b7df13b851c5b525b1fd391e1",
@@ -6346,6 +6381,26 @@
    "subject": "Merge pull request #1234 from darknight11ish/fix/patch-history-rebuild-2026-11-13"
   },
   {
+   "sha": "06832e9ce9b3ab72992777c72c0ee4daf844f85a",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the recent-changes module and the self-code map"
+  },
+  {
+   "sha": "ba742a9b82efcfb83376227ab9af1f87efd56f0a",
+   "date": "2026-11-13",
+   "subject": "docs(records): record the 2026-11-13 github-tools delta false green"
+  },
+  {
+   "sha": "e929b7c18b5db886c75d17f4306c92661ec2dbd6",
+   "date": "2026-11-13",
+   "subject": "test(deploy): pin the extended github-tools false green and the in-place upgrade"
+  },
+  {
+   "sha": "a695fca361e5e80f91e5161f70592ff75f005378",
+   "date": "2026-11-13",
+   "subject": "fix(deploy): detect an extended github-tools block and upgrade it in place"
+  },
+  {
    "sha": "9f2720dc807246c7d2a88fbc467c22d40cdcdc05",
    "date": "2026-11-13",
    "subject": "chore(records): regenerate the self-code map and recent-changes module for the patch-history fragments"
@@ -6354,63 +6409,13 @@
    "sha": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
    "date": "2026-11-13",
    "subject": "Merge H2d (PR #1228 at a90eace36), the self-code map rebuilt on its head"
-  },
-  {
-   "sha": "a90eace36cea9cce2bbaf19f25ad3f66fef2f1e1",
-   "date": "2026-11-13",
-   "subject": "chore: rebuild the self-code map from this head"
-  },
-  {
-   "sha": "337d8bb4b94dbed536f1ede87c784b4260dc0ce4",
-   "date": "2026-11-13",
-   "subject": "Merge H2c (PR #1228 at 322453262), the patch-history fix and its map"
-  },
-  {
-   "sha": "32245326249985ff5bd6a3f369f6308aaf1d841e",
-   "date": "2026-11-13",
-   "subject": "Merge H1d (PR #1227 at b5e5718be), the patch-history fix and its map"
-  },
-  {
-   "sha": "4fbcb44e24735e2586e28c789917f04418dce0d7",
-   "date": "2026-11-13",
-   "subject": "Merge commit '444d7e5c6dad01e688b91f4e4556dac67baf8f1e' into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
-   "date": "2026-11-13",
-   "subject": "chore: regenerate the self-code map for the added patch-history files"
-  },
-  {
-   "sha": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
-   "date": "2026-11-13",
-   "subject": "fix(records): store the four patch versions main's history was missing"
-  },
-  {
-   "sha": "2b63ae5c986e0c03a239cca4efd08d528163bcb2",
-   "date": "2026-11-13",
-   "subject": "chore: keep the PR body out of the tree (it belongs in the PR, not the repository)"
-  },
-  {
-   "sha": "8e275dd30082af426196b14a6b869095da568813",
-   "date": "2026-11-13",
-   "subject": "fix(patch-history): rebuild the history the union's patch edits left out - main's required backend jobs were red"
-  },
-  {
-   "sha": "5256d6c20c94ad9d2bb268bfb8b49a8791e6b657",
-   "date": "2026-11-13",
-   "subject": "Merge commit '30006a2f09fdb0ef9d793358af00fc6900e323df' into feature/roamies-capabilities"
-  },
-  {
-   "sha": "30006a2f09fdb0ef9d793358af00fc6900e323df",
-   "date": "2026-11-13",
-   "subject": "Re-stack on H1b (5efc9f444), the regeneration fix for PR #1227"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1445
+   "files": 1444
   },
   {
    "path": "jarvis-desktop/",
@@ -6435,12 +6440,12 @@
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 264
+   "files": 266
   },
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 244
+   "files": 246
   },
   {
    "path": "videos/",
@@ -6450,7 +6455,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 161
+   "files": 163
   },
   {
    "path": "plugins/",
@@ -6524,8 +6529,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5651,
-  "covered": 5169,
+  "tracked_files": 5656,
+  "covered": 5174,
   "excluded": 482,
   "subsystems": 27
  },
