@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "993c4863a4cddadef772fb2af7e82a090c414572",
- "built_at": "2026-11-13T06:08:38-08:00",
+ "ref": "4e71da569b3bb018c5440ea33babd62a70207c32",
+ "built_at": "2026-11-13T08:16:55-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4611,6 +4611,7 @@
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4772,6 +4773,7 @@
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5220,7 +5222,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 858,
+   "file_count": 860,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5645,6 +5647,8 @@
     "tools/hud-deltas/gate-final-helpers-old.txt",
     "tools/hud-deltas/gate-final-pending-new.txt",
     "tools/hud-deltas/gate-final-pending-old.txt",
+    "tools/hud-deltas/gate-github-tools-new.txt",
+    "tools/hud-deltas/gate-github-tools-old.txt",
     "tools/hud-deltas/gate-guards-dedup-new.txt",
     "tools/hud-deltas/gate-guards-dedup-old.txt",
     "tools/hud-deltas/gate-guards-helpers-new.txt",
@@ -5751,7 +5755,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 507,
+   "file_count": 509,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6305,29 +6309,49 @@
  ],
  "recent_commits": [
   {
-   "sha": "993c4863a4cddadef772fb2af7e82a090c414572",
+   "sha": "4e71da569b3bb018c5440ea33babd62a70207c32",
    "date": "2026-11-13",
-   "subject": "chore(self-code): regenerate the map and the recent-changes bullets"
+   "subject": "Merge origin/main (ad895ed) into fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
-   "sha": "0c5c5605240e93831f1ccdbd9125d6138c4387f7",
+   "sha": "ad895ed1c013bda37904357bc77e63fef22a3ae6",
    "date": "2026-11-13",
-   "subject": "records: the measured Bearer-vs-Basic finding, one fragment each"
+   "subject": "Merge pull request #1234 from darknight11ish/fix/patch-history-rebuild-2026-11-13"
   },
   {
-   "sha": "f050c644aa6729b3f6529575bd5d35d81679d6f8",
+   "sha": "06832e9ce9b3ab72992777c72c0ee4daf844f85a",
    "date": "2026-11-13",
-   "subject": "docs(github): JARVIS-API 190.10 states the Basic header form and why"
+   "subject": "chore(records): regenerate the recent-changes module and the self-code map"
   },
   {
-   "sha": "c6e7982bcc9502dc7475a481b17e42976a5e2ab3",
+   "sha": "ba742a9b82efcfb83376227ab9af1f87efd56f0a",
    "date": "2026-11-13",
-   "subject": "test(github): decode git's auth header - it must be Basic, not Bearer"
+   "subject": "docs(records): record the 2026-11-13 github-tools delta false green"
   },
   {
-   "sha": "b32ed184d5379fad2a7b7895c1f221b8ff7fa48d",
+   "sha": "e929b7c18b5db886c75d17f4306c92661ec2dbd6",
    "date": "2026-11-13",
-   "subject": "fix(github): git needs Basic auth, not Bearer - measured 2026-11-13"
+   "subject": "test(deploy): pin the extended github-tools false green and the in-place upgrade"
+  },
+  {
+   "sha": "a695fca361e5e80f91e5161f70592ff75f005378",
+   "date": "2026-11-13",
+   "subject": "fix(deploy): detect an extended github-tools block and upgrade it in place"
+  },
+  {
+   "sha": "9f2720dc807246c7d2a88fbc467c22d40cdcdc05",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the self-code map and recent-changes module for the patch-history fragments"
+  },
+  {
+   "sha": "2b63ae5c986e0c03a239cca4efd08d528163bcb2",
+   "date": "2026-11-13",
+   "subject": "chore: keep the PR body out of the tree (it belongs in the PR, not the repository)"
+  },
+  {
+   "sha": "8e275dd30082af426196b14a6b869095da568813",
+   "date": "2026-11-13",
+   "subject": "fix(patch-history): rebuild the history the union's patch edits left out - main's required backend jobs were red"
   },
   {
    "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
@@ -6383,26 +6407,6 @@
    "sha": "f178829082997f509029cb143cb3497adfe19dbf",
    "date": "2026-11-12",
    "subject": "records(pr1223): regenerate the self-code map after the main merge"
-  },
-  {
-   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
-   "date": "2026-11-12",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the gate base the state the patch stack really installs"
-  },
-  {
-   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
-  },
-  {
-   "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
-   "date": "2026-11-12",
-   "subject": "fix(union): resolve CI audit zero-jargon, asks-first frontend test, and backend Windows test failures"
   }
  ],
  "top_level": [
@@ -6434,12 +6438,12 @@
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 264
+   "files": 266
   },
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 244
+   "files": 245
   },
   {
    "path": "videos/",
@@ -6449,7 +6453,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 161
+   "files": 162
   },
   {
    "path": "plugins/",
@@ -6523,8 +6527,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5650,
-  "covered": 5168,
+  "tracked_files": 5654,
+  "covered": 5172,
   "excluded": 482,
   "subsystems": 27
  },
