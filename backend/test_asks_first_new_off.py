@@ -3,7 +3,7 @@
     python3 test_asks_first_new_off.py
 
 THE OWNER'S RULING (2026-11-06 11:35 PT, Q7). The shipped template offers the
-model 19 abilities (`[tools].enabled` in `backend/rebuilt/jarvis-framework.toml`);
+model 21 abilities (`[tools].enabled` in `backend/rebuilt/jarvis-framework.toml`);
 the owner's live file names 14, because five were added after he last edited
 that line. A feature he asked for is in the program and switched off, and
 nothing tells him. The ruling: NO startup notification and NO unsolicited chat
@@ -53,6 +53,12 @@ def check(name, cond, detail=""):
 THE_FIVE = ("approval_policy", "pack_list", "pack_inspect", "pack_install",
             "pack_remove")
 
+#: The two local review gates the owner's Q-D/Q7 ruling enables by default in
+#: BOTH shipped settings files. An EXISTING PC's file is never overwritten, so
+#: the pill is exactly how a default reaches it: they are in the template and
+#: absent from an older file, so they appear as "New - currently off".
+REVIEW = ("review_changes", "check_records")
+
 
 def template_tools() -> tuple:
     """The shipped template's own `[tools] enabled` list, in file order."""
@@ -75,23 +81,26 @@ def t_the_constant_is_the_shipped_template():
     names = template_tools()
     check("the shipped template's [tools] enabled list was found", bool(names),
           "no line matched; this suite is blind")
-    check("the template offers 19 abilities (the ruling's own number)",
-          len(names) == 19, len(names))
+    check("the template offers 21 abilities (19 + the two review gates)",
+          len(names) == 21, len(names))
     check("jarvis_asks_first.TEMPLATE_TOOLS is exactly the template's list",
           tuple(AF.TEMPLATE_TOOLS) == names, (tuple(AF.TEMPLATE_TOOLS), names))
     check("the five this build added are all in it",
           all(t in AF.TEMPLATE_TOOLS for t in THE_FIVE), THE_FIVE)
 
 
-def t_with_the_live_list_the_five_appear():
-    live = tuple(t for t in AF.TEMPLATE_TOOLS if t not in THE_FIVE)
+def t_with_the_live_list_the_five_and_the_review_gates_appear():
+    live = tuple(t for t in AF.TEMPLATE_TOOLS
+                 if t not in THE_FIVE and t not in REVIEW)
     check("the live fixture is the owner's own 14", len(live) == 14, len(live))
     rows = AF.newly_off_tools(set(live))
     ids = [r["id"] for r in rows]
-    check("the five new tools appear", sorted(ids) == sorted(THE_FIVE), ids)
+    new_here = THE_FIVE + REVIEW
+    check("the five new tools and the two review gates appear",
+          sorted(ids) == sorted(new_here), ids)
     check("each carries a title for the pill", all(r.get("title") for r in rows), rows)
     check("in the template's own order, so the pill reads like the page",
-          ids == [t for t in AF.TEMPLATE_TOOLS if t in THE_FIVE], ids)
+          ids == [t for t in AF.TEMPLATE_TOOLS if t in new_here], ids)
 
 
 def t_with_a_list_that_has_them_none_appear():
@@ -106,14 +115,16 @@ def t_with_a_list_that_has_them_none_appear():
           len(rows) == len(AF.TEMPLATE_TOOLS) - len(THE_FIVE), len(rows))
 
 
-def t_the_five_are_offered_even_on_an_older_pc_template():
-    """A PC whose shipped template predates one of the five still gets the pill
-    for it - the ruling names the five explicitly, not "whatever the template
-    had"."""
-    older = tuple(t for t in AF.TEMPLATE_TOOLS if t not in THE_FIVE)
+def t_the_review_gates_are_offered_on_an_older_pc_template():
+    """A PC whose settings file predates Q-D still gets the pill for the two
+    review gates: their own file is never overwritten, so this is how "enabled
+    by default" reaches an EXISTING install."""
+    older = tuple(t for t in AF.TEMPLATE_TOOLS if t not in REVIEW)
+    check("the older fixture is the old 19-name template", len(older) == 19,
+          len(older))
     rows = AF.newly_off_tools(set(older))
-    check("all five are named from the build, not only from the template",
-          sorted(r["id"] for r in rows) == sorted(THE_FIVE),
+    check("both review gates appear as new-and-off on an older PC",
+          sorted(r["id"] for r in rows) == sorted(REVIEW),
           [r["id"] for r in rows])
 
 

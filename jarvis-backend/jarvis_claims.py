@@ -176,6 +176,11 @@ READ_ONLY_TOOLS = frozenset({
     # check_records runs the record checkers; neither writes anything, so a
     # result from one never backs "I've done it" and is corrected as a read.
     "review_changes", "check_records",
+    # The full pull-request read of the 2026-11-10 22:30 ruling's Step 2: one
+    # pull request's body, files, commits, comments and reviews, all fixed GETs.
+    # Nothing on GitHub changes, so an answer after it is not a claim an action
+    # ran; its five WRITE siblings are in ACTING_TOOLS below.
+    "github_pr_detail",
     # "plugin_list" (2026-11-02): it lists the drop-in plugin folder - names,
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
@@ -282,6 +287,14 @@ ACTING_TOOLS = frozenset({
     # pushed the fix" must be corrected when only the card was raised or the
     # request failed.
     "github_merge_pr", "github_fix_and_push",
+    # The five carded writes of the 2026-11-10 22:30 ruling's Step 2: opening a
+    # pull request, cancelling / re-running a workflow run, changing labels,
+    # editing a pull request's text and posting a review all CHANGE GitHub in
+    # the owner's name, so a claim after one must be corrected when only the
+    # card was raised or the request failed. The full READ beside them
+    # (`github_pr_detail`) is in READ_ONLY_TOOLS.
+    "github_open_pr", "github_workflow", "github_issue_labels",
+    "github_edit_pr", "github_pr_review", "github_issue_state",
     # "rea_investigate" (2026-11-04, the owner's decision to ship the full
     # REA toolbox): it left READ_ONLY_TOOLS for the reason written there - the
     # full toolbox patches a local file, writes an exported bundle or a pulled

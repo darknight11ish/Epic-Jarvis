@@ -805,21 +805,46 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: worktree (`github_fix_and_push`). Each mutating one raises its OWN one-shot
 #: card; neither can be auto-approved.
 #:
-#: ALL TEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
-#: a fixed-endpoint read still sends the owner's own GitHub token to
+#: ALL SIXTEEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the
+#: point: a fixed-endpoint read still sends the owner's own GitHub token to
 #: api.github.com, so it is egress with a credential attached. `github_read` is
 #: the action a "tell me when" GitHub watch already uses, and it MUST stay
 #: `"auto"` in the shipped config (a look every 30 minutes cannot raise a card
 #: every 30 minutes), which is exactly why these tools do NOT reuse that name.
-#: Their own actions are `github_inspect`, `github_merge_pr` and
-#: `github_fix_and_push`, all shipped as `"ask"`; being in NEEDS_A_PERSON as
+#: Every carded action is its own `"ask"` tier line; being in NEEDS_A_PERSON as
 #: well means an owner who loosens that line still cannot make a GitHub read,
-#: a merge or a push run with nobody asked.
+#: merge, push or edit run with nobody asked.
+#:
+#: The 2026-11-10 22:30 ruling's Step 2 added the last six: a full pull-request
+#: read (`github_pr_detail`), opening a pull request for a branch Jarvis
+#: prepares (`github_open_pr`), cancel / re-run-failed-jobs on ONE workflow run
+#: (`github_workflow`), adding and removing labels (`github_issue_labels`),
+#: editing a pull request's title and/or body (`github_edit_pr`), and posting a
+#: COMMENT or REQUEST_CHANGES review (`github_pr_review`, never APPROVE).
+#:
+#: Since 2026-11-10 23:00 PT the five READ tools are NOT in `NEEDS_A_PERSON`: the
+#: owner chose "make GitHub reads card-free". A read is a fixed-address GET to
+#: api.github.com, the token still only goes there and changes nothing - and the
+#: switchable read row (`github_inspect` in jarvis_asks_first.LOOSE) is how the
+#: card is put back: ONE card plus Windows Hello loosens it, turning it back on
+#: is instant. `github_read` is the action a "tell me when" GitHub watch already
+#: uses, and it MUST stay `"auto"` in the shipped config (a look every 30
+#: minutes cannot raise a card every 30 minutes), which is why these tools do
+#: NOT reuse that name. The TWELVE WRITES each keep their own action
+#: (`github_comment` / `github_open_issue` / `github_rerun_workflow` /
+#: `github_create_repo` / `github_merge_pr` / `github_fix_and_push` /
+#: `github_open_pr` / `github_workflow` / `github_issue_labels` /
+#: `github_edit_pr` / `github_pr_review` / `github_issue_state`), and being in
+#: NEEDS_A_PERSON as well means an owner who loosens one of THOSE lines still
+#: cannot make a write, a merge or a push run with nobody asked.
 GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status",
                      # 2026-11-10: the read-only PR cockpit - every open pull
                      # request, whether it can merge, and which required check
                      # is holding it. Reads only.
-                     "github_pr_scan")
+                     "github_pr_scan",
+                     # 2026-11-10 22:30 ruling: ONE pull request in full - body,
+                     # files, commits, comments and reviews, all fixed GETs.
+                     "github_pr_detail")
 GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow",
                        # 2026-11-09: one new, empty repository on the owner's own
                        # account - the owner's "create a repository called
@@ -832,8 +857,22 @@ GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_work
                        # 2026-11-10: fix a failing pull request in its own scratch
                        # folder, then push to that pull request's own branch on a
                        # SEPARATE card. Never main/master/release/*, never force.
-                       "github_fix_and_push")
+                       "github_fix_and_push",
+                       # 2026-11-10 22:30 ruling (Step 2): the five remaining
+                       # carded writes. Each is its own action at "ask"; each
+                       # refuses the permanently banned verb by name.
+                       "github_open_pr", "github_workflow", "github_issue_labels",
+                       "github_edit_pr", "github_pr_review",
+                       # 2026-11-10 23:00 owner decision: closing/reopening ONE
+                       # issue is carded now, its own action, and the old
+                       # absolute ban on close_issue was overturned for it.
+                       "github_issue_state")
 GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
+
+#: The reads are CARD-FREE (the owner's decision of 2026-11-10 23:00): a read is
+#: a GET on api.github.com and changes nothing, so the gate runs it at "auto"
+#: and it is NOT in NEEDS_A_PERSON. Every WRITE above still asks its own card.
+GITHUB_CARD_FREE_READS = GITHUB_READ_TOOLS
 
 
 def _github_capabilities_words() -> str:
@@ -872,6 +911,23 @@ class _GitHubNoToken:
     NOT a card: there is nothing to approve, and a card nobody can act on is
     noise. `_one_call` answers with the plain "connect GitHub" sentence instead,
     which is the one thing that actually fixes it.
+    """
+
+    def __init__(self, words: str):
+        self.words = words
+
+
+class _GitHubAnswered:
+    """A GitHub stage that answers directly, with NO card (wave 16B).
+
+    ONE caller: `github_fix_and_push`'s "read" stage, which reads a file inside
+    the isolated scratch copy. It sends nothing to GitHub, uses no token, and
+    changes nothing on this PC, so there is nothing for a person to approve -
+    the same rule every local read follows (notes, files, memory). It is still
+    reachable ONLY inside the prepared copy for one pull request, through the
+    same path resolver the carded write uses, so this is not a way to read
+    arbitrary disk. `_one_call` returns the words to the model and marks the
+    turn as having read outside text.
     """
 
     def __init__(self, words: str):
@@ -938,11 +994,61 @@ def _prepare_github_merge_pr(args: dict):
 
 
 def _prepare_github_fix_and_push(args: dict):
+    """Plan one fix-and-push stage: prepare, read, write or push.
+
+    `read` is the wave-16B local read of the prepared copy: it sends nothing to
+    GitHub and changes nothing, so it answers directly and raises NO card.
+    `write` is carded under its OWN action (`github_fix_write`, resolved by the
+    tool's `gate_lookup_name`), and it needs no token either - it is dispatched
+    locally in `jarvis_github.run()` before the token is read. `prepare` and
+    `push` keep the GitHub read and the token they always had.
+    """
     import jarvis_github as GH
+    stage = str((args or {}).get("stage") or "prepare").strip().lower()
+    if stage == "read":
+        return _GitHubAnswered(GH.read_copy_file(args)), ""
+    if stage == "write":
+        r = GH.plan_fix_and_push(args)
+        return r, GH.describe(r)
     # The push stage reads the LOCAL folder only (no socket): its own git state,
     # and the note the prepare stage left there. The planner is called with the
     # real git executor here; tests pass a fake to `plan_fix_and_push` directly.
     return _github_plan(GH.plan_fix_and_push, args)
+
+
+def _prepare_github_pr_detail(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_pr_detail, args)
+
+
+def _prepare_github_open_pr(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_open_pr, args)
+
+
+def _prepare_github_workflow(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_workflow, args)
+
+
+def _prepare_github_issue_labels(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_issue_labels, args)
+
+
+def _prepare_github_edit_pr(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_edit_pr, args)
+
+
+def _prepare_github_pr_review(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_pr_review, args)
+
+
+def _prepare_github_issue_state(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_issue_state, args)
 
 
 def _run_github(args: dict, plan_obj, **_) -> dict:
@@ -5183,19 +5289,21 @@ TOOLS: dict = {
             "capabilities": {"type": "array", "items": {"type": "string"}}},
          "required": ["idea"]},
         _prepare_github_search, _run_github_search,
-        # Resolved at call time, not import time: whether a token is
-        # configured can change between two calls in the same conversation,
-        # and jarvis_research.py's own run() already refuses if the token
-        # state changes between its plan() and run() - this only decides
-        # which action name (and therefore which tier) governs THIS call.
+        # Q3/Q4 (the owner's field-test ruling of 2026-11-11): GitHub READS are
+        # card-free, and github_search is one of the six. Its OWN action names
+        # resolve to their OWN "auto" tier lines, so no other research egress
+        # (web_research / research_authenticated) is loosened by this.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
     # GitHub reads and the small GitHub actions (jarvis_github.py, the owner's
     # decision of 2026-11-03: "Read + actions", the one CREATE of 2026-11-09, and
-    # the cockpit / merge / fix-and-push of 2026-11-10). Every one of the ten asks
-    # a person: `github_inspect`'s tier is "ask" in the shipped config, and all ten
-    # are in NEEDS_A_PERSON, so a loosened tier still cannot run one with nobody
-    # asked (the reason is on GITHUB_READ_TOOLS above).
+    # the cockpit / merge / fix-and-push of 2026-11-10). The six WRITES each ask
+    # a person and are in NEEDS_A_PERSON, so a loosened tier still cannot run one
+    # with nobody asked. The FOUR READS are the owner's 2026-11-10 "make GitHub
+    # reads card-free" decision: fixed-address GETs to api.github.com that ship
+    # asking (`github_inspect` is "ask" in the shipped config) and can be turned
+    # card-free from Settings, What asks first, with the switchable read row -
+    # and turned back at once. They are NOT in NEEDS_A_PERSON any more.
     #
     # The lookup names are the TOOL names: github-tools.patch registers each one
     # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
@@ -5207,7 +5315,10 @@ TOOLS: dict = {
         "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the "
         "open pull requests on one repository (\"pulls\"), its open issues "
         "(\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing "
-        "on GitHub changes. It asks you before every read. It cannot merge, push, "
+        "on GitHub changes. It does not ask by default; the switchable "
+        "\"Read your GitHub\" row on the What asks first page can put the "
+        "card back, and take it off again instantly. It "
+        "cannot merge, push, "
         "commit, delete or close anything.",
         {"type": "object", "properties": {
             "scope": {"type": "string", "enum": ["repos", "pulls", "issues", "runs"],
@@ -5221,8 +5332,10 @@ TOOLS: dict = {
     "github_read_file": Tool(
         "github_read_file",
         "Read ONE file's text from a repository the saved GitHub token can see, "
-        "at an optional branch or commit. Read-only: nothing changes. It asks you "
-        "before every read. It cannot write, edit or commit a file.",
+        "at an optional branch or commit. Read-only: nothing changes. It does "
+        "not ask by default; the switchable \"Read your GitHub\" row on "
+        "the What asks first page can put that card back. It cannot "
+        "write, edit or commit a file.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "path": {"type": "string",
@@ -5234,7 +5347,9 @@ TOOLS: dict = {
     "github_ci_status": Tool(
         "github_ci_status",
         "How CI went: the newest workflow run for a repository and branch, or for "
-        "a pull request. Read-only: nothing changes. It asks you before every read.",
+        "a pull request. Read-only: nothing changes. It does not ask by "
+        "default; the switchable \"Read your GitHub\" row on the What "
+        "asks first page can put that card back.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "branch": {"type": "string", "description": "a branch name"},
@@ -5297,9 +5412,10 @@ TOOLS: dict = {
                         "description": "true for a private repository; default false"}},
          "required": ["name"]},
         _prepare_github_create_repo, _run_github),
-    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): one
-    # card, then every open pull request with its merge state and required checks.
-    # It reads - and it asks, because a read still spends the GitHub token.
+    # The read-only PR cockpit (2026-11-10, the owner's "Everything at once"): every
+    # open pull request with its merge state and required checks. It reads only,
+    # and it ships asking; since 2026-11-10 23:00 PT the owner can make GitHub
+    # reads card-free from Settings (the switchable `github_inspect` row).
     "github_pr_scan": Tool(
         "github_pr_scan",
         "The pull request cockpit: list the open pull requests on one repository and "
@@ -5308,8 +5424,10 @@ TOOLS: dict = {
         "prints each pull request's full 40-character head commit, its title and its "
         "base branch, so that commit, title and base branch can be passed straight "
         "to github_merge_pr. "
-        "Read-only: nothing on GitHub changes. It asks you before every read, and it "
-        "never merges anything itself; merging is a separate carded tool. "
+        "Read-only: nothing on GitHub changes. It does not ask by default; "
+        "the switchable \"Read your GitHub\" row on the What asks first "
+        "page can put that card back, and it never merges anything "
+        "itself; merging is a separate carded tool. "
         + GITHUB_CAPABILITIES_WORDS,
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'}},
@@ -5325,13 +5443,12 @@ TOOLS: dict = {
     "github_merge_pr": Tool(
         "github_merge_pr",
         "Merge ONE pull request with a MERGE COMMIT, pinned to the exact "
-        "40-character head commit you pass. Copy the commit, the title and the "
-        "base branch from github_pr_scan, exactly as it printed them, because a "
-        "different or short commit is refused. One card names the commit, the "
-        "title and the target branch. It refuses, sending nothing, if the pull "
-        "request is a draft, cannot merge cleanly, has a check running, a required "
-        "check failed, moved, or was retargeted to another base branch. It can "
-        "never squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
+        "40-character head commit you pass. Pass the commit, title and base "
+        "branch exactly as github_pr_scan printed them: a different or short "
+        "commit is refused. It refuses, sending nothing, if the pull request is "
+        "a draft, cannot merge cleanly, has a check running, a required check "
+        "failed, moved, or was retargeted to another base branch. It can never "
+        "squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
         "required check. " + GITHUB_CAPABILITIES_WORDS,
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
@@ -5350,27 +5467,46 @@ TOOLS: dict = {
                                    "github_pr_scan.",
                  "github_ci_status": "To read CI without merging, use "
                                      "github_ci_status."}),
-    # Fix-and-push (2026-11-10): TWO cards, one per stage. Prepare copies the pull
-    # request into its own scratch folder and shows the failing checks; push shows
-    # the exact commits, files and command on a SECOND card and only then pushes
-    # to the pull request's own branch.
+    # Fix-and-push (2026-11-10, extended by wave 16B): FOUR stages, and every
+    # change has its own card. Prepare copies the pull request into its own
+    # scratch folder and shows the failing checks; "read" shows one file in that
+    # copy (no card - it sends nothing and changes nothing); "write" changes ONE
+    # file there and makes ONE commit on its own card, showing the exact change;
+    # "push" shows the exact commits, files and command on a further card and
+    # only then pushes to the pull request's own branch.
     "github_fix_and_push": Tool(
         "github_fix_and_push",
-        "Fix a failing pull request in a scratch folder, then push it to its own "
-        "branch. \"prepare\" reads the failing checks and copies it there; \"push\" "
-        "shows its commits and command on a second card. It never force-pushes, "
-        "deletes a branch or pushes to a protected branch, and refuses a folder "
-        "outside the scratch root or a credential file. "
-        + GITHUB_CAPABILITIES_WORDS,
+        "Fix a failing pull request in an isolated scratch folder on this PC, then "
+        "push the fix to its own branch. \"prepare\" copies the pull request there "
+        "and reads the failing checks; \"read\" shows one file (no card - nothing "
+        "is sent); \"write\" changes ONE file there and makes ONE commit on its own "
+        "card, showing the exact change; \"push\" shows the exact commits, files "
+        "and command. It never force-pushes, never pushes to a protected branch, "
+        "writes only inside that one copy and refuses a credential file.",
         {"type": "object", "properties": {
-            "stage": {"type": "string", "enum": ["prepare", "push"],
-                      "description": "prepare or push"},
+            "stage": {"type": "string", "enum": ["prepare", "read", "write", "push"],
+                      "description": "prepare, read, write or push"},
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "number": {"type": "string", "description": "the pull request number"},
             "worktree": {"type": "string",
-                         "description": "the scratch folder"}},
-         "required": ["repo", "number"]},
+                         "description": "the scratch folder the prepare stage made"},
+            "path": {"type": "string",
+                     "description": "read or write: the file's path INSIDE the "
+                                    "scratch folder, e.g. \"backend/app.py\""},
+            "content": {"type": "string",
+                        "description": "write: the file's whole new text, exactly"},
+            "message": {"type": "string",
+                        "description": "write: a one-line commit message for the fix"}},
+         "required": ["repo"]},
         _prepare_github_fix_and_push, _run_github,
+        # The ONE tool whose gate action depends on its stage: only the write is
+        # decided under `github_fix_write` (its own card, its own tier line).
+        # Everything else, the card-less read included, stays under the action
+        # that already governs the fix flow.
+        gate_lookup_name=lambda args: (
+            "github_fix_write"
+            if str((args or {}).get("stage") or "").strip().lower() == "write"
+            else "github_fix_and_push"),
         instead={"github_pr_scan": "To see what is failing, use github_pr_scan.",
                  "github_merge_pr": "To merge a ready one, use github_merge_pr."}),
     # The two LOCAL review gates (wave 16E, 2026-11-10; LOCAL_REVIEW_TOOLS
@@ -5414,6 +5550,153 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"review_changes": "For what changed and what to look at, use "
                                   "review_changes."}),
+    # ONE pull request in full (2026-11-10 22:30 ruling, Step 2): a READ - body,
+    # files, commits, comments and reviews, five fixed GETs, nothing but GET.
+    "github_pr_detail": Tool(
+        "github_pr_detail",
+        "Read ONE pull request in full: its title, body, state, draft and "
+        "mergeable flags, its head commit and base branch, and then its changed "
+        "files, its commits, its comments and its reviews. Read-only: five fixed "
+        "GETs, nothing on GitHub changes. It does not ask - a read is a GET.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the pull request number"}},
+         "required": ["repo", "number"]},
+        _prepare_github_pr_detail, _run_github,
+        instead={"github_pr_scan": "For every open pull request's merge state, "
+                                   "use github_pr_scan."}),
+    # Opening ONE pull request for a branch Jarvis prepares (2026-11-10 22:30
+    # ruling, Step 2): "prepare" copies the repository at the base branch into
+    # the scratch root and makes the NEW branch there; "open" shows every commit,
+    # every changed file, the exact push command, the title and the whole body on
+    # ONE card, then pushes that new branch and creates the pull request, pinned
+    # to the HEAD commit the card showed.
+    "github_open_pr": Tool(
+        "github_open_pr",
+        "Open ONE pull request for a branch Jarvis prepares. \"prepare\" copies "
+        "the repository at a base branch into a scratch folder on this PC and "
+        "makes a NEW branch there (never main/master/release/*/hotfix*); make "
+        "the change and commit it there. \"open\" shows every commit, every "
+        "changed file, the exact git push command, the pull request title and its "
+        "whole body, then pushes that ONE new branch and creates the pull request "
+        "into the base branch. Never a force-push, never a delete.",
+        {"type": "object", "properties": {
+            "stage": {"type": "string", "enum": ["prepare", "open"],
+                      "description": "prepare or open"},
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "base": {"type": "string",
+                     "description": "the branch the pull request merges INTO, e.g. main"},
+            "branch": {"type": "string", "description": "the NEW branch's name"},
+            "worktree": {"type": "string",
+                         "description": "open: the scratch folder prepare printed"},
+            "title": {"type": "string", "description": "open: the pull request's title"},
+            "body": {"type": "string",
+                     "description": "open: the whole pull request body"}},
+         "required": ["repo", "base", "branch"]},
+        _prepare_github_open_pr, _run_github,
+        instead={"github_merge_pr": "To merge a pull request that already exists, "
+                                    "use github_merge_pr."}),
+    # Cancel ONE run, or re-run only its failed jobs (2026-11-10 22:30 ruling).
+    # Dispatch stays in NEVER: there is no way to start a run that did not exist.
+    "github_workflow": Tool(
+        "github_workflow",
+        "Do ONE thing to ONE existing workflow run: \"cancel\" a run that is "
+        "still going, or \"rerun_failed\" to run only the jobs that failed in a "
+        "finished run. It shows which run and which action on a card first; it "
+        "never dispatches a workflow, never starts a new run and changes no code "
+        "or setting.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "run_id": {"type": "string", "description": "the workflow run's number"},
+            "action": {"type": "string", "enum": ["cancel", "rerun_failed"],
+                       "description": "cancel it, or re-run only its failed jobs"}},
+         "required": ["repo", "run_id", "action"]},
+        _prepare_github_workflow, _run_github,
+        instead={"github_ci_status": "To see how the newest run ended, use "
+                                     "github_ci_status."}),
+    # Labels on ONE issue or pull request (2026-11-10 22:30 ruling). Close and
+    # reopen are deliberately NOT built: `close_issue` stays in NEVER.
+    "github_issue_labels": Tool(
+        "github_issue_labels",
+        "Add and/or remove labels on ONE issue or pull request. It reads the "
+        "current labels first and sends the whole new set in ONE request; the "
+        "card shows the exact labels to add and remove. It never closes or "
+        "reopens anything and never edits the title or body.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the issue or pull request number"},
+            "add": {"type": "array", "items": {"type": "string"},
+                    "description": "label names to add, e.g. [\"bug\"]"},
+            "remove": {"type": "array", "items": {"type": "string"},
+                       "description": "label names to remove"}},
+         "required": ["repo", "number"]},
+        _prepare_github_issue_labels, _run_github),
+    # Editing ONE pull request's title and/or body (2026-11-10 22:30 ruling).
+    "github_edit_pr": Tool(
+        "github_edit_pr",
+        "Edit ONE pull request's title and/or body, showing the exact before and "
+        "after on the card. Pass the CURRENT values as old_title/old_body "
+        "(exactly as the pull request read tool printed them) so the card can show "
+        "both and "
+        "Jarvis can refuse if the pull request changed. No other field is "
+        "editable; it never closes, merges or approves anything.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the pull request number"},
+            "title": {"type": "string", "description": "the NEW title"},
+            "body": {"type": "string", "description": "the NEW body"},
+            "old_title": {"type": "string",
+                          "description": "the current title, as github_pr_detail printed it"},
+            "old_body": {"type": "string",
+                         "description": "the current body, as github_pr_detail printed it"}},
+         "required": ["repo", "number"]},
+        _prepare_github_edit_pr, _run_github,
+        instead={"github_pr_detail": "To read the current title and body first, "
+                                     "use github_pr_detail."}),
+    # Posting ONE review (2026-11-10 22:30 ruling): COMMENT or REQUEST_CHANGES
+    # only. A formal APPROVE review is permanently banned and refused by name.
+    "github_pr_review": Tool(
+        "github_pr_review",
+        "Post ONE review on a pull request: either a plain comment (\"COMMENT\") "
+        "or a request for changes (\"REQUEST_CHANGES\"). The whole review text is "
+        "shown on a card first. The APPROVE verdict is permanently banned - a "
+        "formal approval would hand the owner's own sign-off to the assistant - "
+        "and it is refused by name.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the pull request number"},
+            "event": {"type": "string", "enum": ["COMMENT", "REQUEST_CHANGES"],
+                      "description": "a comment, or a request for changes"},
+            "body": {"type": "string", "description": "the whole review text"}},
+         "required": ["repo", "number", "event", "body"]},
+        _prepare_github_pr_review, _run_github,
+        instead={"github_comment": "For a plain comment rather than a review, use "
+                                   "github_comment."}),
+    # Closing ONE issue, or reopening ONE closed issue (the owner's 2026-11-10
+    # 23:00 decision, which overturned the old absolute ban for this one carded
+    # action). One issue, never bulk, never a pull request, never a delete or an
+    # edit; the card shows the issue's title and the direction first.
+    "github_issue_state": Tool(
+        "github_issue_state",
+        "Close ONE issue on a repository, or reopen ONE closed issue - one issue "
+        "per card, never in bulk and never a pull request. Pass the issue's title "
+        "exactly as github_list printed it; the card shows the repository, the "
+        "number, the title, the direction and an optional reason, and Jarvis "
+        "re-reads the issue first and refuses if its title changed. It cannot "
+        "delete, transfer or edit the issue.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the issue number"},
+            "action": {"type": "string", "enum": ["close", "reopen"],
+                       "description": "close it, or reopen a closed issue"},
+            "title": {"type": "string",
+                      "description": "the issue's title, exactly as github_list printed it"},
+            "reason": {"type": "string",
+                       "description": "an optional why, shown on the card (at most "
+                                      "400 characters)"}},
+         "required": ["repo", "number", "action", "title"]},
+        _prepare_github_issue_state, _run_github,
+        instead={"github_open_issue": "To open a NEW issue, use github_open_issue."}),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -6489,13 +6772,23 @@ def _refuse_stopped(name: str, call: dict, convo: list, steps: list, say_step,
 
 
 def _github_search_action_name() -> str:
+    """The action `github_search` is decided under, named for ITS tier.
+
+    The owner's field-test ruling Q3/Q4 of 2026-11-11 made every GitHub read
+    card-free, and `github_search` is one of the six reads. It therefore gets
+    its OWN action names and its OWN shipped tiers ("auto" in both settings
+    files) rather than riding the generic research ones: `web_research` and
+    `research_authenticated` stay "ask" for every other research egress, and
+    this tool cannot make them looser. The authenticated/unauthenticated split
+    is kept because the token is read at call time, exactly as before.
+    """
     try:
         import jarvis_research
         if jarvis_research.authenticated():
-            return "jarvis_research_run_authenticated"
+            return "github_search_run_authenticated"
     except Exception:
         pass
-    return "jarvis_research_run"
+    return "github_search_run"
 
 
 #: Tools that must never run unless a PERSON said yes on a card, whatever
@@ -6521,20 +6814,19 @@ def _github_search_action_name() -> str:
 #: shaped by outside text, where a note write waits for a person too (see
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
-    "github_search": "sends a search term to GitHub",
-    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03, plus the one CREATE of 2026-11-09). The
-    # READS are here for the same reason
-    # `github_search` above is: a read sends the owner's own GitHub token to
-    # api.github.com on a fixed address, so it is egress with a credential
-    # attached, and "it is only a read" is not a reason to spend a credential
-    # with nobody looking. Each action's line says what changes.
-    "github_list": "sends the owner's GitHub token to api.github.com to read their "
-                   "repositories, pull requests, issues or workflow runs",
-    "github_read_file": "sends the owner's GitHub token to api.github.com to read one "
-                        "file in a repository",
-    "github_ci_status": "sends the owner's GitHub token to api.github.com to read how CI "
-                        "went",
+    # The SIX GitHub READS are deliberately NOT here (the owner's field-test
+    # ruling Q3/Q4, 2026-11-11): a read is a GET on api.github.com (or, for
+    # github_search, a read-only library search) and changes nothing, so every
+    # GitHub read is card-free at tier "auto": github_list, github_read_file,
+    # github_ci_status, github_pr_scan, github_pr_detail and github_search.
+    # EVERY GitHub write stays below, in this set.
+    #
+    # The GitHub WRITES (jarvis_github.py, the owner's decisions of 2026-11-03
+    # and 2026-11-10, plus the one CREATE of 2026-11-09, and the 22:30/23:00
+    # Step 2 writes). Each raises its OWN one-shot card, and each is in this
+    # set so a loosened tier line cannot run one with nobody asked. A read's
+    # own switch still decides whether the tool is offered at all. Each
+    # action's line says what changes.
     "github_comment": "posts a comment on GitHub in the owner's name, which cannot be "
                       "taken back",
     "github_open_issue": "opens a new issue on GitHub in the owner's name",
@@ -6542,16 +6834,32 @@ NEEDS_A_PERSON = {
                              "the checks again",
     "github_create_repo": "creates a new repository on GitHub in the owner's name, which "
                           "Jarvis cannot delete afterwards",
-    # The read-only PR cockpit (2026-11-10): a read, and in this set for the same
-    # reason the other GitHub reads are - it sends the owner's token out.
-    "github_pr_scan": "sends the owner's GitHub token to api.github.com to read the open "
-                      "pull requests and their checks",
-    # The two mutating tools of 2026-11-10. Each raises its OWN card, and each is
+    # The mutating tools: merge, fix-and-push, open-pr, workflow, labels,
+    # edit-pr, review and issue-state. Each raises its OWN card, and each is
     # in this set so a loosened tier line cannot run one with nobody asked.
     "github_merge_pr": "merges one pull request on GitHub in the owner's name, which "
                        "cannot be undone and cannot pass a required check",
-    "github_fix_and_push": "pushes commits to a pull request's own branch on GitHub in the "
-                           "owner's name, which cannot be taken back",
+    "github_fix_and_push": "writes one file inside a pull request's isolated fix copy "
+                           "on this PC and pushes commits to that pull request's own "
+                           "branch on GitHub in the owner's name, which cannot be "
+                           "taken back",
+    "github_open_pr": "pushes a NEW branch to GitHub and opens a pull request from "
+                      "it in the owner's name, which cannot be taken back",
+    "github_workflow": "cancels or re-runs jobs on ONE workflow run on GitHub, and a "
+                       "cancelled or started run cannot be taken back",
+    "github_issue_labels": "changes the labels on one GitHub issue or pull request "
+                           "in the owner's name",
+    "github_edit_pr": "changes one pull request's title and/or body on GitHub in the "
+                      "owner's name",
+    "github_pr_review": "posts a review on one pull request on GitHub in the owner's "
+                        "name, which cannot be edited or taken back",
+    "github_issue_state": "closes or reopens ONE issue on GitHub in the owner's name",
+    # The 13th write action: the fix tool's local "write" stage is dispatched
+    # under its own action name (no token, no socket) and it still raises a
+    # card, so it is in this set like every other carded write (Q3/Q4).
+    "github_fix_write": "writes ONE file inside a pull request's isolated fix copy "
+                        "on this PC and makes ONE commit there, which the owner "
+                        "then approves again before any push",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -10520,18 +10828,24 @@ TOOL_GROUPS = (
     ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
     # GitHub: searching it for a library, and (2026-11-03) reading the owner's
     # own and taking the small actions; the cockpit, merge and fix-and-push of
-    # 2026-11-10 joined the same group. All ten joined this group rather
-    # than starting new ones for the reason the propose_plan note below gives: a
+    # 2026-11-10 joined the same group, and the 22:30 ruling's Step 2 added the
+    # last six. All sixteen joined this group rather than starting new ones for
+    # the reason the propose_plan note below gives: a
     # NEW group name costs tokens in more_tools' own description on every turn,
     # and a group's MEMBERS cost nothing extra there. They belong together
-    # anyway - every one of them is about GitHub, and all ten ship switched off.
+    # anyway - every one of them is about GitHub, and all nineteen ship off.
     ("github", "search GitHub, read and act on your own GitHub (all off by "
-               "default), or review a change here before a push - never a "
-               "force-push or a merge past a required check",
+               "default), or review a change here before a push - five card-free "
+               "reads and twelve carded writes, plus the two local review gates; "
+               "never a force-push, an APPROVE review or a merge past a required "
+               "check",
      ("github_search", "github_list", "github_read_file", "github_ci_status",
-      "github_comment", "github_open_issue", "github_rerun_workflow",
-      "github_create_repo", "github_pr_scan", "github_merge_pr",
-      "github_fix_and_push", "review_changes", "check_records")),
+      "github_pr_detail", "github_comment", "github_open_issue",
+      "github_rerun_workflow", "github_create_repo", "github_pr_scan",
+      "github_merge_pr", "github_fix_and_push", "github_open_pr",
+      "github_workflow", "github_issue_labels", "github_edit_pr",
+      "github_pr_review", "github_issue_state", "review_changes",
+      "check_records")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single
@@ -10800,8 +11114,29 @@ TOOL_HINTS = {
                       r"\brisk flags?\b", r"\bpull request\b", r"\bpacket\b"),
     "check_records": (r"\brecords?\b", r"\bchangelog\b", r"\bready to push\b",
                             r"\bbookkeeping\b", r"\bcheck(?:s)? (?:the|my) records\b"),
+    # The 2026-11-10 22:30 ruling's Step 2 actions: their own words, so
+    # `tool_diet` can tell them apart. Every one keeps `github`, because that
+    # word alone must not summon all sixteen to every GitHub question.
+    "github_pr_detail": (r"\bgithub\b", r"\bpull requests?\b", r"\bprs?\b",
+                         r"\bdiff\b", r"\bfiles\b", r"\breviews?\b",
+                         r"\bcomments?\b"),
+    "github_open_pr": (r"\bgithub\b", r"\bopen\b[\s\S]{0,20}\bpull request\b",
+                       r"\bnew pull request\b", r"\bopen a pr\b",
+                       r"\bcreate\b[\s\S]{0,20}\bpull request\b"),
+    "github_workflow": (r"\bgithub\b", r"\bcancel\b", r"\bworkflow\b",
+                        r"\bre-?run\b", r"\brun\b", r"\bfailed jobs?\b"),
+    "github_issue_labels": (r"\bgithub\b", r"\blabels?\b", r"\btag\b",
+                            r"\bissue\b", r"\bpull request\b"),
+    "github_edit_pr": (r"\bgithub\b", r"\bedit\b", r"\brename\b",
+                       r"\bretitle\b", r"\bupdate\b[\s\S]{0,20}\bpull request\b"),
+    "github_pr_review": (r"\bgithub\b", r"\breview\b", r"\brequest changes\b",
+                         r"\bcomment on\b[\s\S]{0,20}\bpull request\b"),
+    "github_issue_state": (r"\bgithub\b.*\b(?:close|closed|reopen)\b",
+                           r"\b(?:close|closed|reopen)\b.*\b(?:issue|github)\b",
+                           r"\b(?:issue|github)\b.*\b(?:closed?|reopened?)\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
-                   r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
+                   r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is",
+                   r"\bgoogle\b"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
     "calendar_read": (r"\bcalendar\b", r"\bschedule\b", r"\bmeeting\b", r"\bappointment\b",
                       r"\bfree\b", r"\bbusy\b", r"this week", r"\btomorrow\b",
@@ -18315,6 +18650,25 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                                 "error": state.words})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
+        return
+    if name in GITHUB_TOOLS and isinstance(state, _GitHubAnswered):
+        # A LOCAL GitHub stage that answers directly and raises NO CARD (wave
+        # 16B): reading one file inside the prepared fix copy sends nothing to
+        # GitHub, uses no token and changes nothing on this PC, so there is
+        # nothing for a person to approve - the same rule every other local read
+        # follows. It is NOT a card-less write: the only write in this tool is
+        # carded, and this object is only ever returned by the read stage.
+        result = {"ok": True, "text": state.words}
+        try:
+            watch.took_in(name, result)
+        except Exception:                    # noqa: BLE001 - a watch is a signal
+            pass
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": True, "ok": True,
+                      "outcome": "no card needed"})
+        say_step("tool_started", name)
+        say_step("tool_finished", name, ok=True)
         return
     if name == PROTECT_TOOL and isinstance(state, (_ProtectionListed,
                                                   _ProtectionNoChange)):

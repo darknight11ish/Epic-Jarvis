@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -319,6 +319,87 @@
+@@ -319,6 +319,127 @@
      }
  
  
@@ -29,6 +29,16 @@
 +    the reader down inside the app where it appears in quotation marks next to
 +    its source. `raised` travels as a BOOLEAN. See docs/ARCHITECTURE.md.
 +
++    THE ONE CARD THAT NAMES ITS SUBJECT (owner's ruling, 2026-11-10). The
++    tool-enable card's subject is chosen at runtime, not by the action name, so
++    a generic "offer a tool to the AI model" left the owner unable to tell WHICH
++    tool he was approving on the phone. For `enable_reading_tool` (and only
++    that action) this function reads `detail.setting`, and only after checking
++    it is a plain tool id (`^[a-z][a-z0-9_]{0,63}$`) and mapping it through
++    `jarvis_reach.TOOL_NAMES`, this project's own labels. Every other row still
++    reads nothing but `action`; a malformed row falls back to the generic title,
++    so no payload text can reach a lock screen through here.
++
 +    Returns:
 +        title    one line: what Jarvis wants to do
 +        body     why it matters, and that nothing has happened yet
@@ -38,6 +48,32 @@
 +    action = str(item.get("action") or "an action")
 +    r = risk_for(action)
 +    raised = bool(item.get("raised"))
++
++    # The tool a tool-enable card is about, or "" - see "THE ONE CARD THAT
++    # NAMES ITS SUBJECT" above. Strictly validated: a plain tool id, mapped
++    # through our own table, never the row's own words.
++    tool_name = ""
++    if action == "enable_reading_tool":
++        try:
++            import json as _json
++            import re as _re
++            _detail = item.get("detail")
++            if isinstance(_detail, str) and _detail.strip().startswith("{"):
++                _detail = _json.loads(_detail)
++            _setting = str((_detail or {}).get("setting") or "").strip() \
++                if isinstance(_detail, dict) else ""
++            if _re.match(r"^[a-z][a-z0-9_]{0,63}$", _setting):
++                try:
++                    import jarvis_reach as _reach
++                    tool_name = str((getattr(_reach, "TOOL_NAMES", {}) or {})
++                                    .get(_setting) or "")
++                except Exception:
++                    tool_name = ""
++                if not tool_name:
++                    tool_name = _setting.replace("_", " ")
++                tool_name = " ".join(tool_name.split())[:80]
++        except Exception:
++            tool_name = ""
 +
 +    # The title from jarvis_card_words.TITLES: a plain phrase for every action
 +    # the gate knows ("Jarvis wants to switch to a different AI model"). It
@@ -56,6 +92,8 @@
 +                                  for c in str(item.get("action") or "")).split())[:60].strip()
 +        title = (f'Jarvis wants your OK for "{_words}"' if _words
 +                 else "Jarvis is asking for your approval")
++    if tool_name:
++        title = f'Jarvis wants to offer "{tool_name}" to the AI model'
 +
 +    # Heavy means "interrupt them". Any one of three things earns it: it cannot
 +    # be undone, it leaves the machine, or outside text pushed the tier up.
@@ -64,6 +102,8 @@
 +    heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
 +
 +    bits = [r["why"]]
++    if tool_name:
++        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
 +    if raised:
 +        # Said, never quoted. That something tried to rush you is the fact that
 +        # changes your decision; its actual words are not needed to convey it,

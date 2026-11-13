@@ -66,9 +66,9 @@ index d67ab9b..e8fcfaa 100644
      rev, reach, why = _RISK.get(action or "", _UNKNOWN_RISK)
      return {
 @@ -750,6 +794,13 @@ def notice_for(item: dict) -> dict:
-     heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
- 
      bits = [r["why"]]
+     if tool_name:
+         bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
 +    if not r["classified"]:
 +        # The warning line above is the headline; this says WHY the worst case
 +        # was chosen, in the plainest words there are. Both are this file's own

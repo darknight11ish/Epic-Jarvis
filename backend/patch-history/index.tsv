@@ -8,6 +8,7 @@ appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a2
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30Z	I invented a NameError, then reported it twice as a finding
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27Z	The backend route, written against the real jarvis_hud.py
 approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50Z	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
+approval-notice.patch	approval-notice/c08d768.patch	c08d768a1a62b1eec61c24d88727642d0c5d753c	2026-10-10T19:59:21-07:00	Approval cards read short: a summary, "Explain more", and a setting
 approval-notice.patch	approval-notice/647f117.patch	647f117105e85fdaacdfce9d4e1e077b97009e6b	2026-09-25T23:33:32Z	Approval cards: one plain card on every screen, "Open the card", voice says a card is waiting
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34Z	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
 apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54Z	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
@@ -23,6 +24,7 @@ auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa37
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10Z	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14Z	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44Z	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
+backup.patch	backup/c7501b4.patch	c7501b43f6e5a3505f93d4317511e2d122ee2300	2026-09-26T22:01:34Z	Add backups: one locked backup file, a recovery code, restore with a card
 bench.patch	bench/d5cf03f.patch	d5cf03f6cdfa36168230309274d47ff975a975b2	2026-11-04T09:37:20-08:00	feat(bench): measure token speed on this PC - phase 1 backend
 big-coder.patch	big-coder/f13d795.patch	f13d795116434212bccbf09fe36402e0f5b750fd	2026-10-11T07:54:49-07:00	the 30B coder: both cards, with Jarvis paused
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14Z	Big model: big-model.patch, the install lists, and parity
@@ -93,6 +95,7 @@ gate-touches.patch	gate-touches/f550503.patch	f550503a69e992885eeab1b8fb2f2d47c1
 gate-touches.patch	gate-touches/50dfe75.patch	50dfe75109ebaf94d0bd729a4c314b25b36e39d1	2026-10-12T16:57:47-07:00	fix(gate): the gate reads the whole tool arguments, not the first 1500 (DEF-003) (#345)
 gate-touches.patch	gate-touches/81e1128.patch	81e1128ad5beab8198943aaec2fd994c81683328	2026-10-11T01:19:53-07:00	fix(gate): read the arguments of a cut tool-call line
 gate-touches.patch	gate-touches/0f244f7.patch	0f244f7b04ecbea8640b5440943242991113a7af	2026-10-11T00:19:59-07:00	the gate reads what an action touches, not the words on its card (#249)
+github-tools.patch	github-tools/5844637.patch	58446374acf3554e343a6995fed326f0bbabc399	2026-11-10T11:49:47-08:00	feat(github): full parity behind one card per action - cockpit, merge, fix-and-push
 github-tools.patch	github-tools/f9cd8ee.patch	f9cd8eee6447376fc2a3c567a77d84774754b8b9	2026-11-09T04:31:07-08:00	feat(github): the truth about web access, and one carded github_create_repo
 github-tools.patch	github-tools/9d2ad3c.patch	9d2ad3c7a774cbcbe3379045e6c6f30c530f159a	2026-11-03T22:30:05-08:00	fix(gate): rehome github-tools.patch so it stops breaking the patch stack
 github-tools.patch	github-tools/72f6847.patch	72f68473885ee7844bca1eb43855a5dcb4050000	2026-11-03T16:39:39-08:00	feat(github): read your own GitHub, and three small actions on it - one card each, never merge or push
@@ -189,10 +192,12 @@ temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a50393
 tool-calling-wiring.patch	tool-calling-wiring/477b7b4.patch	477b7b4383c9d192725f7b8971bfc47a67370e44	2026-09-18T01:45:42Z	backend: fix 5 findings from a second, independent code-review pass
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27Z	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47Z	backend: jarvis_agent.py - the model can finally use a tool, local lane only
+tools-enable.patch	tools-enable/4687f2c.patch	4687f2c669114cf1a6f3ee56393aa3af2f7f1192	2026-09-26T17:30:23Z	Offer reading tools to the model from the PC; search History client-side
 topics.patch	topics/bb25795.patch	bb2579561ee03d659482a2462a3fa56cba841a46	2026-09-30T06:53:12Z	Heatmap and balance chart: phone side (Progress.kt compiled and 16 tests run locally; Compose unverified)
 tutorials.patch	tutorials/d4163ee.patch	d4163eeb59f6b82cc9e43b91f0e41f73f3060f43	2026-10-04T22:28:08-07:00	﻿tutorials.patch anchored on the wrong install block - rebuilt
 tutorials.patch	tutorials/35aad3c.patch	35aad3c61f58f1cf94f4f21cede54cf24489f4e8	2026-10-04T21:12:12-07:00	﻿Two regressions my patch caused, both caught by the full local sweep
 tutorials.patch	tutorials/41ec99f.patch	41ec99f371a6790f12971f3378d293e4e87bfd1e	2026-10-04T20:26:38-07:00	﻿Tutorials: the routes, the patch, the patcher entries and the API page
+unknown-risk-approvable.patch	unknown-risk-approvable/bcd9927.patch	bcd992792dd347bbfcfd9f6b6847d8b010c7b018	2026-10-31T04:59:26-07:00	fix(gate): an explicit [autonomy.tiers] line now wins, plus the 2026-10-31 records wave folded in (DEF-021, DEF-023, pass 9) (#1023)
 unknown-risk-approvable.patch	unknown-risk-approvable/6456833.patch	6456833c1bb5b112f91bef2205ec2321f51ec4db	2026-10-30T19:01:32-07:00	fix(gate): an action with no risk row is approvable with maximum friction (Gemini Q2) (#1008)
 update-in-chat.patch	update-in-chat/11ebd46.patch	11ebd461ea0fd7a8c5b7311dec4820791d154d1a	2026-10-27T06:50:11Z	feat(update): talk about an update in chat, and start one only through ONE card (#878)
 voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41Z	The voice routes were telling four different stories, and one was a leak
@@ -212,6 +217,7 @@ wellbeing.patch	wellbeing/09d4703.patch	09d4703e7193cd9340fdec32bd6f346ed9da22a6
 wiki.patch	wiki/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15Z	Gate notice words (AP-10): what the second card, wiki and big model do
 wiki.patch	wiki/9aaab08.patch	9aaab08a9cdea55259a23a50ee9b1b2e990921fd	2026-09-24T03:29:14Z	Wiki builder: jarvis_wiki.py, wiki.patch, and its tests
 youtube.patch	youtube/ae1ccd3.patch	ae1ccd343a068b515c7ea227b601bfdd04039fdc	2026-09-30T09:31:05Z	Phone: overnight tag suggestions and section marker; YouTube backend and Galaxy in progress
+rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/647f117.patch	647f117105e85fdaacdfce9d4e1e077b97009e6b	2026-09-25T23:33:32Z	Approval cards: one plain card on every screen, "Open the card", voice says a card is waiting
 rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39Z	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/bitemporal.patch	rebuilt-patches/bitemporal/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39Z	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/extraction-wiring.patch	rebuilt-patches/extraction-wiring/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39Z	apply-patches: stop refusing all 21 because six are already in the rebuild

@@ -961,17 +961,11 @@ UNKNOWN_RISK = Repair(
         Piece(
             # `notice_for`: the body says WHY the worst case was chosen.
             anchor=(
-                '    heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised\n'
-                '\n'
-                '    bits = [r["why"]]\n'
                 '    if raised:\n'
                 '        # Said, never quoted. That something tried to rush you is the fact that\n'
                 '        # changes your decision; its actual words are not needed to convey it,'
             ),
             replace_with=(
-                '    heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised\n'
-                '\n'
-                '    bits = [r["why"]]\n'
                 '    if not r["classified"]:\n'
                 '        # The warning line above is the headline; this says WHY the worst case\n'
                 "        # was chosen, in the plainest words there are. Both are this file's own\n"
