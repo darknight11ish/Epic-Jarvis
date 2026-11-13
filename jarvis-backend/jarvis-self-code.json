@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
- "built_at": "2026-11-12T20:16:01-08:00",
+ "ref": "5fed0b4258651dc7475cd1b1ec4a9a234ea70960",
+ "built_at": "2026-11-13T04:56:20-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1085,6 +1085,20 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/face/gl/TokamakRenderer.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/handsfree/HandsfreeClip.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/handsfree/HandsfreeFlow.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/DeviceTiers.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/DeviceTiersAndroid.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/GgufMetadata.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LlamaEngine.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LlamaNative.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiController.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiPrompt.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiScreen.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiSettings.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiWords.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalEngine.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalEnginePolicy.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/ModelStore.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/ModelStoreAndroid.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/ActivityEvent.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/AlsoOnPhone.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/AnimalOptions.kt",
@@ -1454,6 +1468,8 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetPin.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetRuntime.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetStates.kt",
+    "jarvis-client/app/src/main/jniLibs/arm64-v8a/libjarvis_llama.so",
+    "jarvis-client/app/src/main/jniLibs/x86_64/libjarvis_llama.so",
     "jarvis-client/app/src/main/res/anim/notification_frame_in.xml",
     "jarvis-client/app/src/main/res/anim/notification_frame_out.xml",
     "jarvis-client/app/src/main/res/drawable/ic_notification.xml",
@@ -1797,6 +1813,15 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/data/LookTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/PhoneAddressTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/DeviceTiersTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/FakeLocalEngine.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/GgufMetadataTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LlamaEngineTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiControllerTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiPromptTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiShipsOffTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalEnginePolicyTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/ModelStoreTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/net/WriteLikeMeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/platform/LocalNetworkPermissionTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt",
@@ -1860,6 +1885,15 @@
     "jarvis-client/app/src/test/resources/critter-drift-golden.json",
     "jarvis-client/app/src/test/resources/critter-pose-golden.json",
     "jarvis-client/app/src/test/resources/critter-zs-golden.json",
+    "jarvis-client/app/src/test/resources/gguf/bad-magic.gguf",
+    "jarvis-client/app/src/test/resources/gguf/bad-type.gguf",
+    "jarvis-client/app/src/test/resources/gguf/huge-count.gguf",
+    "jarvis-client/app/src/test/resources/gguf/missing-fields.gguf",
+    "jarvis-client/app/src/test/resources/gguf/no-arch.gguf",
+    "jarvis-client/app/src/test/resources/gguf/qwen2-valid.gguf",
+    "jarvis-client/app/src/test/resources/gguf/too-big.gguf",
+    "jarvis-client/app/src/test/resources/gguf/truncated.gguf",
+    "jarvis-client/app/src/test/resources/gguf/v1.gguf",
     "jarvis-client/app/src/test/resources/jarvis-visual-spec.json",
     "jarvis-client/app/src/test/resources/lipsync-golden.json",
     "jarvis-client/app/src/test/resources/pattern-golden.json",
@@ -1873,13 +1907,25 @@
     "jarvis-client/gradle/wrapper/gradle-wrapper.properties",
     "jarvis-client/gradlew",
     "jarvis-client/gradlew.bat",
+    "jarvis-client/native/BUILD-INFO-arm64-v8a.txt",
+    "jarvis-client/native/BUILD-INFO-x86_64.txt",
+    "jarvis-client/native/CMakeLists.txt",
+    "jarvis-client/native/PROVENANCE.json",
+    "jarvis-client/native/README.md",
+    "jarvis-client/native/REPORT.md",
+    "jarvis-client/native/build-native.ps1",
+    "jarvis-client/native/jni/jarvis_llama_jni.cpp",
+    "jarvis-client/native/licenses/LICENSE-PrivateLM-plugin",
+    "jarvis-client/native/licenses/LICENSE-PrivateLM-repo",
+    "jarvis-client/native/licenses/LICENSE-llama.cpp",
+    "jarvis-client/native/licenses/llama.cpp-tree.sha256",
     "jarvis-client/settings.gradle.kts",
     "jarvis-client/tools/gen_feature_directory.py",
     "server/README.md",
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 969,
+   "file_count": 1015,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4599,6 +4645,7 @@
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/2026-11-11-github-union-0-2-448.md",
+    "changelog.d/2026-11-13-phone-on-device-model-engine.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4755,6 +4802,7 @@
     "decisions.d/2026-11-10-phone-approves-tool-switches.md",
     "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/2026-11-11-github-union-0-2-448.md",
+    "decisions.d/2026-11-13-phone-on-device-model-engine.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5202,7 +5250,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 847,
+   "file_count": 849,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6285,6 +6333,76 @@
  ],
  "recent_commits": [
   {
+   "sha": "5fed0b4258651dc7475cd1b1ec4a9a234ea70960",
+   "date": "2026-11-13",
+   "subject": "localai: keep the switch and close from racing a running load"
+  },
+  {
+   "sha": "4636b44f700326c812a158529f57681b29356869",
+   "date": "2026-11-13",
+   "subject": "localai: ship the prebuilt native engine library, its build script and provenance"
+  },
+  {
+   "sha": "fd29946491f913a50c038210eee1805ed827461b",
+   "date": "2026-11-13",
+   "subject": "docs(records): record the phone's on-device engine, its one-sided reason and its MIT attribution"
+  },
+  {
+   "sha": "4b73bf52402e7093a83251687175879496494051",
+   "date": "2026-11-13",
+   "subject": "localai: keep the JNI names through R8"
+  },
+  {
+   "sha": "1fae25523f88654efe705cb37de1f17963143459",
+   "date": "2026-11-13",
+   "subject": "localai: add the Local AI screen, state holder and More entry"
+  },
+  {
+   "sha": "cb999959cfdd344b52dbc85d9f69ee1599816033",
+   "date": "2026-11-13",
+   "subject": "localai: add the models folder with a SAF import and the OFF-by-default switch"
+  },
+  {
+   "sha": "e7847411c00c75cf63a82d3f7f817197da9831f1",
+   "date": "2026-11-13",
+   "subject": "localai: port the RAM tiers, the 5s/180s policy and the prompt formats"
+  },
+  {
+   "sha": "f1757219cd3276f287d5060b7392325d69f79a26",
+   "date": "2026-11-13",
+   "subject": "localai: port the GGUF header reader with binary fixtures"
+  },
+  {
+   "sha": "8477a5ca9a1584246c58c0a27e484e487cc2e525",
+   "date": "2026-11-13",
+   "subject": "localai: add the engine contract, JNI bridge and LlamaEngine"
+  },
+  {
+   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+  },
+  {
+   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+  },
+  {
+   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
+   "date": "2026-11-12",
+   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+  },
+  {
+   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+  },
+  {
+   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "date": "2026-11-12",
+   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+  },
+  {
    "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
    "date": "2026-11-12",
    "subject": "records(pr1223): regenerate the self-code map after the union map fix"
@@ -6313,76 +6431,6 @@
    "sha": "f178829082997f509029cb143cb3497adfe19dbf",
    "date": "2026-11-12",
    "subject": "records(pr1223): regenerate the self-code map after the main merge"
-  },
-  {
-   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
-   "date": "2026-11-12",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the gate base the state the patch stack really installs"
-  },
-  {
-   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
-  },
-  {
-   "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
-   "date": "2026-11-12",
-   "subject": "fix(union): resolve CI audit zero-jargon, asks-first frontend test, and backend Windows test failures"
-  },
-  {
-   "sha": "87a7cbd843c4eb0e245801d4cf08679dffa7c449",
-   "date": "2026-11-11",
-   "subject": "fix(union): 0.2.448 pins, records and the two 2026-11-11 field-test defects"
-  },
-  {
-   "sha": "8475a145e864e64fa899ae32bd178acaca568b86",
-   "date": "2026-11-11",
-   "subject": "fix(base): the base README is its own document, not a copy of backend/README.md"
-  },
-  {
-   "sha": "543d12b2b06d27e866f246ade04421ce5d0930e9",
-   "date": "2026-11-11",
-   "subject": "Merge remote-tracking branch 'origin/main' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "2034e45c2e751602a8e6f69b43744f9164670f55",
-   "date": "2026-11-11",
-   "subject": "feat(github): the 2026-11-11 field-test rulings - Q-C per-repo merge checks, Q-G ci_status reads, Q3/Q4 card-free reads, Q-D/Q7 review tools"
-  },
-  {
-   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
-   "date": "2026-11-11",
-   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
-  },
-  {
-   "sha": "213d35f9276aed80b11804f908a6850e320b7045",
-   "date": "2026-11-11",
-   "subject": "fix(union): repair two merge-resolution artifacts (a missing profile brace and an orphaned test check)"
-  },
-  {
-   "sha": "53a424509ebe786a7d4e2e5e23cb60c3a3030810",
-   "date": "2026-11-11",
-   "subject": "Merge commit '9f0d947abce618f050f494583b45f283dd60a852' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "40875bd0677c959aabcfbac04a38fcfb0ba62985",
-   "date": "2026-11-11",
-   "subject": "Merge commit 'b7341af45432cb076505ebc9366508a01fd9e9c1' into integration/github-union-02447-2026-11-11"
-  },
-  {
-   "sha": "9f0d947abce618f050f494583b45f283dd60a852",
-   "date": "2026-11-11",
-   "subject": "fix(approvals): the phone may approve tool switches, and the card names the tool"
-  },
-  {
-   "sha": "23745c116fa4fcaa6789a1d5eb4082ba17507159",
-   "date": "2026-11-11",
-   "subject": "assemble: github parity step 2 - nine actions"
   }
  ],
  "top_level": [
@@ -6399,7 +6447,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 929
+   "files": 975
   },
   {
    "path": "docs/",
@@ -6419,7 +6467,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 239
+   "files": 240
   },
   {
    "path": "videos/",
@@ -6429,7 +6477,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 156
+   "files": 157
   },
   {
    "path": "plugins/",
@@ -6503,8 +6551,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5628,
-  "covered": 5150,
+  "tracked_files": 5676,
+  "covered": 5198,
   "excluded": 478,
   "subsystems": 27
  },
