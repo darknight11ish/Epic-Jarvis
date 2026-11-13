@@ -34,7 +34,7 @@
 +    "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
  })
 @@ -707,4 +708,12 @@
-     "enable_reading_tool": ("yes", "local", "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant"),
+     "enable_reading_tool": ("no", "local", "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back"),
 +    # backup.patch (jarvis_backup.py, the owner's decision of 2026-09-27).
 +    # Replaces memory, chat history, settings and notes with an older
 +    # backup, and puts the chat-history key back in Windows Credential

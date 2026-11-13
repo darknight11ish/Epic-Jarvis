@@ -607,9 +607,23 @@ def t_github_search_resolves_to_an_ask_tier_in_the_shipped_config():
     and this pins both halves: the resolution and the honest tier."""
     tiers = _shipped_tiers()
     action, tier = tiers["github_search"]
-    check("github_search resolves to a shipped research action",
-          action in ("web_research", "research_authenticated"), action)
-    check("that action is 'ask' in the shipped config", tier == "ask", tier)
+    # Q3/Q4 (2026-11-11): every GitHub READ is card-free, github_search
+    # included. It has its OWN action names now, both "auto", so the generic
+    # web-research tiers stay "ask" for every other research tool.
+    check("github_search resolves to its own card-free GitHub-search action",
+          action in ("github_search_run", "github_search_run_authenticated"),
+          action)
+    check("that action is 'auto' in the shipped config", tier == "auto", tier)
+    import tomllib
+    cfg = tomllib.loads((Path(__file__).resolve().parent / "rebuilt" /
+                         "jarvis-framework.toml").read_text(encoding="utf-8"))
+    shipped = cfg["autonomy"]["tiers"]
+    check("... and no other research egress was loosened",
+          shipped.get("web_research") == "ask"
+          and shipped.get("research_authenticated", "ask") == "ask"
+          and shipped.get("search_the_web") == "ask",
+          (shipped.get("web_research"), shipped.get("research_authenticated"),
+           shipped.get("search_the_web")))
 
 
 def _valid_args(tname):
@@ -675,7 +689,10 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
     does. Run for the tier each tool has in the shipped config AND for
     auto/notify regardless, so an owner who lowers a tier is covered too."""
     tiers = _shipped_tiers()
-    for tname in sorted(AG.NEEDS_A_PERSON):
+    # NEEDS_A_PERSON names the write TOOLS and, as the 13th write action,
+    # `github_fix_write`, which is dispatched through the fix tool: this
+    # tier-only loop drives real Tools.
+    for tname in sorted(set(AG.NEEDS_A_PERSON) & set(AG.TOOLS)):
         if tname == "propose_plan":
             # propose_plan carries a SECOND, independent gate ahead of the
             # tier check this loop drives: jarvis_plan.enabled(), refused
@@ -846,6 +863,19 @@ def t_every_outbound_gate_action_is_covered():
                   "_web_search_call(args" in Path(AG.__file__).read_text(encoding="utf-8"))
             continue
         if action in outbound:
+            if tname in set(getattr(AG, "GITHUB_CARD_FREE_READS", ())):
+                # The owner's 2026-11-10 23:00 PT "make GitHub reads
+                # card-free" decision and the 2026-11-11 Q3/Q4 ruling: SIX
+                # GitHub reads left NEEDS_A_PERSON - the five fixed-address
+                # api.github.com GETs in GITHUB_READ_TOOLS, plus
+                # `github_search`, the sixth, which is a read-only library
+                # search with its own two "auto" action names.
+                # `GITHUB_CARD_FREE_READS` is that set; the switchable
+                # `github_inspect` read row is the card's door, and the token
+                # still only goes to api.github.com.
+                check(f"{tname} is the owner's card-free GitHub read",
+                      tname not in AG.NEEDS_A_PERSON)
+                continue
             check(f"{tname} ({action}) is in NEEDS_A_PERSON", tname in AG.NEEDS_A_PERSON)
 
 

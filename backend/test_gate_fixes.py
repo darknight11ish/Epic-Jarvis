@@ -239,7 +239,7 @@ def t_the_earlier_fixes_are_still_there():
           "env=env" in inspect.getsource(AG._run_shell_exec)
           and "jarvis_child_env.inherited" in inspect.getsource(AG.shell_env))
     for name in ("shell_exec", "control_computer", "control_phone", "browser_control",
-                 "home_control", "github_search"):
+                 "home_control"):
         check(f"4c: {name} runs only on a person's yes", name in AG.NEEDS_A_PERSON)
     check("4c: tier notify is not a person", not AG._a_person_said_yes(Verdict(True, "notify", "notify")))
     check("4c: tier auto is not a person", not AG._a_person_said_yes(Verdict(True, "auto", "auto")))

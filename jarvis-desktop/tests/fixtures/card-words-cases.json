@@ -87,6 +87,10 @@
       "title": "Jarvis wants to hold a conversation with an AI chatbot for you"
     },
     {
+      "action": "check_records",
+      "title": "Jarvis wants to check repository records before a push"
+    },
+    {
       "action": "check_tool_updates",
       "title": "Jarvis wants to check online for tool updates"
     },
@@ -199,12 +203,28 @@
       "title": "Jarvis wants to create a new repository on your GitHub"
     },
     {
+      "action": "github_edit_pr",
+      "title": "Jarvis wants to edit a pull request's title or body"
+    },
+    {
       "action": "github_fix_and_push",
       "title": "Jarvis wants to push a fix to a pull request's own branch"
     },
     {
+      "action": "github_fix_write",
+      "title": "Jarvis wants to write one file in a pull request's fix copy"
+    },
+    {
       "action": "github_inspect",
       "title": "Jarvis wants to read your GitHub"
+    },
+    {
+      "action": "github_issue_labels",
+      "title": "Jarvis wants to change the labels on an issue"
+    },
+    {
+      "action": "github_issue_state",
+      "title": "Jarvis wants to close or reopen one issue"
     },
     {
       "action": "github_merge_pr",
@@ -215,12 +235,32 @@
       "title": "Jarvis wants to open an issue on GitHub"
     },
     {
+      "action": "github_open_pr",
+      "title": "Jarvis wants to open a pull request for a new branch"
+    },
+    {
+      "action": "github_pr_review",
+      "title": "Jarvis wants to post a pull request review, never an approval"
+    },
+    {
       "action": "github_read",
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
     },
     {
       "action": "github_rerun_workflow",
       "title": "Jarvis wants to run a GitHub workflow again"
+    },
+    {
+      "action": "github_search_run",
+      "title": "Jarvis wants to search GitHub"
+    },
+    {
+      "action": "github_search_run_authenticated",
+      "title": "Jarvis wants to search GitHub signed in as you"
+    },
+    {
+      "action": "github_workflow",
+      "title": "Jarvis wants to cancel or re-run a workflow run"
     },
     {
       "action": "google_calendar_write",
@@ -413,6 +453,10 @@
     {
       "action": "restore_backup",
       "title": "Jarvis wants to restore from a backup, replacing what it knows now"
+    },
+    {
+      "action": "review_changes",
+      "title": "Jarvis wants to review code changes before a push"
     },
     {
       "action": "revoke_web_search_grant",
@@ -785,6 +829,18 @@
       }
     },
     {
+      "action": "check_records",
+      "notice": {
+        "title": "Jarvis wants to check repository records before a push",
+        "summary": "Jarvis wants to check repository records before a push.",
+        "full": "reads this PC's own record files and runs the repository's read-only checkers; nothing is written or sent. nothing has happened yet.",
+        "body": "reads this PC's own record files and runs the repository's read-only checkers; nothing is written or sent. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "check_tool_updates",
       "notice": {
         "title": "Jarvis wants to check online for tool updates",
@@ -1065,9 +1121,9 @@
       "notice": {
         "title": "Jarvis wants to offer a tool to the AI model",
         "summary": "Jarvis wants to offer a tool to the model.",
-        "full": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
-        "body": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
-        "weight": "normal",
+        "full": "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back. nothing has happened yet.",
+        "body": "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -1121,6 +1177,18 @@
       }
     },
     {
+      "action": "github_edit_pr",
+      "notice": {
+        "title": "Jarvis wants to edit a pull request's title or body",
+        "summary": "Jarvis wants to edit a pull request's text.",
+        "full": "changes ONE pull request's title and/or body on GitHub in your name; no other field is editable and the same tool can change it back. nothing has happened yet.",
+        "body": "changes ONE pull request's title and/or body on GitHub in your name; no other field is editable and the same tool can change it back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_fix_and_push",
       "notice": {
         "title": "Jarvis wants to push a fix to a pull request's own branch",
@@ -1133,12 +1201,48 @@
       }
     },
     {
+      "action": "github_fix_write",
+      "notice": {
+        "title": "Jarvis wants to write one file in a pull request's fix copy",
+        "summary": "Jarvis wants to write one file in the fix copy.",
+        "full": "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy. nothing has happened yet.",
+        "body": "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_inspect",
       "notice": {
         "title": "Jarvis wants to read your GitHub",
         "summary": "Jarvis wants to read your GitHub.",
         "full": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
         "body": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_issue_labels",
+      "notice": {
+        "title": "Jarvis wants to change the labels on an issue",
+        "summary": "Jarvis wants to change labels.",
+        "full": "adds and/or removes labels on ONE GitHub issue or pull request in your name; no other field changes, nothing is closed or reopened, and the whole new label set is sent in ONE request. nothing has happened yet.",
+        "body": "adds and/or removes labels on ONE GitHub issue or pull request in your name; no other field changes, nothing is closed or reopened, and the whole new label set is sent in ONE request. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_issue_state",
+      "notice": {
+        "title": "Jarvis wants to close or reopen one issue",
+        "summary": "Jarvis wants to close or reopen an issue.",
+        "full": "closes ONE issue or reopens ONE closed issue on GitHub in your name; the same tool changes it back, and it never touches a pull request, more than one issue, a delete or a transfer. nothing has happened yet.",
+        "body": "closes ONE issue or reopens ONE closed issue on GitHub in your name; the same tool changes it back, and it never touches a pull request, more than one issue, a delete or a transfer. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1169,6 +1273,30 @@
       }
     },
     {
+      "action": "github_open_pr",
+      "notice": {
+        "title": "Jarvis wants to open a pull request for a new branch",
+        "summary": "Jarvis wants to open a pull request.",
+        "full": "pushes ONE new branch to GitHub and opens ONE pull request from it into a base branch in your name; never a force-push, never main/master/release/hotfix, never a delete; a pushed branch and an opened pull request cannot be taken back by Jarvis. nothing has happened yet.",
+        "body": "pushes ONE new branch to GitHub and opens ONE pull request from it into a base branch in your name; never a force-push, never main/master/release/hotfix, never a delete; a pushed branch and an opened pull request cannot be taken back by Jarvis. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_pr_review",
+      "notice": {
+        "title": "Jarvis wants to post a pull request review, never an approval",
+        "summary": "Jarvis wants to post a review, never an approval.",
+        "full": "posts ONE review on a pull request on GitHub in your name - a comment or a request for changes, never an APPROVE; the review text cannot be edited or taken back afterwards. nothing has happened yet.",
+        "body": "posts ONE review on a pull request on GitHub in your name - a comment or a request for changes, never an APPROVE; the review text cannot be edited or taken back afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_read",
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
@@ -1187,6 +1315,42 @@
         "summary": "Jarvis wants to run a workflow again.",
         "full": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
         "body": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_search_run",
+      "notice": {
+        "title": "Jarvis wants to search GitHub",
+        "summary": "Jarvis wants to search GitHub.",
+        "full": "searches GitHub's public library index with the words the model chose; GitHub sees this PC's address and nothing on GitHub changes. nothing has happened yet.",
+        "body": "searches GitHub's public library index with the words the model chose; GitHub sees this PC's address and nothing on GitHub changes. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_search_run_authenticated",
+      "notice": {
+        "title": "Jarvis wants to search GitHub signed in as you",
+        "summary": "Jarvis wants to search GitHub signed in as you.",
+        "full": "searches GitHub signed in with the token saved on this PC, so GitHub sees which account asked; nothing on GitHub changes. nothing has happened yet.",
+        "body": "searches GitHub signed in with the token saved on this PC, so GitHub sees which account asked; nothing on GitHub changes. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_workflow",
+      "notice": {
+        "title": "Jarvis wants to cancel or re-run a workflow run",
+        "summary": "Jarvis wants to cancel or re-run a run.",
+        "full": "cancels ONE running workflow run or re-runs only the failed jobs of ONE finished run on GitHub; a cancelled run cannot be resumed and a started run cannot be taken back, and it never dispatches a workflow. nothing has happened yet.",
+        "body": "cancels ONE running workflow run or re-runs only the failed jobs of ONE finished run on GitHub; a cancelled run cannot be resumed and a started run cannot be taken back, and it never dispatches a workflow. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1763,6 +1927,18 @@
         "summary": "Jarvis wants to restore from a backup.",
         "full": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
         "body": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "review_changes",
+      "notice": {
+        "title": "Jarvis wants to review code changes before a push",
+        "summary": "Jarvis wants to review code changes before a push.",
+        "full": "reads one change on this PC - the base and head commits, the files it touches and the risk notes - and writes nothing. nothing has happened yet.",
+        "body": "reads one change on this PC - the base and head commits, the files it touches and the risk notes - and writes nothing. nothing has happened yet.",
         "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
@@ -2348,7 +2524,6 @@
   "pc_only_actions": [
     "change_approval_policy",
     "desktop_update",
-    "enable_reading_tool",
     "handoff_bring_to_front",
     "handoff_keep_offering",
     "loosen_what_asks_first",

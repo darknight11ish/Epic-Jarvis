@@ -189,6 +189,23 @@ TITLES = {
     # and "push a fix" is not "post a comment".
     "github_merge_pr": "merge a pull request with a merge commit",
     "github_fix_and_push": "push a fix to a pull request's own branch",
+    # Wave 16B (2026-11-10): the fix tool's "write" stage changes ONE file inside
+    # that isolated copy ON THIS PC. Its own phrase, never "push a fix": this
+    # card sends nothing anywhere and nothing on GitHub changes.
+    "github_fix_write": "write one file in a pull request's fix copy",
+    # The 2026-11-10 22:30 ruling's Step 2 (full parity): five more carded
+    # writes. Each title says exactly what that card changes, so no two of them
+    # can read as the same action.
+    "github_open_pr": "open a pull request for a new branch",
+    "github_workflow": "cancel or re-run a workflow run",
+    "github_issue_labels": "change the labels on an issue",
+    "github_edit_pr": "edit a pull request's title or body",
+    "github_pr_review": "post a pull request review, never an approval",
+    "github_issue_state": "close or reopen one issue",
+    "github_search_run": "search GitHub",
+    "github_search_run_authenticated": "search GitHub signed in as you",
+    "check_records": "check repository records before a push",
+    "review_changes": "review code changes before a push",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -469,6 +486,19 @@ SUMMARY = {
     "github_create_repo": "create a repository",
     "github_merge_pr": "merge a pull request (merge commit only)",
     "github_fix_and_push": "push a fix to a pull request",
+    # Wave 16B: the short line for the one local card in the fix flow.
+    "github_fix_write": "write one file in the fix copy",
+    # The 2026-11-10 22:30 ruling's Step 2 short lines.
+    "github_open_pr": "open a pull request",
+    "github_workflow": "cancel or re-run a run",
+    "github_issue_labels": "change labels",
+    "github_edit_pr": "edit a pull request's text",
+    "github_pr_review": "post a review, never an approval",
+    "github_issue_state": "close or reopen an issue",
+    "github_search_run": "search GitHub",
+    "github_search_run_authenticated": "search GitHub signed in as you",
+    "check_records": "check repository records before a push",
+    "review_changes": "review code changes before a push",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

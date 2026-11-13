@@ -425,7 +425,8 @@ data class ProposalOption(
 /**
  * The approvals the PC only ever answers on the PC itself, with Windows Hello:
  * a client-side copy of `jarvis_owner_check.PC_ONLY_ACTIONS` (ten on
- * 2026-11-04, listed here in the PC's own order).
+ * 2026-11-04; nine since 2026-11-10, when the owner ruled that the phone may
+ * approve tool switches too), listed here in the PC's own order).
  *
  * The phone cannot ask the server which cards are PC-only, and copying only the
  * one action it used to know is what offered an Approve button on the other
@@ -439,11 +440,17 @@ data class ProposalOption(
  * own `jarvis_owner_check.PC_ONLY_ACTIONS`, and the JVM test in the required
  * `phone-unit-tests` job fails the moment the two differ - instead of an
  * Approve button that can only fail.
+ *
+ * `enable_reading_tool` is NOT here since 2026-11-10 (the owner: "let the
+ * phone approve tool switches too"). It is still a RISKY card - the gate's own
+ * `_RISK` row says the choice cannot be taken back once the model has used the
+ * ability - so this phone's Approve offers its fingerprint or PIN
+ * ([SecurityRules]), and a phone with no approval key is refused with the
+ * existing "no_approval_key" sentence so it can offer signing on.
  */
 object PcOnlyActions {
     val ALL: Set<String> = setOf(
         "loosen_what_asks_first",
-        "enable_reading_tool",
         "restore_backup",
         "pair_device",
         "unretire_shared_key",
