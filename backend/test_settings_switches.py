@@ -137,13 +137,14 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
     # sandbox, the product check and the two web-search grant tools, which ride
     # with web search); a
     # switch the turn ignored would be a lie. test_asks_first.py carries the
-    # same 67 and the same reason.
-    check("the in-app rows: 67, every tool the model can be offered",
+    # same 74 and the same reason: the union of wave 16E's two review tools and
+    # the 22:30/23:00 rulings' seven GitHub tools (67 + 7).
+    check("the in-app rows: 74, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 67)
+          and len(AF.TOOLS_SWITCHABLE) == 74)
     # The PC half of the law, proved against the page itself rather than
     # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
     # list (the Tools page's rows), so a tool added on one side alone fails
@@ -412,6 +413,62 @@ def t_the_gate_lines_and_the_tables():
     import jarvis_card_words as W
     check("its card has a title in plain words", "turn web search back on" in
           W.title_for("web_search_enable").lower(), W.title_for("web_search_enable"))
+
+
+# ============================================ 3. the GitHub master group switch
+#
+# 2026-11-10, the owner's ruling Q1 step 2: ONE switch offers/removes the twenty
+# GitHub tools together. It is a SEPARATE object in the PC's payload
+# (`tools.github_group`), never a row in `tools.items`, so the per-tool rows -
+# and every app's pin on that list - do not move for it. These checks drive the
+# REAL route against the hermetic temp settings file, the same way section 1
+# does, so the atomic [tools].enabled write is proved end to end.
+
+def t_the_github_master_switch_writes_all_twenty_in_one_step():
+    write_toml(["plugin_scan", "calendar_read"])
+    AF._reset_for_tests()
+    code, out = route(AF.GITHUB_TOOLS_GROUP, True)
+    got = enabled_in_file()
+    check("the group switch is not one of the per-tool rows",
+          AF.GITHUB_TOOLS_GROUP not in AF.TOOLS_SWITCHABLE
+          and all(i["id"] != AF.GITHUB_TOOLS_GROUP
+                  for i in AF.tools_status(here=True)["items"]))
+    check("group ON through the real route: 202 and all twenty names written",
+          code == 202 and set(AF.GITHUB_TOOLS) <= got, (code, out.get("message"), got))
+    check("... each name exactly once, and the owner's own names kept",
+          len(got) == len(AF.GITHUB_TOOLS) + 2
+          and "plugin_scan" in got and "calendar_read" in got, got)
+    check("... and the page reports the group as ON, not partial",
+          out["tools"]["github_group"]["on"] is True
+          and out["tools"]["github_group"]["partial"] is False
+          and out["tools"]["github_group"]["on_count"] == len(AF.GITHUB_TOOLS),
+          out["tools"]["github_group"])
+    code, out = route(AF.GITHUB_TOOLS_GROUP, False)
+    got = enabled_in_file()
+    check("group OFF is instant, from the phone too, and removes only the twenty",
+          code == 200 and got == {"plugin_scan", "calendar_read"}, (code, got))
+    # A partial file: the row must be truthful, and ON adds only the missing.
+    write_toml([AF.GITHUB_TOOLS[0], AF.GITHUB_TOOLS[1], AF.GITHUB_TOOLS[2], "plugin_scan"])
+    AF._reset_for_tests()
+    g = AF.tools_status(here=True)["github_group"]
+    check("a file with three of the twenty reads as PARTIAL, never as on",
+          g["on"] is False and g["partial"] is True and g["on_count"] == 3, g)
+    code, out = AF.request_tool_enable(
+        {"tool": AF.GITHUB_TOOLS_GROUP, "enabled": True}, here=False,
+        tier_of=ask_tier, gate=approve, spawn=lambda fn: fn(), armed=lambda: True)
+    check("group ON away from the PC: 403, the PC only, nothing written",
+          code == 403 and out.get("pc_only") is True
+          and enabled_in_file() == {AF.GITHUB_TOOLS[0], AF.GITHUB_TOOLS[1],
+                                    AF.GITHUB_TOOLS[2], "plugin_scan"}, (code, out))
+    code, out = route(AF.GITHUB_TOOLS_GROUP, True)
+    got = enabled_in_file()
+    check("group ON from a partial file adds only the missing seventeen",
+          code == 202 and set(AF.GITHUB_TOOLS) <= got and "plugin_scan" in got
+          and len(got) == len(AF.GITHUB_TOOLS) + 1, got)
+    code, out = route(AF.GITHUB_TOOLS_GROUP, True)
+    check("... and asking again when all twenty are on changes nothing",
+          code == 200 and out["changed"] is False, (code, out.get("changed")))
+    AF._reset_for_tests()
 
 
 def main():

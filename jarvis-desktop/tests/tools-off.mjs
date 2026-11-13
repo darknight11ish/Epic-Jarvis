@@ -6,7 +6,7 @@
  *
  * What must hold:
  * - every tool the model can be offered is drawn with an ON switch, the raw
- *   Tier C set and the everyday helpers included (67 at 2026-11-10, 62 at
+ *   Tier C set and the everyday helpers included (74 at 2026-11-11, 62 at
  *   2026-11-09, 60 at 2026-11-05, 48 before);
  * - a name this PC does not know, or one of the five whose own switch decides
  *   it, is still listed when it is ON, with its real state and the PC's own
@@ -57,7 +57,7 @@ check("every formerly locked tool is a switch row with an ON switch", () => {
       `${id} can be switched on from the PC: ${JSON.stringify(tv)}`);
     assert.ok(TOOLS_SWITCHABLE.includes(id), `${id} is in the switchable list`);
   }
-  assert.equal(view.tools.items.length, 67,
+  assert.equal(view.tools.items.length, 74,
     "67 switches, every tool the model can be offered (seven GitHub tools - the carded repository create added 2026-11-09 - the cardless project_read added the same day, wave 16's read-only PR cockpit, carded merge and carded fix-and-push, and wave 16E's local review packet and record check - send_text_message, the approval-policy row and four pack tools since 2026-11-05)");
 });
 
@@ -71,7 +71,7 @@ check("the fixture really carries the name this PC does not know", () => {
   assert.ok(rows.every((r) => r.why.length > 20), "it carries the PC's plain reason");
   assert.ok(rows.every((r) => r.title && r.title !== r.id),
     "it is drawn with its human label, never the raw id");
-  assert.equal(view.tools.items.length, 67, "the switch rows are unchanged");
+  assert.equal(view.tools.items.length, 74, "the switch rows are unchanged");
   assert.ok(TOOLS_SWITCHABLE.includes("web_search"));
   assert.ok(!TOOLS_SWITCHABLE.includes("plugin_scan"));
 });
@@ -103,7 +103,7 @@ check("a PC with nothing else ON sends no extra and draws no extra rows", () => 
   const view = readAsksFirst(C.pc_shipped);
   assert.deepEqual(view.tools.extra, [], "no extra rows");
   assert.deepEqual(extraToolsView(view.tools), [], "nothing is drawn for them");
-  assert.equal(view.tools.items.length, 67);
+  assert.equal(view.tools.items.length, 74);
 });
 
 check("the page draws the extra rows and sends OFF through the same verb", () => {
@@ -129,7 +129,8 @@ check("Rust refuses ON only for a name the PC does not know, and sends every OFF
   const rust = read("src-tauri/src/asks_first.rs");
   assert.match(rust, /pub\(crate\) fn tool_body\(tool: &str, enabled: bool\)/);
   assert.match(rust, /if !plausible_tool_name\(tool\)/, "a malformed name is refused here");
-  assert.match(rust, /if enabled && !TOOLS_SWITCHABLE\.contains\(&tool\)/,
+  assert.match(rust,
+    /if enabled && tool != GITHUB_TOOLS_GROUP && !TOOLS_SWITCHABLE\.contains\(&tool\)/,
     "only the ON direction is refused before it is sent");
   assert.match(rust, /TOOLS_NO_SWITCH\.iter\(\)\.find/,
     "a known tool with no switch of its own gets its own sentence, not 'does not know'");

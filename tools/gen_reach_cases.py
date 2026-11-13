@@ -32,6 +32,7 @@ for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+import _where  # noqa: F401
 import jarvis_reach as R  # noqa: E402
 
 try:

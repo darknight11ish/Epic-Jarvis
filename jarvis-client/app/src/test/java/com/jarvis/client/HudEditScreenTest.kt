@@ -366,6 +366,13 @@ class HudEditScreenTest {
             "and every card in it",
             src.contains("ids.forEachIndexed { index, id ->"),
         )
+        // The top strip is split across two surfaces since 2026-11-10, so the
+        // editor says where each half is drawn: moving a card there must not look
+        // like a card vanishing from the phone.
+        assertTrue(
+            "the editor does not say the safety cards stay on Home",
+            src.contains("The safety cards here stay on Home"),
+        )
         // The cards the layout does not hold are offered back.
         assertTrue(src.contains("HudLayout.missingFrom(layout)"))
         assertTrue(src.contains("HudLayout.Action.Add("))
@@ -382,7 +389,17 @@ class HudEditScreenTest {
             "and the menu view the rest of the screen uses",
             src.contains("HudLayout.visible(layout, menus)"),
         )
-        assertTrue("the four sections are the model's own", src.contains("for (section in HudLayout.SECTIONS)"))
+        // Since 2026-11-10 the Home screen draws the model's three HOME
+        // sections; the fourth (top_strip) is drawn in the More menu, and
+        // `HomeMoreMenuTest` holds that half.
+        assertTrue(
+            "the Home sections are the model's own",
+            src.contains("for (section in HudLayout.HOME_SECTIONS)"),
+        )
+        assertFalse(
+            "Home draws every section again, so the strip is back on top of it",
+            src.contains("for (section in HudLayout.SECTIONS)"),
+        )
         // The HUD is the conversation list's FIRST row: a door must never come
         // between the owner and a card waiting for a decision.
         val hudItem = src.indexOf("item(key = HUD_KEY)")
@@ -412,8 +429,9 @@ class HudEditScreenTest {
             "Home does not carry a second copy of the threshold",
             src.contains("600"),
         )
-        // Only the body is a grid; the strip, the hero and the composer are
-        // columns of full-width cards, which is what the model means by them.
+        // Only the body is a grid; the hero and the composer (and the More
+        // menu's strip, drawn as rows not cards) are full-width in the layout's
+        // sense, which is what the model means by them.
         assertTrue(
             src.contains("val perRow = if (section == HudLayout.BODY) columns else 1"),
         )

@@ -55,8 +55,12 @@ const VAULT_PATH: &str = "/api/vault/organizer/enabled";
 /// word (tests/fixtures/asks-first-cases.json checks it). Grew from 7 to 12 on
 /// 2026-10-08: the audit found five rows running without asking and switchable
 /// nowhere. `browse_model_catalog` (leaves this PC) and `rollback_model` (the
-/// undo for a switch must never wait) stay off the list, on purpose.
-pub(crate) const SWITCHABLE: [&str; 12] = [
+/// undo for a switch must never wait) stay off the list, on purpose. Grew to
+/// 13 on 2026-11-10 with `github_inspect`: the owner's "make GitHub reads
+/// card-free" decision, so the one action the four GitHub read tools share can
+/// be turned to don't-ask from the page (ONE card + Windows Hello; READS ONLY -
+/// nothing on GitHub changes).
+pub(crate) const SWITCHABLE: [&str; 13] = [
     "calendar_read",
     "email_read",
     "notes_search",
@@ -69,6 +73,7 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
     "read_logseq_page",
     "create_logseq_page",
     "power_manage",
+    "github_inspect",
 ];
 
 /// Lockdown (2026-09-28, `jarvis_asks_first.LOCKDOWN`): not an action but
@@ -78,12 +83,22 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 /// Windows Hello on the PC, that turns it off (held on a stale link).
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
+/// The master GROUP switch (2026-11-10, the owner's ruling): ONE switch that
+/// offers/removes the twenty union tools together, sent through the SAME
+/// `set_tool_enabled` command and `POST /api/asks_first/tools` body as a tool
+/// (`{"tool": "github_tools_group", "enabled": true}`). It is NOT a model tool
+/// and NOT an entry in [`TOOLS_SWITCHABLE`]: the PC's `tools.github_group`
+/// object carries its row, and its ON card writes the twenty names in one atomic
+/// step on the PC. The phone never sends it (it is read-only there).
+pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
+
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 67 at
-/// 2026-11-10 (62 at 2026-11-09; Wave 13 added the carded repository create,
-/// wave 14 the cardless `project_read`; Wave 16 added the read-only PR
-/// cockpit, the carded merge and the carded fix-and-push, and wave 16E the
-/// two local review gates - the review packet and the record check)
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 74 at
+/// 2026-11-11 (67 at 2026-11-10: 62 at 2026-11-09; Wave 13 added the carded
+/// repository create, wave 14 the cardless `project_read`; Wave 16 added the
+/// read-only PR cockpit, the carded merge and the carded fix-and-push, wave
+/// 16E the two local review gates, and the parity pass the full pull-request
+/// read plus six more carded writes)
 /// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
 /// pack-manager tools that ship ON, hands-free's send_text_message and the
 /// approval-policy tool's own row): the
@@ -92,7 +107,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 67] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 74] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -177,6 +192,16 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 67] = [
     "github_pr_scan",
     "github_merge_pr",
     "github_fix_and_push",
+    // Wave 16 parity (2026-11-10): the full pull-request read and the six more
+    // carded writes of the 22:30/23:00 rulings. Each has its own switch row on
+    // the Tools page; the twenty-name group switch above covers all of them.
+    "github_pr_detail",
+    "github_open_pr",
+    "github_workflow",
+    "github_issue_labels",
+    "github_edit_pr",
+    "github_pr_review",
+    "github_issue_state",
     "approval_policy",
 ];
 
@@ -298,7 +323,11 @@ pub(crate) fn tool_body(tool: &str, enabled: bool) -> Result<serde_json::Value, 
     if !plausible_tool_name(tool) {
         return Err(TOOLS_NOT_ON_LIST.to_string());
     }
-    if enabled && !TOOLS_SWITCHABLE.contains(&tool) {
+    // The master GitHub group switch (2026-11-10) is ONE of the names this
+    // command accepts, although it is not a model tool: the PC writes the ten
+    // GitHub tool names for it. It is accepted in both directions; OFF is the
+    // same instant "narrow it" change every tool's OFF is.
+    if enabled && tool != GITHUB_TOOLS_GROUP && !TOOLS_SWITCHABLE.contains(&tool) {
         if let Some((_, note)) = TOOLS_NO_SWITCH.iter().find(|(name, _)| *name == tool) {
             return Err((*note).to_string());
         }
@@ -441,7 +470,8 @@ pub async fn set_vault_organizer_enabled(
 mod tests {
     use super::{
         asks_first_answer, change_answer, held_on_stale, tier_body, tool_body, ASKS_FIRST_MISSING,
-        LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_NO_SWITCH, TOOLS_SWITCHABLE,
+        GITHUB_TOOLS_GROUP, LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_NO_SWITCH,
+        TOOLS_SWITCHABLE,
     };
 
     /// The real answers, made by `tools/gen_asks_first_cases.py`.
@@ -479,6 +509,53 @@ mod tests {
             TOOLS_NOT_ON_LIST
         );
         assert_eq!(doc["words"]["lockdown_action"].as_str().unwrap(), LOCKDOWN);
+        // 2026-11-10: the master GitHub group switch's id and words are the
+        // PC's own, and the group is a separate object - never an item of the
+        // per-tool list, so that list's count does not move for it.
+        assert_eq!(
+            doc["words"]["github_group"].as_str().unwrap(),
+            GITHUB_TOOLS_GROUP
+        );
+        let group_tools: Vec<&str> = doc["words"]["github_group_tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect();
+        assert_eq!(group_tools.len(), 20, "the group speaks for twenty tools");
+        assert_eq!(
+            doc["words"]["github_group_title"].as_str().unwrap(),
+            "Offer GitHub tools to the AI model"
+        );
+        assert!(doc["words"]["github_group_what"]
+            .as_str()
+            .unwrap()
+            .contains("every use is still decided by \"Ask me first\""));
+        let group = &doc["cases"]["pc_github_group_on"]["tools"]["github_group"];
+        assert_eq!(group["id"].as_str().unwrap(), GITHUB_TOOLS_GROUP);
+        assert_eq!(group["on"], true);
+        assert_eq!(group["on_count"], 20);
+        assert_eq!(group["total"], 20);
+        let partial = &doc["cases"]["pc_github_group_partial"]["tools"]["github_group"];
+        assert_eq!(partial["on"], false, "a partial list is never shown as on");
+        assert_eq!(partial["partial"], true);
+        assert_eq!(
+            doc["cases"]["pc_github_group_card_waiting"]["tools"]["github_group"]["waiting"],
+            true
+        );
+        for case in [
+            "pc_shipped",
+            "pc_github_group_on",
+            "pc_github_group_partial",
+        ] {
+            let items = doc["cases"][case]["tools"]["items"].as_array().unwrap();
+            assert!(
+                items
+                    .iter()
+                    .all(|i| i["id"].as_str().unwrap() != GITHUB_TOOLS_GROUP),
+                "{case}: the group is NOT a per-tool item"
+            );
+        }
         // 2026-11-04: the three no-switch sentences are the PC's own words, so
         // the app can never refuse a name it DOES know with "does not know it".
         let notes = doc["words"]["no_switch_note"].as_object().unwrap();
@@ -538,6 +615,23 @@ mod tests {
         }
         assert!(held_on_stale(true));
         assert!(!held_on_stale(false));
+    }
+
+    #[test]
+    fn the_github_group_switch_goes_by_the_same_command_both_ways() {
+        // 2026-11-10: the master group switch is accepted by the SAME command
+        // and body as a tool, in both directions. ON raises the PC's one card
+        // (Windows Hello) and is held on a stale link; OFF is instant.
+        let on = tool_body(GITHUB_TOOLS_GROUP, true).unwrap();
+        assert_eq!(on["tool"], GITHUB_TOOLS_GROUP);
+        assert_eq!(on["enabled"], true);
+        let off = tool_body(GITHUB_TOOLS_GROUP, false).unwrap();
+        assert_eq!(off["enabled"], false);
+        assert!(held_on_stale(true), "ON is loosening: held on a stale link");
+        assert!(!held_on_stale(false), "OFF is never held");
+        // It is not a model tool and not a per-tool row, so the app must never
+        // pretend it is one: the contract's own list does not contain it.
+        assert!(!TOOLS_SWITCHABLE.contains(&GITHUB_TOOLS_GROUP));
     }
 
     #[test]

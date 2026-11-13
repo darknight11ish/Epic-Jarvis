@@ -16,12 +16,16 @@ import kotlinx.serialization.json.put
  * `hud-layout.js` idea (docs/ARCHITECTURE.md section 8, H1/H2), adapted to
  * this screen's own geometry and card ids.
  *
- * WHAT IT IS, IN PLAIN WORDS. The Home screen is arranged in four ordered
- * sections - a top strip, a hero, the body and the bottom composer - and every
- * HOME CARD lives in one section in a chosen order. This module says which
- * cards exist, which arrangement each of the five built-in presets is, and how
- * an untrusted document (a hand-edited one, one pasted from a computer, an old
- * one) becomes a safe layout.
+ * WHAT IT IS, IN PLAIN WORDS. The app's cards are arranged in four ordered
+ * sections. Three of them - the hero, the body and the bottom composer - are
+ * drawn on the Home screen. The fourth, the top strip, is SPLIT since
+ * 2026-11-10 (the owner's ask: the strip sat on top of Home and took the room
+ * the conversation needed): its two SAFETY cards stay on Home as one compact
+ * row ([homeStrip]), and its ordinary cards open from the app's More menu
+ * ([moreStrip]). Every HOME CARD lives in one section in a chosen order. This
+ * module says which cards exist, which arrangement each of the five built-in
+ * presets is, and how an untrusted document (a hand-edited one, one pasted from
+ * a computer, an old one) becomes a safe layout.
  *
  * THE CARD IDS ARE THE GENERATED CATALOGUE'S. Every ordinary card is one
  * `MenuCatalog` id this phone actually has (`Menu.phone == true`), so a card
@@ -50,12 +54,33 @@ object HudLayout {
     /** The version of the document shape this build reads and writes. */
     const val VERSION = 1
 
-    /** The four ordered sections, in the order they are drawn. */
+    /**
+     * The top strip's section id. Two of its cards are always on Home, drawn
+     * COMPACT ([homeStrip]); the rest open from the **More menu** ([moreStrip]).
+     * The id is still `top_strip` and is never renamed: a layout the owner saved
+     * keeps its cards where he put them. The words the owner reads for it are
+     * still "Top strip" (`ui/screens/EditHudScreen.kt`'s `HUD_SECTION_WORDS`).
+     */
     const val TOP_STRIP = "top_strip"
     const val HERO = "hero"
     const val BODY = "body"
     const val COMPOSER = "composer"
-    val SECTIONS = listOf(TOP_STRIP, HERO, BODY, COMPOSER)
+
+    /**
+     * Every section, in the order the editor lists them: the three full-card
+     * Home sections first, in the order Home draws them, then the top strip
+     * (the compact safety row on Home and the More menu's cards).
+     */
+    val SECTIONS = listOf(HERO, BODY, COMPOSER, TOP_STRIP)
+
+    /**
+     * The sections the Home screen draws as FULL-WIDTH CARDS, in order. It does
+     * not include [TOP_STRIP]: since 2026-11-10 that section is split - its
+     * safety cards are drawn by [homeStrip] as one compact row (they must stay
+     * on Home: a safety control is never hidden behind a menu), and its ordinary
+     * cards open from the More menu ([moreStrip]).
+     */
+    val HOME_SECTIONS = listOf(HERO, BODY, COMPOSER)
 
     /** The narrowest width (dp) at which the body draws two columns. */
     const val TWO_COLUMN_DP = 600
@@ -67,8 +92,10 @@ object HudLayout {
 
     /**
      * Every card the Home HUD can draw. `menu` is the generated catalogue id
-     * backing it (null for the fixed safety surfaces); [protected] cards may
-     * never be hidden and are forced present by [normalize].
+     * backing it (null for the fixed safety surfaces); a [safety] card may never
+     * be hidden and is forced present by [normalize] - and when it sits in
+     * [TOP_STRIP] it is drawn on Home as a compact row ([homeStrip]), never
+     * offered from the More menu alone.
      */
     data class Card(
         val id: String,
@@ -91,6 +118,17 @@ object HudLayout {
      * The home cards, in their default section. The menu-backed ones are REAL
      * catalogue ids (the phone's own), so the same hiding and the same words
      * apply here as everywhere else.
+     *
+     * THE TOP STRIP IS SPLIT (2026-11-10). Its two SAFETY cards - the approvals
+     * queue and the emergency stop - stay on Home, drawn as one compact row
+     * ([homeStrip]): the owner asked for the strip's height back, not for the
+     * safety controls to hide behind a menu. Its three informational cards -
+     * Right now, Attention budget and What Jarvis is doing - open from the More
+     * menu ([moreStrip]), because they are things to check, not things to act
+     * on in a hurry. The split is decided by `safety`, not by an edit, so no
+     * preset, edit or pasted document can move the safety pair off Home (the
+     * approvals and emergency stop can be moved between sections like any other
+     * card, but they are forced present wherever they are).
      */
     val CARDS: List<Card> = listOf(
         // The three safety surfaces. Never hidden, never imported out.
@@ -106,6 +144,8 @@ object HudLayout {
         // keeps the feature, and `settings.appearance-card` is still the menu
         // that hides it there.
         Card("entry.voice-check", "Voice check", "Say one line and hear how it sounds.", HERO, menu = "entry.voice-check"),
+        // The three "Now" cards: the top strip's informational half. They open
+        // from the More menu beside the chat's own controls (2026-11-10).
         Card("brain.now.right-now", "Right now", "What Jarvis is doing at this moment.", TOP_STRIP, menu = "brain.now.right-now"),
         Card("brain.now.budget", "Attention budget", "How much Jarvis may interrupt you today.", TOP_STRIP, menu = "brain.now.budget"),
         Card("brain.now.trace", "What Jarvis is doing", "The steps behind the last answer.", TOP_STRIP, menu = "brain.now.trace"),
@@ -192,7 +232,9 @@ object HudLayout {
     /**
      * The five built-in presets, in the order the picker draws them. They are
      * arrangements of the SAME cards declared above; [normalize] still forces
-     * the protected ones in, so no preset can remove a safety surface.
+     * the protected ones in, so no preset can remove a safety surface. A preset
+     * that puts an ordinary card in [TOP_STRIP] is putting it in the More menu's
+     * strip (the safety cards there stay on Home, drawn compact).
      */
     val BUILT_IN_PRESETS: List<Preset> by lazy {
         listOf(
@@ -434,6 +476,29 @@ object HudLayout {
 
     /** How many columns the body uses at this width. */
     fun columnsAt(widthDp: Int): Int = if (widthDp >= TWO_COLUMN_DP) 2 else 1
+
+    // ------------------------------------------------- the split top strip
+
+    /**
+     * The top strip's SAFETY cards: the ones that stay on the Home screen,
+     * drawn as one compact row rather than full cards (2026-11-10). They keep
+     * their place in the owner's layout - the editor still moves them within
+     * [TOP_STRIP] - and [visible]'s rule that a safety card cannot be hidden
+     * applies, so the row is never empty while the strip holds them. A safety
+     * card the owner moves to another section is drawn as that section's card
+     * instead, exactly as the layout says.
+     */
+    fun homeStrip(layout: Layout, view: MenuView): List<String> =
+        visible(layout, view).getValue(TOP_STRIP).filter { isProtected(it) }
+
+    /**
+     * The top strip's ordinary cards: the ones the More menu offers (2026-11-10).
+     * They used to sit on Home as full cards, which is the room the owner asked
+     * for back. The hide rules still apply through [visible], so a menu hidden
+     * by voice or in Settings leaves null here too.
+     */
+    fun moreStrip(layout: Layout, view: MenuView): List<String> =
+        visible(layout, view).getValue(TOP_STRIP).filterNot { isProtected(it) }
 
     // ------------------------------------------------------- JSON (portability)
 

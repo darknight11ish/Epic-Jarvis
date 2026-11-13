@@ -107,6 +107,11 @@ object AsksFirst {
         // rollback_model (the undo for a switch must never wait) stay off.
         "read_files_readonly", "read_joplin_note", "read_logseq_page",
         "create_logseq_page", "power_manage",
+        // 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free": the
+        // one action the four GitHub read tools share. The phone shows the row
+        // read-only like every other loosening switch; turning it ON (stricter)
+        // is the only direction it sends. READS ONLY - nothing on GitHub changes.
+        "github_inspect",
     )
 
     data class Switch(val asks: Boolean, val canLoosen: Boolean)
@@ -153,7 +158,8 @@ object AsksFirst {
     /** The PC's own sentence for a switch page opened away from the PC. */
     const val TOOLS_PC_ONLY =
         "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
-            "first). It takes one approval card and Windows Hello."
+            "first). It takes one approval card - approve it on the PC with Windows Hello, or " +
+            "on your phone with its own fingerprint or PIN."
 
     /** The read-only state lines the phone draws for one tool. */
     const val TOOLS_ON = "On: the AI model is offered this."

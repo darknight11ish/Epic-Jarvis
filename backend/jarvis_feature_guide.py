@@ -856,15 +856,19 @@ TOOL_SWITCHES = {
     # The GitHub research tool (jarvis_agent TOOLS "github_search"; its switch
     # title is "GitHub research" in jarvis_asks_first.tools_status).
     "github-research": ("github_search",),
-    # The ten on-demand tools: one switch each, all off by default. The list is
-    # every model tool in the connected surface, because the row's own `where`
-    # names all ten - a short list here said "six switches" for a surface with
-    # ten (measured 2026-11-10, the 2026-11-07 miss plus wave 16's three).
+    # The sixteen on-demand tools: one switch each, all off by default. The list
+    # is every model tool in the connected surface, because the row's own `where`
+    # names all sixteen - a short list here said "six switches" for a surface
+    # with ten (measured 2026-11-10, the 2026-11-07 miss, wave 16's three and
+    # the 22:30 ruling's six).
     "connected-github": ("github_list", "github_read_file", "github_ci_status",
                          "github_comment", "github_open_issue",
                          "github_rerun_workflow", "github_create_repo",
                          "github_pr_scan", "github_merge_pr",
-                         "github_fix_and_push"),
+                         "github_fix_and_push", "github_pr_detail",
+                         "github_open_pr", "github_workflow",
+                         "github_issue_labels", "github_edit_pr",
+                         "github_pr_review", "github_issue_state"),
 }
 
 
@@ -4053,7 +4057,10 @@ SELF_FACTS = {
                    "scratch folder on this PC, then push commits a person made there to "
                    "that pull request's own branch, two stages and two cards. Every one "
                    "of those six writes asks on its own approval card and is in "
-                   "jarvis_agent.NEEDS_A_PERSON. It never force-pushes, squash-merges, "
+                   "jarvis_agent.NEEDS_A_PERSON. The four reads ship asking too, and "
+                   "since 2026-11-10 the owner can make GitHub reads card-free from "
+                   "Settings, What asks first - turning the card back on is instant. "
+                   "It never force-pushes, squash-merges, "
                    "rebases, uses an admin bypass or auto-merge, bypasses required checks, "
                    "pushes directly to main, deletes or closes a repository or branch, "
                    "approves a pull request, dispatches a workflow or touches gists, and "
@@ -4094,7 +4101,9 @@ SELF_FACTS = {
                   "on its own approval card, and fix-and-push: copy a failing pull "
                   "request into an isolated folder on this PC, then push commits a person "
                   "made there to that pull request's own branch - two stages and two "
-                  "cards. It never force-pushes, squash-merges, rebases, uses an admin "
+                  "cards. The four reads ship asking too, and the owner can make "
+                  "GitHub reads card-free from Settings, What asks first. It never "
+                  "force-pushes, squash-merges, rebases, uses an admin "
                   "bypass or auto-merge, bypasses required checks, pushes to main, "
                   "deletes or closes a repository or branch, approves a pull request, "
                   "dispatches a workflow or touches gists, and there is no tool that "
