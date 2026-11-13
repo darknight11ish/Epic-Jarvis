@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
- "built_at": "2026-11-12T19:27:33-08:00",
+ "ref": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+ "built_at": "2026-11-12T21:37:43-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6282,6 +6282,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "date": "2026-11-12",
+   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+  },
+  {
+   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
+  },
+  {
    "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
    "date": "2026-11-12",
    "subject": "fix(union): make the gate base the state the patch stack really installs"
@@ -6370,16 +6380,6 @@
    "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
    "date": "2026-11-10",
    "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
-  },
-  {
-   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
-  },
-  {
-   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
-   "date": "2026-11-10",
-   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
   }
  ],
  "top_level": [
