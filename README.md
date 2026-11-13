@@ -1,6 +1,6 @@
 # Atlas
 
-> **The name.** This page calls the product **Atlas**. The repository is still `Epic-Jarvis`, and the installer, folders, commands, data paths and API headers keep their `jarvis` names, so where your data lives and how updates arrive do not change. Window titles, the tray, the HUD's brand, the phone's app label and this page use Atlas; chat replies, most in-app help text and the spoken wake word still say Atlas until a later wording pass.
+> **The name.** This page calls the product **Atlas**. The repository is still `Epic-Jarvis`, and the installer, folders, commands, data paths and API headers keep their `jarvis` names, so where your data lives and how updates arrive do not change. Window titles, the tray, the HUD's brand, the phone's app label and this page use Atlas; chat replies, most in-app help text and the spoken wake word still say Jarvis until a later wording pass.
 
 **A local-first personal AI assistant for one person: your Windows 11 PC and your Android phone.**
 
