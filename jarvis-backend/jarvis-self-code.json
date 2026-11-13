@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d1e98064fd76215f3caf3c25149de2e5efd888f0",
- "built_at": "2026-11-12T21:28:35-08:00",
+ "ref": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
+ "built_at": "2026-11-13T06:11:20-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6289,9 +6289,94 @@
  ],
  "recent_commits": [
   {
+   "sha": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
+   "date": "2026-11-13",
+   "subject": "fix(records): store the four patch versions main's history was missing"
+  },
+  {
+   "sha": "5efc9f444d150e2ed584b6eb7a1dd6faa933c888",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map and recent-changes module"
+  },
+  {
+   "sha": "7ba6e650aebef0717efd6aeec3fea2c1d67909ca",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into feature/on-device-ai-and-mobile-harness"
+  },
+  {
+   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+  },
+  {
+   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+  },
+  {
+   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
+   "date": "2026-11-12",
+   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+  },
+  {
+   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+  },
+  {
+   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "date": "2026-11-12",
+   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+  },
+  {
    "sha": "d1e98064fd76215f3caf3c25149de2e5efd888f0",
    "date": "2026-11-12",
    "subject": "fix(mobile): remove the fake on-device engine and offline sync, keep the design and an honest plate"
+  },
+  {
+   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
+  },
+  {
+   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
+   "date": "2026-11-12",
+   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
+  },
+  {
+   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
+  },
+  {
+   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
+   "date": "2026-11-12",
+   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the main merge"
+  },
+  {
+   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
+   "date": "2026-11-12",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
+  },
+  {
+   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
+   "date": "2026-11-12",
+   "subject": "fix(union): make the gate base the state the patch stack really installs"
+  },
+  {
+   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
+   "date": "2026-11-12",
+   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
   },
   {
    "sha": "8ef4acf0c691f7785d368eece72347c00a9e5f60",
@@ -6302,98 +6387,13 @@
    "sha": "9b0ef63d64e61a5cfc676409381bf56d34071ff2",
    "date": "2026-11-12",
    "subject": "fix(ci): align SettingsSearch row order and restore offline sync twin parity in jarvis-backend/_where.py"
-  },
-  {
-   "sha": "860e34311b67ecae5c35fb4bdf6df7b32cbb3743",
-   "date": "2026-11-12",
-   "subject": "fix(mobile): resolve unit test failures in Settings index, MenuPlaces, and ProjectExplorer mapPath"
-  },
-  {
-   "sha": "78d1488ce2913ae07bae3c3d76eb87a0d8ddd2dd",
-   "date": "2026-11-12",
-   "subject": "fix(mobile): resolve OnDeviceModelTest Config param and zero-jargon plain text phrasing"
-  },
-  {
-   "sha": "a2f86d00548cd683b19845c0f709bf5c68a1183f",
-   "date": "2026-11-12",
-   "subject": "fix(mobile): resolve Kotlin UI plate compile errors, self-code map, and backup twin parity"
-  },
-  {
-   "sha": "4f12cf3f7e5e2311f07aa9ff1ad1fbe8fc63e752",
-   "date": "2026-11-12",
-   "subject": "fix(mobile): resolve kotlin compile issues and zero-jargon config keys in feature guide"
-  },
-  {
-   "sha": "c1f8cab1e6522f813d9ee4c871dfd00667cde5e0",
-   "date": "2026-11-12",
-   "subject": "fix(offline-sync): expand 404 refusal message to pass zero-jargon audit"
-  },
-  {
-   "sha": "4ab4b28cc4bbaeb86e213b742cc2330eaee2f47b",
-   "date": "2026-11-12",
-   "subject": "feat(mobile): on-device AI, offline two-way sync, and Mobile-Harness workspace integrations"
-  },
-  {
-   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
-   "date": "2026-11-11",
-   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
-  },
-  {
-   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
-   "date": "2026-11-11",
-   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
-  },
-  {
-   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
-  },
-  {
-   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
-  },
-  {
-   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
-   "date": "2026-11-10",
-   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
-  },
-  {
-   "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
-   "date": "2026-11-10",
-   "subject": "fix: the record check's two reasons use plain words (wave 16E)"
-  },
-  {
-   "sha": "8291d0ffc258ad205d87ded537044f970e92f813",
-   "date": "2026-11-10",
-   "subject": "fix(desktop): wave 16E's two switchable rows reach the Rust, desktop and Android pin lists"
-  },
-  {
-   "sha": "aabb72128b27b1e469e786abb4f5ec6749120d4c",
-   "date": "2026-11-10",
-   "subject": "feat(github): wave 16E - a review packet and a record check before a push"
-  },
-  {
-   "sha": "1087d81c11f59f35059032c54d84da81c18b02a1",
-   "date": "2026-11-10",
-   "subject": "Merge pull request #1222 from darknight11ish/integration/wave16-2026-11-10"
-  },
-  {
-   "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
-   "date": "2026-11-10",
-   "subject": "test(ci): the wave-16 CI catch - diet hints, AST source pins, a real probe, and the no-vec skip"
-  },
-  {
-   "sha": "9694ff26fcf96c6dbc620051101fad2a4e9f54c6",
-   "date": "2026-11-10",
-   "subject": "test(live-parity): drive the Q2 probe cache instead of counting turns (CI catch)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1436
+   "files": 1440
   },
   {
    "path": "jarvis-desktop/",
@@ -6507,15 +6507,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5632,
+  "tracked_files": 5636,
   "covered": 5154,
-  "excluded": 478,
+  "excluded": 482,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 222,
+   "count": 226,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
