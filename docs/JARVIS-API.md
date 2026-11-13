@@ -35787,9 +35787,9 @@ last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 
 **The cockpit is a READ, and it prints the number the merge needs.** `github_pr_scan` sends only `GET` requests, changes nothing, and prints, for every open pull request, its number, its title, one of the five words (merge-ready / blocked / conflicted / running / draft), the reason, its base branch and its **full 40-character head commit** - `#12 <title>: merge-ready - <why>; head <40 hex>; base main`. That whole line is the point: `github_merge_pr` requires the exact 40-hex head commit, the title and the base branch, and the fix-and-push prepare reads from the same place, so the owner (and the model) copy them straight off the cockpit answer onto the card. The cockpit never merges, pushes or changes anything itself; that is always the separate carded tool.
 
-### 190.2 The tiers: `ask`, on its own action, and never `auto`
+### 190.2 The tiers: thirteen `ask` actions, and one that ships `auto` on purpose
 
-**Fourteen gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the five reads share), the **twelve carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review` and `github_issue_state` - and (wave 16B) `github_fix_write`. **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
+**Thirteen gate actions ship `ask` in the shipped `[autonomy.tiers]`:** the **twelve carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review` and `github_issue_state` - and (wave 16B) `github_fix_write`. **`github_inspect` is the fourteenth gate action and it deliberately does NOT ship `ask`: its line is `auto`**, because the five read tools share that one action and the owner's 2026-11-10 23:00 decision made reads card-free by default. The paragraph below is that decision, and the switchable row on What asks first is how the card is put back - so this section and that one say the same thing instead of contradicting each other two paragraphs apart (corrected 2026-11-13; the 2026-11-13 awareness audit measured the old heading and the old "every one `ask`" sentence against the shipped file). **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
 
 **The reads are card-free by default - and the owner can put the card back (2026-11-10 23:00 PT).** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so the owner's decision that evening is the shipped default: the five read tools do NOT ask. The switchable read row (`github_inspect`) on the What asks first page is how the card is put back - ONE card plus Windows Hello to loosen, instant from either app - and every WRITE still asks its own card. §216 and §217 record both decisions.
 
@@ -35811,7 +35811,7 @@ The card prints the **literal address** of every request and, for a comment or a
 
 ### 190.6 Switching it on
 
-All ten ship **SWITCHED OFF**. Settings, **What asks first**, under **"Let the AI use this"** (group **"Jarvis's own tools"**) holds **one switch per tool** - `github_list`, `github_read_file`, `github_ci_status`, `github_pr_scan`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr` and `github_fix_and_push` - and turning one ON from the PC is one card plus Windows Hello while OFF is instant from either app (`POST /api/asks_first/tools`; the owner's decision of 2026-11-04). Adding the name to `[tools].enabled` by hand still works and is what the switch writes. The Reach page lists each one as off until then. The same page has the switches for `github_search` (GitHub research) and every other reading tool.
+All twenty ship **SWITCHED OFF**. Settings, **What asks first**, under **"Let the AI use this"** (group **"Jarvis's own tools"**), offers them as **one master group switch** - the group id is **`github_tools_group`**, its title is "Offer GitHub tools to the AI model" - plus **one switch per tool**: the eighteen GitHub tools (`github_search` and the seventeen in `jarvis_agent.GITHUB_TOOLS`) and both local review gates (`review_changes`, `check_records`). `jarvis_asks_first.GITHUB_TOOLS` is that list, and it is the one place it is written: this paragraph used to name ten of them and call that "all ten", which is exactly the kind of hand-typed list that drifts (corrected 2026-11-13). Turning the group ON from the PC is one card plus Windows Hello while OFF is instant from either app (`POST /api/asks_first/tools`; the owner's decision of 2026-11-04). Adding a name to `[tools].enabled` by hand still works and is what the switches write. The Reach page lists each one as off until then. The same page has the switches for `github_search` (GitHub research) and every other reading tool.
 
 `backend/github-tools.patch` gives `jarvis_gate.py` the **fourteen** gate actions (the reads' own `github_inspect`, the **twelve** carded actions and the wave-16B `github_fix_write`) and **eighteen** `_TOOL_ACTIONS` entries - the seventeen tools plus the fix tool's own `github_fix_write` stage name (a name the gate maps to itself, because the tool is still `github_fix_and_push` and picks it per stage) - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
 
@@ -39044,3 +39044,39 @@ are refused by the shared list while Notepad is allowed; no answer contains any
 of the dropped claims and every answer says the visual half is not built; a
 corrupt settings value is never echoed into an answer; and a private chat's
 "turn off avatar" returns the one refusal with the file on disk unchanged.
+
+## 220. The code-protection check: what is installed, and never a run (2026-11-12, documented 2026-11-13)
+
+`backend/jarvis_obfuscation.py` answers one question and refuses the other. `format_tool_guidance()` lists the code-protection
+programs this PC actually has (javascript-obfuscator, PyArmor, ProGuard/R8, `strip`/`obfstr`, each with the evidence the check
+really found) and starts nothing but a tool's own `--version`; `jarvis_quick.py`'s two intents are the door:
+
+* `obfuscate_tools_info` - "what obfuscation tools do you support?", "list code obfuscation tools", "which hardening tools are
+  installed?". Read-only, card-free, and it opens with what is NOT done.
+* `project_obfuscate_unavailable` - any request to obfuscate, harden or protect code, **including the question form** ("how do I
+  obfuscate my project", since 2026-11-13; it matched nothing before this and went to the model). One fixed sentence:
+  *"Jarvis cannot obfuscate or harden code in this build, so nothing was run and no approval card was raised."*
+
+**There is no `project_obfuscate` action.** No tier line, no gate action, no card, no route, no tool the model can call, and
+nothing that writes a file. Both intents are in `READ_ONLY_INTENTS` and on the private-chat allowlist, because both write
+nothing. `backend/test_obfuscation.py` proves it, including that a path-shaped name (`obfuscate project ..`) is answered rather
+than resolved; `backend/test_feature_control_phrases.py` pins the question form. There is no feature-list row for it on purpose:
+a row in `features/features.json` is drawn in both apps' Features pages, and a "code protection" row would be the claim this
+check exists to refuse.
+
+## 221. VoiceStudio's typed switch, and where the on-device model's answer lives (2026-11-13)
+
+**VoiceStudio's switch is typed.** `[voicestudio] enabled` in `jarvis-framework.toml` (off in the shipped template) now has three
+doors, and all three write that one line: `backend/jarvis_voicestudio.set_enabled()` (the raw writer, atomic, refusing a file it
+cannot change safely), the two typed sentences - `voicestudio_set` on "turn on voicestudio" / "turn off voicestudio" and
+`voicestudio_state` on "is voicestudio on" - and the desktop Settings card "A second voice program (VoiceStudio)". Turning it ON
+is ONE `change_own_config` card plus Windows Hello and nothing is written before the answer; OFF is instant and cardless
+(`jarvis_voicestudio.request_enabled`). No route is added and the phone has no switch for it (§8). **Nothing starts the program**:
+it is still started by hand with `tools\voicestudio_sidecar.ps1 -Start`, and the speaking-voice wiring is the next slice, so the
+answer says switching it on changes nothing you would hear. `backend/test_voicestudio.py` and
+`backend/test_feature_control_phrases.py` are the proof.
+
+**The on-device model has no route and no section, by design.** Nothing that runs a model ships in the phone app, so there is
+nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `jarvis_quick.py`
+(`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
+`docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.

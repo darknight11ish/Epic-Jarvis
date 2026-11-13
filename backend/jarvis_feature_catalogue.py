@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5fcb0b5e6668063c0050a5b4c64df484e9c1b3f5ee202b2a418ffd39d62502cb); the apps' Features pages read their own
+`features/features.json` (sha256 d5a87392b4dcde20c6183d373a53d355e515ee7564e66b0bf4cf51506db6db84); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5fcb0b5e6668063c0050a5b4c64df484e9c1b3f5ee202b2a418ffd39d62502cb"
+SOURCE_SHA256 = "d5a87392b4dcde20c6183d373a53d355e515ee7564e66b0bf4cf51506db6db84"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -538,7 +538,7 @@ FEATURES = (
         "group": "Memory",
         "title": "Your past chats",
         "what": "The chats Jarvis kept, with the switches that govern keeping them.",
-        "where": "Brain, History. In the HUD, the History button in the left column. On the phone, the History row in the Brain.",
+        "where": "Brain, History. In the HUD, the History button in the left column. On the phone it also opens from the More menu's History row on Home; the Brain's History row is still there.",
         "asks": "Turning keeping back on raises a card; deleting one chat is instant; forgetting what a chat taught asks first.",
         "limit": "Kept on the PC, encrypted, by default. This phone keeps none of it.",
         "surface": "both",
@@ -1946,8 +1946,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "A second voice program (VoiceStudio)",
         "what": "A separate program on this PC that can speak in its own voices. Jarvis can ask it for one sentence over a loopback address on this PC and gets a sound file back; nothing else is sent.",
-        "where": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
-        "asks": "No card in this slice: nothing starts by itself, no boot task and no service is made, and the sentence never leaves this PC.",
+        "where": "Off by default and not connected to the voice Jarvis answers in yet. Turn it on in Settings, The PC itself (\"A second voice program (VoiceStudio)\"), or say \"turn on voicestudio\"; turning it off is instant. The program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "asks": "Turning it on raises one approval card plus Windows Hello; turning it off is instant and shows no card. Nothing starts by itself either way: no boot task and no service is made, and the sentence never leaves this PC.",
         "limit": "Off by default. It needs about 1.95 GB of the 8 GB graphics card, and beside Jarvis's own models the machine had 382 MiB free at its peak - so it is started only when it is needed and never kept loaded beside them. The two model licences are personal, non-commercial use only, and they must be accepted once, by you, in VoiceStudio's own terms before it will speak at all.",
         "surface": "desktop",
         "surface_reason": "The program runs on this PC and is started by a PowerShell script on this PC. The phone has no switch for it, and a phone that could start a program on the PC would be a new power.",

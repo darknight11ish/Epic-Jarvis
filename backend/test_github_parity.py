@@ -1664,6 +1664,83 @@ def t_the_two_shipped_tomls_are_one_file_and_say_the_small_details():
         check(f"the shipped Settings copy says {needle!r}", needle in text, needle)
 
 
+def _s190_part(doc: str, section: str) -> str:
+    """One `### 190.x` subsection of docs/JARVIS-API.md, to the next `### `."""
+    start = doc.find(section)
+    if start < 0:
+        return ""
+    rest = doc[start + len(section):]
+    end = re.search(r"\n#{2,3} ", rest)
+    return rest[:end.start()] if end else rest
+
+
+def t_the_api_doc_190_agrees_with_the_code():
+    """The 2026-11-13 awareness audit's GAP-2: §190 contradicted itself.
+
+    Measured on `origin/main` a6f8496f: the heading said the tiers were "`ask`,
+    on its own action, and never `auto`", the first paragraph said "every one
+    `ask`" and counted `github_inspect` among them, and two paragraphs later the
+    same section said the five read tools do NOT ask - while the shipped
+    `[autonomy.tiers]` line for `github_inspect` is `auto`. §190.6 said "All ten
+    ship SWITCHED OFF" and named ten of the eighteen GitHub tools.
+
+    So this pin reads the shipped settings file (the same two byte-identical
+    files the check above reads) and the one tuple the master switch writes, and
+    holds the doc to them: the words cannot drift from the tiers again without
+    this suite failing.
+    """
+    doc_path = REPO / "docs" / "JARVIS-API.md"
+    if not doc_path.is_file():
+        skip("docs/JARVIS-API.md is not in this checkout, so §190 cannot be read")
+        return
+    doc = doc_path.read_text(encoding="utf-8")
+    s2 = _s190_part(doc, "### 190.2")
+    s6 = _s190_part(doc, "### 190.6")
+    check("§190.2 and §190.6 are both in the API doc", bool(s2 and s6), (len(s2), len(s6)))
+
+    tiers = _toml_tiers()[0][1]
+    ask_github = {a for a, t in tiers.items()
+                  if str(t) == "ask" and a.startswith("github_")}
+    check("the shipped settings file has thirteen GitHub actions at `ask`",
+          len(ask_github) == 13, sorted(ask_github))
+    check("... and `github_inspect` ships `auto` there",
+          str(tiers.get("github_inspect")) == "auto", tiers.get("github_inspect"))
+
+    named = set(re.findall(r"`(github_[a-z0-9_]+)`", s2))
+    check("§190.2 no longer claims every gate action is `ask`",
+          "Fourteen gate actions, every one" not in s2
+          and "and never `auto`" not in s2, s2[:200])
+    check("§190.2 says `github_inspect` ships `auto`",
+          "ships `auto`" in s2 or "its line is `auto`" in s2, s2[:400])
+    # `github_read` is named on purpose as the DIFFERENT action (the scheduled
+    # watch's own line, which ships `auto` and must stay so); it is not one of
+    # the thirteen. Every other GitHub action this subsection names is one.
+    check("... and that other action really is `auto`, not `ask`",
+          str(tiers.get("github_read")) == "auto", tiers.get("github_read"))
+    check("§190.2 names exactly the thirteen `ask` actions the file has",
+          named - {"github_inspect", "github_read"} == ask_github,
+          sorted((named - {"github_inspect", "github_read"}) ^ ask_github))
+
+    import jarvis_asks_first as AF
+    offered = tuple(AF.GITHUB_TOOLS)
+    check("the master group switch speaks for twenty tools", len(offered) == 20,
+          len(offered))
+    check("§190.6 names the group id rather than a hand-typed list",
+          "`github_tools_group`" in s6, s6[:300])
+    check("§190.6 counts every tool the group really offers",
+          "All " + __import__("jarvis_quick")._count_words(len(offered)) in s6,
+          [line for line in s6.splitlines() if line.startswith("All ")][:1])
+    check("... and the old 'All ten ship SWITCHED OFF' sentence is gone",
+          "All ten ship" not in s6, "All ten ship")
+    # No invented name: every backticked tool-shaped name in these two
+    # subsections is a real tool, a real gate action or the group id.
+    names = set(re.findall(r"`(github_[a-z0-9_]+|review_changes|check_records"
+                           r"|github_tools_group)`", s2 + s6))
+    known = set(AG.TOOLS) | set(tiers) | {"github_tools_group"}
+    check("every tool name §190.2/.6 prints is a real one",
+          names <= known, sorted(names - known))
+
+
 # --------------------------------------------------------------------------
 #   The run
 # --------------------------------------------------------------------------
@@ -1697,7 +1774,8 @@ if __name__ == "__main__":
                    t_every_write_is_ask_and_in_needs_a_person,
                    t_no_write_is_sent_without_a_person_saying_yes,
                    t_a_stale_event_stream_holds_the_yes,
-                   t_the_two_shipped_tomls_are_one_file_and_say_the_small_details):
+                   t_the_two_shipped_tomls_are_one_file_and_say_the_small_details,
+                   t_the_api_doc_190_agrees_with_the_code):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
- "built_at": "2026-11-13T06:24:00-08:00",
+ "ref": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
+ "built_at": "2026-11-13T09:56:55-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6303,6 +6303,46 @@
  ],
  "recent_commits": [
   {
+   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
+  },
+  {
+   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
+  },
+  {
+   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
+  },
+  {
+   "sha": "0eb5d93124b5ae7b7df13b851c5b525b1fd391e1",
+   "date": "2026-11-13",
+   "subject": "Merge H2 (PR #1228 at 5da9ba6) and H1 (PR #1227 at 50a2db3), with origin/main (ad895ed), into feature/roamies-capabilities"
+  },
+  {
+   "sha": "5da9ba6759d2ffa6113a44f2ba4685447177439e",
+   "date": "2026-11-13",
+   "subject": "Merge H1 (PR #1227 at 50a2db3) and origin/main (ad895ed) into feature/code-obfuscation-tools"
+  },
+  {
+   "sha": "50a2db3dbe65abff2b2b1b6d2b2460884180bd2c",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main (ad895ed) into feature/on-device-ai-and-mobile-harness"
+  },
+  {
+   "sha": "ad895ed1c013bda37904357bc77e63fef22a3ae6",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1234 from darknight11ish/fix/patch-history-rebuild-2026-11-13"
+  },
+  {
+   "sha": "9f2720dc807246c7d2a88fbc467c22d40cdcdc05",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the self-code map and recent-changes module for the patch-history fragments"
+  },
+  {
    "sha": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
    "date": "2026-11-13",
    "subject": "Merge H2d (PR #1228 at a90eace36), the self-code map rebuilt on its head"
@@ -6338,6 +6378,16 @@
    "subject": "fix(records): store the four patch versions main's history was missing"
   },
   {
+   "sha": "2b63ae5c986e0c03a239cca4efd08d528163bcb2",
+   "date": "2026-11-13",
+   "subject": "chore: keep the PR body out of the tree (it belongs in the PR, not the repository)"
+  },
+  {
+   "sha": "8e275dd30082af426196b14a6b869095da568813",
+   "date": "2026-11-13",
+   "subject": "fix(patch-history): rebuild the history the union's patch edits left out - main's required backend jobs were red"
+  },
+  {
    "sha": "5256d6c20c94ad9d2bb268bfb8b49a8791e6b657",
    "date": "2026-11-13",
    "subject": "Merge commit '30006a2f09fdb0ef9d793358af00fc6900e323df' into feature/roamies-capabilities"
@@ -6351,56 +6401,6 @@
    "sha": "5efc9f444d150e2ed584b6eb7a1dd6faa933c888",
    "date": "2026-11-13",
    "subject": "chore: regenerate the self-code map and recent-changes module"
-  },
-  {
-   "sha": "79935082edf0a7c25c4a6edadb5f92dfca442c75",
-   "date": "2026-11-13",
-   "subject": "Merge H2 (PR #1228) into the companion branch"
-  },
-  {
-   "sha": "3b0442a328e494af46e176aa2b3b1cb484225bed",
-   "date": "2026-11-13",
-   "subject": "Merge commit '7ba6e650aebef0717efd6aeec3fea2c1d67909ca' into feature/roamies-capabilities"
-  },
-  {
-   "sha": "e026613ec0b7c3ae73253d67ab0f926edea2ff24",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into feature/roamies-capabilities"
-  },
-  {
-   "sha": "825f93662b83a07fee217c6674cde96fde8ba8f1",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main and H1 (PR #1227) into the obfuscation branch"
-  },
-  {
-   "sha": "5b6b2da8d588da84dcc605fc4a5b11015d0713f2",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "7ba6e650aebef0717efd6aeec3fea2c1d67909ca",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "7f3efe9bd085541c87a37c9a879590cfa4813284",
-   "date": "2026-11-13",
-   "subject": "chore: regenerate the self-code maps for the AGPL removal"
-  },
-  {
-   "sha": "87f2617d045903ad1f47957e69bd226c984fd7ad",
-   "date": "2026-11-13",
-   "subject": "docs(companion): record that the AGPL-derived geometry and wave are gone"
-  },
-  {
-   "sha": "a7b4f7e2ab5ebbc7fc7808ace7f2977723c6c5d3",
-   "date": "2026-11-13",
-   "subject": "fix(companion): delete the AGPL-3.0-derived sphere and wave code"
-  },
-  {
-   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
   }
  ],
  "top_level": [
