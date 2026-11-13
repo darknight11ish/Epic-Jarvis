@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "938492a0cff389925968b14b6a570a59c84a7bcb",
- "built_at": "2026-11-12T20:37:54-08:00",
+ "ref": "3b0442a328e494af46e176aa2b3b1cb484225bed",
+ "built_at": "2026-11-13T04:29:22-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -396,6 +396,7 @@
     "backend/jarvis_handoff_mode.py",
     "backend/jarvis_home.py",
     "backend/jarvis_media.py",
+    "backend/jarvis_obfuscation.py",
     "backend/jarvis_open.py",
     "backend/jarvis_pc_facts.py",
     "backend/jarvis_pc_help.py",
@@ -411,7 +412,7 @@
     "backend/jarvis_tool_updates.py",
     "backend/jarvis_ui_control.py"
    ],
-   "file_count": 27,
+   "file_count": 28,
    "key_modules": [
     {
      "path": "backend/jarvis_ui_control.py",
@@ -437,7 +438,8 @@
     "backend/test_sandbox_exec.py",
     "backend/test_pc_facts.py",
     "backend/test_repomap.py",
-    "backend/test_companion.py"
+    "backend/test_companion.py",
+    "backend/test_obfuscation.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -1363,6 +1365,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/MoreMenuWords.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/NotesPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/NotificationStylesPlate.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/OnDeviceModelPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairByCode.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcHelpPlate.kt",
@@ -1592,6 +1595,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/HistoryViewTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HoldEntryTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HomeLinkWordingTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/HomeMoreMenuTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HomeNavRowTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HudEditScreenTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/HudLayoutTest.kt",
@@ -1880,7 +1884,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 968,
+   "file_count": 970,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -3873,6 +3877,7 @@
     "backend/test_gate_tool_actions.py",
     "backend/test_gate_touches.py",
     "backend/test_gate_unknown_risk.py",
+    "backend/test_github_authoring.py",
     "backend/test_github_parity.py",
     "backend/test_github_record.py",
     "backend/test_github_review.py",
@@ -4011,6 +4016,7 @@
     "backend/test_notify_prefs.py",
     "backend/test_notion_answer.py",
     "backend/test_notion_obsidian.py",
+    "backend/test_obfuscation.py",
     "backend/test_obscura.py",
     "backend/test_obsidian_notes.py",
     "backend/test_ocr_words.py",
@@ -4315,7 +4321,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 687,
+   "file_count": 689,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4590,11 +4596,19 @@
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/2026-11-09-wave14-project-read-presets-hud.md",
+    "changelog.d/2026-11-10-github-authoring-in-the-copy.md",
+    "changelog.d/2026-11-10-github-parity-actions.md",
     "changelog.d/2026-11-10-github-review-and-record-gate.md",
+    "changelog.d/2026-11-10-github-switch-door.md",
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
+    "changelog.d/2026-11-10-phone-approves-tool-switches.md",
+    "changelog.d/2026-11-10-phone-top-strip-in-more-and-history.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
+    "changelog.d/2026-11-11-github-union-0-2-448.md",
+    "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
+    "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4742,10 +4756,18 @@
     "decisions.d/2026-11-09-wave-13-reminders-github-creator.md",
     "decisions.d/2026-11-09-wave14-project-read-presets-hud.md",
     "decisions.d/2026-11-10-cockpit-two-column-ships.md",
+    "decisions.d/2026-11-10-github-authoring-in-the-copy.md",
     "decisions.d/2026-11-10-github-card-gated-merge-and-fix-push.md",
+    "decisions.d/2026-11-10-github-parity-actions.md",
     "decisions.d/2026-11-10-github-review-and-record-gate.md",
+    "decisions.d/2026-11-10-github-switch-door.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
+    "decisions.d/2026-11-10-phone-approves-tool-switches.md",
+    "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
+    "decisions.d/2026-11-11-github-union-0-2-448.md",
+    "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
+    "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -4929,6 +4951,7 @@
     "docs/MEMORY-SCOREBOARD.md",
     "docs/MEMORY-SCORES-2026-10-04.md",
     "docs/MENU-VISIBILITY-DESIGN.md",
+    "docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md",
     "docs/MODEL-TOPOLOGY.md",
     "docs/MODELS-ON-D-2026-10-10.md",
     "docs/MULTI-DEVICE-DESIGN.md",
@@ -5193,7 +5216,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 837,
+   "file_count": 854,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6085,6 +6108,7 @@
     "jarvis-backend/jarvis_notification_styles.py",
     "jarvis-backend/jarvis_notify_prefs.py",
     "jarvis-backend/jarvis_notion_obsidian.py",
+    "jarvis-backend/jarvis_obfuscation.py",
     "jarvis-backend/jarvis_obscura.py",
     "jarvis-backend/jarvis_ocr.py",
     "jarvis-backend/jarvis_ollama_contract.py",
@@ -6247,7 +6271,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 341,
+   "file_count": 342,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6277,6 +6301,66 @@
  ],
  "recent_commits": [
   {
+   "sha": "3b0442a328e494af46e176aa2b3b1cb484225bed",
+   "date": "2026-11-13",
+   "subject": "Merge commit '7ba6e650aebef0717efd6aeec3fea2c1d67909ca' into feature/roamies-capabilities"
+  },
+  {
+   "sha": "e026613ec0b7c3ae73253d67ab0f926edea2ff24",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into feature/roamies-capabilities"
+  },
+  {
+   "sha": "7ba6e650aebef0717efd6aeec3fea2c1d67909ca",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into feature/on-device-ai-and-mobile-harness"
+  },
+  {
+   "sha": "7f3efe9bd085541c87a37c9a879590cfa4813284",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code maps for the AGPL removal"
+  },
+  {
+   "sha": "87f2617d045903ad1f47957e69bd226c984fd7ad",
+   "date": "2026-11-13",
+   "subject": "docs(companion): record that the AGPL-derived geometry and wave are gone"
+  },
+  {
+   "sha": "a7b4f7e2ab5ebbc7fc7808ace7f2977723c6c5d3",
+   "date": "2026-11-13",
+   "subject": "fix(companion): delete the AGPL-3.0-derived sphere and wave code"
+  },
+  {
+   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+  },
+  {
+   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
+   "date": "2026-11-12",
+   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+  },
+  {
+   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
+   "date": "2026-11-12",
+   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+  },
+  {
+   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
+   "date": "2026-11-12",
+   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+  },
+  {
+   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
+   "date": "2026-11-12",
+   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+  },
+  {
+   "sha": "d1e98064fd76215f3caf3c25149de2e5efd888f0",
+   "date": "2026-11-12",
+   "subject": "fix(mobile): remove the fake on-device engine and offline sync, keep the design and an honest plate"
+  },
+  {
    "sha": "938492a0cff389925968b14b6a570a59c84a7bcb",
    "date": "2026-11-12",
    "subject": "chore: regenerate the recent-changes module for this branch's entry"
@@ -6302,86 +6386,26 @@
    "subject": "fix(privacy): a private chat refuses the two companion setting changes"
   },
   {
-   "sha": "5dce7dc647963e48ee11477c009936df5f37ec90",
+   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
    "date": "2026-11-12",
-   "subject": "fix(test_base_regeneration): Python 3.8 compat - use open() instead of write_text(newline=)"
+   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
   },
   {
-   "sha": "2b60236e5410b11c97de9ef72bee18bdac824687",
+   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
    "date": "2026-11-12",
-   "subject": "chore: regenerate self-code maps for feature commit 96d7c44d3"
+   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
   },
   {
-   "sha": "96d7c44d3897e7409e308049a8d0efa1369f3d1d",
+   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
    "date": "2026-11-12",
-   "subject": "feat(companion): integrate Roamies desktop capabilities and chat self-awareness into Jarvis"
-  },
-  {
-   "sha": "095f554c0e3c5be936e95f393ebda91185cef1cc",
-   "date": "2026-11-11",
-   "subject": "Merge pull request #1225 from darknight11ish/feat/github-review-16e-2026-11-10"
-  },
-  {
-   "sha": "7e64d579dfcf8d1b5d7f21912657c9c20e66305f",
-   "date": "2026-11-11",
-   "subject": "fix(records): wave 16E's generated cases and claim totals follow the tree, and the review pair counts as a read"
-  },
-  {
-   "sha": "96322d225c357cf9e169e36e37018a947af7f8f6",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-portrait counts to 72"
-  },
-  {
-   "sha": "f8f245425651e0ff3fdaefd8d69cb3ae4006f184",
-   "date": "2026-11-10",
-   "subject": "fix(tests): wave 16E's two tools move the self-answers counts to 72"
-  },
-  {
-   "sha": "8c247b61133e8120a1f01c4bc402053898351836",
-   "date": "2026-11-10",
-   "subject": "chore(records): regenerate wave 16E's directories, records module and self-code map"
-  },
-  {
-   "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
-   "date": "2026-11-10",
-   "subject": "fix: the record check's two reasons use plain words (wave 16E)"
-  },
-  {
-   "sha": "8291d0ffc258ad205d87ded537044f970e92f813",
-   "date": "2026-11-10",
-   "subject": "fix(desktop): wave 16E's two switchable rows reach the Rust, desktop and Android pin lists"
-  },
-  {
-   "sha": "aabb72128b27b1e469e786abb4f5ec6749120d4c",
-   "date": "2026-11-10",
-   "subject": "feat(github): wave 16E - a review packet and a record check before a push"
-  },
-  {
-   "sha": "1087d81c11f59f35059032c54d84da81c18b02a1",
-   "date": "2026-11-10",
-   "subject": "Merge pull request #1222 from darknight11ish/integration/wave16-2026-11-10"
-  },
-  {
-   "sha": "37a3cc4ca9b486975879f52a6739de2102f800c7",
-   "date": "2026-11-10",
-   "subject": "test(ci): the wave-16 CI catch - diet hints, AST source pins, a real probe, and the no-vec skip"
-  },
-  {
-   "sha": "9694ff26fcf96c6dbc620051101fad2a4e9f54c6",
-   "date": "2026-11-10",
-   "subject": "test(live-parity): drive the Q2 probe cache instead of counting turns (CI catch)"
-  },
-  {
-   "sha": "b2b8f67ad020c982132047f65a848956f81f0392",
-   "date": "2026-11-10",
-   "subject": "fix: the second more_tools budget pin moves with the wave-16 GitHub group (482, measured)"
+   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1431
+   "files": 1440
   },
   {
    "path": "jarvis-desktop/",
@@ -6391,17 +6415,17 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 928
+   "files": 930
   },
   {
    "path": "docs/",
    "line": "the documentation, the audits and the records",
-   "files": 491
+   "files": 492
   },
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 353
+   "files": 354
   },
   {
    "path": "tools/",
@@ -6411,7 +6435,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 234
+   "files": 242
   },
   {
    "path": "videos/",
@@ -6421,7 +6445,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 151
+   "files": 159
   },
   {
    "path": "plugins/",
@@ -6495,15 +6519,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5613,
-  "covered": 5141,
-  "excluded": 472,
+  "tracked_files": 5642,
+  "covered": 5164,
+  "excluded": 478,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 216,
+   "count": 222,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",

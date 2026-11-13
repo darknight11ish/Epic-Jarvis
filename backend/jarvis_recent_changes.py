@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'On-device AI and offline sync are a design, not a shipped mock',
     'The desktop companion says what it is, and it is not the drawing',
+    'A code-protection tool check that says what it does not do',
+    "GitHub's union ships in 0.2.448: merge checks are judged per repository, the CI read refuses a cut answer, six GitHub reads are card-free, and the review gates are ON by default",
     'The two-column Cockpit, a faster claims check, a shared credential denylist, two memory fixes, the everyday-lane guard, and GitHub merge / fix-and-push behind one card each',
-    "The vault organizer's switch now says the approval card is waiting instead of claiming the organizer is already on",
-    "The HUD's way back from Face Only and Mini View, one navigation, two wording fixes, and the third lane's prompt-cache cap kept",
-    'Review a branch, and check the records, before a push',
 )
 
 
