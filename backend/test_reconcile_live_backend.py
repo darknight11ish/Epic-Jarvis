@@ -124,6 +124,22 @@ real PC:
       both files ABSENT with the entry, carries the regions byte-for-byte, checks the
       second plan is a no-op, and guards every real-patch entry's probes against a typo.
 
+  17. the 2026-11-13 measured false green, DEF-035's shape again and the one that
+      reached the owner's live install: `github-tools.patch` was EXTENDED in
+      place four times after the live gate last received it, but its DELTA_TABLE probes
+      were still the two rows of the original ten-tool block. The live gate (223,701
+      bytes) carried that old block, so both probes matched, `patch_presence` said
+      PRESENT and the dry run printed `already present: 234; to insert: none` while 82
+      of the patch's 174 added rows were absent - `action_for_tool("github_open_pr")`
+      answered `("unclassified_tool", False)` and the new tools' cards could not be
+      approved. The fix extends the probe set to name the rows EVERY later revision
+      added, and carries the change as an `adapted_hunks` pair: the measured OLD block
+      is replaced IN PLACE by the whole current block, so no second copy is made. The
+      test builds that live shape from the published base, reproduces the old PRESENT
+      verdict, proves the fixed entry ABSENT, plans the byte-for-byte upgrade, proves
+      the second plan is a no-op, and proves a PRISTINE pre-image still replays the
+      patch's own hunk instead of being refused.
+
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
 uses, and the published base files under `jarvis-backend/` - used as realistic FIXTURES
@@ -138,6 +154,7 @@ unset - which is how CI runs them.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import re
@@ -4499,9 +4516,17 @@ def _wave6_stack() -> dict:
              "_TOOL_ACTIONS.update({",
              '    "github_list": "github_inspect",',
              '    "github_read_file": "github_inspect",',
+             '    "github_pr_detail": "github_inspect",',
+             '    "github_search_run": "github_search_run",',
+             '    "github_fix_write": "github_fix_write",',
+             '    "github_open_pr": "github_open_pr",',
+             '    "github_issue_state": "github_issue_state",',
              "})",
              "_RISK.update({",
              '    "github_comment": ("no", "outbound", "posts a comment in your name"),',
+             '    "github_open_pr": ("no", "outbound", "opens a pull request in your name"),',
+             '    "review_changes": ("yes", "local", "reads a change on this PC"),',
+             '    "check_records": ("yes", "local", "reads the records on this PC"),',
              "})"], github_after),
         "handsfree.patch": _synth_patch(
             "jarvis_gate.py", hand_before,
@@ -4749,6 +4774,171 @@ def t_the_wave6_entries_agree_with_the_real_patches():
         gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
         check("... so its entry is the anchor, and that anchor is exactly once",
               gate.count(R.PRODUCT_CHECK_ANCHOR) == 1)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+#: The probe pair DELTA_TABLE carried for github-tools.patch BEFORE 2026-11-13,
+#: kept here verbatim so this suite reproduces the false green the fix replaces.
+#: Both lines are rows of the TEN-TOOL block the owner's live gate already carried,
+#: so together they prove "a github block is here", not "the CURRENT block is here".
+GITHUB_TOOLS_STALE_PROBES = (
+    '    "github_list": "github_inspect",',
+    '    "github_comment": ("no", "outbound",',
+)
+
+
+def t_the_extended_github_tools_patch_is_upgraded_not_false_greened():
+    """The 2026-11-13 measured false green, and the upgrade that replaces it.
+
+    `backend/github-tools.patch` was extended FOUR times after the owner's live gate
+    last received it (wave 16B's `github_fix_write`; the 22:30 ruling's five writes
+    and `github_pr_detail`; the 23:00 `github_issue_state`; 2026-11-11's
+    `github_search_run` and the two local review gates). The live gate held the
+    ten-tool block and NOTHING else - measured 2026-11-13 at 223,701 bytes, and
+    `action_for_tool("github_open_pr")` on it answered
+    `("unclassified_tool", False)`, so the new tools' cards could not be approved.
+    This tool still printed `HUD DELTAS (234 patch/file delta(s) checked): already
+    present: 234; to insert: none`, because the entry's two probes were rows of that
+    OLD block and the patch's own hunk pre-image is 0 times there (the old block sits
+    between its context lines) - so detection alone cannot insert.
+
+    This test builds that exact shape from the published base (the current block
+    removed, the measured OLD block put back in its place), proves the pre-fix probe
+    pair calls it PRESENT, proves the fixed entry calls it ABSENT, and then proves
+    the plan REPLACES the old block IN PLACE with the current one (never a second
+    copy) and is a no-op on the next run. It also proves a PRISTINE pre-image - an
+    install older than the whole patch - still replays the patch's own hunk instead
+    of being refused. Against the pre-fix tool the ABSENT and insert checks fail.
+    """
+    name, target = "github-tools.patch", "jarvis_gate.py"
+    raw = patch_text(name).decode("utf-8")
+    hunks = R.patch_hunks(raw, target)
+    check("github-tools.patch is ONE hunk for jarvis_gate.py", len(hunks) == 1,
+          len(hunks))
+    hunk = hunks[0]
+    old_lines, added, new_lines = hunk["old"], hunk["added"], hunk["new"]
+    check("... a PURE insertion: its new side is context + added lines",
+          len(new_lines) == len(old_lines) + len(added)
+          and not R.parse_patch_files(raw)[target]["removed"],
+          (len(old_lines), len(added), len(new_lines)))
+    lead_len = new_lines.index(added[0])
+    check("... the added block is contiguous in its post-image",
+          new_lines[lead_len:lead_len + len(added)] == added)
+    lead, trail = old_lines[:lead_len], old_lines[lead_len:]
+    check("... so its own pre-image is the leading + trailing context",
+          lead + trail == old_lines, (lead, trail))
+    old_hunk_text = "\n".join(old_lines)
+    lead_text, trail_text = "\n".join(lead), "\n".join(trail)
+
+    old_block = "\n".join(R._delta_lines(R.GITHUB_TOOLS_OLD_FILE))
+    new_block = "\n".join(R._delta_lines(R.GITHUB_TOOLS_NEW_FILE))
+    check("the OLD block file is the block the owner's live gate holds",
+          len(R._delta_lines(R.GITHUB_TOOLS_OLD_FILE)) == 96
+          and len(old_block.encode("utf-8")) == 7248
+          and hashlib.sha256(old_block.encode("utf-8")).hexdigest()
+          == "3de2f78db0104c521e68e5f3e050f84da374e2d10ca431c469dc1d9eb033ad0e",
+          len(old_block.encode("utf-8")))
+    check("the NEW block file is exactly the patch's current added block",
+          "\n".join(added).rstrip("\n") == new_block
+          and len(R._delta_lines(R.GITHUB_TOOLS_NEW_FILE)) == 173
+          and hashlib.sha256(new_block.encode("utf-8")).hexdigest()
+          == "29d14af32dbebd2a09532cf10fc03eedab24e4a17a290644513028a0ce9575a2",
+          len(new_block.encode("utf-8")))
+
+    # The measured live shape: the current block removed from the published base
+    # (that leaves the pristine pre-image), then the OLD block put in its place.
+    base_gate = BASE_GATE.read_text(encoding="utf-8")
+    post_region = lead_text + "\n" + new_block + "\n\n" + trail_text
+    check("the published base carries this block's post-image exactly once",
+          base_gate.count(post_region) == 1, base_gate.count(post_region))
+    pristine = base_gate.replace(post_region, lead_text + "\n" + trail_text, 1)
+    check("... and removing it leaves the patch's own pre-image exactly once",
+          pristine.count(old_hunk_text) == 1, pristine.count(old_hunk_text))
+    old_live = pristine.replace(
+        old_hunk_text, lead_text + "\n" + old_block + "\n\n" + trail_text, 1)
+    check("the fixture really is the measured shape: old block once, pre-image 0",
+          old_live.count(old_block) == 1 and old_live.count(old_hunk_text) == 0
+          and old_live.count(new_block) == 0,
+          (old_live.count(old_block), old_live.count(old_hunk_text),
+           old_live.count(new_block)))
+    missing = [a for a in added if a.strip() and a not in old_live]
+    check("... with the measured 82 of 174 added rows absent",
+          len(missing) == 82, len(missing))
+    for row in ('    "github_fix_write": "github_fix_write",',
+                '    "github_pr_detail": "github_inspect",',
+                '    "github_search_run": "github_search_run",',
+                '    "github_open_pr": "github_open_pr",',
+                '    "github_issue_state": "github_issue_state",',
+                '    "github_open_pr": ("no", "outbound",',
+                '    "review_changes": ("yes", "local",',
+                '    "check_records": ("yes", "local",'):
+        check(f"a fixed probe names the added row {row!r}",
+              any(str(p) in row for p in R.GITHUB_TOOLS_PROBES))
+
+    pre = R.patch_pre_image(raw, target)
+    stale_table = {name: {target: {"probes": GITHUB_TOOLS_STALE_PROBES,
+                                   "hunks": True}}}
+    state_stale, _ = R.patch_presence(name, target, added, old_live,
+                                     table=stale_table, state_patches=[],
+                                     pre_image=pre)
+    check("the pre-2026-11-13 probe pair calls the OLD live gate PRESENT "
+          "(the measured defect)", state_stale == R.PRESENT, state_stale)
+    state_loose, _ = R.patch_presence(name, target, added, old_live, table={},
+                                      state_patches=[], pre_image=pre)
+    check("... and the loose no-entry fallback calls it PRESENT too (DEF-035)",
+          state_loose == R.PRESENT, state_loose)
+    state_fixed, why_fixed = R.patch_presence(name, target, added, old_live,
+                                              state_patches=[], pre_image=pre)
+    check("the fixed entry calls the SAME gate ABSENT", state_fixed == R.ABSENT,
+          (state_fixed, why_fixed))
+
+    root = tmpdir()
+    try:
+        live = make_base_live(root, "github-old-block", {target: old_live})
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("the old-block live gate plans ONE insert, with no refusal",
+              refusals == []
+              and [(d.patch, d.file, d.status) for d in deltas]
+              == [(name, target, "insert")],
+              (refusals, [(d.patch, d.file, d.status) for d in deltas]))
+        text = staged.get(target, "")
+        check("the staged gate is the OLD block REPLACED by the whole current one",
+              text == old_live.replace(old_block, new_block, 1))
+        check("... no second copy of either update block was created",
+              text.count("_TOOL_ACTIONS.update({")
+              == base_gate.count("_TOOL_ACTIONS.update({")
+              and text.count("_RISK.update({")
+              == base_gate.count("_RISK.update({"),
+              (text.count("_TOOL_ACTIONS.update({"),
+               text.count("_RISK.update({")))
+        check("... the OLD block is gone", old_block not in text)
+        check("... every fixed probe is in the staged gate",
+              all(str(p) in text for p in R.GITHUB_TOOLS_PROBES))
+        check("... and it compiles", R.rehearse({target: text}) == [],
+              R.rehearse({target: text}))
+        (live / target).write_text(text, encoding="utf-8")
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a second plan on the upgraded gate stages nothing (idempotent)",
+              refusals2 == [] and staged2 == {}
+              and [(d.patch, d.file, d.status) for d in again]
+              == [(name, target, "already")],
+              (again, staged2, refusals2))
+
+        live2 = make_base_live(root, "github-pristine", {target: pristine})
+        deltas3, staged3, refusals3 = R.plan_deltas(
+            live2, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a PRISTINE pre-image (an install older than the whole patch) "
+              "still plans ONE insert",
+              refusals3 == []
+              and [(d.patch, d.file, d.status) for d in deltas3]
+              == [(name, target, "insert")],
+              (refusals3, [(d.patch, d.file, d.status) for d in deltas3]))
+        check("... replaying the patch's own hunk: the staged gate IS the "
+              "published base",
+              staged3.get(target) == base_gate)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -5512,6 +5702,7 @@ def main():
                t_the_wave6_patch_regions_are_carried_not_false_greened,
                t_the_call_notes_risk_row_is_carried_to_the_live_gate,
                t_the_wave6_entries_agree_with_the_real_patches,
+               t_the_extended_github_tools_patch_is_upgraded_not_false_greened,
                t_the_packs_tamper_patch_is_carried_by_its_hunk,
                t_the_card_fields_are_carried_as_literal_deltas,
                t_the_activity_turn_guard_is_carried_by_its_six_hunks,

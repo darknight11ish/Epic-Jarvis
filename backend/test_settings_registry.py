@@ -260,8 +260,12 @@ def t_every_real_settings_card_is_listed():
     # display preference saved on this phone only - no route, no approval card,
     # nothing sent to the PC - so the desktop registry has no card for it and
     # the row is always drawn.
+    # "phone-backup" (2026-11-13, the copy-over wave) is the same shape again:
+    # the phone's own settings backup seals THIS phone's preferences into a file
+    # the owner chooses - no route, no approval card, nothing sent to the PC -
+    # so there is no desktop settings card and the row is always drawn.
     phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify",
-                "app-control", "model-lane", "edit-hud"}
+                "app-control", "model-lane", "on-device-model", "phone-backup", "edit-hud"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",

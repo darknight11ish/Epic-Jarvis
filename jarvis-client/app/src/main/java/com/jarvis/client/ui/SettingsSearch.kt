@@ -351,6 +351,13 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "BackupPlate.kt"),
         ),
         Row(
+            key = "phone-backup", title = "Phone settings backup",
+            label = "Back up this phone; save settings to a file; restore settings; password; " +
+                "pairing token not included",
+            quotes = listOf("Phone settings backup"),
+            source = JUMP + listOf(PLATES + "PhoneBackupPlate.kt"),
+        ),
+        Row(
             key = "watch-notify", title = "Smartwatch notifications",
             label = "Smartwatch; watch; notifications on a watch",
             quotes = listOf("Smartwatch notifications"),
@@ -660,6 +667,14 @@ object SettingsSearch {
             // are two of this module's constants rather than a literal in the
             // plate, and the switch-name walk only covers the rows it lists.
             source = listOf("net/Handsfree.kt") + SCREEN,
+        ),
+        Row(
+            key = "on-device-model", title = "On-device AI model",
+            label = "On-device AI model; local model on phone; offline mode; run offline; " +
+                "phone model; not available",
+            titles = emptyList(),
+            quotes = listOf("Not available in this build."),
+            source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
         ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,

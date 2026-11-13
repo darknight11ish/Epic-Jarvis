@@ -56,12 +56,15 @@ import com.jarvis.client.data.CheckMethod
 import com.jarvis.client.data.CheckOutcome
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.LockSession
+import com.jarvis.client.data.NothingToBackUpException
 import com.jarvis.client.data.PipLayout
 import com.jarvis.client.data.PipMode
 import com.jarvis.client.data.PipPresence
 import com.jarvis.client.data.PipWords
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
+import com.jarvis.client.data.SettingsBackup
+import com.jarvis.client.data.SettingsBackupStore
 import com.jarvis.client.data.calmFace
 import com.jarvis.client.face.FaceBudget
 import com.jarvis.client.face.FaceQuality
@@ -819,6 +822,102 @@ class MainActivity : FragmentActivity() {
     /** The chosen provider file, opened fresh for each of the two passes. Never kept. */
     private fun openPicked(uri: Uri): java.io.InputStream? =
         runCatching { contentResolver.openInputStream(uri) }.getOrNull()
+
+    // ------------------------------------- phone settings backup (2026-11-13) --
+    // "Phone settings backup" on Settings: ONE password-locked file holding
+    // THIS phone's settings only (data/SettingsBackup.kt - the pairing token's
+    // own file is deliberately not on its list). Both doors use Android's own
+    // document picker: CreateDocument to choose where to save, OpenDocument to
+    // choose what to restore. The preferences are not touched until the whole
+    // file has authenticated, so a wrong password or a damaged file leaves the
+    // phone exactly as it was.
+
+    /** The password from the plate's dialog, waiting for the picker; cleared after use. */
+    private val phoneBackupPassword = mutableStateOf<CharArray?>(null)
+
+    /** The one sentence the last save/restore produced, and whether it is bad news. */
+    private val phoneBackupLine = mutableStateOf<String?>(null)
+    private val phoneBackupLineIsWarning = mutableStateOf(false)
+    private val phoneBackupBusy = mutableStateOf(false)
+
+    private val createPhoneBackup = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val password = phoneBackupPassword.value
+        phoneBackupPassword.value = null
+        if (uri == null || password == null) {
+            password?.fill('\u0000')
+            return@registerForActivityResult
+        }
+        lifecycleScope.launch {
+            phoneBackupBusy.value = true
+            try {
+                val outcome = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val out = contentResolver.openOutputStream(uri)
+                            ?: error("the chosen place could not be written")
+                        out.use { SettingsBackupStore.save(this@MainActivity, password, it) }
+                    }
+                }
+                outcome.fold(
+                    onSuccess = { count ->
+                        phoneBackupLine.value = "Saved $count settings. Keep this file and its " +
+                            "password together - the password is the only thing that opens it."
+                        phoneBackupLineIsWarning.value = false
+                    },
+                    onFailure = { failure ->
+                        phoneBackupLine.value = if (failure is NothingToBackUpException) {
+                            SettingsBackup.NOTHING_TO_BACK_UP
+                        } else {
+                            SettingsBackup.SAVE_FAILED
+                        }
+                        phoneBackupLineIsWarning.value = true
+                    },
+                )
+            } finally {
+                password.fill('\u0000')
+                phoneBackupBusy.value = false
+            }
+        }
+    }
+
+    private val openPhoneBackup = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val password = phoneBackupPassword.value
+        phoneBackupPassword.value = null
+        if (uri == null || password == null) {
+            password?.fill('\u0000')
+            return@registerForActivityResult
+        }
+        lifecycleScope.launch {
+            phoneBackupBusy.value = true
+            try {
+                val restored = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val input = contentResolver.openInputStream(uri)
+                            ?: error("the chosen file could not be read")
+                        input.use { SettingsBackupStore.restore(this@MainActivity, password, it) }
+                    }.getOrElse {
+                        SettingsBackupStore.Restored.Refused(SettingsBackup.DAMAGED)
+                    }
+                }
+                when (restored) {
+                    is SettingsBackupStore.Restored.Done -> {
+                        phoneBackupLine.value = restored.line
+                        phoneBackupLineIsWarning.value = false
+                    }
+                    is SettingsBackupStore.Restored.Refused -> {
+                        phoneBackupLine.value = restored.words
+                        phoneBackupLineIsWarning.value = true
+                    }
+                }
+            } finally {
+                password.fill('\u0000')
+                phoneBackupBusy.value = false
+            }
+        }
+    }
 
     /**
      * Reads one photo - picked, or shared from another app - and makes it
@@ -3173,9 +3272,11 @@ class MainActivity : FragmentActivity() {
                             },
                             onOpenRelease = ::openReleasePage,
                             // The update download and install (the owner's
-                            // request of 2026-10-11). Download fetches the
-                            // published APK and checks its certificate;
-                            // Install hands a VERIFIED file to Android's own
+                            // request of 2026-10-11; the sha256/size manifest
+                            // added 2026-11-13). Download fetches the published
+                            // APK, checks it against the manifest CI publishes
+                            // beside it AND against its certificate; Install
+                            // hands a file that passed BOTH to Android's own
                             // installer, which asks the owner once to allow
                             // installs from Jarvis.
                             updateDownload = updateDownload,
@@ -3901,6 +4002,24 @@ class MainActivity : FragmentActivity() {
                         // hidden-lists state the Brain's plates do: while it is
                         // on, no name is asked for or shown.
                         privateHidden = privateHidden,
+                        // "Phone settings backup" (2026-11-13, the copy-over
+                        // wave): this phone's OWN settings, sealed into one
+                        // password-locked file. The pickers are this
+                        // Activity's; the plate collects the password and
+                        // draws the one result sentence.
+                        backupLine = phoneBackupLine.value,
+                        backupLineIsWarning = phoneBackupLineIsWarning.value,
+                        backupBusy = phoneBackupBusy.value,
+                        onSavePhoneBackup = { password ->
+                            phoneBackupLine.value = null
+                            phoneBackupPassword.value = password
+                            createPhoneBackup.launch(SettingsBackup.SUGGESTED_FILE_NAME)
+                        },
+                        onRestorePhoneBackup = { password ->
+                            phoneBackupLine.value = null
+                            phoneBackupPassword.value = password
+                            openPhoneBackup.launch(arrayOf("*/*"))
+                        },
                         // Room under the last card for the fixed "Needs your
                         // OK" line, which is drawn over this screen and used to
                         // sit on top of Devices' "Unpair & clear the token" at

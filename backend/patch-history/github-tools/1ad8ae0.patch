@@ -1,0 +1,126 @@
+diff --git a/jarvis_gate.py b/jarvis_gate.py
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -2982,6 +2982,122 @@
+     print()
+     return 0
+ 
++# --------------------------------------------------------------------------
++#   github-tools.patch (2026-11-03, extended 2026-11-10 and by wave 16B) - the
++#   ten GitHub tools, and EIGHT actions
++# --------------------------------------------------------------------------
++# The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
++# open pull requests, issues, CI status, one file) and take three small ACTIONS
++# (comment, open an issue, re-run a workflow) - each action behind its own card.
++# The owner's decision of 2026-11-10 (Gemini ruling Q1, "Everything at once")
++# added the read-only PR cockpit and two more carded actions: one merge-commit-
++# only merge pinned to the head sha the card showed, and one fix-and-push into
++# an isolated scratch folder that pushes to the pull request's own branch.
++# Wave 16B (2026-11-10) added the eighth action, `github_fix_write`: the fix
++# tool's "write" stage, which changes ONE file inside that same isolated copy and
++# makes ONE commit there, with no token and no socket. The absolute bans that
++# remain: force-push, squash-merge, rebase-merge, admin bypass, auto-merge,
++# bypassing required checks, pushing directly to main/master/release/*, and
++# deleting or closing a repository or a branch.
++#
++# WHY IT SITS HERE, IN THE MIDDLE OF THE FILE, AND NOT AT THE END OF IT: two
++# measured reasons, and the second is a break this patch caused before it moved.
++#
++#   * The end of this file is `web-search-grant.patch`'s own block, and its last
++#     hunk ends at EOF. `git apply -R` needs that hunk's whole post-image (three
++#     context lines plus the block) to be contiguous AND to end at the last byte
++#     of the file, so anything inserted after those three context lines makes
++#     the reversal fail - which is what happened when this patch first appended
++#     its block after it (backend/test_web_search_grant.py caught it), and the
++#     published base could no longer be reversed and re-applied byte for byte.
++#   * `unknown-risk-approvable.patch` has to stay the LAST writer of
++#     jarvis_gate.py so its own reversal cannot be disturbed
++#     (backend/test_gate_unknown_risk.py enforces it, with no whitelist), so a
++#     new gate patch must sit before it. This one sits immediately after
++#     `web-search-grant.patch`.
++#
++# It anchors on the owner's own text - the end of `review()` and the opening of
++# the `if __name__` block, which no patch writes - so backend/_stack.py's walk
++# materialises those five lines instead of reading them. That is the honest case
++# its RATCHET records, and `no-expiry-cards.patch`, `no-deadline-cards.patch` and
++# `unknown-risk-approvable.patch` pay exactly the same one.
++#
++# Both `.update` calls run at import, before any `check()`.
++#
++# WHY NOT REUSE `github_read`: that action is the scheduled look a "tell me
++# when" GitHub watch makes, and it is `"auto"` in the shipped settings so a look
++# every ten minutes is not a card every ten minutes. These tools are looks ON
++# DEMAND, at a moment the model chose, each one sending the owner's GitHub
++# token out - so they are their own action, `github_inspect`, at `"ask"`. They
++# are also in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still asks.
++_TOOL_ACTIONS.update({
++    # `action_for_tool` needs these, or every one of the ten answers
++    # "unclassified_tool": fail-safe (that asks too), but the card would not be
++    # the card the tool raises, and the Reach page would call it unclassified.
++    "github_list": "github_inspect",
++    "github_read_file": "github_inspect",
++    "github_ci_status": "github_inspect",
++    # The read-only PR cockpit (2026-11-10) is a READ, so it is decided under the
++    # same read action as the other three - never under the merge it suggests.
++    "github_pr_scan": "github_inspect",
++    "github_comment": "github_comment",
++    "github_open_issue": "github_open_issue",
++    "github_rerun_workflow": "github_rerun_workflow",
++    # The one CREATE (2026-11-09, the owner's "create a repository called
++    # Fitness Band"): one new, empty repository on his own account. Its own
++    # action, so its card says "create a repository" rather than reading as
++    # "open an issue".
++    "github_create_repo": "github_create_repo",
++    # The two carded writes of 2026-11-10. Each is its own action: a card that
++    # read "read your GitHub" for a merge would be a lie, and the tier that
++    # governs a merge has to be the line the owner can find.
++    "github_merge_pr": "github_merge_pr",
++    "github_fix_and_push": "github_fix_and_push",
++    # Wave 16B (2026-11-10): the fix tool's own "write" stage, decided under its
++    # OWN action so its card says "write one file in the scratch copy" rather
++    # than "push a fix". The name passed to the gate here is an ACTION name, not
++    # a tool name - the tool is still `github_fix_and_push`, and its own
++    # `gate_lookup_name` picks this one only for stage "write". The line is
++    # needed because `action_for_tool` answers "unclassified_tool" for a name it
++    # does not know, and an unclassified action would raise a card that says
++    # nothing true about what is being changed.
++    "github_fix_write": "github_fix_write",
++})
++_RISK.update({
++    # Reading only. Reversible "yes" and reach "outbound" is the same pair
++    # `github_read`, `page_read` and `news_read` already carry: nothing on
++    # GitHub changes, but the request leaves this PC, so it is never "local".
++    "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
++    # Posting in the owner's name. "no" for the same reason `send_email` is:
++    # Jarvis cannot edit or withdraw a comment once GitHub has it.
++    "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),
++    "github_open_issue": ("no", "outbound", "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards"),
++    # "no", NOT "yes": a re-run changes nothing in the repository by itself, but
++    # a workflow is free to deploy, publish or post notifications, and a run that
++    # has started cannot be taken back. Calling that reversible would be a
++    # promise this file cannot keep.
++    "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
++    # Creating a repository (2026-11-09). "no" for the same reason opening an
++    # issue is: Jarvis has no delete action, so a repository it makes cannot be
++    # taken back by it, and nothing is pushed into it.
++    "github_create_repo": ("no", "outbound", "creates a new empty repository on your own GitHub account in your name; Jarvis cannot delete it afterwards and nothing is pushed into it"),
++    # Merging one pull request (2026-11-10). "no" because a merge cannot be
++    # undone by Jarvis, and the words say merge-commit only: it cannot squash,
++    # rebase, use an admin bypass or merge past a required check.
++    "github_merge_pr": ("no", "outbound", "merges one pull request with a merge commit, pinned to the exact head commit the card showed; refused with nothing sent if that commit has moved, it is a draft, it conflicts or is blocked, a check is still running or a required check did not pass; Jarvis cannot squash, rebase, force, use an admin bypass or bypass a required check, and a merge cannot be undone"),
++    # Fix-and-push (2026-11-10). "no" for the same reason a comment is: a
++    # pushed commit cannot be taken back. One ordinary push to the pull
++    # request's own branch - never a force, never main, never a delete.
++    "github_fix_and_push": ("no", "outbound", "copies a pull request into an isolated scratch folder on this PC and pushes your commits to that pull request's own branch in your name; never a force-push, never main/master/release/hotfix, never a delete, refuses a changed file that looks like a credential before anything is pushed, and a pushed commit cannot be taken back"),
++    # Writing ONE file inside that isolated copy (wave 16B, 2026-11-10). "yes"
++    # and "local": it sends nothing, reads no token and cannot leave this PC -
++    # it changes one file and adds one commit inside a scratch folder that can
++    # be thrown away. It is still a CARD because it changes something the owner
++    # will later push, and because a file is a thing a person should see before
++    # it changes.
++    "github_fix_write": ("yes", "local", "writes ONE file inside the isolated scratch copy of one pull request on this PC and makes ONE commit there; it uses no GitHub token, sends nothing anywhere, cannot delete, rename, move or change permissions, and cannot touch the owner's own checkout or another pull request's copy"),
++})
++
+ 
+ if __name__ == "__main__":
+     import argparse

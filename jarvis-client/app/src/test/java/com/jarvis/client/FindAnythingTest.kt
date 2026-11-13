@@ -388,6 +388,12 @@ class FindAnythingTest {
             // below have no menu id at all.
             listOf(
                 "settings-row.app-control",
+                // "Phone settings backup" (2026-11-13, the copy-over wave):
+                // the phone backs up its OWN settings, so there is no PC switch
+                // and no catalogue menu id; the row is always drawn, like the
+                // rest of this list. Restoring a wiped phone must never be
+                // hideable, which is also why MenuVisibilityTest lists it.
+                "settings-row.phone-backup",
                 "settings-row.jarvis-notify",
                 // "The local model" (2026-10-31): the automatic-restart card
                 // moved out of Home; it has no catalogue menu id (it is not a
@@ -409,6 +415,7 @@ class FindAnythingTest {
                 // this entry becomes a `SETTINGS` place in MenuPlaces and both
                 // this test and MenuVisibilityTest say so.
                 "settings-row.handsfree",
+                "settings-row.on-device-model",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )
