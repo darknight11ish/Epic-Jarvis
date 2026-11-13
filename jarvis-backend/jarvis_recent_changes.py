@@ -24,7 +24,6 @@ BULLETS = (
     'A free-plan 403 on branch rules means "no rules", not "blind token" - so the owner-approved merge in the field-test repository can land',
     "GitHub's git endpoint needs Basic auth, not Bearer - so the prepare clone and the fix push can authenticate again",
     'On-device AI and offline sync are a design, not a shipped mock',
-    'The desktop companion says what it is, and it is not the drawing',
 )
 
 
