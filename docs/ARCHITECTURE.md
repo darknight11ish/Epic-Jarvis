@@ -5140,6 +5140,26 @@ what is missing is only the Settings screen agreeing about who turned it off.
   unchanged because no route was added: a GitHub screen would be deep
   configuration, which the standing rule keeps off the phone.
 
+- **The desktop companion's visual half is not built, and neither app draws it -
+  one-sided on purpose (2026-11-12; JARVIS-API section 216;
+  `backend/jarvis_companion.py`, `decisions.d/2026-11-12-companion-not-built.md`).**
+  The Roamies-inspired companion lands as ONE shipped module, a saved-preferences
+  file and seven chat answers; it adds no route, so `tools/check_parity.py` has
+  nothing to classify, and neither app has a screen for it. **That is not a
+  missing half:** the avatar drawing, the screen highlighting and step pacing,
+  the cursor ask bar and the 3D card renderer do not exist anywhere in the
+  product yet, and every chat answer says so out loud instead of describing them
+  as working. The one safety question this feature could raise - which programs
+  it must never touch - is answered by the EXISTING enforced desktop hard
+  denylist (`jarvis_ui_control.DENY_PROCESSES` / `DENY_WINDOW_TITLES`, through
+  `denied_process_refusal()`), never by a list of its own: the eight-name list
+  this pull request first shipped allowed `C:\Windows\System32\cmd.exe`,
+  `wt.exe` and every password vault, and no caller consulted it. When the visual
+  half is built it goes on BOTH apps on its own switches and its own cards, and
+  any screen control goes through that same denylist. `features/features.json`
+  gains no row while there is nothing for the owner to use;
+  `backend/test_companion.py` is the proof.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
