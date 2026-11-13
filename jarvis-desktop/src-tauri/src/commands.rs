@@ -6911,7 +6911,7 @@ pub fn read_clipboard(app: AppHandle) -> Result<String, String> {
 /// Raises a Windows toast from the frontend.
 #[tauri::command]
 pub fn notify_user(app: AppHandle, title: Option<String>, body: String) {
-    notify(&app, title.as_deref().unwrap_or("Jarvis"), &body);
+    notify(&app, title.as_deref().unwrap_or("Atlas"), &body);
 }
 
 /// Rejects anything that is not a plain, well-formed http(s) URL.
