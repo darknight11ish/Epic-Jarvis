@@ -594,15 +594,63 @@ BENCH_RUN_NEW_FILE = "hud-bench-run-new.txt"
 #:
 #: Each entry's probes are one line from EVERY `update` block the patch adds (two for
 #: github-tools, three each for handsfree and product-check) or from the install block
-#: (history-purge), so only a file carrying the whole post-image counts as present, and
-#: none of them exists in the live files today (measured: 0 occurrences each).
+#: (history-purge), so only a file carrying the whole post-image counts as present.
+#: At the 2026-11-05 measurement none of them existed in the live files (0 occurrences
+#: each). That stopped being true for github-tools on 2026-11-10, when the patch was
+#: EXTENDED in place - see GITHUB_TOOLS_PROBES for the 2026-11-13 measurement and what
+#: "one line from every update block" was still missing.
+GITHUB_TOOLS_OLD_FILE = "gate-github-tools-old.txt"
+GITHUB_TOOLS_NEW_FILE = "gate-github-tools-new.txt"
+#: github-tools.patch went through FOUR revisions after the live gate last received it,
+#: and the 2026-11-13 defect is DEF-035's shape again inside this one entry: the two
+#: probes below were written on 2026-11-05 for the ten-tool block and are in EVERY
+#: revision, so a live gate carrying only the OLD block satisfied both of them while 82
+#: of the patch's 174 added lines were provably absent (measured on the owner's live
+#: `jarvis_gate.py`, 2026-11-13):
+#:
+#:   * the live gate was 223,701 bytes (the wave-17 0H image) and held the block from
+#:     the 2026-11-10-morning revision (the ten tools / six actions). Both probes,
+#:     `"github_list": "github_inspect",` and `"github_comment": ("no", "outbound",`,
+#:     are rows of THAT block - so `patch_presence` answered PRESENT and this tool
+#:     printed `HUD DELTAS (234 patch/file delta(s) checked): already present: 234;
+#:     to insert: none`. On that file `action_for_tool("github_open_pr")` returned
+#:     `("unclassified_tool", False)`: the card for every new write tool had
+#:     `approve_ok:false` and could not be approved at all.
+#:   * the patch's own hunk pre-image occurs 0 times on that gate (the OLD block sits
+#:     between its context lines), so fixing the probes alone turns a silent skip into
+#:     a refusal, never into the insert this entry promises.
+#:
+#: THE RULE THIS ENTRY NOW FOLLOWS: a probe set must name a line from EVERY generation
+#: of the patch, not one per `update` block, because an EXTENDED patch appends its new
+#: rows inside a block whose older rows are already on the live file. The ten probes
+#: below cover the read additions (github_pr_detail, github_search_run), wave 16B's
+#: `github_fix_write`, the 22:30 ruling's writes (`github_open_pr` is the measured
+#: one) and the 23:00 issue state, the two local review gates, and a new `_RISK` row -
+#: so a gate carrying only the OLD block is ABSENT. GITHUB_TOOLS_OLD_FILE /
+#: GITHUB_TOOLS_NEW_FILE then carry the OLD block -> the whole current block, which is
+#: the `adapted_hunks` rule in DELTA_TABLE: replace the old block in place, never a
+#: second copy. `plan_deltas` also replays the patch's own hunk when the OLD block is
+#: absent and the patch's pre-image is still pristine (an install older than the whole
+#: patch), so both live shapes are carried and the pristine one is not refused.
 GITHUB_TOOLS_PROBES = (
-    # One added line from EACH `update` block the patch appends: the door
-    # mapping block and the risk block. (The old first probe was this patch's
-    # own header comment - the wave-16 patch no longer adds that comment line,
-    # and the class guard rightly refuses a probe the patch does not add.)
+    # --- the original ten-tool block: still the first proof a github block is there
     '    "github_list": "github_inspect",',
     '    "github_comment": ("no", "outbound",',
+    # --- the 22:30 Step 2 read addition (a middle insert; the OLD block has neither)
+    '    "github_pr_detail": "github_inspect",',
+    # --- github_search's own actions (Q3/Q4, 2026-11-11)
+    '    "github_search_run": "github_search_run",',
+    # --- wave 16B's write stage: the FIRST row the measured live block lacked
+    '    "github_fix_write": "github_fix_write",',
+    # --- the 22:30 Step 2 carded writes: the measured unclassified tool is here
+    '    "github_open_pr": "github_open_pr",',
+    # --- the 23:00 issue state: the LAST `_TOOL_ACTIONS` row the patch adds
+    '    "github_issue_state": "github_issue_state",',
+    # --- one new `_RISK` row from the same writes, and the two review gates at the
+    # block's end: `check_records` is the LAST `_RISK` row the patch adds
+    '    "github_open_pr": ("no", "outbound",',
+    '    "review_changes": ("yes", "local",',
+    '    "check_records": ("yes", "local",',
 )
 HANDSFREE_PROBES = (
     '    "send_text_message": "send_text_message",',
@@ -1503,16 +1551,27 @@ DELTA_TABLE = {
     # regions were provably missing (DEF-035 for the third time).
     # ==========================================================================
     # github-tools.patch -> jarvis_gate.py: ONE hunk, a pure insertion between the
-    # end of `review()` and the `if __name__` block, so `"hunks": True` carries the
-    # patch's own 65 added lines exactly where the stack puts them. Its six-line
-    # pre-image appears EXACTLY ONCE in a copy of the live gate, so the location is
-    # proved, not guessed; the block is a module-level `_TOOL_ACTIONS.update` plus a
-    # `_RISK.update`, and both names already exist in the live file (line 1103 and
-    # 484), so the insert runs at import like the patch intends.
+    # end of `review()` and the `if __name__` block. On a PRISTINE file (the published
+    # base, or an install older than the whole patch) its six-line pre-image appears
+    # EXACTLY ONCE and `"hunks": True` replays it there. On the owner's live gate the
+    # pre-image appears 0 times, because an older revision of this same block already
+    # sits between its context lines (measured 2026-11-13, 223,701 bytes): that is why
+    # the entry also carries `adapted_hunks` - the OLD block the live gate holds
+    # (GITHUB_TOOLS_OLD_FILE, byte-identical to the 58446374a revision's added side)
+    # is REPLACED by the current block (GITHUB_TOOLS_NEW_FILE), in place, so the new
+    # rows land and no second copy of the old rows is created. A live gate with no
+    # github block at all still replays the patch's own hunk; a live gate already
+    # carrying the whole current block is PRESENT through the probes and stages
+    # nothing. See GITHUB_TOOLS_PROBES for the measured false green this replaces.
     "github-tools.patch": {
         "jarvis_gate.py": {
             "probes": GITHUB_TOOLS_PROBES,
             "hunks": True,
+            "adapted_hunks": {
+                1: {"file": GITHUB_TOOLS_NEW_FILE,
+                    "replace_file": GITHUB_TOOLS_OLD_FILE,
+                    "probes": GITHUB_TOOLS_PROBES},
+            },
         },
     },
     # handsfree.patch -> jarvis_gate.py: ONE hunk, a pure insertion at the end of the
@@ -2438,6 +2497,24 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                         new = "\n".join(new_lines)
                         label = (f"hunk {index}'s adapted pre-image block "
                                  f"(replacing {override.get('replace_file')!r})")
+                        if old not in text:
+                            # A live file OLDER than any copy of this block still
+                            # holds the pristine pre-image the patch was cut
+                            # against (the published base, or an install that
+                            # predates the whole patch). There the patch's own
+                            # hunk is the correct carrier, and taking it is not a
+                            # guess: the adapted block must appear ZERO times and
+                            # the patch's own pre-image EXACTLY once. The 2026-11-13
+                            # github-tools case is the other shape (old block
+                            # present once), and a half-edited file matches
+                            # neither, so it still falls through to the refusal.
+                            hunk_old = "\n".join(hunk["old"])
+                            hunk_new = "\n".join(hunk["new"])
+                            if (hunk_old and hunk_old != hunk_new
+                                    and text.count(hunk_old) == 1):
+                                text = text.replace(hunk_old, hunk_new, 1)
+                                changed = True
+                                continue
                     else:
                         old = "\n".join(hunk["old"])
                         new = "\n".join(hunk["new"])
