@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "96d7c44d3897e7409e308049a8d0efa1369f3d1d",
- "built_at": "2026-11-12T16:21:09+00:00",
+ "ref": "875d3cb51be13b2e5d15ec6600a7e87e1914c78e",
+ "built_at": "2026-11-12T20:33:00-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4594,6 +4594,7 @@
     "changelog.d/2026-11-10-hud-return-pill-one-navigation.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
+    "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4744,6 +4745,7 @@
     "decisions.d/2026-11-10-github-card-gated-merge-and-fix-push.md",
     "decisions.d/2026-11-10-github-review-and-record-gate.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
+    "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5191,7 +5193,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 835,
+   "file_count": 837,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6275,6 +6277,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "875d3cb51be13b2e5d15ec6600a7e87e1914c78e",
+   "date": "2026-11-12",
+   "subject": "docs(companion): say it is not built in the API doc and section 8, and record it"
+  },
+  {
+   "sha": "5e9bfee61117f3e5992a66def850adccef6c391b",
+   "date": "2026-11-12",
+   "subject": "fix(companion): report the visual half as not built, and use the one denylist"
+  },
+  {
+   "sha": "db953f0c20c22d1459122a307b4a9eda6c089e17",
+   "date": "2026-11-12",
+   "subject": "fix(privacy): a private chat refuses the two companion setting changes"
+  },
+  {
+   "sha": "5dce7dc647963e48ee11477c009936df5f37ec90",
+   "date": "2026-11-12",
+   "subject": "fix(test_base_regeneration): Python 3.8 compat - use open() instead of write_text(newline=)"
+  },
+  {
+   "sha": "2b60236e5410b11c97de9ef72bee18bdac824687",
+   "date": "2026-11-12",
+   "subject": "chore: regenerate self-code maps for feature commit 96d7c44d3"
+  },
+  {
    "sha": "96d7c44d3897e7409e308049a8d0efa1369f3d1d",
    "date": "2026-11-12",
    "subject": "feat(companion): integrate Roamies desktop capabilities and chat self-awareness into Jarvis"
@@ -6348,31 +6375,6 @@
    "sha": "e7544e21a691beb4c9880f5945492668e3ce4c50",
    "date": "2026-11-10",
    "subject": "fix: wave-16 desk catches - scratch cleanup, merge card fields, phone feature directory, doc accuracy"
-  },
-  {
-   "sha": "1acd8758c98659902730b19ce95055cb2268f362",
-   "date": "2026-11-10",
-   "subject": "fix: the desktop Tools page suites pin 65 switches, because wave 16 adds the PR cockpit, the carded merge and the carded fix-and-push"
-  },
-  {
-   "sha": "f0620475ea1bd2cd816ffb9de5787e7a29c2c9ef",
-   "date": "2026-11-10",
-   "subject": "fix: the pooled-preload suite's non-pooled-lane case uses an everyday model, because Q7 now refuses the 30B on a one-card lane before anything is sent"
-  },
-  {
-   "sha": "b2273d3ad2e923e77cb628d79d2eb8bcae966473",
-   "date": "2026-11-10",
-   "subject": "fix: keep the wave-16 additions inside the project's own ratchets - the phone test pins 65 tools, and the parity suite's ordering check is found structurally instead of by source index"
-  },
-  {
-   "sha": "4e6865f25ec5c5c76d54e3f0b44a4ad43201cdb5",
-   "date": "2026-11-10",
-   "subject": "wave 16: two-column Cockpit, claims cap 900 s + memoized parity, shared credential denylist, memory fixes, pooled-lane guard, and GitHub merge / fix-and-push behind one card each"
-  },
-  {
-   "sha": "a3d2bbd2dd205e7d050bb59f79b016e555b5614a",
-   "date": "2026-11-10",
-   "subject": "Merge lane C (wave16-github 58446374): the GitHub PR cockpit, card-gated merge-commit-only merge pinned to the 40-hex head, and card-gated fix-and-push in an isolated scratch worktree, with one CAPABILITIES inventory behind them"
   }
  ],
  "top_level": [
@@ -6409,7 +6411,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 233
+   "files": 234
   },
   {
    "path": "videos/",
@@ -6419,7 +6421,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 150
+   "files": 151
   },
   {
    "path": "plugins/",
@@ -6493,8 +6495,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5611,
-  "covered": 5139,
+  "tracked_files": 5613,
+  "covered": 5141,
   "excluded": 472,
   "subsystems": 27
  },
