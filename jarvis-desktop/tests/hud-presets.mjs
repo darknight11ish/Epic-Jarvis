@@ -707,8 +707,8 @@ await check("the top-right model name IS the door, and it opens the PC's own mod
   await page.close();
   assert.equal(door.shown, true, "the model name is not on screen in the Cockpit shell");
   assert.equal(door.chipInside, true, "the door does not hold the page's own #chip-model span");
-  assert.equal(door.label, "Current Models: what Jarvis is using and has loaded", door.label);
-  assert.equal(door.title, "Current Models: what Jarvis is using and has loaded", door.title);
+  assert.equal(door.label, "Current Models: what Atlas is using and has loaded", door.label);
+  assert.equal(door.title, "Current Models: what Atlas is using and has loaded", door.title);
   assert.equal(door.expanded, "false", "the door starts claiming the panel is open");
   assert.equal(panel.doorExpanded, "true", "opening the panel did not say so on the door");
   assert.equal(panel.title, "Current Models", "the panel's heading does not name it");
@@ -759,16 +759,16 @@ await check("a successful apply keeps the chip door: no turn may overwrite the d
   });
   await page.close();
   assert.equal(afterTurn.cls, "chip-door", "a turn replaced the door's class");
-  assert.equal(afterTurn.title, "Current Models: what Jarvis is using and has loaded",
+  assert.equal(afterTurn.title, "Current Models: what Atlas is using and has loaded",
     "a turn erased the door's tooltip");
   assert.equal(afterTurn.chipCls, "chip", `a turn replaced the chip's own class: ${afterTurn.chipCls}`);
-  assert.equal(afterTurn.label, "Current Models: what Jarvis is using and has loaded",
+  assert.equal(afterTurn.label, "Current Models: what Atlas is using and has loaded",
     "a turn erased the door's accessible name");
   // The old three modes are gone from what #lanes draws; the element stays.
   assert.deepEqual(afterApply.laneButtons, ["auto", "local"],
     `#lanes draws more than the two real routes: ${JSON.stringify(afterApply.laneButtons)}`);
   assert.equal(afterApply.doorCls, "chip-door", "a successful preset apply replaced the door's class");
-  assert.equal(afterApply.doorTitle, "Current Models: what Jarvis is using and has loaded",
+  assert.equal(afterApply.doorTitle, "Current Models: what Atlas is using and has loaded",
     "a successful preset apply erased the door's tooltip");
   assert.match(afterApply.words, /Now using/, `the apply did not say what happened: ${afterApply.words}`);
   assert.deepEqual(problems, []);
@@ -787,7 +787,7 @@ await check("Ambient has its own door, and it opens the same panel", async () =>
   await page.close();
   assert.equal(doors.bar, "none", "the stage bar's chip door is still drawn in Ambient");
   assert.notEqual(doors.pill, "none", "Ambient's pill door is not on screen");
-  assert.equal(doors.label, "Current Models: what Jarvis is using and has loaded");
+  assert.equal(doors.label, "Current Models: what Atlas is using and has loaded");
   assert.equal(panel.doorExpanded, "true", "Ambient's door does not say the panel is open");
   assert.ok(panel.heads.includes("Answering now"), "Ambient's door did not open the same panel");
   assert.deepEqual(problems, []);

@@ -782,7 +782,7 @@ await check("with the shell, the HUD's own chat box is usable, and the button op
 
   // THE OWNER'S ASK FIRST (2026-10-09, with a screenshot): the label follows
   // the bar, in both directions, and never contradicts itself.
-  assert.deepEqual(whileOpen, { label: "Hide the Jarvis bar", title: "Hide the Jarvis bar" },
+  assert.deepEqual(whileOpen, { label: "Hide the Atlas bar", title: "Hide the Atlas bar" },
     "the label did not follow the bar being open");
   assert.deepEqual(afterClose, { label: "Open the Jarvis bar", title: "Open the Jarvis bar" },
     "the label did not come back when the bar closed");

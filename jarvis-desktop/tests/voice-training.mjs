@@ -1229,7 +1229,7 @@ await check("someone else reads 3 sentences; the PC compares; the stricter bar i
   assert.match(said, /Good: none of their 3 clips would pass as you now\. A stricter setting, 0\.47 \(now 0\.35\)/);
   assert.match(said, /Nothing changes until you approve the card\./);
   assert.deepEqual(proposed, [{ threshold: 0.47, model: "strong" }]);
-  assert.match(after, /Waiting for your approval\. Approve it in the Jarvis bar/);
+  assert.match(after, /Waiting for your approval\. Approve it in the Atlas bar/);
 });
 
 await check("on a stale link the check still runs, but the stricter bar's card is held", async () => {
