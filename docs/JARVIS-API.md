@@ -38553,11 +38553,12 @@ Settings, What asks first, "Jarvis's own tools".
 
 **What it is.** `backend/jarvis_companion.py` (a shipped module, with its
 byte-identical `jarvis-backend/` twin) is the settings store and the answer text
-behind the desktop companion, plus the pure data helpers a renderer would need
-if the visual half were ever built: the golden-spiral point set for the avatar
-sphere (520 points, 260 in small mode), the wave formula for a sound-reactive
-surface, a shaper for a step-by-step guidance description and a shaper for a 3D
-card. Nothing in the product draws any of it.
+behind the desktop companion, plus two pure data helpers that shape a plain
+description: one for a step-by-step guidance workflow and one for a 3D card.
+Nothing in the product draws any of it. **The avatar's point set and its
+sound-reactive wave formula are deliberately absent:** both were line-for-line
+translations of AGPL-3.0-licensed code in the Roamies showcase, and this
+MIT-licensed project may not carry them, so both were deleted on 2026-11-13.
 
 **What it is not, and why the words matter.** No window of the desktop app and
 no screen of either app draws an avatar, a guidance overlay, a cursor ask bar or
@@ -38575,8 +38576,8 @@ preferences file says:
 
 | said in chat | intent | what it answers |
 |---|---|---|
-| "what are your desktop companion capabilities", "companion tools", "roamies capabilities", "show companion capabilities" | `companion_overview` | what exists (four saved preferences, the geometry, the two description shapers) and what does not |
-| "explain your holographic avatar", "how does your avatar work", "explain the wave sphere" | `companion_avatar_info` | the sphere's geometry and wave formula, and that nothing draws them |
+| "what are your desktop companion capabilities", "companion tools", "roamies capabilities", "show companion capabilities" | `companion_overview` | what exists (four saved preferences and the two description shapers) and what does not |
+| "explain your holographic avatar", "how does your avatar work", "explain the wave sphere" | `companion_avatar_info` | the saved style and size, and that the avatar's geometry and wave are not here |
 | "how does screen guidance work", "explain screen pointing", "explain screen guidance" | `companion_guidance_info` | what a guidance description holds, and that nothing is highlighted and nothing waits for a click |
 | "what is the cursor ask bar", "how does the ask bar work" | `companion_askbar_info` | the saved preference, and that no floating box exists |
 | "show companion settings", "what are my companion settings" | `companion_settings_show` | the saved preferences, each labelled as a preference |
