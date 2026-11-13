@@ -19,7 +19,7 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    "GitHub's union ships in 0.2.448: required checks are judged per repository, the CI read asks for the newest five runs and refuses a real cut answer in plain words instead of half-showing it, all six GitHub reads are...",
+    "GitHub's union ships in 0.2.448: merge checks are judged per repository, the CI read refuses a cut answer, six GitHub reads are card-free, and the review gates are ON by default",
     'The two-column Cockpit, a faster claims check, a shared credential denylist, two memory fixes, the everyday-lane guard, and GitHub merge / fix-and-push behind one card each',
     "The vault organizer's switch now says the approval card is waiting instead of claiming the organizer is already on",
     'The phone can approve tool switches, and the card names the exact tool',

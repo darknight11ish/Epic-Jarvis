@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "8475a145e864e64fa899ae32bd178acaca568b86",
- "built_at": "2026-11-11T02:40:05-08:00",
+ "ref": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
+ "built_at": "2026-11-12T06:05:38Z",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4596,6 +4596,7 @@
     "changelog.d/2026-11-10-phone-approves-tool-switches.md",
     "changelog.d/2026-11-10-vault-switch-waiting-words.md",
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
+    "changelog.d/2026-11-11-github-union-0-2-448.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4750,6 +4751,7 @@
     "decisions.d/2026-11-10-github-switch-door.md",
     "decisions.d/2026-11-10-hud-return-pill-two-column-withdrawn.md",
     "decisions.d/2026-11-10-phone-approves-tool-switches.md",
+    "decisions.d/2026-11-11-github-union-0-2-448.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5197,7 +5199,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 843,
+   "file_count": 845,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6280,6 +6282,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
+   "date": "2026-11-12",
+   "subject": "fix(union): resolve CI audit zero-jargon, asks-first frontend test, and backend Windows test failures"
+  },
+  {
+   "sha": "87a7cbd843c4eb0e245801d4cf08679dffa7c449",
+   "date": "2026-11-11",
+   "subject": "fix(union): 0.2.448 pins, records and the two 2026-11-11 field-test defects"
+  },
+  {
    "sha": "8475a145e864e64fa899ae32bd178acaca568b86",
    "date": "2026-11-11",
    "subject": "fix(base): the base README is its own document, not a copy of backend/README.md"
@@ -6368,16 +6380,6 @@
    "sha": "e5524c6ae5d6d8e0ae6303cd39f88f3c63bae553",
    "date": "2026-11-10",
    "subject": "chore(records): regenerate the shipped recent-changes module for the wave 16B bullet"
-  },
-  {
-   "sha": "6d5f7a2ac24e4052e6af14f2b6f3038bbb122400",
-   "date": "2026-11-10",
-   "subject": "fix: the record check's two reasons use plain words (wave 16E)"
-  },
-  {
-   "sha": "8291d0ffc258ad205d87ded537044f970e92f813",
-   "date": "2026-11-10",
-   "subject": "fix(desktop): wave 16E's two switchable rows reach the Rust, desktop and Android pin lists"
   }
  ],
  "top_level": [
@@ -6414,7 +6416,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 237
+   "files": 238
   },
   {
    "path": "videos/",
@@ -6424,7 +6426,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 154
+   "files": 155
   },
   {
    "path": "plugins/",
@@ -6498,8 +6500,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5621,
-  "covered": 5145,
+  "tracked_files": 5623,
+  "covered": 5147,
   "excluded": 476,
   "subsystems": 27
  },

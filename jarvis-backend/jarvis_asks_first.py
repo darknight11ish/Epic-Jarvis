@@ -315,6 +315,18 @@ NOTE_GITHUB_TOOL = ("One of the GitHub tools in the master switch's group. The A
                     "This line only decides whether each use asks you first; going looser "
                     "here is only possible by hand in your PC's settings file "
                     "(jarvis-framework.toml).")
+#: Under one of the four abilities added to the page on 2026-11-11 (the library
+#: search's own two actions and the two local review gates). All four ride the
+#: GitHub master switch and all four ship "auto" (card-free), so the shared
+#: "There is no switch for this one" note would be false about them, and
+#: NOTE_GITHUB_TOOL's group sentence does not fit either (the search tool's own
+#: switch sits in "Safety and sharing", the review gates in "Everyday
+#: helpers"). Says only what is true for every one of the four.
+NOTE_OFFERED_TOOL = ("It is card-free by default: the row says whether each use asks you first, and no card "
+                     "stands in front of it. Whether the AI model is offered the ability at all is a "
+                     "different switch, beside the GitHub master switch in Settings, What asks first; "
+                     "making this one ask again would be a hand edit of your PC's settings file "
+                     "(jarvis-framework.toml).")
 NOTE_EXTRA = {
     # The seven GitHub gate actions (2026-11-10): each is the ask-first line
     # UNDER one of the twenty tools, so the shared "There is no switch for this
@@ -346,6 +358,13 @@ NOTE_EXTRA = {
         "for the whole batch; nothing is deleted, and ONE Undo puts the vault "
         "back. There is no app switch for it - going looser is a hand edit of "
         "the settings file."),
+    # 2026-11-11 (Q3/Q4 and Q7): four more actions a card can be raised under,
+    # so the page must name them - the GitHub library search's own two actions
+    # (card-free, "auto") and the two local review gates (card-free, "auto").
+    "github_search_run": NOTE_OFFERED_TOOL,
+    "github_search_run_authenticated": NOTE_OFFERED_TOOL,
+    "review_changes": NOTE_OFFERED_TOOL,
+    "check_records": NOTE_OFFERED_TOOL,
 }
 
 NOTE_ROW = {
@@ -1001,6 +1020,16 @@ GROUPS = (
                       "github_open_pr", "github_workflow",
                       "github_issue_labels", "github_edit_pr",
                       "github_pr_review", "github_issue_state",
+                      # The 2026-11-11 union additions: the GitHub library
+                      # search got its own two gate actions (card-free under
+                      # `github_search_run` / `github_search_run_authenticated`,
+                      # both "auto"; only the search words go to api.github.com),
+                      # and the two local review gates are actions a card can
+                      # name too. All four are rows here because the page
+                      # promises every action a card can name
+                      # (test_asks_first.py requires it).
+                      "github_search_run", "github_search_run_authenticated",
+                      "review_changes", "check_records",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the

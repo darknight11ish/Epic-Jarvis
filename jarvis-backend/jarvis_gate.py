@@ -860,8 +860,6 @@ def notice_for(item: dict) -> dict:
     heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
 
     bits = [r["why"]]
-    if tool_name:
-        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
     if not r["classified"]:
         # The warning line above is the headline; this says WHY the worst case
         # was chosen, in the plainest words there are. Both are this file's own
@@ -875,6 +873,12 @@ def notice_for(item: dict) -> dict:
         # and are the one thing that must not travel.
         bits.append("something in the text it read tried to hurry you, so this "
                     "was raised for a closer look")
+    # The named ability goes FIRST in the body (insert(0)) but sits AFTER the
+    # raised block on purpose: unknown-risk-approvable.patch adds its line
+    # directly between `bits = [r["why"]]` and `if raised:`, and it must keep
+    # applying and reversing out of this base (test_gate_unknown_risk.py).
+    if tool_name:
+        bits.insert(0, f'this offers ONE ability to the AI model, named here: "{tool_name}"')
     bits.append("nothing has happened yet")
 
     return {
@@ -3132,12 +3136,30 @@ _TOOL_ACTIONS.update({
     # action). Its own action, so its card says "close or reopen an issue"
     # rather than "open an issue".
     "github_issue_state": "github_issue_state",
+    # The library search's own gate actions (2026-11-11, Q3/Q4). The tool hands
+    # the gate one of these two names at call time (signed in or not), so the
+    # table needs the ACTION names as keys; without them action_for_tool()
+    # answers "unclassified_tool" on a PC with no GitHub token - which is how CI
+    # runs - and the card and the Reach page would name the wrong thing.
+    "github_search_run": "github_search_run",
+    "github_search_run_authenticated": "github_search_run_authenticated",
 })
 _RISK.update({
     # Reading only. Reversible "yes" and reach "outbound" is the same pair
     # `github_read`, `page_read` and `news_read` already carry: nothing on
     # GitHub changes, but the request leaves this PC, so it is never "local".
     "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
+    # The library search's two actions (2026-11-11, Q3/Q4). GET-only searches on
+    # api.github.com, card-free by the owner's ruling, so they carry the same
+    # "yes"/"outbound" pair as github_inspect: nothing on GitHub changes, but
+    # the search words do leave this PC.
+    "github_search_run": ("yes", "outbound", "searches GitHub for existing libraries using your search words; it reads only and nothing on GitHub changes"),
+    "github_search_run_authenticated": ("yes", "outbound", "searches GitHub for existing libraries using your search words, signed in with the token saved on this PC; it reads only and nothing on GitHub changes"),
+    # The two local review gates (2026-11-11, Q-D/Q7). Local and read-only: they
+    # read this PC's own changes and record files, send nothing and change
+    # nothing; card-free by default, so "yes"/"local" is the honest pair.
+    "review_changes": ("yes", "local", "reviews the changes in a checkout on this PC and the records that should describe them; it reads only, sends nothing and changes nothing"),
+    "check_records": ("yes", "local", "checks this PC's record files against the tree before a push; it reads only, sends nothing and changes nothing"),
     # Posting in the owner's name. "no" for the same reason `send_email` is:
     # Jarvis cannot edit or withdraw a comment once GitHub has it.
     "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),

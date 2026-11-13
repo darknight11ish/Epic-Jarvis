@@ -61,6 +61,14 @@ SHIPPED = {
     # 2026-11-11 union): the one action the five GitHub read tools share. The
     # shipped file itself says "auto" now, so the simulated PC must too.
     "github_inspect": "auto",
+    # 2026-11-11 (Q3/Q4 and Q-D/Q7): the library search's own two actions and
+    # the two local review gates all ship "auto" in both settings files, so the
+    # simulated PC must say so too - otherwise every case draws "Asks you first,
+    # every time" over a line the shipped file says never asks.
+    "github_search_run": "auto",
+    "github_search_run_authenticated": "auto",
+    "review_changes": "auto",
+    "check_records": "auto",
 }
 
 

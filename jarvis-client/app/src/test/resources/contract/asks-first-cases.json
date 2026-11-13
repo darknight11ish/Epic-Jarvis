@@ -877,6 +877,50 @@
        "windows_hello": false
       },
       {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
+       "windows_hello": false
+      },
+      {
        "action": "support_chat",
        "confirmations": 1,
        "fixed": false,
@@ -2298,7 +2342,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -2306,7 +2350,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -2667,11 +2711,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -3582,6 +3626,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -5006,7 +5094,7 @@
       "id": "review_changes",
       "last": null,
       "on": true,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -5014,7 +5102,7 @@
       "id": "check_records",
       "last": null,
       "on": true,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -6286,6 +6374,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -7710,7 +7842,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -7718,7 +7850,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -8083,11 +8215,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -9002,6 +9134,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -10427,7 +10603,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -10435,7 +10611,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -10800,11 +10976,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -11719,6 +11895,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -13144,7 +13364,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -13152,7 +13372,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -13517,11 +13737,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -14432,6 +14652,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -15856,7 +16120,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -15864,7 +16128,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -16229,11 +16493,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -17139,6 +17403,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -18563,7 +18871,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -18571,7 +18879,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -18936,11 +19244,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -19851,6 +20159,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -21290,7 +21642,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -21298,7 +21650,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -21659,11 +22011,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -22574,6 +22926,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -24008,7 +24404,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -24016,7 +24412,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -24377,11 +24773,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -25287,6 +25683,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -26711,7 +27151,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -26719,7 +27159,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -27084,11 +27524,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -28007,6 +28447,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -29432,7 +29916,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -29440,7 +29924,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -29805,11 +30289,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
@@ -30720,6 +31204,50 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Close or reopen one issue",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub",
+       "windows_hello": false
+      },
+      {
+       "action": "github_search_run_authenticated",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_search_run_authenticated",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "review_changes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "review_changes",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Review code changes before a push",
+       "windows_hello": false
+      },
+      {
+       "action": "check_records",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "check_records",
+       "note": "It is card-free by default: the row says whether each use asks you first, and no card stands in front of it. Whether the AI model is offered the ability at all is a different switch, beside the GitHub master switch in Settings, What asks first; making this one ask again would be a hand edit of your PC's settings file (jarvis-framework.toml).",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Check repository records before a push",
        "windows_hello": false
       },
       {
@@ -32144,7 +32672,7 @@
       "id": "review_changes",
       "last": null,
       "on": false,
-      "title": "review changes",
+      "title": "The review packet: what changed, and what usually goes wrong",
       "waiting": false
      },
      {
@@ -32152,7 +32680,7 @@
       "id": "check_records",
       "last": null,
       "on": false,
-      "title": "check records",
+      "title": "The record check before a push: READY, or what is missing",
       "waiting": false
      },
      {
@@ -32517,11 +33045,11 @@
       },
       {
        "id": "review_changes",
-       "title": "review changes"
+       "title": "The review packet: what changed, and what usually goes wrong"
       },
       {
        "id": "check_records",
-       "title": "check records"
+       "title": "The record check before a push: READY, or what is missing"
       }
      ],
      "label": "New — currently off",
