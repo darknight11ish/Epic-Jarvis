@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
- "built_at": "2026-11-12T20:15:28-08:00",
+ "ref": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
+ "built_at": "2026-11-12T20:16:01-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6285,6 +6285,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
+   "date": "2026-11-12",
+   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
+  },
+  {
    "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
    "date": "2026-11-12",
    "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
@@ -6378,11 +6383,6 @@
    "sha": "23745c116fa4fcaa6789a1d5eb4082ba17507159",
    "date": "2026-11-11",
    "subject": "assemble: github parity step 2 - nine actions"
-  },
-  {
-   "sha": "7f11e73afd14dba487344f1477214cc0479b66eb",
-   "date": "2026-11-11",
-   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the main merge"
   }
  ],
  "top_level": [

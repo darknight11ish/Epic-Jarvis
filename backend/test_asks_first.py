@@ -820,12 +820,15 @@ def t_the_shipped_settings_and_the_case_table_agree():
           and "draft_email" not in AF.SWITCHABLE)
     loose = {a for a, t in tiers.items() if t in ("auto", "notify")}
     # web_research ships "ask" since 2026-11-07. It always ASKED in practice -
-    # jarvis_agent.NEEDS_A_PERSON refuses to run the github_search tool without
-    # a person's yes - but the file said "auto", so the live "What asks first"
-    # page showed the owner "Always asks" beside a tier of "auto" and the
-    # developer diagnostic SAYS_REFUSED (measured 2026-11-07). The line now
-    # says what the code does, so it is held by the same rule as every other
-    # never-loosened action instead of being the one exception.
+    # jarvis_agent.NEEDS_A_PERSON refused to run the github_search tool without
+    # a person's yes until the card-free GitHub reads decision (2026-11-10
+    # 23:00 PT) and the Q3/Q4 ruling gave github_search its own "auto" action
+    # names - but the web_research line itself said "auto", so the live "What
+    # asks first" page showed the owner "Always asks" beside a tier of "auto"
+    # and the developer diagnostic SAYS_REFUSED (measured 2026-11-07). The
+    # line now says what the code does - every OTHER research egress still
+    # asks - so it is held by the same rule as every other never-loosened
+    # action instead of being the one exception.
     check("nothing on the never-loosened list ships looser than \"ask\"",
           not (loose & AF.HARD_LIMITS), sorted(loose & AF.HARD_LIMITS))
 
