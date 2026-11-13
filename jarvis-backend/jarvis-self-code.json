@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "43119d35197d6549eeb6406400ba7a769a453e32",
- "built_at": "2026-11-13T06:11:28-08:00",
+ "ref": "32245326249985ff5bd6a3f369f6308aaf1d841e",
+ "built_at": "2026-11-13T06:14:35-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6295,9 +6295,19 @@
  ],
  "recent_commits": [
   {
-   "sha": "43119d35197d6549eeb6406400ba7a769a453e32",
+   "sha": "32245326249985ff5bd6a3f369f6308aaf1d841e",
+   "date": "2026-11-13",
+   "subject": "Merge H1d (PR #1227 at b5e5718be), the patch-history fix and its map"
+  },
+  {
+   "sha": "4fbcb44e24735e2586e28c789917f04418dce0d7",
    "date": "2026-11-13",
    "subject": "Merge commit '444d7e5c6dad01e688b91f4e4556dac67baf8f1e' into feature/code-obfuscation-tools"
+  },
+  {
+   "sha": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map for the added patch-history files"
   },
   {
    "sha": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
@@ -6383,16 +6393,6 @@
    "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
    "date": "2026-11-12",
    "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
-  },
-  {
-   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
-   "date": "2026-11-12",
-   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
-  },
-  {
-   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the main merge"
   }
  ],
  "top_level": [
