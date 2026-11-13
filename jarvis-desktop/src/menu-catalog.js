@@ -593,6 +593,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.voicestudio",
+    "title": "VoiceStudio",
+    "about": "The second voice program, and what it can be asked to do.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "voicestudio",
+      "voice studio",
+      "the second voice program"
+    ]
+  },
+  {
     "id": "settings.voices",
     "title": "Jarvis's voice",
     "about": "Custom voices and the voice pack.",
@@ -3256,6 +3277,7 @@ export const ALIASES = {
   "second card": "settings.second-card",
   "second gpu": "settings.second-card",
   "second graphics card": "settings.second-card",
+  "second voice program": "settings.voicestudio",
   "security": "settings.security",
   "security settings": "settings.security",
   "sending email": "settings.email-sending",
@@ -3315,6 +3337,8 @@ export const ALIASES = {
   "voice check": "entry.voice-check",
   "voice check row": "entry.voice-check",
   "voice settings": "settings.voice",
+  "voice studio": "settings.voicestudio",
+  "voicestudio": "settings.voicestudio",
   "waiting for you": "brain.memory.waiting",
   "watch": "brain.tab.watch",
   "watch notifications": "settings.watch-notify",

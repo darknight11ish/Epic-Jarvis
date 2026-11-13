@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "206eb0e09be58d6701d5095230abc6919cf0acd7",
- "built_at": "2026-11-13T14:29:07-08:00",
+ "ref": "e46ff2d65262080868f08091056af77852183383",
+ "built_at": "2026-11-13T14:29:19-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6314,6 +6314,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "e46ff2d65262080868f08091056af77852183383",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-after-the-phone-fix"
+  },
+  {
    "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
    "date": "2026-11-13",
    "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
@@ -6407,11 +6412,6 @@
    "sha": "5da9ba6759d2ffa6113a44f2ba4685447177439e",
    "date": "2026-11-13",
    "subject": "Merge H1 (PR #1227 at 50a2db3) and origin/main (ad895ed) into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "50a2db3dbe65abff2b2b1b6d2b2460884180bd2c",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (ad895ed) into feature/on-device-ai-and-mobile-harness"
   }
  ],
  "top_level": [

@@ -334,6 +334,15 @@ MENUS: tuple = (
        "Reconnect to a saved Wi-Fi network while this PC has no internet.",
        (DESKTOP,), names=("wi-fi reconnect", "wifi reconnect",
                           "the auto wi-fi reconnect")),
+    # "VoiceStudio" (2026-11-13): settings.html's id="voicestudio" card, the
+    # second voice program the awareness audit's GAP-9 asked for. Desktop-only,
+    # like the section itself (jarvis_settings_registry.Section app="desktop").
+    # Without this entry `test_menu_visibility` refuses the new section: every
+    # registry section must have a menu, or be one of the four that never can.
+    _m("settings.voicestudio", "VoiceStudio",
+       "The second voice program, and what it can be asked to do.",
+       (DESKTOP,), names=("voicestudio", "voice studio",
+                          "the second voice program")),
     _m("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.",
        names=("jarvis's voice", "jarvis's voices", "custom voices")),
     _m("settings.prompt-coach", "Prompt coach",
