@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
- "built_at": "2026-11-13T06:11:20-08:00",
+ "ref": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
+ "built_at": "2026-11-13T06:14:10-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4601,6 +4601,7 @@
     "changelog.d/2026-11-10-wave16-cockpit-claims-github-parity.md",
     "changelog.d/2026-11-11-github-union-0-2-448.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
+    "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4758,6 +4759,7 @@
     "decisions.d/2026-11-10-phone-top-strip-moves-to-more.md",
     "decisions.d/2026-11-11-github-union-0-2-448.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5206,7 +5208,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 850,
+   "file_count": 852,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6289,6 +6291,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "b5e5718bec7ec734510a51ec2d0c6abffe73f2b8",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map for the added patch-history files"
+  },
+  {
    "sha": "444d7e5c6dad01e688b91f4e4556dac67baf8f1e",
    "date": "2026-11-13",
    "subject": "fix(records): store the four patch versions main's history was missing"
@@ -6382,11 +6389,6 @@
    "sha": "8ef4acf0c691f7785d368eece72347c00a9e5f60",
    "date": "2026-11-12",
    "subject": "fix(ci): resolve backend and backend-windows test failures across topics leaks, plugins honesty, urlopen regexes, and speed record timestamp collision"
-  },
-  {
-   "sha": "9b0ef63d64e61a5cfc676409381bf56d34071ff2",
-   "date": "2026-11-12",
-   "subject": "fix(ci): align SettingsSearch row order and restore offline sync twin parity in jarvis-backend/_where.py"
   }
  ],
  "top_level": [
@@ -6423,7 +6425,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 240
+   "files": 241
   },
   {
    "path": "videos/",
@@ -6433,7 +6435,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 157
+   "files": 158
   },
   {
    "path": "plugins/",
@@ -6507,8 +6509,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5636,
-  "covered": 5154,
+  "tracked_files": 5638,
+  "covered": 5156,
   "excluded": 482,
   "subsystems": 27
  },
