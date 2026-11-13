@@ -5164,6 +5164,43 @@ what is missing is only the Settings screen agreeing about who turned it off.
   unchanged because no route was added: a GitHub screen would be deep
   configuration, which the standing rule keeps off the phone.
 
+- **A model that runs on the phone itself is the phone's alone, and that is
+  one-sided on purpose** (2026-11-13; the owner's order *"build the full
+  android local ai model engine into the jarvis app once off peak hits"* and
+  his card answers that night: a separate Local AI screen, model source
+  "Both" with USB/file import first). The Android app gains a small GGUF
+  model engine of its own (`com.jarvis.client.localai`, llama.cpp under the
+  hood, MIT): it reads the model file on this phone's storage, answers in a
+  screen reached from Home's More menu, and has **no backend route, no
+  cloud fallback and no network path at all**. The desktop gets nothing, and
+  not because it was forgotten: it already runs models on the same PC through
+  Ollama, with the graphics-card lanes and the model catalogue that this
+  slice is explicitly not allowed to build on the phone, so a second
+  on-device engine there would be a duplicate rather than parity. **Nothing
+  about the ordinary Jarvis chat changes:** the on-device screen is a
+  separate local session, never a silent replacement for the chat that uses
+  the PC, and the switch that turns it on ships OFF - nothing downloads,
+  nothing loads and no native library is opened until the owner taps, and
+  the model is brought by the owner as a file (E1 has no in-app download;
+  that is E2). It adds no permission, raises no approval card and logs
+  nothing; the phone does no speech-to-text on this path or any other. The
+  two time rules are the engine's own: 5 seconds with nothing asked unloads
+  the model, and one reply is hard-capped at 180 seconds, so a slow model
+  cannot hold the phone's memory or the screen forever. **Honest limits, on
+  the record:** the native `libjarvis_llama.so` is the native lane's prebuilt
+  artefact (CPU-only llama.cpp, both 64-bit ABIs, 16 KB page aligned, with
+  provenance and MIT licences in `jarvis-client/native/`) and is integrated
+  into the same pull request; it was proven on the owner's own phone by that
+  lane's standalone probe - a small Qwen2.5-0.5B Q4_K_M model loaded in
+  262 ms and generated 24 tokens in 1.2 s, about 19.92 tokens/s, with
+  cancellation, unload and destroy passing. **That is a PASS for the LIBRARY,
+  not for the app.** The in-app Local AI screen has not been driven on a real
+  phone, so the screen's own tokens/s line says "not measured", a field-test
+  row for the app is BLOCKED rather than PASS, and no number from the probe is
+  shown in the UI; `features/features.json` is deliberately unchanged until
+  that measurement exists, and `tools/check_parity.py` has nothing to classify
+  because no route is added.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

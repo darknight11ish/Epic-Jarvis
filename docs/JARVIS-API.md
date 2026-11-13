@@ -38954,3 +38954,45 @@ history of their own days.
   twelve writes) plus the two local review gates. An EXISTING PC's settings file
   is never overwritten: the two appear on its "New - currently off" pill and the
   master switch offers them in the same one card.
+
+## 219. The phone's own on-device model engine adds no backend route (2026-11-13)
+
+This section exists to say what is **not** here. The Android app's Local AI screen
+(`jarvis-client/app/src/main/java/com/jarvis/client/localai/`, opened from Home's
+More menu) runs a small GGUF model on the phone itself, with llama.cpp under it:
+the model file is read from this phone's storage, the answer is generated on this
+phone, and **nothing about the question or the answer is sent to the PC or to
+anywhere else**. There is therefore no route to classify, no field to add and no
+permission to ask for - `tools/check_parity.py` sees an empty diff on both sides,
+which is the correct answer rather than an omission.
+
+What that means, route by route:
+
+* **No new `GET` or `POST`.** The screen calls no backend at all. It does not
+  read `/api/models`, `/api/status` or anything else, and the engine has no
+  network code in it (`LocalAiShipsOffTest` reads the package and fails if an
+  HTTP client, a URL or a token ever appears there).
+* **The existing chat is unchanged.** The question box on Home still sends to the
+  PC exactly as before; the Local AI screen is a separate local session, never a
+  fallback or a replacement.
+* **No model catalogue and no download.** E1 takes a `.gguf` file the owner
+  already put on the phone (over USB, or copied across from another device),
+  picked through Android's own document picker. In-app download is E2, and it
+  must arrive with its own route and its own decision record.
+* **No approval card, no token, no pairing change.** A file on this phone and a
+  model answering it are the owner's own act on the owner's own device. The
+  screen never reads the pairing token and never writes one.
+* **No speech.** The phone still does no speech-to-text, here or elsewhere; this
+  screen is typed text only.
+
+The switch that turns it on ships **OFF**, no model is loaded until the owner
+taps Load, and the screen's permanent label is the honest one: *"On-device model:
+runs on this phone, not your PC."* The desktop has no counterpart on purpose -
+`docs/ARCHITECTURE.md` section 8 records why (it already has Ollama on the same
+PC, and a second on-device engine there would duplicate it) - and the public
+feature list is deliberately not changed until this screen has been driven on a
+phone, so no row claims an ability that is still unmeasured. The native library
+itself was proven on the owner's phone by the native lane's standalone probe
+(a small Qwen2.5-0.5B Q4_K_M model, about 19.92 tokens/s, with cancellation,
+unload and destroy passing); that is a PASS for the library, and the in-app
+screen's own tokens/s row stays BLOCKED until the screen itself is driven.
