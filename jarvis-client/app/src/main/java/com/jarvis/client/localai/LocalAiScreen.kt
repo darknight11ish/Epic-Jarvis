@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -71,8 +72,20 @@ import kotlinx.coroutines.launch
  * [DisposableEffect] calls `controller.close()` when the screen leaves the
  * composition, which destroys the native handle. A model is hundreds of
  * megabytes; keeping it alive on the way back to Home is how the next app on
- * the phone gets killed. Within the screen, the 5-second idle rule does the
- * same (`LocalEnginePolicy`).
+ * the phone gets killed. That is the memory-saving rule that matters, and it
+ * had to stay while the idle rule changed: within the screen, five minutes
+ * with nothing asked (or typed) frees the model too (`LocalEnginePolicy`).
+ *
+ * ## The keyboard must not hide the input or Send (field test, 2026-11-13)
+ *
+ * The chat used to be one plate at the end of the scrolling list, so with the
+ * keyboard up the list clipped it and `Send` left the accessibility tree
+ * entirely - the tester could only send after pressing BACK. The chat history
+ * still scrolls (it is a list item), but the composer (field, Send, Clear) is
+ * now pinned below the list, inside the app's root `imePadding()`, so the
+ * keyboard shrinks the screen and the composer stays on it. The permanent
+ * label is pinned above the list for the same reason: it must be readable
+ * even while a question is being typed.
  *
  * ## The file picker is the one step that needs exact words
  *
@@ -112,8 +125,9 @@ fun LocalAiScreen(
         if (state.switchOn) controller.refreshModels()
     }
 
-    // The screen's heartbeat. It is the only caller of tick(), so the 5-second
-    // idle unload and the 180-second cap exist exactly while this screen does.
+    // The screen's heartbeat. It is the only caller of tick(), so the
+    // five-minute idle unload and the 180-second cap exist exactly while this
+    // screen does.
     LaunchedEffect(state.switchOn) {
         if (!state.switchOn) return@LaunchedEffect
         while (true) {
@@ -144,31 +158,39 @@ fun LocalAiScreen(
         scope.launch { controller.send(text) }
     }
 
+    // The chat exists once a model is loaded (or is being loaded, or a reply
+    // is running). It decides whether the composer is pinned at the bottom of
+    // the screen; the history itself stays in the scrolling list above it.
+    val chatVisible = state.loadedModel != null || state.engine == EngineState.READY ||
+        state.engine == EngineState.GENERATING
+
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         TopBar(LocalAiWords.TITLE, onBack, subtitle = LocalAiWords.SUBTITLE)
+
+        // The permanent label, pinned above the scrolling list rather than
+        // living in it. It is drawn on every visit, on and off, because the
+        // one thing this screen must never blur is which machine is
+        // answering - and when the keyboard is up the list scrolls, so a
+        // label inside it is exactly the thing that would scroll away.
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 4.dp),
+        ) {
+            Plate {
+                Text(
+                    LocalAiWords.PERMANENT_LABEL,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.textHi,
+                    modifier = Modifier.semantics {
+                        contentDescription = LocalAiWords.PERMANENT_LABEL
+                    },
+                )
+            }
+        }
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp),
         ) {
-            item(key = "space-top") { Spacer(Modifier.height(4.dp)) }
-
-            // The permanent label. It is drawn on every visit, on and off,
-            // because the one thing this screen must never blur is which
-            // machine is answering.
-            item(key = "permanent-label") {
-                Plate {
-                    Text(
-                        LocalAiWords.PERMANENT_LABEL,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = chrome.textHi,
-                        modifier = Modifier.semantics {
-                            contentDescription = LocalAiWords.PERMANENT_LABEL
-                        },
-                    )
-                }
-            }
-
             item(key = "switch") {
                 Plate {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -313,24 +335,36 @@ fun LocalAiScreen(
                     }
                 }
 
-                if (state.loadedModel != null || state.engine == EngineState.READY ||
-                    state.engine == EngineState.GENERATING
-                ) {
+                if (chatVisible) {
                     item(key = "chat") {
-                        ChatPlate(
-                            state = state,
-                            draft = draft,
-                            onDraftChange = {
-                                draft = it
-                                controller.noteTyping()
-                            },
-                            onSend = { send() },
-                        )
+                        ChatHistoryPlate(state)
                     }
                 }
             }
 
             item(key = "space-bottom") { Spacer(Modifier.height(12.dp)) }
+        }
+
+        // The composer lives OUTSIDE the scrolling list and after it, so it is
+        // pinned just above the bottom of the screen. The root's `imePadding`
+        // is what keeps this Column above the keyboard (MainActivity applies
+        // it once, app-wide); a list item could be scrolled or clipped out of
+        // the tree, and with the keyboard up that is exactly what used to
+        // happen to the field and to Send. Never add a second `imePadding`
+        // here - the root already pays that inset.
+        if (chatVisible) {
+            ChatComposer(
+                state = state,
+                draft = draft,
+                onDraftChange = {
+                    draft = it
+                    controller.noteTyping()
+                },
+                onSend = { send() },
+                onClear = { draft = "" },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+            )
+            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -423,14 +457,9 @@ private fun ModelRow(
     }
 }
 
-/** The conversation with the model on this phone. */
+/** The conversation so far: a scrolling list item above the pinned composer. */
 @Composable
-private fun ChatPlate(
-    state: LocalAiState,
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    onSend: () -> Unit,
-) {
+private fun ChatHistoryPlate(state: LocalAiState) {
     val chrome = LocalChrome.current
     Plate {
         Kicker(LocalAiWords.CHAT)
@@ -452,13 +481,39 @@ private fun ChatPlate(
                 color = chrome.textHi,
             )
         }
-        Gap(8)
+    }
+}
+
+/**
+ * The pinned composer: the draft field, Send and Clear.
+ *
+ * It sits outside the scrolling list so the keyboard cannot take it away.
+ * `maxLines = 3` rather than the list version's 4 because this box is pinned:
+ * a four-line draft plus the button row would push the composer past the
+ * space the keyboard leaves on a small phone.
+ *
+ * Clear discards the draft. The draft is `rememberSaveable` and survives
+ * leaving the screen, which the 2026-11-13 field test found had no way out
+ * except killing the app; it is placed beside Send so the row's height does
+ * not change.
+ */
+@Composable
+private fun ChatComposer(
+    state: LocalAiState,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    Plate(modifier) {
         TextInput(
             value = draft,
             onValueChange = onDraftChange,
             placeholder = LocalAiWords.ASK_PLACEHOLDER,
             singleLine = false,
-            maxLines = 4,
+            maxLines = 3,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSend() }),
         )
@@ -468,6 +523,13 @@ private fun ChatPlate(
                 LocalAiWords.SEND,
                 enabled = state.engine == EngineState.READY && !state.busy && draft.isNotBlank(),
                 onClick = onSend,
+            )
+            Spacer(Modifier.width(6.dp))
+            Quiet(
+                LocalAiWords.CLEAR,
+                color = chrome.textMid,
+                enabled = draft.isNotEmpty(),
+                onClick = onClear,
             )
         }
         Gap(6)
@@ -556,5 +618,5 @@ private fun queryPicked(resolver: ContentResolver, uri: Uri): Picked? {
 
 private data class Picked(val name: String, val size: Long?)
 
-/** Twice a second is enough for a 5-second rule and cheap for the battery. */
+/** Twice a second is enough for a five-minute rule and cheap for the battery. */
 private const val TICK_MILLIS = 500L

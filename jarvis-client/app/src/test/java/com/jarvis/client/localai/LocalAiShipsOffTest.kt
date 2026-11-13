@@ -71,6 +71,34 @@ class LocalAiShipsOffTest {
     }
 
     @Test
+    fun theDraftCanBeClearedWithoutLeavingTheScreen() {
+        // Field test, 2026-11-13: the draft is `rememberSaveable`, so it
+        // survives leaving the screen, and there was no way to throw a stale
+        // or half-typed question away except killing the app. Clear is wired
+        // to the draft's own state, not to the engine.
+        assertEquals("Clear", LocalAiWords.CLEAR)
+        val screen = source("LocalAiScreen.kt")
+        assertTrue(
+            "the Clear action must discard the draft:\n$screen",
+            screen.contains("onClear = { draft = \"\" }"),
+        )
+        assertTrue("the composer must draw the Clear action", screen.contains("LocalAiWords.CLEAR"))
+    }
+
+    @Test
+    fun leavingTheScreenFreesTheModel() {
+        // The memory-saving rule that matters: the model is destroyed when the
+        // Local AI screen leaves the composition. The five-minute idle window
+        // is the rule INSIDE the screen; this is the one on the way out, and
+        // `LocalAiControllerTest.closingTheScreenReleasesTheEngine` proves the
+        // controller side of it.
+        assertTrue(
+            "the screen must destroy the engine when it leaves the composition",
+            source("LocalAiScreen.kt").contains("onDispose { controller.close() }"),
+        )
+    }
+
+    @Test
     fun theSwitchIsOffUntilTheOwnerTapsIt() {
         assertFalse(LocalAiSettings.DEFAULT_ENABLED)
         val settings = LocalAiSettings(MapFlags())
