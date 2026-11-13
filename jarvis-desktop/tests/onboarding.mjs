@@ -163,7 +163,7 @@ check("it sends a new owner to voice training before inviting speech", () => {
     "the walkthrough does not say an unlearned voice is refused");
   const settings = screens.find((s) => /settings/i.test(s.text) && /tray/i.test(s.text));
   assert.ok(settings, "no screen says where the settings are");
-  assert.match(settings.text, /Voice teaches\s+Jarvis your voice/i,
+  assert.match(settings.text, /Voice teaches\s+Atlas your voice/i,
     "the walkthrough never says where voice training lives");
 });
 
@@ -202,9 +202,9 @@ check("it points at what Jarvis can reach, which the audit asked for", () => {
   // screen's numbering and wording are held by three other suites, and the
   // audit's own words are that the app "cannot install this yet", so the
   // first screen stays the one every new owner can act on today.
-  assert.match(ALL, /What\s+Jarvis can reach/,
+  assert.match(ALL, /What\s+Atlas can reach/,
     "the walkthrough never names the page that lists every way out of the PC");
-  const screen = screens.find((s) => /What\s+Jarvis can reach/.test(s.text));
+  const screen = screens.find((s) => /What\s+Atlas can reach/.test(s.text));
   assert.match(screen.text, /way out of this PC/i, "the page is named without saying what it is for");
 });
 

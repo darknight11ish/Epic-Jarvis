@@ -48,7 +48,7 @@ const PY = pythonFor(BACKEND_DIR);
 const T = K.TRAINING;
 const S = T.statuses;
 const A = (name) => K.TRAINING.answer(T.enroll[name]);
-const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 /** An older PC: today's status without the flags 2026-09-24 added. */
 const older = (st) => {
   const c = JSON.parse(JSON.stringify(st));

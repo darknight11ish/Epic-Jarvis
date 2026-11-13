@@ -38,7 +38,7 @@ const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
 const T = K.TRAINING;
 const V = T.voices;
 const P = (name) => K.TRAINING.answer(T.voice_posts[name]);
-const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
