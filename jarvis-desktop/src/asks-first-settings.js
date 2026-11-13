@@ -39,6 +39,8 @@ import {
   TOOLS_LABEL,
   extraToolView,
   extraToolsView,
+  githubGroupRow,
+  githubGroupSwitchView,
   notSwitchableView,
   toolGroupsView,
   toolSwitchView,
@@ -182,6 +184,23 @@ function paintTools() {
     const box = node("div", "af-group");
     box.append(node("h4", "subhead", group.title));
     const ul = node("ul", "sc-cards");
+    // The master GitHub group switch (2026-11-10): ONE row that offers/removes
+    // the ten GitHub tools together, drawn at the TOP of its own group. It is
+    // not a tool item - the PC sends it as a separate object - so the per-tool
+    // rows below it are untouched.
+    const gg = githubGroupRow(tools);
+    if (gg && (!gg.group || gg.group === group.title)) {
+      const li = node("li", "sc-gpu");
+      li.dataset.tool = gg.id;
+      li.append(node("span", "sc-gpu-name", gg.title));
+      const gv = githubGroupSwitchView(gg, tools, live());
+      if (gv) {
+        li.append(toggle("af-github-group", TOOLS_LABEL, "", gv.checked,
+          busy || gv.disabled, (want, box2) => changeTool(gg.id, want, box2)));
+        for (const line of gv.lines) li.append(node("span", "sc-gpu-role", line));
+      }
+      ul.append(li);
+    }
     for (const item of group.items) {
       const li = node("li", "sc-gpu");
       li.dataset.tool = item.id;

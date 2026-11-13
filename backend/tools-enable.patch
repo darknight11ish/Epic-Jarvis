@@ -1,18 +1,20 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -2242,6 +2242,38 @@
+@@ -2242,6 +2242,40 @@
                  code, out = jarvis_asks_first.handle_lights(body)
              return self._send(code, out)
  
 +        if route == "/api/asks_first/tools":
-+            # tools-enable.patch - offering a reading tool to the AI model at
++            # tools-enable.patch - offering one named tool to the AI model at
 +            # all (jarvis_asks_first.py, the owner's answer of 2026-09-27): a
 +            # DIFFERENT thing from /api/asks_first/tier - whether the model is
 +            # offered a tool at all ([tools].enabled), never whether it asks
 +            # first. {"enabled": true} is the PC only, ONE approval card
-+            # (enable_reading_tool) that needs Windows Hello - jarvis_owner_
-+            # check.PC_ONLY_ACTIONS refuses its approval from any other
-+            # device. {"enabled": false} is instant, from either app.
++            # (enable_reading_tool) and it is a RISKY card: Windows Hello on
++            # this PC, and on the phone that phone's own signed approval (a
++            # fingerprint or PIN) - the owner's ruling of 2026-11-10, "let the
++            # phone approve tool switches too". {"enabled": false} is instant,
++            # from either app, and needs no card and no check.
 +            # Desktop only by CLAUDE.md's standing rule; the phone reads the
 +            # same GET /api/asks_first and simply does not show the new
 +            # "tools" key it now carries.
@@ -49,17 +51,23 @@
  })
  
  
-@@ -687,6 +688,13 @@
+@@ -687,6 +688,19 @@
      # paired smartwatch too - not a Jarvis watch app, and nothing about it
      # reaches this PC. Turning it off again is instant.
      "watch_notifications_enable": ("yes", "local", "lets your phone's own notification bridging copy Jarvis's notifications to a paired smartwatch too, instead of keeping them on the phone only; nothing about this reaches this PC, and turning it off again is instant"),
 +    # tools-enable.patch (jarvis_asks_first.py, the owner's answer of
-+    # 2026-09-27). A DIFFERENT thing from loosen_what_asks_first, above: this
-+    # offers a reading tool to the AI model at all, by changing one line of
-+    # [tools].enabled on this PC, and sends nothing. Turning it back off is
-+    # instant, from either app. jarvis_owner_check.PC_ONLY_ACTIONS makes its
-+    # approval need Windows Hello on this PC whatever this line says.
-+    "enable_reading_tool": ("yes", "local", "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant"),
++    # 2026-09-27; made RISKY by the owner's ruling of 2026-11-10). A DIFFERENT
++    # thing from loosen_what_asks_first, above: this offers ONE named tool -
++    # the one on its own card - to the AI model at all, by changing one line of
++    # [tools].enabled on this PC, and sends nothing. It is a RISKY card on
++    # purpose: the switch can be turned back off at once, but while it was on
++    # the model may already have used that ability in a chat, and that use
++    # cannot be taken back. So on the PC it asks Windows Hello, and on the phone
++    # it needs that phone's own signed approval (the owner's 2026-11-10 ruling:
++    # "let the phone approve tool switches too") - a phone with no approval key
++    # is refused with "no_approval_key" so it can offer to turn signing on.
++    # Turning it back off is instant, from either app, no card.
++    "enable_reading_tool": ("no", "local", "offers ONE ability to the AI model at all - the tool named on its own card - by writing that one line into [tools].enabled in your settings file on this PC; it sends nothing, it is separate from whether that ability asks you first, and the switch can be turned back off at once - but while it was on the model may already have used that ability, and that use cannot be taken back"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

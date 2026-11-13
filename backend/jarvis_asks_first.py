@@ -21,21 +21,29 @@ docs/APPROVALS-AUDIT-2026-09-26.md; CLAUDE.md)
     Locks, doors, alarms and covers always keep a card of their own.
 
 OFFERING A READING TOOL TO THE AI MODEL AT ALL (2026-09-27, the owner's
-answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md)
+answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md;
+extended 2026-11-10)
   * "Reading tools (calendar, email, notes, home status) can be switched on
     from the PC app, each with a card plus Windows Hello; other tools stay
     in the settings file." A DIFFERENT thing from loosening, above: loosening
     changes whether an offered tool asks first ([autonomy.tiers]); this
     changes whether the model is offered the tool AT ALL ([tools].enabled -
-    jarvis_agent.offered_tools() only offers a tool named there). Each of
-    the four switches on its own, one card at a time (ENABLE_TOOL_ACTION,
-    "enable_reading_tool"), the same PC-only, Windows-Hello shape as
-    loosening (jarvis_owner_check.PC_ONLY_ACTIONS). Turning one OFF removes
-    it from [tools].enabled at once, from either app, never a card - it
-    only narrows what the model may do. Every other tool (github_search,
-    send_email, home_control, browser_control, ...) stays file-only: it can
-    only be added to [tools].enabled by hand (jarvis_reach.py's rows for
-    them say so plainly).
+    jarvis_agent.offered_tools() only offers a tool named there).
+  * SINCE 2026-11-04 every tool the AI can be offered has its own switch, one
+    card at a time (ENABLE_TOOL_ACTION, "enable_reading_tool"), and the card
+    NAMES that one tool.
+  * The owner's ruling of 2026-11-10: "LET THE PHONE APPROVE TOOL SWITCHES
+    TOO." The card is requested from the PC (the phone's page is read-only),
+    and it is a RISKY card, not a PC-only one: on the PC it asks Windows Hello,
+    and on the phone it needs that phone's own signed approval (a fingerprint
+    or PIN) - a phone with no approval key is refused and offered turning
+    signing on. Denying works from anywhere. Turning a tool OFF removes it
+    from [tools].enabled at once, from either app, never a card - it only
+    narrows what the model may do. Each USE of an offered tool still has its
+    own "Ask me first" decision; this card approves no use.
+  * Every other tool (github_search, send_email, home_control, browser_control,
+    ...) stays file-only: it can only be added to [tools].enabled by hand
+    (jarvis_reach.py's rows for them say so plainly).
 
 THE TWO CARDS HERE MUST NOT NAME A FILE THE GATE PROTECTS (fixed 2026-10-10)
 The loosening card (LOOSEN_ACTION, `loosen_card()`) and the reading-tool card
@@ -295,7 +303,42 @@ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits fo
 #: writes above and is not in MUST_ASK: the default is NOTE_FILE, which speaks
 #: only about "no app switch". The organizer needs the other three promises
 #: said too - the vault it touches, ONE card, and Undo.
+#: Under a GitHub ACTION row (2026-11-10, the owner's ruling: never tell him
+#: "there is no switch for this one" about a GitHub ability). The tool switches
+#: DO exist now - one per ability plus the master group switch - so the note
+#: names them and where they are, and keeps the one thing that is really true
+#: for this row: its TIER is the ask-first decision, and loosening that is a
+#: hand edit of the settings file.
+NOTE_GITHUB_TOOL = ("One of the GitHub tools in the master switch's group. The AI model is offered it by its own "
+                    "switch, and by the master switch that offers all twenty at once, in Settings, "
+                    "What asks first, under \"Let the AI use this\" in \"Jarvis's own tools\". "
+                    "This line only decides whether each use asks you first; going looser "
+                    "here is only possible by hand in your PC's settings file "
+                    "(jarvis-framework.toml).")
+#: Under one of the four abilities added to the page on 2026-11-11 (the library
+#: search's own two actions and the two local review gates). All four ride the
+#: GitHub master switch and all four ship "auto" (card-free), so the shared
+#: "There is no switch for this one" note would be false about them, and
+#: NOTE_GITHUB_TOOL's group sentence does not fit either (the search tool's own
+#: switch sits in "Safety and sharing", the review gates in "Everyday
+#: helpers"). Says only what is true for every one of the four.
+NOTE_OFFERED_TOOL = ("It is card-free by default: the row says whether each use asks you first, and no card "
+                     "stands in front of it. Whether the AI model is offered the ability at all is a "
+                     "different switch, beside the GitHub master switch in Settings, What asks first; "
+                     "making this one ask again would be a hand edit of your PC's settings file "
+                     "(jarvis-framework.toml).")
 NOTE_EXTRA = {
+    # The seven GitHub gate actions (2026-11-10): each is the ask-first line
+    # UNDER one of the twenty tools, so the shared "There is no switch for this
+    # one" note was false about them - the switch is the tool's own row, and
+    # the master group switch beside it. The owner's ruling: never say "no
+    # switch" where a switch exists.
+    "github_comment": NOTE_GITHUB_TOOL,
+    "github_open_issue": NOTE_GITHUB_TOOL,
+    "github_rerun_workflow": NOTE_GITHUB_TOOL,
+    "github_create_repo": NOTE_GITHUB_TOOL,
+    "github_merge_pr": NOTE_GITHUB_TOOL,
+    "github_fix_and_push": NOTE_GITHUB_TOOL,
     "delete_call_recording": (
         "It removes ONE recording's own folder on this PC - the audio, the "
         "transcript and the row you see in the list - and it cannot be undone. "
@@ -315,9 +358,25 @@ NOTE_EXTRA = {
         "for the whole batch; nothing is deleted, and ONE Undo puts the vault "
         "back. There is no app switch for it - going looser is a hand edit of "
         "the settings file."),
+    # 2026-11-11 (Q3/Q4 and Q7): four more actions a card can be raised under,
+    # so the page must name them - the GitHub library search's own two actions
+    # (card-free, "auto") and the two local review gates (card-free, "auto").
+    "github_search_run": NOTE_OFFERED_TOOL,
+    "github_search_run_authenticated": NOTE_OFFERED_TOOL,
+    "review_changes": NOTE_OFFERED_TOOL,
+    "check_records": NOTE_OFFERED_TOOL,
 }
 
 NOTE_ROW = {
+    # The GitHub reads' ask-first row (2026-11-10): the owner's decision made
+    # GitHub reads card-free, and this is the one app switch that does it. The
+    # note says exactly what the switch does and does NOT do - reads only,
+    # nothing on GitHub changes - and who can change it and how.
+    "github_inspect": ("Reads only: it lists or reads your GitHub and nothing on GitHub "
+                       "changes (it still sends your saved GitHub token to api.github.com). "
+                       "This switch is whether each read asks you first: turning it off is "
+                       "ONE approval card and Windows Hello on this PC, and turning it back "
+                       "on asks first again at once, from either app."),
     "read_files_readonly": ("Reading happens on this PC and writes nothing back. A chat that "
                             "read a file counts as having read outside text, so a later web "
                             "search or note in it still asks."),
@@ -385,6 +444,15 @@ LOOSE = {
     "read_logseq_page": "auto",
     "create_logseq_page": "auto",
     "power_manage": "auto",
+    # The GitHub READS (2026-11-10 23:00 PT, the owner's "make GitHub reads
+    # card-free"): github_inspect is the one action the four read tools share
+    # (github_list, github_read_file, github_ci_status and the PR cockpit
+    # github_pr_scan). It is here so the owner can turn "ask first" off from
+    # the page - ONE card plus Windows Hello on the PC - instead of the old
+    # "no switch for this one" dead end. "auto" is what loosening writes back:
+    # READS ONLY, nothing on GitHub changes. The twelve GitHub WRITES keep their
+    # own ask actions and did NOT join this list.
+    "github_inspect": "auto",
 }
 SWITCHABLE = tuple(LOOSE)
 
@@ -483,8 +551,11 @@ TIER_EXTRA = (
     # tools branch met the owner's 2026-11-04 decision - EVERY tool the model
     # can be offered is switchable from an app except the five NOT_A_SWITCH
     # names - so leaving them nowhere would have been the one hole in that
-    # rule. Each one still raises its own card, and the ACTION they share
-    # (github_inspect for the three reads) stays the "ask" tier.
+    # rule. The twelve WRITES each still raise their own card, and the ACTION the
+    # five reads share (github_inspect) is the switchable READ row of
+    # 2026-11-10: the owner can turn "Read your GitHub" to don't-ask from this
+    # page (one card plus Windows Hello), because the owner chose card-free
+    # GitHub reads. Loosening it changes only whether a READ asks first.
     "github_list", "github_read_file", "github_ci_status",
     "github_comment", "github_open_issue", "github_rerun_workflow",
     # Creating one new, empty repository (2026-11-09, the owner's "create a
@@ -495,6 +566,13 @@ TIER_EXTRA = (
     # "Everything at once"). Same group and same reason: the model's own GitHub
     # tools, each with its own switch, each still raising its own card.
     "github_pr_scan", "github_merge_pr", "github_fix_and_push",
+    # The 2026-11-10 22:30 ruling's Step 2 (full parity with DeepSeek): one
+    # full pull-request read and five more carded writes, each with its own
+    # switch here and each still raising its own card.
+    "github_pr_detail", "github_open_pr", "github_workflow",
+    "github_issue_labels", "github_edit_pr", "github_pr_review",
+    # 2026-11-10 23:00 owner decision: ONE issue close/reopen, carded.
+    "github_issue_state",
     # Changing what needs a card, a second yes or Windows Hello by talking to
     # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). A
     # switch here offers the ability to the model at all; it never changes a
@@ -528,17 +606,18 @@ NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: ones above. 67 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six
-#: GitHub tools the tool list had grown without a row of their own, plus
-#: hands-free's send_text_message, plus the approval-policy tool's own row,
-#: plus the four pack tools; 61 was wave 13's carded github_create_repo, a model
-#: tool like the rest, 62 was project_read, the read half of "Jarvis takes over
-#: dev work", 63-65 are wave 16's three GitHub tools of 2026-11-10 - the
-#: read-only PR cockpit, the carded merge and the carded fix-and-push - and
-#: 66-67 are wave 16E's two local review gates, the review packet and the record
-#: check; the product check is the fourth exception rather than a row, and the
-#: cloud escalation switch the fifth - it rides with change_setting, so the
-#: count does not move with it).
+#: ones above. 74 at 2026-11-11 (the union of wave 16E's two local review gates
+#: and the 22:30/23:00 ruling's seven GitHub tools: 67 + 7; 60 at 2026-11-05:
+#: 48 at 2026-11-04, plus the six GitHub tools the tool list had grown without a
+#: row of their own, plus hands-free's send_text_message, plus the
+#: approval-policy tool's own row, plus the four pack tools; 61 was wave 13's
+#: carded github_create_repo, a model tool like the rest, 62 was project_read,
+#: 63-65 were wave 16's three GitHub tools, 66-67 are wave 16E's review packet
+#: and record check, 68-73 are the 22:30 ruling's full pull-request read and
+#: five carded writes, and 74 is the 23:00 decision's carded issue close/reopen
+#: (`github_issue_state`); the product check is the fourth exception rather than
+#: a row, and the cloud escalation switch the fifth - it rides with
+#: change_setting, so the count does not move with it).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -563,6 +642,8 @@ SWITCHABLE_TOOL_NAMES = tuple(real_tool(t) for t in TOOLS_SWITCHABLE)
 def tool_label(tool: str) -> str:
     """The tool's human label and what it does, from jarvis_reach's own words."""
     real = real_tool(tool)
+    if real == GITHUB_TOOLS_GROUP:
+        return GITHUB_TOOLS_GROUP_TITLE
     try:
         import jarvis_reach as R
         words = getattr(R, "TOOL_NAMES", {}).get(real)
@@ -630,6 +711,45 @@ SWITCHABLE_GROUPS = tuple((title, tuple(t for t in tools if _app_can_switch(t)))
 SWITCHABLE_GROUPS = tuple((title, tools) for title, tools in SWITCHABLE_GROUPS if tools)
 
 
+#: The TWENTY tools the master switch speaks for, in one place (2026-11-11,
+#: the union of the switch door, full parity and the two local review gates):
+#: the eighteen GitHub tools (github_search + five card-free reads + twelve
+#: carded writes) and review_changes + check_records. The per-tool switch rows
+#: are these names (SWITCHABLE_GROUPS); the master group switch below
+#: offers/removes exactly this tuple, and `test_asks_first.py` holds it to
+#: jarvis_agent.TOOLS and to the registry, so the group cannot speak for a tool
+#: it does not cover (Q7 of the 2026-11-11 rulings: one master card switches the
+#: GitHub tools AND both local review gates on together).
+GITHUB_TOOLS = (
+    "github_search", "github_list", "github_read_file", "github_ci_status",
+    "github_pr_scan",
+    "github_pr_detail", "github_comment", "github_open_issue",
+    "github_rerun_workflow", "github_create_repo", "github_merge_pr",
+    "github_fix_and_push", "github_open_pr", "github_workflow",
+    "github_issue_labels", "github_edit_pr", "github_pr_review",
+    "github_issue_state",
+    # Q7 (2026-11-11): the two LOCAL review gates ride the SAME master switch,
+    # so one approved master card offers the GitHub tools AND both of them on
+    # together. They are read-only and card-free; their own switches still exist.
+    "review_changes", "check_records",
+)
+
+#: The master group switch's id. It is sent to POST /api/asks_first/tools
+#: exactly like a tool name - `{"tool": "github_tools_group", "enabled": true}`
+#: - and is NOT a model tool: GITHUB_TOOLS are what it writes. request_tool_enable
+#: and set_tools_enabled handle it themselves, so every other tool still takes
+#: the one-line path.
+GITHUB_TOOLS_GROUP = "github_tools_group"
+GITHUB_TOOLS_GROUP_TITLE = "Offer GitHub tools to the AI model"
+#: The group row's one sentence, in the same words both apps draw.
+GITHUB_TOOLS_GROUP_WHAT = (
+    "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still "
+    "decided by \"Ask me first\" as its own row says. Off: instantly, none of them is "
+    "offered.")
+#: The group's own card title, and the sentence the last-answer line prints.
+GITHUB_TOOLS_GROUP_CARD_TITLE = "Offer ALL TWENTY GitHub and review tools to the AI model?"
+
+
 
 
 def normalise_enabled(names) -> set:
@@ -640,8 +760,11 @@ def normalise_enabled(names) -> set:
             out.add(new)
     return out
 
-#: The approval card for offering one of them. jarvis_owner_check.
-#: PC_ONLY_ACTIONS holds the same name.
+#: The approval card for offering one of them. It is NOT on
+#: jarvis_owner_check.PC_ONLY_ACTIONS: since the owner's ruling of 2026-11-10
+#: the phone may approve it too, and it is a RISKY card instead (the gate's
+#: own `_RISK` row in jarvis_gate.py), so the PC asks Windows Hello and the
+#: phone needs its own signed approval.
 ENABLE_TOOL_ACTION = "enable_reading_tool"
 
 #: Never loosened from an app, whatever else changes: anything that leaves
@@ -867,9 +990,14 @@ GROUPS = (
                       # decision of 2026-11-03: "Read + actions"). All four are
                       # actions a card can be raised under, so all four are rows
                       # on this page (test_asks_first.py requires it). The READ
-                      # is here too, not only the three writes: it sends the
-                      # owner's GitHub token out, which is why it asks, and the
-                      # page should say so instead of implying a read is free.
+                      # is here too, not only the twelve writes: the five reads
+                      # share this one row. Since 2026-11-10 it is also a
+                      # SWITCHABLE row (LOOSE): the owner decided GitHub reads
+                      # should be card-free, so "Read your GitHub" is turned to
+                      # don't-ask from this page instead of the old "there is
+                      # no switch for this one" dead end. It reads only -
+                      # nothing on GitHub changes - and the switch's own note
+                      # says so, and says the token is still sent.
                       "github_inspect", "github_comment", "github_open_issue",
                       "github_rerun_workflow",
                       # The one CREATE (2026-11-09, the owner's "create a
@@ -881,8 +1009,27 @@ GROUPS = (
                       # "Everything at once"): a merge and a PR-branch push both
                       # raise a card, so both are rows on this page. The cockpit
                       # (github_pr_scan) is a READ and shares github_inspect
-                      # above, so it has no row of its own here.
-                      "github_merge_pr", "github_fix_and_push",
+                      # above, so it has no row of its own here. `github_fix_write`
+                      # (wave 16B) is the fix tool's local write stage: it sends
+                      # nothing, but it still raises a card and changes a file the
+                      # owner will push, so the page names it too.
+                      "github_merge_pr", "github_fix_and_push", "github_fix_write",
+                      # The 2026-11-10 22:30/23:00 actions: each can be the
+                      # action a card is raised under, so each has its own row
+                      # here (the reads share github_inspect above).
+                      "github_open_pr", "github_workflow",
+                      "github_issue_labels", "github_edit_pr",
+                      "github_pr_review", "github_issue_state",
+                      # The 2026-11-11 union additions: the GitHub library
+                      # search got its own two gate actions (card-free under
+                      # `github_search_run` / `github_search_run_authenticated`,
+                      # both "auto"; only the search words go to api.github.com),
+                      # and the two local review gates are actions a card can
+                      # name too. All four are rows here because the page
+                      # promises every action a card can name
+                      # (test_asks_first.py requires it).
+                      "github_search_run", "github_search_run_authenticated",
+                      "review_changes", "check_records",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -1802,10 +1949,12 @@ def _here(here: Optional[bool], peer, local) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Offering a reading tool to the AI model at all - the PC, one card plus
-# Windows Hello. A DIFFERENT thing from loosening (above): that changes
-# whether a tool asks first once it is offered; this changes whether it is
-# offered at all - one line of [tools].enabled, never [autonomy.tiers].
+# Offering a reading tool to the AI model at all - the PC requests it, ONE
+# card, and it is a RISKY card: Windows Hello on the PC, or the phone's own
+# signed approval (the owner's ruling of 2026-11-10). A DIFFERENT thing from
+# loosening (above): that changes whether a tool asks first once it is
+# offered; this changes whether it is offered at all - one line of
+# [tools].enabled, never [autonomy.tiers].
 # ---------------------------------------------------------------------------
 
 TOOLS_LABEL = "Let the AI use this"
@@ -1813,11 +1962,15 @@ TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separat
                "from whether it asks you first, above. Since 2026-11-04 EVERY ability "
                "the AI can be offered has a switch here, the raw and everyday ones "
                "included; a few are not switches because their own switch decides them, "
-               "and the page names those. Turning one on shows ONE approval card and asks "
-               "Windows Hello on this PC; turning it off is instant, from either app. "
-               "Nothing here switches two tools at once.")
+               "and the page names those. Turning one on shows ONE approval card that "
+               "names that one ability: approve it on the PC with Windows Hello, or on "
+               "your phone with its own fingerprint or PIN. Turning it off is instant, "
+               "from either app. One master switch, \"Offer GitHub tools to the AI "
+               "model\", turns all twenty tools of that group - the GitHub tools and both "
+               "local review gates - on or off together; its own card says so, and every tool.")
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
-                 "What asks first). It takes one approval card and Windows Hello.")
+                 "What asks first). It takes one approval card - approve it on the PC with "
+                 "Windows Hello, or on your phone with its own fingerprint or PIN.")
 TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
 #: The known tools that have no switch of their own (NOT_A_SWITCH). The page
 #: lists them so nobody hunts for a switch that is not there, and the route
@@ -1958,6 +2111,17 @@ TOOL_ENABLE_LAST_WORDS = {
     "failed": "It was approved, but the settings file could not be changed, so the AI model "
              "is still not offered this tool.",
 }
+#: The same answers for the master GROUP card (2026-11-10). It writes ten
+#: names in one step, so "this tool" would be the wrong words on it.
+GITHUB_TOOLS_GROUP_LAST_WORDS = {
+    "enabled": "You approved the card, so the AI model is offered all twenty tools of the group.",
+    "denied": "The card was turned down, so nothing changed.",
+    "timed_out": "Nobody answered the card in time, so nothing changed.",
+    "refused": "Your PC's settings do not let this be approved, so nothing changed.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the settings file could not be changed, so nothing "
+              "changed.",
+}
 
 
 def tools_enabled_set() -> set:
@@ -1997,6 +2161,10 @@ TEMPLATE_TOOLS = (
     "pack_inspect", "pack_install", "pack_remove", "self_portrait",
     "conversation_find", "conversation_open", "refresh_abilities",
     "send_text_message", "approval_policy",
+    # The two local review gates (the owner's Q-D/Q7 ruling): card-free,
+    # ENABLED by default in both shipped settings files, and still switchable
+    # off from the Tools page like every other shipped-on tool.
+    "review_changes", "check_records",
 )
 #: The tools this build added on top of what the owner's live file named on
 #: 2026-11-05/06. A name here that is NOT in the live list is offered with the
@@ -2095,12 +2263,61 @@ def tool_enable_card(tool: str) -> str:
                   "not start either, and without one the AI is not offered it.",
                   ""]
     lines += [
-        "Approving it needs Windows Hello on this PC. You can turn it off again at any time "
-        "from either app, and that is instant.",
+        "Approving it needs a real person's check: Windows Hello on this PC, or your "
+        "phone's own fingerprint or PIN (a phone with no approval key is refused). You "
+        "can turn it off again at any time from either app, and that is instant.",
         "",
         "If you did not just do this, say no.",
         "",
         "If you say no: nothing changes - the AI model is still not offered this ability.",
+    ]
+    return "\n".join(lines)
+
+
+def github_tools_group_card(*, on_now: Optional[set] = None) -> str:
+    """The ONE card's words for offering the twenty tools in the group TOGETHER.
+
+    Same honest facts as tool_enable_card, because the same rule applies: what
+    is being switched on (all twenty, named), that it changes twenty lines in the
+    settings file in one step, that it is separate from "Ask me first" and
+    approves no use, how many are already on when some are, and what a no
+    means. It never names the settings FILE - the gate refuses a card that
+    names a protected file (the 2026-10-10 bug this page already carries).
+    """
+    have = {real_tool(t) for t in (on_now or ())}
+    missing = [t for t in GITHUB_TOOLS if t not in have]
+    lines = [
+        GITHUB_TOOLS_GROUP_CARD_TITLE,
+        "",
+        "From now on the AI model may use ANY of the twenty tools in this group: "
+        + ", ".join(GITHUB_TOOLS) + ".",
+        "",
+        "In plain words: read your GitHub (your repositories, pull requests, issues, CI "
+        "status, one file and the pull request cockpit), comment, open an issue, re-run a "
+        "workflow, create ONE new empty repository on your own account, merge ONE pull "
+        "request with a merge commit, and push a fix to a pull request's own branch from an "
+        "isolated folder on this PC. The twenty names are written into your settings file on "
+        "this PC in ONE step; nothing else changes.",
+        "",
+        "This is separate from whether they ask you first: that is set above, in "
+        '"Ask me first", and is unchanged by this card.',
+        "",
+        "It does not approve any use of them: each time the AI uses one, \"Ask me first\" "
+        "still decides whether you are asked, and each of the six writes still raises its "
+        "own card under that rule.",
+        "",
+    ]
+    if have:
+        lines += [f"{len(have)} of the twenty are already on. This card offers the other "
+                  f"{len(missing)} and leaves those {len(have)} on.", ""]
+    lines += [
+        "Approving it needs Windows Hello on this PC. You can turn all twenty off again at "
+        "any time from either app, and that is instant.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes - the AI model is still offered only the GitHub "
+        "tools that are on now.",
     ]
     return "\n".join(lines)
 
@@ -2194,6 +2411,104 @@ def rewrite_tools(text: str, tool: str, on: bool, *, seed=()) -> str:
     return out
 
 
+def rewrite_tools_many(text: str, *, add=(), remove=(), seed=()) -> str:
+    """`text` with SEVERAL tools added to / removed from the single
+    `enabled = [...]` line under [tools]. Pure, atomic in the same sense as
+    rewrite_tools: one rebuilt line, both sides parsed and compared.
+
+    Added for the master GitHub group switch (2026-11-10), which writes the
+    ten names in ONE step: a loop of ten rewrite_tools calls would rewrite the
+    file ten times (ten crash windows and ten chances for a half-written
+    list), so the whole change is built here and written once by
+    set_tools_enabled_many. Names the owner's file already lists keep their
+    exact spelling and order; the added names go on the end in the caller's
+    order; a name that is already present (under an old saved alias too) is
+    never added twice. Raises TierFileError on an unchangeable file.
+    """
+    add = tuple(str(a) for a in add if a)
+    remove = tuple(str(r) for r in remove if r)
+    for name in add + remove:
+        if not re.fullmatch(r"[a-z][a-z0-9_]{1,60}", name or ""):
+            raise TierFileError("That is not a tool name")
+    before = _parse(text)
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    heads = [i for i, line in enumerate(lines) if _TOOLS_HEADER.match(line)]
+    if len(heads) > 1:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    if not heads:
+        if not add:
+            return text  # nothing to remove from a table that does not exist
+        want = sorted({str(x) for x in seed if x} | set(add))
+        quoted = ", ".join('"%s"' % x for x in want)
+        lines.extend(["", "[tools]", f"enabled = [{quoted}]{_INSERTED_NOTE}"])
+
+        def _norm_new(doc):
+            d = json.loads(json.dumps(doc, default=str))
+            d.setdefault("tools", {})["enabled"] = sorted(
+                str(x) for x in (d.get("tools", {}).get("enabled") or []))
+            return d
+
+        after = _parse(nl.join(lines))
+        if set(after.get("tools", {}).get("enabled") or []) != set(want):
+            raise TierFileError(TOOLS_HAND_EDIT)
+        b = _norm_new(before)
+        b["tools"]["enabled"] = sorted(want)
+        if _norm_new(after) != b:
+            raise TierFileError(TOOLS_HAND_EDIT)
+        return nl.join(lines)
+    start = heads[0] + 1
+    end = next((i for i in range(start, len(lines)) if _ANY_HEADER.match(lines[i])),
+               len(lines))
+    hits = [i for i in range(start, end) if _ENABLED_LINE.match(lines[i])]
+    if len(hits) > 1:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    remove_real = {real_tool(r) for r in remove}
+    if hits:
+        i = hits[0]
+        m = _ENABLED_LINE.match(lines[i])
+        items = [a or b for a, b in _QUOTED_ITEM.findall(m.group("items"))]
+        kept = [x for x in items if real_tool(x) not in remove_real]
+        present = {real_tool(x) for x in kept}
+        for name in add:
+            if real_tool(name) not in present:
+                kept.append(name)
+                present.add(real_tool(name))
+        rebuilt = ", ".join(f'"{x}"' for x in kept)
+        lines[i] = f"{m.group('lead')}[{rebuilt}]{m.group('rest')}"
+    else:
+        if not add:
+            return text  # already absent: nothing to remove
+        keys = [i for i in range(start, end) if _KEY_LINE.match(lines[i])]
+        at = (keys[-1] + 1) if keys else start
+        want_line = ", ".join('"%s"' % x for x in add)
+        lines.insert(at, f"enabled = [{want_line}]{_INSERTED_NOTE}")
+    out = nl.join(lines)
+    after = _parse(out)
+    want = {str(x) for x in (before.get("tools", {}).get("enabled") or [])
+            if real_tool(str(x)) not in remove_real}
+    present = {real_tool(str(x)) for x in want}
+    for name in add:
+        if real_tool(name) not in present:
+            want.add(name)
+            present.add(real_tool(name))
+    got = set(after.get("tools", {}).get("enabled") or [])
+    if got != want:
+        raise TierFileError(TOOLS_HAND_EDIT)
+
+    def _norm(doc):
+        d = json.loads(json.dumps(doc, default=str))
+        d.setdefault("tools", {})["enabled"] = sorted(
+            str(x) for x in (d.get("tools", {}).get("enabled") or []))
+        return d
+
+    b = _norm(before)
+    b["tools"]["enabled"] = sorted(want)
+    if _norm(after) != b:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    return out
+
+
 def _seed_tools(tool: str):
     """The tool names in use right now, minus the one being changed: what a
     `[tools]` table that has to be created must start from, so switching one
@@ -2206,12 +2521,28 @@ def _seed_tools(tool: str):
         return []
 
 
-def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> dict:
-    """Add or remove ONE tool from [tools].enabled, atomically - the same
-    write discipline as set_tier (parse, change, parse again and compare,
-    write to a temporary file, move into place). Raises TierFileError."""
-    legacy = tool if tool in LEGACY_TOOL_NAMES else None
-    tool = real_tool(tool)
+def _seed_tools_many(tools):
+    """`_seed_tools` for a multi-tool change: everything in use EXCEPT the
+    tools this change already owns."""
+    mine = {real_tool(str(t)) for t in tools}
+    try:
+        import jarvis_agent
+        return sorted(n for n in jarvis_agent.enabled_tools_for_turn()
+                      if real_tool(str(n)) not in mine)
+    except Exception:
+        return []
+
+
+def _write_tools_change(change: Callable[[str], str], *,
+                        path: Optional[Path] = None) -> dict:
+    """Read the settings file, apply `change` to its text, write it back.
+
+    The one write discipline of every [tools].enabled change (and the same one
+    set_tier uses): the text is parsed and compared inside rewrite_tools /
+    rewrite_tools_many BEFORE this runs, then written to a temporary file and
+    moved into place, so a crash can never leave a half-written list. Raises
+    TierFileError with a sentence for the owner.
+    """
     p = path or _toml_path()
     if p is None or not Path(p).is_file():
         raise TierFileError("Jarvis could not find your settings file "
@@ -2228,12 +2559,7 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
             text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
         except UnicodeDecodeError:
             raise TierFileError(TOOLS_HAND_EDIT)
-        new = rewrite_tools(text, tool, on, seed=_seed_tools(tool))
-        # An older build wrote the row's action name ("email_read") instead of
-        # the tool's name. Whatever the owner does now, that stale entry goes.
-        for old, real in LEGACY_TOOL_NAMES.items():
-            if real == tool:
-                new = rewrite_tools(new, old, False)
+        new = change(text)
         if new == text:
             _reload()
             return {"ok": True, "changed": False}
@@ -2260,6 +2586,53 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
     return {"ok": True, "changed": True}
 
 
+def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> dict:
+    """Add or remove ONE tool from [tools].enabled, atomically - the same
+    write discipline as set_tier (parse, change, parse again and compare,
+    write to a temporary file, move into place). Raises TierFileError.
+
+    The master group id is the ONE exception: it is not a model tool but the
+    documented short name for the twenty tools in the group, so it goes to
+    set_tools_enabled_many and writes all twenty in one step (2026-11-10).
+    """
+    if real_tool(tool) == GITHUB_TOOLS_GROUP:
+        return set_tools_enabled_many(GITHUB_TOOLS, on, path=path)
+    legacy = tool if tool in LEGACY_TOOL_NAMES else None
+    tool = real_tool(tool)
+
+    def change(text: str) -> str:
+        new = rewrite_tools(text, tool, on, seed=_seed_tools(tool))
+        # An older build wrote the row's action name ("email_read") instead of
+        # the tool's name. Whatever the owner does now, that stale entry goes.
+        for old, real in LEGACY_TOOL_NAMES.items():
+            if real == tool:
+                new = rewrite_tools(new, old, False)
+        return new
+
+    return _write_tools_change(change, path=path)
+
+
+def set_tools_enabled_many(tools, on: bool, *, path: Optional[Path] = None) -> dict:
+    """Add (on) or remove (not on) SEVERAL tools from [tools].enabled in ONE
+    atomic write - the master GitHub group switch's own writer (2026-11-10).
+
+    On: every name is added if it is not there already (the owner's other
+    names and order are untouched). Off: every name is removed and nothing
+    else is touched. A change that would write nothing reports changed=False.
+    Raises TierFileError, and then NOTHING was written - the old list is the
+    list, never a half of one."""
+    names = tuple(real_tool(str(t)) for t in tools)
+    if not names:
+        return {"ok": True, "changed": False}
+    if on:
+        def change(text: str) -> str:
+            return rewrite_tools_many(text, add=names, seed=_seed_tools_many(names))
+    else:
+        def change(text: str) -> str:
+            return rewrite_tools_many(text, remove=names)
+    return _write_tools_change(change, path=path)
+
+
 _T_LOCK = threading.Lock()
 #: `off_rows`: the unlisted tools this page turned OFF, so their row can stay
 #: on the page and say OFF truthfully instead of vanishing on the next read
@@ -2275,6 +2648,8 @@ _T_SWITCH = threading.Lock()
 
 
 def _tools_finish(pid: str, tool: str, outcome: str, why: str = "") -> None:
+    words = (GITHUB_TOOLS_GROUP_LAST_WORDS
+             if real_tool(tool) == GITHUB_TOOLS_GROUP else TOOL_ENABLE_LAST_WORDS)
     with _T_LOCK:
         if _T_STATE["pending"].get("id") == pid:
             _T_STATE["pending"].clear()
@@ -2283,13 +2658,21 @@ def _tools_finish(pid: str, tool: str, outcome: str, why: str = "") -> None:
             return
         _T_STATE["last"].clear()
         _T_STATE["last"].update(outcome=outcome, tool=tool, why=why, at=time.time(),
-                                message=TOOL_ENABLE_LAST_WORDS.get(outcome, ""))
+                                message=words.get(outcome, ""))
     _audit("asks_first.tools.card", {"tool": tool, "outcome": outcome})
+
+
+def _tool_enable_card(tool: str) -> str:
+    """The ONE card's words for what `tool` names: the twenty-name group gets its
+    own card (it writes twenty names), every other tool the single-tool card."""
+    if real_tool(tool) == GITHUB_TOOLS_GROUP:
+        return github_tools_group_card(on_now=tools_enabled_set())
+    return tool_enable_card(tool)
 
 
 def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
                   write: Callable) -> None:
-    card = tool_enable_card(tool)
+    card = _tool_enable_card(tool)
     detail = {"text": card, "what": f"offer {tool_label(tool).lower()} to the AI model",
               "setting": tool, "to": True, "leaves_this_pc": False}
     try:
@@ -2356,9 +2739,13 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                         armed: Optional[Callable[[], bool]] = None,
                         here: Optional[bool] = None) -> tuple:
     """POST /api/asks_first/tools {"tool": "<name>", "enabled": bool}.
-    (code, body). ON is the PC only, one card plus Windows Hello - the same
-    shape as request_tier's looser side, aimed at [tools].enabled instead of
-    [autonomy.tiers]. OFF is instant, never a card, from either app.
+    (code, body). ON is requested from the PC only (the phone's page is
+    read-only), and its ONE card NAMES that one tool. The card is RISKY, not
+    PC-only (the owner's ruling of 2026-11-10, "let the phone approve tool
+    switches too"): on the PC it asks Windows Hello, and on the phone it needs
+    that phone's own signed approval (a fingerprint or PIN); a phone with no
+    approval key is refused there, by jarvis_owner_check. Denying works from
+    anywhere. OFF is instant, never a card, from either app.
 
     ON accepts EVERY tool the AI model can be offered (the owner's decision,
     2026-11-04): Tier A and B, the raw Tier C set, the everyday helpers and
@@ -2379,9 +2766,17 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
             or not isinstance(body.get("tool"), str):
         return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
     tool, enabled = body["tool"], body["enabled"]
-    real = real_tool(tool)
-    known = _app_can_switch(tool)
-    now_on = real in tools_enabled_set()
+    is_group = real_tool(tool) == GITHUB_TOOLS_GROUP
+    real = GITHUB_TOOLS_GROUP if is_group else real_tool(tool)
+    known = True if is_group else _app_can_switch(tool)
+    on_now = tools_enabled_set()
+    if is_group:
+        group_have = [t for t in GITHUB_TOOLS if t in on_now]
+        now_on = len(group_have) == len(GITHUB_TOOLS)   # all twenty: nothing to offer
+        any_on = bool(group_have)                        # any on: something to remove
+    else:
+        now_on = real in on_now
+        any_on = now_on
     if not enabled:
         # OFF: at once, never a card - it only narrows what the model may do.
         if not known and not now_on:
@@ -2398,23 +2793,29 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                 if p and real_tool(str(p.get("tool") or "")) == real:
                     _T_STATE["withdrawn"].add(p["id"])
                     p.clear()
-            if not now_on:
+            if not any_on:
+                already = ("The AI model is already not offered any of the twenty tools in the group."
+                           if is_group
+                           else "The AI model is already not offered this tool.")
                 return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
-                             "message": "The AI model is already not offered this tool."}
+                             "message": already}
             try:
                 write(real, False)
             except TierFileError as exc:
                 return 409, {"ok": False, "error": str(exc) + "."}
             except Exception as exc:
                 return 500, {"ok": False, "error": f"could not change it ({type(exc).__name__})"}
-        said = ("Done - the AI model is not offered this tool any more." if known
-                else _tools_off_said(tool))
+        said = (("Done - the AI model is not offered the twenty tools in the group any more.")
+                if is_group else
+                ("Done - the AI model is not offered this tool any more." if known
+                 else _tools_off_said(tool)))
         if not known:
             _remember_tool_off(real, said)
         _audit("asks_first.tools.disabled", {"tool": tool})
         return 200, {"ok": True, "changed": True, "tools": tools_status(here=True),
                      "message": said}
-    # ON: the PC only, one card plus Windows Hello.
+    # ON: requested from the PC, ONE card, and that card is a RISKY approval
+    # (Windows Hello on the PC; the phone's own signed approval, 2026-11-10).
     if not known:
         note = no_switch_note(tool)
         if note:
@@ -2423,8 +2824,10 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
     if not _here(here, peer, local):
         return 403, {"ok": False, "error": TOOLS_PC_ONLY, "pc_only": True}
     if now_on:
+        already = ("The AI model is already offered all twenty tools in the group."
+                   if is_group else "The AI model is already offered this tool.")
         return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
-                     "message": "The AI model is already offered this tool."}
+                     "message": already}
     if not armed():
         return 503, {"ok": False, "error": TOOLS_NO_OWNER_CHECK}
     t = tier_of(ENABLE_TOOL_ACTION)
@@ -2445,9 +2848,15 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
         with _T_LOCK:
             _T_STATE["pending"].clear()
         return 503, {"ok": False, "error": "could not raise the approval card"}
+    waiting_words = ("Waiting for your approval. Approve the card on this PC - it asks "
+                     "Windows Hello - and the AI model will be offered all twenty tools in the group."
+                     if is_group else
+                     "Waiting for your approval. Approve the card on this PC - it asks "
+                     "Windows Hello - and the AI model will be offered this tool.")
     return 202, {"ok": True, "waiting": True, "tools": tools_status(here=True),
-                 "message": "Waiting for your approval. Approve the card on this PC - it "
-                            "asks Windows Hello - and the AI model will be offered this tool."}
+                 "message": "Waiting for your approval. Approve the card on this PC (Windows "
+                            "Hello) or on your phone (its fingerprint or PIN), and the AI "
+                            "model will be offered this tool."}
 
 
 def _vault_switch_status(here: bool) -> dict:
@@ -2530,6 +2939,12 @@ def tools_status(*, here: bool = False) -> dict:
     one of the four - with its real state and a plain reason (D4). `extra`
     rows can be turned OFF from the page; an ON switch exists for every tool
     this PC knows (`items`).
+
+    `github_group` is the ONE master switch that speaks for several tools
+    (2026-11-10, the owner's ruling): it is a SEPARATE object beside `vault`,
+    NOT an item in `items`, so the per-tool list (and every app's pin on it)
+    stays exactly what it is. It writes/removes the twenty GITHUB_TOOLS names in
+    one atomic step; OFF is instant, ON is one card plus Windows Hello.
     """
     enabled = tools_enabled_set()
     with _T_LOCK:
@@ -2545,11 +2960,36 @@ def tools_status(*, here: bool = False) -> dict:
             items.append({"id": tool, "title": tool_label(tool), "group": title,
                           "on": real_tool(tool) in enabled, "waiting": waiting,
                           "last": last})
+    enabled_real = {real_tool(str(n)) for n in enabled}
+    group_have = [t for t in GITHUB_TOOLS if t in enabled_real]
+    group_waiting = bool(pending) and pending_tool == GITHUB_TOOLS_GROUP
+    group_last = dict(last_all) if (
+        last_all.get("tool")
+        and real_tool(str(last_all["tool"])) == GITHUB_TOOLS_GROUP) else None
+    github_group = {
+        "id": GITHUB_TOOLS_GROUP,
+        "title": GITHUB_TOOLS_GROUP_TITLE,
+        # The group it is drawn in, read from the same table the per-tool rows
+        # use, so it can never end up somewhere else than "Jarvis's own tools".
+        "group": GROUP_FOR_TOOL.get("github_list", "Jarvis's own tools"),
+        "what": GITHUB_TOOLS_GROUP_WHAT,
+        "tools": list(GITHUB_TOOLS),
+        "on": len(group_have) == len(GITHUB_TOOLS),
+        # True only when SOME of the twenty are on: the row must say that, never
+        # show "on" for a partial list.
+        "partial": 0 < len(group_have) < len(GITHUB_TOOLS),
+        "on_count": len(group_have),
+        "total": len(GITHUB_TOOLS),
+        "waiting": group_waiting,
+        "can_enable": bool(here),
+        "last": group_last,
+    }
     return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
             "items": items,
             "groups": [{"title": title, "ids": list(tools)}
                        for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
+            "github_group": github_group,
             "extra": _extra_tool_rows(items, enabled),
             # Q7 (2026-11-06): the tools this build offers that the owner's own
             # [tools].enabled does not name, with the pill's own words. Read
@@ -2847,6 +3287,10 @@ LOCKDOWN_ACTIONS = frozenset({
     # that a tier line loosened one day still asks while Lockdown is on, like
     # every other way out of this PC on this list.
     "github_merge_pr", "github_fix_and_push",
+    # The 2026-11-10 22:30/23:00 writes: every one can change GitHub in the
+    # owner's name with the saved token, so each is on the Lockdown list too.
+    "github_open_pr", "github_workflow", "github_issue_labels",
+    "github_edit_pr", "github_pr_review", "github_issue_state",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

@@ -827,6 +827,202 @@
       "read": false
     },
     {
+      "name": "the tool github_pr_detail ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_pr_detail"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_pr_detail"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_open_pr ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_open_pr"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_open_pr"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_workflow ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_workflow"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_workflow"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_issue_labels ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_issue_labels"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_issue_labels"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_edit_pr ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_edit_pr"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_edit_pr"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_pr_review ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_pr_review"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_pr_review"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool github_issue_state ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_issue_state"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_issue_state"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool web_search ran",
       "heard": {
         "private_aloud": false,

@@ -99,6 +99,28 @@ EXTRA_NAMES = {
                         "the github pull request merge", "github pull request merge"),
     "github_fix_and_push": ("the github pull request fix tool", "github pull request fix tool",
                             "the github pull request fix", "github pull request fix"),
+    # The 2026-11-10 22:30 ruling's Step 2 surface: the owner says "pull
+    # request", not "pr", and "review", not "pr review".
+    "github_pr_detail": ("the github pull request detail tool",
+                         "github pull request detail tool",
+                         "the github pull request detail",
+                         "github pull request detail"),
+    "github_open_pr": ("the github open pull request tool",
+                       "github open pull request tool",
+                       "the github open pull request", "github open pull request"),
+    "github_workflow": ("the github workflow tool", "github workflow tool",
+                        "the github workflow", "github workflow"),
+    "github_issue_labels": ("the github issue labels tool",
+                            "github issue labels tool",
+                            "the github issue labels", "github issue labels",
+                            "the github labels tool", "github labels tool"),
+    "github_edit_pr": ("the github pull request edit tool",
+                       "github pull request edit tool",
+                       "the github pull request edit", "github pull request edit"),
+    "github_pr_review": ("the github pull request review tool",
+                         "github pull request review tool",
+                         "the github pull request review",
+                         "github pull request review"),
 }
 
 

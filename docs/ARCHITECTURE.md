@@ -3182,11 +3182,23 @@ backend routes, in both directions; the rest are listed here only.
   list, a diff and a comment editor are deep configuration and a second door
   onto the owner's own code; the chat tool is the door, and the card is the
   decision. No route was added, so `tools/check_parity.py` is unchanged and
-  clean. What asks first is seven gate actions, every one `ask`:
-  `github_inspect` (the four reads - they ask too, because a read still sends
-  the saved GitHub token out) and the six carded writes `github_comment`,
-  `github_open_issue`, `github_rerun_workflow`, `github_create_repo`,
-  `github_merge_pr` and `github_fix_and_push`. They are NOT the existing
+  clean. ONE master switch, "Offer GitHub tools to the AI model"
+  (`tools.github_group`), sits beside those per-tool rows and offers or
+  removes all twenty tools in the group - the eighteen GitHub tools and both local review gates together: ON is ONE card plus Windows Hello on
+  the PC and writes the twenty names atomically, OFF is instant from either app,
+  and a partial list is reported as partial, never as on. It is a separate
+  payload object, so the per-tool list is unchanged (JARVIS-API §217). What
+  asks first is fourteen gate actions: the twelve carded writes
+  `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`,
+  `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`,
+  `github_issue_labels`, `github_edit_pr`, `github_pr_review` and `github_issue_state` and
+  the wave-16B write stage's own `github_fix_write` are `ask` and in
+  `NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run one
+  with nobody asked; `github_inspect` (the five reads) ships `ask` too and is
+  the ONE switchable READ row on that page since the owner's 2026-11-10
+  "make GitHub reads card-free" decision - ONE card plus Windows Hello to
+  loosen, instant to put the card back - and the four reads left
+  `NEEDS_A_PERSON` in that same decision. They are NOT the existing
   `github_read`, which is the scheduled look a "tell me when" watch makes and
   must stay `auto`; the reason is in JARVIS-API §190.2. Merge and PR-branch push
   are real now - merge-commit only, pinned to the 40-hex head commit the card
@@ -5128,7 +5140,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
 - **The GitHub merge and fix-and-push cards have no phone screen, and that is
   one-sided on purpose** (2026-11-10, the owner's "Everything at once";
   `docs/JARVIS-API.md` §190.9-§190.10). The ABILITY is not one-sided: the
-  ten GitHub tools run on this PC's backend and either app's chat is the same
+  seventeen GitHub tools run on this PC's backend and either app's chat is the same
   turn, so a merge or a push can be asked for and approved from the phone's
   chat exactly as from the desktop's - each raises its own card, and the card is
   answered on whichever app shows it. What is one-sided is the two things that

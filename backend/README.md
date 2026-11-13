@@ -90,14 +90,16 @@ untouched. Proved by `backend/test_plugin_switch.py`; documented in
 on 2026-11-10; JARVIS-API §190).** The owner's decisions: Jarvis may read his
 GitHub and take a few small actions on it, each behind its own card ("Read +
 actions", 2026-11-03), and wave 16's "Everything at once" (2026-11-10) added
-the merge and the fix-and-push. **Ten model tools** in
+the merge and the fix-and-push. **Seventeen model tools** in
 `backend/jarvis_agent.py`, all on the network half in `backend/jarvis_github.py`
-(a SHIPPED module, so no patch for the code): four READS - `github_list`,
-`github_read_file`, `github_ci_status` and the read-only pull request cockpit
+(a SHIPPED module, so no patch for the code): five READS - `github_list`,
+`github_read_file`, `github_ci_status`, the read-only pull request cockpit
 `github_pr_scan`, which prints every open pull request's full 40-hex head commit
-and base branch - and **six carded WRITES** - `github_comment`,
+and base branch, and `github_pr_detail`, which reads ONE pull request in
+full - and **twelve carded WRITES** - `github_comment`,
 `github_open_issue`, `github_rerun_workflow`, `github_create_repo`,
-`github_merge_pr` and `github_fix_and_push`. The module talks to
+`github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`,
+`github_issue_labels`, `github_edit_pr`, `github_pr_review` and `github_issue_state`. The module talks to
 `api.github.com` and nothing else, refuses a redirect, caps every answer, never
 prints the token, and says a failure in a sentence with no HTTP code in it.
 **The two new cards of 2026-11-10, both `ask`, both in `NEEDS_A_PERSON`:** the
@@ -110,12 +112,18 @@ failing pull request into an isolated scratch folder under
 commits a person made there, to that pull request's own branch, with a
 credential-file denylist and no force flag). The token travels only in git's own
 `GIT_CONFIG_*` environment config - never in a URL, never on a command line and
-never written to disk. The reads ask a person too: a fixed-endpoint read still
-sends the owner's own GitHub token out, which is why they are NOT the existing
-`github_read` action (that one is the scheduled look a "tell me when" watch
-makes, and `jarvis_tellme.py` refuses to run a watch unless it stays `auto`).
-Their own action is `github_inspect`, at `"ask"`; all ten are also in
-`NEEDS_A_PERSON`, so a loosened tier still asks. Everything else stays
+never written to disk. The five reads ship asking too - a fixed-endpoint read
+still sends the owner's own GitHub token out, which is why they are NOT the
+existing `github_read` action (that one is the scheduled look a "tell me
+when" watch makes, and `jarvis_tellme.py` refuses to run a watch unless it
+stays `auto`). Their own action is `github_inspect`; since 2026-11-10 23:00 PT
+the owner's "make GitHub reads card-free" decision makes that action a
+switchable READ row on What asks first (ONE card plus Windows Hello to loosen,
+instant to put the card back), and the five reads left
+`jarvis_agent.NEEDS_A_PERSON`. The TWELVE writes stay in `NEEDS_A_PERSON`, so a
+loosened tier still asks for those. ONE master switch, "Offer GitHub tools to
+the AI model", offers/removes all twenty tools in the group - the eighteen GitHub tools and both local review gates together - one card, written
+atomically, OFF instant (JARVIS-API §217). Everything else stays
 impossible: no force-push, squash, rebase, admin bypass, auto-merge, bypassing
 required checks, direct push to main, delete or close of a repository or branch,
 approve-pr, workflow dispatch or gist. `backend/github-tools.patch` is the
@@ -3019,7 +3027,11 @@ correctly, formatted by `notice_for()`, with zero HUD-side code.
   `jarvis_research_run`, and `jarvis_research_run_authenticated` - each
   `_plan` tool is `auto` (matches the read-only bucket `model_list` and
   `browser_axtree` are already in - nothing is sent), each `_run` tool maps
-  to a real `_RISK` action.
+  to a real `_RISK` action. (`github_search` moved off those two names on
+  2026-11-11: the Q3/Q4 ruling made the six GitHub reads card-free, so it now
+  resolves to its own `github_search_run` / `github_search_run_authenticated`
+  actions with their own `auto` lines, and the generic research actions stay
+  "ask".)
 - The owner's real `jarvis-framework.toml` already has `control_computer =
   "ask"` (confirmed against the sample in `backend/rebuilt/`) - so
   `jarvis_ui_control_run` needs **no TOML change at all**. `control_phone`
@@ -3227,9 +3239,10 @@ built earlier this session - `control_computer` (native UI control, resolves
 to the `jarvis_ui_control_run` action added by `ui-control-wiring.patch`),
 `control_phone` (adb, resolves to `jarvis_android_control_run`, added by the
 same patch), and `github_search` (wraps `jarvis_research.py`, resolving to
-`jarvis_research_run` or `jarvis_research_run_authenticated` depending on
+`github_search_run` or `github_search_run_authenticated` depending on
 whether a token is configured *at the moment the call actually runs* - not
-decided by the model). These three model-facing names deliberately differ
+decided by the model; since the 2026-11-11 Q3/Q4 ruling both are their own
+"auto" lines because the six GitHub reads are card-free). These three model-facing names deliberately differ
 from the actual `jarvis_gate` action keys - see `Tool.gate_lookup_name` in
 `jarvis_agent.py`'s own docstring for why a static match on `name` was not
 enough, and `test_agent.py`'s
