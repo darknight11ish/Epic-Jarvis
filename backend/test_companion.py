@@ -1,13 +1,25 @@
-"""backend/test_companion.py - Test suite for desktop companion and Roamies capabilities.
+"""backend/test_companion.py - the desktop companion's own suite.
 
-Verifies:
-  1. Settings lifecycle, defaults, and validation.
-  2. Holographic 3D LED wave sphere mathematical properties and voice reactivity.
-  3. Step-by-step visual screen guidance workflow creation and click-wait pacing.
-  4. Windows native automation security perimeters and hands-off boundaries.
-  5. Interactive 3D explanatory cards generation and motion states.
-  6. Chat intent matching, self-awareness responses, and setting toggle execution.
-  7. Architectural registration in _where.SHIPPED and twin parity.
+What this suite proves, and why each check can fail (review of PR #1229,
+2026-11-13: the first version asserted the module's own story instead of its
+behaviour):
+
+  1. A SAVED PREFERENCE is reported as a preference, never as a working
+     feature, and a save that fails says so instead of a fake success.
+  2. The avatar's geometry is really on the unit sphere, and a louder sound
+     really moves a point further (a strict comparison - the old check passed
+     even when the function returned 0.0 for everything).
+  3. The guidance and 3D-card helpers shape plain descriptions and nothing
+     else.
+  4. The ONE hard denylist is the screen-control module's, and a FULL PATH
+     cannot get round it. The list this PR first shipped allowed
+     `C:\\Windows\\System32\\cmd.exe`, `wt.exe` and every password vault.
+  5. No companion answer claims UI Automation, text recognition, drawing or a
+     security perimeter: every one of them says the visual half is not built.
+  6. A PRIVATE chat cannot change a companion setting: the two change intents
+     are off the private-read whitelist, and the file on disk does not move.
+  7. The suite is hermetic (its own OPENJARVIS_HOME), the module is registered
+     in `_where.SHIPPED`, and its base twin is byte-identical.
 """
 
 from __future__ import annotations
@@ -15,6 +27,8 @@ from __future__ import annotations
 import math
 import os
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 # Add backend directory to sys.path
@@ -22,6 +36,14 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+
+#: The suite's own home. `OPENJARVIS_HOME` is the folder the backend treats as
+#: the owner's, and the runner points it at a throwaway folder for every suite -
+#: so the suite sets it itself and is hermetic either way. The first version of
+#: this suite wrote `~/.jarvis/companion_settings.json` into the owner's real
+#: profile (review finding H2).
+_TMP = Path(tempfile.mkdtemp(prefix="jarvis-test-companion-"))
+os.environ["OPENJARVIS_HOME"] = str(_TMP / "home")
 
 import jarvis_companion as C
 import jarvis_quick as Q
@@ -44,51 +66,85 @@ def check(name: str, condition: bool, detail: str = ""):
         print(msg)
 
 
-def t_companion_settings_lifecycle():
-    print("\n--- t_companion_settings_lifecycle ---------------------")
+# --------------------------------------------------------------------------
+# 1. A preference, saved honestly
+# --------------------------------------------------------------------------
+
+def t_a_preference_is_a_preference():
+    print("\n--- t_a_preference_is_a_preference ----------------------")
     cfg = C.DEFAULT_CONFIG
     check("default config contains avatar_enabled", "avatar_enabled" in cfg)
     check("default config contains screen_guidance_enabled", "screen_guidance_enabled" in cfg)
     check("default config contains cursor_ask_bar_enabled", "cursor_ask_bar_enabled" in cfg)
     check("default config contains interactive_3d_cards", "interactive_3d_cards" in cfg)
-    check("default config contains hands_off_apps", len(cfg["hands_off_apps"]) > 0)
 
-    # Test set_setting validation
-    ok, msg = C.set_setting("avatar_style", "sphere")
-    check("valid avatar style accepted", ok is True)
+    # Nothing draws these, so no switch may ship ON: a switch reading "on" while
+    # no window exists is the fake presence the answers stopped claiming.
+    for key in ("avatar_enabled", "screen_guidance_enabled",
+                "cursor_ask_bar_enabled", "interactive_3d_cards"):
+        check(f"the {key} switch ships OFF", cfg[key] is False, cfg[key])
 
-    ok, msg = C.set_setting("avatar_style", "invalid_style")
-    check("invalid avatar style rejected", ok is False)
+    # ONE denylist, not a second one stored beside the switches.
+    check("the settings hold no second blacklist", "hands_off_apps" not in cfg)
 
-    ok, msg = C.set_setting("guidance_tone", "amber")
-    check("valid tone accepted", ok is True)
-
-    ok, msg = C.set_setting("guidance_tone", "rainbow")
-    check("invalid tone rejected", ok is False)
-
-    # Test toggle_feature
     ok, msg = C.toggle_feature("avatar", want_on=True)
-    check("toggle avatar to True succeeds", ok is True)
-    check("avatar is enabled", C.get_setting("avatar_enabled") is True)
+    check("saving a switch succeeds", ok is True, msg)
+    check("...and the answer says it was SAVED", "Saved" in msg, msg)
+    check("...and it says nothing changes on screen", "nothing changes on screen" in msg, msg)
+    check("...and it never claims the feature is enabled", "enabled" not in msg.lower(), msg)
+    check("the saved value really moved", C.get_setting("avatar_enabled") is True)
 
     ok, msg = C.toggle_feature("screen guidance", want_on=False)
-    check("toggle screen guidance to False succeeds", ok is True)
-    check("screen guidance is disabled", C.get_setting("screen_guidance_enabled") is False)
+    check("turning a switch off saves too", ok is True, msg)
+    check("...and says off", "as off" in msg, msg)
 
-    # Toggle back
-    C.toggle_feature("screen guidance", want_on=True)
-    check("restored screen guidance to enabled", C.get_setting("screen_guidance_enabled") is True)
+    # A save that fails is a failure, never a "now on" (review finding M1: the
+    # old code ignored save_settings' False and reported success).
+    real_save = C.save_settings
+    try:
+        C.save_settings = lambda cfg: False
+        ok, msg = C.toggle_feature("avatar", want_on=True)
+        check("a failed save of a switch is a FAILURE", ok is False, msg)
+        check("...and the answer claims nothing was saved", "Saved" not in msg, msg)
+        ok, msg = C.set_setting("avatar_style", "reticle")
+        check("a failed save of a style is a FAILURE", ok is False, msg)
+        check("...and that answer claims nothing was saved", "Saved" not in msg, msg)
+    finally:
+        C.save_settings = real_save
+
+    # Validation still refuses an unknown word before anything is written.
+    ok, msg = C.toggle_feature("holographic avatar", want_on=True)
+    check("a known feature name saves", ok is True, msg)
+    ok, msg = C.toggle_feature("teleporter", want_on=True)
+    check("an unknown feature is refused", ok is False and "don't recognize" in msg, msg)
+    ok, msg = C.set_setting("avatar_style", "invalid_style")
+    check("invalid avatar style rejected", ok is False, msg)
+    ok, msg = C.set_setting("guidance_tone", "amber")
+    check("valid tone accepted", ok is True, msg)
+    ok, msg = C.set_setting("guidance_tone", "rainbow")
+    check("invalid tone rejected", ok is False, msg)
+    ok, msg = C.set_setting("no_such_setting", "x")
+    check("an unknown setting is refused", ok is False, msg)
+
+    # The old "set style confirms change" check passed on its own failure
+    # message: the refusal names the word it refused. This one is strict.
+    ok, msg = C.set_setting("avatar_style", "reticle")
+    check("a valid style says SAVED and names the value",
+          ok is True and "Saved" in msg and "'reticle'" in msg, msg)
 
 
-def t_holographic_avatar_engine():
-    print("\n--- t_holographic_avatar_engine ------------------------")
+# --------------------------------------------------------------------------
+# 2. The avatar's numbers
+# --------------------------------------------------------------------------
+
+def t_the_avatar_numbers():
+    print("\n--- t_the_avatar_numbers -------------------------------")
     pts_520 = C.generate_sphere_points(520)
     check("generated 520 sphere points", len(pts_520) == 520)
 
     pts_260 = C.generate_sphere_points(260)
     check("generated 260 sphere points", len(pts_260) == 260)
 
-    # Verify points lie on unit sphere
     all_on_sphere = True
     for x, y, z in pts_520[:30]:
         dist = math.sqrt(x * x + y * y + z * z)
@@ -97,18 +153,36 @@ def t_holographic_avatar_engine():
             break
     check("points lie on unit sphere radius 1.0", all_on_sphere)
 
-    # Test wave displacement calculation
-    disp_quiet = C.calculate_wave_displacement((1.0, 0.0, 0.0), time_sec=1.0, audio_level=0.1, is_talking=False)
-    disp_loud = C.calculate_wave_displacement((1.0, 0.0, 0.0), time_sec=1.0, audio_level=0.9, is_talking=True)
-    check("wave displacement reacts to audio energy", abs(disp_loud) >= abs(disp_quiet) or abs(disp_loud) > 0)
+    # A STRICT comparison: the old check (`abs(loud) >= abs(quiet) or
+    # abs(loud) > 0`) passed for any output at all, including 0.0 everywhere.
+    quiet = C.calculate_wave_displacement((1.0, 0.0, 0.0), time_sec=1.0,
+                                          audio_level=0.0, is_talking=False)
+    loud = C.calculate_wave_displacement((1.0, 0.0, 0.0), time_sec=1.0,
+                                         audio_level=1.0, is_talking=False)
+    check("a much louder sound moves the point much further",
+          abs(loud) > 2.0 * abs(quiet), (quiet, loud))
+    check("the ripple stays inside its stated 0.16 limit", abs(loud) <= 0.16 + 1e-9, loud)
 
     av_cfg = C.get_avatar_config()
     check("avatar config contains points", "points" in av_cfg and len(av_cfg["points"]) > 0)
-    check("avatar config reports style", av_cfg.get("style") in C.AVATAR_STYLES)
+    check("avatar config reports a known style", av_cfg.get("style") in C.AVATAR_STYLES)
+    check("avatar config reports the saved preference, not a working avatar",
+          av_cfg.get("enabled") is True)   # saved above by this suite, still a preference
+    check("the default size asks for 520 points", av_cfg["point_count"] == 520)
+
+    C.set_setting("avatar_size", "small")
+    small_cfg = C.get_avatar_config()
+    check("small mode asks for 260 points", small_cfg["point_count"] == 260)
+    check("...and hands back 260 points", len(small_cfg["points"]) == 260)
+    C.set_setting("avatar_size", "default")
 
 
-def t_screen_guidance_workflow():
-    print("\n--- t_screen_guidance_workflow -------------------------")
+# --------------------------------------------------------------------------
+# 3. The two description shapers
+# --------------------------------------------------------------------------
+
+def t_guidance_description_shaper():
+    print("\n--- t_guidance_description_shaper ----------------------")
     steps = [
         {
             "say": "Click the File menu",
@@ -123,121 +197,243 @@ def t_screen_guidance_workflow():
     ]
 
     wf = C.create_guidance_workflow("Export Video Tutorial", steps)
-    check("guidance workflow created successfully", wf.get("ok") is True)
+    check("guidance workflow shaped successfully", wf.get("ok") is True)
     check("workflow has 2 steps", wf.get("total_steps") == 2)
     check("step 1 requires click wait", wf["steps"][0]["wait"] == "click")
     check("step 1 has ring mark", wf["steps"][0]["marks"][0]["kind"] == "ring")
+    check("an unknown tone falls back to the configured one",
+          wf["steps"][0]["marks"][0]["tone"] in C.VALID_TONES)
 
-    # Negative validation
     bad_wf1 = C.create_guidance_workflow("", steps)
     check("empty title is refused", bad_wf1.get("ok") is False)
-
     bad_wf2 = C.create_guidance_workflow("Title", [])
     check("empty steps list is refused", bad_wf2.get("ok") is False)
 
 
-def t_windows_automation_and_security_guards():
-    print("\n--- t_windows_automation_and_security_guards -----------")
-    # Verify hands-off apps are blocked
-    check("Command Prompt is hands-off", C.is_hands_off("cmd.exe") is not None)
-    check("PowerShell is hands-off", C.is_hands_off("powershell.exe") is not None)
-    check("PowerShell 7 is hands-off", C.is_hands_off("pwsh") is not None)
-    check("Windows Terminal is hands-off", C.is_hands_off("WindowsTerminal.exe") is not None)
-    check("KeePassXC is hands-off", C.is_hands_off("keepassxc") is not None)
-
-    # Standard safe apps are allowed
-    check("Notepad is permitted", C.is_hands_off("notepad.exe") is None)
-    check("Calculator is permitted", C.is_hands_off("calc") is None)
-
-    # Risky actions are caught
-    check("format action flagged as risky", C.is_risky_action("format disk C:") is True)
-    check("delete all action flagged as risky", C.is_risky_action("delete all files") is True)
-    check("view action is not risky", C.is_risky_action("view the document") is False)
-
-
-def t_interactive_3d_cards():
-    print("\n--- t_interactive_3d_cards -----------------------------")
+def t_3d_card_shaper():
+    print("\n--- t_3d_card_shaper -----------------------------------")
     card = C.create_3d_card("Rotating Black Hole", shape="sphere", motion="spin", tone="accent")
     check("card type is card_3d", card.get("type") == "card_3d")
     check("shape is sphere", card.get("shape") == "sphere")
     check("motion is spin", card.get("motion") == "spin")
     check("render mode is dithered LED", card.get("render_mode") == "dithered_led_5level")
 
-    # Fallback validation
     fallback_card = C.create_3d_card("Test", shape="invalid_shape", motion="invalid_motion")
     check("invalid shape falls back to sphere", fallback_card.get("shape") == "sphere")
     check("invalid motion falls back to spin", fallback_card.get("motion") == "spin")
 
 
-def t_chat_intent_routing_and_self_awareness():
-    print("\n--- t_chat_intent_routing_and_self_awareness -----------")
-    import time
+# --------------------------------------------------------------------------
+# 4. The ONE denylist
+# --------------------------------------------------------------------------
 
-    def run_cmd(intent):
-        return Q.run(intent, None, time.time())
+def t_the_one_denylist_is_the_shared_one():
+    print("\n--- t_the_one_denylist_is_the_shared_one ---------------")
+    cases = {
+        # A FULL PATH was the measured bypass in the list this PR first shipped.
+        r"C:\Windows\System32\cmd.exe": "Command Prompt",
+        "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe": "PowerShell",
+        "1Password.exe": "1Password",
+        "bitwarden.exe": "Bitwarden",
+        "keepass.exe": "KeePass",
+        "keepassxc": "KeePassXC",
+        "wt.exe": "Windows Terminal",
+        "taskmgr.exe": "Task Manager",
+        "consent.exe": "the Windows UAC prompt",
+    }
+    for exe, label in cases.items():
+        got = C.denied_app_reason(exe)
+        check(f"the shared denylist refuses {exe}",
+              got is not None and label in got, got)
+    check("a program the shipped list allows stays allowed",
+          C.denied_app_reason("notepad.exe") is None)
+    check("...and a bare program name is allowed too",
+          C.denied_app_reason("calc") is None)
+    check("an empty name is not a refusal", C.denied_app_reason("") is None)
 
-    # 1. Overview
+    # No second list anywhere: the module must not grow one back.
+    check("the companion keeps NO blacklist of its own",
+          not hasattr(C, "is_hands_off") and not hasattr(C, "hands_off_apps"))
+    check("...and no second destructive-word list either",
+          not hasattr(C, "is_risky_action") and not hasattr(C, "RISKY_WORDS"))
+
+
+# --------------------------------------------------------------------------
+# 5. The chat answers claim nothing that is not built
+# --------------------------------------------------------------------------
+
+#: Every phrase the first version said in Jarvis's own voice about work the
+#: code does not do. Each one was reachable from chat (or, for the last one,
+#: one edit away from being reachable).
+FALSE_CLAIMS = (
+    "ui automation",
+    "winrt",
+    "windows runtime ocr",
+    "subtree caching",
+    "security perimeter",
+    "hands-off",
+    "zero external downloads",
+    "stark-inspired",
+    "tracks your cursor",
+    "ripple dynamically",
+    "reticle cursor",
+    "draws spotlights",
+    "hand-drawn glowing loops",
+    "waits for your real click",
+)
+
+
+def _all_answers():
+    return {
+        "overview": C.format_companion_overview(),
+        "avatar": C.format_avatar_explanation(),
+        "guidance": C.format_guidance_explanation(),
+        "askbar": C.format_askbar_explanation(),
+        "settings": C.format_settings_summary(),
+    }
+
+
+def t_no_answer_claims_what_is_not_built():
+    print("\n--- t_no_answer_claims_what_is_not_built ---------------")
+    answers = _all_answers()
+    for name, text in answers.items():
+        low = text.lower()
+        quote = [claim for claim in FALSE_CLAIMS if claim in low]
+        check(f"the {name} answer claims no automation, OCR or perimeter",
+              not quote, quote)
+        check(f"the {name} answer says the visual half is NOT BUILT",
+              "not built" in low, text[:120])
+
+    check("the overview names no drawn avatar", "no window of jarvis draws" in answers["overview"].lower())
+    check("the guidance answer says nothing is highlighted",
+          "nothing is highlighted" in answers["guidance"].lower())
+    check("the askbar answer says there is no box",
+          "no floating input box" in answers["askbar"].lower())
+    check("the settings answer calls them preferences",
+          "saved preferences only" in answers["settings"].lower())
+
+    # A damaged or hand-edited settings file must not put its own text into an
+    # answer (review finding L3): the old summary printed the value straight.
+    path = C._get_settings_path()
+    saved = path.read_bytes() if path.is_file() else None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"avatar_style": "BOOM-do-not-echo", "guidance_tone": 7}',
+                        encoding="utf-8")
+        broken = C.format_settings_summary()
+        check("a corrupt style is never echoed back", "BOOM-do-not-echo" not in broken, broken[:160])
+        check("...and the answer says the value is not set", "not set" in broken.lower(), broken[:160])
+    finally:
+        if saved is None:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        else:
+            path.write_bytes(saved)
+
+
+# --------------------------------------------------------------------------
+# 6. Chat routing, and the private chat's refusal
+# --------------------------------------------------------------------------
+
+def _run(intent):
+    return Q.run(intent, None, time.time())
+
+
+def t_chat_routing_and_honest_answers():
+    print("\n--- t_chat_routing_and_honest_answers ------------------")
+    want = {
+        "what are your desktop companion capabilities": "companion_overview",
+        "explain your holographic avatar": "companion_avatar_info",
+        "how does screen guidance work": "companion_guidance_info",
+        "what is the cursor ask bar": "companion_askbar_info",
+        "show companion settings": "companion_settings_show",
+        "turn on holographic avatar": "companion_toggle",
+        "disable screen guidance": "companion_toggle",
+        "set avatar style to reticle": "companion_set_style",
+    }
+    for sentence, name in want.items():
+        got = Q.match(sentence)
+        check(f"{sentence!r} routes to {name}", got is not None and got.name == name, got)
+
     res = Q.match("what are your desktop companion capabilities")
-    check("companion overview intent matched", res is not None and res.name == "companion_overview")
-    if res:
-        out = run_cmd(res)
-        check("companion overview output describes features", "Holographic 3D LED Wave Sphere" in out.reply)
+    out = _run(res)
+    check("the overview answer is the honest one in chat",
+          "not built" in out.reply.lower(), out.reply[:120])
 
-    # 2. Avatar explanation
-    res = Q.match("explain your holographic avatar")
-    check("companion avatar intent matched", res is not None and res.name == "companion_avatar_info")
-    if res:
-        out = run_cmd(res)
-        check("avatar explanation describes golden spiral", "golden spiral" in out.reply)
-
-    # 3. Guidance explanation
-    res = Q.match("how does screen guidance work")
-    check("companion guidance intent matched", res is not None and res.name == "companion_guidance_info")
-    if res:
-        out = run_cmd(res)
-        check("guidance explanation describes visual rings", "Visual Rings" in out.reply)
-
-    # 4. Ask bar explanation
-    res = Q.match("what is the cursor ask bar")
-    check("companion ask bar intent matched", res is not None and res.name == "companion_askbar_info")
-    if res:
-        out = run_cmd(res)
-        check("ask bar explanation mentions shortcut", "Ctrl+Shift" in out.reply)
-
-    # 5. Settings summary
-    res = Q.match("show companion settings")
-    check("companion settings show matched", res is not None and res.name == "companion_settings_show")
-    if res:
-        out = run_cmd(res)
-        check("settings summary outputs status", "Holographic Avatar" in out.reply)
-
-    # 6. Toggle feature in chat
     res = Q.match("turn on holographic avatar")
-    check("toggle intent matched", res is not None and res.name == "companion_toggle")
-    if res:
-        out = run_cmd(res)
-        check("toggle result confirms state", "enabled" in out.reply or "avatar" in out.reply)
+    out = _run(res)
+    check("a toggle in chat says it was SAVED, not that it works",
+          "Saved" in out.reply and "nothing changes on screen" in out.reply, out.reply[:160])
 
-    res = Q.match("disable screen guidance")
-    check("disable guidance matched", res is not None and res.name == "companion_toggle")
-    if res:
-        out = run_cmd(res)
-        check("disable confirms disabled", "disabled" in out.reply)
-
-    # 7. Set style in chat
     res = Q.match("set avatar style to reticle")
-    check("set style intent matched", res is not None and res.name == "companion_set_style")
-    if res:
-        out = run_cmd(res)
-        check("set style confirms change", "reticle" in out.reply or "avatar_style" in out.reply)
+    out = _run(res)
+    check("a style change in chat says it was SAVED",
+          "Saved" in out.reply and "reticle" in out.reply, out.reply[:160])
 
+    # The generic "set style/size/tone" form used to be swallowed by this
+    # feature's own grammar. It must not be: an ordinary setting sentence is
+    # not this feature's.
+    got = Q.match("set style to compact")
+    check("a generic 'set style to ...' is NOT the companion's",
+          got is None or got.name != "companion_set_style", got)
+
+
+def t_a_private_chat_cannot_change_a_companion_setting():
+    print("\n--- t_a_private_chat_cannot_change_a_companion_setting -")
+    check("the companion's READS are on the private-read whitelist",
+          "companion_overview" in Q._PRIVATE_DETERMINISTIC_READS
+          and "companion_settings_show" in Q._PRIVATE_DETERMINISTIC_READS)
+    check("the TOGGLE is deliberately NOT on it",
+          "companion_toggle" not in Q._PRIVATE_DETERMINISTIC_READS)
+    check("the STYLE CHANGE is deliberately NOT on it",
+          "companion_set_style" not in Q._PRIVATE_DETERMINISTIC_READS)
+    check("neither change is marked read-only",
+          "companion_toggle" not in Q.READ_ONLY_INTENTS
+          and "companion_set_style" not in Q.READ_ONLY_INTENTS)
+
+    import jarvis_private_chat
+
+    res = Q.match("turn off avatar")
+    check("'turn off avatar' really routes to the toggle",
+          res is not None and res.name == "companion_toggle", res)
+
+    C.toggle_feature("avatar", want_on=True)
+    path = C._get_settings_path()
+    before = path.read_bytes()
+    body = {
+        "messages": [{"role": "user", "content": "turn off avatar",
+                      "provenance": "voice"}],
+        "model": "m",
+        "stream": False,
+        "private": True,
+    }
+    out = Q.answer_turn(body)
+    check("a private chat refuses the change in the one refusal sentence",
+          out is not None and out.reply == jarvis_private_chat.REFUSAL,
+          None if out is None else out.reply[:160])
+    check("...and the settings file on disk did not move",
+          path.read_bytes() == before)
+    check("...so the avatar preference is still the one saved before",
+          C.get_setting("avatar_enabled") is True)
+
+
+# --------------------------------------------------------------------------
+# 7. Governance, hermeticity, twin
+# --------------------------------------------------------------------------
 
 def t_governance_and_integrity():
     print("\n--- t_governance_and_integrity -------------------------")
     check("jarvis_companion.py is registered in _where.SHIPPED",
           "jarvis_companion.py" in _where.SHIPPED)
 
-    # Check twin parity
+    check("the suite's settings file is its own temp folder",
+          str(_TMP) in str(C._get_settings_path()),
+          C._get_settings_path())
+    check("...and OPENJARVIS_HOME is what put it there",
+          str(_TMP) in str(os.environ.get("OPENJARVIS_HOME") or ""))
+
     backend_path = HERE / "jarvis_companion.py"
     twin_path = ROOT / "jarvis-backend" / "jarvis_companion.py"
     check("twin file exists in jarvis-backend/", twin_path.is_file())
@@ -248,12 +444,14 @@ def t_governance_and_integrity():
 
 
 def main():
-    t_companion_settings_lifecycle()
-    t_holographic_avatar_engine()
-    t_screen_guidance_workflow()
-    t_windows_automation_and_security_guards()
-    t_interactive_3d_cards()
-    t_chat_intent_routing_and_self_awareness()
+    t_a_preference_is_a_preference()
+    t_the_avatar_numbers()
+    t_guidance_description_shaper()
+    t_3d_card_shaper()
+    t_the_one_denylist_is_the_shared_one()
+    t_no_answer_claims_what_is_not_built()
+    t_chat_routing_and_honest_answers()
+    t_a_private_chat_cannot_change_a_companion_setting()
     t_governance_and_integrity()
 
     print("\n" + "=" * 60)

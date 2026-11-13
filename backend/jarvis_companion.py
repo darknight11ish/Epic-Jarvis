@@ -1,17 +1,29 @@
-"""jarvis_companion.py - Desktop companion and screen guidance capabilities for Jarvis.
+"""jarvis_companion.py - the desktop companion's settings and its honest answers.
 
-Multi-modal desktop companion features inspired by the open-source Roamies system:
-1. Holographic 3D LED Wave Sphere Avatar: Stark-style glowing sphere of 520 golden-spiral
-   LED points with voice-reactive ripples, yaw/pitch gaze tracking, and reticle cursor mode.
-2. Step-by-Step Screen Guidance: Visual pointing, glowing loops, spotlights, and step-by-step
-   walkthroughs on screen ("Jarvis shows you how"), with click confirmation.
-3. Windows Native Automation Guards: Non-blocking UI Automation with subtree caching,
-   hardware-accelerated Windows Runtime OCR (WinRT), and hands-off security boundaries.
-4. Transient Cursor Micro-Ask Bar: Minimal floating HUD input field beside the cursor.
-5. Interactive 3D Explanatory Cards: Lightweight zero-dependency WebGL 3D concept diagrams
-   with animated motions (spin, orbit, slide, pulse) dithered to 5 LED levels.
-6. Chat Settings Management & Self-Awareness: Discuss capabilities in depth, query settings,
-   and toggle companion features directly via voice or chat.
+WHAT IS HERE. The settings store behind the desktop-companion chat answers, plus
+the pure data helpers a renderer would need if the companion's visual half were
+ever built: the golden-spiral point set for the avatar sphere, the wave formula
+for a sound-reactive surface, a shaper for a step-by-step guidance description,
+and a shaper for a 3D card.
+
+WHAT IS NOT HERE, AND IS NOT CLAIMED (corrected 2026-11-12, the PR #1229 review).
+This module does not draw anything, does not open a window, does not read another
+program's controls, does not recognise text in a picture, and does not click,
+type or take a screenshot. No window of the desktop app and no screen of either
+app draws an avatar, a guidance overlay, a cursor ask bar or a 3D card. So the
+chat answers below say plainly that the visual half is NOT BUILT in this copy of
+Jarvis, and that the switches only record a preference - never a success, never
+a maybe.
+
+THE ONE SAFETY LIST. This module keeps no list of programs of its own.
+`denied_app_reason()` asks the screen-control module, which owns the ONE enforced
+hard denylist (password vaults, terminals, the sign-in and UAC prompts, the
+security-settings windows) and the ONE approval-card path. A second, shorter list
+here is exactly the shape that lets a program through the moment the two
+disagree, so there is not one (review finding H1, 2026-11-13).
+
+Provenance: the design was inspired by the open-source Roamies system. The
+numbers and the words are ours; the drawing is not built.
 
 Standard library only. All state changes are non-destructive.
 """
@@ -25,23 +37,25 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-#: Default companion settings configuration
+#: The one sentence a companion answer says when it describes a thing that does
+#: not exist in this build. Nothing here reports a success for it.
+NOT_BUILT = ("The desktop companion's drawing and screen half is not built in "
+             "this copy of Jarvis.")
+
+#: Default companion settings. Every switch ships OFF: nothing draws any of
+#: these, so a switch that read ON would be the fake presence the answers below
+#: stopped claiming (2026-11-12).
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "avatar_enabled": True,
+    "avatar_enabled": False,
     "avatar_style": "sphere",  # "sphere", "reticle", "classic", "off"
     "avatar_size": "default",  # "default", "small", "cursor"
-    "avatar_voice_reactive": True,
-    "screen_guidance_enabled": True,
+    "avatar_voice_reactive": False,
+    "screen_guidance_enabled": False,
     "guidance_tone": "accent",  # "accent", "teal", "amber", "coral", "lilac", "sky", "lime"
     "guidance_auto_advance": False,  # wait for user click before advancing step
-    "cursor_ask_bar_enabled": True,
+    "cursor_ask_bar_enabled": False,
     "cursor_ask_bar_hotkey": "ctrl+shift",
-    "windows_native_ocr": "auto",  # "auto", "winrt", "off"
-    "hands_off_apps": [
-        "cmd", "powershell", "powershell_ise", "pwsh",
-        "windowsterminal", "openconsole", "conhost", "keepassxc"
-    ],
-    "interactive_3d_cards": True,
+    "interactive_3d_cards": False,
 }
 
 #: Valid avatar styles
@@ -59,18 +73,49 @@ SHAPES_3D = ("sphere", "box", "cylinder", "cone", "torus")
 #: Valid 3D animations
 MOTIONS_3D = ("spin", "orbit", "slide", "pulse")
 
-#: Dangerous action keywords that cannot run automatically
-RISKY_WORDS = ("delete", "remove", "erase", "format", "wipe", "drop", "purge", "destroy", "shutdown", "reboot")
+#: The plain name of each setting, for a saved-preference sentence.
+_SETTING_WORDS = {
+    "avatar_style": "the avatar style",
+    "avatar_size": "the avatar size",
+    "guidance_tone": "the guidance highlight colour",
+}
+
+#: What a saved switch is called in the answer.
+_FEATURE_WORDS = {
+    "avatar_enabled": "holographic avatar",
+    "screen_guidance_enabled": "screen guidance",
+    "cursor_ask_bar_enabled": "cursor ask bar",
+    "interactive_3d_cards": "3D cards",
+    "avatar_voice_reactive": "voice-reactive avatar",
+}
+
+
+# -----------------------------------------------------------------------------
+# Settings - a preference file, and nothing more
+# -----------------------------------------------------------------------------
+
+def _settings_dir() -> Path:
+    """The folder Jarvis keeps its own settings in.
+
+    The same rule the rest of the backend follows (`jarvis_receipts.py` and
+    `jarvis_file_guardian.py`): `OPENJARVIS_HOME` first - which is what the test
+    runner points at a throwaway folder, so a suite can never write the owner's
+    real profile - then the two config-folder names, then `~/.openjarvis`.
+    Read on every call, never cached.
+    """
+    env = os.environ.get("OPENJARVIS_HOME")
+    if env and str(env).strip():
+        return Path(os.path.expanduser(str(env).strip()))
+    env = (os.environ.get("OPENJARVIS_CONFIG_DIR")
+           or os.environ.get("JARVIS_CONFIG_DIR"))
+    if env and str(env).strip():
+        return Path(os.path.expanduser(str(env).strip()))
+    return Path(os.path.expanduser("~")) / ".openjarvis"
 
 
 def _get_settings_path() -> Path:
     """Return the path to the companion settings file."""
-    custom = os.environ.get("JARVIS_SETTINGS_DIR")
-    if custom:
-        base = Path(custom)
-    else:
-        base = Path.home() / ".jarvis"
-    return base / "companion_settings.json"
+    return _settings_dir() / "companion_settings.json"
 
 
 def load_settings() -> Dict[str, Any]:
@@ -89,7 +134,7 @@ def load_settings() -> Dict[str, Any]:
 
 
 def save_settings(cfg: Dict[str, Any]) -> bool:
-    """Save companion settings to disk safely."""
+    """Save companion settings to disk safely. False means nothing changed."""
     p = _get_settings_path()
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -108,8 +153,22 @@ def get_setting(key: str) -> Any:
     return cfg.get(key, DEFAULT_CONFIG.get(key))
 
 
+def _known(value: Any, allowed: Tuple[str, ...]) -> str:
+    """A saved value if it is one of the allowed words, else "not set".
+
+    A hand-edited or damaged settings file must never put its own text into a
+    chat answer (review finding L3, 2026-11-13).
+    """
+    return value if value in allowed else "not set"
+
+
+def _saved_word(value: Any) -> str:
+    """How a saved on/off preference is described - never "enabled"."""
+    return "on" if value else "off"
+
+
 def set_setting(key: str, value: Any) -> Tuple[bool, str]:
-    """Set a specific companion setting value with validation."""
+    """Save one companion preference, and say honestly what that did."""
     if key not in DEFAULT_CONFIG:
         return False, f"Unknown companion setting: '{key}'."
 
@@ -123,14 +182,15 @@ def set_setting(key: str, value: Any) -> Tuple[bool, str]:
 
     cfg = load_settings()
     cfg[key] = value
-    ok = save_settings(cfg)
-    if ok:
-        return True, f"Updated {key} to {value}."
-    return False, "Failed to save settings file."
+    if not save_settings(cfg):
+        return False, "Jarvis could not save that preference, so nothing changed."
+    name = _SETTING_WORDS.get(key, key.replace("_", " "))
+    return True, (f"Saved {name} as '{value}' for the desktop companion. This build "
+                  f"does not draw the companion yet, so nothing changes on screen.")
 
 
 def toggle_feature(feature: str, want_on: Optional[bool] = None) -> Tuple[bool, str]:
-    """Toggle a companion feature on or off."""
+    """Save a companion switch, and say honestly what that did."""
     feature_map = {
         "avatar": "avatar_enabled",
         "holographic avatar": "avatar_enabled",
@@ -161,18 +221,23 @@ def toggle_feature(feature: str, want_on: Optional[bool] = None) -> Tuple[bool, 
     current = bool(cfg.get(key, DEFAULT_CONFIG[key]))
     new_val = (not current) if want_on is None else bool(want_on)
     cfg[key] = new_val
-    save_settings(cfg)
-    state_str = "enabled" if new_val else "disabled"
-    readable = key.replace("_enabled", "").replace("_", " ")
-    return True, f"Desktop companion {readable} is now {state_str}."
+    if not save_settings(cfg):
+        # A failed save is a failure, never a "now on" (review finding M1).
+        return False, "Jarvis could not save that switch, so it is still where it was."
+    readable = _FEATURE_WORDS.get(key, key.replace("_", " "))
+    return True, (f"Saved the {readable} switch as {_saved_word(new_val)}. This build "
+                  f"does not draw the companion yet, so nothing changes on screen.")
 
 
 # -----------------------------------------------------------------------------
-# 1. Holographic 3D LED Wave Sphere Avatar
+# 1. The avatar's numbers - not a drawn avatar
 # -----------------------------------------------------------------------------
 
 def generate_sphere_points(count: int = 520) -> List[Tuple[float, float, float]]:
-    """Generate evenly distributed 3D points on a unit sphere using the golden spiral algorithm."""
+    """Evenly distributed 3D points on a unit sphere (the golden spiral).
+
+    The numbers a renderer would draw. Nothing draws them in this build.
+    """
     n = max(32, min(count, 2000))
     points: List[Tuple[float, float, float]] = []
     for i in range(n):
@@ -191,7 +256,11 @@ def calculate_wave_displacement(
     audio_level: float,
     is_talking: bool = False
 ) -> float:
-    """Calculate outward surface wave ripple at a given 3D coordinate based on speech audio."""
+    """The outward ripple a renderer would apply at one point, from sound.
+
+    A pure number between -0.16 and 0.16: louder sound moves a point further,
+    and nothing plays, draws or hears it here.
+    """
     x, y, z = point
     azimuth = math.atan2(z, x)
     freq_y = 7.0
@@ -203,27 +272,36 @@ def calculate_wave_displacement(
 
 
 def get_avatar_config() -> Dict[str, Any]:
-    """Return the active configuration for the desktop avatar."""
+    """The numbers a renderer would need, plus the saved preferences.
+
+    `enabled` is the owner's saved preference, not a statement that anything is
+    drawn: nothing is (see NOT_BUILT).
+    """
     cfg = load_settings()
-    style = cfg.get("avatar_style", "sphere")
-    size = cfg.get("avatar_size", "default")
+    style = _known(cfg.get("avatar_style"), AVATAR_STYLES)
+    size = _known(cfg.get("avatar_size"), AVATAR_SIZES)
     dot_count = 260 if size == "small" else 520
     return {
-        "enabled": cfg.get("avatar_enabled", True),
+        "enabled": bool(cfg.get("avatar_enabled")),
         "style": style,
         "size": size,
-        "voice_reactive": cfg.get("avatar_voice_reactive", True),
+        "voice_reactive": bool(cfg.get("avatar_voice_reactive")),
         "point_count": dot_count,
         "points": generate_sphere_points(dot_count),
     }
 
 
 # -----------------------------------------------------------------------------
-# 2. Screen Guidance & Visual Ringing Engine ("JARVIS Shows You How")
+# 2. Screen guidance - a description, not a drawn overlay
 # -----------------------------------------------------------------------------
 
 def create_guidance_workflow(title: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Create a structured multi-step visual screen guidance workflow."""
+    """Shape the plain description of a multi-step screen guidance workflow.
+
+    A title, numbered steps, marks with a colour and a wait mode - and no more.
+    Nothing shows it, highlights anything or waits for a click: the overlay does
+    not exist in this build (see NOT_BUILT).
+    """
     if not title or not title.strip():
         return {"ok": False, "problem": "Guidance workflow requires a descriptive title."}
     if not steps or not isinstance(steps, list):
@@ -231,7 +309,9 @@ def create_guidance_workflow(title: str, steps: List[Dict[str, Any]]) -> Dict[st
 
     cleaned_steps: List[Dict[str, Any]] = []
     cfg = load_settings()
-    default_tone = cfg.get("guidance_tone", "accent")
+    default_tone = _known(cfg.get("guidance_tone"), VALID_TONES)
+    if default_tone == "not set":
+        default_tone = "accent"
     auto_advance = cfg.get("guidance_auto_advance", False)
 
     for i, s in enumerate(steps):
@@ -273,43 +353,41 @@ def create_guidance_workflow(title: str, steps: List[Dict[str, Any]]) -> Dict[st
 
 
 # -----------------------------------------------------------------------------
-# 3. Windows Native Automation & Security Boundaries
+# 3. The ONE safety list - asked, never copied
 # -----------------------------------------------------------------------------
 
-def is_hands_off(app_or_exe: str) -> Optional[str]:
-    """Check if an executable or application is on the hands-off security blacklist."""
-    raw = app_or_exe.lower().strip()
-    name = raw[:-4] if raw.endswith(".exe") else raw
+def denied_app_reason(app_or_exe: str) -> Optional[str]:
+    """The shared hard denylist's refusal for a program, or None when allowed.
 
-    cfg = load_settings()
-    blacklist = set(cfg.get("hands_off_apps", DEFAULT_CONFIG["hands_off_apps"]))
+    ONE list, never a second one. The screen-control code already refuses to
+    click or type in a password vault, a terminal, a sign-in or UAC prompt, or a
+    security-settings window, and it refuses by EXECUTABLE NAME. A companion
+    answer that kept its own shorter list would let a program through the moment
+    the two lists disagreed, so this asks that module and nothing else (review
+    finding H1, 2026-11-13 - the list this replaced allowed
+    `C:\\Windows\\System32\\cmd.exe` and nine vault/terminal names).
 
-    if name in blacklist:
-        names = {
-            "cmd": "Command Prompt",
-            "powershell": "PowerShell",
-            "powershell_ise": "PowerShell ISE",
-            "pwsh": "PowerShell 7",
-            "windowsterminal": "Windows Terminal",
-            "openconsole": "Windows Console",
-            "conhost": "Console Host",
-            "keepassxc": "KeePassXC Password Vault",
-        }
-        return names.get(name, name)
-    return None
-
-
-def is_risky_action(instruction_or_label: str) -> bool:
-    """Check if a label or instruction suggests destructive or sensitive operations."""
-    text = instruction_or_label.lower()
-    for w in RISKY_WORDS:
-        if re.search(r"\b" + re.escape(w) + r"\b", text):
-            return True
-    return False
+    A full path is reduced to the program's own file name first, and both
+    separators are split, so the answer is the same on this PC and on a runner
+    that is not Windows. When the list cannot be read the answer is a refusal,
+    never None: a guard that fails open is not a guard.
+    """
+    name = str(app_or_exe or "").strip()
+    if not name:
+        return None
+    leaf = name.replace("\\", "/").rsplit("/", 1)[-1].strip()
+    if not leaf:
+        return None
+    try:
+        import jarvis_ui_control as _screen
+        return _screen.denied_process_refusal(process=leaf) or None
+    except Exception:
+        return ("Jarvis cannot read its own list of programs it never drives, so "
+                "it will not touch any window at all.")
 
 
 # -----------------------------------------------------------------------------
-# 4. Interactive 3D Explanatory Cards
+# 4. Interactive 3D cards - a description, not a rendered card
 # -----------------------------------------------------------------------------
 
 def create_3d_card(
@@ -319,7 +397,11 @@ def create_3d_card(
     tone: str = "accent",
     description: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Create a structured specification for a WebGL 3D concept visualization card."""
+    """Shape the plain description of a 3D concept card.
+
+    A shape, a motion and a colour. Nothing renders it: there is no card
+    renderer in either app in this build (see NOT_BUILT).
+    """
     if shape not in SHAPES_3D:
         shape = "sphere"
     if motion not in MOTIONS_3D:
@@ -339,107 +421,115 @@ def create_3d_card(
 
 
 # -----------------------------------------------------------------------------
-# 5. Self-Awareness Knowledge Base & Chat Guidance
+# 5. The chat answers - honest first, every time
 # -----------------------------------------------------------------------------
 
 def format_companion_overview() -> str:
-    """Return a comprehensive overview of desktop companion capabilities."""
+    """Return the overview of what a desktop companion has, and has not, here."""
     cfg = load_settings()
-    av_state = "ON" if cfg.get("avatar_enabled") else "OFF"
-    sg_state = "ON" if cfg.get("screen_guidance_enabled") else "OFF"
-    ab_state = "ON" if cfg.get("cursor_ask_bar_enabled") else "OFF"
-    cards_state = "ON" if cfg.get("interactive_3d_cards") else "OFF"
+    av_state = _saved_word(cfg.get("avatar_enabled"))
+    sg_state = _saved_word(cfg.get("screen_guidance_enabled"))
+    ab_state = _saved_word(cfg.get("cursor_ask_bar_enabled"))
+    cards_state = _saved_word(cfg.get("interactive_3d_cards"))
 
     return (
-        "### Jarvis Desktop Companion Capabilities\n\n"
-        "Here are the desktop presence, guidance, and automation capabilities integrated into Jarvis:\n\n"
-        f"1. **Holographic 3D LED Wave Sphere Avatar** [{av_state}]\n"
-        "   - Stark-inspired glowing globe of 520 golden-spiral LED points that tracks your cursor gaze.\n"
-        "   - Sound-reactive surface waves ripple dynamically as Jarvis listens or speaks.\n"
-        "   - Smoothly transforms into a HUD precision reticle cursor when pointing at screen items.\n"
-        "   - *Settings:* `avatar_style` (sphere, reticle, classic, off), `avatar_size` (default, small, cursor).\n\n"
-        f"2. **Step-by-Step Screen Guidance & Pointing** [{sg_state}]\n"
-        "   - Jarvis shows you how to use any desktop app by highlighting and ringing real controls.\n"
-        "   - Draws spotlights, callout lines, and hand-drawn glowing loops around buttons.\n"
-        "   - Paces instructions step-by-step and waits for your real click before continuing.\n\n"
-        f"3. **Transient Cursor Micro-Ask Bar** [{ab_state}]\n"
-        "   - Tap **Ctrl+Shift** to open a minimal floating input bar right beside your mouse cursor.\n"
-        "   - Ask a question or trigger a task without opening the main window, and it vanishes when done.\n\n"
-        f"4. **Interactive 3D Explanatory Cards** [{cards_state}]\n"
-        "   - Zero-dependency WebGL 3D visualizations rendered in Jarvis's retro-futuristic 5-level LED style.\n"
-        "   - Explains physical, astronomical, and structural concepts with interactive rotating or pulsing models.\n\n"
-        "5. **Windows Native Automation & Security Boundaries**\n"
-        "   - Non-blocking UI Automation with batch subtree caching and timeout protection.\n"
-        "   - Native Windows Runtime OCR (WinRT) with zero external downloads.\n"
-        "   - Strict hands-off security perimeter blocking terminals, password vaults, and destructive actions.\n\n"
-        "You can say *'turn on avatar'*, *'disable screen guidance'*, or *'show companion settings'* at any time."
+        "### Desktop Companion\n\n"
+        f"**{NOT_BUILT}** No window of Jarvis draws an avatar, a guidance "
+        "overlay, a cursor bar or a 3D card, and nothing here clicks, types, "
+        "reads your screen or recognises text in a picture.\n\n"
+        "What is here today:\n\n"
+        f"1. **Four saved preferences** (avatar {av_state}, screen guidance "
+        f"{sg_state}, cursor ask bar {ab_state}, 3D cards {cards_state}). Saying "
+        "*'turn on avatar'* saves the preference; it does not turn anything on "
+        "on screen, because there is nothing to turn on yet.\n"
+        "2. **The avatar's numbers** (the Holographic 3D LED Wave Sphere): 520 "
+        "points on a golden spiral around a sphere, 260 in small mode, plus the "
+        "wave formula a renderer would use for sound-reactive ripples. Nothing "
+        "draws them.\n"
+        "3. **A guidance description:** a title, numbered steps, marks with a "
+        "colour and a wait mode. It is plain words only - nothing is "
+        "highlighted and nothing waits for your click.\n"
+        "4. **A 3D card description:** a shape, a motion and a colour. Nothing "
+        "renders it.\n\n"
+        "What is not here, and is not claimed: the avatar itself, the screen "
+        "pointing and highlighting, the cursor ask bar, the 3D card renderer, "
+        "reading another program's controls, reading text off the screen, and "
+        "any control of your mouse or keyboard.\n\n"
+        "You can say *'turn on avatar'*, *'disable screen guidance'*, or "
+        "*'show companion settings'* at any time - each one saves a preference "
+        "and tells you so."
     )
 
 
 def format_avatar_explanation() -> str:
-    """Return a detailed explanation of the holographic 3D wave sphere avatar."""
+    """Return the design of the wave sphere, and say it is not drawn."""
     return (
         "### Holographic 3D LED Wave Sphere Avatar\n\n"
-        "The Jarvis holographic avatar is a Stark-inspired visual presence for your desktop:\n"
-        "- **Mathematical Structure:** 520 points (260 in small mode) mapped along a golden spiral around a 3D unit sphere.\n"
-        "- **Cursor Tracking:** Rotates in 3D pitch and yaw, following the direction of your mouse cursor.\n"
-        "- **Audio Reactivity:** Surface waves ripple outward dynamically based on microphone input and spoken speech.\n"
-        "- **Luminescent Core:** An inner glowing heart pulses gently during idle states and expands with vocal energy.\n"
-        "- **Reticle Mode:** In screen-pointing tasks, the sphere collapses into a precision HUD targeting reticle.\n\n"
-        "To adjust: say *'set avatar style to sphere'*, *'set avatar size to small'*, or *'turn off avatar'*."
+        f"**{NOT_BUILT}** What follows is the design and its geometry, not a "
+        "working avatar.\n\n"
+        "- **The geometry:** 520 points (260 in small mode) evenly spaced on a "
+        "golden spiral around a 3D sphere. The points are computed here; "
+        "nothing draws them.\n"
+        "- **The wave:** a formula gives each point a small outward ripple, and "
+        "a louder sound moves it further. It is never played or drawn.\n"
+        "- **Gaze, the glowing core and reticle mode:** described in the design "
+        "and not built. No window follows your cursor, and no reticle appears.\n\n"
+        "The two preferences that exist are the style (sphere, reticle, classic, "
+        "off) and the size (default, small, cursor). Say *'set avatar style to "
+        "sphere'* or *'set avatar size to small'* to save one."
     )
 
 
 def format_guidance_explanation() -> str:
-    """Return an explanation of the screen guidance engine."""
+    """Return the design of screen guidance, and say nothing is drawn."""
     return (
         "### Step-by-Step Screen Guidance ('Jarvis Shows You How')\n\n"
-        "Jarvis can visually guide you through complex software workflows across any application:\n"
-        "- **Visual Rings:** Draws glowing hand-drawn loops around the exact button or menu item on your real screen.\n"
-        "- **Spotlights & Underlines:** Dims distraction and focuses attention on the exact relevant text or element.\n"
-        "- **Click-Wait Progression:** Vocalizes the current step and pauses until you actually click the highlighted control.\n"
-        "- **Ask-First Protection:** Jarvis guides you visually without taking control of your mouse without permission.\n\n"
-        "To adjust: say *'turn on screen guidance'*, *'turn off screen guidance'*, or *'set guidance tone to amber'*."
-    )
-
-
-def format_native_automation_explanation() -> str:
-    """Return an explanation of native Windows automation and OCR."""
-    return (
-        "### Windows Native Automation & Security Guardrails\n\n"
-        "Jarvis interacts with desktop applications safely using specialized native helpers:\n"
-        "- **Non-Blocking UI Automation:** Queries Windows accessibility trees via COM cache requests with 4s/8s timeouts, preventing application freezes.\n"
-        "- **Zero-Download WinRT OCR:** Uses Windows 10/11 built-in optical character recognition (`Windows.Media.Ocr`) for fast local text extraction.\n"
-        "- **Hands-Off Security Perimeter:** Automatically refuses to type into or click inside command terminals (cmd, PowerShell, Windows Terminal) and password vaults (KeePassXC).\n"
-        "- **Destructive Action Filter:** Prompts for explicit Ask-First approval cards before any critical system changes."
+        f"**{NOT_BUILT}** Jarvis cannot point at your screen in this build, so "
+        "this is a description of a workflow, not something you can watch.\n\n"
+        "- **What the description holds:** a title, numbered steps, marks (a "
+        "ring, a target, a label) with a colour, and a wait mode.\n"
+        "- **What does not happen:** no rings, spotlights or lines are drawn, "
+        "nothing is highlighted, and Jarvis never waits for a click because it "
+        "never shows you the step.\n"
+        "- **Control:** Jarvis does not take your mouse or keyboard, here or "
+        "anywhere else.\n\n"
+        "The preference that exists is the highlight colour (tone). Say *'set "
+        "guidance tone to amber'* to save it."
     )
 
 
 def format_askbar_explanation() -> str:
-    """Return an explanation of the transient cursor micro-ask bar."""
+    """Return the design of the cursor ask bar, and say it does not exist."""
     return (
         "### Transient Cursor Micro-Ask Bar\n\n"
-        "The cursor ask bar is a lightweight, floating text prompt directly beside your cursor:\n"
-        "- **Instant Access:** Tap **Ctrl+Shift** anywhere to open the prompt immediately.\n"
-        "- **Frictionless Interaction:** Type a command, read the answer, and press Escape or click away to dismiss.\n"
-        "- **Non-Intrusive:** Keeps your screen clear without shifting focus away from your active work."
+        f"**{NOT_BUILT}** There is no floating input box beside your cursor in "
+        "this build, and no shortcut opens one.\n\n"
+        "- **What is here:** the saved preference that says whether you would "
+        "want it, and the shortcut written beside it.\n"
+        "- **What is not here:** the bar itself, its window, and dismissing it "
+        "by clicking away.\n\n"
+        "To ask Jarvis something now, use the chat window or the Jarvis bar - "
+        "both already work."
     )
 
 
 def format_settings_summary() -> str:
-    """Return a plain-English summary of all companion settings."""
+    """Return the saved preferences, each labelled as a preference."""
     cfg = load_settings()
     return (
-        "### Jarvis Desktop Companion Settings\n\n"
-        f"- **Holographic Avatar:** {'Enabled' if cfg.get('avatar_enabled') else 'Disabled'}\n"
-        f"  - Style: `{cfg.get('avatar_style')}`\n"
-        f"  - Size: `{cfg.get('avatar_size')}`\n"
-        f"  - Voice Reactive: {'Yes' if cfg.get('avatar_voice_reactive') else 'No'}\n"
-        f"- **Screen Guidance:** {'Enabled' if cfg.get('screen_guidance_enabled') else 'Disabled'}\n"
-        f"  - Highlight Tone: `{cfg.get('guidance_tone')}`\n"
-        f"  - Auto Advance: {'Yes' if cfg.get('guidance_auto_advance') else 'Wait for click'}\n"
-        f"- **Cursor Micro-Ask Bar:** {'Enabled' if cfg.get('cursor_ask_bar_enabled') else 'Disabled'} (`{cfg.get('cursor_ask_bar_hotkey')}`)\n"
-        f"- **Interactive 3D Cards:** {'Enabled' if cfg.get('interactive_3d_cards') else 'Disabled'}\n"
-        f"- **Windows Native OCR:** `{cfg.get('windows_native_ocr')}`\n"
-        f"- **Hands-Off Apps Protected:** {len(cfg.get('hands_off_apps', []))} apps (cmd, powershell, pwsh, keepassxc, ...)"
+        "### Desktop Companion Settings\n\n"
+        f"**{NOT_BUILT}** These are saved preferences only: none of them "
+        "changes what you see on screen.\n\n"
+        f"- **Holographic Avatar:** saved as {_saved_word(cfg.get('avatar_enabled'))}\n"
+        f"  - Style: `{_known(cfg.get('avatar_style'), AVATAR_STYLES)}`\n"
+        f"  - Size: `{_known(cfg.get('avatar_size'), AVATAR_SIZES)}`\n"
+        f"  - Voice Reactive: {_saved_word(cfg.get('avatar_voice_reactive'))}\n"
+        f"- **Screen Guidance:** saved as {_saved_word(cfg.get('screen_guidance_enabled'))}\n"
+        f"  - Highlight Tone: `{_known(cfg.get('guidance_tone'), VALID_TONES)}`\n"
+        f"  - Auto Advance: {'yes' if cfg.get('guidance_auto_advance') else 'wait for click'}\n"
+        f"- **Cursor Micro-Ask Bar:** saved as {_saved_word(cfg.get('cursor_ask_bar_enabled'))}\n"
+        f"  - Shortcut: `{_known(cfg.get('cursor_ask_bar_hotkey'), ('ctrl+shift',))}`\n"
+        f"- **Interactive 3D Cards:** saved as {_saved_word(cfg.get('interactive_3d_cards'))}\n\n"
+        "No companion window, overlay or card is drawn in this build, so these "
+        "preferences wait for one."
     )
