@@ -126,14 +126,24 @@ TOOL_NAMES = {
                       "(one card each)",
     "github_merge_pr": "Merging one pull request with a merge commit, pinned to its head "
                        "commit (one card each)",
-    "github_fix_and_push": "Pushing a fix to one pull request's own branch from a scratch "
-                           "folder (one card each)",
-    # The two LOCAL review gates (2026-11-10, wave 16E): reads of a checkout on
-    # this PC - no token, no network, no file written - so no card.
-    "review_changes": "Reviewing a change on this PC before it is pushed (read-only, "
-                     "no card)",
-    "check_records": "Checking a change's records before a push (read-only, "
-                           "no card)",
+    "github_fix_and_push": "Writing one file of a fix inside a pull request's own "
+                           "scratch copy here, then pushing it to that pull "
+                           "request's branch (one card for each change)",
+    # The 2026-11-10 22:30 ruling's Step 2 surface: one full pull-request read
+    # and five more carded writes.
+    "github_pr_detail": "Reading one pull request in full: its body, files, "
+                        "commits, comments and reviews (one card each)",
+    "github_open_pr": "Opening one pull request for a new branch Jarvis copies "
+                      "and prepares here (one card each)",
+    "github_workflow": "Cancelling one running workflow run, or re-running only "
+                       "its failed jobs (one card each)",
+    "github_issue_labels": "Adding or removing labels on one issue or pull "
+                           "request (one card each)",
+    "github_edit_pr": "Editing one pull request's title and/or body (one card each)",
+    "github_pr_review": "Posting one pull request review, a comment or a request "
+                        "for changes - never an approval (one card each)",
+    "github_issue_state": "Closing one issue, or reopening one closed issue "
+                          "(one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",
@@ -267,6 +277,8 @@ TOOL_NAMES = {
     # read-only in jarvis_claims.py.
     "setup_quiz": "Explaining your Personalize Jarvis quiz and staging a "
                   "choice in it (read-only; you press Apply on the PC)",
+    "review_changes": "The review packet: what changed, and what usually goes wrong",
+    "check_records": "The record check before a push: READY, or what is missing",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
@@ -320,18 +332,19 @@ def _inherited_config() -> dict:
     if not path.exists():
         return {}
     try:
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
         with open(path, "rb") as fh:
             return tomllib.load(fh)
-    except ImportError:
-        pass
     except Exception:
-        return {}
+        pass
     try:
         raw = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return {}
-    block = re.search(r"^\[tools\]\s*$(.*?)(?=^\[)", raw, re.M | re.S)
+    block = re.search(r"^\[tools\]\s*$(.*?)(?=^\[|\Z)", raw, re.M | re.S)
     names = re.findall(r'"([a-z0-9_]+)"', block.group(1)) if block else []
     return {"tools": {"enabled": names}}
 

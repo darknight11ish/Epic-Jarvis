@@ -7231,8 +7231,9 @@ the reader's own state:
   kept as a password) and that any calendar giving a private `.ics` address
   works the same way. When `[tools].enabled` does not offer `calendar_read` (the
   shipped list does not), it adds the one sentence that raises that card:
-  **"let the AI model read my calendar"** (`enable_reading_tool`, PC only, one
-  card plus Windows Hello). It also carries `open_settings: "account-secrets"`,
+  **"let the AI model read my calendar"** (`enable_reading_tool`, a RISKY card:
+  one card, Windows Hello on the PC or the phone's own fingerprint/PIN). It also
+  carries `open_settings: "account-secrets"`,
   so the desktop jumps its Settings window to that card - the same cardless jump
   "open accounts" makes, and nothing is changed by it.
 * **Already set up**: the reader's own name for the source ("your Google
@@ -11514,18 +11515,21 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
   `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
   the tools the earlier slice left out.
-- **Jarvis's own tools (24):** `goals_list`, `goal_add`, `goal_progress`,
+- **Jarvis's own tools (35):** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
   `plugin_list`, `plugin_switch`, `pack_list`, `pack_inspect`, `pack_install`,
   `pack_remove`, `send_text_message`, `refresh_abilities`,
   `self_portrait`, `setup_quiz`, `approval_policy` - the switch that offers
   the approval-policy TOOL at all (it never changes a policy by itself;
   §193 is the changing, and every loosening still needs its own card) - and,
-  since 2026-11-05, the six on-demand GitHub tools `github_list`,
-  `github_read_file`, `github_ci_status`, `github_comment`,
-  `github_open_issue`, `github_rerun_workflow` (the three reads share the
-  `github_inspect` action, the other three their own; every use still raises
-  its own card). The twelve before the GitHub six shipped ON and had no
+  since 2026-11-05, the seventeen on-demand GitHub tools `github_list`,
+  `github_read_file`, `github_ci_status`, `github_pr_scan`, `github_pr_detail`,
+  `github_comment`, `github_open_issue`, `github_rerun_workflow`,
+  `github_create_repo`, `github_merge_pr`, `github_fix_and_push`,
+  `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`,
+  `github_pr_review` and `github_issue_state` (the five reads share the
+  `github_inspect` action, the twelve writes their own; every use still raises
+  its own card). The non-GitHub names above shipped ON and had no
   switch row at all before 2026-11-04; `send_text_message` came with
   hands-free the same day as the GitHub six.
 **Four known tools are NOT switches of their own**, because the turn ignores
@@ -11553,16 +11557,17 @@ it stays off by default because the deterministic chat request is the normal
 door, and the card names any other switch that must also be on.
 
 Built into `backend/jarvis_asks_first.py` (shipped whole, no new module), the
-same PC-only, Windows-Hello shape as §32.3's loosening card:
-`jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any
-device but the PC. **Desktop only for changing** (`CLAUDE.md`: no deep config
+RISKY shape (the owner's ruling of 2026-11-10): the PC asks Windows Hello and
+the phone asks for its own fingerprint or PIN, so an approval cannot be given
+without a person. It is NOT in `jarvis_owner_check.PC_ONLY_ACTIONS`.
+**Desktop only for changing** (`CLAUDE.md`: no deep config
 editing on the phone): the phone reads the same list but `can_enable` is false.
 
 ### 43.1 Route
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (60), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: requested from the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2), and that card may be approved on the PC (Windows Hello) or on the phone (its own fingerprint or PIN); a phone with no approval key is refused with `no_approval_key` so it can offer to turn signing on. Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (60), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11658,8 +11663,11 @@ otherwise "offered" would be a promise the card cannot keep.
 `send_file_to_phone` keeps its own paragraph: off by default on purpose, asking
 in chat is the normal door.
 
-Its title: "Jarvis wants to offer a tool to the AI model"
-(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the shipped
+Its title: "Jarvis wants to offer \"<the tool's own label>\" to the AI model"
+(`jarvis_gate.notice_for` names the tool from the card's own `detail.setting`,
+validated as a plain tool id and mapped through `jarvis_reach.TOOL_NAMES`; the
+generic `jarvis_card_words.TITLES["enable_reading_tool"]` phrase is the fallback
+for a malformed row). Tier `ask` in the shipped
 `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`: it
 always asks, and it is never itself on the switchable list.
 
@@ -11927,7 +11935,8 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-14; **rule changed 2026-10-24**). **TWO callers may finish a run** (2026-10-24): (a) **the device that MINTED it** - `prepare` records the caller's `handler._jarvis_device` identity in the live run ("pc", "shared", or a paired device's id: the same identity `jarvis_devices` stamps on every request and `jarvis_chatbot_limits` reads, never a new header), and a `commit` whose identity matches is the phone's own finish press (ONE TAP after the tick, with no step on the PC); or (b) **this PC** typing the same code (`finish_phone_backup`, the fallback for a run left waiting). **Any OTHER paired device that holds or has learned the code is refused 403** `{"ok": false, "other_device": true, "error": "That backup was started on another device, so nothing was written and your folder is unchanged. Finish it on the phone that started it, or on your PC (Settings, Backups)."}` - it writes **NOTHING**, leaves the folder byte-for-byte unchanged, and does **NOT spend the run**, so its real finisher can still use it. The device is checked BEFORE the code, so a device that may not finish a run cannot use 400-vs-403 as a code oracle. **The fallback that must stay, said plainly:** a run whose asker identity was never recorded - a direct in-process call (the tests), or a backend with no `jarvis_devices`, where the token wrapper that stamps `_jarvis_device` never ran - cannot be bound, so possession of the live code still decides for it (`jarvis_backup.request_commit`'s own docstring). The old **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, ..."}` stays GONE: the phone that minted the run is not refused. What does not change is where the write happens - on the PC's disk, by the PC's backend, into the folder the owner chose on the PC. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module, or no folder at commit - **409** `NO_FOLDER`) records `last_attempt.ok: false` and writes nothing. The run is **CLAIMED under the module's lock BEFORE the file is written**: two presses - from one app or from both, or the phone and the PC's fallback at once - write ONE file (the second is the 409 above), where before both could pass the check and write two files with the same code, the second one's retention pass pushing an older, still-openable backup out of the five kept. The `id` is sent but **never compared**, so the PC's fallback needs nothing from the phone but the code the owner wrote down. **The phone's half** (§45.5): after `prepare` showed the code and the owner ticked "I have written this code down somewhere safe", its finish button is this call; the screen says "Nothing has been written yet" until the answer says a file landed, and only then "Your PC wrote the backup". **What the guard does NOT close:** a caller holding a paired token can `prepare` (as itself) and then `commit` as the device that minted that same run, so it can still churn the kept backups (§45.6) - the guard stops a DIFFERENT device finishing a run it did not mint, not a token holder making its own. **Residual risk, accepted by the owner on 2026-10-24:** the tick is a client-side promise inside the phone app, not a check by the PC, so a modified or misused paired phone could commit without the code ever being kept - which writes a backup nobody can open and pushes the oldest of the five kept out. **What stays PC-only:** choosing the folder, restoring, listing files and deleting older copies (§45.5; `tools/check_parity.py` has this route as `ported`). |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
-| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. **Since 2026-10-20 (ruling 8.1, §45.4b): the safety backup must be VERIFIED ON DISK before one live file is touched** - present, not empty, its own `JBAK1` shape, the size that was written, it opens with its code, and its manifest reads back; anything else refuses the restore with nothing changed, `reason: "safety_unverified"` in `last_restore` and in the audit's `backup.restore.card`, and the plain sentence "the safety backup could not be made first, so nothing was restored". The outcome's `restored` block names the EXACT files put back (`databases`, `settings_files`, `notes_files`, `voice_files`, `source_files`, `framework_toml`, `keys`), not just counts. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` uses;
+`enable_reading_tool` LEFT that list on 2026-11-10 and is a RISKY card instead). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. **Since 2026-10-20 (ruling 8.1, §45.4b): the safety backup must be VERIFIED ON DISK before one live file is touched** - present, not empty, its own `JBAK1` shape, the size that was written, it opens with its code, and its manifest reads back; anything else refuses the restore with nothing changed, `reason: "safety_unverified"` in `last_restore` and in the audit's `backup.restore.card`, and the plain sentence "the safety backup could not be made first, so nothing was restored". The outcome's `restored` block names the EXACT files put back (`databases`, `settings_files`, `notes_files`, `voice_files`, `source_files`, `framework_toml`, `keys`), not just counts. |
 
 | `POST /api/backup/restore/dismiss` `{}` | **Clears the last restore's outcome** (2026-10-20, Gemini ruling 8.1, §45.4b) - the ONLY thing that clears it, because reading `last_restore` now never consumes it. **Any paired device** may ask, EXCEPT while this PC has not yet shown the restore's one-time recovery code: the code exists only in the PC's memory, so a device clearing the notice first would destroy the only way to open the safety backup (audit 2026-10-21, M2). That request is **409** `{"ok": false, "code_pending": true, "error": "<plain words: read it on the PC first; the code is shown once>"}`, and **nothing is cleared**; the PC itself may always clear it (the owner can read the code in the same panel first), and once the PC has read it any paired device can. 200 `{"ok": true, "dismissed": <true when there was something to clear>}`; **idempotent** - dismissing an empty record is a 200 with `"dismissed": false`, not an error. Removes `last-restore.json` from the settings folder and clears the in-memory copy; the disk write of a finishing restore and a dismiss cannot interleave to resurrect a cleared record (audit 2026-10-21, LOW-1). Audited as `backup.restore.dismissed {had, from}`, and a refusal as `backup.restore.dismiss_refused`. **No app draws the button yet** (named follow-up in §45.5): the route is the explicit action the persistent record requires. |
 
@@ -13660,30 +13669,34 @@ Every one of these keeps its EXISTING gate exactly:
   still raises that SAME card through this new path - never applies
   silently - whichever app or device asked; turning the same setting OFF
   is still immediate, no card, exactly as the existing route.
-- `loosen_what_asks_first` and `enable_reading_tool`
-  (`jarvis_owner_check.PC_ONLY_ACTIONS` - **the authoritative, current
-  list has three entries**: those two and `restore_backup`; nothing else
-  is on it today) still refuse from a request that did not truly come from
-  this PC (`jarvis_asks_first.request_tier`'s and `request_tool_enable`'s
-  own `_here(here, peer, local)` check, fed `peer`/`local` read off the
-  live TCP connection the same way `owner-check.patch`'s own `do_POST`
-  wrapper reads them - never invented; the rule is the opposite of a
-  default toward "elsewhere", though, not away from "this PC":
+- `loosen_what_asks_first` (on `jarvis_owner_check.PC_ONLY_ACTIONS`, the
+  authoritative list) still refuses from a request that did not truly come
+  from this PC (`jarvis_asks_first.request_tier`'s own
+  `_here(here, peer, local)` check, fed `peer`/`local` read off the live TCP
+  connection the same way `owner-check.patch`'s own `do_POST` wrapper reads
+  them - never invented; the rule is the opposite of a default toward
+  "elsewhere", though, not away from "this PC":
   `jarvis_owner_check.from_this_pc`'s own docstring says plainly "anything
   that cannot be placed counts as this PC", so an address that cannot be
-  read at all is treated as PC-only, never as a stranger) and
-  still need Windows Hello to approve, whichever app or device raised the
-  card. Making one of these settings STRICTER (`"ask": true`) is unaffected
-  by PC_ONLY_ACTIONS - it always was immediate, from anywhere, no card -
-  and turning `enable_reading_tool` OFF is the same.
+  read at all is treated as PC-only, never as a stranger) and still needs
+  Windows Hello to approve, whichever app or device raised the card.
+- `enable_reading_tool` LEFT `PC_ONLY_ACTIONS` on 2026-11-10 (the owner's
+  ruling: the phone may approve tool switches too) and is a RISKY card
+  instead: the card is still only RAISED from the PC
+  (`request_tool_enable`'s own `_here` check), and it is approved with
+  Windows Hello on the PC or with that phone's own fingerprint or PIN on
+  the phone; a phone with no approval key is refused. Making it STRICTER
+  (`"ask": true`) is unaffected by PC_ONLY_ACTIONS - it always was
+  immediate, from anywhere, no card - and turning it OFF is the same.
 - `set_asks_first`/`set_reading_tool` pass `peer`/`local` all the way from
   `jarvis_quick.answer_turn`'s own new keyword-only parameters, which
   `schedule.patch`'s `/api/chat` handler now reads off `self.client_address`
   and `self.connection.getsockname()` before calling in - the SAME two
   values `owner-check.patch`'s wrapper already reads for `POST /api/approve`.
-  `test_settings_registry.py` proves both directions for both
-  PC_ONLY_ACTIONS settings covered here (from the PC: the same card;
-  from a simulated phone request: the same 403, nothing changed) and that
+  `test_settings_registry.py` proves both directions for what remains
+  PC_ONLY_ACTIONS here (from the PC: the same card; from a simulated phone
+  request: the same 403, nothing changed), for the tool-enable route's own
+  PC-only ON, and that
   a card-gated-but-not-device-restricted setting (lights, background
   learning) still raises its card rather than applying at once.
 
@@ -21943,7 +21956,9 @@ the gate as `page_read`. One name for this feature, and it is neither.
 | **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
 | **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
 | **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
-| **Off until switched on** | a one-tool switch in Settings, What asks first, under "Let the AI use this" - ONE PC-only `enable_reading_tool` card plus Windows Hello (§43; switchable since 2026-11-04), or the same line by hand in the owner's `jarvis-framework.toml` `[tools].enabled`. It is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+| **Off until switched on** | a one-tool switch in Settings, What asks first, under "Let the AI use this" - ONE `enable_reading_tool` card - a RISKY one:
+Windows Hello on the PC, the phone's own fingerprint or PIN (§43; switchable
+since 2026-11-04), or the same line by hand in the owner's `jarvis-framework.toml` `[tools].enabled`. It is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
 
 ### 115.2 One card, then one plain GET
 
@@ -33765,8 +33780,8 @@ card either way.
 tool (§115). It is still off by default (not in `[tools].enabled`) and still in
 `jarvis_asks_first.TIER_C`, but the owner's decision of 2026-11-04 put it in
 `TOOLS_SWITCHABLE` with every other tool the model can be offered, so
-`request_tool_enable` accepts ON for it with ONE PC-only `enable_reading_tool`
-card and Windows Hello (§43) - superseding the 2026-11-03 decision
+`request_tool_enable` accepts ON for it with ONE `enable_reading_tool`
+card (a RISKY one: Windows Hello on the PC, the phone's own signature) (§43) - superseding the 2026-11-03 decision
 (`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`) that had kept it
 out. Its tier stays `ask`, and it stays in `HARD_LIMITS` and `MUST_ASK`, so
 nothing in an app can loosen it: offering it and making each read ask are two
@@ -35715,14 +35730,38 @@ main/master/release/*, deleting or closing repositories or branches, approving a
 pull request, dispatching a workflow and gists are all still impossible, and
 `jarvis_github.NEVER_WORDS` says so in one sentence.
 
+**Updated again the same day (wave 16B):** the fix can now be WRITTEN by Jarvis
+itself. The deferred item the 2026-11-10 record named is built: one new carded
+action, `github_fix_write`, changes ONE file inside that same isolated copy and
+makes ONE commit there - no GitHub token, no socket, no delete/rename/move/chmod,
+and no path outside the prepared copy for that pull request. The existing carded
+push then carries the commit, with its card still showing the real commits, files
+and command. §190.13 is its envelope; §190.4's old sentence "there is no tool
+that edits or commits code" is now false and has been corrected.
+
+**Corrected 2026-11-10 at 23:00 PT (two owner decisions, asked and answered).**
+(A) **GitHub reads are card-free now.** A read is a GET on `api.github.com` and
+changes nothing, so the owner chose "make GitHub reads card-free":
+`github_inspect` ships `"auto"` in both shipped settings files, and the five
+read tools are deliberately NOT in `jarvis_agent.NEEDS_A_PERSON`. Every WRITE
+still raises its own one-shot card and is still `"ask"`. (B) **Closing one issue
+is allowed, carded.** The owner overturned the old absolute ban on
+`close_issue`: `github_issue_state` closes ONE issue or reopens ONE closed
+issue, on its own card, one issue at a time, never a pull request, never bulk,
+never a delete, transfer or edit. `close_issue` left `jarvis_github.NEVER`;
+`bulk_close` joined it. §216 is the full record of both, and of the other nine
+actions the same day's 22:30 ruling added.
+
+**Updated 2026-11-10 23:00 PT (the owner's second decision that day):** GitHub READS are card-free - the five read tools left `jarvis_agent.NEEDS_A_PERSON`, `github_inspect` is a switchable READ row on What asks first, and ONE master switch offers/removes all twenty tools in the group - the eighteen GitHub tools and both local review gates together. Section **217** is the record of that decision and of the switch door; §190.2's read paragraphs below are corrected to match. Section **218** is the record of the 2026-11-11 01:40 field-test rulings: per-repository merge checks and the CI read's five runs and plain cut refusal.
+
 The owner's decisions: of 2026-11-03, *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card** - and of 2026-11-10 ("Everything at once"), the same rule now covers **merge and fix-and-push**: each gets its own card, the merge is merge-commit-only and pinned to the head commit on the card, and the push only ever goes to the pull request's own branch from an isolated scratch folder. The reads ask too, on their own card, because a read still sends the saved token to `api.github.com`.
 
 ### 190.1 What exists, and what each one does
 
 `backend/jarvis_github.py` is the whole of the network half. It talks to `api.github.com` and to nothing else: every address is built from the module's own `GITHUB_API` constant plus a path the module wrote, so there is **no arbitrary-URL code path at all** and a model cannot point it at another host. A redirect is REFUSED rather than followed (`_RefuseRedirect`), because following one would hand the owner's token to whoever answered. Every answer is capped (`MAX_BYTES` for a list, `MAX_FILE_CHARS` for a file) and every request has a timeout.
 
-Ten tools in `backend/jarvis_agent.py` (the three added on 2026-11-10 are the
-last three rows here, and §190.9-§190.10 are their two envelopes):
+Seventeen tools in `backend/jarvis_agent.py` (the seven added on 2026-11-10 are the
+last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 
 | Tool | What it does | The request |
 |---|---|---|
@@ -35735,7 +35774,14 @@ last three rows here, and §190.9-§190.10 are their two envelopes):
 | `github_create_repo` | creates ONE new, empty repository on the owner's own account | `POST /user/repos` |
 | `github_pr_scan` | the read-only PR cockpit: every open pull request, whether it can merge, and the required check holding it | `GET .../pulls?state=open`, then each `GET .../pulls/{n}` and its check runs |
 | `github_merge_pr` | merges ONE pull request with a merge commit, pinned to the exact head commit on the card | `GET .../pulls/{n}` and its check runs, then `PUT .../pulls/{n}/merge` |
-| `github_fix_and_push` | copies a failing pull request into a scratch folder here, then pushes the fix to that pull request's own branch | `GET .../pulls/{n}`, its check runs, annotations and job log; `git clone`/`fetch`/`checkout`; `git push` |
+| `github_fix_and_push` | copies a failing pull request into a scratch folder here, **writes ONE file of the fix there on its own card** (wave 16B), then pushes the fix to that pull request's own branch | `GET .../pulls/{n}`, its check runs, annotations and job log; `git clone`/`fetch`/`checkout`; the local write and `git commit` (no socket); `git push` |
+| `github_pr_detail` | reads ONE pull request in full: its body, changed files, commits, comments and reviews (ten of each at most) | five fixed `GET`s under `.../pulls/{n}` |
+| `github_open_pr` | prepares a NEW branch in the isolated copy, then pushes that one branch and opens ONE pull request | `git clone`/`checkout -b`/`push`; `POST .../pulls` |
+| `github_workflow` | cancels ONE running workflow run, or re-runs only its FAILED jobs - it never dispatches one | `POST .../actions/runs/{id}/cancel` or `.../rerun-failed-jobs` |
+| `github_issue_labels` | adds and/or removes labels on ONE issue or pull request, in ONE request | `PUT .../issues/{n}/labels` |
+| `github_edit_pr` | edits ONE pull request's title and/or body, showing the exact before and after | `PATCH .../pulls/{n}` |
+| `github_pr_review` | posts ONE review that is COMMENT or REQUEST_CHANGES - never APPROVE | `POST .../pulls/{n}/reviews` |
+| `github_issue_state` | closes ONE issue or reopens ONE closed issue, with an optional reason shown on the card | `PATCH .../issues/{n}` |
 
 `github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
 
@@ -35743,21 +35789,21 @@ last three rows here, and §190.9-§190.10 are their two envelopes):
 
 ### 190.2 The tiers: `ask`, on its own action, and never `auto`
 
-**Seven gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the four reads share) and the **six carded writes** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr` and `github_fix_and_push`. **Every mutating action's risk row is `reversible = "no"`**, and the merge's and the push's say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
+**Fourteen gate actions, every one `ask` in the shipped `[autonomy.tiers]`:** `github_inspect` (which the five reads share), the **twelve carded actions** - `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review` and `github_issue_state` - and (wave 16B) `github_fix_write`. **Every mutating action's risk row is `reversible = "no"`**, except `github_fix_write`, which is `("yes", "local", ...)`: it changes one file and adds one commit inside a scratch folder that can be thrown away, it sends nothing, and the push is the step that cannot be undone. The merge's and the push's rows say in words exactly what changes and that Jarvis cannot undo it. **`github_rerun_workflow` is `"no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
 
-**The reads ask too, and the reason is not red tape.** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so it is egress with a credential attached: "it is only a read" is not a reason to spend a credential with nobody looking, and the same call was already made for `github_search` when it was found resolving to `web_research` at `auto`.
+**The reads are card-free by default - and the owner can put the card back (2026-11-10 23:00 PT).** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so the owner's decision that evening is the shipped default: the five read tools do NOT ask. The switchable read row (`github_inspect`) on the What asks first page is how the card is put back - ONE card plus Windows Hello to loosen, instant from either app - and every WRITE still asks its own card. §216 and §217 record both decisions.
 
 **It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
 
-All ten tools are also in `jarvis_agent.NEEDS_A_PERSON`, so the setting says how much Jarvis asks and that set says a read like this is never done with nobody asked: an owner who loosens a tier line still gets a card. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
+The **twelve WRITES** are in `jarvis_agent.NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run a write, a merge or a push with nobody asked. The **five reads are not** since 2026-11-10 23:00 PT (the owner's card-free decision); their card is put back from this page with the switchable `github_inspect` row. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
 
 ### 190.3 No token, no card
 
-Without a saved token every one of the ten answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
+Without a saved token every one of the seventeen answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
 
 ### 190.4 What Jarvis will never do with GitHub
 
-**The absolute bans that remain (the owner's rulings of 2026-11-10):** force-push, squash-merge, rebase-merge, admin bypass, auto-merge, bypassing required checks, pushing directly to `main`/`master`/`release/*`, and deleting or closing a repository or a branch. Five more are permanently banned and have no action, card or tool anywhere: **approving a pull request** (`approve_pr` - a formal APPROVE satisfies branch-protection required-reviewer rules, so it would hand the owner's own sign-off authority to the assistant), **closing an issue** (`close_issue`), **editing a comment** (`edit_comment`), **dispatching a workflow** (`workflow_dispatch`, which is arbitrary remote execution with model-chosen inputs), and **gists** (public by default, an exfiltration sink). There is also **no tool that edits or commits code**: fix-and-push only pushes commits a person made in its isolated folder. Merge and PR-branch push ARE possible now - only behind their own cards - so the old sentence "there is no merge action and no merge card" is no longer true and is gone. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`): *"Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card."* Every action tool's own description carries the honest version of its own boundary. **The refusal is deterministic:** "can you merge a pull request?" is answered by the `github_self` chat intent (§190.8) from the module's own `ACTIONS` and `NEVER_WORDS` - it used to say "no" and then offer a merge card that did not exist; it now says yes, merge commit only, one card, and names the refusals.
+**The absolute bans that remain (the owner's rulings of 2026-11-10):** force-push, squash-merge, rebase-merge, admin bypass, auto-merge, bypassing required checks, pushing directly to `main`/`master`/`release/*`, and deleting or closing a repository or a branch. Five more are permanently banned and have no action, card or tool anywhere: **approving a pull request** (`approve_pr` - a formal APPROVE satisfies branch-protection required-reviewer rules, so it would hand the owner's own sign-off authority to the assistant), **editing a comment** (`edit_comment`), **dispatching a workflow** (`workflow_dispatch`, which is arbitrary remote execution with model-chosen inputs), **gists** (public by default, an exfiltration sink), and **closing or reopening more than one issue at a time** (`bulk_close`). **`close_issue` was overturned by the owner on 2026-11-10 at 23:00 for exactly ONE carded action**: `github_issue_state` closes ONE issue or reopens ONE closed issue on its own one-shot card (§216). There is now **exactly one way Jarvis can change code**: `github_fix_and_push`'s wave-16B "write" stage, which changes ONE file inside the isolated copy the "prepare" stage made and makes ONE local commit there, on its own card (§190.13). It cannot write in the owner's own checkout, in another pull request's copy, or anywhere else on this PC; it cannot delete, rename, move or change permissions; it refuses a credential file; and it sends nothing, so the separate carded push is still the only step that can put a commit on GitHub. Merge and PR-branch push ARE possible now - only behind their own cards - so the old sentence "there is no merge action and no merge card" is no longer true and is gone. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`): *"Jarvis can never force-push, squash-merge or rebase, use an admin bypass, turn on auto-merge, bypass required checks, push directly to main, approve a pull request in your name, close an issue, edit a comment, dispatch a workflow, use a gist, or delete/close repositories or branches; every merge or PR-branch push requires its own approval card."* Every action tool's own description carries the honest version of its own boundary. **The refusal is deterministic:** "can you merge a pull request?" is answered by the `github_self` chat intent (§190.8) from the module's own `ACTIONS` and `NEVER_WORDS` - it used to say "no" and then offer a merge card that did not exist; it now says yes, merge commit only, one card, and names the refusals.
 
 ### 190.5 The wording, the token and the failures
 
@@ -35767,11 +35813,11 @@ The card prints the **literal address** of every request and, for a comment or a
 
 All ten ship **SWITCHED OFF**. Settings, **What asks first**, under **"Let the AI use this"** (group **"Jarvis's own tools"**) holds **one switch per tool** - `github_list`, `github_read_file`, `github_ci_status`, `github_pr_scan`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr` and `github_fix_and_push` - and turning one ON from the PC is one card plus Windows Hello while OFF is instant from either app (`POST /api/asks_first/tools`; the owner's decision of 2026-11-04). Adding the name to `[tools].enabled` by hand still works and is what the switch writes. The Reach page lists each one as off until then. The same page has the switches for `github_search` (GitHub research) and every other reading tool.
 
-`backend/github-tools.patch` gives `jarvis_gate.py` the seven gate actions (the reads' own `github_inspect` plus the six carded writes) and the ten `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
+`backend/github-tools.patch` gives `jarvis_gate.py` the **fourteen** gate actions (the reads' own `github_inspect`, the **twelve** carded actions and the wave-16B `github_fix_write`) and **eighteen** `_TOOL_ACTIONS` entries - the seventeen tools plus the fix tool's own `github_fix_write` stage name (a name the gate maps to itself, because the tool is still `github_fix_and_push` and picks it per stage) - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
 
 ### 190.7 What proves it
 
-`backend/test_github_tools.py` - 592 checks (measured 2026-11-10), **no network, no real token and no real git process**: a socket opened anywhere in it fails the run, and every git command goes through a fake. It proves the host is `api.github.com` and only that (a `url` argument is ignored, a redirect raises, and the ONE address fetched without the token is a job log's signed redirect, only on an https host GitHub owns), the scopes are the closed four, every bad repository/path/number/40-hex sha is refused, the token appears in no card, body, address, result, git URL or command line while it IS sent in the `Authorization` header (the control that stops that check passing for the wrong reason), no token is a plain answer with no card, each action is exactly ONE card naming the repository, the number and the full text (and the merge card names the plain fields, the title, the target branch and the exact head commit), the cockpit classifies merge-ready/blocked/conflicted/running/draft from fake answers, prints each pull request's 40-hex head commit and only ever sends GETs, the merge sends exactly `{"merge_method": "merge", "sha": <pinned sha>}` once and is refused - sending nothing - for a draft, a conflict, a blocked or unknown state, a running check, a failing or missing required check, a moved head commit, a retargeted base branch and a non-2xx answer, the fix-and-push stage clones, fetches and pushes with the token only in git's environment config (`GIT_CONFIG_*` / `http.extraheader`), never in a command line, refuses a fork, a protected branch, a folder outside the scratch root, a dirty tree, a branch mismatch, a changed credential file and a force flag, a failed prepare removes the scratch folder it made so the next prepare is not blocked, `MERGE_METHOD` is the only merge method and `squash`/`rebase`/`admin`/`force` have no path, `NEVER_WORDS` is the owner's 2026-11-10 sentence word for word, a refused token and a rate limit are sentences with no code in them, nothing from email/files/memory/credentials is sent, the seven gate actions ship as `ask` while `github_read` stays `auto`, every registration table has the ten (card words, the Reach page, the claim checker, the "What asks first" page, the tools page, the small-card list, the short tool list's diet hints), every twin is byte-identical, and **the patch reverses out of the published base and applies forward again
+`backend/test_github_tools.py` - 599 checks (measured 2026-11-10), **no network, no real token and no real git process**: a socket opened anywhere in it fails the run, and every git command goes through a fake. It proves the host is `api.github.com` and only that (a `url` argument is ignored, a redirect raises, and the ONE address fetched without the token is a job log's signed redirect, only on an https host GitHub owns), the scopes are the closed four, every bad repository/path/number/40-hex sha is refused, the token appears in no card, body, address, result, git URL or command line while it IS sent in the `Authorization` header (the control that stops that check passing for the wrong reason), no token is a plain answer with no card, each action is exactly ONE card naming the repository, the number and the full text (and the merge card names the plain fields, the title, the target branch and the exact head commit), the cockpit classifies merge-ready/blocked/conflicted/running/draft from fake answers, prints each pull request's 40-hex head commit and only ever sends GETs, the merge sends exactly `{"merge_method": "merge", "sha": <pinned sha>}` once and is refused - sending nothing - for a draft, a conflict, a blocked or unknown state, a running check, a failing or missing required check, a moved head commit, a retargeted base branch and a non-2xx answer, the fix-and-push stage clones, fetches and pushes with the token only in git's environment config (`GIT_CONFIG_*` / `http.extraheader`), never in a command line, refuses a fork, a protected branch, a folder outside the scratch root, a dirty tree, a branch mismatch, a changed credential file and a force flag, a failed prepare removes the scratch folder it made so the next prepare is not blocked, `MERGE_METHOD` is the only merge method and `squash`/`rebase`/`admin`/`force` have no path, `NEVER_WORDS` is the owner's 2026-11-10 sentence word for word, a refused token and a rate limit are sentences with no code in them, nothing from email/files/memory/credentials is sent, the seven gate actions ship as `ask` while `github_read` stays `auto`, every registration table has the ten (card words, the Reach page, the claim checker, the "What asks first" page, the tools page, the small-card list, the short tool list's diet hints), every twin is byte-identical, and **the patch reverses out of the published base and applies forward again
 byte for byte, and it sits between `web-search-grant.patch` and the last
 writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
 those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
@@ -35781,12 +35827,12 @@ those reversals is disturbed**. The same facts are held by `test_card_words.py`,
 
 The tool-capability audit of 2026-11-07 drove these questions through the live chat and found the model answering them: it denied having a public repository, offered a merge card that does not exist, said nothing was needed to read the owner's repos, and answered "how do I disconnect it?" with "you haven't told me what 'it' is yet". The surface was built; the self-knowledge was not. Two things fix that, and both are model-free (updated 2026-11-10 for the ten-tool surface):
 
-* **`features/features.json` has ONE `connected-github` row** - id `connected-github`, title "Read and act on your own GitHub" - naming the ten tools, `github_search`, the scheduled `watch_github` job, the six carded actions and the bans that remain, with `gate` = the seven real `ask` actions (`github_inspect`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`). It is the row the Features pages, the Feature Guide and the deterministic capability answer all read, so "what can you do with my GitHub?" now names the connected surface instead of only the two 2026-09-30 research features.
+* **`features/features.json` has ONE `connected-github` row** - id `connected-github`, title "Read and act on your own GitHub" - naming the seventeen tools, `github_search`, the scheduled `watch_github` job, the **twelve carded actions** (the wave-16B write included) and the bans that remain, with `gate` = the **fourteen** real `ask` actions (`github_inspect`, `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_fix_write`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review`, `github_issue_state`). It is the row the Features pages, the Feature Guide and the deterministic capability answer all read, so "what can you do with my GitHub?" now names the connected surface instead of only the two 2026-09-30 research features.
 * **Two read-only chat intents in `jarvis_quick.py`:**
-  * `github_self` (shapes `repo`, `ci`, `tools`, `needs`, `never`, `merge`, `asks`, `action`) answers "what is your GitHub repository?" / "where does your code live?" with **`darknight11ish/Epic-Jarvis`**, reads `jarvis_github.connected()` for the token state, lists the ten tools plus `github_search` and `watch_github`, answers "what do you need before you can read my repos?" (a token + the tools switched on), "what can't you do on GitHub?" (the bans that remain), the seven `ask` rows from `jarvis_asks_first.view()`, and - since 2026-11-10 - answers "can you merge a pull request?" with the REAL boundary: yes, with one card, merge commit only, pinned to the head commit, refused if it moved / is a draft / is blocked / has a running or failing required check, and never squash, rebase, force or admin.
+  * `github_self` (shapes `repo`, `ci`, `tools`, `needs`, `never`, `merge`, `asks`, `action`) answers "what is your GitHub repository?" / "where does your code live?" with **`darknight11ish/Epic-Jarvis`**, reads `jarvis_github.connected()` for the token state, lists the ten tools plus `github_search` and `watch_github`, answers "what do you need before you can read my repos?" (a token + the tools switched on), "what can't you do on GitHub?" (the bans that remain), the eight `ask` rows from `jarvis_asks_first.view()`, and - since 2026-11-10 - answers "can you merge a pull request?" with the REAL boundary: yes, with one card, merge commit only, pinned to the head commit, refused if it moved / is a draft / is blocked / has a running or failing required check, and never squash, rebase, force or admin.
   * `accounts_answer` (shapes `list`, `abilities`, `disconnect`) is the door `jarvis_accounts.sentence()` / `state_words()` never had: "what accounts do I have?", "what abilities does my GitHub connection have?" and "how do I disconnect my GitHub?" (the row's own `remove` sentence) are answered from the same values `GET /api/accounts` serves. `probe=False` - no socket is opened by a chat answer.
 
-`GET /api/accounts`'s GitHub row is corrected in the same change: nine abilities (the four reads sharing `github_inspect`, plus `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, and the existing `github_read`/`research_authenticated` watch pair), with its limit saying "Read AND act, each with its own card", the merge-commit-only rule and the bans. `test_github_self_knowledge.py` holds all of it; `test_self_answers.py` and `test_feature_guide.py` hold the chat and guide cases.
+`GET /api/accounts`'s GitHub row is corrected in the same change: seventeen abilities (the five reads sharing `github_inspect`, plus `github_comment`, `github_open_issue`, `github_rerun_workflow`, `github_create_repo`, `github_merge_pr`, `github_fix_and_push`, `github_open_pr`, `github_workflow`, `github_issue_labels`, `github_edit_pr`, `github_pr_review`, `github_issue_state`, and the existing `github_read`/`research_authenticated` watch pair), with its limit saying "Read AND act, each with its own card", the merge-commit-only rule and the bans. `test_github_self_knowledge.py` holds all of it; `test_self_answers.py` and `test_feature_guide.py` hold the chat and guide cases.
 
 ### 190.9 The merge envelope (2026-11-10)
 
@@ -35799,10 +35845,12 @@ will merge.
 * **The card** prints, in plain words, the repository, the pull request number and title, the pull request's own address on github.com, the target branch, the pinned 40-hex head commit, the seven required checks that must have passed, the method ("one merge commit - never squash or rebase") and that squash/rebase/admin/auto-merge are impossible; the exact body it sends is `{"merge_method": "merge", "sha": <the 40-hex head commit>}` and is built by the planner, never typed by the model.
 * **The tier** is its own action, `github_merge_pr`, `"ask"` in both shipped settings files, and it is in `jarvis_agent.NEEDS_A_PERSON`, so loosening the tier line still raises the card.
 
-### 190.10 The fix-and-push envelope (2026-11-10)
+### 190.10 The fix-and-push envelope (2026-11-10, extended by wave 16B)
 
-TWO stages, ONE isolated folder, TWO cards - and a push that can only ever go to
-the pull request's own branch.
+FOUR stages - prepare, read, write, push - ONE isolated folder, and a card for
+every change. `prepare` and `push` keep their 2026-11-10 shape; `read` raises no
+card (it sends nothing); `write` is §190.13. A push can only ever go to the pull
+request's own branch.
 
 * **`stage="prepare"` (default)** reads the pull request, remembers `head.repo.full_name`, `head.ref` and `head.sha`, refuses a fork's branch and a protected branch, then creates `<owner>__<name>__pr<number>` under `JARVIS_GITHUB_SCRATCH_ROOT` (default `%LOCALAPPDATA%\Jarvis\github-fix`) and runs `git clone --no-checkout https://github.com/<repo>.git <dir>`, `git fetch origin pull/<n>/head:refs/heads/fix-pr-<n>`, `git checkout fix-pr-<n>` and a branch rename to the pull request's own branch name. **The token is never in the remote URL, never on a command line or in a process's arguments, and never written to disk**: the clone, the fetch and the push alike take it only in git's own environment config (`GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=http.extraheader`, `GIT_CONFIG_VALUE_0=Authorization: Bearer <token>`), which `Get-CimInstance Win32_Process` and `ps` cannot read. The stage then gathers failing-check evidence: check runs for the head sha, GitHub's annotations for each failing check (bounded to 1,200 characters) and the end of the job log (bounded to 2,000 characters, §190.12). A small note in the folder's `.git` records which pull request it is (no token), so the push stage needs no socket to know it. The answer says plainly: nothing has been pushed.
 * **`stage="push"`** builds its card from **local git state only**: the folder must resolve inside the scratch root, the tree must be clean ("commit your fix first"), the branch must be the pull request's own, the commits are `git log --oneline <pr head sha>..HEAD`, the changed files are `git diff --name-only <pr head sha>`, and the card prints all of it, the earlier failing-check summary, and the exact command `git push origin HEAD:refs/heads/<pr head ref>`.
@@ -35845,6 +35893,70 @@ or `*.githubusercontent.com` - and anything else is refused in plain words
 with the token and not fetched without it either. The fetched log is capped at
 2,000 characters and it is data, never instructions (§190.7's sanitizer). Any
 other redirect anywhere in the module is refused (`_RefuseRedirect`).
+
+### 190.13 The authoring stage: Jarvis writes the fix itself, inside the copy (wave 16B, 2026-11-10)
+
+The 2026-11-10 record deferred this in its own words: *"The scratch-scoped
+code-authoring tool that would let fix-and-push write its own fix is deliberately
+deferred to wave 16B."* It is built, and it is deliberately the smallest version
+that closes the gap.
+
+* **Two new stages of the same tool.** `github_fix_and_push` now takes
+  `stage="read"` and `stage="write"` beside `prepare` and `push`. No new tool and
+  no new switch: the surface stays the seventeen switched-off GitHub tools, and the one
+  switch that already governs the fix flow governs this too.
+* **`stage="read"` raises NO card**, and that is the same rule every local read
+  follows: it opens ONE file inside the prepared copy, sends nothing to GitHub,
+  uses no token and changes nothing on this PC. It cannot read arbitrary disk -
+  the path goes through the same resolver as the write (`_copy_file`) - and the
+  file's text comes back wrapped in the module's data delimiters, because it is
+  fetched code from a pull request and it is data, never an instruction.
+* **`stage="write"` is its own action, `github_fix_write`**, `"ask"` in both
+  shipped settings files and in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier
+  still raises its card. The card shows the repository, the pull request, the
+  scratch folder, the file's path, the EXACT change as a real unified diff
+  (`difflib`, `a/<path>` to `b/<path>`, three context lines) and the one-line
+  commit message - and it says plainly that it uses no token and sends nothing.
+  A change too big to show in full on one card (the gate's card is capped at
+  4,000 characters; `MAX_WRITE_DIFF` is 2,900) is REFUSED before a card exists,
+  with words that say to split it into smaller writes. Nothing is ever shown cut.
+* **What it can touch, and only that.** The folder must resolve inside
+  `JARVIS_GITHUB_SCRATCH_ROOT` (default `%LOCALAPPDATA%\Jarvis\github-fix`) and
+  its `.git` note must name the SAME repository and pull request the call names -
+  so the owner's live checkout, another pull request's copy and every other
+  folder on this PC are unreachable. The file path is relative; `..`, an absolute
+  path, a drive letter, a UNC address, a NUL, and any symlink or Windows junction
+  on the way are refused. A path inside `.git`, and any path on the SAME
+  credential denylist the push stage uses (`_credential_path`), is refused. There
+  is no delete/rename/move/chmod argument: one naming any of those is refused
+  rather than ignored. `content` and `message` are bounded; only plain UTF-8 text
+  is changed; a binary file or one over 1 MB is refused.
+* **The change is one file and one commit.** After the write, the stage runs
+  `git add -- <path>` and one `git commit -m <message>` in that folder, with the
+  commit identity in git's own `GIT_AUTHOR_*`/`GIT_COMMITTER_*` environment
+  variables (never argv, never a file) so a fresh scratch clone with no git
+  identity still works. A failed commit puts the file back and unstages it, so
+  the copy is never left dirty with a change no card covered. The commit is
+  LOCAL: nothing leaves this PC, and the existing carded push is still the only
+  step that sends it.
+* **The same file, re-checked.** The planner reads the file and the card shows
+  its text; `run()` re-reads it immediately before writing and refuses - writing
+  nothing - if it changed since the card was shown. That is the same TOCTOU pin
+  the merge has, applied to the file.
+* **Nothing else changed.** The push card still prints the real commits, files
+  and command; the bans are unchanged (force-push, squash/rebase merge, admin
+  bypass, auto-merge, bypassing a required check, pushing to main, deleting or
+  closing anything, approving a pull request, workflow dispatch and gists);
+  `NEVER` lost only the two names that are no longer true (`edit_file`,
+  `write_file`), because one file inside the copy CAN now be written, while the
+  `NEVER_WORDS` sentence and every other ban are untouched.
+* **Proved by** `backend/test_github_authoring.py` (hermetic: a real temporary
+  git repository under a temporary scratch root, the real git executor, no
+  network, no token) - the happy path with the commit and the card's diff, every
+  refusal above as a plain sentence with nothing written, the push card still
+  pinning the real commits/files/command, the push not happening without its own
+  card, and the read raising no card and reaching nothing outside the copy.
+  `test_github_parity.py` and `test_github_tools.py` carry the surface pins.
 
 ## 191. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
 
@@ -38548,3 +38660,297 @@ cannot take away what "cancel that" would undo, and a private chat hands them to
 its own gate like every other read. The model also has the two tools, in the
 `github` group, and both ship off until their own switch is turned on under
 Settings, What asks first, "Jarvis's own tools".
+
+## 216. GitHub full parity, Step 2: nine more actions, card-free reads, and a carded issue close/reopen (added 2026-11-10, the owner's 22:30 and 23:00 PT decisions)
+
+The owner's ruling of 2026-11-10 22:30, "GitHub full integration, full parity
+with DeepSeek", named a Step 2 of GitHub actions to build on top of the merge
+and the fix-and-push of §190.9-§190.10 (wave 16B). The same evening, at 23:00,
+the owner answered two questions that changed two standing rules: **GitHub reads
+are card-free**, and **closing one issue is allowed, carded**. This section is
+the record of both, and of every action the Step 2 list added.
+
+### 216.1 What was added, and what each one does
+
+| Tool | Kind | What it does | The request(s) |
+|---|---|---|---|
+| `github_pr_detail` | read (shares `github_inspect`) | reads ONE pull request in full: title, body, state/draft/mergeable, head commit and base branch, then its changed files, commits, comments and reviews. At most 10 of each shown, the real count always printed, every text bounded | five fixed GETs: the pull request, `.../files`, `.../commits`, `.../issues/{n}/comments`, `.../pulls/{n}/reviews` |
+| `github_open_pr` | write (own action) | two stages. "prepare" copies the repository at a base branch into the scratch root and makes a NEW branch there; "open" shows every commit, every changed file, the exact push command, the title and the WHOLE body on ONE card, then pushes that ONE new branch and opens the pull request, pinned to the HEAD commit the card showed | `GET /repos/{r}` then `git clone`/`checkout -b`; on open: local git reads, `git push origin HEAD:refs/heads/<new branch>`, then `POST /repos/{r}/pulls` with exactly `{title, body, head, base}` |
+| `github_workflow` | write (own action) | "cancel" ONE in-progress workflow run, or "rerun_failed" to run only the FAILED jobs of ONE finished run. It re-reads the run first and refuses, changing nothing, if it is not in the state the card named. It never dispatches a workflow | `GET .../actions/runs/{id}`, then `POST .../cancel` or `POST .../rerun-failed-jobs` |
+| `github_issue_labels` | write (own action) | adds and/or removes labels on ONE issue or pull request. It reads the current labels first, refuses if a label it would remove is not there, and sends the whole final set in ONE request | `GET .../issues/{n}`, then `PUT .../issues/{n}/labels` with the whole set |
+| `github_edit_pr` | write (own action) | edits ONE pull request's title and/or body. The card shows the exact before and after; the run re-reads the pull request and refuses, changing nothing, if either text is no longer the one on the card. No other field is editable | `GET .../pulls/{n}`, then `PATCH .../pulls/{n}` with only `title` and/or `body` |
+| `github_pr_review` | write (own action) | posts ONE review with verdict `COMMENT` or `REQUEST_CHANGES` and shows the whole review text first. The `APPROVE` verdict is **refused by name** before any card exists - a formal approval would hand the owner's own sign-off to the assistant | `POST .../pulls/{n}/reviews` with exactly `{event, body}` |
+| `github_issue_state` | write (own action) | **the owner's 23:00 decision**: closes ONE issue, or reopens ONE closed issue, on its own card. The card shows the repository, the issue number and title, the direction and an optional reason (at most 400 characters, shown on the card and in the answer; GitHub's state change has no free-text reason field, so it is not sent as one). It cannot delete, transfer or edit the issue, never touches a pull request, and never bulk | `GET .../issues/{n}` (the title is the pin - a changed title refuses with nothing sent), then `PATCH .../issues/{n}` with exactly `{"state": "closed"|"open"}` |
+
+The other two of the nine are not new tools: `github_pr_detail` is a read, and
+the owner's 23:00 answer also means `github_open_issue` is unchanged (it still
+cannot close what it opens - the close/reopen is the separate action above).
+
+### 216.2 Decision A: GitHub READS are card-free (owner, 2026-11-10 23:00 PT)
+
+A read is a GET on `api.github.com` and changes nothing, so the owner chose
+"make GitHub reads card-free". Concretely:
+
+* `github_inspect` ships **`"auto"`** in both shipped settings files
+  (`backend/rebuilt/jarvis-framework.toml` and `jarvis-backend/jarvis-framework.toml`).
+* The five read tools (`github_list`, `github_read_file`, `github_ci_status`,
+  `github_pr_scan`, `github_pr_detail`) are **not** in
+  `jarvis_agent.NEEDS_A_PERSON`; a read no longer raises a card.
+* The read TOOLS are still switched off until the owner switches them on (the
+  owner's 2026-11-04 rule: every offered tool is switchable). It is the read
+  ACTION that never asks.
+* **Every WRITE still asks its own card**, is its own `"ask"` tier line, and is
+  still in `NEEDS_A_PERSON`; a loosened line still raises its card.
+* `github_read` stays separate and `"auto"` - that is the scheduled look a
+  "tell me when" GitHub watch makes, and the two names must never be merged.
+
+### 216.3 Decision B: ONE issue's close/reopen is allowed, carded (owner, 2026-11-10 23:00 PT)
+
+The owner overturned the old absolute ban on `close_issue`, choosing "allow
+carded close/reopen" over keeping it banned. The ruling, exactly:
+
+* ONE issue per card; the card shows the repository, the issue number, its
+  title, the direction and an optional reason (≤ 400 characters).
+* The action is `github_issue_state`, its own `"ask"` tier line, its own switch,
+  and in `NEEDS_A_PERSON`.
+* It cannot delete, transfer or edit the issue, cannot touch a pull request
+  (`GET` says `pull_request` -> refused), and cannot close or reopen anything in
+  bulk: **`bulk_close` is in `jarvis_github.NEVER`**, and it is named in
+  `NEVER_WORDS`.
+* `github_open_issue` keeps its own boundary: that tool still cannot close what
+  it opened. The ban did not loosen there; it is a separate action.
+* `close_issue` left `jarvis_github.NEVER` - the same way `edit_file` and
+  `write_file` left it in wave 16B when the carded write landed. Removing a name
+  from `NEVER` is the one direction that needs a decision on the record, and
+  `decisions.d/2026-11-10-github-parity-actions.md` is it.
+* Reversible: the same tool reopens a closed issue, and the risk row says so
+  (`("yes", "outbound", ...)`).
+
+### 216.4 The refusals, in one place
+
+* `github_open_pr`: the NEW branch may never be `main`, `master`, `release/*` or
+  `hotfix/*`; the BASE branch may be `main` (a pull request must point at the
+  branch it merges into, and Jarvis only reads it); never a force-push, never a
+  delete, never a fork's branch; a title over 200 characters, a body over 2,000,
+  more than 20 commits or more than 20 changed files, or a card that cannot fit
+  in the gate's 4,000 characters, is refused BEFORE a card exists. The final
+  card pins the local HEAD commit and the run refuses if it moved since.
+* `github_workflow`: a finished run cannot be cancelled; a run that is not
+  finished cannot have its failed jobs re-run; a run with no failed jobs is
+  refused. It never dispatches a workflow (`workflow_dispatch` stays banned).
+* `github_issue_labels`: labels only - never close/reopen, never edit the title
+  or body; at most 10 labels per set; a label that is not there is refused with
+  nothing written; one `PUT` sends the whole set.
+* `github_edit_pr`: title and body only; no other field; refuses if the live
+  pull request is not still the carded one.
+* `github_pr_review`: `COMMENT` or `REQUEST_CHANGES` only; `APPROVE` refused by
+  name; at most 2,000 characters.
+* `github_issue_state`: ONE issue, never a pull request, never bulk, never a
+  delete/transfer/edit, title pinned on the card, refuses when it is already in
+  the state asked for.
+
+### 216.5 Tokens, cards and proof
+
+Every new tool obeys §190.5: the token is sent only to `api.github.com` (and for
+the two git steps of `github_open_pr` in git's own `GIT_CONFIG_*` environment,
+never on a command line), never printed, never on a card; fetched GitHub text
+goes through the one sanitizer; failures are plain sentences with no HTTP code.
+`github_open_pr` is the one action that does two things (a push then a POST):
+its card says so plainly, and if the pull request cannot be opened after a
+successful push the answer says the branch WAS pushed and nothing else changed.
+
+**The proof.** `backend/test_github_tools.py` grows by one function per action:
+the five-GET read, the two-stage open (including the "local commit moved"
+TOCTOU refusal and a refused push opening no pull request), cancel vs
+rerun-failed-jobs with every state refusal, the label set sent once, the edit
+card's before/after pin, the APPROVE refusal by name, and ONE issue's
+close/reopen with the pull-request/title/already-in-state/bulk refusals. The
+reads' card-free status and every write's `"ask"` tier are pinned from the
+shipped settings files in `test_github_tools.py` and `test_github_parity.py`.
+Nothing here opens a socket in a test: every HTTP call is a fake and every git
+call a fake or a real temporary repository.
+
+**One-sided on purpose:** no new screen in either app and no new route; both
+apps' chats already reach every tool, and `tools/check_parity.py` is unchanged.
+
+
+## 217. The GitHub switch door: one master switch, a switchable read row, and card-free GitHub reads (2026-11-10)
+
+**Two owner decisions, both on 2026-11-10.** At **22:30 PT** the owner ruled
+that `/api/asks_first` must never again answer "There is no switch for this
+one: going looser is only possible by hand in your PC's settings file" about a
+GitHub ability: the GitHub ACTION rows now name the tool switches and where
+they live, and ONE master switch offers or removes all ten GitHub tools
+together. At **23:00 PT** the owner chose **card-free GitHub reads**: the four
+read tools' shared action `github_inspect` joined the switchable READ actions,
+and the four reads left `jarvis_agent.NEEDS_A_PERSON` while the six writes
+stayed. This section is the record of both decisions.
+
+### 217.1 The master group switch (`tools.github_group`)
+
+One switch, "Offer GitHub tools to the AI model", sits in the "Jarvis's own
+tools" group beside the ten per-tool rows. It is a SEPARATE object in the
+payload, never an item in `tools.items` - that keeps the per-tool list exactly
+its ten rows and every app's count of it unchanged:
+
+```json
+"tools": {
+  "github_group": {
+    "id": "github_tools_group",
+    "title": "Offer GitHub tools to the AI model",
+    "group": "Jarvis's own tools",
+    "what": "On: the AI model is offered all ten GitHub abilities, and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered.",
+    "tools": ["github_list", "github_read_file", "github_ci_status", "github_pr_scan", "github_comment", "github_open_issue", "github_rerun_workflow", "github_create_repo", "github_merge_pr", "github_fix_and_push"],
+    "on": false, "partial": false, "on_count": 0, "total": 10,
+    "waiting": false, "can_enable": true, "last": null
+  }
+}
+```
+
+* **ON is one card plus Windows Hello, on the PC only.** The card says it
+  offers ALL TEN and names every one, that the ten names are written into the
+  settings file in ONE step, that each use is still decided by "Ask me first",
+  and what a no means. It names no protected file.
+* **The write is atomic.** `set_tools_enabled_many` writes all ten names in ONE
+  temp-file-and-replace step (the whole list parsed and compared before and
+  after it), so a crash cannot leave half a list; names already present are
+  never duplicated and the owner's other `[tools].enabled` names keep their
+  order.
+* **OFF is instant, from either app** - never a card - and removes only those
+  ten names.
+* **Partial is never shown as ON.** `on` is true only when all ten are on; with
+  some on, the row carries `partial: true` and `on_count`/`total`, and the page
+  draws it unchecked with "N of the 10 GitHub tools are on now". Its ON card
+  offers only the missing ones and leaves the ones already on alone.
+* **The same route, the same command.** `POST /api/asks_first/tools
+  {"tool": "github_tools_group", "enabled": true|false}` through the existing
+  `set_tool_enabled` command - no new route and no new permission.
+* **Older PCs stay honest:** a PC without the object sends no row, and the page
+  draws nothing extra.
+
+### 217.2 The switchable read row: `github_inspect` in the READ actions
+
+`github_inspect` - the one action the four GitHub READ tools share - joined the
+switchable READ-action family (`jarvis_asks_first.LOOSE` / `SWITCHABLE`, 12 to
+13 rows). Its row appears on What asks first as "Read your GitHub":
+
+* its note says exactly what it is: READS ONLY, nothing on GitHub changes, and
+  the saved token is still sent only to api.github.com;
+* turning it to "don't ask" is ONE card plus Windows Hello on the PC; turning
+  it back to "ask" is instant, from either app;
+* the six GitHub writes are NOT on that list and keep their own ask actions.
+
+The desktop carries it (`jarvis-desktop/src/asks-first.js` `SWITCHABLE`, the
+Rust `SWITCHABLE` array, and the contract fixture both apps read); the phone
+shows it read-only like every other loosening switch.
+
+### 217.3 GitHub reads are card-free (2026-11-10 23:00 PT)
+
+The four read tools (`github_list`, `github_read_file`, `github_ci_status`,
+`github_pr_scan`) have LEFT `jarvis_agent.NEEDS_A_PERSON`. They ship asking
+(`github_inspect = "ask"` in the shipped `[autonomy.tiers]`; the release sets
+the shipped default to `"auto"`), and what decides each read now is the tier
+line the switch writes. The belt that refused a `NEEDS_A_PERSON` tool at a
+looser tier therefore no longer catches them - that is the point of the
+decision, not an oversight.
+
+**What stays safe in the same decision:**
+
+* the reads are fixed-address GETs to `api.github.com`; there is still no
+  arbitrary-URL path, a redirect is refused, and the token is sent nowhere
+  else;
+* the six writes, the merge and the fix-and-push are STILL in
+  `NEEDS_A_PERSON`, so loosening one of their tier lines still cannot run one
+  with nobody asked;
+* the plan-step belt, the URL belt and the sandbox belt are untouched - they
+  fire on the tools that remain in the set;
+* putting the card back is one action: the `github_inspect` switch above, or
+  its line in the owner's own settings file.
+
+### 217.4 The honest wording everywhere
+
+* The GitHub action rows on `/api/asks_first` no longer say "There is no switch
+  for this one": each of the six write rows names its tool's own switch and the
+  master switch and where they are, and the read row has its real "Ask me
+  first" switch and a note saying reads only.
+* The tools card's detail says the master switch turns the ten GitHub abilities
+  together, so "nothing here switches two tools at once" is no longer claimed
+  anywhere.
+* The model's own GitHub tool descriptions, the feature-guide self-fact, the
+  chat capability words and the feature list all say the reads are fixed-address
+  GETs whose card can be turned off from Settings; none of them claims a read
+  changes GitHub.
+* The not-switchable note and the "New - currently off" pill never name a
+  GitHub tool: every one of the ten has a real switch.
+
+### 217.5 What proves it
+
+`backend/test_asks_first.py` (the group object, the atomic ten-name write, the
+one card, the partial truth, OFF instant from either app, the PC-only refusal,
+withdrawal, and the seven GitHub action rows naming their switches),
+`backend/test_settings_switches.py` (the same route against a hermetic settings
+file), `jarvis-desktop/tests/asks-first.mjs` with the shared contract fixture
+`tests/fixtures/asks-first-cases.json` (three new cases: the group on, partial,
+and its card waiting), `backend/test_github_tools.py` / `test_github_parity.py`
+/ `test_agent.py` (the reads left the belt, the six writes stayed, the switch is
+the card's door), and `backend/test_lockdown.py` (the one way out an app may now
+loosen is the read row).
+
+## 218. The 2026-11-11 field-test rulings: per-repository merge checks, and a CI read that asks for five runs and refuses a cut answer (2026-11-11, the GitHub union 0.2.448)
+
+This section is the envelope of the owner's 2026-11-11 01:40 PT field-test
+rulings (Q-C, Q-G) and of the two decisions they complete (Q3/Q4 card-free
+reads; Q-D/Q7 review tools). It is a dated record: the sections above keep the
+history of their own days.
+
+* **Per-repository required checks (Q-C).** `github_merge_pr` no longer carries
+  one fixed list of seven checks for every repository. `darknight11ish/Epic-Jarvis`
+  (matched case-insensitively) ALWAYS enforces the seven `REQUIRED_CHECKS` as an
+  unbypassable floor, and its branch rules are never read - no repository rule can
+  lower the floor. Any OTHER repository is judged by its OWN branch rules: every
+  required status-check context they name must have completed successfully on the
+  carded head commit. When the rules name no contexts (200 with none) or the rules
+  endpoint answers 404, the commit's own check-runs decide (falling back to its
+  workflow runs when there are none): at least one check, all completed, every
+  conclusion in success/neutral/skipped. A 401/403 on the rules read or on the
+  checks read refuses the merge in plain words and appends the module's standing
+  sentence " Nothing was merged." - the rule is never silently weakened. The
+  READ-ONLY cockpit `github_pr_scan` uses the SAME plan for its rows (one
+  function, `_check_plan`, behind both doors), so a green pull request in another
+  repository reads "merge-ready" under its own rule and no longer prints
+  "blocked - rust has not reported". `backend/test_github_tools.py` pins both
+  halves (`t_merge_checks_are_per_repository`,
+  `t_pr_scan_classifies_a_foreign_repo_with_its_own_checks`). Honest residual,
+  recorded rather than hidden: the generic rule reads ONE page of check-runs /
+  workflow runs (page 1 only, `per_page=100` and the Q-G `per_page=5` fallback are
+  not paginated), so "every run" means every run on page 1 - the ruling itself
+  specified those page sizes, so this is a stated limit, not a silent gap.
+* **The CI read asks for the newest five runs (Q-G).** `github_ci_status` plans
+  `CI_PER_PAGE = 5` for its run reads while `PER_PAGE` stays 20 for every other
+  repository read. The read layer also marks a REAL cut, not only a self-cut:
+  `_read_capped` reads `MAX_BYTES + 1` and `_capped_text` appends `CUT_MARKER`
+  when the answer really exceeded `MAX_BYTES = 200_000`, so `_said()` can answer
+  a genuinely oversized answer with the plain refusal - *"GitHub's answer was
+  longer than Jarvis reads in one go, so Jarvis will not guess at it. Nothing on
+  GitHub changed - ask again about one thing at a time."* - instead of showing
+  half an answer or saying "GitHub answered without saying anything about CI"
+  about an answer Jarvis itself had truncated. `backend/test_github_tools.py`
+  proves the real transport cut (`t_ci_status_reads_five_runs_and_refuses_a_cut`).
+* **Card-free reads (Q3/Q4).** All six GitHub reads are out of
+  `jarvis_agent.NEEDS_A_PERSON`: `github_list`, `github_read_file`,
+  `github_ci_status`, `github_pr_scan` and `github_pr_detail` share the shipped
+  `github_inspect = "auto"` line, and `github_search` runs card-free under its OWN
+  actions `github_search_run` / `github_search_run_authenticated` (both `"auto"`),
+  while `web_research` and `research_authenticated` stay `"ask"` for every other
+  research egress. Every one of the twelve GitHub write tools and the
+  `github_fix_write` action inside `github_fix_and_push` still asks its own card
+  and stays in `NEEDS_A_PERSON`.
+* **The review tools are on by default and in the master switch (Q-D/Q7).**
+  `review_changes` and `check_records` move from switched-off to the shipped
+  `[tools].enabled` list (both settings files stay byte-identical), both are
+  `"auto"` in `[autonomy.tiers]`, both are in `jarvis_claims.READ_ONLY_TOOLS`,
+  and both are members of the ONE master switch `tools.github_group` - whose
+  twenty names are the eighteen GitHub tools (the library search, five reads and
+  twelve writes) plus the two local review gates. An EXISTING PC's settings file
+  is never overwritten: the two appear on its "New - currently off" pill and the
+  master switch offers them in the same one card.

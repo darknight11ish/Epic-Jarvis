@@ -60,7 +60,11 @@ import com.jarvis.client.ui.theme.LocalChrome
  * WHAT IT EDITS. One [HudLayout.Layout]: four ordered sections
  * (`top_strip`, `hero`, `body`, `composer`) and the cards in each, in order.
  * [HudLayout] is pure Kotlin and is where every rule lives; this file is the
- * screen that calls it and nothing else.
+ * screen that calls it and nothing else. Since 2026-11-10 the `top_strip`
+ * section is drawn in TWO places - its safety cards stay on the Home screen as
+ * one compact row, its other cards open from the app's **More menu** (the owner
+ * asked for the strip's height back) - so this editor says where each half
+ * appears; the other three sections are the Home screen's full-width cards.
  *
  * ONE REDUCER, THREE INPUTS. A card moves by (a) dragging it, (b) the click-only
  * Up / Down / "Move to" buttons, and (c) five TalkBack custom actions on the
@@ -157,7 +161,11 @@ class HudEditSession(initial: HudLayout.Layout) {
     }
 }
 
-/** The four sections in plain words, in the order they are drawn. */
+/**
+ * The four sections in plain words, in the order the editor lists them: the
+ * Home screen's full-width cards first, then the top strip (its safety cards are
+ * the compact row on Home, its other cards open from More).
+ */
 internal val HUD_SECTION_WORDS: Map<String, String> = mapOf(
     HudLayout.TOP_STRIP to "Top strip",
     HudLayout.HERO to "Hero",
@@ -248,7 +256,7 @@ fun EditHudScreen(
         TopBar(
             title = "Edit HUD",
             onBack = onBack,
-            subtitle = "Your Home screen, in four sections",
+            subtitle = "Your Home screen and the More menu, in four sections",
             trailing = {
                 Quiet(
                     "Undo",
@@ -295,6 +303,17 @@ fun EditHudScreen(
                 ) {
                     Gap(14)
                     Section(HUD_SECTION_WORDS.getValue(section)) {
+                        // The one section that is drawn in two places (2026-11-10):
+                        // say where each half appears, so moving a card here is not
+                        // a card vanishing from the phone.
+                        if (section == HudLayout.TOP_STRIP) {
+                            Text(
+                                "The safety cards here stay on Home, drawn small. " +
+                                    "The other cards here open from the app's More menu.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid,
+                            )
+                        }
                         if (ids.isEmpty()) {
                             Text(
                                 "Nothing in this section yet. Add one below, or move a card here.",

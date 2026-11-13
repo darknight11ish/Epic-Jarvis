@@ -66,18 +66,25 @@ export const SWITCHABLE = Object.freeze([
   // rollback_model (the undo for a switch must never wait) stay off the list.
   "read_files_readonly", "read_joplin_note", "read_logseq_page",
   "create_logseq_page", "power_manage",
+  // 2026-11-10 23:00 PT, the owner's "make GitHub reads card-free": the one
+  // action the four GitHub read tools share. Loosening it turns "Read your
+  // GitHub" to don't-ask (ONE card + Windows Hello); tightening asks first
+  // again at once. READS ONLY - nothing on GitHub changes.
+  "github_inspect",
 ]);
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 67 at 2026-11-10 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
- * GitHub tools that landed with the GitHub tools branch, the four pack-manager
- * tools, hands-free's send_text_message and the approval-policy tool's own
- * row; wave 13's carded github_create_repo made it 61, 62 added project_read's
- * own row, the read half of "Jarvis takes over dev work", wave 16's three
- * GitHub tools of 2026-11-10 - the read-only PR cockpit, the carded merge and
- * the carded fix-and-push - made it 65, and wave 16E's two local review gates
- * made it 67). A DIFFERENT thing from SWITCHABLE
+ * 74 at 2026-11-11 (67 at 2026-11-10; 60 at 2026-11-05: 48 at 2026-11-04, plus
+ * the six on-demand GitHub tools that landed with the GitHub tools branch, the
+ * four pack-manager tools, hands-free's send_text_message and the
+ * approval-policy tool's own row; wave 13's carded github_create_repo made it
+ * 61, 62 added project_read's own row, the read half of "Jarvis takes over dev
+ * work", wave 16's three GitHub tools of 2026-11-10 - the read-only PR cockpit,
+ * the carded merge and the carded fix-and-push - made it 65, wave 16E's two
+ * local review gates made it 67, and the parity pass added the full
+ * pull-request read plus six more carded writes). A DIFFERENT thing from
+ * SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -115,7 +122,7 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "review_changes", "check_records",
   // Jarvis's own tools, which had no switch row at all before 2026-11-04 (25:
   // the original 12, plus the four pack-manager tools, hands-free's
-  // send_text_message, the ten on-demand GitHub tools and the approval row)
+  // send_text_message, the seventeen on-demand GitHub tools and the approval row)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove",
@@ -128,6 +135,11 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "github_comment", "github_open_issue", "github_rerun_workflow",
   "github_create_repo", "github_pr_scan", "github_merge_pr",
   "github_fix_and_push",
+  // Wave 16 parity (2026-11-10): the full pull-request read and the six more
+  // carded writes of the 22:30/23:00 rulings, each with its own switch row.
+  "github_pr_detail", "github_open_pr", "github_workflow",
+  "github_issue_labels", "github_edit_pr", "github_pr_review",
+  "github_issue_state",
   "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
@@ -136,11 +148,27 @@ export const TOOLS_DETAIL =
   "asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a " +
   "switch here, the raw and everyday ones included; a few are not switches because their " +
   "own switch decides them, and the page names those. Turning one on shows ONE approval " +
-  "card and asks Windows Hello on this PC; turning it off is instant, from either app. " +
-  "Nothing here switches two tools at once.";
+  "card that names that one ability: approve it on the PC with Windows Hello, or on your " +
+  "phone with its own fingerprint or PIN. Turning it off is instant, from either app. " +
+  'One master switch, "Offer GitHub tools to the AI model", turns all twenty tools of ' +
+  "that group - the GitHub tools and both local review gates - on or off together; its " +
+  "own card says so, and every tool.";
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
-  "first). It takes one approval card and Windows Hello.";
+  "first). It takes one approval card - approve it on the PC with Windows Hello, or on " +
+  "your phone with its own fingerprint or PIN.";
+/**
+ * The MASTER GitHub group switch (2026-11-10, the owner's ruling): ONE switch
+ * that offers/removes the twenty tools together - the eighteen GitHub tools
+ * and both local review gates. It is a SEPARATE object
+ * in the PC's `tools.github_group`, NOT an item in `tools.items`, so the
+ * per-tool list (and every app's count of it) does not change for it. Its id
+ * is sent through the same `set_tool_enabled` command and POST body as a tool:
+ * ON is one card plus Windows Hello on the PC, OFF is instant from either app.
+ */
+export const GITHUB_TOOLS_GROUP = "github_tools_group";
+/** The row's fallback title if an older PC sends the object without one. */
+export const GITHUB_TOOLS_GROUP_TITLE = "Offer GitHub tools to the AI model";
 /**
  * D4, the owner, 2026-11-04: every tool that is ON is listed, including one the
  * settings file switched on that this page has no switch row for. Since the
@@ -303,8 +331,30 @@ function readTools(t) {
         .map((i) => ({ id: text(i.id), title: text(i.title) }))
       : [],
   } : null;
+  // The master GitHub group switch (2026-11-10): a separate object beside
+  // `vault`, never an item - an older PC sends none and the page simply has
+  // no group row.
+  const gg = t.github_group && typeof t.github_group === "object" ? t.github_group : null;
+  const ggLast = gg && gg.last && typeof gg.last === "object" ? gg.last : null;
+  const githubGroup = gg ? {
+    id: text(gg.id) || GITHUB_TOOLS_GROUP,
+    title: text(gg.title) || GITHUB_TOOLS_GROUP_TITLE,
+    group: text(gg.group),
+    what: text(gg.what),
+    tools: Array.isArray(gg.tools) ? gg.tools.map(text) : [],
+    on: gg.on === true,
+    // A partial list (some of the ten on) must never draw as ON. The PC owns
+    // the two flags; the JS only draws them.
+    partial: gg.partial === true,
+    onCount: Number.isFinite(gg.on_count) ? gg.on_count : 0,
+    total: Number.isFinite(gg.total) ? gg.total : 10,
+    waiting: gg.waiting === true,
+    canEnable: gg.can_enable === true,
+    last: ggLast ? text(ggLast.message) : "",
+    lastOutcome: ggLast ? text(ggLast.outcome) : "",
+  } : null;
   return { canEnable: t.can_enable === true, items, groups, vault, extra, notSwitchable,
-    newOff };
+    newOff, githubGroup };
 }
 
 /**
@@ -438,6 +488,60 @@ export function toolSwitchView(item, tools, live) {
   }
   if (item.last && item.lastOutcome !== "enabled" && !waitingHere) lines.push(item.last);
   return { checked, disabled, lines };
+}
+
+/**
+ * The MASTER GitHub group switch's view (2026-11-10): {checked, disabled,
+ * lines, partial}. `checked` is TRUE only when ALL ten are on (the PC's own
+ * `on`); a partial list is drawn UNCHECKED with a line saying how many are on
+ * - never a lying "on". Turning it ON needs the PC, a live link and no other
+ * tool card waiting (it raises the same one card + Windows Hello); turning the
+ * full set OFF is instant and never held.
+ */
+export function githubGroupSwitchView(g, tools, live) {
+  if (!g) return null;
+  const waitingHere = g.waiting === true;
+  const anyWaiting = (tools.items || []).some((i) => i.waiting);
+  const checked = g.on || waitingHere;
+  const lines = [];
+  let disabled = false;
+  if (g.what) lines.push(g.what);
+  if (waitingHere) {
+    lines.push(WAITING);
+    disabled = true;
+  } else {
+    if (g.partial) {
+      const on = Math.max(0, Number(g.onCount) || 0);
+      const total = Math.max(on, Number(g.total) || 10);
+      lines.push(`${on} of the ${total} GitHub tools are on now - this row is not on ` +
+        `until all ${total} are. Switching it on offers the other ${total - on}; to take ` +
+        "one off, use its own switch below (off is instant).");
+    }
+    if (!g.on) {
+      // Turning it ON: the PC, a live link, and no other tool's card waiting.
+      if (!g.canEnable) {
+        lines.push(TOOLS_PC_ONLY);
+        disabled = true;
+      } else if (anyWaiting) {
+        lines.push(ONE_AT_A_TIME);
+        disabled = true;
+      } else if (!live) {
+        lines.push(STALE);
+        disabled = true;
+      }
+    }
+  }
+  if (g.last && g.lastOutcome !== "enabled" && !waitingHere) lines.push(g.last);
+  return { checked, disabled, lines, partial: g.partial === true };
+}
+
+/**
+ * The row to draw for the master GitHub group switch in its own group
+ * ("Jarvis's own tools"), or null from a PC older than 2026-11-10. It is not
+ * an item: this is the one place the page reads it from.
+ */
+export function githubGroupRow(tools) {
+  return tools && tools.githubGroup ? tools.githubGroup : null;
 }
 
 /**

@@ -280,8 +280,19 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,691 tokens)", short <= 1691,
+    check("the short list stays small (pinned: at most 1,735 tokens)", short <= 1735,
           str(short))
+        # Pinned 1,710 -> 1,735 on 2026-11-11 (the GitHub union, 0.2.448): the
+    # `github` group's line gained the union's seven parity member names and
+    # `more_tools` gained the two local review gates; measured 1720 here with
+    # this module's own estimate_tokens rule (more_tools itself measured 511,
+    # pinned 520). The cost is still paid only with `[tools] short_list =
+    # true`, which ships OFF.
+# Pinned 1,691 -> 1,710 on 2026-11-10 (the 22:30/23:00 ruling): the
+    # `github` group's own line grew with the sixteen-tool surface and seven
+    # new member names, measured 1,704 on this tree with this module's own
+    # estimate_tokens rule. The cost is paid only with `[tools] short_list =
+    # true`, which ships OFF.
     # Pinned 1,676 -> 1,691 on 2026-11-10 (wave 16), and the whole growth is
     # measured with this module's own estimate_tokens rule: the `github` group
     # gains the three GitHub tools of the owner's "Everything at once" decision
@@ -417,14 +428,15 @@ def t_what_it_saves():
     # group's own line now lists the three GitHub tools the owner's "Everything
     # at once" decision added (github_pr_scan, github_merge_pr,
     # github_fix_and_push), and a member name costs this card its characters.
-    # Measured on this tree with estimate_tokens: 482, where it read 469 before
-    # the three names - so the old 460 had no room and the names need 13. 482
-    # leaves 0 spare; the next tool that lands here must widen this pin with its
-    # own measurement, which is exactly what this note is for. The cost is paid
-    # only with `[tools] short_list = true`, which ships OFF.
-    check("more_tools itself stays small (at most 482 tokens)",
+    # Measured on this tree with estimate_tokens: 495 (the 2026-11-10 22:30
+    # ruling added seven more names to the `github` group's line and member
+    # list; it read 482 before). 500 leaves 5 tokens spare; the next tool that
+    # lands here must widen this pin with its own measurement, which is exactly
+    # what this note is for. The cost is paid only with `[tools] short_list =
+    # true`, which ships OFF.
+    check("more_tools itself stays small (at most 520 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 482)
+          <= 520)
 
 
 if __name__ == "__main__":

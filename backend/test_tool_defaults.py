@@ -12,7 +12,7 @@ repository chose, not the owner: the template is what
 `scripts/apply-patches.ps1` copies to the PC when there is no settings file.
 
 WHAT THIS PINS
-  1. BOTH SHIPPED TEMPLATES name the fourteen defaults. The repository's copy
+  1. BOTH SHIPPED TEMPLATES name the twenty-one defaults. The repository's copy
      (`backend/rebuilt/jarvis-framework.toml`) and the published base's copy
      (`jarvis-backend/jarvis-framework.toml`) are byte-identical, and every
      name in the list is a real tool (`jarvis_agent.TOOLS`) - a name that is
@@ -20,7 +20,7 @@ WHAT THIS PINS
      default can look on and do nothing.
   2. A FRESH INSTALL OFFERS THEM. The template copied in as the settings file
      (exactly what apply-patches.ps1 installs) makes a turn's enabled set the
-     fourteen, and the model is offered the local ones - calculator,
+     twenty-one, and the model is offered the local ones - calculator,
      memory_search, phone_apps, plugin_list, plugin_switch, web_search,
      change_setting, feature_guide, refresh_abilities, self_portrait,
      conversation_find, conversation_open and approval_policy - plus the two
@@ -119,7 +119,14 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    # ONE dimension at a time; more asking is cardless, and less
                    # asking raises ONE PC-only card that needs Windows Hello, so
                    # being a default grants nothing.
-                   "approval_policy"]
+                   "approval_policy",
+                   # The two local review gates (2026-11-11, the owner's Q-D/Q7
+                   # ruling): `review_changes` and `check_records` are read-only
+                   # self-checks that send nothing and change nothing, and the
+                   # ruling put them IN the shipped default list so a fresh
+                   # install can use them; their own switch still exists and an
+                   # existing PC gets them through the twenty-name master switch.
+                   "review_changes", "check_records"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
@@ -134,7 +141,10 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
 #: left it never offered at all.
 OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      "plugin_switch", "pack_list", "pack_inspect", "pack_install",
-                     "pack_remove", "web_search",
+                     "pack_remove",
+                     # The two review gates (2026-11-11, Q-D/Q7) sit where TOOLS
+                     # puts them, after the pack tools and before web_search.
+                     "review_changes", "check_records", "web_search",
                      "change_setting",
                      # The standing cloud escalation switch (2026-11-06): it
                      # rides with change_setting and is not a [tools].enabled
@@ -150,7 +160,10 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
 #: What a PC with at least one folder listed is offered: my_files joins it.
 OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                        "plugin_switch", "pack_list", "pack_inspect", "pack_install",
-                       "pack_remove", "web_search",
+                       "pack_remove",
+                       # Same two review gates, same TOOLS position, plus the
+                       # folder-gated my_files as before.
+                       "review_changes", "check_records", "web_search",
                        "my_files", "change_setting",
                        "cloud_escalation", "feature_guide",
                        "refresh_abilities", "self_portrait",
@@ -246,7 +259,7 @@ def t_a_fresh_install_offers_the_defaults():
     os.environ["JARVIS_FRAMEWORK_TOML"] = str(settings)
     try:
         enabled = AG.enabled_tools_for_turn()
-        check("a fresh install's turn reads the fifteen-name enabled set",
+        check("a fresh install's turn reads the twenty-one-name enabled set",
               enabled == set(DEFAULT_ENABLED), enabled)
         offered = AG.offered_tools(enabled)
         check("...and the model is offered the local defaults, plus the grant ask "

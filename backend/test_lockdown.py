@@ -128,8 +128,12 @@ def t_it_bites_through_the_tier_table():
     check("only ever stricter", all(AF.lockdown_tier(a, "ask") == "ask"
                                     for a in AF.LOCKDOWN_ACTIONS))
     check("no way out is something the owner may loosen from an app... except the reads",
+          # The four READ rows: the three local reads, plus github_inspect since
+          # 2026-11-10 23:00 PT (the owner's "make GitHub reads card-free" - the
+          # one action the four GitHub READ tools share, reads only). Every
+          # WRITE that leaves this PC stays un-loosenable from an app.
           set(AF.LOCKDOWN_ACTIONS) & set(AF.SWITCHABLE) ==
-          {"calendar_read", "email_read", "home_read"})
+          {"calendar_read", "email_read", "home_read", "github_inspect"})
     off()
 
 
