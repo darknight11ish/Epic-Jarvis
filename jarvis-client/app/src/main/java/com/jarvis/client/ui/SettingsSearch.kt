@@ -662,6 +662,14 @@ object SettingsSearch {
             source = listOf("net/Handsfree.kt") + SCREEN,
         ),
         Row(
+            key = "on-device-model", title = "On-device AI model",
+            label = "On-device AI model; local model on phone; offline mode; run offline; " +
+                "phone model; not available",
+            titles = emptyList(),
+            quotes = listOf("Not available in this build."),
+            source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
+        ),
+        Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
             source = SCREEN,

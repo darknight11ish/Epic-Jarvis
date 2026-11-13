@@ -261,7 +261,7 @@ def t_every_real_settings_card_is_listed():
     # nothing sent to the PC - so the desktop registry has no card for it and
     # the row is always drawn.
     phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify",
-                "app-control", "model-lane", "edit-hud"}
+                "app-control", "model-lane", "on-device-model", "edit-hud"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",

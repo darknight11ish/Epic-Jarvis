@@ -483,7 +483,7 @@ class MenuVisibilityTest {
         // its row is always drawn.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "files", "protection", "model-lane", "edit-hud", "handsfree")
+                "files", "protection", "model-lane", "edit-hud", "handsfree", "on-device-model")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 
