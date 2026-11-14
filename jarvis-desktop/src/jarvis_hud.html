@@ -1041,29 +1041,25 @@ html[data-galaxy-hidden] .galaxy-back{display:inline-flex;}
 
 /* The Connect button (2026-10-28, the owner's ask: "there should be a connect
    button next to these notifications saying its offline"). One small control
-   at the end of either offline line, in the page's own mono/gold language, and
+   at the end of the offline line, in the page's own mono/gold language, and
    a real <button> - keyboard reachable, focusable, Enter and Space work, and
    its words are the PC's own reading. It is never drawn from a guess: the
-   page paints it only while the PC says a press would really start a lane. */
-#model-warn .lane-start,
-#banner .lane-start{
+   page paints it only while the PC says a press would really start a lane.
+   The demo banner's own copy of this button went on 2026-11-13 with its
+   duplicate sentence: with the PC's answer in hand, the banner stays shut and
+   this row is the one line. */
+#model-warn .lane-start{
   align-self:center; padding:3px 10px; min-height:24px;
   font-family:var(--f-mono); font-size:10.5px; letter-spacing:.04em;
   color:var(--gold); background:transparent; cursor:pointer;
   border:1px solid var(--line-hot); border-radius:3px;
 }
-#model-warn .lane-start:hover,
-#banner .lane-start:hover{border-color:var(--gold);}
-#model-warn .lane-start:focus-visible,
-#banner .lane-start:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
-#model-warn .lane-start:disabled,
-#banner .lane-start:disabled{color:var(--dim); border-color:var(--line); cursor:default;}
-#model-warn .lane-start[hidden],
-#banner .lane-start[hidden]{display:none;}
-#model-warn .lane-start-note,
-#banner .lane-start-note{color:var(--dim); font-size:10.5px; opacity:.9;}
-#model-warn .lane-start-note[hidden],
-#banner .lane-start-note[hidden]{display:none;}
+#model-warn .lane-start:hover{border-color:var(--gold);}
+#model-warn .lane-start:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+#model-warn .lane-start:disabled{color:var(--dim); border-color:var(--line); cursor:default;}
+#model-warn .lane-start[hidden]{display:none;}
+#model-warn .lane-start-note{color:var(--dim); font-size:10.5px; opacity:.9;}
+#model-warn .lane-start-note[hidden]{display:none;}
 
 /* ---------- Jarvis Live's refusal popup ------------------------------ *
  * The owner's field bug of 2026-10-27: clicking Live with no microphone
@@ -2838,7 +2834,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 /* History sidebar styles, moved out of hud-history.js on 2026-10-28:
    the packaged CSP refuses a <style> element built at run time, and this
    page's own <style> carries the nonce. Keep this text here, not in JS. */
-html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}/* An open section's chevron points DOWN (rotated 90) and a collapsed one points RIGHT - the other way round read as "collapsed" beside an open section's own rows (seen in the render check, 2026-10-27). */.hh-sec[data-open="1"] .hh-head .glyph.hh-caret{transform:rotate(90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}/* The archived list (2026-10-29): two chips under the search box - "Your chats" and "Archived" - and the one note that says an archived chat is not carried on from here. Both windows say that sentence (history-actions.js ARCHIVED_NOT_CONTINUED). */#hh-filters{display:flex;gap:6px;margin:0 12px 8px;}.hh-filt{flex:1 1 auto;padding:5px 8px;border:1px solid var(--hh-hair-4);border-radius:8px;background:var(--hh-hair-3);color:var(--hh-fg-soft);font:inherit;font-size:11.5px;cursor:pointer;text-align:center;}.hh-filt:hover,.hh-filt:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-filt:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-filt[aria-pressed="true"]{background:var(--hh-glow);color:var(--hh-accent);}.hh-note-block{margin:2px 12px 8px;padding:6px 8px;border:1px solid var(--hh-hair-4);border-radius:7px;background:var(--hh-hair-3);color:var(--hh-fg-soft);font-size:11px;line-height:1.4;}
+html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}/* An open section's chevron points DOWN (rotated 90) and a collapsed one points RIGHT - the other way round read as "collapsed" beside an open section's own rows (seen in the render check, 2026-10-27). */.hh-sec[data-open="1"] .hh-head .glyph.hh-caret{transform:rotate(90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}/* A HISTORY ROW, not the root: `setOpen` also puts `hh-open` on <html> for the scroll lock, so a bare `.hh-open` here turned the root itself into a flex row (html display block->flex, padding-left 7px, the shell stopped at 801.83px of a 1280 window and the bare html showed through on the right, owner's screenshot 2026-11-13). Keep every row selector qualified with .hh-item, the same shape hud-history.js's own row query uses. */.hh-item .hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-item .hh-open:hover,.hh-item .hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-item .hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-item .hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-item .hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-item .hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-item .hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}/* The archived list (2026-10-29): two chips under the search box - "Your chats" and "Archived" - and the one note that says an archived chat is not carried on from here. Both windows say that sentence (history-actions.js ARCHIVED_NOT_CONTINUED). */#hh-filters{display:flex;gap:6px;margin:0 12px 8px;}.hh-filt{flex:1 1 auto;padding:5px 8px;border:1px solid var(--hh-hair-4);border-radius:8px;background:var(--hh-hair-3);color:var(--hh-fg-soft);font:inherit;font-size:11.5px;cursor:pointer;text-align:center;}.hh-filt:hover,.hh-filt:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-filt:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-filt[aria-pressed="true"]{background:var(--hh-glow);color:var(--hh-accent);}.hh-note-block{margin:2px 12px 8px;padding:6px 8px;border:1px solid var(--hh-hair-4);border-radius:7px;background:var(--hh-hair-3);color:var(--hh-fg-soft);font-size:11px;line-height:1.4;}
   /* THE MAIN SCREEN'S FEATURE-CARD STRIP (PR #981). Moved out of hud-edit.js's
      ensureHomeStyles() on 2026-10-30, for the same reason as the history
      sidebar above: the packaged CSP refuses a <style> element built at run
@@ -3837,12 +3833,6 @@ html[data-hud-shell="split-stage"] .dock-label{
     <div id="banner">
       <span id="banner-text"><b>Demo data.</b>
       Atlas is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.</span>
-      <!-- The PC is answering and only its model is missing: the one action
-           that starts the lane Jarvis talks to. Painted from the PC's own
-           reading (lane-connect below), never from a guess, and it is the
-           same words and the same command the Jarvis bar's button sends. -->
-      <button id="banner-connect" class="lane-start" type="button" hidden></button>
-      <span id="banner-connect-note" class="lane-start-note" role="status" hidden></span>
     </div>
 
     <!-- The PC is answering and its own model is not. Standing, before any
@@ -4904,7 +4894,15 @@ function jfetch(path, opts){
  * ================================================================== */
 const S = {
   view: "talk",
-  online: false,
+  // The page's own answer to "can I talk to Jarvis", and the one boolean the
+  // face and Send read. null until a read lands: "the PC has not said" is not
+  // "offline", and the page must not say the second before it knows. boot()
+  // sets it from its own read; `paintHost` moves it on every landed
+  // /api/status read after that, and that copy is what had gone stale - the
+  // owner's HUD booted with the model down on 2026-11-13, the model came back,
+  // the status row went green, and every reply stayed a sample because nothing
+  // ever wrote this field again.
+  online: null,
   // /api/status's own `ollama` field, as the PC reported it: true, false, or
   // null for "the PC has not said" (a read that did not land, or an older
   // backend with no such field). Re-read on the page's beat; see `paintHost`.
@@ -5276,7 +5274,9 @@ const reactor = (() => {
   // shows it (jarvis-link.js surfaceState). `S.power` comes from the status
   // read at boot and the `power` event (see subscribe()).
   const faceState = () => {
-    if (!S.online) return "standby";
+    // Only a page that has been told can say "offline": S.online is null until
+    // the first read lands, and the face rests at its real state until then.
+    if (S.online === false) return "standby";
     const st = FACE_STATE[S.state] || "idle";
     const focusQuiet = S.power === "quiet" && S.powerBy === "focus";
     return st === "idle" && !focusQuiet && (S.power === "standby" || S.power === "quiet") ? "standby" : st;
@@ -5310,8 +5310,8 @@ const reactor = (() => {
     // `serious`: see above.
     // `focus`: the resting face is a focus session's Quiet - only the words differ.
     const st = faceState();
-    if (w) w.postMessage({ type:"jarvis-hud-face", state:st, offline:!S.online,
-                           focus: S.online && st === "idle" && S.power === "quiet" && S.powerBy === "focus",
+    if (w) w.postMessage({ type:"jarvis-hud-face", state:st, offline:S.online === false,
+                           focus: S.online === true && st === "idle" && S.power === "quiet" && S.powerBy === "focus",
                            serious:serious(), appearance }, "/");
   }
 
@@ -5418,7 +5418,7 @@ const reactor = (() => {
   return {
     set(state){
       S.state = state;
-      const label = S.online ? (words[state] || state) : "offline";
+      const label = S.online === false ? "offline" : (words[state] || state);
       $("reactor-state").textContent = label;
       $("chip-state").textContent = label;
       $("chip-state").className = "chip" + (state === "thinking" ? " hot" : state === "listening" ? " live" : "");
@@ -7055,9 +7055,12 @@ const voice = (() => {
  *     PC's `read_aloud` OFF frame stops it exactly like it stops the bar.
  *
  * PAUSE / RESUME / STOP. `pauseSpeechPlayback()` and `resumeSpeechPlayback()`
- * act on the clip playing now; `stopSpeechPlayback()` is the full reset -
- * token, queue, the audio element, the line under the answer and the meter -
- * and is what Stop everything and `read_aloud {enabled: false}` call.
+ * act wherever the read is: on the clip playing now, on the first clip still
+ * being made, and in the gap between two pieces (the 2026-11-13 fix - a pause
+ * between pieces used to be a button that did nothing);
+ * `stopSpeechPlayback()` is the full reset - token, queue, the audio element,
+ * the line under the answer and the meter - and is what Stop everything and
+ * `read_aloud {enabled: false}` call.
  * The answer menu's Pause / Resume / Stop reading items (hud_bootstrap.js
  * section 6) reach these through `window.__jarvisSpeech`, so there is one
  * player and one state, never a second copy in the shell.
@@ -7120,6 +7123,11 @@ const readAloudState = {
   /** Settles the promise the player is waiting on, so a stop releases the
    *  read loop instead of leaving it waiting on a clip that will never end. */
   settle: null,
+  /** Releases a read that is paused where there is no clip to hold the pause:
+   *  while the first piece is being made, or in the gap between two pieces.
+   *  A resume or a stop wakes it; the loop's own token check then continues or
+   *  ends the read. */
+  wake: null,
 };
 
 /** Tell the shell the player moved (the answer menu repaints its items). */
@@ -7225,15 +7233,53 @@ function speechPlay(uri, token){
   });
 }
 
-/** Make and play the pieces in order. A stop or a newer read bumps the token
- *  and this loop simply falls out. */
+/** Wait here while the owner has the read paused and there is no clip to hold
+ *  that pause: the first piece being made, or the silence between two pieces.
+ *  A resume or a stop releases it (the caller checks the token afterwards). */
+function speechWaitWhilePaused(){
+  if(readAloudState.state !== "paused" || readAloudState.audio) return Promise.resolve();
+  return new Promise((resolve) => { readAloudState.wake = resolve; });
+}
+
+/** Release a read paused between clips - Resume, or a Stop that must end it. */
+function speechWakePaused(){
+  const wake = readAloudState.wake;
+  readAloudState.wake = null;
+  if(wake){ try{ wake(); }catch(error){ /* already released */ } }
+}
+
+/** Make and play the pieces in order, asking for the NEXT piece's sound while
+ *  this one plays - the bar's "one ahead" (src/main.js `prefetchNextClip`), so
+ *  the reply does not go silent for as long as the PC takes to make the next
+ *  clip. One request ahead at most, and the order is still this loop's. A stop
+ *  or a newer read bumps the token and this loop simply falls out. */
 async function speechRun(token){
+  /** The next piece's request, started while this piece plays. `null` when it
+   *  has not been started (or there is no next piece). */
+  let ahead = null;
+  /** Ask for piece i + 1 now, so its clip is already being made while piece i
+   *  is heard. Never a second request while one is on its way. */
+  function askAhead(i){
+    if(ahead || i + 1 >= readAloudState.pieces.length) return;
+    let pending;
+    // A synchronous failure is reported by the next turn of the loop, which
+    // asks for that piece itself and takes the error path.
+    try{ pending = speechRequest(readAloudState.pieces[i + 1]); }catch(error){ return; }
+    // A stop can leave this request unawaited; its rejection is then nobody's
+    // to hear, so it is marked handled here. An awaited caught promise still
+    // rejects for the loop that asks it.
+    pending.catch(() => {});
+    ahead = pending;
+  }
   for(let i = 0; i < readAloudState.pieces.length; i++){
     if(readAloudState.token !== token) return;
     readAloudState.at = i;
+    let request;
+    if(ahead){ request = ahead; ahead = null; }
+    else request = speechRequest(readAloudState.pieces[i]);
     let uri = null;
     try{
-      uri = await speechRequest(readAloudState.pieces[i]);
+      uri = await request;
     }catch(error){
       if(readAloudState.token !== token) return;
       console.info("[jarvis] Jarvis's voice could not make this sentence:", error);
@@ -7242,6 +7288,13 @@ async function speechRun(token){
     }
     if(readAloudState.token !== token) return;
     if(typeof uri !== "string" || !uri){ speechGiveUp(token); return; }
+    // Paused while the first piece was being made, or between two pieces:
+    // there is no clip to hold the pause, so hold the loop here.
+    await speechWaitWhilePaused();
+    if(readAloudState.token !== token) return;
+    // Start the next piece's request BEFORE this clip plays, so it is made
+    // while this one is heard instead of after it, in silence.
+    askAhead(i);
     try{
       await speechPlay(uri, token);
     }catch(error){
@@ -7290,24 +7343,39 @@ function readAnswerAloud(text, bubble){
   return Promise.resolve({ ok: true, why: "Reading." });
 }
 
-/** Pause the clip playing now, where it is. False when nothing is playing
- *  (the menu's own item is drawn from `window.__jarvisSpeech`'s state). */
+/** Pause the read wherever it is: the clip playing now, the first clip still
+ *  being made, or the gap between two pieces. False only when nothing is being
+ *  read (the menu's own item says so in one short line rather than doing
+ *  nothing at all). */
 function pauseSpeechPlayback(){
+  const now = readAloudState.state;
+  if(now !== "playing" && now !== "loading") return false;
   const audio = readAloudState.audio;
-  if(!audio || readAloudState.state !== "playing") return false;
-  try{ audio.pause(); }catch(error){ return false; }
+  if(audio){
+    try{ audio.pause(); }catch(error){ return false; }
+  }
   speechSetState("paused");
   return true;
 }
 
-/** Carry on from where it paused. False unless a paused clip is waiting. */
+/** Carry on from where it paused: a paused clip plays on, and a pause taken
+ *  while no clip existed (the first piece being made, or the gap between two
+ *  pieces) lets the read loop run again. False only when nothing is paused. */
 function resumeSpeechPlayback(){
+  if(readAloudState.state !== "paused") return false;
   const audio = readAloudState.audio;
-  if(!audio || readAloudState.state !== "paused") return false;
-  let started;
-  try{ started = audio.play(); }catch(error){ return false; }
-  if(started && typeof started.catch === "function") started.catch(() => {});
-  speechSetState("playing");
+  if(audio){
+    let started;
+    try{ started = audio.play(); }catch(error){ return false; }
+    if(started && typeof started.catch === "function") started.catch(() => {});
+    speechSetState("playing");
+    return true;
+  }
+  // No clip to start: the loop is waiting on `speechWaitWhilePaused`. Back to
+  // "loading" (the next sound is still being made) and release it - its
+  // speechPlay says "playing" the moment a clip really starts.
+  speechSetState("loading");
+  speechWakePaused();
   return true;
 }
 
@@ -7332,6 +7400,9 @@ function stopSpeechPlayback(){
   // Release the read loop that was waiting on that clip; its token check ends
   // it, so a stop never leaves a half-alive read behind.
   if(settle){ try{ settle(); }catch(error){ /* already settled */ } }
+  // ...and one that was paused where there was no clip to settle (the first
+  // piece still being made, or the gap between two pieces).
+  speechWakePaused();
   const bubble = readAloudState.bubble;
   readAloudState.bubble = null;
   clearReadFailed(bubble);
@@ -7730,7 +7801,13 @@ async function send(){
   reactor.set("thinking");
   const started = performance.now();
 
-  if(!S.online){
+  // false is the page KNOWING it cannot talk: boot's own read failed, or a
+  // landed read said the PC's model is down. null is "no read has landed
+  // yet", and that is not offline - Send tries the PC for real rather than
+  // putting a "Jarvis is not connected" sample in the box on a guess. This
+  // used to be `!S.online`, true for both, and the frozen copy meant a model
+  // that came back still answered with samples.
+  if(S.online === false){
     await new Promise(r => setTimeout(r, 700));
     addMessage("sample", sampleReply());
     reactor.set("idle");
@@ -8910,6 +8987,11 @@ async function boot(){
     publishSafetyFacts(status);
     $("brand-sub").textContent = S.online ? "online · local first" : "online · model not running";
   } else {
+    // The read itself threw: the page cannot reach the PC at all, which is the
+    // one thing it knows without a second opinion. Keep that false rather than
+    // null ("still waiting for the first answer"), so Send keeps answering
+    // from a sample and the face keeps its not-connected ring.
+    S.online = false;
     led("led-ollama", false, "—");
     led("led-proxy",  false, "—");
     // No invented lane names (2026-10-27): with the PC unreachable this page
@@ -8939,14 +9021,22 @@ async function boot(){
   paintHost();
 
   if(!S.online){
-    $("banner").classList.add("on");
-    // Written into its own span, never over #banner's whole contents: the
-    // Connect button beside it must survive every status read (2026-10-28).
-    $("banner-text").innerHTML = status
-      ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
-        + 'Replies below are sample data.'
-      : '<b>Demo data.</b> Atlas is not answering yet — start '
-        + '<span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.';
+    // ONE line for "the PC is up and its model is not": the standing #model-warn
+    // row, drawn from the PC's own reading (lane-warning.js). This banner used
+    // to say the same fact a second time, one strip above it, and the owner saw
+    // both at once (2026-11-13) - so with the PC's answer in hand the banner
+    // stays shut and the row speaks. The banner is left for the case with no PC
+    // at all, which the row deliberately never draws, and the consequence the
+    // banner used to carry ("sample data") is the conversation's own note below.
+    if(S.ollama !== false){
+      $("banner").classList.add("on");
+      // Written into its own span, never over #banner's whole contents.
+      $("banner-text").innerHTML = status
+        ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
+          + 'Replies below are sample data.'
+        : '<b>Demo data.</b> Atlas is not answering yet — start '
+          + '<span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.';
+    }
     addMessage("system", status
       ? "The PC is up, but its local model is not running yet. Everything below is sample data until it is."
       : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
@@ -9122,8 +9212,10 @@ boot();
  *
  *  `S.ollama` is the field as the PC reported it - true, false, or null for
  *  "the PC has not said" - and `S.linkUp` is the shell's live stream verdict,
- *  null until it says. Kept apart from `S.online`, this page's older, coarser
- *  boolean that decides sample replies.
+ *  null until it says. `S.online` is this page's own, coarser answer to "can I
+ *  talk to Jarvis", read by the face and by Send: null until a read lands,
+ *  then moved here on every landed read, so the two can no longer drift apart
+ *  the way they did until 2026-11-13.
  * ---------------------------------------------------------------------- */
 async function paintHost(){
   try{
@@ -9133,6 +9225,18 @@ async function paintHost(){
       // Only a read that landed changes anything. A failed read says nothing
       // about the model, so what was last known stands.
       if(st) S.ollama = st.ollama;
+      // And a landed read now unfreezes the page. Until 2026-11-13 only boot()
+      // ever wrote `S.online`, so a window that booted while the model was down
+      // stayed on sample replies for the rest of the session however healthy
+      // the PC became - the owner's HUD that night: status row green, no
+      // banner, and every answer still "sample reply · not from jarvis".
+      // Only a real boolean is taken (a landed read that does not mention the
+      // model is not a verdict), and only when it CHANGED, so boot's own read
+      // and this beat's read cannot paint the chip twice for one truth.
+      if(st && typeof st.ollama === "boolean" && st.ollama !== S.online){
+        S.online = st.ollama;
+        paintOnline();
+      }
       // A4: the same read carries the two persistent latches; a restart while
       // this window is open is noticed on this beat (the latch can expire).
       if(st) publishSafetyFacts(st);
@@ -9143,6 +9247,16 @@ async function paintHost(){
   // a press would do anything, and a lane started somewhere else (the Jarvis
   // bar, the phone, the logon task) has to take this page's button away too.
   await refreshLane();
+}
+
+/** Repaints what `S.online` decides - the chip's words and the face - once.
+ *  `reactor.set` is this page's only painter of both: it owns the label, the
+ *  chip's class and the face's post, so a beat that learns the model is back
+ *  goes through the same door boot does rather than writing the label here.
+ *  It never writes the brand or the banner: `hostWarn` owns those, and it must
+ *  stay free to leave the shell's "demo · not connected" marker standing. */
+function paintOnline(){
+  reactor.set(S.state);
 }
 
 /** The last lane reading this page has, or null for "the PC has not said". */
@@ -9312,39 +9426,31 @@ function laneRefusalWords(reply){
 }
 
 /**
- * Draw the button into both offline surfaces of this page and return whether
- * it is showing. `opts.banner` decides the banner half: that line only appears
- * when the PC answers and its MODEL does not, and a page with no server to ask
- * has nothing to start.
+ * Draw the button into the standing offline row and return whether it is
+ * showing. There is ONE surface: the row says why the model is missing and
+ * carries the action, and the demo banner - the page with no server to ask at
+ * all - has nothing to start.
  */
-function paintLaneConnect(doc, lane, onPress, opts){
-  opts = opts || {};
+function paintLaneConnect(doc, lane, onPress){
   const view = laneButtonView(lane);
-  const bannerHalf = opts.banner === true;
-  let shown = false;
-  const put = (buttonId, noteId, allowed) => {
+  const put = (buttonId, noteId) => {
     const button = doc && doc.getElementById ? doc.getElementById(buttonId) : null;
     if(!button) return false;
-    const show = allowed && view.show;
-    button.textContent = show || allowed ? view.words : "";
+    const show = view.show;
+    button.textContent = show ? view.words : "";
     button.hidden = !show;
     button.disabled = !show || view.disabled;
     button.setAttribute("aria-busy", show && view.disabled ? "true" : "false");
     const note = doc.getElementById(noteId);
     if(note){
-      // The line under the button is the PC's own sentence (or the countdown),
-      // and only while this surface is the one telling the owner about it.
-      note.textContent = allowed && view.note ? view.note : "";
-      note.hidden = !(allowed && view.note);
+      // The line under the button is the PC's own sentence (or the countdown).
+      note.textContent = view.note ? view.note : "";
+      note.hidden = !view.note;
     }
     if(onPress) button.onclick = show && !view.disabled ? onPress : null;
     return show;
   };
-  // The standing row: the PC is answering and its own model is not.
-  shown = put("model-warn-start", "model-warn-start-note", true) || shown;
-  // The banner: only in its "model not running" state.
-  put("banner-connect", "banner-connect-note", bannerHalf);
-  return shown;
+  return put("model-warn-start", "model-warn-start-note");
 }
 
 /* The two ways this page can ask. `core.invoke` for the shell (the token and
@@ -9434,10 +9540,8 @@ async function hudLanePress(io){
 /* == hud-lane-connect end == */
 
 
-/** Redraws the button on both offline surfaces from the last reading. */
+/** Redraws the button on the standing offline row from the last reading. */
 function paintLaneConnectNow(){
-  const banner = document.getElementById("banner");
-  const bannerHalf = !!banner && banner.classList.contains("on") && S.ollama === false;
   // The LANE's own reading decides, not the live stream's: `linkStatus.up`
   // false means the shell's event stream dropped, which says nothing about
   // whether the PC can be asked (the bridge read goes over its own road, and
@@ -9449,22 +9553,16 @@ function paintLaneConnectNow(){
   const lane = lanePressing
     ? Object.assign({}, laneRead || {}, { state: "starting" })
     : laneRead;
-  paintLaneConnect(document, lane, startTheLane, { banner: bannerHalf });
+  paintLaneConnect(document, lane, startTheLane);
   if(!laneNote) return;
-  // The PC's refusal, or this page's plain sentence, under whichever line is
-  // the one on screen. Never invented, and never cleared by a repaint that has
-  // nothing new to say.
+  // The PC's refusal, or this page's plain sentence, under the line on screen.
+  // Never invented, and never cleared by a repaint that has nothing new to say.
   const standing = document.getElementById("model-warn");
-  const standingWanted = !!standing && !standing.hidden;
-  for(const [noteId, surface, wanted] of [
-    ["model-warn-start-note", standing, standingWanted],
-    ["banner-connect-note", banner, bannerHalf],
-  ]){
-    const note = document.getElementById(noteId);
-    if(!note || !surface) continue;
-    note.textContent = wanted ? laneNote : "";
-    note.hidden = !wanted;
-  }
+  const note = document.getElementById("model-warn-start-note");
+  if(!note || !standing) return;
+  const wanted = !standing.hidden;
+  note.textContent = wanted ? laneNote : "";
+  note.hidden = !wanted;
 }
 
 /** Reads the lane and draws from it. Never throws; one read at a time. */

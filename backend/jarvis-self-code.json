@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "11ee3cdb3e45d9f22f562664de0631df7fd000c7",
- "built_at": "2026-11-14T00:13:59-08:00",
+ "ref": "ea3485abfd1c11be7ac09da519b2dfd36004078d",
+ "built_at": "2026-11-14T00:26:49-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6414,6 +6414,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "ea3485abfd1c11be7ac09da519b2dfd36004078d",
+   "date": "2026-11-14",
+   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
    "sha": "11ee3cdb3e45d9f22f562664de0631df7fd000c7",
    "date": "2026-11-14",
    "subject": "fix(settings): keep #1231's one phone-backup Section, not the older #1232 copy"
@@ -6507,11 +6512,6 @@
    "sha": "69428294081ee150aefe347399e36531787b5f01",
    "date": "2026-11-13",
    "subject": "Regenerate the whole-repo records against the merged tree"
-  },
-  {
-   "sha": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main into integration/wave18-2026-11-13 (current main after #1246 landed)"
   }
  ],
  "top_level": [
