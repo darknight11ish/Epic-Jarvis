@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "0fbcbdbf69fe1c3737ff9e9ae88f1d37b3e93659",
- "built_at": "2026-11-13T07:05:42-08:00",
+ "ref": "d85796a23a2857f8d36ec2710d19c05277352006",
+ "built_at": "2026-11-13T16:12:17-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1039,7 +1039,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ChatPins.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ContactsLookup.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FaceTuning.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FloatingAvatar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/HistoryViewPrefs.kt",
@@ -1059,7 +1058,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenNever.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenRate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/SettingsBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/TokenStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/WakeResume.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/face/AnimalNow.kt",
@@ -1091,20 +1089,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/face/gl/TokamakRenderer.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/handsfree/HandsfreeClip.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/handsfree/HandsfreeFlow.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/DeviceTiers.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/DeviceTiersAndroid.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/GgufMetadata.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LlamaEngine.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LlamaNative.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiController.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiPrompt.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiScreen.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiSettings.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiWords.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalEngine.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalEnginePolicy.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/ModelStore.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/localai/ModelStoreAndroid.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/ActivityEvent.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/AlsoOnPhone.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/AnimalOptions.kt",
@@ -1386,7 +1370,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcHelpPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcNotifyPlate.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneBackupPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneNotificationsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhotoReminderDialog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PicturesPlate.kt",
@@ -1441,7 +1424,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/JarvisTheme.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Themes.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/CardVoice.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/HoldEndRule.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveAudioRoute.kt",
@@ -1477,8 +1459,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetPin.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetRuntime.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetStates.kt",
-    "jarvis-client/app/src/main/jniLibs/arm64-v8a/libjarvis_llama.so",
-    "jarvis-client/app/src/main/jniLibs/x86_64/libjarvis_llama.so",
     "jarvis-client/app/src/main/res/anim/notification_frame_in.xml",
     "jarvis-client/app/src/main/res/anim/notification_frame_out.xml",
     "jarvis-client/app/src/main/res/drawable/ic_notification.xml",
@@ -1817,27 +1797,16 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/YoutubeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/BaseUrlTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/ChatPinsTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/data/EncryptedBackupTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceSizeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceTuningTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/LookTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/PhoneAddressTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/DeviceTiersTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/FakeLocalEngine.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/GgufMetadataTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LlamaEngineTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiControllerTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiPromptTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiShipsOffTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalEnginePolicyTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/localai/ModelStoreTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/net/WriteLikeMeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/platform/LocalNetworkPermissionTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/VoicePressTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/theme/ThemeContrastTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/update/ApkUpdaterTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/voice/HoldEndRuleTest.kt",
     "jarvis-client/app/src/test/resources/chat-stream-cases.json",
     "jarvis-client/app/src/test/resources/contract/animal-cases.json",
@@ -1896,15 +1865,6 @@
     "jarvis-client/app/src/test/resources/critter-drift-golden.json",
     "jarvis-client/app/src/test/resources/critter-pose-golden.json",
     "jarvis-client/app/src/test/resources/critter-zs-golden.json",
-    "jarvis-client/app/src/test/resources/gguf/bad-magic.gguf",
-    "jarvis-client/app/src/test/resources/gguf/bad-type.gguf",
-    "jarvis-client/app/src/test/resources/gguf/huge-count.gguf",
-    "jarvis-client/app/src/test/resources/gguf/missing-fields.gguf",
-    "jarvis-client/app/src/test/resources/gguf/no-arch.gguf",
-    "jarvis-client/app/src/test/resources/gguf/qwen2-valid.gguf",
-    "jarvis-client/app/src/test/resources/gguf/too-big.gguf",
-    "jarvis-client/app/src/test/resources/gguf/truncated.gguf",
-    "jarvis-client/app/src/test/resources/gguf/v1.gguf",
     "jarvis-client/app/src/test/resources/jarvis-visual-spec.json",
     "jarvis-client/app/src/test/resources/lipsync-golden.json",
     "jarvis-client/app/src/test/resources/pattern-golden.json",
@@ -1918,25 +1878,13 @@
     "jarvis-client/gradle/wrapper/gradle-wrapper.properties",
     "jarvis-client/gradlew",
     "jarvis-client/gradlew.bat",
-    "jarvis-client/native/BUILD-INFO-arm64-v8a.txt",
-    "jarvis-client/native/BUILD-INFO-x86_64.txt",
-    "jarvis-client/native/CMakeLists.txt",
-    "jarvis-client/native/PROVENANCE.json",
-    "jarvis-client/native/README.md",
-    "jarvis-client/native/REPORT.md",
-    "jarvis-client/native/build-native.ps1",
-    "jarvis-client/native/jni/jarvis_llama_jni.cpp",
-    "jarvis-client/native/licenses/LICENSE-PrivateLM-plugin",
-    "jarvis-client/native/licenses/LICENSE-PrivateLM-repo",
-    "jarvis-client/native/licenses/LICENSE-llama.cpp",
-    "jarvis-client/native/licenses/llama.cpp-tree.sha256",
     "jarvis-client/settings.gradle.kts",
     "jarvis-client/tools/gen_feature_directory.py",
     "server/README.md",
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 1022,
+   "file_count": 970,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -3889,6 +3837,7 @@
     "backend/test_failure_detail.py",
     "backend/test_fault_probes.py",
     "backend/test_feature_answers.py",
+    "backend/test_feature_control_phrases.py",
     "backend/test_feature_controls.py",
     "backend/test_feature_detail.py",
     "backend/test_feature_guide.py",
@@ -4373,7 +4322,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 689,
+   "file_count": 690,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4661,10 +4610,10 @@
     "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
+    "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
+    "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
-    "changelog.d/2026-11-13-phone-on-device-model-engine.md",
-    "changelog.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4825,10 +4774,10 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
+    "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
-    "decisions.d/2026-11-13-phone-on-device-model-engine.md",
-    "decisions.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -6365,111 +6314,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "0fbcbdbf69fe1c3737ff9e9ae88f1d37b3e93659",
+   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
    "date": "2026-11-13",
-   "subject": "localai: name adjustResize so the keyboard cannot pan the header off screen"
+   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
   },
   {
-   "sha": "79664afa1fa21041e5e310f8fb29b19ebeaf71b1",
+   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
    "date": "2026-11-13",
-   "subject": "records: record the phone field test and the idle-window correction"
+   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
   },
   {
-   "sha": "f820791c80cb85f49f4f376d2fddedbf987e604d",
+   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
    "date": "2026-11-13",
-   "subject": "localai: keep the draft, Send and Clear on screen with the keyboard up"
+   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
   },
   {
-   "sha": "1d87132443a70aa6a175d8866e74fc808b3f809a",
+   "sha": "e46ff2d65262080868f08091056af77852183383",
    "date": "2026-11-13",
-   "subject": "localai: unload the model after 5 minutes idle, not 5 seconds"
+   "subject": "chore-records-regenerate-after-the-phone-fix"
   },
   {
-   "sha": "1e809c3a5fe08788f3d4f5ff1d7b555dfbcb7ab6",
+   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
    "date": "2026-11-13",
-   "subject": "chore(records): regenerate the self-code map and recent-changes module for the engine's record fragments"
+   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
   },
   {
-   "sha": "5fed0b4258651dc7475cd1b1ec4a9a234ea70960",
+   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
    "date": "2026-11-13",
-   "subject": "localai: keep the switch and close from racing a running load"
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
   },
   {
-   "sha": "4636b44f700326c812a158529f57681b29356869",
+   "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
    "date": "2026-11-13",
-   "subject": "localai: ship the prebuilt native engine library, its build script and provenance"
+   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
   },
   {
-   "sha": "fd29946491f913a50c038210eee1805ed827461b",
+   "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
    "date": "2026-11-13",
-   "subject": "docs(records): record the phone's on-device engine, its one-sided reason and its MIT attribution"
+   "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
   },
   {
-   "sha": "4b73bf52402e7093a83251687175879496494051",
+   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
    "date": "2026-11-13",
-   "subject": "localai: keep the JNI names through R8"
+   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
   },
   {
-   "sha": "1fae25523f88654efe705cb37de1f17963143459",
+   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
    "date": "2026-11-13",
-   "subject": "localai: add the Local AI screen, state holder and More entry"
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
   },
   {
-   "sha": "cb999959cfdd344b52dbc85d9f69ee1599816033",
+   "sha": "43ff622708f70142a1ad58a533053991bd75f634",
    "date": "2026-11-13",
-   "subject": "localai: add the models folder with a SAF import and the OFF-by-default switch"
+   "subject": "chore: regenerate the self-code map with the new suite tracked"
   },
   {
-   "sha": "e7847411c00c75cf63a82d3f7f817197da9831f1",
+   "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
    "date": "2026-11-13",
-   "subject": "localai: port the RAM tiers, the 5s/180s policy and the prompt formats"
+   "subject": "fix(github): a free-plan 403 on branch rules means no rules, not a blind token"
   },
   {
-   "sha": "f1757219cd3276f287d5060b7392325d69f79a26",
+   "sha": "379e106a094818492c11987146dea40e4b45863e",
    "date": "2026-11-13",
-   "subject": "localai: port the GGUF header reader with binary fixtures"
+   "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
-   "sha": "8477a5ca9a1584246c58c0a27e484e487cc2e525",
+   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
    "date": "2026-11-13",
-   "subject": "localai: add the engine contract, JNI bridge and LlamaEngine"
+   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
   },
   {
-   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
   },
   {
-   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
   },
   {
-   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
-   "date": "2026-11-12",
-   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
   },
   {
-   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
-   "date": "2026-11-12",
-   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
   },
   {
-   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
-   "date": "2026-11-12",
-   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
+   "date": "2026-11-13",
+   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
-   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
+   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
+   "date": "2026-11-13",
+   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1444
+   "files": 1445
   },
   {
    "path": "jarvis-desktop/",
@@ -6479,7 +6428,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 982
+   "files": 930
   },
   {
    "path": "docs/",
@@ -6583,8 +6532,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5710,
-  "covered": 5228,
+  "tracked_files": 5659,
+  "covered": 5177,
   "excluded": 482,
   "subsystems": 27
  },

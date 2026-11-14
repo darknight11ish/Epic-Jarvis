@@ -1425,6 +1425,19 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _call_record_prompt(s)
     if got is not None:
         return got
+    # --- the two DESIGN-ONLY features answer honestly, before the generic
+    #     capability lane (2026-11-13, the awareness audit's GAP-4) ------------
+    # BEFORE `_feature_capability_question`, and both halves are the fix:
+    # that lane answers an area the feature list does not know by quoting the
+    # rows it DOES know - measured: "what can you do with the desktop
+    # companion" came back with the Anti-Slop filter's own words - and "can
+    # you run a model on my phone" never reached a capability lane at all, it
+    # was read by `_open` and answered "I have asked this PC to open model on
+    # my phone".
+    got = _not_built_question(s, text)
+    if got is not None:
+        return got
+
     # The capability questions (2026-10-31, the pass-9 field test) are read
     # BEFORE the tidied sentence, because "can you add something to my
     # calendar?" loses its "can you" on the way in and would otherwise be
@@ -6464,6 +6477,20 @@ _ASKS_FIRST_LOOSER = re.compile(
     r"stop\s+asking\s+(?:me\s+)?before\s+(?:jarvis\s+(?:reads?|accesses?|checks?|writes?)\s+)?"
     r"(.+)")
 
+#: "Turn on GitHub reads" / "turn off GitHub reads" (2026-11-13, the awareness
+#: audit's CONTROL C-3 - the one cell its control matrix could not verify,
+#: because no typed sentence reached the reads switch at all). The row's own
+#: name is "Read your GitHub", and its switch's ON is "ask me first", so ON
+#: puts that card back and OFF stops asking. Both are the row's own two states
+#: and both go through `settings_asks_first`, which is the same carded write the
+#: Settings row makes - this pattern decides only WHICH row is meant.
+_GITHUB_READS_SWITCH = re.compile(
+    r"(?:turn|switch)\s+(?P<on>on|off)\s+(?:the\s+|my\s+|your\s+)?"
+    r"github\s+reads?\s*\??$"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?github\s+reads?\s+"
+    r"(?P<on2>on|off)\s*\??$"
+)
+
 #: Offering a tool to the AI model at all (jarvis_asks_first.
 #: TOOLS_SWITCHABLE - every tool the model can be offered since 2026-11-04) -
 #: a DIFFERENT thing from the above (see that module's own header): "let the
@@ -6965,6 +6992,11 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         tool = R.find_tool_target(name)
         if tool is not None:
             return Intent("settings_tool", {"tool": tool, "on": bool(on)})
+    m = _GITHUB_READS_SWITCH.fullmatch(s)
+    if m is not None:
+        on = (m.groupdict().get("on") or m.groupdict().get("on2")) == "on"
+        return Intent("settings_asks_first",
+                      {"action": "github_inspect", "ask": bool(on)})
     m = _ASKS_FIRST_LOOSER.fullmatch(s) or _ASKS_FIRST_STRICTER.fullmatch(s)
     if m:
         action = R.find_asks_first_target(m.group(1))
@@ -11990,6 +12022,15 @@ def _feature_target(words) -> str:
         return text
     text = re.sub(r"\s*\b(?:feature|features|option|options|setting|settings)\b\s*$",
                   "", text, flags=re.I)
+    # A trailing PLACE the owner is asking FROM is not part of the name
+    # (2026-11-13, the awareness audit's GAP-3): "where is history on my phone"
+    # named nothing, so it fell to the model, while "where is history" answered
+    # from the row. Only the exact-name gate is relaxed - a name that does not
+    # exist still falls through exactly as before.
+    text = re.sub(r"\s*\b(?:on|in|from)\s+(?:my|the|this)\s+phone\b\s*$", "",
+                  text, flags=re.I)
+    text = re.sub(r"\s*\b(?:on|in|from)\s+(?:my|the|this)\s+"
+                  r"(?:pc|computer|laptop|desktop)\b\s*$", "", text, flags=re.I)
     return text.strip()
 
 
@@ -13818,7 +13859,7 @@ def _github_capability_inventory() -> str:
                         "\"tell me when\" GitHub checks.")
         except Exception:                   # noqa: BLE001 - fall through to words
             pass
-    return (GITHUB_TOOLS_WORDS + " All of them are off by default: each has its "
+    return (_github_tools_words() + " All of them are off by default: each has its "
             "own switch in Settings, What asks first, under \"Let the AI use "
             "this\" (group \"Jarvis's own tools\").")
 
@@ -21686,23 +21727,34 @@ def _run_connected(intent: Intent) -> Result:
                   "the AI model.", intent.name)
 
 
-#: The ten on-demand tools, named EXACTLY as jarvis_agent.TOOLS registers them,
-#: plus the research tool and the scheduled watch body - so the inventory
-#: answer names the whole real GitHub surface and nothing invented.
-GITHUB_TOOLS_WORDS = (
-    "Ten tools for your own GitHub: github_list (your repositories, a "
-    "repository's pull requests, issues or workflow runs), github_read_file (one "
-    "file), github_ci_status (the newest workflow run), github_pr_scan (the pull "
-    "request cockpit: which open pull requests can be merged, and which check is "
-    "holding them), github_comment (one comment), github_open_issue (one new "
-    "issue), github_rerun_workflow (run an existing workflow again), "
-    "github_create_repo (create ONE new, empty repository on your own account), "
-    "github_merge_pr (merge ONE pull request with a merge commit, pinned to the "
-    "head commit the card shows) and github_fix_and_push (copy a failing pull "
-    "request into a scratch folder here, write ONE file of the fix there on its "
-    "own card, then push the fix to its own branch on a further card). Plus "
-    "github_search, which researches a library on GitHub, and the scheduled "
-    "watch_github job behind \"tell me when\" GitHub checks.")
+def _github_tools_words() -> str:
+    """The on-demand tools, named EXACTLY as jarvis_agent.TOOLS registers them.
+
+    The COUNT is read from `jarvis_agent.GITHUB_TOOLS` - the tuple the model's
+    own tools are built from - never typed. It said "Ten tools" while that
+    tuple held seventeen, which is one of the four wrong numbers the 2026-11-13
+    awareness audit measured (GAP-1). The tools named below are the ones a
+    person asks about; "including" keeps the sentence from claiming to be the
+    whole list, and the derived count says how many there really are.
+    """
+    counts = _github_counts()
+    how_many = (f"{_count_words(counts['tools']).capitalize()} tools"
+                if counts["tools"] else "The tools")
+    return (
+        f"{how_many} for your own GitHub, including github_list (your "
+        "repositories, a repository's pull requests, issues or workflow runs), "
+        "github_read_file (one file), github_ci_status (the newest workflow run), "
+        "github_pr_scan (the pull request cockpit: which open pull requests can be "
+        "merged, and which check is holding them), github_comment (one comment), "
+        "github_open_issue (one new issue), github_rerun_workflow (run an existing "
+        "workflow again), github_create_repo (create ONE new, empty repository on "
+        "your own account), github_merge_pr (merge ONE pull request with a merge "
+        "commit, pinned to the head commit the card shows) and "
+        "github_fix_and_push (copy a failing pull request into a scratch folder "
+        "here, write ONE file of the fix there on its own card, then push the fix "
+        "to its own branch on a further card). Plus github_search, which researches "
+        "a library on GitHub, and the scheduled watch_github job behind \"tell me "
+        "when\" GitHub checks.")
 
 
 def _github_asks_words() -> str:
@@ -21732,11 +21784,7 @@ def _github_asks_words() -> str:
         view = AF.view(here=False)
     except Exception:                       # noqa: BLE001 - older PC
         return write_fallback + " " + read_switchable
-    rows = {}
-    for group in view.get("groups") or ():
-        for row in group.get("rows") or ():
-            if isinstance(row, dict):
-                rows[str(row.get("id") or "")] = row
+    rows = _github_row_map(view)
     writes = ("github_comment", "github_open_issue", "github_rerun_workflow",
               "github_create_repo", "github_merge_pr", "github_fix_and_push",
               "github_open_pr", "github_workflow", "github_issue_labels",
@@ -21747,18 +21795,114 @@ def _github_asks_words() -> str:
         return write_fallback + " " + read_switchable
     said = ("These GitHub actions ask you first every time: " + _self_list(got)
             + ". They cannot be loosened from an app.")
-    read_row = rows.get("github_inspect") or {}
-    read_switch = read_row.get("switch") if isinstance(read_row.get("switch"), dict) else {}
-    if read_switch.get("asks") is False:
-        said += (" Reading your GitHub does not ask you first right now: the "
-                 "GitHub reads switch on the PC's What asks first page turned "
-                 "that card off, and it can put the card back at once.")
-    else:
-        said += (" Reading your GitHub asks you first now, and it has its own "
-                 "switch on the PC's What asks first page - putting the card "
-                 "back there is one card plus Windows Hello, and turning it off "
-                 "again is instant.")
-    return said
+    return said + " " + _github_reads_state_words(_github_reads_ask(rows))
+
+
+#: How a small count reads in a sentence. Kept here rather than imported from
+#: `jarvis_github._count_word`, because these answers must still speak on a PC
+#: whose backend predates that module - and a digit is the honest second choice.
+_COUNT_WORDS = {0: "no", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+                6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+                11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+                15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
+                19: "nineteen", 20: "twenty"}
+
+
+def _count_words(n) -> str:
+    """A small count as words, or its digits when it is not one of them."""
+    try:
+        return _COUNT_WORDS.get(int(n), str(int(n)))
+    except (TypeError, ValueError):
+        return str(n)
+
+
+def _github_row_map(view: dict) -> dict:
+    """The asks-first page's rows by id, from a `jarvis_asks_first.view()`."""
+    out = {}
+    for group in (view or {}).get("groups") or ():
+        for row in (group or {}).get("rows") or ():
+            if isinstance(row, dict):
+                out[str(row.get("id") or "")] = row
+    return out
+
+
+def _github_reads_ask(rows: Optional[dict] = None):
+    """The live `github_inspect` row's `asks`, or None when it cannot be read.
+
+    The row is the one thing that says whether reading the owner's GitHub asks
+    first RIGHT NOW. Typing the answer is what went wrong: the answer said the
+    reads "ship asking first" while the shipped line is `auto`
+    (jarvis-framework.toml, the owner's 2026-11-10 23:00 decision).
+    """
+    if rows is None:
+        try:
+            import jarvis_asks_first as AF
+            rows = _github_row_map(AF.view(here=False))
+        except Exception:                   # noqa: BLE001 - older PC
+            return None
+    row = rows.get("github_inspect") or {}
+    switch = row.get("switch") if isinstance(row.get("switch"), dict) else {}
+    asks = switch.get("asks")
+    return None if asks is None else bool(asks)
+
+
+def _github_reads_state_words(asks) -> str:
+    """The GitHub reads switch in ONE sentence, from its live state.
+
+    Both GitHub answers that mention the switch call this, so the two can never
+    describe it differently - the failure the audit measured was one sentence
+    saying the reads ask and the shipped tier saying they do not.
+    """
+    if asks is False:
+        return ("Reading your GitHub does not ask you first right now: the "
+                "GitHub reads switch on the PC's What asks first page turned that "
+                "card off, and it can put the card back at once.")
+    if asks is True:
+        return ("Reading your GitHub asks you first now, and it has its own "
+                "switch on the PC's What asks first page - putting the card back "
+                "there is one card plus Windows Hello, and turning it off again "
+                "is instant.")
+    return ("I could not read the GitHub reads switch on this PC, so I cannot "
+            "say whether reading your GitHub asks you first.")
+
+
+def _github_counts() -> dict:
+    """The GitHub numbers, read at answer time instead of typed (2026-11-13).
+
+    Four hand-typed numerals contradicted the code (the awareness audit's
+    GAP-1/GAP-7): "ten" where the master switch offers twenty, "six" where
+    twelve writes exist, "four" where the read tuple holds five, and a promise
+    that the reads "ship asking first" where the shipped tier is `auto`. Each one
+    is read where it lives:
+
+      * `tools`   - `jarvis_agent.GITHUB_TOOLS`, the tuple the model's tools are
+                    built from (reads + carded writes);
+      * `reads`   - `jarvis_agent.GITHUB_READ_TOOLS`, the fixed-address reads;
+      * `actions` - `jarvis_agent.GITHUB_ACTION_TOOLS`, the carded writes;
+      * `offered` - `jarvis_asks_first.GITHUB_TOOLS`, the ONE tuple the master
+                    group switch writes (it also carries github_search and the
+                    two local review gates);
+      * `reads_ask` - the live `github_inspect` row, via `_github_reads_ask`.
+
+    A PC too old to have one says None for it, and every caller says "I cannot
+    read that" rather than a number nobody checked.
+    """
+    out = {"tools": None, "reads": None, "actions": None, "offered": None,
+           "reads_ask": None}
+    try:
+        import jarvis_agent as AG
+        out["tools"] = len(tuple(AG.GITHUB_TOOLS))
+        out["reads"] = len(tuple(AG.GITHUB_READ_TOOLS))
+        out["actions"] = len(tuple(AG.GITHUB_ACTION_TOOLS))
+    except Exception:                       # noqa: BLE001 - older PC
+        pass
+    try:
+        import jarvis_asks_first as AF
+        out["offered"] = len(tuple(AF.GITHUB_TOOLS))
+    except Exception:                       # noqa: BLE001 - older PC
+        pass
+    out["reads_ask"] = _github_reads_ask()
+    return out
 
 
 def _github_create_repo_words() -> str:
@@ -21813,7 +21957,7 @@ def _github_create_repo_words() -> str:
 GITHUB_CAPABILITY_FALLBACK = (
     "A GitHub token saved on the connect card is tested once with one GitHub "
     "request - that proves the token identifies your GitHub account, nothing more. "
-    "It lets me search GitHub, see private repositories and watch CI. With the ten "
+    "It lets me search GitHub, see private repositories and watch CI. With the "
     "GitHub tools switched on (all off by default) I can also read your "
     "repositories, pull requests, issues, CI status, one file and the pull request "
     "cockpit (whether each open pull request can merge, with its head commit), "
@@ -21826,8 +21970,8 @@ GITHUB_CAPABILITY_FALLBACK = (
     "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
     "checks, pushes to main, deletes or closes a repository or branch, approves a "
     "pull request, dispatches a workflow or touches gists, and it has no tool that "
-    "edits or commits code. The four reads ship asking too, and the owner can make "
-    "GitHub reads card-free from Settings, What asks first.")
+    "edits or commits code. The reads are card-free by default, and the GitHub "
+    "reads switch in Settings, What asks first, can put that card back.")
 GITHUB_NEVER_FALLBACK = (
     "No - I never copy a repository to this PC, and I have no tool that edits or "
     "commits code. What a saved token does let me do: search GitHub, see private "
@@ -21842,12 +21986,12 @@ GITHUB_NEVER_FALLBACK = (
     "pull request's own branch - two stages and two cards. It never force-pushes, "
     "squash-merges, rebases, uses an admin bypass or auto-merge, bypasses required "
     "checks, pushes to main, deletes or closes a repository or branch, approves a "
-    "pull request, dispatches a workflow or touches gists. The four reads ship "
-    "asking too, and the owner can make GitHub reads card-free from Settings, "
-    "What asks first.")
+    "pull request, dispatches a workflow or touches gists. The reads are card-free "
+    "by default, and the GitHub reads switch in Settings, What asks first, can put "
+    "that card back.")
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
-    "GitHub tools switched on - ten of them, all off by default - it can also read "
+    "GitHub tools switched on - all off by default - it can also read "
     "your repositories, pull requests, issues, CI status, one file and the pull "
     "request cockpit (whether each open pull request can merge, with its head "
     "commit), comment, open an issue, re-run a workflow, create one new empty "
@@ -21858,9 +22002,9 @@ GITHUB_SHORT_FALLBACK = (
     "two cards. It never force-pushes, squash-merges, rebases, uses an admin bypass "
     "or auto-merge, bypasses required checks, pushes to main, deletes or closes a "
     "repository or branch, approves a pull request, dispatches a workflow or "
-    "touches gists, and there is no tool that edits or commits code. The four "
-    "reads ship asking too, and the owner can make GitHub reads card-free from "
-    "Settings, What asks first.")
+    "touches gists, and there is no tool that edits or commits code. The reads are "
+    "card-free by default, and the GitHub reads switch in Settings, What asks "
+    "first, can put that card back.")
 
 
 def _github_capability_words(which: str = "sentence") -> str:
@@ -21971,30 +22115,40 @@ def _run_github_self(f: dict) -> Result:
         return Result((_github_create_repo_words() + " " + state).strip(),
                       "github_self")
     if shape == "needs":
+        counts = _github_counts()
+        offered = (f"offers all {_count_words(counts['offered'])} together on one "
+                   f"card plus Windows Hello" if counts["offered"] else
+                   "offers every one of them together on one card plus Windows "
+                   "Hello")
         return Result(
             "Two things. First a GitHub personal access token, saved on this PC by "
             "the one \"connect my GitHub\" card - it is typed on the card and never "
             "in chat. Second, the GitHub tools switched on in Settings, What asks "
             "first, under \"Let the AI use this\": each has its own switch and they "
             "all ship off, and one master switch, \"Offer GitHub tools to the AI "
-            "model\", offers all ten together on one card plus Windows Hello - every "
-            "use still asks on its own card either way. " + state, "github_self")
+            "model\", " + offered + " - every use still asks on its own card either "
+            "way. " + state, "github_self")
     if shape == "asks":
         return Result(_github_asks_words() + " " + state, "github_self")
     if shape == "action":
+        counts = _github_counts()
+        actions = (f"{_count_words(counts['actions']).capitalize()} actions can "
+                   f"change something on GitHub" if counts["actions"] else
+                   "Several actions can change something on GitHub")
+        reads = (f"{_count_words(counts['reads']).capitalize()} reads exist too"
+                 if counts["reads"] else "Reads exist too")
         return Result(
             "Yes - each one waits for its own approval card showing exactly what "
             "will be posted, merged, pushed or re-run, and nothing happens until "
-            "you decide that card. Six actions can change something on GitHub: "
+            "you decide that card. " + actions + ", each with its own card: "
             "commenting, opening an issue, re-running a workflow, creating a "
             "repository, merging a pull request with a merge commit pinned to the "
             "head commit on the card, and pushing a fix to a pull request's own "
-            "branch on a second card. Four reads exist too: listing your "
+            "branch on a second card. " + reads + ": listing your "
             "repositories, pull requests, issues or workflow runs, the pull request "
-            "cockpit, reading one file, and checking the newest CI run - they ship "
-            "asking first, and since 2026-11-10 the owner can make GitHub reads "
-            "card-free from Settings, What asks first, with the GitHub reads switch "
-            "(turning it back on is instant). " + state, "github_self")
+            "cockpit, reading one file, and checking the newest CI run - a read "
+            "changes nothing on GitHub. " + _github_reads_state_words(
+                counts["reads_ask"]) + " " + state, "github_self")
     return Result(never + " " + state, "github_self")
 
 
@@ -26207,6 +26361,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_obfuscation_tools()
     if n == "project_obfuscate_unavailable":
         return _run_obfuscate_unavailable()
+    if n == "ondevice_model":
+        return _run_ondevice_model()
+    if n == "voicestudio_state":
+        return _run_voicestudio_state()
+    if n == "voicestudio_set":
+        return _run_voicestudio_set(f)
     if n == "self_changes":
         return _run_self_changes(f)
     if n == "changeable_overview":
@@ -27075,7 +27235,12 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # answer (2026-11-12): fixed local words, no plan, no card and no file
     # touched. A private chat gets the same honest answer instead of a model
     # that would invent a card or a run.
-    "obfuscate_tools_info", "project_obfuscate_unavailable",
+    "obfuscate_tools_info", "project_obfuscate_unavailable", "ondevice_model",
+    # The VoiceStudio STATE answer (2026-11-13): it reads the switch and writes
+    # nothing, so a private chat gets the real state instead of a model's guess.
+    # The CHANGE (`voicestudio_set`) is deliberately NOT here: turning it on
+    # writes the owner's settings file, and a private chat refuses a change.
+    "voicestudio_state",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -27295,7 +27460,8 @@ READ_ONLY_INTENTS = frozenset({
     # The code-protection tool check and its honest "this build cannot run it"
     # answer (2026-11-12): fixed local words, no plan, no card and no file
     # touched, so neither may clear what "cancel that" would take back.
-    "obfuscate_tools_info", "project_obfuscate_unavailable",
+    "obfuscate_tools_info", "project_obfuscate_unavailable", "ondevice_model",
+    "voicestudio_state",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
@@ -28580,7 +28746,18 @@ _AW_COMPANION_OVERVIEW = re.compile(
     r"|tell\s+me\s+about\s+(?:your\s+)?desktop\s+sidekick\s*\??$"
     r"|(?:what\s+are\s+your\s+)?roamies\s+capabilities\s*\??$"
     r"|show\s+(?:me\s+)?companion\s+capabilities\s*\??$"
-    r"|what\s+companion\s+features\s+do\s+you\s+have\s*\??$", re.I)
+    r"|what\s+companion\s+features\s+do\s+you\s+have\s*\??$"
+    # "what can you do with the desktop companion" (2026-11-13, the awareness
+    # audit's GAP-4). Before this, the generic capability lane answered it by
+    # quoting an unrelated row - measured: the Anti-Slop filter's own words -
+    # because no catalogue row is called "desktop companion" and the feature
+    # list is where that lane looks. The honest answer already existed here
+    # (jarvis_companion.format_companion_overview, which opens with "not
+    # built"); only the sentence shape was missing.
+    r"|what\s+can\s+(?:you|jarvis)\s+do\s+with\s+(?:the\s+|your\s+)?"
+    r"(?:desktop\s+companion|companion)\s*\??$"
+    r"|what\s+can\s+(?:the\s+|your\s+)?desktop\s+companion\s+do\s*\??$"
+    r"|what\s+does\s+(?:the\s+|your\s+)?desktop\s+companion\s+do\s*\??$", re.I)
 
 _AW_COMPANION_AVATAR = re.compile(
     r"(?:what\s+is\s+the\s+|tell\s+me\s+about\s+(?:your\s+)?|explain\s+(?:the\s+|your\s+)?)holographic\s+avatar\s*\??$"
@@ -28684,11 +28861,62 @@ _AW_OBFUSCATE_TOOLS = re.compile(
 #: An optional name after "project"/"app" is accepted and ignored - this lane
 #: never resolves a folder or touches a file, so a name can never reach the
 #: filesystem (the old path accepted ".." and planned the parent directory).
+#:
+#: THE QUESTION FORM (2026-11-13, the awareness audit's GAP-4). "how do I
+#: obfuscate my project" matched nothing at all: the verbs only ever arrived
+#: first, so the owner's own phrasing fell to the model, which invented an
+#: answer. The refusal above is the right answer to it, so the polite leads are
+#: accepted here rather than a second lane being written.
 _AW_OBFUSCATE_PROJECT = re.compile(
+    r"(?:how\s+(?:do|can|could|would|should)\s+(?:i|you|we)\s+"
+    r"|(?:can|could|would|will)\s+(?:you|jarvis)\s+"
+    r"|please\s+|i\s+want\s+to\s+|i\s+need\s+to\s+)?"
     r"(?:obfuscate|harden|protect)\s+"
     r"(?:the\s+|my\s+|this\s+|our\s+)?"
     r"(?:code|source(?:\s+code)?|project|app)\b.*"
     r"|apply\s+(?:code\s+)?(?:obfuscation|hardening)\s+to\s+.*"
+)
+
+#: The two VoiceStudio sentences (2026-11-13, the awareness audit's GAP-9 /
+#: CONTROL C-7). Before this the ONLY door was a hand edit of
+#: `jarvis-framework.toml`; this is the typed switch the owner asked for, and
+#: the answer's words are the module's own (`jarvis_voicestudio.state()` and
+#: `request_enabled()`), never a second copy.
+_AW_VOICESTUDIO_STATE = re.compile(
+    r"(?:is|are)\s+(?:the\s+)?voice\s*studio(?:\s+(?:on|off|enabled|disabled))?\s*\??$"
+    r"|(?:is|are)\s+(?:the\s+|my\s+)?second\s+voice\s+program(?:\s+(?:on|off|enabled))?\s*\??$"
+    r"|(?:what|which)\s+is\s+(?:the\s+)?voice\s*studio(?:\s+switch)?\s+"
+    r"(?:set\s+to|on|off)\s*\??$"
+    r"|(?:where|how)\s+(?:do\s+i|can\s+i)\s+(?:turn|switch)\s+(?:on|off)\s+"
+    r"(?:the\s+)?voice\s*studio\s*\??$"
+)
+_AW_VOICESTUDIO_SET = re.compile(
+    r"(?P<action>turn\s+on|turn\s+off|switch\s+on|switch\s+off|enable|disable)\s+"
+    r"(?:the\s+|my\s+|your\s+)?(?P<what>voice\s*studio|second\s+voice\s+program)"
+    r"(?:\s+(?:switch|please|now))?\s*\??$"
+)
+
+#: "Can you run a model on my phone?" and its neighbours (2026-11-13, the
+#: awareness audit's GAP-4). Measured before this: the sentence was read by
+#: `_open` as a request to OPEN a program called "model on my phone", and the
+#: answer said "I have asked this PC to open model on my phone" - a claim that
+#: an action was taken, for a thing that does not exist. The phone ships an
+#: honest plate and a design document and NO model runtime, so the answer is
+#: fixed words that say exactly that.
+_AW_ONDEVICE_MODEL = re.compile(
+    # The lead is OPTIONAL because `normalize_spoken_command` drops "can you"
+    # before this lane sees the sentence ("run a model on my phone").
+    r"(?:(?:can|could|do|does|will|would)\s+(?:you|jarvis|the\s+phone|my\s+phone)\s+)?"
+    r"(?:run|use|load|host|have)\s+(?:a\s+|an\s+|the\s+|its\s+own\s+)?"
+    r"(?:ai\s+|llm\s+|language\s+)?(?:model|llm|engine)\s+"
+    r"(?:on|in|from|offline\s+on)\s+(?:my|the|this)\s+phone\s*\??$"
+    r"|(?:is|are)\s+there\s+(?:an?\s+)?(?:on-device|on\s+device|offline)\s+"
+    r"(?:ai|model|engine)(?:\s+(?:on|in)\s+(?:my|the|this)\s+phone)?\s*\??$"
+    r"|(?:what|how)\s+(?:about|is)\s+(?:the\s+)?(?:on-device|on\s+device)\s+"
+    r"(?:ai|model|engine)(?:\s+(?:on|in)\s+(?:my|the|this)\s+phone)?\s*\??$"
+    r"|does\s+(?:the\s+|my\s+|this\s+)?phone\s+(?:run|have|host)\s+"
+    r"(?:a\s+|an\s+|its\s+own\s+)?(?:ai\s+|llm\s+|language\s+)?(?:model|llm|engine)"
+    r"\s*(?:of\s+its\s+own)?\s*\??$"
 )
 
 #: "Which folders may you look in?" - the read of jarvis_documents.folders().
@@ -29735,6 +29963,110 @@ def _run_obfuscate_unavailable() -> Result:
     return Result(OBFUSCATE_UNAVAILABLE, "project_obfuscate_unavailable")
 
 
+#: The honest answer to "can you run a model on my phone?" (2026-11-13). The
+#: phone's own plate says "Not available in this build." and its design document
+#: says DESIGN ONLY - NOTHING IN THIS DOCUMENT IS BUILT; no model runtime ships
+#: in the APK. Before this sentence existed, the question was read as a request
+#: to OPEN a program called "model on my phone".
+ONDEVICE_MODEL_UNAVAILABLE = (
+    "No - not in this build. Nothing that runs a model ships in the phone app: "
+    "there is no on-device engine in the APK, so the phone cannot answer while "
+    "this PC is unreachable, and nothing is captured or synced offline. The "
+    "phone's own Settings page says exactly that - \"Not available in this "
+    "build.\" - and the design for the real thing is a document, not code. "
+    "Every answer still comes from a model running on this PC.")
+
+
+def _run_ondevice_model() -> Result:
+    """Say plainly that no model runs on the phone, and change nothing."""
+    return Result(ONDEVICE_MODEL_UNAVAILABLE, "ondevice_model")
+
+
+def _voicestudio_module():
+    """`jarvis_voicestudio`, or None on a backend that predates it."""
+    try:
+        import jarvis_voicestudio as VS
+        return VS
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _run_voicestudio_state() -> Result:
+    """Is VoiceStudio on? Read from the module that owns the switch."""
+    VS = _voicestudio_module()
+    if VS is None:
+        return Result("This PC's Jarvis does not have the VoiceStudio client yet - "
+                      "run apply-patches.ps1 on the PC. Nothing was changed.",
+                      "voicestudio_state")
+    try:
+        state = VS.state()
+    except Exception as exc:                # noqa: BLE001 - unreadable is said
+        return Result(f"The VoiceStudio switch could not be read on this PC "
+                      f"({type(exc).__name__}), so I cannot say whether it is on.",
+                      "voicestudio_state")
+    return Result(str(state.get("words") or ""), "voicestudio_state")
+
+
+def _run_voicestudio_set(f: dict) -> Result:
+    """Turn VoiceStudio on or off through the module's OWN door.
+
+    ON is ONE `change_own_config` card plus Windows Hello and writes nothing
+    until it is answered; OFF is instant and cardless. `request_enabled()` owns
+    all of that - this runner copies none of it, and reports the body's own
+    sentence, so a waiting card is never announced as on.
+    """
+    VS = _voicestudio_module()
+    if VS is None:
+        return Result("This PC's Jarvis does not have the VoiceStudio client yet - "
+                      "run apply-patches.ps1 on the PC. Nothing was changed.",
+                      "voicestudio_set")
+    on = bool(f.get("on"))
+    try:
+        code, body = VS.request_enabled(on)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"The VoiceStudio switch could not be changed on this PC "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "voicestudio_set")
+    words = str((body or {}).get("words") or (body or {}).get("message")
+                or (body or {}).get("error") or "").strip()
+    if not words:
+        words = ("VoiceStudio was not changed: the switch said nothing, so I will "
+                 "not claim it did.")
+    return Result(words, "voicestudio_set")
+
+
+def _not_built_question(s: str, text: str) -> Optional[Intent]:
+    """The two design-only features, answered before anything can misread them.
+
+    2026-11-13, the awareness audit's GAP-4. Neither one has a feature-list row
+    (and must not get one: a row in `features/features.json` is drawn in both
+    apps' Features pages, so it would be the claim these two features exist to
+    remove). So each needs its OWN deterministic owner, and it has to run before
+    the generic lanes that were answering them wrongly:
+
+      * `ondevice_model` - "can you run a model on my phone" was read by `_open`
+        as a request to open a program called "model on my phone", and the
+        answer said "I have asked this PC to open model on my phone".
+      * `companion_overview` - "what can you do with the desktop companion" was
+        answered by the catalogue capability lane with the Anti-Slop filter's
+        own words, because no row is called "desktop companion".
+
+    Both answers already existed and are fixed words: the phone's own "Not
+    available in this build." and `jarvis_companion.format_companion_overview`.
+    `s` is the tidied sentence and `text` the raw one, because the tidier drops
+    a leading "can you" - either may be the one that carries the shape.
+    """
+    for words in (s, " ".join(str(text or "").strip().lower().split())):
+        low = str(words or "").strip()
+        if not low or len(low) > 400:
+            continue
+        if _AW_ONDEVICE_MODEL.fullmatch(low):
+            return Intent("ondevice_model")
+        if _AW_COMPANION_OVERVIEW.fullmatch(low):
+            return Intent("companion_overview")
+    return None
+
+
 def _awareness_chat(s: str, text: str) -> Optional[Intent]:
     """The full self-awareness sentences, matched before the older lanes."""
     low = str(s or "").strip()
@@ -29794,6 +30126,15 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         # The old regex captured a project name here and then planned a folder.
         # This lane now changes nothing, so no name is read and none is kept.
         return Intent("project_obfuscate_unavailable")
+    if _AW_ONDEVICE_MODEL.fullmatch(low):
+        return Intent("ondevice_model")
+    m = _AW_VOICESTUDIO_SET.fullmatch(low)
+    if m is not None:
+        action = str(m.groupdict().get("action") or "").lower()
+        return Intent("voicestudio_set", {"on": action in ("turn on", "switch on",
+                                                           "enable")})
+    if _AW_VOICESTUDIO_STATE.fullmatch(low):
+        return Intent("voicestudio_state")
     m = _AW_CHANGES.fullmatch(low)
     if m:
         d = m.groupdict()
