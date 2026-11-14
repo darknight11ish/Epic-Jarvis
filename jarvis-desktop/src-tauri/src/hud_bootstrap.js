@@ -854,18 +854,14 @@
         }
         if (utterance.voice && utterance.voice.localService !== true) utterance.voice = null;
         if (!utterance.voice) {
-          var mine = localVoices();
-          var english = mine.filter(function (v) {
-            return /^en/i.test(v.lang || "");
-          });
-          var pick = english[0] || mine[0];
-          if (!pick) {
-            // No voice on this computer (or none loaded yet): silence, not
-            // the browser's choice, which could be an online one.
-            console.info("[jarvis] no local voice available, so this reply is not spoken");
-            return undefined;
-          }
-          utterance.voice = pick;
+          // No voice was chosen for this utterance, and this wrapper does not
+          // choose one (2026-11-13). The rule that did - the first English
+          // local voice, then any local one - is the rule that once read the
+          // HUD's replies in Microsoft David, a man the owner never picked.
+          // Letting the browser choose instead could be an "Online (Natural)"
+          // voice, which sends the words to Microsoft, so nothing is spoken.
+          console.info("[jarvis] no local voice was chosen, so this reply is not spoken");
+          return undefined;
         }
         return realSpeak(utterance);
       };
@@ -1563,13 +1559,16 @@
     }
 
     /** Pause (or Resume) and Stop reading are drawn from the page's own state,
-     *  never from a click: the label says what the next tap will do. A tap only
-     *  ever reaches the page's one player (`window.__jarvisSpeech`), whose own
-     *  functions are `pauseSpeechPlayback`, `resumeSpeechPlayback` and
+     *  never from a click: the label says what the next tap will do. "loading"
+     *  is a live read too - the first clip is still being made, and the page
+     *  honours a pause taken there (2026-11-13: it used to hide the item while
+     *  the first clip was made, and offer a dead one between pieces). A tap
+     *  only ever reaches the page's one player (`window.__jarvisSpeech`), whose
+     *  own functions are `pauseSpeechPlayback`, `resumeSpeechPlayback` and
      *  `stopSpeechPlayback` - this menu holds no audio of its own. */
     function paintSpeech() {
       var now = speechStateHere();
-      var reading = now === "playing" || now === "paused";
+      var reading = now === "playing" || now === "paused" || now === "loading";
       if (pauseItem) {
         pauseItem.hidden = !reading;
         pauseItem.textContent = now === "paused" ? "Resume" : "Pause";
@@ -2036,16 +2035,35 @@
      * state, and these two items only call its own functions through
      * `window.__jarvisSpeech`. A tap never starts a second read: Read out loud
      * is still the only item that speaks. */
-    pauseItem = item("Pause", function () {
+    pauseItem = item("Pause", function (button) {
       var speech = window.__jarvisSpeech;
-      if (!speech) return;
-      if (speechStateHere() === "paused") speech.resume();
-      else speech.pause();
+      if (!speech) {
+        receipt(button, "Nothing is being read.");
+        return;
+      }
+      var resuming = speechStateHere() === "paused";
+      var acted = false;
+      try {
+        acted = resuming ? speech.resume() : speech.pause();
+      } catch (err) {
+        acted = false;
+      }
+      if (!acted) {
+        // The read may have ended between the paint and the tap. A press that
+        // cannot act says so in one short line - it is never a button that
+        // does nothing.
+        receipt(button, "Nothing is being read.");
+        return;
+      }
       paintSpeech();
     });
-    stopItem = item("Stop reading", function () {
+    stopItem = item("Stop reading", function (button) {
       var speech = window.__jarvisSpeech;
-      if (speech) speech.stop();
+      if (!speech || typeof speech.stop !== "function") {
+        receipt(button, "Nothing is being read.");
+        return;
+      }
+      speech.stop();
       paintSpeech();
     });
     copyItem = item("Copy answer", function (button) {
