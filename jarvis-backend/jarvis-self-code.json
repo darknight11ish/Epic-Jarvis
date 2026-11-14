@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
- "built_at": "2026-11-14T10:49:38-08:00",
+ "ref": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
+ "built_at": "2026-11-14T11:56:59-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -5457,6 +5457,7 @@
     "backend/README.md",
     "backend/accounts.patch",
     "backend/activity-turn-guard.patch",
+    "backend/android-builder-gate.patch",
     "backend/animal.patch",
     "backend/answer-sources.patch",
     "backend/app-control.patch",
@@ -5936,7 +5937,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 509,
+   "file_count": 510,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6490,6 +6491,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
+   "date": "2026-11-14",
+   "subject": "Fix the six suites the DEF-068 lane turned red, and carry its gate rows in a patch"
+  },
+  {
    "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
    "date": "2026-11-14",
    "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
@@ -6583,18 +6589,13 @@
    "sha": "b0210d2567361d67b284afa7adce323c1d6c2337",
    "date": "2026-11-14",
    "subject": "Regenerate the whole-repo records once, after folding four branches"
-  },
-  {
-   "sha": "02e16caac26a9004f5685d0101d607ba789593fe",
-   "date": "2026-11-14",
-   "subject": "Merge f75b34e1f into integration/wave19-2026-11-14 (#1255 widgets wear their own look); generated records keep the integration side, regenerated at the end"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1449
+   "files": 1450
   },
   {
    "path": "jarvis-desktop/",
@@ -6713,8 +6714,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5836,
-  "covered": 5353,
+  "tracked_files": 5837,
+  "covered": 5354,
   "excluded": 483,
   "subsystems": 27
  },
