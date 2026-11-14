@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
- "built_at": "2026-11-14T06:07:02-08:00",
+ "ref": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
+ "built_at": "2026-11-14T08:47:55-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4702,6 +4702,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-field-test-archive.md",
+    "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-widget-look.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -5396,7 +5397,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 972,
+   "file_count": 973,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6483,6 +6484,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
+   "date": "2026-11-14",
+   "subject": "Say \"Open the Atlas bar\": the last label the visible rename missed"
+  },
+  {
    "sha": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
    "date": "2026-11-14",
    "subject": "Merge pull request #1257 from darknight11ish/integration/wave19-2026-11-14"
@@ -6576,11 +6582,6 @@
    "sha": "723ad5c4ef2960e6aa30f02c909f69d2bd215625",
    "date": "2026-11-14",
    "subject": "Regenerate the self-code map from the merged tree"
-  },
-  {
-   "sha": "32f1d25086361bafae22a5a1c93d9a434c43262e",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main again, and regenerate the map rather than merge it"
   }
  ],
  "top_level": [
@@ -6612,7 +6613,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 274
+   "files": 275
   },
   {
    "path": "tools/",
@@ -6706,8 +6707,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5829,
-  "covered": 5346,
+  "tracked_files": 5830,
+  "covered": 5347,
   "excluded": 483,
   "subsystems": 27
  },
