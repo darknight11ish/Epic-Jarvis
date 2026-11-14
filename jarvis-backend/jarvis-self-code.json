@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "15625d0dbc9057712958c526a70f0549519fa1cf",
- "built_at": "2026-11-13T18:49:49-08:00",
+ "ref": "1985e79cad2748d1815149b86e12be38dc09f9fb",
+ "built_at": "2026-11-13T20:58:38-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1039,6 +1039,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ChatPins.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ContactsLookup.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FaceTuning.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FloatingAvatar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/HistoryViewPrefs.kt",
@@ -1058,6 +1059,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenNever.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenRate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/SettingsBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/TokenStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/WakeResume.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/face/AnimalNow.kt",
@@ -1370,6 +1372,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcHelpPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcNotifyPlate.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneBackupPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneNotificationsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhotoReminderDialog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PicturesPlate.kt",
@@ -1424,6 +1427,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/JarvisTheme.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Themes.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/CardVoice.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/HoldEndRule.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveAudioRoute.kt",
@@ -1798,6 +1802,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/YoutubeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/BaseUrlTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/ChatPinsTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/data/EncryptedBackupTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceSizeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceTuningTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/LookTest.kt",
@@ -1808,6 +1813,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/VoicePressTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/theme/ThemeContrastTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/update/ApkUpdaterTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/voice/HoldEndRuleTest.kt",
     "jarvis-client/app/src/test/resources/chat-stream-cases.json",
     "jarvis-client/app/src/test/resources/contract/animal-cases.json",
@@ -1885,7 +1891,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 971,
+   "file_count": 977,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4615,6 +4621,8 @@
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-phone-backup-host-and-iteration-limit.md",
+    "changelog.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/README.md",
@@ -4780,6 +4788,8 @@
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-phone-backup-excludes-the-address.md",
+    "decisions.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/README.md",
@@ -5230,7 +5240,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 866,
+   "file_count": 870,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6317,6 +6327,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "1985e79cad2748d1815149b86e12be38dc09f9fb",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
+  },
+  {
+   "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1237 from darknight11ish/fix/undo-notice-timeout-2026-11-13"
+  },
+  {
+   "sha": "0a51207d0097002e52962362e1fc4b5c746e598c",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map, recent changes and feature catalogue after the merge"
+  },
+  {
+   "sha": "9a092636cc5fc2d4add3b8212c46e35e245b8ced",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
+  },
+  {
+   "sha": "8e4c8b27210f7dda4fb8b8d3be92eb95ac37d32a",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
    "sha": "15625d0dbc9057712958c526a70f0549519fa1cf",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
@@ -6352,6 +6387,11 @@
    "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
   },
   {
+   "sha": "ffaa42e711cecbc8d78089ffaffe150bf57d28f0",
+   "date": "2026-11-13",
+   "subject": "fix(phone): a settings restore cannot re-point the pairing token (DEF-065)"
+  },
+  {
    "sha": "e46ff2d65262080868f08091056af77852183383",
    "date": "2026-11-13",
    "subject": "chore-records-regenerate-after-the-phone-fix"
@@ -6385,36 +6425,6 @@
    "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
-  },
-  {
-   "sha": "43ff622708f70142a1ad58a533053991bd75f634",
-   "date": "2026-11-13",
-   "subject": "chore: regenerate the self-code map with the new suite tracked"
-  },
-  {
-   "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
-   "date": "2026-11-13",
-   "subject": "fix(github): a free-plan 403 on branch rules means no rules, not a blind token"
-  },
-  {
-   "sha": "379e106a094818492c11987146dea40e4b45863e",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
-   "date": "2026-11-13",
-   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
-  },
-  {
-   "sha": "65c10195c7ee8e1d44881cb54a3d7b0dd7b88da9",
-   "date": "2026-11-13",
-   "subject": "fix(phone): the undo notice after an approved card times out after 15 seconds"
-  },
-  {
-   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
@@ -6431,7 +6441,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 931
+   "files": 937
   },
   {
    "path": "docs/",
@@ -6451,7 +6461,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 248
+   "files": 250
   },
   {
    "path": "videos/",
@@ -6461,7 +6471,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 165
+   "files": 167
   },
   {
    "path": "plugins/",
@@ -6535,8 +6545,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5662,
-  "covered": 5180,
+  "tracked_files": 5672,
+  "covered": 5190,
   "excluded": 482,
   "subsystems": 27
  },
