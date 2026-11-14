@@ -206,6 +206,26 @@ def main():
               no_label.returncode == 1 and "label" in no_label.stdout.lower(), no_label.stdout + no_label.stderr)
 
         reset_surfaces(tmp)
+        # Finding 4 (2026-11-13): the label-mix failure messages had the mix
+        # TYPED into them (43/2/17/108/12) while the pin beside them said
+        # 44/2/17/107/12, so a genuine failure printed a mix that described
+        # nothing. The message is built from the pin now; this case moves one
+        # row's label so the check really fails, and demands the message carry
+        # the mix derived from THIS tree's own contract (the labels' order and
+        # the contract's own label_counts) - never a literal in either file.
+        doc = read_json(tmp)
+        order = list(doc["labels"])
+        moved_row = next(f for f in doc["features"] if f.get("label") == order[0])
+        moved_row["label"] = order[3]
+        write_json(tmp, doc)
+        mix = "/".join(str(doc["label_counts"][name]) for name in order)
+        moved = run(tmp)
+        check("a moved label fails, and the pin's mix in the message is the "
+              "contract's own",
+              moved.returncode == 1 and "must be " + mix in moved.stdout,
+              (mix, moved.stdout + moved.stderr))
+
+        reset_surfaces(tmp)
         doc = read_json(tmp)
         lights = next(f for f in doc["features"] if f["id"] == "lights")
         lights["control"]["turn_on"] = "speak faster"

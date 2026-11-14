@@ -63,6 +63,7 @@ require_shipped("jarvis_quick.py", "jarvis_self_portrait.py", "jarvis_asks_first
 # is the shipped `jarvis-framework.toml`, exactly as on an install.
 sys.path.append(str(HERE / "rebuilt"))
 
+import jarvis_agent as A  # noqa: E402
 import jarvis_asks_first as ASK  # noqa: E402
 import jarvis_feature_guide as FG  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
@@ -172,20 +173,25 @@ def tools_answer_is_the_registry_and_the_live_file():
     # GitHub tools (2026-11-10: the PR cockpit, the carded merge and the carded
     # fix-and-push) also ship OFF, wave 16E's two local review tools (2026-11-10)
     # joined after them, and the parity pass added the full pull-request read and
-    # six more carded writes; so the registered count is 79 and enabled is 21
-    # (19 + the two review gates the owner enabled by default). The answer is
-    # still read from the registry and the settings file, never typed.
+    # six more carded writes. The registered count is therefore whatever
+    # `jarvis_agent.TOOLS` holds and enabled is whatever the shipped settings
+    # file lists (19 plus the two review gates the owner enabled by default);
+    # both are DERIVED below, never typed, so a tool added later moves both
+    # sides together (2026-11-13 audit, finding 4).
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 79,
+    registered = len(A.TOOLS)
+    enabled = len({str(getattr(ASK, "real_tool", lambda n: n)(n))
+                   for n in (ASK.tools_enabled_set() or ())} & set(A.TOOLS))
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == registered,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
-          inv["enabled"] == 21, str(inv["enabled"]))
+          inv["enabled"] == enabled, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "79 tools" in reply, reply[:120])
-    check("it names the switched-on count", "21 of them are switched on" in reply,
-          reply[:160])
+    check("it names the registered count", f"{registered} tools" in reply, reply[:120])
+    check("it names the switched-on count",
+          f"{enabled} of them are switched on" in reply, reply[:160])
     # The list is capped at about fourteen names plus "and N more", so the
     # two named here are ones a fresh install really shows. "Web search"
     # fell past the cap when the four pack tools joined the shipped list
@@ -219,8 +225,10 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 78 are not switched on",
-              bool(reply) and "other 78 are built in but not switched on" in reply,
+        remaining = len(A.TOOLS) - 1
+        check(f"... and says the other {remaining} are not switched on",
+              bool(reply)
+              and f"other {remaining} are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:
@@ -463,6 +471,23 @@ def the_github_questions_read_their_modules():
 # ---------------------------------------------------------------------------
 
 
+def the_page_carries_no_hand_typed_counts():
+    """Finding 4 (2026-11-13): the page typed counts that had gone stale.
+
+    `docs/SELF-AWARENESS.md` said "all 49 settings, all 61 tool switches" and
+    "(49 settings, 61 tools, 181 features)" long after the registries had moved
+    past every one of those numbers. A count typed into prose has no owner and
+    no test; the page now says "every setting value, every tool switch" and
+    "the counts read from the program's own tables". This check fails if a
+    count of settings, tools or features is typed into the page again, so the
+    stale number cannot come back unnoticed.
+    """
+    typed = re.findall(r"\b\d+\s+(?:settings|tools?|tool switches|features)\b",
+                       DOC, re.IGNORECASE)
+    check("docs/SELF-AWARENESS.md carries no hand-typed count of settings, "
+          "tools or features", not typed, typed[:8])
+
+
 def main() -> int:
     try:
         the_docs_quoted_questions_all_answer()
@@ -477,6 +502,7 @@ def main() -> int:
         read_a_link_is_the_feature_it_names()
         the_focus_preset_is_a_real_setting()
         the_github_questions_read_their_modules()
+        the_page_carries_no_hand_typed_counts()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")
