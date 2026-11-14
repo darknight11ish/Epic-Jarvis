@@ -184,3 +184,12 @@ _jarvis-backup-*
 /jarvis-framework.toml
 /jarvis-framework.toml.backup-*
 /_jarvis-logs/
+
+# ---------------------------------------------------------------------------
+# The vendored llama.cpp source for the phone's on-device engine (about 34 MB).
+# It is deliberately NOT committed: the shipped artefacts are the two stripped
+# libjarvis_llama.so files under jarvis-client/app/src/main/jniLibs/, and
+# jarvis-client/native/README.md says how to fetch this exact tree again
+# (pinned PrivateLM commit + sha256 tree listing) when the native code changes.
+# Ignored so a rebuild on a dev PC never turns into a 34 MB commit.
+jarvis-client/native/vendor/

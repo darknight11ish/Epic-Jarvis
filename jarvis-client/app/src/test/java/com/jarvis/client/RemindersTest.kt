@@ -279,9 +279,17 @@ class RemindersTest {
             "no destination draws RemindersScreen",
             activity.contains("Screen.REMINDERS -> com.jarvis.client.ui.screens.RemindersScreen("),
         )
-        // The destination is the last one, because a saved back stack restores
-        // by name - a screen inserted in the middle would restore as another.
-        assertEquals("Screen.REMINDERS must be the last entry", Screen.REMINDERS, Screen.values().last())
+        // The destination must stay after the screens that already existed when
+        // it landed, because a saved back stack restores by name - a screen
+        // inserted in the middle would restore as another. It is no longer the
+        // LAST entry: "Local AI" was appended after it on 2026-11-13, which is
+        // the same append-only rule one screen later. The newest screen is the
+        // one that must be last, and that check belongs to the newest screen's
+        // own test rather than to Reminders.
+        assertTrue(
+            "REMINDERS must stay after the screens that predate it",
+            Screen.REMINDERS.ordinal > Screen.EDIT_HUD.ordinal,
+        )
     }
 
     @Test

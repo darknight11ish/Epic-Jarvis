@@ -522,10 +522,13 @@ def main(argv=None):
     # by `jarvis_feature_guide.control_matrix()` through the real matcher - so
     # 43 -> 44 Switchable, 108 -> 107 Command-Only; 182 features. Measured from
     # the contract, not chosen.
-    # 2026-11-13 (the copy-over wave): the phone's own settings backup joined as
-    # PC-Only Setting - a phone-only card with no backend route, saved and
-    # opened entirely on the phone - so 17 + 1 -> 18 PC-Only, 182 + 1 -> 183
-    # features. Measured from the contract, not chosen.
+    # 2026-11-13 (the phone's own settings backup): "Set up a new phone from a
+    # settings backup" joined as PC-Only Setting - it is ONE card in the phone's
+    # own Settings whose buttons seal this phone's settings into a file and read
+    # one back, nothing reaches the PC, and there is no backend route for a typed
+    # phrase to reach (the same `app-local` class as Floating Jarvis, Quick
+    # Settings tiles, the screen rate and picture-in-picture) - so 17 + 1 -> 18
+    # PC-Only, 182 + 1 -> 183 features. Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 18,
         LAB_COMMAND: 107, LAB_ALWAYS: 12,
