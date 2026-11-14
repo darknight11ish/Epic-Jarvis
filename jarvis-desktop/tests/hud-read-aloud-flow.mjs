@@ -202,6 +202,7 @@ await check("the next piece is asked for while this clip plays, not after it end
   assert.equal(play.asked[1], pieces[1], "the prefetched piece is not the next one in order");
 
   play.clips[0].end();
+  await play.until("the second clip", () => play.seq.includes("play:1"));
   const atAsk = play.seq.indexOf("ask:1");
   const atEnd = play.seq.indexOf("end:0");
   assert.ok(atAsk >= 0 && atEnd > atAsk,
