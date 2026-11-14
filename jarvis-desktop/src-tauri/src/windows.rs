@@ -483,7 +483,7 @@ pub fn is_quickbar_visible(app: &AppHandle) -> bool {
 /// channel (`hud_bootstrap.js` section 2's `barStateChanged`).
 ///
 /// THE OWNER'S ASK (2026-10-09, with a screenshot): the button beside the big
-/// window's chat box said "Open the Jarvis bar" whether the bar was open or
+/// window's chat box said "Open the Atlas bar" whether the bar was open or
 /// not. Its label follows this, and it is the only thing that does - the bar
 /// can also leave the screen without that button being touched at all (losing
 /// focus, its X, Escape, another window's "open a chat"), and a label that
@@ -534,7 +534,7 @@ pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
     // not carry a backdrop. See `reveal_quickbar`.
     let hidden = conceal_quickbar(&window);
     // The HUD's own button is labelled from this (windows.rs
-    // `publish_bar_state`): it said "Open the Jarvis bar" whether the bar was
+    // `publish_bar_state`): it said "Open the Atlas bar" whether the bar was
     // on screen or not.
     publish_bar_state(app);
     // The bar closed: a look held for follow-ups is thrown away (look.rs).

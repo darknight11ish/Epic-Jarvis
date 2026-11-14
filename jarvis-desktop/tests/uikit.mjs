@@ -500,7 +500,7 @@ export const HOTKEYS = [
     accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },
   { id: "capture_screen", label: "Look at this", hint: "Jarvis looks at the window in front, once, then you ask about it. Nothing is saved. Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
     accelerator: "Alt+Shift+S", default: "Alt+Shift+S", registered: true, error: null },
-  { id: "quick_note", label: "Quick note", hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
+  { id: "quick_note", label: "Quick note", hint: "Open the Atlas bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
   { id: "toggle_widget", label: "Show or hide the widget", hint: "The desktop pane with the meters and the gates.",
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },

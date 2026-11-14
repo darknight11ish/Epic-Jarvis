@@ -661,7 +661,7 @@
    * still held down would land the rest of the press in the quickbar.
    * ---------------------------------------------------------------- */
   var MIC_TITLE =
-    "Talk to Jarvis: opens the quickbar - hold its mic button to speak. " +
+    "Talk to Atlas: opens the quickbar - hold its mic button to speak. " +
     "Your voice stays on this computer.";
 
   function hudMicNote(text) {
@@ -2623,7 +2623,7 @@
    * already opens the bar.
    *
    * AND IT IS ONE BUTTON THAT TOGGLES (the owner's ask of 2026-10-09, with a
-   * screenshot): its label follows what is on screen - "Open the Jarvis bar"
+   * screenshot): its label follows what is on screen - "Open the Atlas bar"
    * while the bar is hidden, "Hide the Atlas bar" while it is shown - and
    * clicking it again hides the bar. The state reaches this page from the
    * shell, never from the click: see `barOnScreen` below.
@@ -2641,12 +2641,12 @@
    * as it ships.
    *
    * AND A SWITCH FOR THE BUTTON (the owner's request of 2026-10-06). Looking
-   * at this window, the owner asked for its "Open the Jarvis bar" button to be
+   * at this window, the owner asked for its "Open the Atlas bar" button to be
    * replaced by a text box he could type into, and then chose: keep the button
    * beside the box, AND add a Settings option controlling whether the button
    * shows in this window at all. That option is "The big HUD window" in
    * Settings (settings.html, src/hud-window.js), ON by default - the state the
-   * owner already approved ("The 'Open the Jarvis bar' button stays in that
+   * owner already approved ("The 'Open the Atlas bar' button stays in that
    * window, beside the box").
    *
    * Cosmetic, so it changes at once and raises no approval card (CLAUDE.md):
@@ -2660,7 +2660,7 @@
    * second time here, deliberately, and tests/hud-window.mjs reads this file
    * and fails unless the two agree - value by value, by running this code.
    * ---------------------------------------------------------------- */
-  var OPEN_BAR = "Open the Jarvis bar";
+  var OPEN_BAR = "Open the Atlas bar";
   var HIDE_BAR = "Hide the Atlas bar";
 
   /* The localStorage key src/hud-window.js exports as OPEN_BAR_KEY. */
@@ -2695,7 +2695,7 @@
   }
 
   /* The words the button carries, given what is on screen (the owner's ask of
-   * 2026-10-09: it said "Open the Jarvis bar" whether the bar was open or
+   * 2026-10-09: it said "Open the Atlas bar" whether the bar was open or
    * not). The same shape as the wording that was already there - an imperative
    * and the bar's name - and the SAME string is the tooltip and the accessible
    * name, so a screen reader is never told something the sighted label
