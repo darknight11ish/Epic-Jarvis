@@ -420,6 +420,13 @@ object OpenPlace {
         "notifications" to Where.Go(Screen.SETTINGS, "jarvis-notify"),
         "model-lane" to Where.Go(Screen.SETTINGS, "model-lane"),
         "on-device-model" to Where.Go(Screen.SETTINGS, "on-device-model"),
+        // "Phone settings backup" (2026-11-13, the copy-over wave; PR #1233):
+        // the phone's own Settings row that seals THIS phone's settings into a
+        // password-locked file and restores them. A real Settings item
+        // (SettingsScreen.kt, item "phone-backup"), so naming it lands on the
+        // row rather than the top of Settings - OpenPlaceTest's new-section
+        // check is what caught it missing.
+        "phone-backup" to Where.Go(Screen.SETTINGS, "phone-backup"),
     )
 
     /**

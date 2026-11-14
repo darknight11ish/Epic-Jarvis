@@ -886,7 +886,9 @@ private fun ThisAppCard(
             title = "Check for new versions",
             detail = "At most every six hours, this phone asks GitHub whether a newer build of this app is " +
                 "on its release page. Nothing about you or Jarvis is sent. When one is found you can " +
-                "download it here; nothing is downloaded until you press Download.",
+                "download it here; nothing is downloaded until you press Download, and a download is " +
+                "offered for install only when its SHA-256 matches the checksum published beside the " +
+                "build and it is signed with Jarvis's own key.",
             checked = checks,
             onChange = onChecks,
         )
@@ -928,7 +930,8 @@ private fun ThisAppCard(
                         color = chrome.textMid,
                     )
                     is UpdateCheck.Download.Ready -> {
-                        // Only a certificate-matched file ever gets here.
+                        // Only a file that matched the published SHA-256/size
+                        // AND carried Jarvis's signing certificate gets here.
                         Primary(
                             text = "Install update",
                             modifier = Modifier.fillMaxWidth(),
@@ -936,8 +939,9 @@ private fun ThisAppCard(
                         )
                         Gap(4)
                         Text(
-                            "Android will ask once to allow installs from Jarvis. Then it shows its own " +
-                                "screen with Install on it.",
+                            "The file matches the checksum published with this build and is signed " +
+                                "with Jarvis's key. Android will ask once to allow installs from " +
+                                "Jarvis, then it shows its own screen with Install on it.",
                             style = MaterialTheme.typography.labelSmall,
                             color = chrome.textLo,
                         )

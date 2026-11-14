@@ -440,7 +440,11 @@ class LimitsTest {
         // 31, not 30, since 2026-10-31: "The local model" (the moved automatic-
         // restart card) sits right after Quick Settings tiles, so every number
         // below it moved down by one more.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 31"))
+        // 32, not 31, since 2026-11-13: "Phone settings backup" (the copy-over
+        // wave) sits right under the PC's Backups card, so every number below
+        // it - this one included - moved down by one, and SettingsJumpTest
+        // holds the whole map to the row the screen really draws.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 32"))
     }
 
     // ------------------------------------------- a time of day, and the PC's
