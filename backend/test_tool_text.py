@@ -162,7 +162,19 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # would hide exactly what C1 and the confusion pairs check.
                    # 380 leaves 12 tokens of headroom, the same shape as
                    # my_files above.
-                   "project_read": 380}
+                   "project_read": 380,
+                   # android_app (DEF-068, 2026-11-14): the builder's way in from
+                   # a chat turn, measured 440 with this module's own rule. It is
+                   # a SWITCHABLE tool and NOT a shipped default, so this cost is
+                   # paid only on a turn where the owner has turned it on - the
+                   # same shape as control_phone and my_files above. No smaller
+                   # shape stays honest: the action enum is how the model picks
+                   # build or install, and the nine arguments are the page, the
+                   # app's name, the two colours and the two things a chat
+                   # request does not carry (which project, which task). 470
+                   # leaves 30 tokens of headroom, the same shape as the
+                   # exceptions above.
+                   "android_app": 470}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),
