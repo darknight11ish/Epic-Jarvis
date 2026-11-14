@@ -965,9 +965,26 @@ object JarvisRuntime {
      */
     val absent: StateFlow<Set<String>> = _absent.asStateFlow()
 
+    // The owner asked on 2026-11-13 for this notice to disappear after 15 seconds.
+    private const val UNDO_NOTICE_TIMEOUT_MS = 15_000L
+
     /** Non-null when something needs saying on screen and nowhere else will say it. */
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
+
+    /**
+     * The wait behind [showUndoNotice]'s timeout. Production delays for the
+     * duration it is handed; a JVM test replaces it with a controllable fake
+     * so the 14.9 s / 15.0 s boundary can be driven deterministically instead
+     * of sleeping it. Nothing else in the runtime reads it.
+     */
+    internal var undoNoticeWait: suspend (Long) -> Unit = { delay(it) }
+
+    /**
+     * The one timer behind [showUndoNotice]. Replaced whenever a new undo
+     * sentence goes up; the previous one is cancelled where it stands.
+     */
+    private var undoNoticeTimer: Job? = null
 
     /**
      * Bumped by [unpairAndClearToken] (M10). The activity listens so the
@@ -1587,6 +1604,35 @@ object JarvisRuntime {
 
     /** For failures the UI has no other place to put. */
     fun setNotice(text: String) { _notice.value = text }
+
+    /**
+     * Puts [text] up and takes it back down after [UNDO_NOTICE_TIMEOUT_MS],
+     * unless something else replaced it in the meantime.
+     *
+     * Only an approved card's undo sentence ([undoNoticeFor]) comes through
+     * here. Error and problem notices deliberately do not: a failure the
+     * owner has not read yet stays until it is dismissed or replaced, exactly
+     * as it did before 2026-11-13.
+     *
+     * Re-setting the same sentence restarts the 15 seconds - the owner has
+     * just answered another card and is owed a full read of its sentence.
+     *
+     * Returns the timer so a JVM test can join it and know the clear has
+     * happened; the app ignores the return value.
+     */
+    internal fun showUndoNotice(text: String): Job {
+        _notice.value = text
+        undoNoticeTimer?.cancel()
+        val timer = scope.launch {
+            undoNoticeWait(UNDO_NOTICE_TIMEOUT_MS)
+            // Only a notice that is STILL this sentence is cleared, so an
+            // older timer can never wipe a newer, different one. compareAndSet
+            // makes that check and the clear one atomic step.
+            _notice.compareAndSet(text, null)
+        }
+        undoNoticeTimer = timer
+        return timer
+    }
 
     // ----------------------------------------------------------- stream ----
 
@@ -5591,7 +5637,7 @@ object JarvisRuntime {
                     // An inbox tidy approved here: its Undo strip shows at once.
                     if (approve && item.action == "tidy_inbox") watchInboxTidyQuickly()
                     if (approve) {
-                        undoNoticeFor(item)?.let { _notice.value = it }
+                        undoNoticeFor(item)?.let { showUndoNotice(it) }
                     }
                 }
                 is ApiResult.Failed -> {
