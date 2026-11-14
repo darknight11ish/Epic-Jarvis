@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "153e4ca76dfe5c94e390df591feb618f7eb397f5",
- "built_at": "2026-11-14T02:48:55-08:00",
+ "ref": "02e16caac26a9004f5685d0101d607ba789593fe",
+ "built_at": "2026-11-14T04:47:40-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1436,6 +1436,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WatchNotifyPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WatchPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WebSearchPlate.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetPreview.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WikiPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
@@ -1939,7 +1940,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 1025,
+   "file_count": 1026,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -2656,6 +2657,7 @@
     "jarvis-desktop/src/backup-settings.js",
     "jarvis-desktop/src/barge-in.js",
     "jarvis-desktop/src/big-coder-settings.js",
+    "jarvis-desktop/src/board.css",
     "jarvis-desktop/src/brain.css",
     "jarvis-desktop/src/brain.html",
     "jarvis-desktop/src/brain.js",
@@ -3234,7 +3236,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1252,
+   "file_count": 1253,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -3757,6 +3759,7 @@
     "backend/test_agent_retirement_wiring.py",
     "backend/test_android_builder.py",
     "backend/test_android_builder_honesty.py",
+    "backend/test_android_builder_native.py",
     "backend/test_android_control.py",
     "backend/test_animal.py",
     "backend/test_antislop.py",
@@ -4380,7 +4383,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 691,
+   "file_count": 692,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4672,6 +4675,7 @@
     "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-backend-shard.md",
     "changelog.d/2026-11-13-bar-stop-silences-speech.md",
+    "changelog.d/2026-11-13-chat-history-storage-answer.md",
     "changelog.d/2026-11-13-ci-backend-timeout-120.md",
     "changelog.d/2026-11-13-forget-range-card-shows-the-count.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
@@ -4694,6 +4698,9 @@
     "changelog.d/2026-11-13-tray-and-readme-truth.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
+    "changelog.d/2026-11-14-android-native-screens.md",
+    "changelog.d/2026-11-14-field-test-archive.md",
+    "changelog.d/2026-11-14-widget-look.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4857,6 +4864,7 @@
     "decisions.d/2026-11-13-aside-dropped-not-queued.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-backend-shard.md",
+    "decisions.d/2026-11-13-chat-history-storage-answer.md",
     "decisions.d/2026-11-13-ci-backend-timeout-120.md",
     "decisions.d/2026-11-13-forget-range-card-shows-the-count.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
@@ -4879,6 +4887,9 @@
     "decisions.d/2026-11-13-tray-and-readme-truth.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/2026-11-13-wake-word-not-planned.md",
+    "decisions.d/2026-11-14-android-native-screens.md",
+    "decisions.d/2026-11-14-field-test-archive.md",
+    "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5325,9 +5336,63 @@
     "docs/ui-audit-2026-09-26/phone-today.md",
     "docs/ui-audit-2026-09-26/research.md",
     "docs/ui-audit-2026-09-26/restraint.md",
-    "docs/ui-audit-2026-09-26/ui-mockups.html"
+    "docs/ui-audit-2026-09-26/ui-mockups.html",
+    "field-test-archive/2026-11/FIELD-TEST-2026-10-30/FINAL-DRIVE-PLAN.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-10-30/MATRIX-UPDATE-DRAFT.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-10-30/REPORT.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-01-GAPS/REMINDER-HARNESS-EVIDENCE.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-02/PLAN-WAVE2.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-02/RESULTS-WAVE2-PRE.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-02/RESULTS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/AGENT-DRIVEN-RESULTS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/GROUP-A-RESULTS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/MATRIX-F5.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/MATRIX.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/OWNER-CLICKTHROUGH.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/PHONE-DRIVE.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/POST-F4-PROBE-RESULT-2026-11-03.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/README-F5.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/README.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/RUNBOOK-READY-FEATURES.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-04/OWNER-TEST-STEPS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-04/README-DRIVER.md",
+    "field-test-archive/2026-11/FIELD-TEST-PRESETS-2026-11-03/PLAN.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE6-2026-11-06/ADDENDUM-2026-11-06-repomap.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE6-2026-11-06/FIELDTEST-PLAN.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE6-2026-11-06/README.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE7-2026-11-06/FIELDTEST-PLAN-WAVE6-BASE.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE7-2026-11-06/README-WAVE6-BASE.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE7-2026-11-06/README.md",
+    "field-test-archive/2026-11/PIXEL-FIELD-TEST-2026-11-04/REPORT.md",
+    "field-test-archive/2026-11/README.md",
+    "field-test-archive/2026-11/WAVE12-INTEGRATION-2026-11-09/FIELD-TEST-AUTOMATED-ROWS.md",
+    "field-test-archive/2026-11/WAVE12-INTEGRATION-2026-11-09/WAVE12-EXTRA-PROBES.md",
+    "field-test-archive/2026-11/WAVE12-INTEGRATION-2026-11-09/WAVE12-RESULT-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/DEPLOY-PACKET-REBASE.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/DEPLOY-PLAN-WAVE13.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/GATE-REHEARSAL-NOTES-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/REAL-RUN-RUNBOOK-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/ROLLBACK.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/WAVE13-RESULT-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/WAVE14-BACKLOG-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/EXPECTATIONS-0H.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/GATE-DIFF-NOTES.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/PACKET-INTEGRATION-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/POSTDEPLOY-EXPECT-WAVE14.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/ROLLBACK-WAVE14.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/WAVE14-RUNBOOK-2026-11-10.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/EXPECTATIONS-0H.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/FACT-SOURCES-WAVE15.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/GATE-DIFF-NOTES.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/PACKET-INTEGRATION-2026-11-10.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/POSTDEPLOY-EXPECT-WAVE15.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/ROLLBACK-WAVE15.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/WAVE15-RUNBOOK-2026-11-10.md",
+    "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/EXPECTATIONS-0H.md",
+    "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
+    "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 906,
+   "file_count": 968,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6414,121 +6479,121 @@
  ],
  "recent_commits": [
   {
+   "sha": "02e16caac26a9004f5685d0101d607ba789593fe",
+   "date": "2026-11-14",
+   "subject": "Merge f75b34e1f into integration/wave19-2026-11-14 (#1255 widgets wear their own look); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "f91415dacce46ca92beece1a81772a6e296cb185",
+   "date": "2026-11-14",
+   "subject": "Merge da1f764f8 into integration/wave19-2026-11-14 (#1256 native Android screens); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "cf20c50d1a65b3e75b7947f94e9963baee85566d",
+   "date": "2026-11-14",
+   "subject": "Merge 38c3e60c3 into integration/wave19-2026-11-14 (#1251 answer where chats are kept from the code); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "213d070cb52613ca7d6ba5282959fa54820b0031",
+   "date": "2026-11-14",
+   "subject": "Merge 723ad5c4e into integration/wave19-2026-11-14 (#1254 archive the 53 field-test records); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "ea2299d4d180adee1a68954d001250e48b6725b0",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1252 from darknight11ish/feat/any-file-transfer-2026-11-13"
+  },
+  {
+   "sha": "da1f764f8c5a9d388086436827d1e060b046fd0a",
+   "date": "2026-11-14",
+   "subject": "Keep both sides of the defect register: mine becomes DEF-068"
+  },
+  {
+   "sha": "38c3e60c3df8c023a227468bcbbd0f1cc8e854dc",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main into the chat-history answer (second time)"
+  },
+  {
+   "sha": "b284c38fa6b464e7a92fce33a66e87c0138747e6",
+   "date": "2026-11-14",
+   "subject": "The native-screens kind clears the three record gates CI found"
+  },
+  {
+   "sha": "f75b34e1fb2d712fb353e119eddb0e55b9a2be1f",
+   "date": "2026-11-14",
+   "subject": "docs(about): quote the register's real totals after the widget claim went built"
+  },
+  {
+   "sha": "794e0ce3ce8e50cacdb519ae0bab41b44ad1ea1c",
+   "date": "2026-11-14",
+   "subject": "chore(records): regenerate the self-code map after merging main into the widget look"
+  },
+  {
+   "sha": "60a1b034e374b133072002dc8be787bae8ad8c59",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main (PR #1231, android local engine) into feat/any-file-transfer-2026-11-13"
+  },
+  {
+   "sha": "723ad5c4ef2960e6aa30f02c909f69d2bd215625",
+   "date": "2026-11-14",
+   "subject": "Regenerate the self-code map from the merged tree"
+  },
+  {
+   "sha": "32f1d25086361bafae22a5a1c93d9a434c43262e",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main again, and regenerate the map rather than merge it"
+  },
+  {
+   "sha": "65629fe48ff6f9beebd72b10cf2a2960ddc5f673",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1231 from darknight11ish/feat/android-local-engine-2026-11-13"
+  },
+  {
+   "sha": "e8412edd7791e8b438c8a27b8e465b21e563c9eb",
+   "date": "2026-11-14",
+   "subject": "Regenerate the two generated records over the archive, and count it honestly"
+  },
+  {
+   "sha": "e728b18f0c2be50112e83101447c00ad17f30492",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main into the chat-history answer"
+  },
+  {
+   "sha": "05ae3d399404fcac0aa8cdc0f24b0cf9c4e01b7a",
+   "date": "2026-11-14",
+   "subject": "The self-code map's table learns about the archived field-test records"
+  },
+  {
    "sha": "153e4ca76dfe5c94e390df591feb618f7eb397f5",
    "date": "2026-11-14",
    "subject": "Merge origin/main into feat/any-file-transfer-2026-11-13"
   },
   {
-   "sha": "cf4a2797f2c4b388f95c66813435081650bb9fa3",
+   "sha": "1ac7e3d540350b5b491c3371911ca4d70507a795",
    "date": "2026-11-14",
-   "subject": "Merge pull request #1233 from darknight11ish/feat/phone-backup-updater-2026-11-13"
+   "subject": "Merge remote-tracking branch 'origin/main' into pr-1254-fix"
   },
   {
-   "sha": "1b52af68286d8d529b588e3bb7403e549b06444e",
+   "sha": "1ef8a5540932aba4a8f5285195b6efba5780f617",
    "date": "2026-11-14",
-   "subject": "Merge origin/main into the any-file-transfer work"
-  },
-  {
-   "sha": "8d48d8afa422f8799b58257476122e010bc4c22e",
-   "date": "2026-11-14",
-   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
-  },
-  {
-   "sha": "98b82d643adc589f6004541f4a520398ccb08481",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
-  },
-  {
-   "sha": "30a9a9793fba9c5d66132cddbe15572dba13b531",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate after the restack onto the wave-18 batch"
-  },
-  {
-   "sha": "48acf718776a72466d1b4ba6c50086517d9c900c",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/integration/wave18-2026-11-13' into resolve-1233"
-  },
-  {
-   "sha": "1ebb76696b8fecde790bcaefd7e2b286f1698575",
-   "date": "2026-11-13",
-   "subject": "fix(features): the phone's settings backup is a real Settings Section, so the feature guide can prove its place"
-  },
-  {
-   "sha": "5a4f6b2a60a72f1801d51f99d4ed8baf1999419e",
-   "date": "2026-11-13",
-   "subject": "feat(upload): any file type from the phone, up to 2 GiB, behind one constant"
-  },
-  {
-   "sha": "e3e3a9126ac22c696b0fdad4966eb41bf8f13753",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/feat/photo-from-phone' into feat/any-file-transfer-2026-11-13"
-  },
-  {
-   "sha": "e962f55f90edf8afca182ae8119dc4b7a2859f92",
-   "date": "2026-11-13",
-   "subject": "The invariant block's length pin follows the block: 5,234 -> 5,357 characters"
-  },
-  {
-   "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
-   "date": "2026-11-13",
-   "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
-  },
-  {
-   "sha": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
-  },
-  {
-   "sha": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
-  },
-  {
-   "sha": "69428294081ee150aefe347399e36531787b5f01",
-   "date": "2026-11-13",
-   "subject": "Regenerate the whole-repo records against the merged tree"
-  },
-  {
-   "sha": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main into integration/wave18-2026-11-13 (current main after #1246 landed)"
-  },
-  {
-   "sha": "f2366ba75440aaabe2666aaadab3643dcadf3dc0",
-   "date": "2026-11-13",
-   "subject": "Merge fix/self-knowledge-places-and-counts-2026-11-13 into integration/wave18-2026-11-13 (self-knowledge places and counts); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
-  },
-  {
-   "sha": "6f013f5490257a7902bba82f6fbe26d7a79a6582",
-   "date": "2026-11-13",
-   "subject": "fix(features): record the phone's settings backup in the feature matrix"
-  },
-  {
-   "sha": "a9bd71f9a273be6c5d462c9cd90f7bc379336ace",
-   "date": "2026-11-13",
-   "subject": "Merge fix/tray-and-readme-truth-2026-11-13 into integration/wave18-2026-11-13 (tray wording + README truth); generated records keep the integration side, regenerated at the end"
+   "subject": "Merge origin/main into the native-screens kind, keeping both sides' records"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1447
+   "files": 1448
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1260
+   "files": 1261
   },
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 985
+   "files": 986
   },
   {
    "path": "docs/",
@@ -6543,7 +6608,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 268
+   "files": 272
   },
   {
    "path": "tools/",
@@ -6558,7 +6623,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 185
+   "files": 189
   },
   {
    "path": "plugins/",
@@ -6569,6 +6634,11 @@
    "path": "jarvis-android/",
    "line": "the older Android app, kept for reference; it cannot reach the backend",
    "files": 63
+  },
+  {
+   "path": "field-test-archive/",
+   "line": "the field-test records behind the matrix's verdicts, copied verbatim from the gitignored scratch folders",
+   "files": 54
   },
   {
    "path": "obsidian-plugin/",
@@ -6632,8 +6702,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5760,
-  "covered": 5277,
+  "tracked_files": 5825,
+  "covered": 5342,
   "excluded": 483,
   "subsystems": 27
  },
