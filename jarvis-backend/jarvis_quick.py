@@ -347,7 +347,12 @@ _LEAD = re.compile(
     r"^(?:(?:hey|hi|ok|okay)\s+jarvis\b[\s,]*|jarvis\b[\s,]*|please\s+|"
     r"(?:can|could|would|will)\s+you\s+(?:please\s+)?|i\s+(?:want|need)\s+you\s+to\s+|"
     r"i'?d\s+like\s+you\s+to\s+)+")
-_TAIL = re.compile(r"(?:[\s,]+(?:please|thanks|thank\s+you|jarvis|for\s+me))+$")
+# The trailing address is stripped - EXCEPT inside "hey Jarvis", which is the
+# wake word's own name, not an address (2026-11-13). Without the lookbehind the
+# owner's own "turn on hey jarvis" became "turn on hey" and missed `_WAKE_WORD`
+# entirely, so the sentence fell to the model.
+_TAIL = re.compile(r"(?:[\s,]+(?:please|thanks|thank\s+you|(?<!hey\s)jarvis|"
+                   r"for\s+me))+$")
 
 
 def normalise(text) -> str:
@@ -6038,6 +6043,32 @@ _WAKE_WORD = re.compile(
     r"|(?P<enable>enable|disable)\s+(?:the\s+|my\s+|your\s+)?"
     r"(?:wake\s+word|hey\s+jarvis(?:\s+wake\s+word)?)")
 
+#: "How do I activate Hey Jarvis on my Android app?" - a QUESTION about turning
+#: it on, not the request above (2026-11-13).
+#:
+#: THE MEASURED MISTAKE. On the live build the owner asked exactly that and the
+#: local model answered "say 'Hey Jarvis' out loud when the app is open and has
+#: microphone access granted" - the opposite of the shipped rule. Nothing in
+#: this grammar claimed the sentence, so a free model turn invented it, while
+#: the catalogue's own row says "Turn it on in Settings, Voice, then tap Listen
+#: on the phone" and "Turning it on raises one approval card on the PC". This
+#: shape is deliberately NARROW: only an on-ish question ("how do I ...", "where
+#: do I ...") whose subject is the wake word, with an optional phone/app tail.
+#: "turn off"/"disable" stay with the switch above, so a change is never read as
+#: a question. The answer is `_run_wake_word_howto`, built from the catalogue
+#: row itself - no model, no card, nothing changed.
+_WAKE_WORD_ACTIVATE = re.compile(
+    r"(?:how\s+(?:do|can|should|would)\s+i|how\s+to"
+    r"|where\s+(?:do|can)\s+i)"
+    r"\s+(?:activate|enable|turn\s+on|switch\s+on|start|use)"
+    r"\s+(?:the\s+|my\s+|your\s+|a\s+)?"
+    r"(?:hey\s+jarvis(?:\s+wake\s+word)?"
+    r"|wake\s+word(?:\s+\"?hey\s+jarvis\"?)?"
+    r"|hey)"
+    r"(?:\s+(?:on|in)\s+(?:(?:my|the|this)\s+)?"
+    r"(?:android\s+app|android|phone|handset))?")
+
+
 #: THE STANDING CLOUD-ESCALATION SWITCH, SAID OUT LOUD (2026-11-07).
 #:
 #: WHY THIS EXISTS. The model tool from PR #1209 (`cloud_escalation`) is the
@@ -6962,6 +6993,11 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     # through the blocks below; both are real routes with their own setters,
     # and both answer here rather than falling to the model, which has no
     # control for either.
+    # "How do I activate Hey Jarvis on my Android app?" is a QUESTION about the
+    # switch, so it must be read before the change pattern below - and the
+    # answer is the catalogue's own where/asks, never the model's invention.
+    if _WAKE_WORD_ACTIVATE.fullmatch(s):
+        return Intent("wake_word_howto", {"id": "wake-word"})
     m = _WAKE_WORD.fullmatch(s)
     if m:
         on = ((m.group("on") or m.group("on2") or "") == "on"
@@ -12367,11 +12403,13 @@ def _feature_switch_intent(raw, target: str, on: bool, explicit: bool = False):
     # the guide's control tables name no key for this row, and the fall-through
     # below answered the false "Command-Only ... there is no fixed sentence for
     # it" sentence for a feature that HAS a working phrase. Name that phrase
-    # instead. (Mapping the title straight to `settings_wake_word` was the
-    # other option; not taken here because the feature directory and
-    # contract/feature-controls.json record this row as planned, and changing
-    # them is a separate, contract-owned edit - naming the real phrase is
-    # enough to stop the false sentence, and it never changes anything.)
+    # instead. (The title is still not mapped straight to `settings_wake_word`:
+    # the phrase that really changes this switch is "turn on the wake word", not
+    # "turn on Say Hey Jarvis", and `t_the_matrix_keeps_every_typed_phrase`
+    # accepts only the switch/refusal shapes for a title that carries "Jarvis".
+    # Since 2026-11-13 the guide's matrix row is `adjust` with that phrase, and
+    # contract/feature-controls.json says `enforced` - so this answer points at
+    # the real phrase; it still changes nothing.)
     if str(row.get("id") or "") == "wake-word":
         return Intent("feature_switch_refused", {"words": (
             f"{title} is the PC's \"hey Jarvis\" switch. Say \"turn on the wake "
@@ -25106,6 +25144,59 @@ def _run_settings_wake_word(f: dict, peer, local,
     return Result(out.said, "settings_wake_word")
 
 
+#: The phone's own rule for its Listen switch, from
+#: `VoiceSwitchesPlate.kt` lines 41-44: THIS PHONE'S LISTENING "is never on by
+#: default or after a restart". The catalogue's `limit` only says "Off until
+#: you turn it on", so the restart half is carried here as its own sentence.
+_WAKE_WORD_PHONE_RULE = (
+    "The phone's listening is never on by default or after a restart, so tap "
+    "Listen again after a restart."
+)
+
+_WAKE_WORD_TWO_SWITCHES = ("There are two switches: the one on the PC, and "
+                           "Listen on the phone.")
+
+#: The one thing the measured wrong answer said and this answer must never say:
+#: the wake word is not self-activating. Stated as a denial so the next reader
+#: cannot mistake the feature for "say it and it turns on".
+_WAKE_WORD_NOT_SELF_ACTIVATING = (
+    'Saying "Hey Jarvis" out loud does not switch it on.')
+
+
+def _run_wake_word_howto() -> Result:
+    """"How do I activate Hey Jarvis on my Android app?" (2026-11-13).
+
+    THE MEASURED WRONG ANSWER. The local model said "You turn it on by saying
+    'Hey Jarvis' out loud when the app is open and has microphone access
+    granted" - the opposite of the shipped rule (the owner reported it, and the
+    phone's own `VoiceSwitchesPlate.kt` lines 26-44 say so in more detail). The
+    feature list says: "Turn it on in Settings, Voice, then tap Listen on the
+    phone", "Turning it on raises one approval card on the PC. Turning it off is
+    instant", "Off until you turn it on".
+
+    So every switching word here is READ FROM THE CATALOGUE ROW (`where` and
+    `asks`, verbatim), the phone's own restart rule is one fixed sentence, and
+    the denial is the other. No model, no card, no write, no state read.
+    """
+    FG = _guide()
+    row = FG.row_by_id("wake-word") if FG is not None else None
+    if not row:
+        return Result(FEATURE_MISSING, "wake_word_howto")
+    title = str(row.get("title") or "").strip()
+    if title and title[-1] not in ".!?":
+        title += "."
+    said = " ".join(part for part in (
+        title,
+        str(row.get("what") or "").strip(),
+        _WAKE_WORD_TWO_SWITCHES,
+        str(row.get("where") or "").strip(),
+        str(row.get("asks") or "").strip(),
+        _WAKE_WORD_PHONE_RULE,
+        _WAKE_WORD_NOT_SELF_ACTIVATING,
+    ) if part)
+    return Result(said, "wake_word_howto")
+
+
 def _run_settings_browser_mode(f: dict, peer, local,
                                conversation: Optional[str] = None) -> Result:
     """"Set the browser to headless" (2026-10-26).
@@ -26435,6 +26526,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "settings_wake_word":
         return _run_settings_wake_word(f, peer, local,
                                        conversation=conversation)
+    if n == "wake_word_howto":
+        # "How do I activate Hey Jarvis?" - a read of the catalogue row. No
+        # card, no write, no model (2026-11-13).
+        return _run_wake_word_howto()
     if n == "settings_browser_mode":
         return _run_settings_browser_mode(f, peer, local,
                                           conversation=conversation)
@@ -27277,6 +27372,10 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # None of them changes anything, so none may clear a "cancel that".
     "feature_state", "feature_state_setting", "setting_explain",
     "self_setting_state", "settings_explain_all",
+    # The wake-word activation answer (2026-11-13): fixed words built from the
+    # catalogue row and the phone's own rule, with no write and no state read.
+    # A private chat gets that answer rather than the model's invented one.
+    "wake_word_howto",
     # Q3.3 (2026-11-08): the honest "no such setting or feature" answer reads
     # nothing but this PC's own lists and writes nothing, so a private chat gets
     # it from local code too - the model has no list to read.
@@ -27304,6 +27403,10 @@ _ADDING_INTENTS = frozenset({
 })
 
 READ_ONLY_INTENTS = frozenset({
+    # "How do I activate Hey Jarvis on my Android app?" (2026-11-13): the answer
+    # only reads the catalogue row and says its where/asks, so it must not take
+    # away what "cancel that" would undo.
+    "wake_word_howto",
     # The two pre-push review gates (2026-11-10, wave 16E): the review packet
     # and the record check read a checkout on this PC and write nothing, so
     # neither may take away what "cancel that" would undo.

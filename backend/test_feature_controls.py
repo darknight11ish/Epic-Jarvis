@@ -254,12 +254,15 @@ def main():
 
         reset_surfaces(tmp)
         doc = read_json(tmp)
-        planned = next(f for f in doc["features"] if f["id"] == "wake-word")
+        # Still a planned Switchable row after the wake-word row became
+        # `enforced` on 2026-11-13; this bite test needs one that is still
+        # planned, so it moved to read-aloud rather than dropping the check.
+        planned = next(f for f in doc["features"] if f["id"] == "read-aloud")
         planned.pop("label_note", None)
         write_json(tmp, doc)
         no_note = run(tmp)
         check("a planned Switchable row without a label_note fails",
-              no_note.returncode == 1 and "wake-word" in no_note.stdout
+              no_note.returncode == 1 and "read-aloud" in no_note.stdout
               and "label_note" in no_note.stdout,
               no_note.stdout + no_note.stderr)
 

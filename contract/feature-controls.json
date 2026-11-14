@@ -187,12 +187,12 @@
       "surface": "both",
       "where": "Turn it on in Settings, Voice, then tap Listen on the phone.",
       "control": {
-        "type": "refused",
+        "type": "title",
         "setting_keys": [],
-        "turn_on": "turn on Say \"Hey Jarvis\"",
-        "turn_off": "turn off Say \"Hey Jarvis\"",
+        "turn_on": "turn on the wake word",
+        "turn_off": "turn off the wake word",
         "adjust": [],
-        "intent": "feature_switch_refused"
+        "intent": "settings_wake_word"
       },
       "desktop": {
         "section": "voice",
@@ -212,26 +212,28 @@
         ],
         "found": true
       },
-      "status": "planned",
+      "status": "enforced",
       "owner": "voiceprint-wiring",
-      "reason": "no own switch or typed control is wired today; a planned row, not a fake phrase",
+      "reason": "typed control and the Settings, Voice switch are wired: turning it on is one approval card on the PC, turning it off is instant, and the phone's own Listen switch is never on by default or after a restart.",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "turn on Say \"Hey Jarvis\"",
+        "example_phrase": "turn on the wake word",
         "screen_path": "desktop Settings: voice; phone: All features and abilities"
       },
       "command": {
-        "status": "planned",
-        "reason_code": "planned-no-own-control",
+        "status": "adjust",
+        "reason_code": "command",
         "owner": "voiceprint-wiring",
-        "reason": "no own switch or typed control is wired today; a planned row, not a fake phrase",
+        "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [],
-      "own_intents": [],
+      "own_intents": [
+        "settings_wake_word"
+      ],
       "own_actions": {},
-      "label_note": "no own switch or typed control is wired today; a planned row, not a fake phrase"
+      "label_note": "Two switches: the PC's wake-word switch in Settings, Voice (one approval card to turn on, instant to turn off, and it decides whether Jarvis takes wake-word clips at all), then Listen on the phone (the handset's microphone, never on by default or after a restart). Saying \"Hey Jarvis\" out loud does not switch either on."
     },
     {
       "id": "read-aloud",
@@ -11763,13 +11765,6 @@
       "status": "not-a-setting",
       "owner": "none-needed",
       "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row."
-    },
-    {
-      "kind": "feature",
-      "id": "wake-word",
-      "status": "planned",
-      "owner": "voiceprint-wiring",
-      "reason": "no own switch or typed control is wired today; a planned row, not a fake phrase"
     },
     {
       "kind": "feature",
