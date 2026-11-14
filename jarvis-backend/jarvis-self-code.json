@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "48acf718776a72466d1b4ba6c50086517d9c900c",
- "built_at": "2026-11-13T23:58:16-08:00",
+ "ref": "30a9a9793fba9c5d66132cddbe15572dba13b531",
+ "built_at": "2026-11-13T23:58:46-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6362,6 +6362,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "30a9a9793fba9c5d66132cddbe15572dba13b531",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate after the restack onto the wave-18 batch"
+  },
+  {
    "sha": "48acf718776a72466d1b4ba6c50086517d9c900c",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/integration/wave18-2026-11-13' into resolve-1233"
@@ -6455,11 +6460,6 @@
    "sha": "d543b0122c09cab712686b62efd952ec3225cc64",
    "date": "2026-11-13",
    "subject": "fix: self-knowledge places, planned labels and derived counts"
-  },
-  {
-   "sha": "e1308a7a2aa7f106c4fde353b1c12d9c79d81739",
-   "date": "2026-11-13",
-   "subject": "ci: shard the required backend job, keeping the check name"
   }
  ],
  "top_level": [
