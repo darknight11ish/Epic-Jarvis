@@ -177,3 +177,31 @@
 -keep class com.jarvis.client.widget.JarvisBoardWidgetOne
 -keep class com.jarvis.client.widget.JarvisBoardWidgetTwo
 -keep class com.jarvis.client.widget.JarvisBoardWidgetThree
+
+# THE ON-DEVICE MODEL ENGINE - R8 MUST KEEP THESE NAMES (2026-11-13).
+#
+# `com.jarvis.client.localai.LlamaNative` is looked up from C++ BY NAME:
+# libjarvis_llama.so exports
+#   Java_com_jarvis_client_localai_LlamaNative_nativeCreate ...
+# and calls BACK into Kotlin through `TokenSink.emit` / `TokenSink.stopped`.
+# R8 renames classes and strips methods it cannot see being used, and no Java
+# call site names an `external` method's implementation or the interface's
+# native-side callers - so without this rule the minified release build would
+# strip the engine and fail at the first Load, while every debug build kept
+# working (isMinifyEnabled = false there). That is exactly the shape of bug
+# that only reaches the phone after a release build.
+#
+# The whole package is kept rather than only LlamaNative and TokenSink: the
+# screen and controller are tiny next to the rest of the app, and a future
+# JNI entry point (E3's GPU path) in the same package then cannot be missed by
+# a rule that named yesterday's classes. No behavioural code is kept alive by
+# this beyond that package.
+-keep class com.jarvis.client.localai.** { *; }
+
+# The generic half, kept too: every other `native` method in the app (ONNX
+# Runtime's spotter, if a future library calls one) keeps the class and member
+# name JNI will look for. The rule above covers the engine; this one states the
+# invariant for the rest of the app.
+-keepclasseswithmembernames,includedescriptorclasses class * {
+    native <methods>;
+}

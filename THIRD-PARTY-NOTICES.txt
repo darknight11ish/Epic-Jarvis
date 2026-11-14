@@ -1397,6 +1397,52 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+THE PHONE'S ON-DEVICE MODEL ENGINE (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+llama.cpp (The ggml authors), MIT - https://github.com/ggml-org/llama.cpp
+  Copyright (c) 2023-2026 The ggml authors
+  The Android app's Local AI screen runs a GGUF model on the phone itself with
+  llama.cpp. The shipped libraries are
+  jarvis-client/app/src/main/jniLibs/arm64-v8a/libjarvis_llama.so (4,381,104
+  bytes, SHA-256 3de1334045f8f4deb716d2c828faaa4a84fcfa0dc8fa2468c544cf3156e882da)
+  and jarvis-client/app/src/main/jniLibs/x86_64/libjarvis_llama.so (4,791,688
+  bytes, SHA-256 dd4b5c35cd19c2838d8a5ed21c8e5cba4bf19cf39a16daf31daa92e83d205511),
+  both CPU-only (Vulkan and RPC off) and 16 KB page aligned. The version is the
+  one PrivateLM vendors: llama.cpp 0.5.0-dev, ggml 0.25.1, its own LICENSE
+  present. Provenance, measured by the native lane and recorded in
+  jarvis-client/native/PROVENANCE.json: vendored from PrivateLM commit
+  8a5f3b0c0ca8c2108b76ac9619fe5faf6a6a098e at
+  local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp, tree
+  sha256 9ecc1ed57a9e235f4e7a5c94840ab32a6ec7b7badb2bed390d34ab2dd8d40b51
+  over 1,738 files (the per-file manifest is
+  jarvis-client/native/licenses/llama.cpp-tree.sha256). PrivateLM does not
+  record which upstream llama.cpp commit its snapshot came from, so the
+  PrivateLM commit plus that tree hash are the strongest provenance available;
+  this is a stated limit, not a guess.
+  The full MIT text, and llama.cpp's own copyright line, are also in
+  jarvis-client/native/licenses/LICENSE-llama.cpp and in the generated MIT
+  section below.
+
+PrivateLM's llama.cpp Android plugin (`orailnoor/cross-platform-llm-client`),
+MIT, Copyright (c) 2025 dragneel2074 - https://github.com/orailnoor/cross-platform-llm-client
+  Used for: `local_plugins/llama_flutter_android/android/src/main/cpp/jni_wrapper.cpp`
+  (54,756 bytes) and its `android/CMakeLists.txt`, which are adapted into
+  `jarvis-client/native/jni/jarvis_llama_jni.cpp` and
+  `jarvis-client/native/CMakeLists.txt`. The Flutter/Dart app layer is NOT
+  copied. Full licence: `jarvis-client/native/licenses/LICENSE-PrivateLM-plugin`
+  and `LICENSE-PrivateLM-repo`.
+  PrivateLM's Dart logic in `lib/services/gguf_metadata.dart`,
+  `lib/services/device_info_service.dart` and
+  `lib/services/inference_android.dart` is re-expressed in Kotlin (not copied
+  line for line) and credited in each adapted file's header:
+  `GgufMetadata.kt` (the GGUF header reader and its two calibrated memory
+  estimates), `DeviceTiers.kt` (the RAM tier table and thread choice),
+  `LocalEnginePolicy.kt` (the idle-unload and 180-second hard-cap rules) and
+  `LocalAiPrompt.kt` (the ChatML, Gemma and Llama 3 prompt shapes). The Kotlin
+  files are new code in this MIT project, and each one names PrivateLM at the
+  top.
+  The full MIT text is in the generated MIT section below.
+
 2. RUST LIBRARIES IN THE DESKTOP PROGRAM (generated)
 ====================================================
 
