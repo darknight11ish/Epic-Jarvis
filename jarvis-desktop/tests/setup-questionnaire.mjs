@@ -468,6 +468,12 @@ const STEPS = Q.normaliseReading({
   },
 });
 const STEPS_DRAFT = Q.draftFromAnswers(STEPS);
+/** The same reading with every question answered: the pass the owner finishes. */
+const STEPS_EVERY_ANSWER = {
+  talk_style: "warm", personality: "calm_stoic", reading_tools: ["calendar"],
+  lights_without_card: "off", learning: "learn", reworded_memories: "on",
+  chat_history: "off", notifications: ["phone"],
+};
 
 await check("the PC's sections are the tabs, in its order; a backend without them still gets one", () => {
   const sections = Q.sectionsOf(STEPS);
@@ -605,6 +611,163 @@ await check("next, first-unanswered and the position words walk the PC's order",
     "0 of 0 answered");
   assert.equal(Q.positionWords(STEPS, "learning"), "Question 5 of 8");
   assert.equal(Q.positionWords(STEPS, "not-a-question"), "");
+});
+
+await check("the last question's Next is Finish, and one press records the pass", () => {
+  // (a) 2026-11-13, the owner's own report. Before this, Next at the end of the
+  // list painted the row and returned: the press did nothing, Finish was never
+  // painted or wired, and the pass could never be recorded as complete - so the
+  // app kept telling him the quiz was unfinished.
+  const last = Q.nextStep(STEPS, {
+    section: "notify", currentId: "notifications", draft: STEPS_EVERY_ANSWER,
+  });
+  assert.equal(last.kind, Q.STEP_FINISH, "the last question's Next is Finish");
+  assert.notEqual(last.kind, Q.STEP_END, "and not the silent end it used to be");
+  assert.equal(last.id, "");
+  assert.equal(last.why, "", "Finish needs no apology under the row");
+
+  // The same press at the end of a FILTERED walk: the four version-2 questions
+  // are all that is left of this pass, and their end is the questionnaire's end.
+  assert.deepEqual(
+    Q.visibleQuestions(STEPS, { section: "learning", filter: true }).map((q) => q.id),
+    ["reworded_memories", "chat_history"]);
+  const filtered = Q.nextStep(STEPS, {
+    filter: true, section: "learning", currentId: "chat_history",
+    draft: STEPS_EVERY_ANSWER,
+  });
+  assert.equal(filtered.kind, Q.STEP_FINISH);
+
+  // An ordinary step is still a question - the next one on screen - and the end
+  // of a section still opens the section after it.
+  assert.deepEqual(
+    Q.nextStep(STEPS, { section: "talk", currentId: "talk_style", draft: STEPS_DRAFT }),
+    { kind: Q.STEP_QUESTION, id: "personality", why: "" });
+  assert.equal(Q.nextStep(STEPS, {
+    section: "read", currentId: "lights_without_card", draft: STEPS_DRAFT,
+  }).id, "learning");
+});
+
+await check("walking the PC's own question list reaches Finish at the end of it", () => {
+  // The owner's state on 2026-11-13: `completed_version` 1, the set at version
+  // 2, every one of the 25 questions staged in the draft - and a Next button
+  // that did nothing at the end, so the pass could never be recorded. This walks
+  // the real list, question by question, with the same rule the button uses.
+  const fixture = JSON.parse(read("../backend/fixtures/setup_questions.json"));
+  const questions = fixture.questions.map((q) => ({
+    id: q.id, title: q.title, help: q.help, multi: q.multi === true,
+    all_none: q.multi === true, section: q.section || "", version: q.version || 1,
+    options: q.options,
+  }));
+  const answers = {};
+  for (const q of questions) {
+    answers[q.id] = q.multi ? [q.options[0].id] : q.options[0].id;
+  }
+  const reading = Q.normaliseReading({
+    available: true, version: Number(fixture.version) || 2, completed_version: 1,
+    questions, answers: {},
+  });
+  assert.ok(Q.passComplete(reading, answers), "every question has an answer");
+  let section = Q.sectionsOf(reading)[0].id;
+  let currentId = questions[0].id;
+  const walked = [];
+  for (let guard = 0; guard <= questions.length; guard += 1) {
+    const action = Q.nextStep(reading, {
+      section, filter: false, currentId, draft: answers,
+    });
+    if (action.kind === Q.STEP_FINISH) {
+      walked.push("finish");
+      break;
+    }
+    assert.equal(action.kind, Q.STEP_QUESTION,
+      `Next has no second move at ${currentId}: ${action.why}`);
+    walked.push(action.id);
+    currentId = action.id;
+    section = (Q.questionById(reading, action.id) || {}).section || section;
+  }
+  assert.equal(walked[walked.length - 1], "finish",
+    "the end of the real question list is Finish, not a press that does nothing");
+  assert.equal(walked.length, questions.length,
+    "and it walks every question on the way there, once each");
+});
+
+await check("a question the filter hid is stepped over one at a time, never a section", () => {
+  // (b) 2026-11-13. `findIndex` for a question the filter has hidden is -1, and
+  // the old Next fell straight through to the NEXT SECTION - skipping every
+  // question of this one that came after it. One step is the whole rule.
+  const reading = Q.normaliseReading({
+    available: true, version: 1, completed_version: 1,
+    sections: [{ id: "talk", title: "Talk" }, { id: "read", title: "Read" }],
+    questions: [
+      { id: "q1", title: "One", help: "", section: "talk", version: 1,
+        options: [{ id: "x", label: "X" }, { id: "y", label: "Y" }] },
+      { id: "q2", title: "Two", help: "", section: "talk", version: 1,
+        options: [{ id: "x", label: "X" }, { id: "y", label: "Y" }] },
+      { id: "q3", title: "Three", help: "", section: "read", version: 1,
+        options: [{ id: "x", label: "X" }, { id: "y", label: "Y" }] },
+    ],
+    answers: { q1: "x" },
+  });
+  assert.deepEqual(
+    Q.visibleQuestions(reading, { section: "talk", filter: true }).map((q) => q.id),
+    ["q2"], "the filter really has hidden the question on screen");
+  const action = Q.nextStep(reading, {
+    section: "talk", filter: true, currentId: "q1", draft: Q.draftFromAnswers(reading),
+  });
+  assert.equal(action.kind, Q.STEP_QUESTION);
+  assert.equal(action.id, "q2", "one step, into the question after it in its own section");
+  assert.notEqual(action.id, "q3", "never a jump over the rest of the section to the next one");
+
+  // A section with nothing left in it still has a defined move: the next
+  // section that has something. It is not a press that does nothing.
+  assert.equal(Q.nextStep(reading, {
+    section: "talk", filter: true, currentId: "", draft: {},
+  }).id, "q3");
+});
+
+await check("an incomplete pass offers no Finish, and the end says what is left", () => {
+  // (c) 2026-11-13. Finish records the pass as complete on the PC, so it is
+  // offered only on a pass that IS complete - and four of these eight have no
+  // answer. Before this, the end was a button that did nothing at all.
+  assert.equal(Q.passComplete(STEPS, STEPS_DRAFT), false);
+  assert.equal(Q.unansweredCount(STEPS, STEPS_DRAFT), 4);
+  assert.equal(Q.passComplete(STEPS, STEPS_EVERY_ANSWER), true);
+
+  const end = Q.nextStep(STEPS, {
+    section: "notify", currentId: "notifications", draft: STEPS_DRAFT,
+  });
+  assert.equal(end.kind, Q.STEP_END, "no Finish on a pass with questions left");
+  assert.notEqual(end.kind, Q.STEP_FINISH);
+  assert.equal(end.id, "");
+  assert.match(end.why, /last question/);
+  assert.match(end.why, /4 questions still have no answer/);
+  assert.match(end.why, /Keep current settings/,
+    "it points at the one button that records the pass without an answer");
+
+  // The count is the draft's own, and it is said in the singular for one.
+  const oneLeft = { ...STEPS_EVERY_ANSWER };
+  delete oneLeft.chat_history;
+  assert.equal(Q.passComplete(STEPS, oneLeft), false);
+  assert.match(Q.stepOpenWords(STEPS, oneLeft), /1 question still has no answer/);
+
+  // A complete pass the PC has ALREADY recorded is not offered Finish a second
+  // time: there is nothing left to record, and the line says exactly that.
+  const recorded = { ...STEPS, completedVersion: 2 };
+  const done = Q.nextStep(recorded, {
+    section: "notify", currentId: "notifications", draft: STEPS_EVERY_ANSWER,
+  });
+  assert.equal(done.kind, Q.STEP_END);
+  assert.equal(done.why, Q.STEP_END_WORDS);
+
+  // And on a PC whose module predates the versioned pass there is no record to
+  // write at all - which is said, not silently ignored.
+  const oldPc = Q.normaliseReading({
+    available: true,
+    questions: [{ id: "q1", title: "One", options: [{ id: "x", label: "X" }] }],
+  });
+  const oldEnd = Q.nextStep(oldPc, { currentId: "q1", draft: { q1: "x" } });
+  assert.equal(oldEnd.kind, Q.STEP_END);
+  assert.equal(oldEnd.why, Q.STEP_END_NO_RECORD);
+  assert.match(oldEnd.why, /does not keep a record/);
 });
 
 await check("the reading carries the PC's own progress state, and tolerates every missing field", () => {
@@ -901,6 +1064,41 @@ await check("the card paints the three honest states from the model", () => {
     "the retake never clears the draft the PC stores");
   assert.ok(!takeBody.includes("queueProgress()"),
     "the retake's clear rides the debounce, where the next note replaces it");
+});
+
+await check("the page paints Finish from the model's one rule, and Finish records the pass", () => {
+  const page = read("src/setup-settings.js");
+  // The label, the disabled state and the sentence under the row all come from
+  // `nextStep`. A second idea of what the next step is, in the page, is exactly
+  // what made the last question a press that did nothing (2026-11-13).
+  assert.equal((page.match(/const action = nextStep\(reading, \{/g) || []).length, 2,
+    "the painted row and the press read the same rule");
+  assert.match(page, /el\.next\.textContent = action\.kind === STEP_FINISH \? FINISH : NEXT/);
+  assert.match(page, /el\.next\.disabled = busy \|\| action\.kind === STEP_END/);
+  assert.ok(!page.includes("shown.length <= 1 ? FINISH"),
+    "Finish is not painted from how many questions happen to be on screen");
+  const nextAt = page.indexOf("function goNext()");
+  const backAt = page.indexOf("function goBack()");
+  assert.ok(nextAt > 0 && backAt > nextAt, "goNext is gone from the page");
+  const nextBody = page.slice(nextAt, backAt);
+  assert.ok(nextBody.includes("action.kind === STEP_FINISH"),
+    "the press routes Finish nowhere, so Finish is painted and not wired");
+  assert.ok(nextBody.includes("void finishPass()"), "Finish does not record anything");
+  assert.ok(!nextBody.includes("findIndex"),
+    "the page works the next step out itself again");
+  // Finish is the same cardless `{"keep_current": true}` note "Keep current
+  // settings" already sends: it records the pass, writes no answer and changes
+  // no setting - so it may never reach the apply body or the apply call.
+  const finishAt = page.indexOf("async function finishPass()");
+  const loadAt = page.indexOf("async function load()");
+  assert.ok(finishAt > 0 && loadAt > finishAt, "finishPass is gone from the page");
+  const finishBody = page.slice(finishAt, loadAt);
+  assert.ok(finishBody.includes("recordPassComplete()"),
+    "Finish does not record the pass as complete");
+  assert.ok(!finishBody.includes("applySetup") && !finishBody.includes("applyBody"),
+    "Finish must never apply an answer: Apply is the only write");
+  assert.equal((page.match(/progressBody\(\{ keepCurrent: true \}\)/g) || []).length, 1,
+    "the completion note is built in one place, for both buttons");
 });
 
 await check("the Rust command builds the bodies, refuses without confirm, and holds only apply on a stale link", () => {

@@ -603,6 +603,15 @@ OURS = {
     "remind me every Monday and Thursday at 9 to water the plants": ("reminder_set", {}),
     "add milk to my to-do list": ("todo_add", {"text": "milk"}),
     "put Call the dentist on my todo list": ("todo_add", {"text": "Call the dentist"}),
+    # 2026-11-13, the owner's report: "add these things to my to-do list. buy
+    # Elizabeth a mint mobile plan." matched NOTHING, so the turn reached the
+    # model, which answered that Jarvis had no to-do list at all. The sentences
+    # AFTER the list name are the items; a colon carries them too.
+    "add these things to my to-do list. buy Elizabeth a mint mobile plan.": (
+        "todo_add", {"text": "buy Elizabeth a mint mobile plan"}),
+    "add these to my to-do list: milk and eggs": ("todo_add", {"text": "milk and eggs"}),
+    "add milk and eggs to my to-do list": ("todo_add", {"text": "milk and eggs"}),
+    "add to my to-do list. call the bank": ("todo_add", {"text": "call the bank"}),
     "what's on my to do list": ("todo_list", {}),
     "read my to-do list": ("todo_list", {}),
     "mark milk as done": ("todo_done", {"text": "milk"}),
@@ -644,6 +653,30 @@ def t_the_grammar_knows_these():
             (abs(got.f.get(k, 0) - v) < 0.5 if isinstance(v, (int, float)) and not isinstance(
                 v, bool) else got.f.get(k) == v) for k, v in fields.items())
         check(f"ours: {text!r} -> {name}", ok, got and (got.name, got.f))
+
+
+def t_the_owner_sentence_is_never_the_models():
+    """2026-11-13: "add these things to my to-do list. buy Elizabeth a mint
+    mobile plan." matched no grammar at all, so the turn fell to the model,
+    which answered that Jarvis had no to-do list on this PC - false. A non-None
+    match is what keeps the sentence off the model path.
+    """
+    use_tz("Europe/London")
+    now = local(2026, 11, 13, 12, 0)
+    said = "add these things to my to-do list. buy Elizabeth a mint mobile plan."
+    got = Q.match(said, now)
+    check("the owner's exact sentence is matched, so it never reaches the model",
+          got is not None, got and (got.name, got.f))
+    check("... as the to-do list's add, with the second sentence as the item",
+          got is not None and got.name == "todo_add"
+          and got.f.get("text") == "buy Elizabeth a mint mobile plan",
+          got and (got.name, got.f))
+    w = World(now, name="ownersentence")
+    r = Q.answer(said, sched=w.s, now=now)
+    check("... and the item really lands on the PC's to-do list",
+          r is not None and r.reply == "Added to your to-do list."
+          and [i["text"] for i in w.s.todos()] == ["buy Elizabeth a mint mobile plan"],
+          r and (r.reply, w.s.todos()))
 
 
 def t_near_misses_go_to_the_model():

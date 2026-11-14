@@ -478,6 +478,50 @@ def test_chat_storage_writes_nothing_and_raises_no_card():
         C.use(old)
     assert called == [], ("a write path was taken", called)
     assert said is not None and said.made == [], said
+def test_wake_word_activation_answer_is_the_catalogues_own():
+    """The owner's own question, answered from the catalogue (2026-11-13).
+
+    MEASURED WRONG ANSWER: "You turn it on by saying 'Hey Jarvis' out loud when
+    the app is open and has microphone access granted" - it described the wake
+    word as self-activating. The catalogue's row says "Turn it on in Settings,
+    Voice, then tap Listen on the phone" and "Turning it on raises one approval
+    card on the PC. Turning it off is instant"; the phone's own
+    VoiceSwitchesPlate.kt says its listening is never on by default or after a
+    restart. This pins the deterministic answer for the exact question and its
+    natural variants, and pins that it never claims the false half.
+    """
+    Q = _quick()
+    import jarvis_feature_guide as G
+    row = G.row_by_id("wake-word")
+    assert row is not None, "the catalogue has no wake-word row"
+    out = Q._run_wake_word_howto()
+    words = str(out.reply)
+    low = words.lower()
+    asks = ("How do I activate Hey Jarvis on my Android app?",
+            "how do I turn on Hey Jarvis on my phone?",
+            "how do I enable the wake word on Android?")
+    for ask in asks:
+        got = Q.match(ask)
+        assert got is not None and got.name == "wake_word_howto", (ask, got)
+        assert got.f.get("id") == "wake-word", (ask, got.f)
+        live = Q.answer(ask)
+        assert live is not None and str(live.reply) == words, (ask, live)
+    assert str(row["where"]) in words, (row["where"], words)
+    assert str(row["asks"]) in words, (row["asks"], words)
+    for need in ("Settings, Voice", "Listen on the phone", "approval card",
+                 "two switches", "never on by default or after a restart"):
+        assert need.lower() in low, (need, words)
+    assert 'saying "hey jarvis" out loud does not switch it on' in low, words
+    # "hey Jarvis" is the switch's NAME, not an address: the tail normaliser
+    # used to strip "jarvis", turning the owner's own sentence into "turn on
+    # hey" and missing the switch entirely. This pins the one-line fix.
+    got = Q.match("turn on hey jarvis")
+    assert got is not None and got.name == "settings_wake_word", got
+    assert got.f.get("on") is True, got.f
+    for wrong in ("say it and it turns on", "out loud when the app is open",
+                  "is on by default", "starts by itself", "no on/off switch",
+                  "command-only", "planned"):
+        assert wrong not in low, (wrong, words)
 
 
 def main():
@@ -497,6 +541,8 @@ def main():
         ("chat storage claims only what it can read", test_chat_storage_never_claims_what_it_cannot_read),
         ("chat storage is not a general Q and A", test_chat_storage_is_not_a_general_q_and_a),
         ("chat storage writes nothing and raises no card", test_chat_storage_writes_nothing_and_raises_no_card),
+        ("wake word activation answers from the catalogue",
+         test_wake_word_activation_answer_is_the_catalogues_own),
     ]
     for name, fn in checks:
         check(name, fn)

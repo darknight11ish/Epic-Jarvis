@@ -484,7 +484,7 @@ is its acceptance proof.
   benchmark and no card - that false claim is gone.**
 - `self_changes`: what changed about this PC's Jarvis and when, from a local
   change journal. The journal is a snapshot of every awareness-relevant value
-  (version, chosen preset/model, all 49 settings, all 61 tool switches, the
+  (version, chosen preset/model, every setting value, every tool switch, the
   counts, the benchmark count) diffed against the last snapshot and appended
   to `self-awareness/changes.jsonl` under the owner's Jarvis home (bounded to
   500 rows). It is written when a changing quick answer runs, and refreshed
@@ -492,7 +492,7 @@ is its acceptance proof.
   next time Jarvis looks.
 - `changeable_overview` ("what can you change?") and `self_inventory` ("what
   do you have?") answer with the counts read from the program's own tables
-  (49 settings, 61 tools, 181 features, presets, installed models, version)
+  (the counts read from the program's own tables: settings, tools and features, presets, installed models and version)
   and the card rule that applies to changes.
 - `tool_switches_on_off` / `tool_switch_state`: which tool switches are on or
   off, and one named tool's state (detail still comes from `tool_profile`).
