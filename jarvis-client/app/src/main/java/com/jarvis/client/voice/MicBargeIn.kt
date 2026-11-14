@@ -70,8 +70,8 @@ object MicBargeIn {
             "then listens for what you say next. The answer stays on your screen, and the part " +
             "you heard goes with your next question."
     } else {
-        "Off: while Jarvis is speaking, the microphone waits for the reply to finish - the " +
-            "press does nothing and nothing is recorded. Tap Stop, or wait, then talk."
+        "Off: while Jarvis is speaking, a press of the microphone does nothing until it has " +
+            "finished - nothing is recorded. Tap Stop, or wait, then talk."
     }
 
     /** The one line that says whose setting this is, and which one it is not. */
