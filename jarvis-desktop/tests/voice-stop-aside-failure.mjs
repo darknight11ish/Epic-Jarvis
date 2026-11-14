@@ -36,6 +36,7 @@ const delta = (text) => JSON.stringify({ choices: [{ delta: { content: text } }]
 const asked = (log) => log.filter((l) => l.startsWith("speak ")).map((l) => l.slice(6));
 const played = (log) => log.filter((l) => l.startsWith("play ")).map((l) => l.slice(5));
 const status = (page) => page.evaluate(() => document.getElementById("card-status-text").textContent);
+const playedByNow = async (page, text) => played(await K.speechLog(page)).includes(text);
 
 async function holdAndRelease(page) {
   await page.hover("#mic");
@@ -107,7 +108,8 @@ await check("CONTROL: a question asked after a Stop is answered out loud again",
   await page.locator("#stop").click();
   await page.waitForTimeout(300);
   await holdAndRelease(page);
-  await page.waitForTimeout(900);
+  await K.until(page, "the question asked after the Stop to be spoken", async () =>
+    askedFor(await K.speechLog(page), "Clean answer."));
   const log = await K.speechLog(page);
   await page.close();
   assert.ok(askedFor(log, "Clean answer."),
@@ -133,15 +135,16 @@ await check("a timer going off while an answer plays is not spoken over it", asy
   await K.until(page, "the answer to have started speaking", async () =>
     (await K.speechLog(page)).includes("play One."));
   await page.evaluate((frame) => window.__emit("jarvis-event", frame), timerFrame);
-  await page.waitForTimeout(900);
+  // The answer carrying on past the timer's own moment is also what proves
+  // the drain was running when the aside arrived: a line queued there would
+  // have been asked for by now (that ask is synchronous with the event).
+  await K.until(page, "the answer to carry on past the timer", () => playedByNow(page, "Two."));
   const log = await K.speechLog(page);
   const errors = page.__errors;
   await page.close();
   assert.deepEqual(errors, []);
   assert.ok(!askedFor(log, "Your timer is done"),
     `the timer was spoken over the answer: ${JSON.stringify(asked(log))}`);
-  // The answer itself carries on: the aside was dropped, not the speech.
-  assert.ok(played(log).includes("Two."), `the answer was disturbed: ${JSON.stringify(log)}`);
 });
 
 await check("a Live line arriving while an answer plays is not spoken over it", async () => {
@@ -156,7 +159,7 @@ await check("a Live line arriving while an answer plays is not spoken over it", 
     (await K.speechLog(page)).includes("play One."));
   await page.evaluate(() =>
     window.__emit("live-status", { say: "Jarvis Live is on your phone." }));
-  await page.waitForTimeout(900);
+  await K.until(page, "the answer to carry on past the Live line", () => playedByNow(page, "Two."));
   const log = await K.speechLog(page);
   await page.close();
   assert.ok(!askedFor(log, "Jarvis Live is on your phone"),
@@ -188,7 +191,8 @@ const FAILED_LINE = "Jarvis's voice could not read this aloud, so nothing was sp
 
 /** The PC answers speak_reply with nothing: the voice could not be made. A
  *  resolved empty string, not a rejection - `if (!dataUri) continue;` is
- *  what swallowed it. */
+ *  what swallowed it. The call is recorded the way the harness records one,
+ *  so the same waits work for both shapes. */
 const noVoice = (page) => page.evaluate(() => {
   const core = window.__TAURI__.core;
   const real = core.invoke;
@@ -196,9 +200,17 @@ const noVoice = (page) => page.evaluate(() => {
   core.invoke = async (cmd, args) => {
     if (cmd !== "speak_reply") return real(cmd, args);
     window.__speakAsks += 1;
+    window.__voiceCalls.push(["speak", args.text]);
     return "";
   };
 });
+
+/** The answer really finished, and both of its lines were asked for - so
+ *  "nothing was said" cannot be the answer not having got that far yet. */
+async function answerDoneAndAsked(page, n = 2) {
+  const log = await K.speechLog(page);
+  return (await status(page)) === "Complete" && asked(log).length >= n;
+}
 
 const read = (page) => page.evaluate(() => ({
   note: document.getElementById("chat-note").textContent,
@@ -216,7 +228,8 @@ await check("a voice that could not be made is said once, in fixed words, not as
   });
   await noVoice(page);
   await holdAndRelease(page);
-  await page.waitForTimeout(600);
+  await K.until(page, "the answer to finish with both of its lines asked for",
+    () => answerDoneAndAsked(page));
   const got = await read(page);
   const errors = page.__errors;
   await page.close();
@@ -238,7 +251,8 @@ await check("a rejected speak_reply says the same fixed line", async () => {
     speakFails: "the voice service answered 503",
   });
   await holdAndRelease(page);
-  await page.waitForTimeout(600);
+  await K.until(page, "the answer to finish with both of its lines asked for",
+    () => answerDoneAndAsked(page));
   const got = await read(page);
   await page.close();
   assert.equal(got.noteShown, true, "a rejected speak_reply was swallowed");
@@ -255,7 +269,7 @@ await check("CONTROL: a spoken answer that worked says nothing about a failure",
   });
   await K.slowSpeaker(page, 60);
   await holdAndRelease(page);
-  await page.waitForTimeout(700);
+  await K.until(page, "the answer to be spoken", () => playedByNow(page, "One."));
   const got = await read(page);
   const log = await K.speechLog(page);
   await page.close();
