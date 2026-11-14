@@ -30,7 +30,9 @@
  * cardless and desktop-only): a timestamp, and - for "Keep current settings" -
  * the PC's own `completed_version`. Neither carries an answer, calls a setter or
  * raises a card. The stepper's position is sent the same way, debounced, so the
- * phone and the HUD can say where the PC's card is.
+ * phone and the HUD can say where the PC's card is. Finish is that same note
+ * with its own words (2026-11-13): recording that the pass is done is not a
+ * change, and the answers are still applied only by Apply.
  *
  * HONEST WAITING. The PC works through the changes one at a time and waits on
  * each existing approval card, so applying can take minutes. The card says so
@@ -67,7 +69,10 @@ import {
   SHOW_ALL,
   SKIPPED_HEADING,
   SKIP,
+  STEP_END,
+  STEP_FINISH,
   STEP_MODE_HINT,
+  STEP_QUESTION,
   STEP_THROUGH,
   TAKE_AGAIN,
   TITLE,
@@ -87,6 +92,7 @@ import {
   gate,
   lastRunView,
   nextQuestion,
+  nextStep,
   normaliseReading,
   offerShown,
   optionOn,
@@ -393,6 +399,16 @@ function paintQuestions() {
   renderQuestionsState();
 }
 
+/**
+ * The Back / Skip / Next row, painted from ONE rule: what the next press does.
+ *
+ * `nextStep` decides the label (Next, or Finish when the press is the one that
+ * records the pass), whether Next can be pressed at all, and - when it cannot -
+ * the sentence under the row that says what is left. The page computes nothing
+ * about the next step itself; before 2026-11-13 it did, and the last question
+ * was a press that did nothing (`FINISH` was painted only while a single
+ * question was on screen, and nothing was wired to it anyway).
+ */
 function paintStepNav() {
   if (!el.stepWhere) return;
   const shown = questionsShown();
@@ -401,15 +417,20 @@ function paintStepNav() {
     return;
   }
   const one = currentQuestion();
-  el.stepWhere.textContent = one ? positionWords(reading, one.id) : "";
-  if (el.prev) el.prev.textContent = BACK;
-  if (el.next) el.next.textContent = NEXT;
-  if (el.skip) el.skip.textContent = SKIP;
+  const at = one ? shown.findIndex((q) => q.id === one.id) : 0;
+  const action = nextStep(reading, {
+    section, filter: filterOn, currentId: one ? one.id : "", draft,
+  });
+  el.stepWhere.textContent = action.why || (one ? positionWords(reading, one.id) : "");
   if (el.prev) {
-    const at = one ? shown.findIndex((q) => q.id === one.id) : 0;
+    el.prev.textContent = BACK;
     el.prev.disabled = busy || at <= 0;
   }
-  if (el.next) el.next.textContent = one && shown.length <= 1 ? FINISH : NEXT;
+  if (el.skip) el.skip.textContent = SKIP;
+  if (el.next) {
+    el.next.textContent = action.kind === STEP_FINISH ? FINISH : NEXT;
+    el.next.disabled = busy || action.kind === STEP_END;
+  }
 }
 
 function renderQuestionsState() {
@@ -452,33 +473,24 @@ function stepTo(questionId) {
   queueProgress();
 }
 
-/** The section after the current one that has something visible, or "". */
-function nextSectionWithQuestions() {
-  const sections = sectionsOf(reading);
-  const at = sections.findIndex((row) => row.id === section);
-  for (let i = Math.max(0, at + 1); i < sections.length; i += 1) {
-    const id = sections[i].id;
-    if (visibleQuestions(reading, { section: id, filter: filterOn }).length) return id;
-  }
-  return "";
-}
-
-/** Next: the next question on screen, then the next section's first. */
+/**
+ * Next: the model's one move (`nextStep`), and nothing worked out here.
+ *
+ * Step to the question it names - `stepTo` opens the section that question is
+ * in; ask to record the pass when it says FINISH; and do nothing at all when it
+ * says END, because in that state the button is painted disabled with its own
+ * sentence under the row.
+ */
 function goNext() {
-  const shown = questionsShown();
-  const at = shown.findIndex((q) => q.id === currentId);
-  if (at >= 0 && shown[at + 1]) {
-    stepTo(shown[at + 1].id);
+  const one = currentQuestion();
+  const action = nextStep(reading, {
+    section, filter: filterOn, currentId: one ? one.id : "", draft,
+  });
+  if (action.kind === STEP_FINISH) {
+    void finishPass();
     return;
   }
-  const following = nextSectionWithQuestions();
-  if (!following) {
-    paintStepNav();
-    return;
-  }
-  section = following;
-  const first = visibleQuestions(reading, { section, filter: filterOn })[0];
-  if (first) stepTo(first.id);
+  if (action.kind === STEP_QUESTION && action.id) stepTo(action.id);
 }
 
 function goBack() {
@@ -752,20 +764,52 @@ async function notNow() {
   say("Not now. Jarvis will not offer this again for a day.");
 }
 
-/** "Keep current settings": the owner is happy as they are. No setting, no
- *  answer and no card - one progress note that moves `completed_version`. */
-async function keepCurrent() {
-  if (busy) return;
+/**
+ * Record the pass as complete on the PC: `{"keep_current": true}`, the one
+ * cardless note that moves `completed_version`.
+ *
+ * It writes no answer, calls no setter and raises no card - so it is never an
+ * apply, and the two presses on Apply stay the only way a setting changes. Both
+ * "Keep current settings" and Finish are this same note, with their own words;
+ * one press, one write, and a refusal is said in the PC's own sentence.
+ */
+async function recordPassComplete() {
   sentProgress = "";
   const answer = await progressSetup(progressBody({ keepCurrent: true }));
   if (answer && answer.ok === false) {
     say(answer.error || "That did not reach the PC. Try again in a moment.", "warn");
-    return;
+    return false;
   }
   if (reading) reading.completedVersion = reading.version;
   paintView();
   paintApply();
+  return true;
+}
+
+/** "Keep current settings": the owner is happy as they are. No setting, no
+ *  answer and no card - one progress note that moves `completed_version`. */
+async function keepCurrent() {
+  if (busy) return;
+  if (!(await recordPassComplete())) return;
   say("Kept as it is. Nothing was changed, and Jarvis will not offer this again.");
+}
+
+/**
+ * Finish: the last question's Next, once every question has an answer
+ * (2026-11-13).
+ *
+ * `nextStep` is the only thing that offers this, so it can never be pressed on
+ * a pass that still has questions without an answer. The press records the pass
+ * as complete through the same cardless note as "Keep current settings"; it
+ * applies nothing, and the words say so, because the answers on screen are
+ * staged and only Apply writes them.
+ */
+async function finishPass() {
+  if (busy) return;
+  if (!(await recordPassComplete())) return;
+  say("Finished. Jarvis has recorded that you have been through this pass and " +
+    "will not offer it again. Your answers are applied only by Apply these " +
+    "changes.");
 }
 
 /* ── Reading, planning, applying ─────────────────────────────────────────── */

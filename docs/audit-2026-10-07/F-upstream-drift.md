@@ -89,6 +89,8 @@ are **behind** are listed; the rest are in "checked and already current" below.
 | `python-dotenv` | Marks: env loading in the backend | 1.2.3 | **1.2.4** | 1 patch | Low | None |
 | `torch` (optional, **not** in the lock) | the better voice / F5-TTS worker | 2.14.0 | **2.14.1** | 1 patch | Low | None |
 
+**Correction, 2026-11-13 — the `soupsieve` row above is the 2026-10-07 reading, not the pin today.** `backend/requirements.lock` and `jarvis-backend/requirements.lock` now pin `soupsieve==4.0.1`; 2.9.2 was later found to carry four advisories — GHSA-4j63-6c4x-wfg4 / CVE-2026-126192 (fixed in 2.10.0), GHSA-mmhr-3c5m-f64f / CVE-2026-126190 (fixed in 4.0.0), GHSA-7g44-g9rc-x53w / CVE-2026-126193 and GHSA-6655-6qjp-jx7x / CVE-2026-126191 (both fixed in 3.0.2) — so the "zero advisories" sentence below describes what the 2026-10-07 check returned, not what `soupsieve` returns today. The lock's coverage floor moved 3.11 -> 3.11.5 with that bump; the reasons are in the lock header's HISTORY and `changelog.d/2026-11-13-soupsieve-4-0-1.md`.
+
 **Advisories (independent check, not a guess).** All 78 pinned versions were
 queried against OSV at their **exact** version —
 `POST https://api.osv.dev/v1/query` with

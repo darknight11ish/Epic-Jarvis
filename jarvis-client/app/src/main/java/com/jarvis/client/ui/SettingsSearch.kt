@@ -151,7 +151,13 @@ object SettingsSearch {
     val ROWS: List<Row> = listOf(
         Row(
             key = "voice", title = "Voice",
-            label = "Train my voice; Voice check; Jarvis's voice; Listen on this phone",
+            // "Stop speaking when I press the mic" is a switch drawn inside the
+            // Voice card (the same UI, `VoiceSwitchesPlate.kt`): the owner's ask
+            // of 2026-11-13, on by default. Its exact printed words are here so
+            // typing them finds Voice - the 2026-10-13 rule that a switch is
+            // findable by the words on it.
+            label = "Train my voice; Voice check; Jarvis's voice; Listen on this phone; " +
+                "Stop speaking when I press the mic; interrupt Jarvis; barge in",
             quotes = listOf(
                 "Whether Jarvis knows your voice, how strict that check is, and ",
                 "Pair with your desktop first - these settings live on it.",
@@ -311,17 +317,20 @@ object SettingsSearch {
         Row(
             // "Folders Jarvis may look in" now carries TWO doors of its own
             // (2026-11-05: send a document, and bring a Notion export in from
-            // the phone), so the words a person would type for them are in the
+            // the phone; 2026-11-13: a photo rides the first door as a plain
+            // file copy), so the words a person would type for them are in the
             // same row's label and quotes - `net/Upload.kt` and
             // `net/NotionImport.kt` print them, so the index quotes the app's
             // own words rather than inventing a second copy.
             key = "folders", title = "Folders Jarvis may look in",
             label = "Which folders Jarvis may read; Obsidian; Logseq; Joplin; Notion; " +
-                "send a document from your phone; phone uploads; upload a file; " +
+                "send a document from your phone; send a photo from your phone; a photo as " +
+                "a file; phone uploads; upload a file; " +
                 "bring in a Notion export; the .zip Notion made; From my phone",
             quotes = listOf(
                 "Folders Jarvis may look in",
                 "Send a document",
+                "Send a document or a photo",
                 "Bring in a Notion export",
             ),
             source = JUMP + listOf(

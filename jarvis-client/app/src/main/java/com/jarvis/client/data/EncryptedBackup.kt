@@ -103,7 +103,12 @@ object EncryptedBackup {
      */
     const val SEGMENT_BYTES = 64 * 1024
 
-    /** PBKDF2 rounds. The adapted project used 210,000; kept, and it is in the header. */
+    /**
+     * PBKDF2 rounds. The adapted project used 210,000; kept, and it is in the
+     * header. It is also the most [readHeader] will accept: the count is
+     * written by the file, so a crafted file must not be able to pick a slower
+     * key derivation than this app itself writes.
+     */
     const val DEFAULT_ITERATIONS = 210_000
 
     /**
@@ -150,7 +155,10 @@ object EncryptedBackup {
         }
         val salt = ByteArray(SALT_BYTES).also(data::readFully)
         val iterations = data.readInt()
-        if (iterations !in 1..10_000_000) throw InvalidBackupException("Damaged backup header")
+        // The count is chosen by the FILE, and the key is derived before the
+        // first tag can be checked. The ceiling is what this app writes, so a
+        // crafted header cannot make the phone run millions of PBKDF2 rounds.
+        if (iterations !in 1..DEFAULT_ITERATIONS) throw InvalidBackupException("Damaged backup header")
         return BackupHeader(version, true, salt, iterations)
     }
 

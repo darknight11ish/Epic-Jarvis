@@ -94,6 +94,57 @@ class MicWordsTest {
     }
 
     @Test
+    fun `a press that will stop the reply is not told the answer is in the way`() {
+        // "Stop speaking when I press the mic" (the owner's ask of 2026-11-13):
+        // with it on and the reply being SPOKEN, the press is the way out, so
+        // the "wait for it to finish" line must not sit over a button that now
+        // works - the sentence would name a reason that no longer holds.
+        assertNull(
+            "a barge-in press is still told Jarvis is answering",
+            MicWords.heldLine(
+                link = LinkState.CONNECTED,
+                streaming = true,
+                micAllowed = true,
+                voiceOffered = true,
+                bargeIn = true,
+            ),
+        )
+        // OFF (the default argument is false), or nothing being spoken: the old
+        // sentence, exactly as before this branch.
+        assertEquals(
+            MicWords.ANSWERING,
+            MicWords.heldLine(
+                link = LinkState.CONNECTED,
+                streaming = true,
+                micAllowed = true,
+                voiceOffered = true,
+            ),
+        )
+        // The reasons that still bite are unchanged and still outrank it: a
+        // denied microphone is the one the owner has to fix.
+        assertEquals(
+            MicWords.NO_PERMISSION,
+            MicWords.heldLine(
+                link = LinkState.CONNECTED,
+                streaming = true,
+                micAllowed = false,
+                voiceOffered = true,
+                bargeIn = true,
+            ),
+        )
+        assertEquals(
+            LinkWords.composerHeldLine(LinkState.OFFLINE),
+            MicWords.heldLine(
+                link = LinkState.OFFLINE,
+                streaming = true,
+                micAllowed = true,
+                voiceOffered = true,
+                bargeIn = true,
+            ),
+        )
+    }
+
+    @Test
     fun `the waiting line does not claim a voice check`() {
         // The owner, 2026-11-02: "when i do the mic press to make a short
         // verbal message to jarvis, dont have it confirm my voice through the

@@ -66,6 +66,14 @@ class VoiceSession(
      */
     private val heardSoundOn: () -> Boolean = { false },
     /**
+     * "Stop speaking when I press the mic" on this phone ([MicBargeIn]) - ON by
+     * default, the owner's ask of 2026-11-13. Read at the press, so a switch
+     * changed while Jarvis is talking applies to the very next press. See
+     * [begin]. Off, a press during speech is refused exactly as it was before
+     * this setting existed.
+     */
+    private val micBargeInOn: () -> Boolean = { MicBargeIn.DEFAULT },
+    /**
      * "Read out answers that use what Jarvis remembers" on this phone
      * (ClientSettings, [MemoryAloud]). OFF unless the owner turned it on, and
      * read when a sentence is about to be spoken, so a switch changed
@@ -464,6 +472,12 @@ class VoiceSession(
      * Silences the reply being spoken - and nothing else. The turn carries
      * on (the answer still arrives on screen); only the voice stops, for the
      * rest of this turn. The one thing the stop word may do.
+     *
+     * Also the silence a mic press asks for when it barges in ([MicBargeIn],
+     * the owner's setting of 2026-11-13): that caller then ALSO cancels the old
+     * turn, because the press is a new question rather than a "stop" over an
+     * answer still worth finishing. One function either way, so the two cannot
+     * drift into different ideas of "silent".
      *
      * "For the rest of this turn" is held by the turn's own
      * [Turn.silenced], not only by the speaker's stop flag. Before, the
@@ -1088,12 +1102,36 @@ class VoiceSession(
         }
         val previous = job
         if (previous != null && !previous.isCompleted) {
-            // Not silent. The old guard returned having done nothing — no
-            // notice, no phase change — so after a 30-second capture hit its
-            // cap the button was simply inert for the several seconds the
-            // desktop spent verifying, with nothing on screen saying why.
-            _notice.value = "Still finishing the last one."
-            return
+            // "Stop speaking when I press the mic" ([MicBargeIn], ON by default
+            // - the owner's ask of 2026-11-13). A press while the previous
+            // reply is still being SPOKEN stops it now and starts this new
+            // turn, which is what the desktop's own talk button has always
+            // done (`main.js` `startPushToTalk`: `noteCutOff(); stopSpeaking()`).
+            //
+            // The silence is [stopSpeaking], the one the "stop" word calls, and
+            // the old turn is dropped the way [interruptForWake] drops one - so
+            // no more of its reply is spoken and one still arriving from the PC
+            // never starts again here. The whole decision is made in this ONE
+            // pass that reads `previous`: a handler that silenced the reply and
+            // then called `begin` again would race this very guard (the old
+            // turn may not have unwound yet) and refuse half the presses.
+            if (MicBargeIn.press(
+                    on = micBargeInOn(),
+                    // Only a reply really being SPOKEN can be interrupted.
+                    // THINKING and VERIFYING make no sound, so there is nothing
+                    // to stop there and they keep today's words.
+                    speaking = _phase.value == Phase.SPEAKING,
+                    stopSpeech = ::stopSpeaking,
+                    dropOldTurn = { previous.cancel() },
+                ) == MicBargeIn.Press.REFUSED
+            ) {
+                // Not silent. The old guard returned having done nothing — no
+                // notice, no phase change — so after a 30-second capture hit its
+                // cap the button was simply inert for the several seconds the
+                // desktop spent verifying, with nothing on screen saying why.
+                _notice.value = "Still finishing the last one."
+                return
+            }
         }
         // A fresh flag for this turn rather than resetting a shared one. The old
         // code cleared the instance-wide flag here, and after `cancel()` - which

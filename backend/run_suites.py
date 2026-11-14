@@ -95,6 +95,21 @@ its own config folder, audit log and scratch folder inside the same run root,
 because the suites write real state and two of them writing into one folder
 is not a check either of them asked for.
 
+THE SHARDS (2026-11-13). `--shard I/N` runs only the I-th of N slices of the
+suite list, chosen by POSITION in it (`position % N == I - 1`, positions
+counted from 0), so every suite runs in exactly one shard and the split is the
+same on every run. It is the list this runner already builds - the sorted
+`test_*.py` names, narrowed by any bare suite names on the command line - and
+nothing is reordered, filtered or skipped differently: with no `--shard` the
+run is exactly what it has always been. The required `backend` CI job now runs
+one of these per shard, in parallel, and fans them into one aggregator,
+because the unsharded sweep had reached the job's 90-minute wall: a PASSING
+run of it (43549014566) took 79m20s, 75m54s of that in this one step, and PR
+#1241's run 43547214198 was CANCELLED at 90m16s with 88m41s of it in this one
+step - so the wall, not a check, decides whether the job finishes. A shard that
+would run no suite at all is a FAILURE, not an empty green - a broken split
+must never look like a pass.
+
 A SUITE THAT PASSES NOTHING IS NOT A PASS (2026-10-27, and widened the same
 evening by the partner test-health corrections). A suite that exits 0 having
 PASSED NO CHECK - every check skipped, or no summary at all - is reported as
@@ -1022,6 +1037,9 @@ USE_ENV_BACKEND_FLAG = "--use-env-backend"
 BACKEND_PATH_FLAG = "--backend-path"
 #: The patcher's own subcommand: print the environment its suite loop needs.
 STATE_ENV_FLAG = "--state-env"
+#: The shard selector, `--shard INDEX/TOTAL` (e.g. `--shard 2/4`). CI runs
+#: one of these per shard, in parallel; `shard_suites` holds the one rule.
+SHARD_FLAG = "--shard"
 
 #: `--help` prints exactly this and exits 0, before the update lock is read and
 #: before anything is staged. Deliberately short.
@@ -1034,12 +1052,15 @@ usage: run_suites.py [test_name.py ...] [options]
 
 options:
   --jobs N              run N suites at once (default 1, what CI uses)
+  --shard I/N           run only slice I of N of the suite list (e.g. --shard 2/4)
   --backend-path DIR    run against the backend folder DIR
   --use-env-backend     run against whatever JARVIS_BACKEND names
   --ignore-update-lock  run even while a backend update holds the lock
   --state-env DIR       print the suite-state environment for DIR
 
 A path is not a suite name: `backend/test_x.py` is refused, not ignored.
+`--shard` splits the sorted suite list by position, so every suite is in
+exactly one shard; a shard that would run no suite fails instead of passing.
 The four suites that open a real, VISIBLE browser window are skipped, with
 their reason, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set.
 """
@@ -1083,6 +1104,64 @@ def suite_arguments(args) -> tuple:
 
 class UsageError(ValueError):
     """A command line that cannot be honoured; `__main__` prints it and exits 2."""
+
+
+def parse_shard(value: str) -> tuple:
+    """`--shard INDEX/TOTAL` -> (INDEX, TOTAL), or a UsageError saying why not.
+
+    WHY THIS IS PARSED BEFORE ANYTHING IS STAGED. A mistyped shard must stop
+    the run, not widen it to the whole fleet (the same rule as a mistyped suite
+    name, measured 2026-10-26) and not narrow it to an empty green. Accepted:
+    two whole numbers `INDEX/TOTAL`, TOTAL >= 1 and 1 <= INDEX <= TOTAL.
+    Everything else - `--shard 2`, `--shard two/4`, `--shard 0/4`,
+    `--shard 5/4`, `--shard 1/0` - is refused with exit 2 in `__main__`,
+    before the update lock is read and before a backend is staged, so nothing
+    runs and no folder is made.
+    """
+    text = str(value).strip()
+    parts = text.split("/")
+    if len(parts) != 2:
+        raise UsageError(
+            f"{SHARD_FLAG} takes INDEX/TOTAL, e.g. {SHARD_FLAG} 2/4 "
+            f"(got {value!r}). No suite was run.")
+    try:
+        index, total = (int(part) for part in parts)
+    except ValueError:
+        raise UsageError(
+            f"{SHARD_FLAG} takes two whole numbers, INDEX/TOTAL, e.g. "
+            f"{SHARD_FLAG} 2/4 (got {value!r}). No suite was run.") from None
+    if total < 1:
+        raise UsageError(
+            f"{SHARD_FLAG} TOTAL must be at least 1 (got {total}); a run "
+            f"cannot be split into no parts. No suite was run.")
+    if not 1 <= index <= total:
+        raise UsageError(
+            f"{SHARD_FLAG} INDEX must be between 1 and {total} (got {index}); "
+            f"a shard outside that range would run nothing. No suite was run.")
+    return index, total
+
+
+def shard_suites(suites: list, shard: tuple) -> list:
+    """The slice of `suites` that belongs to one shard, chosen by POSITION.
+
+    THE ONE RULE THE SPLIT HAS: `position % TOTAL == INDEX - 1`, over the list
+    this runner already built (`sorted(HERE.glob("test_*.py"))`, narrowed by
+    any bare suite names on the command line). Position, and not file size or
+    name, because it needs no table to keep in step and the same list always
+    gives the same slices - so every suite runs in exactly one shard of a run,
+    and two runs of the same tree cannot disagree about which. The list is
+    never reordered or filtered here; a shard is a strict slice of it, and the
+    shards of one run partition it exactly (each suite appears once).
+
+    With one shard (`1/1`) every position satisfies the rule, which is what
+    makes `--shard 1/1` behave exactly like no `--shard` at all. A slice may be
+    empty when the shard count is larger than the number of suites; `_sweep`
+    treats that as a FAILURE, not an empty pass - the rule the frontend shard
+    in `.github/workflows/ci.yml` already follows.
+    """
+    index, total = shard
+    return [suite for position, suite in enumerate(suites)
+            if position % total == index - 1]
 
 
 def _named_backend(use_env_backend: bool = False, backend_path=None):
@@ -1175,7 +1254,7 @@ def update_lock_refusal(ignore: bool = False) -> str:
 
 
 def main(only=(), jobs: int = 1, ignore_update_lock: bool = False,
-         use_env_backend: bool = False, backend_path=None) -> int:
+         use_env_backend: bool = False, backend_path=None, shard=None) -> int:
     """Every suite, or only the ones named (`run_suites.py test_x.py ...`).
 
     Refuses immediately (exit 3, nothing staged, no suite started) while a
@@ -1199,6 +1278,10 @@ def main(only=(), jobs: int = 1, ignore_update_lock: bool = False,
     The updater (the owner's own "how hard should this update work" choice) is
     the only caller that passes more; which suites run never changes, only how
     many are in flight.
+
+    `shard` is `(INDEX, TOTAL)` from `--shard INDEX/TOTAL`: the same suites,
+    narrowed to one position-based slice of them (see `shard_suites`). None -
+    the default - runs every suite, in the same order, exactly as before.
 
     A name given on the command line that is not a suite here is a FAILURE, not
     an empty run: a sweep that prints "0 passed, 0 skipped, 0 failed" and exits
@@ -1225,7 +1308,7 @@ def main(only=(), jobs: int = 1, ignore_update_lock: bool = False,
     root = Path(tempfile.mkdtemp(prefix=SWEEP_PREFIX))
     lock = claim(root, "sweep")
     try:
-        return _sweep(root, only, jobs, ignore_update_lock, backend)
+        return _sweep(root, only, jobs, ignore_update_lock, backend, shard)
     finally:
         # The lock goes FIRST: on Windows a file this process still holds open
         # cannot be deleted, so the marker would keep the whole folder alive -
@@ -1385,7 +1468,8 @@ def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
 
 
 def _sweep(root: Path, only=(), jobs: int = 1,
-           ignore_update_lock: bool = False, named_backend: "Path|None" = None) -> int:
+           ignore_update_lock: bool = False, named_backend: "Path|None" = None,
+           shard: "tuple|None" = None) -> int:
     """One run, inside `root`: reap what a dead run left, stage, run each
     suite, report. Never called except from `main`, which owns `root`.
 
@@ -1397,7 +1481,11 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     `named_backend` is the folder `main` resolved from an EXPLICIT
     `--use-env-backend` / `--backend-path`; None means the default: stage a
     throwaway copy. The ambient `JARVIS_BACKEND` is never read here - `main`
-    has already decided (and popped it when the run is hermetic)."""
+    has already decided (and popped it when the run is hermetic).
+
+    `shard` is the `(INDEX, TOTAL)` slice `main` parsed from `--shard`, applied
+    below to the list this function builds, by position (`shard_suites`); None
+    runs the whole list, in the same order, exactly as before 2026-11-13."""
     jobs = max(1, int(jobs))
     reaped = reap_orphans(keep=(root,))
     if reaped:
@@ -1425,6 +1513,26 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     # renamed or deleted suite must be caught even by `run_suites.py test_x.py`.
     stale_visible = sorted(set(VISIBLE_BROWSER_SUITES) - {s.name for s in known})
     passed, failed, skipped = [], [], []
+    # A SHARD IS A SLICE OF THE LIST ABOVE, AND NOTHING ELSE (2026-11-13).
+    # `names` and `stale` were computed from the WHOLE list on purpose: a shard
+    # that does not hold test_events_pump.py must not report that suite's
+    # NEEDS_OWNER entry as stale, and the visible-browser list is checked
+    # against every suite in the checkout, not only the ones in this slice.
+    if shard is not None:
+        selected = len(suites)
+        suites = shard_suites(suites, shard)
+        print(f"shard: {shard[0]}/{shard[1]}  ({len(suites)} of {selected} "
+              f"suite(s), by position in the sorted list - every suite runs in "
+              f"exactly one shard)")
+        if not suites:
+            # A BROKEN SPLIT MUST NOT LOOK GREEN. This is the frontend shard's
+            # rule, copied here 2026-11-13: with nothing in the slice the run
+            # below would print "0 passed" and exit 0 - a green that proves a
+            # quarter of the tests never ran. It is a FAILURE, and it names
+            # itself so the red run says which shard is broken.
+            print(f"FAIL  shard {shard[0]}/{shard[1]} would run no suite at all "
+                  f"({selected} suite(s) in this run) - the split is broken")
+            failed.append(f"shard {shard[0]}/{shard[1]}")
     # The checks inside the suites that ran, summed from what each suite
     # reported. A suite that exits 0 having PASSED nothing is FAILED, not
     # "ok" - whatever it skipped, and with no allowlist to excuse it
@@ -1541,6 +1649,7 @@ if __name__ == "__main__":
     ignore_update_lock = False
     use_env_backend = False
     backend_path = None
+    shard = None
     if LOCK_BYPASS_FLAG in args:
         # The update's own suite phase: it holds the lock, so it must not
         # refuse itself. Any other caller asking for this is saying "I know an
@@ -1583,6 +1692,21 @@ if __name__ == "__main__":
                   f"unexpected: {' '.join(args)}", file=sys.stderr)
             sys.exit(2)
         sys.exit(state_env(state_where))
+    if SHARD_FLAG in args:
+        # PARSED BEFORE ANY STAGING, like a suite name: a mistyped shard must
+        # stop the run, never widen it to the full fleet or narrow it to an
+        # empty green (see `parse_shard`).
+        at = args.index(SHARD_FLAG)
+        try:
+            shard = parse_shard(args[at + 1])
+        except IndexError:
+            print(f"FAIL  {SHARD_FLAG} needs INDEX/TOTAL, e.g. "
+                  f"{SHARD_FLAG} 2/4. No suite was run.", file=sys.stderr)
+            sys.exit(2)
+        except UsageError as exc:
+            print(f"FAIL  {exc}", file=sys.stderr)
+            sys.exit(2)
+        del args[at:at + 2]
     # A TYPO MUST STOP THE RUN, NOT WIDEN IT. A path-shaped or unknown argument
     # is refused here, before any staging, so the fleet cannot start by
     # accident (see `suite_arguments`).
@@ -1595,7 +1719,7 @@ if __name__ == "__main__":
         sys.exit(main(only,
                       max(1, jobs), ignore_update_lock=ignore_update_lock,
                       use_env_backend=use_env_backend,
-                      backend_path=backend_path))
+                      backend_path=backend_path, shard=shard))
     except UsageError as exc:
         print(f"FAIL  {exc}", file=sys.stderr)
         sys.exit(2)

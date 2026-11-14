@@ -130,6 +130,34 @@ await check("the generated copy matches the canonical contract", async () => {
   assert.match(out, /match the feature contract/);
 });
 
+await check("a planned note is only on a row that is really planned", async () => {
+  // Finding 2 (2026-11-13, the self-knowledge audit). The generator used to
+  // decide the note from `known_gaps` and the multi-field boards ALONE, so:
+  //   * a feature that had become `enforced` while a stale gap row still said
+  //     `planned` printed "Still being wired" (memory-saved and jarvis-calendar
+  //     were the two), and
+  //   * a board member that is not a setting at all - Command-Only, Always-On,
+  //     Settings-Only or PC-Only - was told its "typed path" was "still being
+  //     wired", which its own label denies.
+  // Both are false bullets in the owner's own directory. The note may now only
+  // appear on a row whose OWN status is `planned` and whose label is the one
+  // that claims a Settings control and a typed path. This reads the committed
+  // data, so a regenerated false note fails here; the generator's own --check
+  // (above) is what catches a generator change nobody regenerated.
+  const PLANNED_NOTE = "Settings control today; typed path still being wired.";
+  const SWITCHABLE = "Switchable / Adjustable (Typed & Settings)";
+  const isPlannedNote = (note) =>
+    note === PLANNED_NOTE || note.startsWith("Still being wired");
+  const plannedRows = FIXTURE.rows.filter((row) => row.status === "planned");
+  assert.ok(plannedRows.length > 0,
+    "no row is planned, so the note rule below cannot be checked");
+  const bad = FIXTURE.rows.filter((row) => isPlannedNote(String(row.note || ""))
+    && (row.status !== "planned" || row.label !== SWITCHABLE))
+    .map((row) => `${row.id} (status ${row.status}, label ${row.label})`);
+  assert.deepEqual(bad, [],
+    `a planned note is on a row that is not planned: ${bad.join("; ")}`);
+});
+
 await check(`the page renders all ${CONTRACT.features.length} features, grouped under exactly five labels`, async () => {
   const page = await open();
   const d = await directory(page);

@@ -87,9 +87,11 @@ Some abilities are **off until you switch them on**, each with its own approval 
 - **Ready to add: three drop-in modules.** **Habit check-ins** (one tap a day, no streaks, scores or praise) and a **1-5 mood log** with optional words are built and tested, and neither store is ever learned from. The habit and mood modules have **no screen in either app and no chat sentence that reaches them yet** - they are routes only - so today they are ready rather than usable. The PC's **Skills** menu installs a `SKILL.md` from a folder or a `.zip`, imports from `%USERPROFILE%\.hermes\skills`, turns one off and on, and edits one - each install, turn-on and edit behind one card - and, once added, its screen is **Settings → Skills**. All three are folders under `plugins/ready/`, added with `scripts\add-plugin.ps1` and a restart, and none is a marketplace: nothing is downloaded from a store.
 
 **In the 2026-11-05 to 2026-11-09 updates (Wave 10, Wave 11, Wave 12 and Wave 13).** Wave 10 and Wave 11
-are live (desktop and backend 0.2.441, phone 0.2.4028); Wave 12 is the consolidated review that also fixes
-the one failure the live acceptance found; Wave 13 is the next consolidated batch. Every line below is
-built and tested, and the ones with no hands-on pass say so in **Honest limits**.
+are live (the rolling [desktop-latest](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest)
+and [client-latest](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest) release notes
+name the exact version each build carries); Wave 12 is the consolidated review that also fixes the one
+failure the live acceptance found; Wave 13 is the next consolidated batch. Every line below is built and
+tested, and the ones with no hands-on pass say so in **Honest limits**.
 
 - **Brain → Model tells the truth about this PC.** A "Loaded now / Resources" plate shows what is really
   loaded, its real context size, the spill (as a percentage and MiB, never hidden), each card's memory and
@@ -298,11 +300,12 @@ The full list, in plain words, is **Settings → What asks first** in both apps.
 
 This project's habit is to say what is not done. One of its own architecture rules is that **nothing is claimed that is not true**. The short list:
 
-- **Wave 12 and Wave 13 are not deployed or field-tested yet.** The live install is 0.2.441 (Wave 10/11);
-  `docs/FIELD-TEST-MATRIX-2026-11-09.md` records what that install's acceptance really measured (23 of its
-  24 rows PASS, one FAIL since fixed) and every Wave-12/13 row stays **NOT RUN YET**. A row becomes PASS only
-  after the feature is driven on the real desktop app or the owner's phone - no line on this page claims
-  otherwise.
+- **Wave 12 and Wave 13 are not deployed or field-tested yet.** The live install's exact version is in the
+  rolling [desktop-latest release notes](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest),
+  not on this page; `docs/FIELD-TEST-MATRIX-2026-11-09.md` records what that install's acceptance really
+  measured (23 of its 24 rows PASS, one FAIL since fixed) and every Wave-12/13 row stays **NOT RUN YET**.
+  A row becomes PASS only after the feature is driven on the real desktop app or the owner's phone - no
+  line on this page claims otherwise.
 - **The pooled Coding lane's 49,152-token window used to be lost on a chat-triggered reload; the fix is in code but not yet driven on the live PC.** Measured on the live install: with the 30B unloaded, a `/v1/chat/completions` turn reloaded it at 8,192 tokens because Ollama's OpenAI-compatible endpoint ignores the request's `options` field. The wave-13 branch now warms the lane natively at 49,152 before a cold pooled turn and proves the loaded window from `/api/ps` (design page `docs/POOLED-WINDOW-PRELOAD-DESIGN-2026-11-09.md`); the live cold-turn row stays **NOT RUN** until it is measured after the wave-13 deploy, and nothing here claims that measurement.
 - **Creator mode's plug-in half is refused, not built.** It stages and scans a plug-in and refuses it in the
   pack manager's own words; skills install behind the one card. The first real plug-in install is future
