@@ -1651,8 +1651,9 @@ permissions = [
 # for memory lists and chat history" hides the private lists, or App lock
 # has locked Jarvis. A change is ONE of two actions from a fixed list
 # (brain/forget_range.rs) - the page never names a URL: "Forget these" sends
-# the ids still ticked, and the PC raises ONE card listing every item (never
-# approved here, never by voice); it is refused while the list is hidden
+# the ids still ticked, and the PC raises ONE card carrying the count and the
+# days - every title and date stays on the page - (never approved here,
+# never by voice); it is refused while the list is hidden
 # and held while the event stream is stale. Undo puts back what that card
 # removed, within 10 minutes, with no card; it is never held.
 [[set]]

@@ -6,9 +6,10 @@ ten minutes to undo.
 The owner's decision of 2026-09-28 (CLAUDE.md): the owner may ask, by voice
 or typing, to forget what Jarvis learned or said in a time frame. Nothing is
 removed at once: both apps show the exact facts and chats, each ticked; ONE
-approval card listing every item is decided by tapping only; approved, the
-facts are forgotten (retired, as Forget does) and the chats deleted, with
-10 minutes to Undo. backend/jarvis_forget_range.py does the work,
+approval card carrying the count of facts and chats and the days is decided by
+tapping only; approved, the facts are forgotten (retired, as Forget does) and
+the chats deleted, with 10 minutes to Undo. The full list stays on the screen
+that was ticked. backend/jarvis_forget_range.py does the work,
 forget-range.patch installs its routes (docs/JARVIS-API.md section 64).
 
 What is proved here, against a real memory store and a real, encrypted
@@ -22,9 +23,12 @@ chat history in a temp folder, with the clock and the time zone fixed:
      counts, with a human sentence; NO ITEM CAP (the owner's 2026-11-08
      ruling): any number is listed in full and offered, and a selection past
      LARGE_WIPE_ITEMS (200) is called a LARGE WIPE in words - never refused;
-  * the card: tier "ask" only, every fact word for word, every chat's
-    title, the pinned-kept count and the estimate on it; one at a time; a
-    list that changed since it was read refused;
+  * the card: tier "ask" only, the COUNT of facts and chats with the date
+    range, the facts' own words while they fit, the pinned-kept count and the
+    estimate on it; one at a time; a list that changed since it was read
+    refused; a card that would be cut by the gate's 4,000-character limit
+    (the owner's ruling of 2026-11-13) is REFUSED before it is raised - and
+    the checked list still carries every item in full;
    * NO BACKUP IS TOUCHED: a backup folder present on disk is byte-unchanged
      through a preview and a full forget, and the module names no backup at
      all (walked as AST nodes, not pinned as source text);
@@ -568,6 +572,178 @@ def t_the_card():
           detail["leaves_this_pc"] is False
           and detail["text"] == prompt and detail["facts"] == 2 and detail["chats"] == 2
           and detail["pinned_kept"] == 1, detail)
+
+
+# --------------------------------------------------------------------------
+#   A big range must still FIT on one card (the owner's ruling, 2026-11-13)
+# --------------------------------------------------------------------------
+
+#: Monday 9 November 2026, 15:30 UTC: the day after the range the owner used,
+#: so his own "2 to 8 November" frame is in the past and frame_of accepts it.
+NOV_AFTER = at(2026, 11, 9, 15, 30)
+
+#: The facts the range holds. The owner's own chat titles are longer (his card
+#: measured 14,546 characters on 2026-11-13); these are short on purpose, so
+#: the number this suite prints is THIS test's, not his.
+_NOV_FACTS = ("The owner moved to Leeds", "The owner's lease ends in December",
+              "The owner likes pears")
+
+
+def _november_world(chats=125):
+    """The owner's own shape: 3 facts and `chats` chats from 2 to 8 November
+    2026, with the preview of that range already taken."""
+    w = World()
+    for i, text in enumerate(_NOV_FACTS):
+        w.fact(text, at(2026, 11, 3 + i))
+    for i in range(chats):
+        w.chat(f"conv-{i:05d}", f"Chat number {i} about the kitchen plan",
+               at(2026, 11, 2) + i * 3600)
+    w.frame = FR.frame_of("2026-11-02", "2026-11-08", NOV_AFTER)
+    w.preview_nov = FR.preview(w.frame, FR.KINDS, mem=w.mem, chats=w.log)
+    w.body = {"from": "2026-11-02", "to": "2026-11-08",
+              "facts": [f["id"] for f in w.preview_nov["facts"]],
+              "chats": [c["id"] for c in w.preview_nov["chats"]]}
+    return w
+
+
+def t_a_125_chat_range_fits_on_one_card():
+    """THE OWNER'S RULING (2026-11-13, verbatim: "Show the count, allow it").
+
+    jarvis_gate stores a card's detail as `json.dumps(detail)[:4000]`, and the
+    HUD disables Approve when a detail that long no longer parses ("This
+    request was cut off before it reached this card"). A card that listed
+    every chat was 14,546 characters for the owner's own 125 chats: it reached
+    the HUD cut off mid-JSON and expired un-approvable. So the CARD now
+    carries the count and the dates, and the PREVIEW screen keeps every item -
+    this proves both halves at once."""
+    w = _november_world()
+    p = w.preview_nov
+    check("CONTROL: the range holds 3 facts and 125 chats",
+          p["counts"] == {"facts": 3, "chats": 125} and len(p["chats"]) == 125,
+          p["counts"])
+    code, out = w.ask(w.body, now=NOV_AFTER)
+    check("CONTROL: the range is offered - 202 and one card", code == 202, out)
+    w.approve()                     # the card is raised, so the gate saw its detail
+    action, detail, prompt = w.gate.asked[-1]
+    stored = json.dumps(detail)
+    try:
+        json.loads(stored[:4000])
+        parses = True
+    except ValueError:
+        parses = False
+    check("PIN 1: the 125-chat card is well under the gate's 4,000 characters",
+          len(prompt) < 2000, len(prompt))
+    check("PIN 1b: the detail the gate keeps - json.dumps(detail)[:4000] - is VALID "
+          "JSON, so the HUD can never call it cut off",
+          len(stored) < 4000 and parses, f"{len(stored)} characters, parses={parses}")
+    check("PIN 2: the card says the count of facts and chats and the date range",
+          "3 facts and 125 chats from 2 to 8 November 2026." in prompt, prompt[:300])
+    check("... word for word the sentence the checked list itself carries",
+          p["said"] in prompt, p["said"])
+    check("... and the facts' own words are still on it, so the owner sees what he loses",
+          all(t in prompt for t in _NOV_FACTS), prompt[:600])
+    check("... with the risk sentence and the undo promise unchanged",
+          "For 10 minutes after the second yes, one tap on Undo" in prompt
+          and "the chats are gone for good" in prompt
+          and "Saying yes out loud does not approve it" in prompt, prompt[-500:])
+    check("... and it says where the full list is",
+          "The full list, every title and date, is on the Forget a time frame screen, "
+          "where you ticked them." in prompt, prompt[-500:])
+    check("... not one line per chat: a card of a few dozen lines, not 144",
+          prompt.count("\n") < 30, prompt.count("\n"))
+    check("PIN 4: the PREVIEW still lists every item in full - nothing was removed there",
+          [c["title"] for c in p["chats"]] == [f"Chat number {i} about the kitchen plan"
+                                               for i in range(125)]
+          and all(c["label"] for c in p["chats"])
+          and [f["text"] for f in p["facts"]] == list(_NOV_FACTS), p["counts"])
+    check("... so the card counts them while the screen still shows every title",
+          "Chat number 0" not in prompt
+          and p["chats"][0]["title"] == "Chat number 0 about the kitchen plan",
+          prompt[:200])
+    check("... and the card's detail carries the same counts, on this PC",
+          detail["facts"] == 3 and detail["chats"] == 125
+          and detail["leaves_this_pc"] is False, detail)
+
+
+def t_a_big_list_of_facts_fits_too():
+    """The other half of the fit: the facts are kept while they fit, and when
+    they cannot, the card says so and names where their words are - rather
+    than being cut. 300 facts of ordinary length cannot fit (each line is over
+    100 characters), so the card falls back to the count and the pointer."""
+    w = World()
+    with closing(sqlite3.connect(w.mem.path)) as c:
+        for i in range(300):
+            c.execute("INSERT INTO facts (text, source, created, valid_from) VALUES (?,?,?,?)",
+                      (f"The owner said thing number {i}, which is a long enough fact to take "
+                       "a line of its own on any card that tried to list it", "test",
+                       at(2026, 11, 2) + i, at(2026, 11, 2)))
+        c.commit()
+    w.frame = FR.frame_of("2026-11-02", "2026-11-08", NOV_AFTER)
+    p = FR.preview(w.frame, FR.KINDS, mem=w.mem, chats=w.log)
+    body = {"from": "2026-11-02", "to": "2026-11-08",
+            "facts": [f["id"] for f in p["facts"]]}
+    code, out = w.ask(body, now=NOV_AFTER)
+    check("CONTROL: 300 facts are offered - 202 and one card", code == 202, out)
+    w.approve()
+    prompt = w.gate.asked[-1][2]
+    check("a 300-fact card fits by carrying the count, not 300 lines",
+          len(prompt) < 2000 and prompt.count("\n") < 20, f"{len(prompt)} characters")
+    check("... the count and the days are on it",
+          "300 facts from 2 to 8 November 2026." in prompt, prompt[:300])
+    check("... and it says, grammatically, where the facts' own words are",
+          "Their words are on the Forget a time frame screen, where you ticked them." in prompt,
+          prompt[:600])
+    check("... no fact is quoted on it", "thing number 0" not in prompt, prompt[:300])
+    check("... and the preview still carries all 300, each with its words",
+          len(p["facts"]) == 300 and p["counts"] == {"facts": 300, "chats": 0}
+          and p["facts"][0]["label"], p["counts"])
+
+
+def t_a_card_that_would_be_cut_is_refused_before_it_exists():
+    """Fail closed on THIS path too - the half that was missing.
+
+    The model tool path refuses a too-long card before it is raised
+    (jarvis_agent.py's `_card_would_be_cut`, the rule its comment at
+    :7672-7676 describes). jarvis_forget_range raised its card straight
+    through `jarvis_gate.check` and never asked, so the owner's own card sat at
+    exactly 4,000 characters, invalid JSON, un-approvable, until it expired
+    (measured 2026-11-13). Now the route asks the same rule, imported from its
+    owner."""
+    import jarvis_agent
+    w = _november_world(chats=2)
+    body = w.body
+    asked = len(w.gate.asked)
+
+    # (a) The rule is IMPORTED, not copied: patching the owner's function must
+    # change this route's answer.
+    real = jarvis_agent._card_would_be_cut
+    calls = []
+    jarvis_agent._card_would_be_cut = lambda *a, **k: (calls.append(a), True)[1]
+    try:
+        code, out = w.ask(body, now=NOV_AFTER)
+    finally:
+        jarvis_agent._card_would_be_cut = real
+    check("PIN 3: a card the gate would cut is REFUSED before it is raised - "
+          "no approvals row, no card job",
+          code == 400 and "nothing was asked" in out.get("error", "")
+          and len(w.gate.asked) == asked and not w.spawn.jobs, out)
+    check("... the refusal comes from jarvis_agent's own rule - imported from the "
+          "module that owns it, never copied",
+          len(calls) == 1, calls)
+    check("... and nothing is left holding anything: no card waiting, no second yes",
+          FR._STATE["pending"] is None and FR._STATE["hold"] is None, FR._STATE)
+
+    # (b) The real rule, on a card that genuinely would be cut: 9,000 characters.
+    real_card = FR.card_text
+    FR.card_text = lambda *a, **k: "x" * 9000
+    try:
+        code2, out2 = w.ask(body, now=NOV_AFTER)
+    finally:
+        FR.card_text = real_card
+    check("... and a card forced past 4,000 characters is refused the same way, "
+          "not shown un-approvable",
+          code2 == 400 and "nothing was asked" in out2.get("error", "")
+          and len(w.gate.asked) == asked and not w.spawn.jobs, out2)
 
 
 def t_two_yeses():
