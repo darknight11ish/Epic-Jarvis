@@ -556,9 +556,9 @@ export function linkWords(state = link) {
         tone: "bad",
         short: "Offline",
         // stream.rs now starts its reasons with a plain sentence that names
-        // Jarvis ("Jarvis is not running at ..."); an older or raw reason
+        // the product ("Atlas is not running at ..."); an older or raw reason
         // gets the words around it.
-        text: /^Jarvis\b/.test(first)
+        text: /^(?:Atlas|Jarvis)\b/.test(first)
           ? `Offline — ${first}. Approving is blocked until it reconnects.`
           : `Offline — Jarvis is not answering: ${first}. Approving is blocked until it reconnects.`,
         canAct: false,

@@ -1150,7 +1150,7 @@ async fn get_json_status(
         .await
         .map_err(|e| {
             let why = if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else if e.is_timeout() {
                 format!("{path} did not answer within {}s", budget.as_secs())
             } else {
@@ -1236,7 +1236,7 @@ async fn post_with(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else if e.is_timeout() {
                 format!("{path} did not answer within {}s", budget.as_secs())
             } else {

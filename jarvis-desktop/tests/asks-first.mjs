@@ -289,8 +289,8 @@ await check("the GitHub group switch: one row, truthfully off/on/partial, ON hel
 });
 
 await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {  const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 74,
-    "every tool the model can be offered is a switch (65 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65)");
+  assert.equal(pc.tools.items.length, 75,
+    "every tool the model can be offered is a switch (75 at 2026-11-14, 74 at 2026-11-11, 65 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65; wave 16E's two local review gates, the parity pass's pull-request read and six carded writes, and wave 20's android_app builder took it to 75)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));
@@ -301,8 +301,9 @@ await check("the tool surface: groups, the vault row and the not-a-switch note",
   const raw = groups.flatMap((g) => g.items).filter((i) => i.group === "Raw and powerful");
   assert.deepEqual(raw.map((i) => i.id),
     ["shell_exec", "control_computer", "control_phone", "browser_control",
-      "read_web_page", "connect_account", "rea_investigate"],
-    "the seven raw tools that were refused until 2026-11-04 are switches now");
+      "read_web_page", "connect_account", "rea_investigate", "android_app"],
+    "the seven raw tools that were refused until 2026-11-04 are switches now, " +
+    "and wave 20's android_app joins them: a Gradle build runs another program");
   const vault = pc.tools.vault;
   assert.equal(vault.id, "vault_organizer");
   assert.equal(vault.kind, "switch", "the organizer is a separate switch, not a tool item");

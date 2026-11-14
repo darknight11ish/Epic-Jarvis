@@ -168,9 +168,9 @@ class AsksFirstTest {
         // cockpit, carded merge and carded fix-and-push are the 63rd, 64th and
         // 65th, and wave 16E's local review packet and record check are the
         // 66th and 67th. The phone still shows them read-only.
-        assertEquals("74 one-tool switches", 74, rawIds.size)
+        assertEquals("75 one-tool switches", 75, rawIds.size)
         for (id in listOf("shell_exec", "control_computer", "browser_control",
-                "read_web_page", "connect_account", "rea_investigate",
+                "read_web_page", "connect_account", "rea_investigate", "android_app",
                 "calculator", "propose_plan", "web_search",
                 "github_list", "github_read_file", "github_ci_status",
                 "github_comment", "github_open_issue", "github_rerun_workflow",

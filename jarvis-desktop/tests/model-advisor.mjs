@@ -507,7 +507,7 @@ await check("one click shows progress, then the candidates with size, quant, fit
   assert.match(text, /licence apache-2\.0/, "the licence the catalogue reported is missing");
   assert.match(text, /licence not reported by the catalogue/,
     "a row with no licence did not say so honestly");
-  assert.match(text, /No SHA-256 is shown: the catalogue Jarvis reads reports no file hash/,
+  assert.match(text, /No SHA-256 is shown: the catalogue Atlas reads reports no file hash/,
     "the missing hash was not said out loud");
   assert.match(text, /Nothing here has been measured on this PC yet/,
     "the panel let an unmeasured list read as an upgrade");

@@ -111,7 +111,7 @@ export function arrivalLine() {
   return (
     "How a skill arrives: a folder or a .zip already on this PC, installed from " +
     "Settings, Skills. The scanner runs first and one approval card is asked before " +
-    "anything is installed; Jarvis never downloads one and there is no marketplace."
+    "anything is installed; Atlas never downloads one and there is no marketplace."
   );
 }
 

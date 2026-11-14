@@ -786,6 +786,50 @@ GATE_ROWS = Repair(
     why="the app builder's approval cards are unapprovable without these rows",
 )
 
+#: DEF-068's second half (2026-11-14). The `_RISK` rows above make both cards
+#: approvable, but `jarvis_gate.action_for_tool()` still answers
+#: "unclassified_tool" for the two tools, because `_TOOL_ACTIONS` on this
+#: install has no entry mapping `android_app`'s gate lookup names to themselves.
+#: The consequence is not a refusal - it is a card that is not the one the tool
+#: raised, and a Reach page that calls both actions unclassified.
+#:
+#: WHY THIS IS A REPAIR AND NOT A PATCH (the owner's ruling, 2026-11-14, and it
+#: is measured rather than preferred): typing these two rows into
+#: `_TOOL_ACTIONS`'s literal broke `web-search-grant.patch`'s reversal
+#: ("error: patch failed: jarvis_gate.py:1052"), because every line inside that
+#: literal is some earlier patch's hunk context. Adding a NEW patch to carry
+#: them was worse: it moved `backend/_stack.py`'s walk pin for `jarvis_gate.py`
+#: from 61 to 62, smeared `handsfree_enable`'s row into the reconstructed tree
+#: twice (the row was in the new patch's own 3-line context), collided two
+#: plug-in stack orders, and broke the `test_patch_original_text` claim - six
+#: suites and the audit, for two lines. So the rows live in the published base
+#: (`jarvis-backend/jarvis_gate.py`, an `_TOOL_ACTIONS.update` block at the end
+#: of the file, the shape handsfree and product-check already use) and reach
+#: this PC through this repair, exactly as the `_RISK` rows above did.
+GATE_TOOL_ACTIONS = Repair(
+    name="tool-actions",
+    filename="jarvis_gate.py",
+    probes=('"app_build_android": "app_build_android"',
+            '"app_install_android": "app_install_android"'),
+    anchor="_TOOL_ACTIONS: dict[str, str] = {\n",
+    replace_with=(
+        "_TOOL_ACTIONS: dict[str, str] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-14, DEF-068): each name\n"
+        "    # maps to ITSELF, the shape send_file_to_phone above uses, because\n"
+        "    # jarvis_agent.py puts both halves of the app builder to the gate under\n"
+        "    # the builder module's own action names\n"
+        "    # (jarvis_android_builder.BUILD_ACTION / INSTALL_ACTION). Inside the\n"
+        "    # literal rather than in an `.update` block here on purpose: this is\n"
+        "    # the LIVE file, which no patch is applied to afterwards, and the\n"
+        "    # literal is what an older install shape already has. The published\n"
+        "    # base carries the same two rows in an `.update` block at its end.\n"
+        '    "app_build_android": "app_build_android",\n'
+        '    "app_install_android": "app_install_android",\n'
+    ),
+    why="without these entries the gate's action_for_tool() calls both builder "
+        "actions unclassified, so the card shown is not the one the tool raised",
+)
+
 HISTORY_ROUTES = Repair(
     name="history",
     filename="jarvis_hud.py",
@@ -1119,8 +1163,8 @@ UNKNOWN_RISK = Repair(
 )
 
 
-REPAIRS = {r.name: r for r in (GATE_ROWS, HISTORY_ROUTES, CARD_TIMER,
-                              UNKNOWN_RISK)}
+REPAIRS = {r.name: r for r in (GATE_ROWS, GATE_TOOL_ACTIONS, HISTORY_ROUTES,
+                              CARD_TIMER, UNKNOWN_RISK)}
 
 
 class Refused(Exception):

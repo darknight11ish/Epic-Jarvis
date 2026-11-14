@@ -92,7 +92,7 @@ await check("the PC's list is read, and anything else shows no names", async () 
   assert.equal(moreLine(1), "and 1 older fact not shown");
   assert.equal(MERGE_SOURCE, "entity_merge");
   assert.ok(read("src/brain.html").includes(
-    "The facts Jarvis has linked to this name, word for word. Nothing here is written by the model."));
+    "The facts Atlas has linked to this name, word for word. Nothing here is written by the model."));
 });
 
 /* ── The Brain window ─────────────────────────────────────────────────── */

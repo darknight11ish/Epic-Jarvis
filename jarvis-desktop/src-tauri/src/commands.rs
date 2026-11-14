@@ -2933,7 +2933,7 @@ pub async fn mark_answer(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else {
                 format!("the mark could not be sent: {e}")
             }
@@ -2992,7 +2992,7 @@ pub async fn get_feedback_mark(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else {
                 format!("the saved mark could not be read: {e}")
             }
@@ -3455,7 +3455,7 @@ async fn answer_approval(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to {endpoint} `{id}`: {e}")
             }
@@ -3524,7 +3524,7 @@ async fn post_task_control(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else {
                 format!("unable to reach `{path}`: {e}")
             }
@@ -4474,7 +4474,7 @@ pub async fn note_targets(app: AppHandle) -> Result<serde_json::Value, String> {
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to reach `/api/notes/capture`: {e}")
             }
@@ -4537,7 +4537,7 @@ pub async fn capture_note(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("the note could not be sent: {e}")
             }
@@ -4560,7 +4560,7 @@ pub async fn capture_note_status(app: AppHandle, id: String) -> Result<serde_jso
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to reach `/api/notes/capture`: {e}")
             }
@@ -5599,7 +5599,7 @@ pub async fn wiki_ingest(app: AppHandle, source: String) -> Result<serde_json::V
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to reach `/api/wiki/ingest`: {e}")
             }
@@ -5662,7 +5662,7 @@ async fn wiki_get(app: &AppHandle, path: &str) -> Result<(u16, String), String> 
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(app))
+                format!("could not reach the Atlas server at {}", jarvis_base(app))
             } else {
                 format!("unable to reach the wiki builder: {e}")
             }
@@ -5870,7 +5870,7 @@ pub async fn notes_list(app: AppHandle, q: Option<String>) -> Result<serde_json:
     }
     let response = request.send().await.map_err(|e| {
         if e.is_connect() {
-            format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            format!("could not reach the Atlas server at {}", jarvis_base(&app))
         } else {
             format!("unable to reach `/api/notes/list`: {e}")
         }
@@ -5896,7 +5896,7 @@ pub async fn notes_read(app: AppHandle, path: String) -> Result<serde_json::Valu
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to reach `/api/notes/read`: {e}")
             }
@@ -5952,7 +5952,7 @@ pub async fn notes_save(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("the save could not be sent: {e}")
             }
@@ -5979,7 +5979,7 @@ pub async fn notes_save_status(app: AppHandle, id: String) -> Result<serde_json:
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to reach `/api/notes/save`: {e}")
             }
@@ -6067,7 +6067,7 @@ pub async fn notes_change_status(app: AppHandle, id: String) -> Result<serde_jso
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("unable to reach `/api/notes/change`: {e}")
             }
@@ -6099,7 +6099,7 @@ async fn notes_change(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("the {verb} could not be sent: {e}")
             }

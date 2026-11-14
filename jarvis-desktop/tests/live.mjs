@@ -102,8 +102,8 @@ await check("the tab is called \"Now\" (not confused with Jarvis Live), and a Ja
   await page.close();
   assert.equal(label, "Now");
   assert.deepEqual(got, [
-    "Jarvis Live on the phone · 24 min left · Waiting for the card - approve or deny it, and Live carries on",
-    "Jarvis Live ended: You ended it.",
+    "Atlas Live on the phone · 24 min left · Waiting for the card - approve or deny it, and Live carries on",
+    "Atlas Live ended: You ended it.",
   ]);
 });
 

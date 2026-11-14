@@ -2411,5 +2411,58 @@
     "properties": {}
    }
   }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "android_app",
+   "description": "Build a real Android app in one of the owner's app projects, or put a built one on their phone (action \"install\"). Jarvis writes its own fixed project, so the model supplies only the page and an optional name - the app gets no permission at all. One card before Gradle, one before adb; nothing runs until the owner says yes. Name the project; if there are several, ask instead of guessing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "build",
+       "install"
+      ],
+      "description": "\"build\" (the default), or \"install\""
+     },
+     "project": {
+      "type": "string",
+      "description": "the project's name or id; leave out if there is only one"
+     },
+     "task": {
+      "type": "string",
+      "description": "the task id; leave out if there is only one open"
+     },
+     "title": {
+      "type": "string",
+      "description": "the app's name on the phone"
+     },
+     "background": {
+      "type": "string",
+      "description": "page colour, like #101828"
+     },
+     "accent": {
+      "type": "string",
+      "description": "accent colour, like #7cc4ff"
+     },
+     "index_html": {
+      "type": "string",
+      "description": "the page's HTML, at most 96 KB"
+     },
+     "app_js": {
+      "type": "string",
+      "description": "the page's JS, at most 96 KB"
+     },
+     "app_css": {
+      "type": "string",
+      "description": "the page's CSS, at most 96 KB"
+     }
+    },
+    "required": []
+   }
+  }
  }
 ]

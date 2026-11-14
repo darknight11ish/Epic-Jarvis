@@ -939,7 +939,7 @@ pub(crate) async fn post_utterance(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else {
                 format!("sending the recording failed: {e}")
             }
@@ -1846,7 +1846,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
     let client = jarvis_client(Some(WAKE_CHECK_TIMEOUT))?;
     let unreachable = |e: reqwest::Error| {
         if e.is_connect() {
-            format!("could not reach the Jarvis server at {base}")
+            format!("could not reach the Atlas server at {base}")
         } else {
             format!("could not ask the Jarvis server about the wake word: {e}")
         }
@@ -3287,7 +3287,7 @@ pub async fn speak_reply(app: AppHandle, text: String) -> Result<String, String>
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+                format!("could not reach the Atlas server at {}", jarvis_base(&app))
             } else {
                 format!("asking for speech failed: {e}")
             }

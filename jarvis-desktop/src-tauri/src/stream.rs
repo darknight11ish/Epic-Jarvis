@@ -454,9 +454,9 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
             // jarvis-link.js linkWords), and Settings shows the whole thing.
             if e.is_connect() {
                 format!(
-                    "Jarvis is not running at {base}. Start it, or check the \
+                    "Atlas is not running at {base}. Start it, or check the \
                      address in Settings. Technical detail: could not reach the \
-                     Jarvis server at {base}."
+                     Atlas server at {base}."
                 )
             } else {
                 format!(

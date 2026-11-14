@@ -5032,6 +5032,341 @@ def _run_stop_web_search(args: dict, state, *, watch=None, **_unused) -> dict:
 GOAL_GATE_ACTION = "todo_add"
 
 
+# --------------------------------------------------------------------------
+#   The Android app builder's way in - a model tool (DEF-068, 2026-11-14)
+# --------------------------------------------------------------------------
+# THE DEFECT. `backend/jarvis_android_builder.py` has written, built and
+# installed a real Android app since 2026-10-30, behind two risky `ask` cards,
+# and NOTHING IN THE TREE CALLED ITS FOUR ROUTES. The routes are PC-only
+# (`handle_post(..., here=False)` answers 403), and a chat request carries no
+# project id - the Projects page is a tab in the Brain window with no chat box -
+# so the owner could not start a build by talking at all. Saying "build the
+# Android app" in a project task did nothing (recorded as DEF-068; the row's
+# own words are the evidence).
+#
+# WHY A MODEL TOOL AND NOT A FAST PATH. `plan_template` needs the PAGE itself
+# (`assets`: index.html, app.js, app.css - a fixed closed list, at most three
+# files, each <= 96 KB), and only a model turn can write one in the same breath
+# as "make me an app". A regex fast path receives the sentence and nothing else,
+# so it could only ever build the second time. The design note is
+# `.dsh-scratch/wave18/ANDROID-ENTRY-POINT-SPEC.md` (gitignored).
+#
+# WHY IT SUPPLIES THE PROJECT AND TASK. Neither is in the chat request, and
+# there can be up to `jarvis_app_workspace.MAX_OPEN_TASKS` (10) open tasks per
+# app, so "the task" is not unique. The tool therefore takes both as arguments
+# and ASKS when the answer is ambiguous - it never picks one. Picking silently
+# would write files into, and build, a copy the owner did not mean, and the
+# card would be the only warning.
+#
+# ONE CARD, NOT TWO. `prepare()` uses the module's OWN `plan_template` /
+# `plan_build` / `plan_install` (never a second implementation of them) and
+# returns `plan.says` as the card's words; `execute()` calls the module's
+# `run_build(plan, approved=True)` / `run_install(plan, approved=True)`. The
+# module's own `_raise()` card is NEVER reached from here, so a build asked for
+# in chat is ONE card - the agent's. The cost, named plainly: a build started
+# from chat does not appear as `waiting` on `GET .../android` and is not
+# withdrawn when the task is thrown away, because the module's in-memory
+# bookkeeping is skipped. The chat answer still carries the result.
+#
+# THE TEMPLATE WRITE HAS NO CARD AND HAPPENS IN prepare(). That is not a
+# shortcut: `plan_build` refuses a task with no written project, so the build
+# cannot be PLANNED (and its card cannot show the exact command) until the
+# template is written. Writing it is the module's own cardless act - files in
+# the task's own copy, nothing executed (`APP-BUILDER-DESIGN.md`: "Write files
+# in a task's copy: No card"). `prepare()` still runs NO program, raises NO
+# card, and writes nothing at all when the task already has its project; the
+# suite proves all three.
+ANDROID_APP_TOOL = "android_app"
+#: The gate actions this tool is put to the gate under. They are the module's
+#: OWN action names (`jarvis_android_builder.BUILD_ACTION` /
+#: `INSTALL_ACTION`), whose `_RISK` rows, `_NO_RULE_FROM_DENIAL` membership and
+#: `[autonomy.tiers]` "ask" lines already ship. `jarvis-backend/jarvis_gate.py`
+#: maps each name to itself in `_TOOL_ACTIONS` (a fresh install and CI read
+#: that), and `_one_call` passes the name through unchanged as a belt for a
+#: live install whose gate predates this tool - the same shape
+#: `send_file_to_phone` uses. No new action, tier, route or card is invented.
+ANDROID_BUILD_LOOKUP = "app_build_android"
+ANDROID_INSTALL_LOOKUP = "app_install_android"
+
+#: Every field this tool accepts. A field outside it is refused BEFORE any
+#: file or card, so "build these three apps" cannot become three builds.
+_ANDROID_FIELDS = ("action", "project", "task", "title", "background", "accent",
+                   "index_html", "app_js", "app_css")
+#: The tool's own argument names for the page, mapped to the module's closed
+#: list. The mapping is the ONLY way a name reaches the writer - never a path.
+_ANDROID_ASSETS = (("index_html", "index.html"), ("app_js", "app.js"),
+                   ("app_css", "app.css"))
+#: A project id (`jarvis_projects._ID`) and a task id
+#: (`jarvis_app_workspace`: ^[0-9a-f]{12}$). A task id is a filename component,
+#: so it is checked here as well as by the workspace.
+_ANDROID_PROJECT_ID = re.compile(r"[0-9a-fA-F]{32}")
+_ANDROID_TASK_ID = re.compile(r"[0-9a-f]{12}")
+
+
+class _AndroidAsked(Exception):
+    """A question, NOT a refusal and NOT a card.
+
+    The owner has more than one project, or more than one open task, and did
+    not say which. The answer goes back to the model in the owner's words so it
+    can ask; nothing is written, nothing is built and nobody is asked to
+    approve anything. `_one_call` answers this BEFORE the gate, like
+    `_PhoneAppsRefused` - a card showing a question would ask the owner to
+    approve nothing. It is raised and caught inside `_prepare_android_app`, so
+    it is a control-flow carrier and never escapes as an error."""
+
+    def __init__(self, question: str) -> None:
+        super().__init__(question)
+        self.question = question
+
+
+class _AndroidRefused(Exception):
+    """A plain reason an Android build cannot become ONE card.
+
+    A project that is not an app, an app that is not an Android app, a task that
+    is gone, a task that already has a DIFFERENT kind of project, a missing SDK,
+    no APK to install yet. The reason goes back to the model, in the module's
+    own words, BEFORE any card - a card showing one of these would ask the
+    owner to approve nothing. Raised and caught inside `_prepare_android_app`,
+    the same way."""
+
+    def __init__(self, problem: str) -> None:
+        super().__init__(problem)
+        self.problem = problem
+
+
+def _android_names(rows: list, *, what: str) -> str:
+    """The open choices as one short list, so a question can name them."""
+    said = [f'"{r.get("name")}"' if what == "project"
+            else f'"{r.get("title") or r.get("task")}" ({r.get("task")})'
+            for r in rows[:10]]
+    return ", ".join(said)
+
+
+def _android_project(store, given: str) -> dict:
+    """The one project the owner means, or `_AndroidAsked` / `_AndroidRefused`.
+
+    `given` may be a project's name or its 32-hex id. A name matches exactly
+    first (case-insensitively), then by a word inside it ("the weather app"),
+    and two matches ASK rather than pick. An empty `given` is allowed only when
+    there is exactly one project: none is a plain "make one first" answer, and
+    several is a question naming them."""
+    try:
+        rows = store.list()
+    except Exception as exc:                            # noqa: BLE001
+        raise _AndroidRefused("Jarvis could not read your projects just now "
+                              f"({type(exc).__name__}), so nothing was built") from exc
+    if not isinstance(rows, list):
+        rows = []
+    if not given:
+        if not rows:
+            raise _AndroidAsked(
+                "You have no projects yet, so there is no app to build. Make a "
+                "coding project that is an app in the Projects tab, then start a "
+                "task in it and ask me again.")
+        if len(rows) == 1:
+            return rows[0]
+        raise _AndroidAsked(
+            f"Which project? You have {_android_names(rows, what='project')}.")
+    wanted = given.strip()
+    if _ANDROID_PROJECT_ID.fullmatch(wanted):
+        for row in rows:
+            if str(row.get("id") or "") == wanted:
+                return row
+        raise _AndroidRefused("no project has that id")
+    exact = [r for r in rows if str(r.get("name") or "").lower() == wanted.lower()]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        raise _AndroidAsked(
+            f"Which project? More than one is called \"{wanted}\": "
+            f"{_android_names(exact, what='project')}.")
+    part = [r for r in rows if wanted.lower() in str(r.get("name") or "").lower()]
+    if len(part) == 1:
+        return part[0]
+    if len(part) > 1:
+        raise _AndroidAsked(
+            f"Which project? \"{wanted}\" matches "
+            f"{_android_names(part, what='project')}.")
+    raise _AndroidRefused(
+        f"there is no project called \"{wanted}\" - your projects are "
+        f"{_android_names(rows, what='project')}")
+
+
+def _android_task(app: str, given: str) -> str:
+    """The one open task the owner means, or `_AndroidAsked` / `_AndroidRefused`.
+
+    `given` may be a task's own 12-hex id. An empty `given` is allowed only
+    when the app has exactly one open task; more than one ASKS and names them
+    (`MAX_OPEN_TASKS` is 10), and none says plainly that a task has to be
+    started first."""
+    import jarvis_app_workspace as W
+    tasks = W.list_tasks(app)
+    if given:
+        wanted = given.strip().lower()
+        if not _ANDROID_TASK_ID.fullmatch(wanted):
+            raise _AndroidRefused(
+                f"\"{given[:20]}\" is not a task id - a task id is 12 lowercase "
+                "letters and digits, shown beside the task in Projects")
+        for row in tasks:
+            if str(row.get("task") or "") == wanted:
+                return wanted
+        raise _AndroidRefused("that task is gone - it was merged or thrown away")
+    if not tasks:
+        raise _AndroidRefused(
+            "that app has no open task, so there is nothing to build in - start "
+            "a task in Projects first")
+    if len(tasks) > 1:
+        raise _AndroidAsked(
+            f"Which task? \"{app}\" has {len(tasks)} open: "
+            f"{_android_names(tasks, what='task')}.")
+    return str(tasks[0]["task"])
+
+
+def _prepare_android_app(args: dict):
+    """prepare() for `android_app`: the plan the ONE card needs, and no run.
+
+    Refuses (a `_AndroidRefused`) or asks (a `_AndroidAsked`) BEFORE any card
+    when the request cannot become one build: no project, an ambiguous project
+    or task, a project that is not an Android app, a task that is gone, a
+    missing Android SDK or JDK, no APK to install. The state returned on
+    success is the module's OWN `CommandPlan`, the same object its own
+    `run_build`/`run_install` re-check, so what is approved is what runs."""
+    try:
+        import jarvis_android_builder as AB
+    except Exception as exc:                            # noqa: BLE001
+        return (_AndroidRefused(
+            "Jarvis cannot build Android apps on this PC: the Android builder is "
+            f"not in the backend folder ({type(exc).__name__}), so nothing was "
+            "built"), "Build an Android app")
+    args = args or {}
+    extra = sorted(str(k) for k in args if str(k) not in _ANDROID_FIELDS)
+    if extra:
+        return (_AndroidRefused(
+            "one app at a time, please - this tool takes an action, a project, a "
+            f"task and the page only ({', '.join(extra)} was sent), so nothing was "
+            "built"), "Build an Android app")
+    action = str(args.get("action") or "build").strip().lower()
+    if action not in ("build", "install"):
+        return (_AndroidRefused(
+            'say "build" to make the app, or "install" to put a built one on the '
+            "phone, so nothing was built"), "Build an Android app")
+    assets = {}
+    for key, name in _ANDROID_ASSETS:
+        value = args.get(key)
+        if value in (None, ""):
+            continue
+        if not isinstance(value, str):
+            return (_AndroidRefused(f"{name} must be text, not "
+                                    f"{type(value).__name__}, so nothing was built"),
+                    "Build an Android app")
+        assets[name] = value
+    words = {}
+    for key, what in (("title", "the app's name"), ("background", "the background colour"),
+                      ("accent", "the accent colour")):
+        value = args.get(key)
+        if value in (None, ""):
+            continue
+        if not isinstance(value, str):
+            return (_AndroidRefused(f"{what} must be text, so nothing was built"),
+                    "Build an Android app")
+        words[key] = value
+    try:
+        import jarvis_app_workspace as W
+        import jarvis_projects as P
+        store = P.get()
+        row = _android_project(store, str(args.get("project") or "").strip())
+        got = store.app_of(row.get("id"))
+        app = str(got.get("app") or "")
+        if not app:
+            return (_AndroidRefused(
+                "that project is not an app - an Android app is made in a coding "
+                "project that was created as an app, so nothing was built"),
+                "Build an Android app")
+        task = _android_task(app, str(args.get("task") or "").strip())
+        if action == "install":
+            plan = AB.plan_install(app, task)
+            if plan.refused:
+                return (_AndroidRefused(plan.refused), "Put the Android app on the phone")
+            return plan, plan.says
+        # BUILD. The template first, and only when the task has none: writing it
+        # is cardless by the module's own rule and the build cannot be PLANNED
+        # until it exists (plan_build refuses a task with no project).
+        wrote = False
+        tdir = W.task_dir(app, task)
+        if not AB.is_template(tdir):
+            template = AB.plan_template(app, task, title=words.get("title", ""),
+                                        background=words.get("background", ""),
+                                        accent=words.get("accent", ""),
+                                        assets=assets or None)
+            if template.refused:
+                return (_AndroidRefused(template.refused), "Build an Android app")
+            AB.write_template(template)
+            wrote = True
+        plan = AB.plan_build(app, task)
+        if plan.refused:
+            return (_AndroidRefused(plan.refused), "Build an Android app")
+        text = plan.says
+        if wrote:
+            text = ("Jarvis writes this task's Android project first - its own fixed "
+                    "files, in the task's own copy, which needs no card.\n\n") + text
+        return plan, text
+    except (_AndroidAsked, _AndroidRefused) as stop:
+        return stop, "Build an Android app"
+    except AB.BuildRefused as exc:
+        return (_AndroidRefused(str(exc)), "Build an Android app")
+    except W.WorkspaceError as exc:
+        return (_AndroidRefused(str(exc)), "Build an Android app")
+    except Exception as exc:                            # noqa: BLE001
+        return (_AndroidRefused("Jarvis could not prepare that Android build "
+                                f"({type(exc).__name__}), so nothing was built"),
+                "Build an Android app")
+
+
+def _run_android_app(args: dict, state, **_unused) -> dict:
+    """execute() for `android_app`: the card said yes, so the ONE documented
+    command runs.
+
+    `approved=True` is the module's "a person said yes" - it still re-checks
+    that `plan.argv` is the one build/install command and refuses anything else,
+    so this cannot become a way to run an arbitrary command. A build that exits
+    non-zero, times out, or exits 0 without an APK is reported as a FAILURE, not
+    as a build, and nothing is ever claimed installed that adb did not take.
+    """
+    try:
+        import jarvis_android_builder as AB
+    except Exception as exc:                            # noqa: BLE001
+        return {"ok": False, "built": False, "installed": False,
+                "error": "the Android builder is not in the backend folder "
+                         f"({type(exc).__name__}), so nothing ran"}
+    kind = str(getattr(state, "kind", "") or "")
+    if kind not in ("build", "install"):
+        return {"ok": False, "built": False, "installed": False,
+                "error": "refused: there is no Android plan to run, so nothing ran "
+                         "and nothing was installed."}
+    try:
+        if kind == "build":
+            done = AB.run_build(state, approved=True)
+        else:
+            done = AB.run_install(state, approved=True)
+    except Exception as exc:                            # noqa: BLE001
+        return {"ok": False, "built": False, "installed": False,
+                "error": f"the Android builder raised {type(exc).__name__}: {exc}. "
+                         "Nothing was installed."}
+    if not done.get("ok"):
+        return {"ok": False, "built": False, "installed": False,
+                "why": str(done.get("why") or ""),
+                "error": str(done.get("error") or "the Android command did not succeed"),
+                "log": str(done.get("log") or "")[-4000:]}
+    if kind == "install":
+        return {"ok": True, "installed": True,
+                "note": "Installed on the phone. That was the second card; nothing "
+                        "else ran."}
+    return {"ok": True, "built": True, "apk": str(done.get("apk") or ""),
+            "bytes": int(done.get("bytes") or 0),
+            "note": "Built. The APK is ready; putting it on the phone is a SECOND "
+                    "card, and this did not do it."}
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -6400,6 +6735,52 @@ TOOLS: dict = {
         {"type": "object", "properties": {}},
         _prepare_stop_web_search,
         _run_stop_web_search),
+    # The Android app builder's way in (DEF-068, 2026-11-14) - see the block
+    # above `TOOLS` for the whole design. ONE tool with an action, like
+    # `phone_apps`: "build" writes the task's fixed project (no card) and asks
+    # ONE card for Gradle; "install" asks ONE card for adb. The project and the
+    # task are ARGUMENTS and the tool asks when either is ambiguous, because a
+    # chat request carries neither. Its two lookup names are the module's own
+    # action names, so the gate's existing `ask` rows and risky "no" words are
+    # the ones the card uses - no new action, tier or card.
+    ANDROID_APP_TOOL: Tool(
+        ANDROID_APP_TOOL,
+        "Build a real Android app in one of the owner's app projects, or put a "
+        "built one on their phone (action \"install\"). Jarvis writes its own "
+        "fixed project, so the model supplies only the page and an optional name "
+        "- the app gets no permission at all. One card before Gradle, one before "
+        "adb; nothing runs until the owner says yes. Name the project; if there "
+        "are several, ask instead of guessing.",
+        {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["build", "install"],
+                       "description": "\"build\" (the default), or \"install\""},
+            "project": {"type": "string",
+                        "description": "the project's name or id; leave out if there "
+                                       "is only one"},
+            "task": {"type": "string",
+                     "description": "the task id; leave out if there is only one open"},
+            "title": {"type": "string",
+                      "description": "the app's name on the phone"},
+            "background": {"type": "string",
+                           "description": "page colour, like #101828"},
+            "accent": {"type": "string",
+                       "description": "accent colour, like #7cc4ff"},
+            "index_html": {"type": "string",
+                           "description": "the page's HTML, at most 96 KB"},
+            "app_js": {"type": "string",
+                       "description": "the page's JS, at most 96 KB"},
+            "app_css": {"type": "string",
+                        "description": "the page's CSS, at most 96 KB"}},
+         "required": []},
+        _prepare_android_app, _run_android_app,
+        # The lookup name is the gate's OWN action name, chosen by the action
+        # argument: app_build_android or app_install_android. Each is already a
+        # `_TOOL_ACTIONS` key in the published base gate (mapped to itself), has
+        # its own `_RISK` row and ships "ask" in both settings copies.
+        gate_lookup_name=lambda args: (
+            ANDROID_INSTALL_LOOKUP
+            if str((args or {}).get("action") or "").strip().lower() == "install"
+            else ANDROID_BUILD_LOOKUP)),
 }
 
 
@@ -6895,6 +7276,13 @@ NEEDS_A_PERSON = {
     # phone's storage and the phone can keep a copy after it downloads it.
     SEND_FILE_TOOL: "makes one of the owner's own files fetchable by the phone, which "
                     "can keep a copy after it downloads it",
+    # The Android app builder (DEF-068, 2026-11-14): "build" runs Gradle, which
+    # runs other people's build code with the owner's own Windows permissions,
+    # and "install" changes what is on the phone. Both already ship "ask" with
+    # risky `_RISK` rows; this entry is the belt for the day either line is
+    # loosened - a build must never run with nobody asked.
+    ANDROID_APP_TOOL: "builds an Android app with Gradle on this PC, or installs one "
+                      "on the owner's phone, and neither can be taken back",
     # Text a contact (2026-11-04): the phone sends a real message in the owner's
     # name from the owner's own number, and a sent text cannot be unsent.
     SEND_TEXT_TOOL: "sends a real text message from the owner's phone, in their name, "
@@ -10828,7 +11216,14 @@ TOOL_GROUPS = (
      ("my_files", "my_spending")),
     ("files", "read a file or run a command or small script",
      ("file_read", "project_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, SEND_FILE_TOOL,
-      PROTECT_TOOL)),
+      PROTECT_TOOL,
+      # The Android app builder's way in (DEF-068, 2026-11-14) shares this
+      # group: "build" writes the fixed project into the task's own copy and
+      # runs one command, which is this group's own subject. A group member
+      # costs nothing extra in more_tools' own enum, so
+      # test_short_tool_list.py's pins do not move; a NEW group would add a
+      # name to that enum on every turn, which the notes above refuse.
+      ANDROID_APP_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
@@ -11085,6 +11480,17 @@ TOOL_HINTS = {
                          r"on-screen"),
     "control_phone": (r"\bphone\b", r"\bandroid\b", r"\btap\b", r"\bswipe\b",
                       r"\bscreenshot\b"),
+    # The Android app builder's way in (DEF-068, 2026-11-14). `android` alone is
+    # already on control_phone, so the words that narrow this one are the words
+    # that mean a real app being MADE or PUT ON the phone; "what's on my phone"
+    # and "tap the screen" still land on control_phone alone. Without this entry
+    # `test_tool_eval.py` fails: it refuses to let a new tool land where the diet
+    # can never show it (the required `backend` job caught exactly that on PR
+    # #1260, shard 3/4).
+    "android_app": (r"\bandroid app\b", r"\bapk\b", r"\bapp for my phone\b",
+                    r"\b(?:make|build|write|install)\b[\s\S]{0,30}\bapp\b",
+                    r"\bput\b.*\bapp\b.*\bphone\b",
+                    r"\bnative (?:app|screen)\b"),
     "browser_control": (r"\bbrowser\b", r"\btab\b", r"\bchrome\b", r"\bedge\b",
                         r"\bfirefox\b", r"page element"),
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
@@ -18538,6 +18944,19 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # action at "ask" with its outbound worst case, and the tier row in
         # both shipped settings copies says "ask" too.
         action_name = SEND_FILE_ACTION
+    if name == ANDROID_APP_TOOL:
+        # Its OWN action name (the builder's BUILD_ACTION / INSTALL_ACTION),
+        # chosen by the action argument. On a fresh install and in CI the base
+        # gate's `_TOOL_ACTIONS` already maps each lookup name to itself, so
+        # this changes nothing there. It is the BELT for a live install whose
+        # jarvis_gate.py predates those two lines (the Android builder shipped
+        # in the base, with no patch): without it `action_for_tool()` would
+        # answer "unclassified_tool", and while that still ASKS, the card would
+        # carry the generic unclassified words instead of the app builder's own
+        # risky "no" rows - which the live gate already has from 2026-10-30.
+        action_name = (ANDROID_INSTALL_LOOKUP
+                       if str(args.get("action") or "").strip().lower() == "install"
+                       else ANDROID_BUILD_LOOKUP)
     if name == PRODUCT_CHECK_TOOL:
         # Its OWN action name (2026-11-04): `product_check` is the gate's own
         # "ask" line in both shipped settings copies, its `_RISK` row carries
@@ -18703,6 +19122,34 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                       "content": _tool_content(result)})
         steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
                       "outcome": "no card needed" if ran else "refused"})
+        return
+
+    if name == ANDROID_APP_TOOL and isinstance(state, (_AndroidAsked, _AndroidRefused)):
+        # NOTHING TO APPROVE, so no card (DEF-068, 2026-11-14). One of two
+        # things came back from _prepare_android_app instead of ONE plan: a
+        # QUESTION (the owner has several projects or several open tasks and
+        # did not say which - guessing would build a copy they did not mean),
+        # or a plain reason nothing could become one build (no project, a
+        # project that is not an Android app, a task that is gone, the SDK
+        # missing, no APK to install yet). A card showing either would ask the
+        # owner to approve nothing; the model is told instead, in those words,
+        # and nothing was written, run or asked.
+        if isinstance(state, _AndroidAsked):
+            result = {"ok": False, "asked": True, "question": state.question}
+            say_step("tool_finished", name, ok=False)
+            ran = False
+            outcome = "no card needed"
+        else:
+            result = {"ok": False, "asked": False,
+                      "error": f"refused: {state.problem}. Nothing was built, run "
+                               "or installed, and nobody was asked."}
+            say_step("tool_refused", name)
+            ran = False
+            outcome = "refused"
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": outcome})
         return
 
     if name == PHONE_APPS_TOOL and isinstance(state, (_PhoneAppsListed, _PhoneAppsRefused)):
@@ -19037,8 +19484,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # moment, so a tool the gate lets straight through never flashes it).
         out.set_status("approval")
         # The send-file card shows the filename, folder, size and cap in its
-        # OWN words (prepare() built them), not the generic tool-call line.
-        prompt = plan_text if name == SEND_FILE_TOOL else _gate_prompt(name, args)
+        # OWN words (prepare() built them), not the generic tool-call line. The
+        # Android builder's card does the same: prepare() returns the module's
+        # own `plan.says`, with the exact command, folder, SDK, JDK and the
+        # download disclosure - the one thing the owner is approving.
+        prompt = (plan_text if name in (SEND_FILE_TOOL, ANDROID_APP_TOOL)
+                  else _gate_prompt(name, args))
         if name == SEND_TEXT_TOOL:
             prompt = plan_text
         verdict = checker(action_name, {"text": plan_text}, prompt)

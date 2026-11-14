@@ -318,6 +318,42 @@ quietly skips the checks that need history - so it passes here and fails in
 CI. Run `git fetch --unshallow origin` first. (Shipped once, 2026-09-28:
 `voices.patch` changed, CI's backend job went red.)
 
+## Do NOT add a patch to carry new gate rows — send them through the repair tool
+
+**The owner's ruling of 2026-11-14, and it was measured the expensive way.** When
+a feature needs a new row in one of `jarvis_gate.py`'s three tables (`_RISK`,
+`_TOOL_ACTIONS`, `_NO_RULE_FROM_DENIAL`), the row belongs in the **published
+base** (`jarvis-backend/jarvis_gate.py`), inside a `<table>.update({...})` block
+at the **end of the file** — the one region no earlier patch's hunk claims — and
+it reaches the owner's own PC through `tools/repair_live_backend_gaps.py`, the
+same route the Android app builder's `_RISK` rows took on 2026-10-30.
+
+Write a new patch only if you have checked the three things that make a new
+writer of `jarvis_gate.py` possible at all: `unknown-risk-approvable.patch` must
+stay the **last** patch that writes the file (`backend/test_gate_unknown_risk.py`,
+no whitelist), `handsfree.patch` must stay immediately before
+`web-search-grant.patch` (`backend/test_phone_app_allowlist.py`), and that one
+immediately before `unknown-risk-approvable.patch`
+(`backend/test_web_search_grant.py`). Then count what else polices the order —
+`test_gate_touches`, `test_referee`, `test_devices`, `test_hud_manual_lane_gate`
+and `test_gate_risk_rows` each have their own "patches written after me" list,
+`backend/_stack.py`'s `RATCHET` pins the walk's cost per file, and
+`test_patch_original_text` demands a recorded original version. **Two rows cost
+six suites and the `audit` job on 2026-11-14**, and the `_stack.py` walk smeared
+another patch's row into its reconstructed tree twice, because that row happened
+to sit in the new patch's own three lines of hunk context.
+
+So: **base + repair tool**. If the row must reach a live install that the
+patcher refuses (37 patches refuse on this drifted install — the repair tool's
+own docstring says so), the repair tool is not a workaround; it is the route.
+
+Two tests read a table the way Python builds it, not the way its literal reads —
+`backend/test_gate_tool_actions.py` and `backend/test_def068_entry.py` both fold
+in `<table>.update({...})` calls at module level. A suite that greps only the
+literal reports a row "missing" on a tree where the gate answers correctly; that
+false finding appeared once on this branch and is why the fold is written down
+here rather than left in the code.
+
 ## Checking the Rust without waiting for CI
 
 `cargo clippy` fails in the dev container: the product is a Windows app, the

@@ -277,7 +277,7 @@ async fn post_json(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
+                format!("could not reach the Atlas server at {base}")
             } else {
                 format!("{path} failed: {e}")
             }

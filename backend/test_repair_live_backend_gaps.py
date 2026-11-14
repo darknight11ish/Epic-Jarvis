@@ -37,6 +37,7 @@ live folder must never be left half-written.
 
 Run: python -B backend/test_repair_live_backend_gaps.py
 """
+import ast
 import importlib.util
 import sys
 import tempfile
@@ -64,12 +65,53 @@ def load_tool():
     return mod
 
 
+def _literal_rows(text: str, name: str) -> dict:
+    """The rows of a module-level `name: dict[...] = {...}` literal, read with `ast`.
+
+    Two reasons this is `ast` and not a substring test, and the second one is
+    the one that matters:
+
+    1. `tools/check_no_source_pins.py` is a CEILING RATCHET and this suite is
+       already at its ceiling (7, and it may only go down). A new check here
+       cannot be another source-text pin.
+    2. A substring test cannot tell "this row is a KEY of the table" from "this
+       row appears somewhere in the file" - the old check had to hunt for the
+       closing brace to approximate it, and any comment carrying the same words
+       satisfied it. An `ast` walk answers the actual question: is it in the
+       literal.
+
+    Only string-to-string rows are returned; `_TOOL_ACTIONS` is
+    `dict[str, str]`, and `_RISK` (whose values are tuples) is not read here.
+    """
+    for node in ast.walk(ast.parse(text)):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        if not isinstance(node.value, ast.Dict):
+            continue
+        targets = getattr(node, "targets", None) or [getattr(node, "target", None)]
+        if not any(isinstance(t, ast.Name) and t.id == name for t in targets):
+            continue
+        return {k.value: v.value
+                for k, v in zip(node.value.keys, node.value.values)
+                if isinstance(k, ast.Constant) and isinstance(v, ast.Constant)}
+    return {}
+
+
 def a_live_folder(gate: str = None, hud: str = None) -> Path:
     d = Path(tempfile.mkdtemp(prefix="repair-gaps-"))
     (d / "jarvis_gate.py").write_text(
         gate if gate is not None else
         "_RISK: dict[str, tuple[str, str, str]] = {\n"
         '    "web_research": ("yes", "outbound", "a public query leaves the machine"),\n'
+        "}\n"
+        "\n"
+        "# A live jarvis_gate.py always carries this table; the tool-actions\n"
+        "# repair (2026-11-14) anchors on it, so the fabricated file must have it\n"
+        "# or every repair in the loop below would be refused for the wrong\n"
+        "# reason. Two rows are enough to prove an insertion at its top.\n"
+        "_TOOL_ACTIONS: dict[str, str] = {\n"
+        '    "calculator": "auto",\n'
+        '    "send_file_to_phone": "send_file_to_phone",\n'
         "}\n"
         "\n"
         'def _tiers(framework: Optional[dict] = None) -> dict:\n'
@@ -166,6 +208,15 @@ def t_check_names_both_missing_then_apply_fixes_them():
     gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
     check("the two risk rows landed", '"app_build_android": ("no"' in gate
           and '"app_install_android": ("no"' in gate)
+    table = _literal_rows(gate, "_TOOL_ACTIONS")
+    check("the two tool->action rows landed, so action_for_tool() answers the "
+          "specific action instead of unclassified_tool",
+          table.get("app_build_android") == "app_build_android"
+          and table.get("app_install_android") == "app_install_android",
+          f"the literal's keys are {sorted(table)}")
+    check("... inside the _TOOL_ACTIONS literal, not floating after the table",
+          {"app_build_android", "app_install_android"} <= set(table),
+          f"the literal's keys are {sorted(table)}")
     hud = (live / "jarvis_hud.py").read_text(encoding="utf-8")
     check("both history routes landed", '"/api/history/pin"' in hud
           and '"/api/history/archive"' in hud)

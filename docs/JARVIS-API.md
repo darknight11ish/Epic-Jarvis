@@ -30835,7 +30835,7 @@ That was **not** run in this checkout (no live call is made by any test or by
 CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
 field check.
 
-## 166. Building an Android app and putting it on your phone: four routes, no entry point yet (added 2026-10-30)
+## 166. Building an Android app and putting it on your phone: four routes and the way in (added 2026-10-30; the entry point 2026-11-14)
 
 **Why this section number.** The last section on `main` when this was written
 was 162, and four in-flight branches had already claimed 163-167 (the numbers
@@ -30852,11 +30852,23 @@ and nothing in the backend had ever started a program that was not git.
 
 **What is built.** The four routes below are the narrowest full path from an
 app description to an app on the phone, in three steps, of which TWO COST A
-CARD. **What is not built is the way in.** No chat sentence, no model tool and
-no button in either app calls these routes yet; only this module's own tests
-call them, and the tests drive the module's handlers directly. So the path is
-complete for a caller and there is no caller: an entry point still has to be
-written, and these contracts are what it would be built against.
+CARD. **The way in is the `android_app` model tool** (2026-11-14, defect
+DEF-068): a chat turn calls these routes through `prepare()`/`execute()`, and
+the module's own two cards remain the ones the owner sees - the agent's ONE
+card per act is the same `ask` action, and the module's own `_raise()` is never
+reached, so one build is one card and not two. The tool takes the project (a
+name or its id) and the task (its 12-hex id) because a chat request carries
+neither; when the owner has more than one project or more than one open task it
+ASKS which and names the open ones, and it runs nothing until the owner says
+yes. Writing the fixed project stays cardless (it changes only the task's own
+copy) and happens just before the build card, because the build cannot be
+planned until the project is written. **It is an opt-in tool**: it is not in
+the shipped `[tools].enabled` list (Gradle is other people's build code running
+with the owner's Windows permissions), so it is offered once the owner turns on
+"android app" in Settings -> Tools under "Raw and powerful". Nothing in either
+app calls the routes directly, and the routes stay PC only. **DEF-068's row
+stays open until this is field tested on the owner's PC** - code landing is not
+the same as an app arriving on the phone.
 
 The four routes, exactly as they are answered:
 
