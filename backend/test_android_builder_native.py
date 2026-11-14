@@ -484,7 +484,7 @@ def t_every_limit_is_refused_in_plain_words():
     limit_case(duplicate_id, ("home", "two screens"), "two screens with one id")
     limit_case(missing_open, ("nope", "home"), "open to a screen that does not exist")
     limit_case(missing_start, ("welcome",), "a start screen that does not exist")
-    limit_case(bad_tail, ("My App", "package_tail"), "a package tail with a space")
+    limit_case(bad_tail, ("My App", "package ending"), "a package tail with a space")
     limit_case(bad_bg, ("bg", "colour"), "a bg that is not #RRGGBB")
     limit_case(bad_accent, ("accent", "colour"), "an accent that is not #RRGGBB")
     limit_case(quoted_name, ("It's mine", "quote"), "an app name with a quote")
@@ -499,7 +499,7 @@ def t_every_limit_is_refused_in_plain_words():
     limit_case(unknown_do, ("browse", "open"), "an action that is neither open nor show")
     limit_case(text_with_items, ("items",), "items on a text screen")
     limit_case(list_without_items, ("items",), "a list screen with no items")
-    limit_case(form_without_save, ("save_label",), "a form with no save_label")
+    limit_case(form_without_save, ("Save button",), "a form with no save label")
     limit_case(body_not_list, ("body",), "a body that is not a list")
     limit_case(control_char, ("control character",), "a control character")
 

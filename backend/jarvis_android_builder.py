@@ -848,6 +848,16 @@ _SPEC_ID = re.compile(r"^[a-z][a-z0-9_-]{0,23}$")
 
 _SCREEN_KINDS = ("text", "list", "form")
 _SPEC_KEYS = frozenset({"name", "package_tail", "bg", "accent", "screens", "start"})
+#: The spec's own key names in the words the owner reads. A refusal says
+#: "app.json is missing its package ending", never the snake_case field name.
+_SPEC_KEY_WORDS = {
+    "name": "name",
+    "package_tail": "package ending",
+    "bg": "background colour",
+    "accent": "accent colour",
+    "screens": "screens",
+    "start": "starting screen",
+}
 _SCREEN_KEYS = {
     "text": frozenset({"id", "title", "kind", "body", "buttons"}),
     "list": frozenset({"id", "title", "kind", "items", "buttons"}),
@@ -941,7 +951,7 @@ def _spec_form(screen: dict, sid: str) -> tuple:
         out.append({"key": key,
                     "label": _spec_string(field.get("label"),
                                           f"a field's label on screen {sid!r}", MAX_LABEL)})
-    save = _spec_string(screen.get("save_label"), f"screen {sid!r}'s save_label", MAX_LABEL)
+    save = _spec_string(screen.get("save_label"), f"the Save button's words on screen {sid!r}", MAX_LABEL)
     return out, save
 
 
@@ -988,16 +998,17 @@ def validate_spec(raw) -> dict:
     is told so and nothing is built. The returned dict is the ONLY version that
     is written into the app, so the shipped bytes are the checked bytes."""
     if not isinstance(raw, dict):
-        raise BuildRefused("app.json must be one JSON object with name, package_tail, bg, "
-                           "accent, screens and start")
+        raise BuildRefused("app.json must be one JSON object holding the app's own keys - "
+                           "a name, a package ending, two colours, its screens and the "
+                           "screen it starts on")
     _spec_unknown(raw, _SPEC_KEYS, "app.json")
     for key in ("name", "package_tail", "bg", "accent", "screens", "start"):
         if key not in raw:
-            raise BuildRefused(f'app.json is missing "{key}"')
+            raise BuildRefused(f"app.json is missing its {_SPEC_KEY_WORDS[key]}")
     name = _spec_name(raw.get("name"))
     tail = raw.get("package_tail")
     if not isinstance(tail, str) or not _PKG_TAIL.match(tail):
-        raise BuildRefused("package_tail must be small letters, digits and _ (up to 40), "
+        raise BuildRefused("the package ending must be small letters, digits and _ (up to 40), "
                            f"starting with a letter: {str(tail)[:40]!r}")
     bg = check_colour(raw.get("bg"), "app.json's bg")
     accent = check_colour(raw.get("accent"), "app.json's accent")

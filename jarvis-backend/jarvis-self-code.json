@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "846ad9125767fa90afdd2fd22cb67f315cba5eac",
- "built_at": "2026-11-14T02:39:48-08:00",
+ "ref": "1ef8a5540932aba4a8f5285195b6efba5780f617",
+ "built_at": "2026-11-14T02:43:11-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6365,9 +6365,19 @@
  ],
  "recent_commits": [
   {
+   "sha": "1ef8a5540932aba4a8f5285195b6efba5780f617",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main into the native-screens kind, keeping both sides' records"
+  },
+  {
    "sha": "846ad9125767fa90afdd2fd22cb67f315cba5eac",
    "date": "2026-11-14",
    "subject": "Record the native-screens kind, and say plainly that nothing can start it"
+  },
+  {
+   "sha": "cf4a2797f2c4b388f95c66813435081650bb9fa3",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1233 from darknight11ish/feat/phone-backup-updater-2026-11-13"
   },
   {
    "sha": "f4c356ab4782692c19bf5402fbc7639e2277c904",
@@ -6375,9 +6385,29 @@
    "subject": "Add the native-screens kind to the Android builder"
   },
   {
+   "sha": "8d48d8afa422f8799b58257476122e010bc4c22e",
+   "date": "2026-11-14",
+   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
    "sha": "98b82d643adc589f6004541f4a520398ccb08481",
    "date": "2026-11-14",
    "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
+  },
+  {
+   "sha": "30a9a9793fba9c5d66132cddbe15572dba13b531",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate after the restack onto the wave-18 batch"
+  },
+  {
+   "sha": "48acf718776a72466d1b4ba6c50086517d9c900c",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/integration/wave18-2026-11-13' into resolve-1233"
+  },
+  {
+   "sha": "1ebb76696b8fecde790bcaefd7e2b286f1698575",
+   "date": "2026-11-13",
+   "subject": "fix(features): the phone's settings backup is a real Settings Section, so the feature guide can prove its place"
   },
   {
    "sha": "e962f55f90edf8afca182ae8119dc4b7a2859f92",
@@ -6388,6 +6418,16 @@
    "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
    "date": "2026-11-13",
    "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
+  },
+  {
+   "sha": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
+  },
+  {
+   "sha": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
   },
   {
    "sha": "69428294081ee150aefe347399e36531787b5f01",
@@ -6410,6 +6450,11 @@
    "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
   },
   {
+   "sha": "6f013f5490257a7902bba82f6fbe26d7a79a6582",
+   "date": "2026-11-13",
+   "subject": "fix(features): record the phone's settings backup in the feature matrix"
+  },
+  {
    "sha": "a9bd71f9a273be6c5d462c9cd90f7bc379336ace",
    "date": "2026-11-13",
    "subject": "Merge fix/tray-and-readme-truth-2026-11-13 into integration/wave18-2026-11-13 (tray wording + README truth); generated records keep the integration side, regenerated at the end"
@@ -6418,51 +6463,6 @@
    "sha": "7f9339bf9ef24e247a450cb8e88b11fdb315cd3a",
    "date": "2026-11-13",
    "subject": "Merge ci/backend-shard-2026-11-13 into integration/wave18-2026-11-13 (backend job sharded four ways, 60-minute shard ceiling; backend-windows keeps 120)"
-  },
-  {
-   "sha": "db4309bbdf2f3c7468afc59c684a66ad66c05bf3",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the recent-changes bullets and the self-code map for the new fragments"
-  },
-  {
-   "sha": "5710dbd5842247547edf69692145702272a00c94",
-   "date": "2026-11-13",
-   "subject": "fix(desktop): the tray says only what it measured, and the README stops naming a live version"
-  },
-  {
-   "sha": "6ca912016c3cc692870d6db14dba108ddd547354",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the self-code map for the new shard suite"
-  },
-  {
-   "sha": "34aa2ff8ac366efbe8b32eaf16161b91c6e15012",
-   "date": "2026-11-13",
-   "subject": "soupsieve 4.0.1 in both lock copies, and the whole-repo records regenerated for this tree"
-  },
-  {
-   "sha": "80e96d85ea280d1b1aa85d062c92f9b61b367216",
-   "date": "2026-11-13",
-   "subject": "Merge origin/fix/wake-word-self-answer-2026-11-13 into integration/wave18-2026-11-13 (#1248 wake word + Layer 1 routing); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "d543b0122c09cab712686b62efd952ec3225cc64",
-   "date": "2026-11-13",
-   "subject": "fix: self-knowledge places, planned labels and derived counts"
-  },
-  {
-   "sha": "e1308a7a2aa7f106c4fde353b1c12d9c79d81739",
-   "date": "2026-11-13",
-   "subject": "ci: shard the required backend job, keeping the check name"
-  },
-  {
-   "sha": "8d807ec394e835510cdb8325245d0a0559d049b1",
-   "date": "2026-11-13",
-   "subject": "Regenerate the whole-repo records for the integration branch"
-  },
-  {
-   "sha": "4e24021b56a6fc6d2ea4af89b2d1c70eca24f60d",
-   "date": "2026-11-13",
-   "subject": "Merge origin/ci/backend-timeout-120 into integration/wave18-2026-11-13 (120-minute backend ceiling)"
   }
  ],
  "top_level": [
