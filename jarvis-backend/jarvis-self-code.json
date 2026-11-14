@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d85796a23a2857f8d36ec2710d19c05277352006",
- "built_at": "2026-11-13T16:12:17-08:00",
+ "ref": "9e97c28e11ea603e70714e4c72c5c3ed9e7638ac",
+ "built_at": "2026-11-13T19:50:51-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4613,6 +4613,7 @@
     "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
+    "changelog.d/2026-11-13-notification-body-opens-jarvis.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
@@ -4777,6 +4778,7 @@
     "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
+    "decisions.d/2026-11-13-notification-body-opens-jarvis.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
@@ -5227,7 +5229,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 864,
+   "file_count": 866,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6314,6 +6316,36 @@
  ],
  "recent_commits": [
   {
+   "sha": "9e97c28e11ea603e70714e4c72c5c3ed9e7638ac",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr-1242"
+  },
+  {
+   "sha": "0b6e5a96798ef34a8fe047f7f66ae7f93799f009",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1238 from darknight11ish/fix/awareness-of-new-features-2026-11-13"
+  },
+  {
+   "sha": "1fe499d7c49cb0f76f61e5dd8cd233f28f634a4a",
+   "date": "2026-11-13",
+   "subject": "docs(desktop): say Deny is unreported-broken, not reported-working"
+  },
+  {
+   "sha": "bbceba3583078d49859f5e276622c4b083071739",
+   "date": "2026-11-13",
+   "subject": "fix(desktop): a notification click opens Jarvis, and an approval's toast offers Open"
+  },
+  {
+   "sha": "0a195e9493b2ec66ad573a747278ea13ba4352d3",
+   "date": "2026-11-13",
+   "subject": "fix: restore the Tauri 'features' capability, which my last commit overwrote"
+  },
+  {
+   "sha": "1c1a516da21eed1afd0210d4798b6ea9bec5068b",
+   "date": "2026-11-13",
+   "subject": "fix: VoiceStudio's phone absence and its feature-list cover - #1238's backend was red on both"
+  },
+  {
    "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
    "date": "2026-11-13",
    "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
@@ -6382,36 +6414,6 @@
    "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
    "date": "2026-11-13",
    "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
-  },
-  {
-   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
-  },
-  {
-   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
-  },
-  {
-   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
-   "date": "2026-11-13",
-   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
-   "date": "2026-11-13",
-   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
@@ -6448,7 +6450,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 247
+   "files": 248
   },
   {
    "path": "videos/",
@@ -6458,7 +6460,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 164
+   "files": 165
   },
   {
    "path": "plugins/",
@@ -6532,8 +6534,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5659,
-  "covered": 5177,
+  "tracked_files": 5661,
+  "covered": 5179,
   "excluded": 482,
   "subsystems": 27
  },
