@@ -1,5 +1,6 @@
 package com.jarvis.client
 
+import com.jarvis.client.net.AttachFile
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Upload
 import kotlinx.coroutines.runBlocking
@@ -52,7 +53,7 @@ class UploadTest {
         assertEquals("/api/upload/chunk", Upload.CHUNK_PATH)
         assertEquals("/api/upload/finish", Upload.FINISH_PATH)
         assertEquals(1_048_576, Upload.CHUNK_BYTES)
-        assertEquals(50L * 1024 * 1024, Upload.DOCUMENT_MAX)
+        assertEquals(2L * 1024 * 1024 * 1024, Upload.DOCUMENT_MAX)
         assertEquals(4L * 1024 * 1024 * 1024, Upload.NOTION_MAX)
         assertEquals("document", Upload.Purpose.DOCUMENT.wire)
         assertEquals("notion", Upload.Purpose.NOTION.wire)
@@ -66,7 +67,11 @@ class UploadTest {
         assertEquals(1, Upload.chunks(1))
         assertEquals(1, Upload.chunks(Upload.CHUNK_BYTES.toLong()))
         assertEquals(2, Upload.chunks(Upload.CHUNK_BYTES + 1L))
-        assertEquals(50, Upload.chunks(Upload.DOCUMENT_MAX))
+        // 2 GiB is 2,048 one-MiB pieces - the same loop that already carries a
+        // 4 GiB Notion export, so the raised cap needs no new transport.
+        assertEquals(2048, Upload.chunks(Upload.DOCUMENT_MAX))
+        assertEquals(Upload.CHUNK_BYTES, Upload.chunkLength(Upload.DOCUMENT_MAX, 2047))
+        assertEquals(0, Upload.chunkLength(Upload.DOCUMENT_MAX, 2048))
         assertEquals(1, Upload.chunkLength(1, 0))
         assertEquals(Upload.CHUNK_BYTES, Upload.chunkLength(Upload.CHUNK_BYTES.toLong(), 0))
         // The last chunk of a file that is not a whole number of chunks.
@@ -168,19 +173,24 @@ class UploadTest {
     // -------------------------------------------------------- the refusals ---
 
     @Test
-    fun `the pick is refused before a byte is read`() {
+    fun `the pick is refused before a byte is read - for size, never for its type`() {
         assertNull(Upload.refusal("taxes.pdf", "application/pdf", 10, Upload.Purpose.DOCUMENT))
         assertNull(Upload.refusal("Export.zip", "application/octet-stream", 10, Upload.Purpose.NOTION))
-        val wrong = Upload.refusal("notes.zip", "application/zip", 10, Upload.Purpose.DOCUMENT)
-        assertNotNull(wrong)
-        assertTrue(wrong!!.contains("PDF"))
+        // ANY file type is accepted on the folder door (2026-11-13): the PC
+        // stores the bytes as a plain file and no reader opens them.
+        for (name in listOf("notes.zip", "tool.exe", "data.dat", "clip.mp4", "README")) {
+            assertNull(name, Upload.refusal(name, null, 10, Upload.Purpose.DOCUMENT))
+            assertNull(name, Upload.refusal(name, "application/octet-stream", 10,
+                Upload.Purpose.DOCUMENT))
+        }
         val notZip = Upload.refusal("Export.txt", "text/plain", 10, Upload.Purpose.NOTION)
         assertNotNull(notZip)
         assertTrue(notZip!!.contains(".zip"))
         val big = Upload.refusal("taxes.pdf", "application/pdf", Upload.DOCUMENT_MAX + 1,
             Upload.Purpose.DOCUMENT)
         assertNotNull(big)
-        assertTrue(big!!.contains("50 MB"))
+        assertTrue(big!!.contains("2 GB"))
+        assertFalse("the old 50 MB cap is gone: $big", big.contains("50 MB"))
         val bigZip = Upload.refusal("Export.zip", "application/zip", Upload.NOTION_MAX + 1,
             Upload.Purpose.NOTION)
         assertNotNull(bigZip)
@@ -188,33 +198,77 @@ class UploadTest {
     }
 
     @Test
-    fun `a photo is accepted by this door as a plain file, and the wrong kind still is not`() {
+    fun `the folder door sends every type, and the chat picture path is unchanged`() {
         // 2026-11-13: every picture the phone treats as a photo by name is a
-        // kind the Settings folder door sends. The provider's type is not
-        // needed - the name decides, as it does for a document.
+        // kind the Settings folder door sends - and so is every other file.
         for (name in listOf(
             "holiday.jpg", "holiday.jpeg", "holiday.png", "holiday.webp",
             "holiday.heic", "holiday.heif", "holiday.gif", "holiday.bmp",
+            "drawing.svg", "scan.tif", "notes.zip", "tool.exe", "data.dat", "scan",
         )) {
             assertNull(name, Upload.refusal(name, "application/octet-stream", 10,
                 Upload.Purpose.DOCUMENT))
             assertNull(name, Upload.refusal(name, null, 10, Upload.Purpose.DOCUMENT))
         }
-        val svg = Upload.refusal("drawing.svg", "image/svg+xml", 10, Upload.Purpose.DOCUMENT)
-        assertNotNull(svg)
-        assertTrue(svg!!.contains("photo"))
-        assertTrue("the refusal names the photo kinds: $svg", svg.contains("JPG"))
-        assertNotNull(Upload.refusal("clip.mp4", "video/mp4", 10, Upload.Purpose.DOCUMENT))
-        assertNotNull(Upload.refusal("notes.tif", "image/tiff", 10, Upload.Purpose.DOCUMENT))
         // The Notion door is untouched: still a .zip and nothing else.
         assertNotNull(Upload.refusal("holiday.jpg", "image/jpeg", 10, Upload.Purpose.NOTION))
-        // A photo has the same 50 MB cap as a document.
+        // Every file has the same 2 GiB cap.
         assertNotNull(
             Upload.refusal("holiday.png", "image/png", Upload.DOCUMENT_MAX + 1,
                 Upload.Purpose.DOCUMENT),
         )
-        // ...and no extension means no photo kind: the PC decides by the name.
-        assertNotNull(Upload.refusal("scan", "image/png", 10, Upload.Purpose.DOCUMENT))
+        // The chat path still sees a photo as a picture, never as a document.
+        assertTrue(AttachFile.goesToPicture("holiday.png", "image/png"))
+        assertNull(AttachFile.kindOf("holiday.png"))
+        // ...and a document picked there is still a document.
+        assertTrue(!AttachFile.goesToPicture("taxes.pdf", "application/pdf"))
+    }
+
+    @Test
+    fun `the phone's cap is the PC's ONE constant, read from its source`() {
+        val pc = repoFile("backend/jarvis_upload.py").readText()
+        val line = pc.lineSequence().first { it.trimStart().startsWith("MAX_FILE_BYTES = ") }
+        val bytes = line.substringAfter("=").substringBefore("#").split("*")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .fold(1L) { acc, part -> acc * part.toLong() }
+        assertEquals("the phone's pre-check must be the PC's cap", bytes, Upload.DOCUMENT_MAX)
+        assertTrue(
+            "the PC's card and refusal must read that same line",
+            "MAX_DOC_BYTES = MAX_FILE_BYTES" in pc && "_cap_words(" in pc,
+        )
+        // The words are derived from the constant too - no typed "50 MB" left.
+        assertEquals("2 GB", Upload.capWords(Upload.Purpose.DOCUMENT))
+        assertEquals("4 GB", Upload.capWords(Upload.Purpose.NOTION))
+    }
+
+    @Test
+    fun `a refusal at begin shows the server's own sentence, word for word`() = runBlocking {
+        val sentence = "That file is 3.0 GB. Files up to 2 GB can be sent from your phone."
+        var opened = 0
+        val outcome = Upload.send(
+            meta = meta(size = 10),
+            into = "C:\\Docs",
+            open = { opened += 1; ByteArrayInputStream(bytes(10)) },
+            begin = {
+                Upload.Reply(413, json("""{"ok":false,"said":"$sentence","reason":"too big","max_bytes":2147483648}"""))
+            },
+            chunk = { Upload.Reply(500, null) },
+            finish = { Upload.Reply(500, null) },
+        )
+        assertEquals(sentence, (outcome as Upload.Outcome.Refused).why)
+        assertEquals("the screen must show the server's words, not a generic failure",
+            sentence, Upload.outcomeText(outcome))
+        assertEquals("nothing is opened when begin refused", 0, opened)
+    }
+
+    @Test
+    fun `measure reports its progress on a big file instead of looking frozen`() {
+        val seen = mutableListOf<Long>()
+        val size = (Upload.READ_REPORT * 2 + 5).toInt()
+        val m = Upload.measure(ByteArrayInputStream(bytes(size)), size.toLong()) { seen += it }
+        assertTrue(m is Upload.Measured.Ok)
+        assertEquals(listOf(Upload.READ_REPORT, Upload.READ_REPORT * 2), seen)
     }
 
     // ------------------------------------------------------- answer mapping ---
@@ -542,17 +596,21 @@ class UploadTest {
     }
 
     @Test
-    fun `progress is real chunks, never a timer`() {
+    fun `progress is real chunks and real bytes read, never a timer`() {
         assertEquals("Sending taxes.pdf - 2 of 4", Upload.progress("taxes.pdf", 2, 4))
         assertEquals("Getting taxes.pdf ready…", Upload.preparing("taxes.pdf"))
+        assertEquals(
+            "Getting taxes.pdf ready… 2.5 MB read",
+            Upload.preparing("taxes.pdf", 2_500_000),
+        )
         assertTrue(Upload.waitingLine("taxes.pdf").contains("taxes.pdf"))
         assertFalse(Upload.waitingLine("taxes.pdf").contains("2 of 4"))
         assertTrue(Upload.DETAIL.contains("From my phone"))
-        // 2026-11-13: the row says photos as well as documents, and that a
-        // photo is a plain file no model sees on this path.
-        assertTrue(Upload.TITLE.contains("photo"))
-        assertTrue(Upload.DETAIL.contains("photo"))
+        // 2026-11-13: any file type, as a plain copy no model sees, up to 2 GB.
+        assertTrue(Upload.TITLE.contains("file"))
         assertTrue(Upload.DETAIL.contains("plain file"))
+        assertTrue(Upload.DETAIL.contains("never shown to a model"))
+        assertTrue(Upload.DETAIL.contains("2 GB"))
         assertTrue(Upload.NOT_HERE.contains("not available on this PC"))
         assertTrue(Upload.NO_FOLDERS.contains("Settings, Folders Jarvis may look in"))
     }
@@ -567,5 +625,21 @@ class UploadTest {
     private fun assertArrayEqualsBytes(want: ByteArray, got: ByteArray) {
         assertEquals("byte count", want.size, got.size)
         for (i in want.indices) assertEquals("byte $i", want[i], got[i])
+    }
+
+    /**
+     * A file in this repository, found by walking up from the test's working
+     * directory - the same helper the other contract tests here use. It is how
+     * the phone's cap is compared with the PC's one constant instead of a copy
+     * typed into this test.
+     */
+    private fun repoFile(rel: String): java.io.File {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = java.io.File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
     }
 }

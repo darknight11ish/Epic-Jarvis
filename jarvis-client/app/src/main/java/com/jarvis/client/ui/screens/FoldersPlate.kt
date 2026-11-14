@@ -205,7 +205,7 @@ internal fun FoldersSection(
                         Gap(4)
                         Text(
                             if (now.waiting) Upload.waitingLine(now.name)
-                            else if (now.total <= 0) Upload.preparing(now.name)
+                            else if (now.total <= 0) Upload.preparing(now.name, now.read)
                             else Upload.progress(now.name, now.sent, now.total),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (now.waiting) chrome.warnInk else chrome.textMid,

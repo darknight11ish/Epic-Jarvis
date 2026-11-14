@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "ea3485abfd1c11be7ac09da519b2dfd36004078d",
- "built_at": "2026-11-14T00:26:49-08:00",
+ "ref": "c76cec4449219d74bd8d6a5a57d86c61afb85042",
+ "built_at": "2026-11-14T04:12:11-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4669,6 +4669,7 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-12-visible-name-atlas.md",
+    "changelog.d/2026-11-13-any-file-transfer.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-backend-shard.md",
     "changelog.d/2026-11-13-bar-stop-silences-speech.md",
@@ -4854,6 +4855,7 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-12-visible-name-atlas.md",
+    "decisions.d/2026-11-13-any-file-transfer.md",
     "decisions.d/2026-11-13-aside-dropped-not-queued.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-backend-shard.md",
@@ -5327,7 +5329,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 906,
+   "file_count": 908,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6414,9 +6416,49 @@
  ],
  "recent_commits": [
   {
+   "sha": "c76cec4449219d74bd8d6a5a57d86c61afb85042",
+   "date": "2026-11-14",
+   "subject": "Repair the HUD file the earlier resolution had rolled back, and pin Atlas's note"
+  },
+  {
+   "sha": "65629fe48ff6f9beebd72b10cf2a2960ddc5f673",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1231 from darknight11ish/feat/android-local-engine-2026-11-13"
+  },
+  {
+   "sha": "f3a89f62b4f608c4706435f47c56bde9db5f9a8f",
+   "date": "2026-11-14",
+   "subject": "chore(records): regenerate after merging main with #1233 in it"
+  },
+  {
+   "sha": "6373b00ef752a703b70910dc645cd32946a88923",
+   "date": "2026-11-14",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
+  },
+  {
+   "sha": "cf4a2797f2c4b388f95c66813435081650bb9fa3",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1233 from darknight11ish/feat/phone-backup-updater-2026-11-13"
+  },
+  {
    "sha": "ea3485abfd1c11be7ac09da519b2dfd36004078d",
    "date": "2026-11-14",
    "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
+   "sha": "8dfbf1047906bf3eee23afb22ca1723b02efbb85",
+   "date": "2026-11-14",
+   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
+   "sha": "8d48d8afa422f8799b58257476122e010bc4c22e",
+   "date": "2026-11-14",
+   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
+   "sha": "98b82d643adc589f6004541f4a520398ccb08481",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
   },
   {
    "sha": "11ee3cdb3e45d9f22f562664de0631df7fd000c7",
@@ -6472,46 +6514,6 @@
    "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
    "date": "2026-11-13",
    "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
-  },
-  {
-   "sha": "939d06efe673c4ed01a6d59ab90041a7a1c65937",
-   "date": "2026-11-13",
-   "subject": "fix(claims): C167 says the phone's on-device AI is built, which this branch makes true"
-  },
-  {
-   "sha": "c1c354e943231cba9a3aa90f2c4345d386fbe766",
-   "date": "2026-11-13",
-   "subject": "fix(records): record the phone's settings backup in the feature matrix"
-  },
-  {
-   "sha": "972ca5350431f44c72e1cc271277d61d0ce2702f",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
-  },
-  {
-   "sha": "45ed79defbf624ae86e12ff39030da9692d30c94",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
-  },
-  {
-   "sha": "41e0c19b26b5bba90de98c7961da3b31acd4a98b",
-   "date": "2026-11-13",
-   "subject": "records(feature-controls): the phone settings backup row, so the catalogue's records agree (183)"
-  },
-  {
-   "sha": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
-  },
-  {
-   "sha": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
-  },
-  {
-   "sha": "69428294081ee150aefe347399e36531787b5f01",
-   "date": "2026-11-13",
-   "subject": "Regenerate the whole-repo records against the merged tree"
   }
  ],
  "top_level": [
@@ -6543,7 +6545,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 268
+   "files": 269
   },
   {
    "path": "tools/",
@@ -6558,7 +6560,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 185
+   "files": 186
   },
   {
    "path": "plugins/",
@@ -6632,8 +6634,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5760,
-  "covered": 5277,
+  "tracked_files": 5762,
+  "covered": 5279,
   "excluded": 483,
   "subsystems": 27
  },

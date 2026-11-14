@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "e544d24c82ff097d72e337540479b5786755627e4a3c6c9d7cb5d727d5a60f98",
+  "source_sha256": "9b5f67aef864479ec53c62097b58d1960965e32c4924bd54992e026a967764e8",
   "feature_count": 183,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1233,9 +1233,9 @@ export const FEATURE_DIRECTORY = {
       "label_note": "",
       "example": "turn on Send a document from your phone",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: Settings, Folders Jarvis may look in, then Send a document or a photo",
+      "where": "desktop Settings: All features and abilities; phone: Settings, Folders Jarvis may look in, then Send a file from your phone",
       "where_desktop": "All features and abilities",
-      "where_phone": "Settings, Folders Jarvis may look in, then Send a document or a photo",
+      "where_phone": "Settings, Folders Jarvis may look in, then Send a file from your phone",
       "note": "",
       "not_a_control": true
     },

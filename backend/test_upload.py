@@ -12,11 +12,11 @@ that it kept every rule the promise was protecting:
      it is denied, times out or is never answered (rule 4, taken at its word);
   2. a folder that is not on the owner's own "Folders Jarvis may look in" list
      is refused - the phone cannot create a grant;
-  3. only the eight document kinds, plus a photo as a PLAIN FILE COPY, and an
-     executable or a script is refused by name AND by bytes; a `.docx` that is
-     really a renamed archive never reaches a parser (the 2026-10-20 parser
-     audit's guards, imported not copied), and a landed photo is still refused
-     by both readers that turn bytes into words;
+  3. ANY file type lands as a PLAIN FILE COPY, and the kinds that claim to be a
+     document or a photo are still checked by name AND by bytes; a `.docx` that
+     is really a renamed archive never reaches a parser, a `.pdf` that is really
+     a program is refused, and a landed `.zip`/`.exe`/`.dat` is still refused by
+     every reader that turns bytes into words;
   4. the sha256 and the size are checked at finish, and a truncated or altered
      upload leaves nothing behind;
   5. staging is invisible to every reader before `finish`, and deleted on every
@@ -456,6 +456,11 @@ def t_the_card_is_raised_before_anything_lands():
           str(TMP) not in json.dumps(detail) and "data" not in detail, detail)
     check("the card does not claim Jarvis opens or runs it",
           "never opened, run or sent" in prompt and "outside text" in prompt, prompt)
+    check("the card shows the ONE cap in words",
+          f"Files up to {U._cap_words('document')} can be sent from your phone." in prompt,
+          prompt)
+    check("... and the approval detail carries that same number",
+          detail.get("max_bytes") == U.MAX_FILE_BYTES, detail)
 
 
 def t_a_denied_card_leaves_nothing():
@@ -521,24 +526,76 @@ def t_the_sha256_and_the_size_are_checked():
 def t_the_caps():
     fresh()
     into, = listed("Documents")
-    code, out = U.request_begin({"name": "big.pdf", "size": U.MAX_DOC_BYTES + 1,
+    # ONE constant, 2 GiB (2026-11-13). The next checks raise/lower the module's
+    # own constant at run time instead of writing 2 GiB to disk: the card, the
+    # refusal sentence and the begin answer must all read the patched number, so
+    # none of them can carry a copy of it.
+    check("the ONE file cap is 2 GiB (the owner's 2026-11-13 number)",
+          U.MAX_FILE_BYTES == 2 * 1024 * 1024 * 1024, U.MAX_FILE_BYTES)
+    check("... and the old name is that same number, not a second literal",
+          U.MAX_DOC_BYTES == U.MAX_FILE_BYTES
+          and "MAX_DOC_BYTES = MAX_FILE_BYTES" in _read(HERE / "jarvis_upload.py"),
+          (U.MAX_DOC_BYTES, U.MAX_FILE_BYTES))
+    code, out = U.request_begin({"name": "big.pdf", "size": U.MAX_FILE_BYTES + 1,
                                  "into": str(into)}, gate=gate_yes(),
                                 tier_of=lambda a: "ask", spawn=run_now, sweep=False)
-    check("a document over the cap is refused, with the size and the cap",
-          code == 413 and U._said_size(U.MAX_DOC_BYTES) in out.get("said", ""), (code, out))
-    check("... and it names the cap it enforces",
-          out.get("max_bytes") == 50 * 1024 * 1024 == U.MAX_DOC_BYTES, out)
+    exact = U.TOO_BIG_DOC.format(size=U._said_size(U.MAX_FILE_BYTES + 1),
+                                 cap=U._cap_words("document"))
+    check("a file over the cap is refused with the EXACT sentence",
+          code == 413 and out.get("said") == exact, (code, out, exact))
+    check("... the sentence names the cap the owner reads: 2 GB",
+          "2 GB" in out.get("said", ""), out)
+    check("... and the answer carries the same number it enforced",
+          out.get("max_bytes") == U.MAX_FILE_BYTES, out)
     code, out = U.request_begin({"name": "big.zip", "size": U.MAX_NOTION_BYTES + 1,
                                  "purpose": "notion", "into": str(into)},
                                 spawn=run_now, sweep=False)
-    check("a Notion export over its own cap is refused, with its own sentence",
-          code == 413 and U._said_size(U.MAX_NOTION_BYTES) in out.get("said", ""),
-          (code, out))
+    notion_exact = U.TOO_BIG_NOTION.format(size=U._said_size(U.MAX_NOTION_BYTES + 1),
+                                           cap=U._cap_words("notion"))
+    check("a Notion export over its own cap is refused, with its own exact sentence",
+          code == 413 and out.get("said") == notion_exact, (code, out, notion_exact))
+    check("... and that sentence says 4 GB, not 4096.0 MB",
+          "4 GB" in out.get("said", ""), out)
     check("the two caps are the owner's numbers (Notion raised to 4 GiB 2026-11-09)",
           U.MAX_NOTION_BYTES == 4 * 1024 * 1024 * 1024
-          and U.MAX_NOTION_BYTES > U.MAX_DOC_BYTES, U.MAX_NOTION_BYTES)
+          and U.MAX_NOTION_BYTES > U.MAX_FILE_BYTES, U.MAX_NOTION_BYTES)
     check("the staging ceiling can hold one full Notion export",
           U.STAGING_MAX >= U.MAX_NOTION_BYTES, (U.STAGING_MAX, U.MAX_NOTION_BYTES))
+
+    # THE LARGE-FILE PROOF, WITHOUT 2 GiB ON DISK. The cap is moved to 4 KiB for
+    # the duration of this block; a real 4,000-byte file is then accepted through
+    # the same begin/chunk/finish path and landed byte for byte, and a 5,000-byte
+    # one is refused with the sentence naming the PATCHED cap. If any message
+    # carried "2 GB" as a literal, these checks fail.
+    real = U.MAX_FILE_BYTES
+    try:
+        U.MAX_FILE_BYTES = 4096
+        under = b"Z" * 4000
+        code, out = begin("near-cap.dat", under, into)
+        check("with a test-only 4 KiB cap, a 4,000-byte file is accepted",
+              code == 202 and out.get("max_bytes") == 4096, (code, out))
+        uid = out["id"]
+        send(uid, under)
+        c, fin = U.request_finish({"id": uid})
+        landed = into / U.SUB / "near-cap.dat"
+        check("... it lands through the SAME finish, byte for byte",
+              c == 200 and fin.get("saved") is True and landed.is_file()
+              and landed.read_bytes() == under, (c, fin, landed))
+        over = b"Z" * 5000
+        code, out = U.request_begin({"name": "over.dat", "size": len(over),
+                                     "into": str(into)}, gate=gate_yes(),
+                                    tier_of=lambda a: "ask", spawn=run_now,
+                                    sweep=False)
+        patched = U.TOO_BIG_DOC.format(size=U._said_size(len(over)),
+                                       cap=U._cap_words("document"))
+        check("... and a 5,000-byte one is refused with the PATCHED cap in the sentence",
+              code == 413 and out.get("said") == patched and "4 KB" in patched,
+              (code, out, patched))
+        card = U.card("near-cap.dat", 4000, str(into))
+        check("... and the card shows that same patched cap, so it reads the constant",
+              "Files up to 4 KB can be sent from your phone." in card, card)
+    finally:
+        U.MAX_FILE_BYTES = real
 
     data = b"%PDF-1.4\n" + b"z" * 5000
     code, out = begin("taxes.pdf", data, into)
@@ -557,6 +614,8 @@ def t_the_caps():
 
 def t_the_four_mib_body_cap_is_respected():
     check("one piece is 1 MiB of raw bytes", U.CHUNK_BYTES == 1024 * 1024, U.CHUNK_BYTES)
+    check("a 2 GiB file is 2,048 pieces, and no piece is bigger than one MiB",
+          U.MAX_FILE_BYTES // U.CHUNK_BYTES == 2048, U.MAX_FILE_BYTES // U.CHUNK_BYTES)
     piece = base64.b64encode(b"x" * U.CHUNK_BYTES).decode("ascii")
     body = len(json.dumps({"id": "0" * 32, "index": 0, "data": piece}).encode("utf-8"))
     check("a full chunk's whole request body is far under the server's 4 MiB cap",
@@ -602,33 +661,81 @@ def t_the_folder_must_be_on_the_owners_list():
     listed("Documents")
 
 
-def t_the_eight_kinds_and_no_executable():
+def t_any_kind_lands_as_a_plain_file():
+    """2026-11-13: ANY file type lands as a PLAIN FILE COPY, and nothing reads it.
+
+    The owner asked to "transfer any file type ... up to a reasonably large
+    size". The safety shape is the one the document door always had: the bytes
+    land unchanged in `From my phone`, nothing runs or opens them, and the
+    modules that turn bytes into words still refuse an unfamiliar kind.
+    """
     fresh()
     into, = listed("Documents")
-    data = b"hello\n"
-    bad = [".exe", ".bat", ".cmd", ".ps1", ".py", ".sh", ".lnk", ".dll", ".js",
-           ".vbs", ".msi", ".jar", ".scr", ".com", ".zip", ""]
-    for ext in bad:
-        code, out = U.request_begin({"name": "thing" + ext, "size": len(data),
-                                     "into": str(into)}, gate=gate_yes(),
-                                    tier_of=lambda a: "ask", spawn=run_now, sweep=False)
-        check(f"{ext or 'no extension'} is refused by name", code == 400 and
-              out.get("said") == U.KIND_BAD, (code, out))
-    for ext in (".md", ".markdown", ".txt", ".csv", ".pdf", ".docx", ".xlsx", ".pptx"):
-        U._reset_for_tests()                 # a fresh slot: three may be in flight
-        code, out = U.request_begin({"name": "thing" + ext, "size": len(data),
-                                     "into": str(into)}, gate=gate_yes(),
-                                    tier_of=lambda a: "ask", spawn=run_now, sweep=False)
-        check(f"the eight kinds include {ext}", code == 202, (code, out))
+    cases = {
+        "notes.zip": zip_bytes({"inner.txt": "hi"}),
+        "tool.exe": b"MZ\x90\x00" + bytes(60),
+        "raw.dat": bytes(range(64)) * 2,
+        "clip.mp4": b"\x00\x00\x00\x18ftypmp42" + bytes(60),
+        "archive.tar.gz": b"\x1f\x8b\x08" + bytes(60),
+        "no-extension": b"plain bytes",
+    }
+    for name, data in cases.items():
+        U._reset_for_tests()
+        c, o = whole(name, data, into)
+        landed = into / U.SUB / name
+        check(f"{name} is accepted and lands byte for byte ({len(data)} bytes)",
+              c == 200 and o.get("saved") is True and landed.is_file()
+              and landed.read_bytes() == data,
+              (c, o, sorted(p.name for p in (into / U.SUB).iterdir())))
+    # A `.zip` is NOT the Office kinds' business on this purpose: it is stored,
+    # never unpacked. If the door ever sent it through the .docx zip guards this
+    # 26 MB-declared bomb would be refused instead of landed.
+    bomb = zip_bytes({"word/document.xml": "0" * (26 * 1024 * 1024)})
     U._reset_for_tests()
+    c, o = whole("bomb.zip", bomb, into)
+    check("a .zip is stored and NEVER unpacked - a zip bomb named .zip lands as bytes",
+          c == 200 and o.get("saved") is True
+          and (into / U.SUB / "bomb.zip").read_bytes() == bomb, (c, o))
+
+    text = U.card("tool.exe", len(cases["tool.exe"]), str(into))
+    check("the card names the file, its size and the folder",
+          "File: tool.exe" in text and "Size:" in text
+          and "Into: Documents > From my phone" in text, text)
+    check("... says it is never opened, run, read, indexed or shown to a model",
+          "does not open it, run it, read it, index it or show it to a model" in text, text)
+    check("... and does not claim its words were read as outside text",
+          "outside text" not in text, text)
+    check("... and shows the ONE cap in words",
+          "Files up to 2 GB can be sent from your phone." in text, text)
+
+    # THE PRIVACY LINE, on the landed file and the real modules.
+    landed = into / U.SUB / "raw.dat"
+    got = D.read(str(landed))
+    check("the documents reader refuses a .dat", got.get("ok") is False, got)
+    attachment = A.read({"name": "raw.dat",
+                         "data": base64.b64encode(cases["raw.dat"]).decode("ascii")})
+    check("the chat attachment reader refuses a .dat", attachment.get("ok") is False,
+          attachment)
+    check("the index's own kind set holds no .dat/.zip/.exe/.mp4/.gz",
+          not ({".dat", ".zip", ".exe", ".mp4", ".gz"} & set(D.the_index().kinds)),
+          sorted(D.the_index().kinds))
+    found = D.search("plain bytes", roots=[into])
+    check("a folder search never opens a .dat",
+          all(row.get("path") != str(landed) for row in found.get("results") or []), found)
+    by_name = D.find("raw", roots=[into])
+    check("find still reaches it by name - it is a plain file in a listed folder",
+          by_name.get("ok") and any("raw.dat" in (r.get("name") or "")
+                                    for r in by_name.get("found") or []), by_name)
+
+
+def t_the_known_kinds_are_still_checked_by_their_bytes():
+    """Any TYPE may land; a file that CLAIMS a known kind still has its bytes checked."""
+    fresh()
+    into, = listed("Documents")
     check("the kinds are the phone's and the attachment reader's SAME eight",
           set(A.KINDS) == set(U._kinds()) == {
               ".pdf", ".docx", ".xlsx", ".pptx", ".md", ".markdown", ".txt", ".csv"},
           sorted(U._kinds()))
-
-    # The BYTES half, at finish.
-    fresh()
-    listed("Documents")
     c, o = whole("notes.txt", b"a\x00b", into)
     check("a text file that is really binary is refused at finish", c == 200
           and o.get("said") == U.NOT_PLAIN_TEXT, (c, o))
@@ -702,15 +809,16 @@ def t_a_photo_lands_as_a_plain_file():
     check("a document's card is unchanged", "outside text" in U.card(
         "taxes.pdf", len(png), str(into)))
 
-    # A non-allowed type is STILL refused by name - the allowance is a list,
-    # not a door that opened for everything.
-    for ext in (".svg", ".tif", ".tiff", ".mp4", ".zip", ".exe", ".py"):
+    # Other types take the same plain-file road (2026-11-13): a photo is no
+    # longer a special allowance - it is one of many plain copies now, and a
+    # `.zip`/`.exe`/`.mp4` is accepted on exactly the same terms.
+    for ext in (".svg", ".tif", ".mp4", ".zip", ".exe"):
         U._reset_for_tests()
-        c, o = U.request_begin({"name": "thing" + ext, "size": 10, "into": str(into)},
-                               gate=gate_yes(), tier_of=lambda a: "ask",
-                               spawn=run_now, sweep=False)
-        check(f"a photo allowance does not let {ext} through", c == 400
-              and o.get("said") == U.KIND_BAD, (c, o))
+        payload = b"plain bytes for " + ext.encode("ascii")
+        c, o = whole("thing" + ext, payload, into)
+        check(f"{ext} lands as a plain file too, byte for byte",
+              c == 200 and o.get("saved") is True
+              and (into / U.SUB / ("thing" + ext)).read_bytes() == payload, (c, o))
     U._reset_for_tests()
     c, o = whole("fake.png", b"MZ\x90\x00" + bytes(60), into)
     check("a program renamed .png is refused by its bytes", c == 200
@@ -1082,6 +1190,12 @@ def t_the_records_and_the_wiring_are_in_step():
     check("the module has the install() the loader calls", callable(U.install))
     check("the plugin catalogue counts it (regenerated, never hand-typed)",
           '"upload"' in _read(REPO / "plugins" / "registry.json"))
+    source = _read(HERE / "jarvis_upload.py")
+    check("the file cap is ONE named constant (MAX_FILE_BYTES), not a number in three places",
+          source.count("MAX_FILE_BYTES = ") == 1
+          and "MAX_DOC_BYTES = MAX_FILE_BYTES" in source
+          and source.count("50 * 1024 * 1024") == 0,
+          (source.count("MAX_FILE_BYTES = "), source.count("50 * 1024 * 1024")))
 
 
 def t_the_twins_are_identical():
@@ -1119,7 +1233,8 @@ def main() -> int:
              t_the_caps,
              t_the_four_mib_body_cap_is_respected,
              t_the_folder_must_be_on_the_owners_list,
-             t_the_eight_kinds_and_no_executable,
+             t_any_kind_lands_as_a_plain_file,
+             t_the_known_kinds_are_still_checked_by_their_bytes,
              t_a_photo_lands_as_a_plain_file,
              t_a_name_with_a_path_is_refused,
              t_the_staging_folder_is_invisible_before_finish,

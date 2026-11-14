@@ -154,7 +154,7 @@ class FeatureDirectoryTest {
             assertTrue("the document row must offer no phone switch",
                 document.switchKeys.isEmpty())
             assertTrue("the row does not name the phone's own button: ${document.why}",
-                document.why.contains("Send a document"))
+                document.why.contains("Send a file"))
             assertTrue("the row does not say where the file lands: ${document.why}",
                 document.why.contains("From my phone"))
             assertTrue("the row does not name the phone's Settings row: ${document.why}",
