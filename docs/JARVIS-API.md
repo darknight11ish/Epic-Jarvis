@@ -39191,7 +39191,9 @@ nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `ja
 (`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
 `docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.
 
-## 224. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
+## 222. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
+
+*Numbering note, 2026-11-13: written as 220, renumbered to 222 when main's code-protection (220), VoiceStudio (221) and the on-device model engine (223) sections took the numbers around it. `docs/ARCHITECTURE.md` section 8 cites this as section 222.*
 
 This section is the record of the owner-approved copy-over wave
 (`COPY-OVER-SPEC-2026-11-13.md`, sections A1-A2). Neither feature is an API
@@ -39283,3 +39285,55 @@ credited as above) is deliberately only the integrity half:
 option, its multi-GB project/file/chats backup and its Keystore API-key vault
 (no consumer on this phone yet), its branding and file names. No AGPL or
 unlicensed code was used anywhere in this wave.
+
+## 223. The phone's own on-device model engine adds no backend route (2026-11-13)
+
+*Numbering note, 2026-11-13: this section was written as 221; main's VoiceStudio section already held 221 when this branch merged main, so this one is 223. The words below are unchanged.*
+
+This section exists to say what is **not** here. The Android app's Local AI screen
+(`jarvis-client/app/src/main/java/com/jarvis/client/localai/`, opened from Home's
+More menu) runs a small GGUF model on the phone itself, with llama.cpp under it:
+the model file is read from this phone's storage, the answer is generated on this
+phone, and **nothing about the question or the answer is sent to the PC or to
+anywhere else**. There is therefore no route to classify, no field to add and no
+permission to ask for - `tools/check_parity.py` sees an empty diff on both sides,
+which is the correct answer rather than an omission.
+
+What that means, route by route:
+
+* **No new `GET` or `POST`.** The screen calls no backend at all. It does not
+  read `/api/models`, `/api/status` or anything else, and the engine has no
+  network code in it (`LocalAiShipsOffTest` reads the package and fails if an
+  HTTP client, a URL or a token ever appears there).
+* **The existing chat is unchanged.** The question box on Home still sends to the
+  PC exactly as before; the Local AI screen is a separate local session, never a
+  fallback or a replacement.
+* **No model catalogue and no download.** E1 takes a `.gguf` file the owner
+  already put on the phone (over USB, or copied across from another device),
+  picked through Android's own document picker. In-app download is E2, and it
+  must arrive with its own route and its own decision record.
+* **No approval card, no token, no pairing change.** A file on this phone and a
+  model answering it are the owner's own act on the owner's own device. The
+  screen never reads the pairing token and never writes one.
+* **No speech.** The phone still does no speech-to-text, here or elsewhere; this
+  screen is typed text only.
+
+The switch that turns it on ships **OFF**, no model is loaded until the owner
+taps Load, and the screen's permanent label is the honest one: *"On-device model:
+runs on this phone, not your PC."* The desktop has no counterpart on purpose -
+`docs/ARCHITECTURE.md` section 8 records why (it already has Ollama on the same
+PC, and a second on-device engine there would duplicate it) - and
+`features/features.json` is not regenerated in this pull request. That is no
+longer a claim that the screen is unmeasured, because the screen itself **has**
+been driven on a phone, so the words here are measured rather than designed. The
+native library itself was proven on the owner's phone by the native lane's
+standalone probe (a small Qwen2.5-0.5B Q4_K_M model, about 19.92 tokens/s, with
+cancellation, unload and destroy passing); that is a PASS for the library, and
+the app now has its own PASS too. The screen was driven on the OnePlus
+`f0a5b32b` on 2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B
+Q4_K_M each answered `Hello, who are you?` at **27.1, 13.8 and 7.7 tokens per
+second on screen**, matched by the engine's own `generated N token(s) in M ms`
+line. With the keyboard up, two further sends measured **34.5 and 34.3** tokens
+per second. The in-app **Import** (system file picker) row stays **NOT-TESTED**:
+the test models were `adb push`ed rather than imported, and a NOT-TESTED row is
+never a pass.

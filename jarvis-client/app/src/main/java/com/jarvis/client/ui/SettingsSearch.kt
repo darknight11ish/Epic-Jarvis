@@ -680,9 +680,12 @@ object SettingsSearch {
         Row(
             key = "on-device-model", title = "On-device AI model",
             label = "On-device AI model; local model on phone; offline mode; run offline; " +
-                "phone model; not available",
+                "phone model; Home; More; Local AI; import a model; nothing downloaded",
             titles = emptyList(),
-            quotes = listOf("Not available in this build."),
+            // The plate's own sentence, from `ui/screens/OnDeviceModelPlate.kt`.
+            // It said "Not available in this build." until 2026-11-13, while the
+            // screen it points at worked (DEF-065).
+            quotes = listOf("nothing is downloaded for you"),
             source = JUMP + listOf("ui/screens/OnDeviceModelPlate.kt"),
         ),
         Row(

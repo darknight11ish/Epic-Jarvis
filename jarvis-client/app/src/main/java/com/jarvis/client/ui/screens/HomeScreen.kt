@@ -939,6 +939,17 @@ data class HomeActions(
      */
     val onOpenReminders: () -> Unit,
     /**
+     * "Local AI" (2026-11-13): the phone's own on-device model screen
+     * ([com.jarvis.client.localai.LocalAiScreen]), where a small GGUF model
+     * runs on this phone with no PC and no internet.
+     *
+     * It is the ONE row in the More menu that needs no PC at all, which is why
+     * its detail line says which machine answers. Navigation only: the screen's
+     * switch ships OFF and its engine is created inside its own Load tap, so
+     * this callback cannot start anything.
+     */
+    val onOpenLocalAi: () -> Unit = {},
+    /**
      * Settings itself (2026-10-08): its own button in the row, beside
      * Reminders - it used to be three taps and a scroll away. Always shown,
      * like Help: "Settings and Help themselves always stay reachable"
@@ -6417,6 +6428,15 @@ private fun HomeMoreMain(
             MoreMenuWords.HISTORY,
             detail = MoreMenuWords.HISTORY_DETAIL,
         ) { onDismiss(); actions.onEarlierChats() }
+
+        // Local AI (2026-11-13): the one row that needs no PC. It opens the
+        // phone's own on-device model screen; the switch there ships OFF and
+        // no engine is created until its Load tap, so opening this menu row
+        // cannot start a model or touch the phone's storage.
+        MoreRow(
+            MoreMenuWords.LOCAL_AI,
+            detail = MoreMenuWords.LOCAL_AI_DETAIL,
+        ) { onDismiss(); actions.onOpenLocalAi() }
 
         // ONE row for everything sent with a question - the owner's ask of
         // 2026-11-01: "remove the photo option because ATTach a file on my

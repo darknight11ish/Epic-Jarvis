@@ -1,0 +1,31 @@
+jarvis_llama native build
+built_at_utc      : 2026-11-13T12:24:31Z
+abi               : x86_64
+platform          : android-33
+build_type        : Release
+stl               : c++_static
+output            : D:\jarvis-scratch\android-engine-native-2026-11-13\dist\x86_64\libjarvis_llama.so
+size_bytes        : 4791688
+size_before_strip_bytes : 46068368
+stripped          : True
+sha256            : dd4b5c35cd19c2838d8a5ed21c8e5cba4bf19cf39a16daf31daa92e83d205511
+ndk               : D:\Android\ndk\android-ndk-r27c
+ndk_revision      : 27.2.12479018
+cmake             : cmake version 3.31.6
+ninja             : 1.12.1
+clang             : Android (12470979, based on r522817c) clang version 18.0.3 (https://android.googlesource.com/toolchain/llvm-project d8003a456d14a3deb8054cdaa529ffbf02d9b262)
+jni_symbols       : 8
+  0000000000108ef0 T Java_com_jarvis_client_localai_LlamaNative_nativeCreate
+  000000000010c600 T Java_com_jarvis_client_localai_LlamaNative_nativeDestroy
+  000000000010a2f0 T Java_com_jarvis_client_localai_LlamaNative_nativeGenerate
+  000000000010c6c0 T Java_com_jarvis_client_localai_LlamaNative_nativeLastError
+  0000000000108fa0 T Java_com_jarvis_client_localai_LlamaNative_nativeLoad
+  000000000010c850 T Java_com_jarvis_client_localai_LlamaNative_nativeStats
+  000000000010c550 T Java_com_jarvis_client_localai_LlamaNative_nativeUnload
+  000000000010c7c0 T Java_com_jarvis_client_localai_LlamaNative_nativeVersion
+load_segments     : 4
+  LOAD           0x000000 0x0000000000000000 0x0000000000000000 0x104e7c 0x104e7c R   0x4000
+  LOAD           0x104e80 0x0000000000108e80 0x0000000000108e80 0x377740 0x377740 R E 0x4000
+  LOAD           0x47c5c0 0x00000000004845c0 0x00000000004845c0 0x0149d0 0x017a40 RW  0x4000
+  LOAD           0x490f90 0x000000000049cf90 0x000000000049cf90 0x0004b8 0x083d10 RW  0x4000
+
