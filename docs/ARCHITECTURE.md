@@ -5211,7 +5211,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **The phone's own settings backup and the checksum-pinned update manifest
   are the phone's, and that is one-sided on purpose** (2026-11-13, the
-  owner-approved copy-over wave; `docs/JARVIS-API.md` section 220;
+  owner-approved copy-over wave; `docs/JARVIS-API.md` section 222;
   `COPY-OVER-SPEC-2026-11-13.md` sections A1-A2). **Backup:** Settings ->
   "Phone settings backup" seals THIS PHONE'S OWN settings - the face and
   colours, the menus shown, the voice and display switches, which apps Jarvis
@@ -5233,6 +5233,61 @@ what is missing is only the Settings screen agreeing about who turned it off.
   program with a different installer, so nothing is ported to it. Neither
   feature adds a route - the backup is a file the owner chooses, the update
   comes from GitHub - so `tools/check_parity.py` classifies nothing new.
+
+- **A model that runs on the phone itself is the phone's alone, and that is
+  one-sided on purpose** (2026-11-13; the owner's order *"build the full
+  android local ai model engine into the jarvis app once off peak hits"* and
+  his card answers that night: a separate Local AI screen, model source
+  "Both" with USB/file import first). The Android app gains a small GGUF
+  model engine of its own (`com.jarvis.client.localai`, llama.cpp under the
+  hood, MIT): it reads the model file on this phone's storage, answers in a
+  screen reached from Home's More menu, and has **no backend route, no
+  cloud fallback and no network path at all**. The desktop gets nothing, and
+  not because it was forgotten: it already runs models on the same PC through
+  Ollama, with the graphics-card lanes and the model catalogue that this
+  slice is explicitly not allowed to build on the phone, so a second
+  on-device engine there would be a duplicate rather than parity. **Nothing
+  about the ordinary Jarvis chat changes:** the on-device screen is a
+  separate local session, never a silent replacement for the chat that uses
+  the PC, and the switch that turns it on ships OFF - nothing downloads,
+  nothing loads and no native library is opened until the owner taps, and
+  the model is brought by the owner as a file (E1 has no in-app download;
+  that is E2). It adds no permission, raises no approval card and logs
+  nothing; the phone does no speech-to-text on this path or any other. The
+  time rules are the engine's own: **five minutes** with nothing asked (or
+  typed) unloads the model, one reply is hard-capped at 180 seconds, and
+  leaving the Local AI screen frees the model immediately, so a slow model
+  cannot hold the phone's memory or the screen forever. **The idle window was
+  5 seconds, and the field test changed it (2026-11-13):** on the owner's
+  phone the first build unloaded the model 16 seconds after Load, before a
+  person could start typing (logcat `model loaded` at 06:15:04.976, `model
+  unloaded` at 06:15:20.870), so the measured correction is five minutes; the
+  180-second reply cap is unchanged. **Honest limits, on the record:** the
+  native `libjarvis_llama.so` is the native lane's prebuilt
+  artefact (CPU-only llama.cpp, both 64-bit ABIs, 16 KB page aligned, with
+  provenance and MIT licences in `jarvis-client/native/`) and is integrated
+  into the same pull request; it was proven on the owner's own phone by that
+  lane's standalone probe - a small Qwen2.5-0.5B Q4_K_M model loaded in
+  262 ms and generated 24 tokens in 1.2 s, about 19.92 tokens/s, with
+  cancellation, unload and destroy passing. **That is a PASS for the LIBRARY,
+  not for the app.** The app itself was then driven on the same phone on
+  2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B Q4_K_M
+  each produced a real reply to `Hello, who are you?`, at 27.1, 13.8 and
+  7.7 tokens/s as shown on the screen and matched by the engine's own
+  `generated N token(s) in M ms` line; with the keyboard up, two further sends
+  measured 34.5 and 34.3 tokens/s on the same screen. The 3B model was accepted
+  by the RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The
+  in-app **Import** (SAF picker) was not exercised - the models were `adb
+  push`ed - so that row is NOT-TESTED, not PASS. Screenshots are black because
+  the activity sets `FLAG_SECURE`, which is correct, so the evidence is
+  uiautomator XML and logcat, and a screenshot row stays BLOCKED rather than
+  PASS. Two usability defects the test found are fixed in the same pull
+  request: the composer (draft, Send, Clear) is pinned above the keyboard inset
+  instead of being a list item the keyboard clipped out of the accessibility
+  tree, and the draft gained a Clear action. `features/features.json` is
+  unchanged in this pull request - the screen has now been measured, but the
+  measurement lives in this paragraph, not in that list; `tools/check_parity.py`
+  has nothing to classify because no route is added.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

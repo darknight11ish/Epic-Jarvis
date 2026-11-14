@@ -39148,29 +39148,9 @@ nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `ja
 (`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
 `docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.
 
-## 222. ANY file from your phone, up to 2 GiB, behind ONE number (added 2026-11-13)
+## 222. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
 
-**What changed, and what it supersedes.** The owner asked to "transfer any file type through the jarvis android app to my computer ... up to a reasonably large size". This section replaces two paragraphs of section 196 and nothing else: the type allowlist ("The eight documents, plus eight photos...") and the 50 MiB row of "Limits, in one place". Section 196's three routes, its ONE card, its folder-by-equality rule, its staging, its Notion door and its rule that a photo on this path is a plain copy (never `ChatPicture`) are unchanged and remain the record of those. **`purpose: "document"` now accepts ANY file name.** The phone's picker for the Settings row is `*/*`; a `.zip`, an `.exe`, a `.dat`, a `.mp4`, a `.tar.gz` and a name with no extension all take the same three calls, land byte for byte in `<the listed folder>\From my phone\<name>` (a duplicate name still gets a number), and are **never run, opened, parsed, converted, indexed or shown to a model**. The Notion purpose is still `.zip` only.
-
-**Safety: only the kinds that CLAIM a format are inspected.** `begin` checks the NAME (bare name, no path, no leading dot, no control character, no reserved Windows name, at most 150 characters) and no longer checks the extension. At `finish`, a known `jarvis_attached_file.KINDS` extension still gets the byte guards it always had - `%PDF-` and no `/Encrypt` trailer for a PDF, `PK\x03\x04` plus the right `word/`/`xl/`/`ppt/` member for the three Office kinds, the declared unpack size through `jarvis_documents.zip_bomb_problem`, UTF-8 with no NULs for a note, text file or CSV - and a photo still gets `_photo_problem`'s 64-byte header check. An unfamiliar extension claims nothing, so nothing is opened to check it: a `.zip` sent to this purpose is **stored and never unpacked**, and an `.exe` is stored and never run. **The landing folder being listed does not make a file readable:** `jarvis_documents.read` still accepts only `TEXT_KINDS`/`DOC_KINDS`, the index still reconciles `TEXT_KINDS` only (`:1258`, `:1387`), the word scan still opens `TEXT_KINDS` only (`:1772`), and `jarvis_attached_file.read` still refuses an unknown extension (`:528-529`) - the same four gates section 196 proves for a photo, proved again for `.dat`/`.zip` below.
-
-**THE ONE NUMBER: 2 GiB.** `jarvis_upload.MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024` (2,147,483,648 bytes, raised from 50 MiB). It is the only place the file cap is written:
-
-- `begin` answers `"max_bytes": MAX_FILE_BYTES` and refuses past it with the exact sentence `That file is <size>. Files up to 2 GB can be sent from your phone.` - the cap in words comes from `_cap_words`, from the same constant;
-- the approval card carries `Files up to 2 GB can be sent from your phone.` and its detail carries the same `max_bytes`, both from that constant;
-- `finish` re-checks the received size against it;
-- the phone's `Upload.DOCUMENT_MAX` is compared with that exact Python line by `UploadTest`, which parses `MAX_FILE_BYTES = ...` out of the source, and `Upload.capWords` derives `2 GB`/`4 GB` from the constants rather than typing them. So the phone's pre-check, the phone's own refusal sentence and the PC's card and sentence cannot disagree.
-
-`MAX_DOC_BYTES` remains as `MAX_DOC_BYTES = MAX_FILE_BYTES` (the old name, the same number). The READER's `jarvis_documents.MAX_DOC_BYTES` is still 50 MiB and is a DIFFERENT number: a landed document over it can be found by name and is not turned into text, and the card says that for that case instead of promising a read it will not do.
-
-**2 GiB is achievable here, measured against every part that bounds it.** It is 2,048 requests of the existing 1 MiB chunk; a full chunk's whole base64 + JSON body is about 1.37 MB, a third of the server's 4 MiB `MAX_BODY` (`t_the_four_mib_body_cap_is_respected` measures the arithmetic). The same chunk loop already carries a 4 GiB Notion export, so 2 GiB needs no new transport. `STAGING_MAX` (4 GiB) holds one full 2 GiB file; two in flight at once are refused with the existing `FULL` sentence. The phone reads the file twice - one measuring pass for size and SHA-256, one sending pass - which is the existing shape; the chip now also reports **bytes read** during the measuring pass and **chunks sent** during the send, so a large file shows movement instead of one unchanging sentence. **No 2 GiB file was written in a test:** `backend/test_upload.py` moves `MAX_FILE_BYTES` to 4 KiB for one block, sends a real 4,000-byte file through begin/chunk/finish and compares the landed bytes, and checks the card and the refusal sentence against the PATCHED number (a literal "2 GB" copied into either would fail that block). The real constant is asserted separately at 2 GiB.
-
-**Approval unchanged.** Same `receive_uploaded_document` action, tier `ask`, in `HARD_LIMITS` and `MUST_ASK`; the card is raised at `begin` before a byte is written; every chunk answers 409 while it waits and 403 once denied; a denial, a timeout or a refusal deletes the staging and lands nothing; the card still names the file, its size, the folder's NAME and now the cap. Nothing became auto-approved, and a file arriving from another device is still one card per file.
-
-**The phone's own half.** `AttachFile.SEND_FILE_MIME_TYPES` is `arrayOf("*/*")` for this row only; the chat "Attach a file" row keeps `MIME_TYPES`/`mimeTypes`, and a picture picked there still goes to `ChatPicture`/`goesToPicture`. `Upload.refusal` now refuses only on size (and the Notion `.zip` rule). A refusal from any of the three calls is shown verbatim through `Outcome.Refused`/`outcomeText` - the server's sentence, not a generic failure. `Upload.send` and the three wire bodies are unchanged.
-
-**Tests.** `backend/test_upload.py` - **212 passed, 0 skipped, 0 failed** on this PC, including the Notion temp-folder dry run and import: the any-type landings (`.zip`, `.exe`, `.dat`, `.mp4`, `.tar.gz`, no extension) byte-identical, a 26 MB-declared zip bomb named `.zip` stored without being unpacked, a real 4,000-byte file accepted through a test-only 4 KiB cap, the exact over-limit sentence and the card's patched cap line, the known-kind byte refusals still firing, the 2,048-piece arithmetic, a landed `.dat` refused by `jarvis_documents.read`, `jarvis_attached_file.read` and the index while `find` still reaches it by name, and the one-constant source pin. `jarvis-client`'s `UploadTest` and `AttachFileTest` hold the phone half: `*/*`, every name accepted, the cap parsed from the Python source, the server's sentence shown verbatim, measure progress and the new words. `tools/check_feature_controls.py` is clean (182/182) and `tools/check_feature_list.py` is 13/0.
-## 224. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
+*Numbering note, 2026-11-13: written as 220, renumbered to 222 when main's code-protection (220), VoiceStudio (221) and the on-device model engine (223) sections took the numbers around it. `docs/ARCHITECTURE.md` section 8 cites this as section 222.*
 
 This section is the record of the owner-approved copy-over wave
 (`COPY-OVER-SPEC-2026-11-13.md`, sections A1-A2). Neither feature is an API
@@ -39262,3 +39242,81 @@ credited as above) is deliberately only the integrity half:
 option, its multi-GB project/file/chats backup and its Keystore API-key vault
 (no consumer on this phone yet), its branding and file names. No AGPL or
 unlicensed code was used anywhere in this wave.
+
+## 223. The phone's own on-device model engine adds no backend route (2026-11-13)
+
+*Numbering note, 2026-11-13: this section was written as 221; main's VoiceStudio section already held 221 when this branch merged main, so this one is 223. The words below are unchanged.*
+
+This section exists to say what is **not** here. The Android app's Local AI screen
+(`jarvis-client/app/src/main/java/com/jarvis/client/localai/`, opened from Home's
+More menu) runs a small GGUF model on the phone itself, with llama.cpp under it:
+the model file is read from this phone's storage, the answer is generated on this
+phone, and **nothing about the question or the answer is sent to the PC or to
+anywhere else**. There is therefore no route to classify, no field to add and no
+permission to ask for - `tools/check_parity.py` sees an empty diff on both sides,
+which is the correct answer rather than an omission.
+
+What that means, route by route:
+
+* **No new `GET` or `POST`.** The screen calls no backend at all. It does not
+  read `/api/models`, `/api/status` or anything else, and the engine has no
+  network code in it (`LocalAiShipsOffTest` reads the package and fails if an
+  HTTP client, a URL or a token ever appears there).
+* **The existing chat is unchanged.** The question box on Home still sends to the
+  PC exactly as before; the Local AI screen is a separate local session, never a
+  fallback or a replacement.
+* **No model catalogue and no download.** E1 takes a `.gguf` file the owner
+  already put on the phone (over USB, or copied across from another device),
+  picked through Android's own document picker. In-app download is E2, and it
+  must arrive with its own route and its own decision record.
+* **No approval card, no token, no pairing change.** A file on this phone and a
+  model answering it are the owner's own act on the owner's own device. The
+  screen never reads the pairing token and never writes one.
+* **No speech.** The phone still does no speech-to-text, here or elsewhere; this
+  screen is typed text only.
+
+The switch that turns it on ships **OFF**, no model is loaded until the owner
+taps Load, and the screen's permanent label is the honest one: *"On-device model:
+runs on this phone, not your PC."* The desktop has no counterpart on purpose -
+`docs/ARCHITECTURE.md` section 8 records why (it already has Ollama on the same
+PC, and a second on-device engine there would duplicate it) - and
+`features/features.json` is not regenerated in this pull request. That is no
+longer a claim that the screen is unmeasured, because the screen itself **has**
+been driven on a phone, so the words here are measured rather than designed. The
+native library itself was proven on the owner's phone by the native lane's
+standalone probe (a small Qwen2.5-0.5B Q4_K_M model, about 19.92 tokens/s, with
+cancellation, unload and destroy passing); that is a PASS for the library, and
+the app now has its own PASS too. The screen was driven on the OnePlus
+`f0a5b32b` on 2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B
+Q4_K_M each answered `Hello, who are you?` at **27.1, 13.8 and 7.7 tokens per
+second on screen**, matched by the engine's own `generated N token(s) in M ms`
+line. With the keyboard up, two further sends measured **34.5 and 34.3** tokens
+per second. The in-app **Import** (system file picker) row stays **NOT-TESTED**:
+the test models were `adb push`ed rather than imported, and a NOT-TESTED row is
+never a pass.
+
+
+## 224. ANY file from your phone, up to 2 GiB, behind ONE number (added 2026-11-13)
+
+*Numbering note, 2026-11-13: written as 222, renumbered to 224 when main's phone-backup section (222) and on-device model engine section (223) took the numbers around it.*
+
+**What changed, and what it supersedes.** The owner asked to "transfer any file type through the jarvis android app to my computer ... up to a reasonably large size". This section replaces two paragraphs of section 196 and nothing else: the type allowlist ("The eight documents, plus eight photos...") and the 50 MiB row of "Limits, in one place". Section 196's three routes, its ONE card, its folder-by-equality rule, its staging, its Notion door and its rule that a photo on this path is a plain copy (never `ChatPicture`) are unchanged and remain the record of those. **`purpose: "document"` now accepts ANY file name.** The phone's picker for the Settings row is `*/*`; a `.zip`, an `.exe`, a `.dat`, a `.mp4`, a `.tar.gz` and a name with no extension all take the same three calls, land byte for byte in `<the listed folder>\From my phone\<name>` (a duplicate name still gets a number), and are **never run, opened, parsed, converted, indexed or shown to a model**. The Notion purpose is still `.zip` only.
+
+**Safety: only the kinds that CLAIM a format are inspected.** `begin` checks the NAME (bare name, no path, no leading dot, no control character, no reserved Windows name, at most 150 characters) and no longer checks the extension. At `finish`, a known `jarvis_attached_file.KINDS` extension still gets the byte guards it always had - `%PDF-` and no `/Encrypt` trailer for a PDF, `PK\x03\x04` plus the right `word/`/`xl/`/`ppt/` member for the three Office kinds, the declared unpack size through `jarvis_documents.zip_bomb_problem`, UTF-8 with no NULs for a note, text file or CSV - and a photo still gets `_photo_problem`'s 64-byte header check. An unfamiliar extension claims nothing, so nothing is opened to check it: a `.zip` sent to this purpose is **stored and never unpacked**, and an `.exe` is stored and never run. **The landing folder being listed does not make a file readable:** `jarvis_documents.read` still accepts only `TEXT_KINDS`/`DOC_KINDS`, the index still reconciles `TEXT_KINDS` only (`:1258`, `:1387`), the word scan still opens `TEXT_KINDS` only (`:1772`), and `jarvis_attached_file.read` still refuses an unknown extension (`:528-529`) - the same four gates section 196 proves for a photo, proved again for `.dat`/`.zip` below.
+
+**THE ONE NUMBER: 2 GiB.** `jarvis_upload.MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024` (2,147,483,648 bytes, raised from 50 MiB). It is the only place the file cap is written:
+
+- `begin` answers `"max_bytes": MAX_FILE_BYTES` and refuses past it with the exact sentence `That file is <size>. Files up to 2 GB can be sent from your phone.` - the cap in words comes from `_cap_words`, from the same constant;
+- the approval card carries `Files up to 2 GB can be sent from your phone.` and its detail carries the same `max_bytes`, both from that constant;
+- `finish` re-checks the received size against it;
+- the phone's `Upload.DOCUMENT_MAX` is compared with that exact Python line by `UploadTest`, which parses `MAX_FILE_BYTES = ...` out of the source, and `Upload.capWords` derives `2 GB`/`4 GB` from the constants rather than typing them. So the phone's pre-check, the phone's own refusal sentence and the PC's card and sentence cannot disagree.
+
+`MAX_DOC_BYTES` remains as `MAX_DOC_BYTES = MAX_FILE_BYTES` (the old name, the same number). The READER's `jarvis_documents.MAX_DOC_BYTES` is still 50 MiB and is a DIFFERENT number: a landed document over it can be found by name and is not turned into text, and the card says that for that case instead of promising a read it will not do.
+
+**2 GiB is achievable here, measured against every part that bounds it.** It is 2,048 requests of the existing 1 MiB chunk; a full chunk's whole base64 + JSON body is about 1.37 MB, a third of the server's 4 MiB `MAX_BODY` (`t_the_four_mib_body_cap_is_respected` measures the arithmetic). The same chunk loop already carries a 4 GiB Notion export, so 2 GiB needs no new transport. `STAGING_MAX` (4 GiB) holds one full 2 GiB file; two in flight at once are refused with the existing `FULL` sentence. The phone reads the file twice - one measuring pass for size and SHA-256, one sending pass - which is the existing shape; the chip now also reports **bytes read** during the measuring pass and **chunks sent** during the send, so a large file shows movement instead of one unchanging sentence. **No 2 GiB file was written in a test:** `backend/test_upload.py` moves `MAX_FILE_BYTES` to 4 KiB for one block, sends a real 4,000-byte file through begin/chunk/finish and compares the landed bytes, and checks the card and the refusal sentence against the PATCHED number (a literal "2 GB" copied into either would fail that block). The real constant is asserted separately at 2 GiB.
+
+**Approval unchanged.** Same `receive_uploaded_document` action, tier `ask`, in `HARD_LIMITS` and `MUST_ASK`; the card is raised at `begin` before a byte is written; every chunk answers 409 while it waits and 403 once denied; a denial, a timeout or a refusal deletes the staging and lands nothing; the card still names the file, its size, the folder's NAME and now the cap. Nothing became auto-approved, and a file arriving from another device is still one card per file.
+
+**The phone's own half.** `AttachFile.SEND_FILE_MIME_TYPES` is `arrayOf("*/*")` for this row only; the chat "Attach a file" row keeps `MIME_TYPES`/`mimeTypes`, and a picture picked there still goes to `ChatPicture`/`goesToPicture`. `Upload.refusal` now refuses only on size (and the Notion `.zip` rule). A refusal from any of the three calls is shown verbatim through `Outcome.Refused`/`outcomeText` - the server's sentence, not a generic failure. `Upload.send` and the three wire bodies are unchanged.
+
+**Tests.** `backend/test_upload.py` - **212 passed, 0 skipped, 0 failed** on this PC, including the Notion temp-folder dry run and import: the any-type landings (`.zip`, `.exe`, `.dat`, `.mp4`, `.tar.gz`, no extension) byte-identical, a 26 MB-declared zip bomb named `.zip` stored without being unpacked, a real 4,000-byte file accepted through a test-only 4 KiB cap, the exact over-limit sentence and the card's patched cap line, the known-kind byte refusals still firing, the 2,048-piece arithmetic, a landed `.dat` refused by `jarvis_documents.read`, `jarvis_attached_file.read` and the index while `find` still reaches it by name, and the one-constant source pin. `jarvis-client`'s `UploadTest` and `AttachFileTest` hold the phone half: `*/*`, every name accepted, the cap parsed from the Python source, the server's sentence shown verbatim, measure progress and the new words. `tools/check_feature_controls.py` is clean (182/182) and `tools/check_feature_list.py` is 13/0.
