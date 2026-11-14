@@ -54,27 +54,38 @@ def run(args, cwd):
 # --------------------------------------------------------------------------
 
 def t_it_reads_its_map_from_the_checkout_it_lives_in():
-    root_code, root_out = run(["--all"], REPO)
+    root_code, root_out = run(["--all", "--list"], REPO)
     sub = REPO / "jarvis-desktop" / "src-tauri"
     if not sub.is_dir():
         check("the checkout has the subdirectory CI runs the step from", False,
               f"{sub} is not a directory, so this regression cannot be checked")
         return
-    sub_code, sub_out = run(["--all"], sub)
+    sub_code, sub_out = run(["--all", "--list"], sub)
 
     check("from the repository root, the map is found", root_code == 0,
           f"exit {root_code}: {root_out.strip()[-400:]}")
     check("from the subdirectory the CI step uses, the map is found",
           sub_code == 0, f"exit {sub_code}: {sub_out.strip()[-400:]}")
-    # The summary line is the answer; it must not depend on the cwd either.
-    def summary(out: str) -> str:
-        for line in out.splitlines():
-            if "have moved since they were last audited" in line:
-                return line.strip()
-        return ""
+    # The ANSWER - every area, its file count, its staleness and its audit
+    # dates - must not depend on the cwd either. `--list` is compared and not
+    # the one-line summary, because the summary carries a RANK
+    # (`N commits since <date>`, from `git rev-list --count --since`).
+    #
+    # Measured on PR #1260's run 43640363455 (required `backend`, shard 2/4):
+    # two invocations of the same tool on the same checkout seconds apart
+    # printed `docs (1623 commits since 2026-09-28)` and then
+    # `docs (1622 commits ...)`, and `desktop-rust (417)` then `(416)`, while
+    # every area, file count and audit date was identical. Whatever git's
+    # `--since` walk was allowed to stop at, it was not this tool's answer, and
+    # an equality assertion on it fails a required job for a number nobody
+    # reads. The listing below is the answer, and it is compared in full - all
+    # eighteen rows rather than the three the summary ranks.
+    def listing(out: str) -> list:
+        return [line.rstrip() for line in out.splitlines()
+                if line.startswith("  ") and " file(s)  " in line]
     check("both runs give the same answer, not merely both zero",
-          summary(root_out) == summary(sub_out) and summary(root_out) != "",
-          f"root={summary(root_out)!r} sub={summary(sub_out)!r}")
+          listing(root_out) == listing(sub_out) and len(listing(root_out)) >= 10,
+          f"root={listing(root_out)!r} sub={listing(sub_out)!r}")
 
 
 def t_it_says_where_the_map_it_read_is():

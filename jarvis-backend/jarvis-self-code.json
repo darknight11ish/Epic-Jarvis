@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
- "built_at": "2026-11-14T12:45:25-08:00",
+ "ref": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
+ "built_at": "2026-11-14T12:59:15-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6492,6 +6492,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
+   "date": "2026-11-14",
+   "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
+  },
+  {
    "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
    "date": "2026-11-14",
    "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
@@ -6585,11 +6590,6 @@
    "sha": "ebd271b34860f46b87822751d862a4fd6df40642",
    "date": "2026-11-14",
    "subject": "docs(field-test): record the wave-19 deploy as its own matrix (2026-11-14)"
-  },
-  {
-   "sha": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
-   "date": "2026-11-14",
-   "subject": "Say \"Open the Atlas bar\": the last label the visible rename missed"
   }
  ],
  "top_level": [
