@@ -1136,6 +1136,40 @@ jobs:
           version="${base%.*}.$GITHUB_RUN_NUMBER"
           file_sha=$(sha256sum "jarvis-client/artifacts/$apk" | cut -d' ' -f1)
 
+          # The machine-readable manifest published BESIDE the APK (2026-11-13,
+          # the copy-over wave; adapted from Mobile-Harness's update JSON, MIT).
+          # The app fetches this small JSON first and refuses to offer Install
+          # unless the APK's size and SHA-256 match it
+          # (jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt).
+          # versionCode is the number build.gradle.kts gives this build - its
+          # VERSION_CODE_BASE plus CI's run number - and ApkUpdaterTest reads
+          # both files and fails if the two numbers ever disagree.
+          size_bytes=$(stat -c %s "jarvis-client/artifacts/$apk")
+          version_code=$((1000000000 + GITHUB_RUN_NUMBER))
+          apk_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/$apk"
+          manifest=client-latest.json
+          cat > "jarvis-client/artifacts/$manifest" <<JSON
+          {
+            "versionName": "$version",
+            "versionCode": $version_code,
+            "apkUrl": "$apk_url",
+            "sha256": "$file_sha",
+            "sizeBytes": $size_bytes,
+            "builtAt": "$built_at",
+            "commit": "$GITHUB_SHA"
+          }
+          JSON
+          # The manifest must name the file that was just hashed, before it is
+          # uploaded. A manifest naming the wrong bytes is worse than none: the
+          # phone would refuse every genuine update.
+          if ! grep -q "\"sha256\": \"$file_sha\"" "jarvis-client/artifacts/$manifest" \
+             || ! grep -q "\"sizeBytes\": $size_bytes" "jarvis-client/artifacts/$manifest" \
+             || ! grep -q "\"apkUrl\": \"$apk_url\"" "jarvis-client/artifacts/$manifest"; then
+            echo "::error::The update manifest does not name the APK that was just built. Not publishing."
+            exit 1
+          fi
+          echo "Manifest names this exact APK: $version ($version_code), $size_bytes bytes."
+
           # The signing certificate's SHA-256 in the same lowercase 64-hex,
           # no-colons form the app itself pins (UpdateCheck.SIGNER_SHA256) and
           # its About card shows. The step before this one already proved the
@@ -1210,7 +1244,9 @@ jobs:
           # worked does the tag move, the notes change and the old APK go.
           # A failure anywhere leaves the previous build downloadable.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "jarvis-client/artifacts/$apk" --clobber
+            # The APK and its manifest go up together, so the release never
+            # offers a build whose checksum has not been published yet.
+            gh release upload "$TAG" "jarvis-client/artifacts/$apk" "jarvis-client/artifacts/$manifest" --clobber
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
               -f sha="$GITHUB_SHA" -F force=true >/dev/null
             # The rolling release's targetCommitish must name this build too
@@ -1223,12 +1259,14 @@ jobs:
               -f target_commitish="$GITHUB_SHA" >/dev/null
             gh release edit "$TAG" --prerelease --title "$title" --notes "$notes"
             gh release view "$TAG" --json assets --jq '.assets[].name' | while IFS= read -r old; do
-              if [ "$old" != "$apk" ]; then
+              # Keep the new APK and its manifest; everything else on the
+              # rolling release is the previous build and goes.
+              if [ "$old" != "$apk" ] && [ "$old" != "$manifest" ]; then
                 gh release delete-asset "$TAG" "$old" --yes
               fi
             done
           else
-            gh release create "$TAG" "jarvis-client/artifacts/$apk" \
+            gh release create "$TAG" "jarvis-client/artifacts/$apk" "jarvis-client/artifacts/$manifest" \
               --prerelease \
               --target "$GITHUB_SHA" \
               --title "$title" \

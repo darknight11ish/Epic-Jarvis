@@ -1285,6 +1285,56 @@ The GPL-licensed project named in the research report
 (.dsh-scratch/RESEARCH-APP-AUTOMATION-REPOS-2026-10-19.md, khimaros/mimic) was
 read as a design reference only and is not used.
 
+MOBILE-HARNESS - CODE ADAPTED INTO THE PHONE APP (not generated - keep when regenerating)
+=========================================================================================
+
+Mobile-Harness - techjarves/Mobile-Harness, https://github.com/techjarves/Mobile-Harness
+MIT License. Copyright (c) 2026 Mobile Harness Contributors.
+
+Two files in the Android app are adapted from it, and each file's own header says
+so:
+  * jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt
+      adapted from app/src/main/java/com/jarves/mh/backup/BackupCrypto.kt - the
+      versioned header, PBKDF2-HMAC-SHA256 from a typed password, AES-256-GCM in
+      segments, and the per-segment AAD that makes truncation, reordering and
+      splicing fail instead of decrypting to something shorter.
+  * jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt
+      adapted from app/src/main/java/com/jarves/mh/update/AppUpdater.kt and the
+      shape of its mobile-harness-update.json - the version + sha256 + size
+      manifest, and the rule that a download which does not match it is refused.
+      Jarvis's file adds this gate to the download the app already had; it does
+      not replace it and it installs nothing by itself.
+
+Jarvis's versions are narrower on purpose: the backup carries THIS PHONE'S
+SETTINGS ONLY - never the pairing token, which stays in the Android Keystore and
+means a restored phone pairs again, and never chats, saved memories, pictures or
+logs - and the updater still only offers a file to Android's own installer, from
+the owner's own tap. No Mobile Harness branding, name or file name is used, and
+nothing else from that repository is vendored.
+
+MIT License text as that project publishes it (the same MIT terms as this
+repository's LICENSE):
+
+Copyright (c) 2026 Mobile Harness Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 MORLUTO/REA - A SEPARATE LOCAL PROGRAM, NOT LINKED (not generated - keep when regenerating)
 =========================================================================================
 
