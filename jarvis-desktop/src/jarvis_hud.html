@@ -7055,9 +7055,12 @@ const voice = (() => {
  *     PC's `read_aloud` OFF frame stops it exactly like it stops the bar.
  *
  * PAUSE / RESUME / STOP. `pauseSpeechPlayback()` and `resumeSpeechPlayback()`
- * act on the clip playing now; `stopSpeechPlayback()` is the full reset -
- * token, queue, the audio element, the line under the answer and the meter -
- * and is what Stop everything and `read_aloud {enabled: false}` call.
+ * act wherever the read is: on the clip playing now, on the first clip still
+ * being made, and in the gap between two pieces (the 2026-11-13 fix - a pause
+ * between pieces used to be a button that did nothing);
+ * `stopSpeechPlayback()` is the full reset - token, queue, the audio element,
+ * the line under the answer and the meter - and is what Stop everything and
+ * `read_aloud {enabled: false}` call.
  * The answer menu's Pause / Resume / Stop reading items (hud_bootstrap.js
  * section 6) reach these through `window.__jarvisSpeech`, so there is one
  * player and one state, never a second copy in the shell.
@@ -7120,6 +7123,11 @@ const readAloudState = {
   /** Settles the promise the player is waiting on, so a stop releases the
    *  read loop instead of leaving it waiting on a clip that will never end. */
   settle: null,
+  /** Releases a read that is paused where there is no clip to hold the pause:
+   *  while the first piece is being made, or in the gap between two pieces.
+   *  A resume or a stop wakes it; the loop's own token check then continues or
+   *  ends the read. */
+  wake: null,
 };
 
 /** Tell the shell the player moved (the answer menu repaints its items). */
@@ -7225,15 +7233,53 @@ function speechPlay(uri, token){
   });
 }
 
-/** Make and play the pieces in order. A stop or a newer read bumps the token
- *  and this loop simply falls out. */
+/** Wait here while the owner has the read paused and there is no clip to hold
+ *  that pause: the first piece being made, or the silence between two pieces.
+ *  A resume or a stop releases it (the caller checks the token afterwards). */
+function speechWaitWhilePaused(){
+  if(readAloudState.state !== "paused" || readAloudState.audio) return Promise.resolve();
+  return new Promise((resolve) => { readAloudState.wake = resolve; });
+}
+
+/** Release a read paused between clips - Resume, or a Stop that must end it. */
+function speechWakePaused(){
+  const wake = readAloudState.wake;
+  readAloudState.wake = null;
+  if(wake){ try{ wake(); }catch(error){ /* already released */ } }
+}
+
+/** Make and play the pieces in order, asking for the NEXT piece's sound while
+ *  this one plays - the bar's "one ahead" (src/main.js `prefetchNextClip`), so
+ *  the reply does not go silent for as long as the PC takes to make the next
+ *  clip. One request ahead at most, and the order is still this loop's. A stop
+ *  or a newer read bumps the token and this loop simply falls out. */
 async function speechRun(token){
+  /** The next piece's request, started while this piece plays. `null` when it
+   *  has not been started (or there is no next piece). */
+  let ahead = null;
+  /** Ask for piece i + 1 now, so its clip is already being made while piece i
+   *  is heard. Never a second request while one is on its way. */
+  function askAhead(i){
+    if(ahead || i + 1 >= readAloudState.pieces.length) return;
+    let pending;
+    // A synchronous failure is reported by the next turn of the loop, which
+    // asks for that piece itself and takes the error path.
+    try{ pending = speechRequest(readAloudState.pieces[i + 1]); }catch(error){ return; }
+    // A stop can leave this request unawaited; its rejection is then nobody's
+    // to hear, so it is marked handled here. An awaited caught promise still
+    // rejects for the loop that asks it.
+    pending.catch(() => {});
+    ahead = pending;
+  }
   for(let i = 0; i < readAloudState.pieces.length; i++){
     if(readAloudState.token !== token) return;
     readAloudState.at = i;
+    let request;
+    if(ahead){ request = ahead; ahead = null; }
+    else request = speechRequest(readAloudState.pieces[i]);
     let uri = null;
     try{
-      uri = await speechRequest(readAloudState.pieces[i]);
+      uri = await request;
     }catch(error){
       if(readAloudState.token !== token) return;
       console.info("[jarvis] Jarvis's voice could not make this sentence:", error);
@@ -7242,6 +7288,13 @@ async function speechRun(token){
     }
     if(readAloudState.token !== token) return;
     if(typeof uri !== "string" || !uri){ speechGiveUp(token); return; }
+    // Paused while the first piece was being made, or between two pieces:
+    // there is no clip to hold the pause, so hold the loop here.
+    await speechWaitWhilePaused();
+    if(readAloudState.token !== token) return;
+    // Start the next piece's request BEFORE this clip plays, so it is made
+    // while this one is heard instead of after it, in silence.
+    askAhead(i);
     try{
       await speechPlay(uri, token);
     }catch(error){
@@ -7290,24 +7343,39 @@ function readAnswerAloud(text, bubble){
   return Promise.resolve({ ok: true, why: "Reading." });
 }
 
-/** Pause the clip playing now, where it is. False when nothing is playing
- *  (the menu's own item is drawn from `window.__jarvisSpeech`'s state). */
+/** Pause the read wherever it is: the clip playing now, the first clip still
+ *  being made, or the gap between two pieces. False only when nothing is being
+ *  read (the menu's own item says so in one short line rather than doing
+ *  nothing at all). */
 function pauseSpeechPlayback(){
+  const now = readAloudState.state;
+  if(now !== "playing" && now !== "loading") return false;
   const audio = readAloudState.audio;
-  if(!audio || readAloudState.state !== "playing") return false;
-  try{ audio.pause(); }catch(error){ return false; }
+  if(audio){
+    try{ audio.pause(); }catch(error){ return false; }
+  }
   speechSetState("paused");
   return true;
 }
 
-/** Carry on from where it paused. False unless a paused clip is waiting. */
+/** Carry on from where it paused: a paused clip plays on, and a pause taken
+ *  while no clip existed (the first piece being made, or the gap between two
+ *  pieces) lets the read loop run again. False only when nothing is paused. */
 function resumeSpeechPlayback(){
+  if(readAloudState.state !== "paused") return false;
   const audio = readAloudState.audio;
-  if(!audio || readAloudState.state !== "paused") return false;
-  let started;
-  try{ started = audio.play(); }catch(error){ return false; }
-  if(started && typeof started.catch === "function") started.catch(() => {});
-  speechSetState("playing");
+  if(audio){
+    let started;
+    try{ started = audio.play(); }catch(error){ return false; }
+    if(started && typeof started.catch === "function") started.catch(() => {});
+    speechSetState("playing");
+    return true;
+  }
+  // No clip to start: the loop is waiting on `speechWaitWhilePaused`. Back to
+  // "loading" (the next sound is still being made) and release it - its
+  // speechPlay says "playing" the moment a clip really starts.
+  speechSetState("loading");
+  speechWakePaused();
   return true;
 }
 
@@ -7332,6 +7400,9 @@ function stopSpeechPlayback(){
   // Release the read loop that was waiting on that clip; its token check ends
   // it, so a stop never leaves a half-alive read behind.
   if(settle){ try{ settle(); }catch(error){ /* already settled */ } }
+  // ...and one that was paused where there was no clip to settle (the first
+  // piece still being made, or the gap between two pieces).
+  speechWakePaused();
   const bubble = readAloudState.bubble;
   readAloudState.bubble = null;
   clearReadFailed(bubble);
