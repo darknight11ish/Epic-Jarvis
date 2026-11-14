@@ -330,7 +330,8 @@ fun SettingsScreen(
      */
     onOpenEditHud: (() -> Unit)? = null,
     /**
-     * "Send a document", on the Folders row (the owner's ask of 2026-11-05;
+     * "Send a document or a photo", on the Folders row (the owner's ask of
+     * 2026-11-05; the photo half added 2026-11-13 as a plain file copy;
      * docs/ARCHITECTURE.md section 8; `net/Upload.kt`): launches Android's own
      * document picker, bound to ONE folder from the PC's list - the path the
      * owner tapped. Null only in previews and tests, where the button is drawn
