@@ -1529,12 +1529,27 @@ def _default_keys(kind: str, payload: str, window_id=None):  # pragma: no cover 
 #   so a renamed window, or the HUD page open in a browser tab ("Jarvis HUD -
 #   Microsoft Edge"), is covered too. The cost - a window of some other
 #   program whose title starts with "Jarvis" cannot be driven - is accepted.
+#
+#   The visible rename to Atlas (2026-11-13) moved every one of those titles
+#   to "Atlas"/"Atlas ..." - tauri.conf.json, windows.rs, lib.rs and each
+#   page's <title>. Left alone, the guard would have stopped refusing the
+#   app's OWN windows, which is the approve-a-card-you-never-saw door this
+#   block exists to close, so Atlas is refused on exactly the same terms: the
+#   known titles, plus any title that STARTS with the word Atlas. The same
+#   accepted cost applies (a program genuinely titled "Atlas ..." cannot be
+#   driven); the old Jarvis names stay refused as well, because a running
+#   window from before the rename can still be on screen and a browser tab may
+#   still carry the old page title.
 # --------------------------------------------------------------------------
 
 JARVIS_WINDOWS = (
     "Jarvis", "Jarvis Desktop Widget", "Jarvis Desktop \u2014 Settings",
     "Jarvis \u2014 Brain", "Jarvis \u2014 Faces", "Jarvis \u2014 Welcome",
     "Jarvis HUD", "Jarvis Widget", "Jarvis Faces",
+    "Atlas", "Atlas Desktop Widget", "Atlas Desktop \u2014 Settings",
+    "Atlas \u2014 Brain", "Atlas \u2014 Faces", "Atlas \u2014 Welcome",
+    "Atlas HUD", "Atlas Widget", "Atlas Faces", "Atlas Live",
+    "Atlas Desktop \u2014 Everything Atlas can do", "Atlas \u2014 Everything Atlas can do",
 )
 
 
@@ -1543,7 +1558,7 @@ def is_jarvis_window(window: str) -> bool:
     title = " ".join(str(window or "").split())
     if title in JARVIS_WINDOWS:
         return True
-    return re.match(r"jarvis(?![\w'])", title, re.I) is not None
+    return re.match(r"(?:jarvis|atlas)(?![\w'])", title, re.I) is not None
 
 
 def own_window_refusal(window: str) -> str:

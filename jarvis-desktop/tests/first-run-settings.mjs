@@ -1,5 +1,5 @@
 /**
- * first-run-settings.mjs - the "Set up Jarvis" card, and the one rule it must
+ * first-run-settings.mjs - the "Set up Atlas" card, and the one rule it must
  * not break.
  *
  *     node tests/first-run-settings.mjs
@@ -73,8 +73,8 @@ await check("the settings page has the card, before Connection", () => {
   // "In the order a person would do them" starts with where the card sits:
   // the first thing on the page, not buried among the read-only cards.
   const connection = section("connection");
-  assert.ok(card.at < connection.at, "the Set up Jarvis card is below Connection");
-  assert.match(card.all, /<h2>Set up Jarvis<\/h2>/, "the card has no heading");
+  assert.ok(card.at < connection.at, "the Set up Atlas card is below Connection");
+  assert.match(card.all, /<h2>Set up Atlas<\/h2>/, "the card has no heading");
   // It is a plain card, like every other one in this window: no `hidden` in
   // its own markup, so it is on screen the moment Settings opens.
   assert.doesNotMatch(card.tag, /\bhidden\b/, "the card starts hidden");
@@ -82,11 +82,11 @@ await check("the settings page has the card, before Connection", () => {
 
 await check("the jump list points at it first", () => {
   const nav = HTML.slice(HTML.indexOf('class="settings-jump"'), HTML.indexOf("</nav>"));
-  assert.match(nav, /<a href="#first-run">Set up Jarvis<\/a>/,
-    "the jump list has no Set up Jarvis row");
+  assert.match(nav, /<a href="#first-run">Set up Atlas<\/a>/,
+    "the jump list has no Set up Atlas row");
   const first = nav.indexOf("<a href=");
   assert.equal(nav.slice(first, first + 40).includes("#first-run"), true,
-    "Set up Jarvis is not the first jump row");
+    "Set up Atlas is not the first jump row");
 });
 
 await check("the page loads the module as a real ES module", () => {
@@ -771,7 +771,7 @@ await check("pressing Show the intro again asks Rust for the replay, and nothing
       "the page does not say that replaying leaves the once-only show alone");
     // A replay is not a setting: it may not rewrite this card's own marker.
     assert.equal(stub.localStorage._value(), "1",
-      "replaying the intro rewrote the Set up Jarvis marker");
+      "replaying the intro rewrote the Set up Atlas marker");
     assert.equal(intro.disabled, false, "the button stayed disabled after a successful press");
   } finally {
     unload();
@@ -812,4 +812,4 @@ if (fails.length) {
   console.log(`\n${fails.length} failed: ${fails.join("; ")}`);
   process.exit(1);
 }
-console.log("\nthe Set up Jarvis card gathers the first-run settings, and every one keeps its card.");
+console.log("\nthe Set up Atlas card gathers the first-run settings, and every one keeps its card.");

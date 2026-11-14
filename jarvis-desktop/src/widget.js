@@ -712,8 +712,17 @@ if (dom.screenStop) {
  * boot on the queue read to close a gap nobody can see.
  */
 function applyFaceVisibility() {
+  const drawn = Boolean(board.id && board.view);
   // "Your widget" takes the face's place while one is chosen and drawn.
-  const show = state.expanded && !state.approval && !(board.id && board.view);
+  const show = state.expanded && !state.approval && !drawn;
+  // BOARD MODE (2026-11-14): while a described widget is DRAWN, the window's
+  // own coloured backdrop gives way (widget.css `.widget-shell.board-mode`),
+  // so the widget's own shade is what the owner sees over his desktop. Without
+  // it "See-through" is a setting that looks applied and is not: the card's
+  // 50% sits on this shell's 86%, which composites to 93%. Only while the tray
+  // is open - collapsed, the widget is not on screen and the pill keeps its
+  // backdrop - and it is a class, so every other state is untouched.
+  if (dom.shell) dom.shell.classList.toggle("board-mode", state.expanded && drawn);
   if (dom.faceWrap) dom.faceWrap.hidden = !show;
   // `feed=parent`: this window tells the face what to wear and what state to
   // show, the way the HUD does. The frame used to ask for the owner's face

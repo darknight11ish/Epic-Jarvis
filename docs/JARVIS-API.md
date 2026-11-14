@@ -10637,7 +10637,7 @@ No new route and no new field.
   sent with it are still a picture's caption, not the owner's own words. On one
   graphics card no model sees pictures anyway (the words are read as before).
 - **Both apps** say, under an attached picture, in the same words: "Secrets in
-  pictures you attach are covered with black boxes before Jarvis looks."
+  pictures you attach are covered with black boxes before Atlas looks."
   (`jarvis_chat_picture.OWNER_LINE`; the desktop's attachment chip; the phone's
   `ChatPicture.SECRETS_COVERED`; `backend/test_chat_picture.py` checks all
   three). Neither app keeps or re-sends the picture after the message, and
@@ -17873,7 +17873,7 @@ a live one is:
 of all four kinds.
 ---
 
-## 86. Widgets you describe (added 2026-09-28; the four arrangements added 2026-10-30)
+## 86. Widgets you describe (added 2026-09-28; the four arrangements added 2026-10-30; the look added 2026-11-14)
 
 The owner's choice of 2026-09-28, **the SAFE version**. The owner says what a
 small widget should show - "make me a widget showing my next 3 reminders and
@@ -17993,10 +17993,66 @@ looks exactly like I describe" is not a thing this feature will grow into -
 it is a thing Android does not allow. What CAN be added is another entry in
 this closed list, which is a new app build.
 
-Nothing here sets a colour, a size, a font, an image, a grid or a position:
-those are not arrangement, and the vocabulary cannot be extended from a
-server either. The palette stays the one fixed dark set each widget already
-had (§86.5).
+Nothing in the arrangement sets a colour, a size, a font, an image, a grid or a
+position: those are not arrangement, and the vocabulary cannot be extended from
+a server either. The colour half is a closed list of its own - §86.1.2 - and it
+is the one part of a widget's look a server CAN choose, for the reason given
+there.
+
+### 86.1.2 The look is a closed list too (added 2026-11-14)
+
+Three more top-level keys, all optional and all from a fixed list: `accent`,
+`shade` and `contrast`. Absent means today's look - cyan on near-black, fully
+opaque - so a widget saved before this date draws as it did, to within a shade:
+the same near-black, now at full opacity where it was the window's 86% twice
+over (about 98%), and the look's own two near-whites where the theme's were.
+Neither is visible on a dark desktop; it is written down because "exactly the
+same" would be a claim a screenshot could contradict. This is
+the half that CAN be per widget, and the difference from §86.1.1 is the whole
+reason it is a separate decision: a colour and an alpha are values the app holds
+at run time, where a layout is a resource compiled into the APK.
+
+| key | on the list | means |
+|---|---|---|
+| `accent` | `cyan` (default), `sky`, `violet`, `pink`, `amber`, `lime`, `orange`, `mono` | the colour of the large number, the values, "+N more" and the buttons |
+| `shade` | `solid` (default), `half`, `clear` | the alpha of the card and of its panel: 255/255, 191/159, 128/102 |
+| `contrast` | `normal` (default), `high` | the colours under the accent: near-black, panel, near-white, muted - or pure black, light panel, pure white, light muted |
+
+The model maps a colour word the owner said onto one of the eight names, and is
+told to leave all three out when no look was asked for, so *"my next 3
+reminders"* comes back with no colour keys and draws in today's cyan. Plain code
+checks all three, and a value off the list is refused like every other off-menu
+value. The preview's own pickers can change any of them before Add, and what is
+saved is what the owner last looked at (§86.3, §86.4).
+
+**See-through is alpha and nothing else.** A `RemoteViews` layout has no
+backdrop blur and neither does a webview, so the words are "Solid", "Half
+see-through" and "See-through" and never "frosted" or "glass": it is the card's
+own alpha over whatever is behind it. Text is never given an alpha - a
+see-through widget still has to be readable, which is what `contrast: high` is
+for.
+
+**Every colour on the list is legible, and that is measured.** No accent is
+allowed on it unless it clears WCAG AA (4.5:1) against both the background and
+the panel it is written on, in both contrasts - asserted in
+`backend/test_widgets.py`, so adding a colour nobody can read fails the suite at
+the desk. The least legible pair in the whole table is 7.17:1.
+
+**Where the panel lands is the same in both apps.** The panel is the fill on a
+widget's button pills and on a bar's track - the phone's `PillButton` and its
+`LinearProgressIndicator` both take `Surface1`, which is
+`argb(contrast.surface, shade.surfaceAlpha)`, and the desktop's `.board-button`
+and `.meter-track` take that same colour at that same alpha through
+`color-mix`. Every other block paints **no** panel on either platform: a plain
+`.board-part` is layout only, which is what it was before the look existed. So a
+see-through widget is see-through in its card, its buttons and its bar track,
+and nowhere else.
+
+**The PC refuses; the apps fall back.** The same direction as `layout`: an
+off-list value is refused when a widget is made or saved, and an app that meets
+one it does not know (a newer PC's word) draws that list's default, so the
+widget still draws. The hexes and the alphas live in `jarvis_widgets.py` and
+nowhere else; both apps are held to them by `widget-cases.json`.
 
 ### 86.2 Only the owner's own words; no approval card
 
@@ -18026,10 +18082,10 @@ tool: the model cannot call any of them, and nothing they return reaches it.
 
 | Route | Body | Answers |
 |---|---|---|
-| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "limits"}`; a row is `{"id": "w…"/"d…", "name", "layout", "blocks", "created"?, "said", "parts": ["Arranged: …", "Heading: …", "List: …", "Button: …"]}` |
-| `GET /api/widgets/show?id=w…` | - | 200 `{"ok": true, "id", "name", "layout", "at", "blocks": [...]}` - each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
+| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "look", "limits"}`; a row is `{"id": "w…"/"d…", "name", "layout", "accent", "shade", "contrast", "blocks", "created"?, "said", "parts": ["Arranged: …", "Heading: …", "List: …", "Button: …"]}` |
+| `GET /api/widgets/show?id=w…` (or `?id=d…`, added 2026-11-14) | - | 200 `{"ok": true, "id", "name", "layout", "accent", "shade", "contrast", "at", "blocks": [...]}` - a DRAFT id answers the same way from the unsaved preview, which is what lets the phone's preview draw the real blocks with real numbers; it reads, and it saves nothing; each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
 | `POST /api/widgets/draft` | `{"words", "provenance"}` | 200 `{"ok": true, "draft", "said", "card": false, "no_card"}`; 400 not own words / no words / over 300 characters; 409 tainted (chat only); 422 `{"error", "why"}` off the menu; 503 no model |
-| `POST /api/widgets/add` | `{"draft": "d…"}` | 200 `{"ok", "widget", "said"}` - the draft EXACTLY as previewed; 404 expired or used; 409 twelve widgets already |
+| `POST /api/widgets/add` | `{"draft": "d…", "accent"?, "shade"?, "contrast"?}` | 200 `{"ok", "widget", "said"}` - the draft EXACTLY as previewed, wearing the look the preview last showed (an absent key means the draft's own); 400 a look off its list; 404 expired or used; 409 twelve widgets already |
 | `POST /api/widgets/discard` | `{"draft"}` | 200 |
 | `POST /api/widgets/delete` | `{"id": "w…"}` | 200 at once; 404 not there |
 
@@ -18065,10 +18121,30 @@ and events.
   event, and once a minute while shown. Since 2026-10-30 it draws the
   widget's own **arrangement** too: `boardOf` in `src/widget-board.js` places
   the large number, the order and the buttons, and `.board-big` in
-  `widget.css` is the only size that changes.
+  `widget.css` is the only size that changes. Since 2026-11-14 it draws the
+  widget's own **look** in the same place: `applyLook` sets `--board-bg`,
+  `--board-surface`, the two ink colours and the accent from the described
+  widget, so the Brain's preview and this window cannot show the same widget in
+  two different colours. **The alphas were real and still invisible until this
+  change:** the window is `"transparent": true` and the CSS does use rgba, but
+  `#widget-shell` painted `var(--bg)` at 0.86 over everything, so a 50% card
+  composited to about 93% near-black and the shade controlled nothing on the
+  PC. Board mode now gives that backdrop away - `applyFaceVisibility` toggles
+  `board-mode` on the shell, its fill goes to `transparent`, the bar and the
+  rows below the widget keep the fill they had, and a spread `box-shadow` tints
+  the gutter - so the card's own rounded rectangle is the **only** see-through
+  part of the window. Collapsed, face, approval and message modes carry no
+  `board-mode` and keep exactly the fill they had (`tests/widget-board.mjs`
+  measures both halves: board mode `rgba(0, 0, 0, 0)`, the card
+  `color(srgb 0 0 0 / 0.502)` at `clear` + `high`, face mode
+  `rgba(4, 7, 12, 0.86)`).
 - **Phone, Brain -> Widgets** (`WidgetsPlate.kt`, `net/JarvisWidgets.kt`):
   the same list, previews and box, and **On your home screen**: which saved
-  widget each of the three slots shows (kept on the phone, ids only). The
+  widget each of the three slots shows (kept on the phone, ids only).
+  Since 2026-11-14 a draft is drawn rather than described: the plate reads
+  `GET /api/widgets/show?id=d…` and renders the preview exactly as the widget
+  will look, filled in with real numbers, with the accent, shade and contrast
+  pickers under it; Add sends the look the owner last saw (§86.1.2). The
   slot count and the app's three board receivers are held equal by
   `JarvisWidgetsTest.everySlotHasAReceiver` - they were not before 2026-10-30,
   when the picker offered five and the app shipped three.
@@ -18085,8 +18161,11 @@ and events.
 - **Phone home screen, "Jarvis widget" 1-3** (`widget/JarvisBoardWidget.kt`,
   Glance 1.1.1 - no version change was needed): draws the blocks natively, in
   the widget's arrangement (`JarvisWidgets.boardOf`: the large number at 28sp
-  first, then the blocks in order, then the buttons two to a row);
-  read from the PC on any CONNECTED link - catching up included, because a
+  first, then the blocks in order, then the buttons two to a row), and in the
+  widget's own **look** (§86.1.2): the card, the panel and their two alphas come
+  from the described widget, its text never takes an alpha, and a value this
+  build does not know draws the default; it is read from the PC on any
+  CONNECTED link - catching up included, because a
   stale link holds ACTING and never READING, and that read is one of the things
   that clears it - otherwise "Not up to date - tap to open Jarvis and connect"
   (a link that is not up has nothing to ask), like the approvals widget.
@@ -18110,7 +18189,10 @@ private, and sizes are capped - so even a wrong PC answer cannot put a
 button on screen that the app does not already know is safe. The fixture now
 also carries each case's `boards` (every layout, arranged) and the closed
 `layouts` list, so the two apps' arrangement rule is held to the PC's case for
-case as well.
+case as well. Since 2026-11-14 it carries each case's `accent`, `shade` and
+`contrast` too, plus the three closed lists with their real hexes and alphas -
+so neither app can hold its own opinion of what "violet" is or how see-through
+"half" is.
 
 ### 86.5 Not done, and why
 
@@ -18125,11 +18207,12 @@ case as well.
   provider is manifest XML and the drawing is `RemoteViews` over this app's
   own resources - so a server cannot add one (§86.1.1). The four arrangements
   are the whole menu; a fifth is a new app build, not a setting.
-- **Per-widget accent, transparency and high contrast**: still open, and
-  deliberately NOT part of the 2026-10-30 arrangements. Those are the queued
-  owner decision recorded in `docs/DECISIONS.md` ("per-widget transparency,
-  accent, high contrast and a live preview"), they are a different feature,
-  and half-building them here would have made the queue's own line untrue.
+- **Per-widget accent, transparency and high contrast**: **built 2026-11-14**
+  (§86.1.2), which closes the queued owner decision of that name. What is still
+  not possible is the rest of that queue's look half: no backdrop blur, no free
+  colour or hex, no image, custom font or grid. A widget's layout is compiled
+  into the APK, and alpha is the only transparency a `RemoteViews` layout and a
+  webview have in common.
 - **The Windows 11 widget board**: needs a packaged (MSIX) app with a widget
   provider; this app is not packaged that way, so it cannot be done now.
 - **A dashboard server** (homepage, glance and the like): another program in
@@ -18143,7 +18226,28 @@ case as well.
 stand-in); the desktop's Rust tests compile but run only on Windows; and the
 home-screen widget has not been seen on a real launcher **or an emulator** -
 so the four arrangements are proved as rules, not as pixels (the phone's
-Kotlin compiles and its JVM tests run, 2026-10-30).
+Kotlin compiles and its JVM tests run, 2026-10-30). **The look's phone half is
+one step further out than that, and about half of it is now proven.** No widget
+in this app had ever carried an alpha before 2026-11-14 - all 23 colours in
+`widget/` were `FF` - so the mechanism was read out of the pinned artifacts
+rather than assumed: Glance 1.1.1's `applyBackgroundModifier` matches a
+`FixedColorProvider`, calls `Color.toArgb`, and hands the colour untouched to
+`RemoteViewsCompat.setViewBackgroundColor`, which is exactly
+`RemoteViews.setInt(viewId, "setBackgroundColor", colorInt)`; and Glance's own
+`root_match_match.xml` / `glance_frame.xml` declare no `android:background`, so
+nothing opaque is painted under the card. That is the whole path from the
+described colour to the view, and it carries the alpha. **What is still not
+proven is the last inch:** that a launcher composites that alpha over the
+wallpaper. The field test is literally *"set a widget to See-through and see
+whether your wallpaper shows through it"*. **On the desktop the same line is
+measured rather than photographed:** board mode computes the card at a real
+alpha over a bright backdrop (the same widget shot Solid beside See-through
+through the same page), and the window is the same `"transparent": true` one
+the face already draws its rounded corners over - but nobody has photographed
+the composited screen, so the PC's field test is that same one line, with a
+picture on the desktop. The failure is graceful
+either way, because the same colour at alpha 255 is the solid look: a launcher
+that ignores alpha draws a readable widget that is simply not see-through.
 
 
 ## 87. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
@@ -30926,7 +31030,65 @@ gate rows, tier lines and drop-in folder are all in place, and that the module's
 real Gradle build or a real adb install** - a CI runner has no Android SDK and
 no phone. The build in section 166.1 was a manual measurement on the owner's
 PC, reported as such.
+
+### 166.7 The second kind: native screens (added 2026-11-14)
+
+Everything above describes ONE shape: a WebView showing the owner's page. The
+owner asked on 2026-11-14 for *"a real app with its own screens, written by
+Jarvis"*, so there is a second kind - and the task's own files pick it.
+
+**What decides the kind.** A task whose copy carries `app.json` is a
+native-screens task; a task without one is the WebView app it has always been.
+There is no flag that could drift out of step with the files. A request that
+passes `assets` or a `title` beside a native spec is REFUSED (400), because
+the spec is the only source of the app's name, its two colours and its words.
+`GET …/android` answers `kind` (`"webview"` or `"native"`) and, for a native
+app, `screens`.
+
+**What the model may write: data, never code.** `app.json` is one JSON object
+with exactly these keys - `name`, `package_tail`, `bg`, `accent`, `screens`,
+`start` - and at most **8 screens**, each of kind `text`, `list` or `form`,
+with exactly the keys its kind allows (`id`, `title`, `kind`, `body` and
+`buttons`; `items` instead of `body` for a list; `fields` and `save_label` for
+a form). An item is `{title, detail}`, a field `{key, label}`, a button
+`{label, action}` where an action is `{do: "open", screen}` or
+`{do: "show", text}`. Nothing else is accepted: an unknown key, a screen id
+outside the closed pattern, a button that opens a screen that does not exist,
+or a ninth screen is refused with a sentence BEFORE a byte of the project is
+written and before any card is raised.
+
+**What draws it.** A second FIXED Kotlin activity in the same module, compiled
+into the same APK, reads `assets/app.json` at run time and draws it with
+ordinary Android views - `ScrollView`, `LinearLayout`, `TextView`, `EditText`,
+`Button`. No Compose, no WebView, no dependency, and still **no permission**:
+the generated app cannot reach the internet, the phone's files, or Jarvis. A
+form's Save writes its values to `SharedPreferences` on the phone and nothing
+else; a `show` button displays one short line. There is no navigation stack,
+no data source and no script - the app is the data in that one file, drawn.
+
+**Measured, 2026-11-14.** A native spec was written into a task's copy and the
+module's own `plan_build`/`run_build` ran a real `gradlew.bat assembleDebug`
+through this PC's toolchain: **BUILD SUCCESSFUL in 23s**, the debug APK
+**2,479,127 bytes**, SHA-256
+`4BA8FD8718067FE117E391F28E121738D2A3DB98675FD91B99C3727319D9159F`. That was a
+WARM build (Gradle and the Android Gradle plugin already cached) - the same
+caveat as 166.1. **No install was run**: `adb install -r` still needs the phone
+on its cable, and the native kind has never been seen on a screen.
+
+**Tests.** `backend/test_android_builder_native.py` (247 checks): every closed
+key set, every refusal, the task's-files-choose-the-kind rule, the status
+answer, and the activity's own source pinned so a later edit cannot quietly
+turn the fixed activity into a general one. `backend/test_android_builder.py`
+(252 checks) still passes unchanged, so the WebView kind is untouched.
+
+**Still true, and worth saying twice: nothing calls this.** No chat sentence,
+no model tool and no button in either app starts any of the four routes, so
+these apps are made only by the module's own tests. That is now a defect row
+(DEF-068) rather than only a sentence in this section, because "built but
+unreachable" is the kind of thing a reader skims past.
+
 ## 167. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
+
 
 The owner asked, 2026-10-30: *"does jarvis android have custom animated notifications? if not can you
 build this feature into it? i want them customizable and buildable by just chatting to jarvis"*.
@@ -35722,11 +35884,54 @@ The measured answer is `jarvis_history_purge.capability()`:
 It is wired into `jarvis_quick` as the `history_purge` intent, ahead of the
 model lane, for whole-sentence shapes only: *"how long does it take to clear
 old chats"*, *"can you clear 200 chats"*, *"clear old chats"*, *"is there a way
-to delete chats from last week"*, *"where are my chats stored"*, *"how big is my
-chat history"*, *"do my chats expire"*. `X-Jarvis-Route`'s `quick` field carries
+to delete chats from last week"*, *"how big is my chat history"*, *"do my chats
+expire"*. `X-Jarvis-Route`'s `quick` field carries
 `history_purge`, so an app can tell it from the model's prose. **The retention
 half is not taken on trust**: `keep_days` is the measured switch (0, 30, 90 or
 365) and the sentence says "nothing expires automatically" only when it is 0.
+
+**One shape moved off this intent on 2026-11-13.** *"Where are my chats
+stored"* is answered by `chat_history_storage` (below), not here: the owner
+asked where his chat backups were kept and the live backend told him they
+"aren't stored anywhere ... until you close it or clear them", so the storage
+questions got ONE deterministic answer that states the default, the encryption,
+the file, the voice transcripts and the switch. The clearing, size and expiry
+shapes stay exactly where they were, and `docs/DECISIONS.md` carries the
+ruling.
+
+#### 189.8.1 `chat_history_storage` - where the chats are kept (2026-11-13)
+
+A read-only `jarvis_quick` intent for *"where are my chats stored"*, *"where is
+my chat history kept"*, *"are my chats saved"*, *"do you keep a record of
+this"*, *"where are the chat backups"*, *"is my history encrypted"*, *"what
+happens to my voice transcripts"* and *"when do the chat backups run"*. It
+opens no card, writes nothing, and never reaches a model (architect's ruling,
+Gemini 2026-11-13 22:30 PT, section 5.6: a self-fact about storage, history,
+privacy or settings is answered from the code or refused).
+
+The words come from `jarvis_chat_log`'s OWN state, read at the moment of
+answering: `settings()` (no settings file means on; an unreadable or damaged
+one means nothing is kept) and the module's own `chat-history.db` path, which
+is checked with `is_file()` and then OPENED before the answer says it is there.
+It is deliberately not `jarvis_chat_log.status()`: status() also opens the
+recording cipher, which mints the Credential Manager key on a brand-new
+history, and this answer must write nothing. The reply states: kept on this PC
+and on by default, encrypted with AES-256-GCM with the key in Windows
+Credential Manager, the file (`chat-history.db` in `.openjarvis` in the user
+folder - the folder is named without the Windows account name, because the same
+reply reaches the phone), that voice transcripts are kept as ordinary
+encrypted turns and the recording is not, the retention window, and the switch
+as each app draws it ("Chat history on this PC" in the desktop's Settings,
+Security; "Keep chat history on this PC" in the phone's History screen).
+
+Three states are said out loud instead of the default sentence: the switch is
+off (nothing new is kept, what is kept stays until deleted), the settings file
+cannot be read (nothing is being kept), and the file is there but cannot be
+opened (so its contents are not claimed). A question with no answer - a backup
+TIMETABLE - is refused in words: nothing backs the chats up on a timer, and a
+backup is made only when the owner asks for one in Settings, Backups (the
+newest five are kept). `backend/test_self_knowledge_honesty.py` holds all of
+it, including that an unrelated question is not captured.
 
 ### 189.9 What this section does NOT claim
 

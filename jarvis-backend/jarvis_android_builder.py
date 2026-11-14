@@ -10,14 +10,15 @@ that ends with an app on the phone:
 
   1. TEMPLATE. A FIXED, minimal Android project is written into one task's
      copy (`jarvis_app_workspace`): the Gradle files, the manifest, one
-     WebView activity, and the owner's own `index.html` / `app.js` /
-     `app.css`. Jarvis - which means the local model - supplies ONLY those
-     three web files and a few declared values (the app's name and two
-     colours). It never supplies a Gradle file, a Kotlin file or a manifest.
-     Those are strings in this module, and the only thing that varies inside
-     them is a VALIDATED name, package, colour or title. So the model cannot
-     add a permission, a dependency, a network address or a receiver: the
-     worst it can do is write a bad web page.
+     activity, and either the owner's own web page or the model's own screens.
+     Jarvis - which means the local model - supplies ONLY the page
+     (`index.html` / `app.js` / `app.css`, a name and two colours) or, for the
+     second kind, ONE JSON spec (`app.json`). It never supplies a Gradle file,
+     a Kotlin file or a manifest. Those are strings in this module, and the
+     only thing that varies inside them is a VALIDATED name, package, colour
+     or title. So the model cannot add a permission, a dependency, a network
+     address or a receiver: the worst it can do is write a bad web page, or a
+     spec the checks below refuse.
   2. BUILD. `gradlew.bat assembleDebug`, exactly, inside the task's copy,
      behind its OWN approval card (`app_build_android`), with the
      allowlisted environment every program Jarvis starts gets
@@ -39,13 +40,32 @@ gets the part it is actually good at: words and pixels. `docs/ANDROID-APP-
 BUILDER-2026-10-30.md` (scratch, gitignored) records the two routes that were
 compared and why this one was chosen.
 
+THE SECOND KIND: NATIVE SCREENS (2026-11-14)
+The owner asked for a real app with its own screens, not one page inside a
+WebView. So a task may carry `app.json` - one JSON object the model writes,
+describing at most 8 screens of three kinds (text, list, form), their buttons,
+a start screen and two colours. A second fixed Kotlin activity in this module
+reads that file from `assets/app.json` at run time and draws it with ordinary
+Android views (ScrollView, LinearLayout, TextView, EditText, Button): no
+Compose, no WebView, no dependency. The model writes DATA, never code - and
+the whole spec is validated HERE, before a byte of the project is written and
+before any card is raised, so it cannot smuggle in a permission, a path, an id
+outside the closed pattern, a button that opens a screen that does not exist,
+or an unknown key. A form saves its values to SharedPreferences on the phone
+and nothing else; a button opens another screen or shows one short line.
+THIS TASK'S OWN FILES CHOOSE THE KIND: a task that carries `app.json` is a
+native-screens task, and a task without one is the WebView app it has always
+been. There is no separate flag that could drift out of step with the files.
+
 WHY THE GENERATED APP HAS NO PERMISSIONS AT ALL
 The manifest declares no `<uses-permission>` - not even INTERNET - and the
-WebView is built with file access off and every navigation refused. So the
-app the owner sideloads cannot reach the internet, cannot read their files
-and cannot call Jarvis's own routes: rule 1 and rule 2 hold by construction
-rather than by promise. An app that needs to talk to something is a separate
-decision with its own card, and it is not this slice.
+WebView is built with file access off and every navigation refused. The
+native-screens activity has no WebView at all and draws only the views its
+validated spec names. So either app the owner sideloads cannot reach the
+internet, cannot read their files and cannot call Jarvis's own routes: rule 1
+and rule 2 hold by construction rather than by promise. An app that needs to
+talk to something is a separate decision with its own card, and it is not this
+slice.
 
 WHAT RUNS WHERE, AND WHAT EACH CARD SAYS
   * Writing the template: NO card. It writes files into a task's own copy -
@@ -82,7 +102,11 @@ waiting card and the task simply stays, so it can be built again.
 WHAT THIS MODULE DOES NOT DO
 No `npm`, no Capacitor, no release signing, no Play Store (rule 5), no
 `adb shell`, no device management, no arbitrary command, and no model call.
-The Gradle task name and both commands are module constants.
+For the native-screens kind: no Compose, no WebView, no dependency, no
+permission, no internet call, no file read outside the app's own `assets/`,
+and no code of any kind from the model - it writes one JSON spec and the
+activity that draws it is a string in this module. The Gradle task name and
+both commands are module constants.
 """
 from __future__ import annotations
 
@@ -113,10 +137,35 @@ KIND = "android"
 BUILD_ACTION = "app_build_android"
 INSTALL_ACTION = "app_install_android"
 
-#: The ONLY web files Jarvis may write into the project. A closed list: the
-#: model's answer is looked up in it, never used as a path.
+#: The two kinds of Android app this module builds. The kind is chosen by the
+#: TASK, from the task's own files and nothing else: a task that carries
+#: `app.json` (the model's spec) is a native-screens task, and a task without
+#: one is the WebView app. There is no separate flag that could drift.
+WEBVIEW = "webview"
+NATIVE = "native"
+
+#: The ONLY web files Jarvis may write into the WebView project. A closed
+#: list: the model's answer is looked up in it, never used as a path.
 ASSETS = ("index.html", "app.js", "app.css")
 ASSET_DIR = "app/src/main/assets"
+
+#: The ONE file the model writes for a native-screens app, at the root of the
+#: task's copy. The validated copy is what ships, inside `assets/`.
+SPEC_FILE = "app.json"
+SPEC_ASSET = f"{ASSET_DIR}/{SPEC_FILE}"
+
+#: The hard limits of a spec, refused in plain words before anything is
+#: written and before any card. They bound what the phone will draw and what
+#: the owner can be shown: a 1,000-screen app, or a 40 KB title, is not a
+#: small app and could not be read on one card. A spec the model can write is
+#: at most 512 KB (the workspace's own file limit), so nothing legal is cut off.
+MAX_SPEC_BYTES = 512 * 1024
+MAX_SCREENS = 8
+MAX_ITEMS = 40
+MAX_FIELDS = 6
+MAX_BUTTONS = 4
+MAX_TEXT = 400
+MAX_LABEL = 40
 
 #: The only OS this feature claims: the Android SDK, the phone's cable and the
 #: owner's own toolchain are on a Windows PC. Read at CALL time (never baked
@@ -396,6 +445,269 @@ class MainActivity : Activity() {
 '''
 
 
+#: The native-screens app: ONE fixed activity that reads `assets/app.json` and
+#: builds the screens with ordinary Android views. No Compose, no WebView, no
+#: library, no permission. The model's spec is data; every view below is a
+#: widget from the Android framework, and the only strings that vary are the
+#: package (validated) - the spec itself is read at run time.
+_MAIN_ACTIVITY_SCREENS = '''\
+package __JARVIS_PACKAGE__
+
+import android.app.Activity
+import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.text.InputType
+import android.util.TypedValue
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * The app's own screens, built at run time from `assets/app.json`.
+ *
+ * This is the whole app: one fixed activity and no code from the model. The
+ * file it reads is DATA - titles, paragraphs, list rows, form fields, buttons
+ * and two colours - and every view below is an ordinary Android widget. There
+ * is no WebView, so there is no page, no script and no `file://` access; there
+ * is no Compose and no dependency, so the build is the same fixed one the
+ * WebView app uses, and the manifest declares no permission at all.
+ *
+ * A form's values are kept with [Context.getSharedPreferences] on the phone
+ * and nowhere else; its button shows a short confirmation. A button either
+ * opens another screen or shows one short line in a [Toast]. The spec is
+ * written from a model's answer, so it can only say what the fixed checks in
+ * `jarvis_android_builder.py` allow - the activity trusts its own data
+ * because those checks ran before the build.
+ */
+class MainActivity : Activity() {
+
+    private val screens = LinkedHashMap<String, JSONObject>()
+    private val history = ArrayList<String>()
+    private lateinit var page: LinearLayout
+    private var background: Int = Color.parseColor("#101828")
+    private var accent: Int = Color.parseColor("#7cc4ff")
+    private var ink: Int = Color.parseColor("#f2f4f8")
+    private var faded: Int = Color.parseColor("#b9c2d0")
+    private var current: String = ""
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val spec = readSpec()
+        if (spec == null) {
+            val sorry = TextView(this)
+            sorry.text = "This app's screens are missing or could not be read."
+            sorry.setTextColor(Color.WHITE)
+            sorry.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            sorry.setPadding(dp(24), dp(32), dp(24), dp(24))
+            setContentView(sorry)
+            return
+        }
+        background = colour(spec.optString("bg"), Color.parseColor("#101828"))
+        accent = colour(spec.optString("accent"), Color.parseColor("#7cc4ff"))
+        ink = readable(background)
+        faded = withAlpha(ink, 168)
+        val listed = spec.optJSONArray("screens") ?: JSONArray()
+        for (i in 0 until listed.length()) {
+            val screen = listed.optJSONObject(i) ?: continue
+            val id = screen.optString("id")
+            if (id.isNotEmpty()) {
+                screens[id] = screen
+            }
+        }
+        page = LinearLayout(this)
+        page.orientation = LinearLayout.VERTICAL
+        page.setPadding(dp(20), dp(28), dp(20), dp(36))
+        page.setBackgroundColor(background)
+        val scroll = ScrollView(this)
+        scroll.isFillViewport = true
+        scroll.setBackgroundColor(background)
+        scroll.addView(page, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        setContentView(scroll)
+        show(spec.optString("start"))
+    }
+
+    /**
+     * Android's own Back goes to the screen the owner came from. It is
+     * deprecated on Android 13, and this app carries no AndroidX library to
+     * use the replacement - so the deprecation is accepted rather than adding
+     * a dependency the whole design exists to avoid.
+     */
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun onBackPressed() {
+        if (history.isEmpty()) {
+            super.onBackPressed()
+        } else {
+            show(history.removeAt(history.size - 1))
+        }
+    }
+
+    /** The spec, or null when the asset is missing or is not JSON. */
+    private fun readSpec(): JSONObject? {
+        return try {
+            JSONObject(assets.open("app.json").bufferedReader(Charsets.UTF_8).use { it.readText() })
+        } catch (exc: Exception) {
+            null
+        }
+    }
+
+    /** Draws one screen. The spec was validated before the build, so a screen
+     *  that is not here means the asset was changed by hand: say so, quietly. */
+    private fun show(id: String) {
+        page.removeAllViews()
+        val screen = screens[id]
+        if (screen == null) {
+            page.addView(label("That screen is missing.", 17f, ink, false, 0))
+            return
+        }
+        current = id
+        page.addView(label(screen.optString("title"), 27f, ink, true, 0))
+        when (screen.optString("kind")) {
+            "text" -> paragraphs(screen.optJSONArray("body"))
+            "list" -> items(screen.optJSONArray("items"))
+            "form" -> form(screen)
+        }
+        buttons(screen)
+    }
+
+    private fun paragraphs(body: JSONArray?) {
+        if (body == null) {
+            return
+        }
+        for (i in 0 until body.length()) {
+            page.addView(label(body.optString(i), 16f, faded, false, 18))
+        }
+    }
+
+    private fun items(items: JSONArray?) {
+        if (items == null) {
+            return
+        }
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.VERTICAL
+            row.setPadding(0, dp(12), 0, dp(12))
+            row.addView(label(item.optString("title"), 17f, ink, true, 0))
+            row.addView(label(item.optString("detail"), 14f, faded, false, 4))
+            page.addView(row)
+        }
+    }
+
+    private fun form(screen: JSONObject) {
+        val fields = screen.optJSONArray("fields") ?: JSONArray()
+        val saved = getSharedPreferences("jarvis_native_screens", Context.MODE_PRIVATE)
+        val inputs = ArrayList<EditText>()
+        for (i in 0 until fields.length()) {
+            val field = fields.optJSONObject(i) ?: continue
+            val key = field.optString("key")
+            page.addView(label(field.optString("label"), 14f, faded, false, 20))
+            val input = EditText(this)
+            input.tag = key
+            input.setText(saved.getString(key, ""))
+            input.setTextColor(ink)
+            input.setHintTextColor(faded)
+            input.inputType = InputType.TYPE_CLASS_TEXT
+            input.backgroundTintList = ColorStateList.valueOf(accent)
+            page.addView(input)
+            inputs.add(input)
+        }
+        val save = Button(this)
+        save.text = screen.optString("save_label")
+        save.setTextColor(readable(accent))
+        save.backgroundTintList = ColorStateList.valueOf(accent)
+        save.setOnClickListener {
+            val edit = saved.edit()
+            for (input in inputs) {
+                val key = input.tag as? String ?: continue
+                edit.putString(key, input.text.toString())
+            }
+            edit.apply()
+            Toast.makeText(this, "Saved on this phone.", Toast.LENGTH_SHORT).show()
+        }
+        val params = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        params.topMargin = dp(22)
+        page.addView(save, params)
+    }
+
+    private fun buttons(screen: JSONObject) {
+        val listed = screen.optJSONArray("buttons") ?: return
+        for (i in 0 until listed.length()) {
+            val button = listed.optJSONObject(i) ?: continue
+            val action = button.optJSONObject("action") ?: continue
+            val view = Button(this)
+            view.text = button.optString("label")
+            view.setTextColor(readable(accent))
+            view.backgroundTintList = ColorStateList.valueOf(accent)
+            view.setOnClickListener {
+                if (action.optString("do") == "open") {
+                    val target = action.optString("screen")
+                    if (screens.containsKey(target)) {
+                        history.add(current)
+                        show(target)
+                    }
+                } else {
+                    Toast.makeText(this, action.optString("text"), Toast.LENGTH_SHORT).show()
+                }
+            }
+            val params = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            params.topMargin = dp(12)
+            page.addView(view, params)
+        }
+    }
+
+    private fun label(text: String, size: Float, colour: Int, bold: Boolean,
+                      top: Int): TextView {
+        val view = TextView(this)
+        view.text = text
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, size)
+        view.setTextColor(colour)
+        if (bold) {
+            view.setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        view.setLineSpacing(0f, 1.15f)
+        if (top > 0) {
+            view.setPadding(0, dp(top), 0, 0)
+        }
+        return view
+    }
+
+    private fun colour(value: String, fallback: Int): Int {
+        return try {
+            Color.parseColor(value)
+        } catch (exc: Exception) {
+            fallback
+        }
+    }
+
+    /** A text colour that reads on the given background, light or dark. */
+    private fun readable(on: Int): Int {
+        val level = 0.299 * Color.red(on) + 0.587 * Color.green(on) + 0.114 * Color.blue(on)
+        return if (level > 150.0) Color.parseColor("#101828") else Color.parseColor("#f2f4f8")
+    }
+
+    private fun withAlpha(colour: Int, alpha: Int): Int {
+        return Color.argb(alpha, Color.red(colour), Color.green(colour), Color.blue(colour))
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density + 0.5f).toInt()
+    }
+}
+'''
+
 _THEMES = '''\
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The window's colours come from colors.xml, which is one of the two
@@ -518,6 +830,291 @@ def _xml(text: str) -> str:
 
 
 # --------------------------------------------------------------------------
+#   The native-screens spec: the model's data, checked before anything
+# --------------------------------------------------------------------------
+#
+# A spec is ONE JSON object, and every part of it is checked here: unknown keys
+# are refused rather than ignored, every string has a length and a shape,
+# every `open` names a screen that exists, and the ids are a closed pattern.
+# The returned dict is the ONLY thing written into the app, so the bytes the
+# phone reads are exactly the bytes that were checked.
+
+#: A screen id AND a form field's key (which becomes a SharedPreferences key).
+#: Small letters, digits, '-' and '_', starting with a letter, 24 at most. The
+#: narrowness is the point: an id is a key in the activity's own table and a
+#: field key reaches Android's own storage, so neither may contain a space, a
+#: path separator, a dot or anything a preference name treats specially.
+_SPEC_ID = re.compile(r"^[a-z][a-z0-9_-]{0,23}$")
+
+_SCREEN_KINDS = ("text", "list", "form")
+_SPEC_KEYS = frozenset({"name", "package_tail", "bg", "accent", "screens", "start"})
+#: The spec's own key names in the words the owner reads. A refusal says
+#: "app.json is missing its package ending", never the snake_case field name.
+_SPEC_KEY_WORDS = {
+    "name": "name",
+    "package_tail": "package ending",
+    "bg": "background colour",
+    "accent": "accent colour",
+    "screens": "screens",
+    "start": "starting screen",
+}
+_SCREEN_KEYS = {
+    "text": frozenset({"id", "title", "kind", "body", "buttons"}),
+    "list": frozenset({"id", "title", "kind", "items", "buttons"}),
+    "form": frozenset({"id", "title", "kind", "fields", "save_label", "buttons"}),
+}
+_ITEM_KEYS = frozenset({"title", "detail"})
+_FIELD_KEYS = frozenset({"key", "label"})
+_BUTTON_KEYS = frozenset({"label", "action"})
+_ACTION_KEYS = {"open": frozenset({"do", "screen"}), "show": frozenset({"do", "text"})}
+
+
+def _spec_unknown(given: dict, allowed, where: str) -> None:
+    """Refuse a key the fixed activity would silently ignore. The model is
+    told which key, and the whole spec is refused rather than half-honoured."""
+    extra = sorted(k for k in given if k not in allowed)
+    if extra:
+        raise BuildRefused(f"{where} has a key this kind does not use: {str(extra[0])[:40]!r}")
+
+
+def _spec_string(value, where: str, limit: int) -> str:
+    """One validated piece of text. Whitespace is tidied to single spaces, so
+    a length limit is a limit on what the phone draws; control characters are
+    refused because they can hide the end of a line from the owner."""
+    if not isinstance(value, str):
+        raise BuildRefused(f"{where} must be text")
+    text = " ".join(value.split())
+    if not text:
+        raise BuildRefused(f"{where} is empty")
+    if any(ord(ch) < 0x20 for ch in text):
+        raise BuildRefused(f"{where} has a control character in it")
+    if len(text) > limit:
+        raise BuildRefused(f"{where} is {len(text)} characters; at most {limit} are allowed")
+    return text
+
+
+def _spec_id(value, where: str) -> str:
+    if not isinstance(value, str) or not _SPEC_ID.match(value):
+        raise BuildRefused(f"{where} must be small letters, digits, '-' and '_' (up to 24), "
+                           f"starting with a letter: {str(value)[:40]!r}")
+    return value
+
+
+def _spec_name(value) -> str:
+    """The app's own name. Narrow like `check_title`, and for the same reason:
+    it becomes Android's label for the app in `strings.xml`."""
+    text = " ".join(value.split()) if isinstance(value, str) else ""
+    if not text or not _TITLE_OK.match(text):
+        raise BuildRefused(
+            f"the app's name {str(value)[:40]!r} may use letters, digits, spaces and "
+            ". , ! ? ( ) : + - (up to 40), and no quotes - it becomes Android's label "
+            "for the app")
+    return text
+
+
+def _spec_items(items, sid: str) -> list:
+    if not isinstance(items, list):
+        raise BuildRefused(f"screen {sid!r}: items must be a list")
+    if len(items) > MAX_ITEMS:
+        raise BuildRefused(f"screen {sid!r} has {len(items)} items; at most {MAX_ITEMS} are "
+                           "allowed")
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise BuildRefused(f"an item on screen {sid!r} must be an object")
+        _spec_unknown(item, _ITEM_KEYS, f"an item on screen {sid!r}")
+        out.append({
+            "title": _spec_string(item.get("title"),
+                                  f"an item's title on screen {sid!r}", MAX_LABEL),
+            "detail": _spec_string(item.get("detail"),
+                                   f"an item's detail on screen {sid!r}", MAX_TEXT),
+        })
+    return out
+
+
+def _spec_form(screen: dict, sid: str) -> tuple:
+    fields = screen.get("fields")
+    if not isinstance(fields, list):
+        raise BuildRefused(f"screen {sid!r}: fields must be a list")
+    if len(fields) > MAX_FIELDS:
+        raise BuildRefused(f"screen {sid!r} has {len(fields)} fields; at most {MAX_FIELDS} "
+                           "are allowed")
+    out, keys = [], set()
+    for field in fields:
+        if not isinstance(field, dict):
+            raise BuildRefused(f"a field on screen {sid!r} must be an object")
+        _spec_unknown(field, _FIELD_KEYS, f"a field on screen {sid!r}")
+        key = _spec_id(field.get("key"), f"a field's key on screen {sid!r}")
+        if key in keys:
+            raise BuildRefused(f"screen {sid!r} has two fields with the key {key!r}")
+        keys.add(key)
+        out.append({"key": key,
+                    "label": _spec_string(field.get("label"),
+                                          f"a field's label on screen {sid!r}", MAX_LABEL)})
+    save = _spec_string(screen.get("save_label"), f"the Save button's words on screen {sid!r}", MAX_LABEL)
+    return out, save
+
+
+def _spec_buttons(screen: dict, sid: str) -> tuple:
+    buttons = screen.get("buttons", [])
+    if not isinstance(buttons, list):
+        raise BuildRefused(f"screen {sid!r}: buttons must be a list")
+    if len(buttons) > MAX_BUTTONS:
+        raise BuildRefused(f"screen {sid!r} has {len(buttons)} buttons; at most {MAX_BUTTONS} "
+                           "are allowed")
+    out, targets = [], []
+    for button in buttons:
+        if not isinstance(button, dict):
+            raise BuildRefused(f"a button on screen {sid!r} must be an object")
+        _spec_unknown(button, _BUTTON_KEYS, f"a button on screen {sid!r}")
+        label = _spec_string(button.get("label"), f"a button's label on screen {sid!r}",
+                             MAX_LABEL)
+        action = button.get("action")
+        if not isinstance(action, dict):
+            raise BuildRefused(f"the button {label!r} on screen {sid!r} needs an action")
+        do = action.get("do")
+        if do not in _ACTION_KEYS:
+            raise BuildRefused(f"a button on screen {sid!r} asks to {str(do)[:40]!r}; it may "
+                               "only \"open\" a screen or \"show\" a line of text")
+        _spec_unknown(action, _ACTION_KEYS[do], f"a button on screen {sid!r}")
+        if do == "open":
+            target = _spec_id(action.get("screen"), f"a button's open target on screen {sid!r}")
+            out.append({"label": label, "action": {"do": "open", "screen": target}})
+            targets.append((sid, target))
+        else:
+            out.append({"label": label,
+                        "action": {"do": "show",
+                                   "text": _spec_string(action.get("text"),
+                                                        f"a button's text on screen {sid!r}",
+                                                        MAX_TEXT)}})
+    return out, targets
+
+
+def validate_spec(raw) -> dict:
+    """The model's `app.json` -> the validated spec, or a plain-words refusal.
+
+    Every key is checked and every unknown one refused, never ignored: a model
+    that writes `"permissions"` (or a key belonging to the other screen kind)
+    is told so and nothing is built. The returned dict is the ONLY version that
+    is written into the app, so the shipped bytes are the checked bytes."""
+    if not isinstance(raw, dict):
+        raise BuildRefused("app.json must be one JSON object holding the app's own keys - "
+                           "a name, a package ending, two colours, its screens and the "
+                           "screen it starts on")
+    _spec_unknown(raw, _SPEC_KEYS, "app.json")
+    for key in ("name", "package_tail", "bg", "accent", "screens", "start"):
+        if key not in raw:
+            raise BuildRefused(f"app.json is missing its {_SPEC_KEY_WORDS[key]}")
+    name = _spec_name(raw.get("name"))
+    tail = raw.get("package_tail")
+    if not isinstance(tail, str) or not _PKG_TAIL.match(tail):
+        raise BuildRefused("the package ending must be small letters, digits and _ (up to 40), "
+                           f"starting with a letter: {str(tail)[:40]!r}")
+    bg = check_colour(raw.get("bg"), "app.json's bg")
+    accent = check_colour(raw.get("accent"), "app.json's accent")
+    screens = raw.get("screens")
+    if not isinstance(screens, list):
+        raise BuildRefused("app.json's screens must be a list")
+    if not screens:
+        raise BuildRefused("an app needs at least one screen")
+    if len(screens) > MAX_SCREENS:
+        raise BuildRefused(f"this app has {len(screens)} screens; at most {MAX_SCREENS} are "
+                           "allowed")
+    out, ids, targets = [], [], []
+    for index, screen in enumerate(screens):
+        where = f"screen {index + 1}"
+        if not isinstance(screen, dict):
+            raise BuildRefused(f"{where} must be an object")
+        sid = _spec_id(screen.get("id"), f"{where}'s id")
+        if sid in ids:
+            raise BuildRefused(f"two screens have the id {sid!r}")
+        ids.append(sid)
+        kind = screen.get("kind")
+        if kind not in _SCREEN_KINDS:
+            raise BuildRefused(f"screen {sid!r}'s kind must be \"text\", \"list\" or \"form\", "
+                               f"not {str(kind)[:40]!r}")
+        _spec_unknown(screen, _SCREEN_KEYS[kind], f"screen {sid!r}")
+        row = {"id": sid,
+               "title": _spec_string(screen.get("title"), f"screen {sid!r}'s title", MAX_LABEL),
+               "kind": kind}
+        if kind == "text":
+            body = screen.get("body")
+            if not isinstance(body, list):
+                raise BuildRefused(f"screen {sid!r}: body must be a list of paragraphs")
+            row["body"] = [_spec_string(one, f"a paragraph on screen {sid!r}", MAX_TEXT)
+                           for one in body]
+        elif kind == "list":
+            row["items"] = _spec_items(screen.get("items"), sid)
+        else:
+            row["fields"], row["save_label"] = _spec_form(screen, sid)
+        buttons, opened = _spec_buttons(screen, sid)
+        if buttons:
+            row["buttons"] = buttons
+        targets.extend(opened)
+        out.append(row)
+    start = _spec_id(raw.get("start"), "the app's start")
+    if start not in ids:
+        raise BuildRefused(f"the app starts at {start!r}, and no screen has that id")
+    for sid, target in targets:
+        if target not in ids:
+            raise BuildRefused(f"a button on screen {sid!r} opens {target!r}, and no screen "
+                               "has that id")
+    return {"name": name, "package_tail": tail, "bg": bg, "accent": accent, "start": start,
+            "screens": out}
+
+
+def native_package(spec: dict) -> str:
+    """The package id for a validated spec. The spec supplies only the tail;
+    the fixed prefix is what keeps two Jarvis-made apps, and a Jarvis-made app
+    and a real vendor's, from colliding."""
+    tail = str(spec.get("package_tail", ""))
+    if not _PKG_TAIL.match(tail):
+        raise BuildRefused(f"package_tail {tail[:40]!r} cannot become an Android package name")
+    return "com.jarvis.made." + tail
+
+
+def spec_path(tdir: Path, *, shipped: bool = False) -> Path:
+    """Where the spec is: the model's own `app.json` at the root of the task's
+    copy (before the project is written), or the copy inside `assets/` that the
+    APK will actually read (after it is)."""
+    return Path(tdir) / (SPEC_ASSET if shipped else SPEC_FILE)
+
+
+def read_spec(tdir: Path, *, shipped: bool = False) -> tuple:
+    """(validated spec, the canonical JSON text that is written) or a refusal.
+
+    The spec is READ AND CHECKED here, before the template is written or a card
+    raised: a task whose `app.json` cannot be built is refused in plain words,
+    and no project is half-written around it."""
+    path = spec_path(tdir, shipped=shipped)
+    try:
+        data = path.read_bytes()
+    except OSError:
+        raise BuildRefused("app.json is not there")
+    if len(data) > MAX_SPEC_BYTES:
+        raise BuildRefused(f"app.json is larger than {MAX_SPEC_BYTES // 1024} KB")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise BuildRefused("app.json must be UTF-8 text")
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise BuildRefused(f"app.json is not valid JSON: {exc.msg} (line {exc.lineno}, "
+                           f"column {exc.colno})")
+    except RecursionError:
+        # A spec nested thousands of arrays deep can exhaust the parser before
+        # any of the checks run. It is still the model's data, so it is still a
+        # plain refusal rather than a 500.
+        raise BuildRefused("app.json is nested too deeply to check")
+    spec = validate_spec(raw)
+    canonical = json.dumps(spec, indent=2, ensure_ascii=True) + "\n"
+    if len(canonical.encode("utf-8")) > MAX_SPEC_BYTES:
+        raise BuildRefused(f"app.json is larger than {MAX_SPEC_BYTES // 1024} KB once tidied")
+    return spec, canonical
+
+
+# --------------------------------------------------------------------------
 #   The toolchain on this PC
 # --------------------------------------------------------------------------
 
@@ -604,10 +1201,17 @@ def toolchain() -> dict:
 #   The project in a task's copy
 # --------------------------------------------------------------------------
 
-def _texts(name: str, title: str, background: str, accent: str) -> dict:
-    """Every text file the template writes, by path inside the task's copy."""
-    pkg = package_name(name)
-    return {
+def _texts(name: str, title: str, background: str, accent: str, *, package: str = "",
+           native: bool = False, spec_text: str = "") -> dict:
+    """Every text file the template writes, by path inside the task's copy.
+
+    `native` picks the second kind: the fixed screens activity and the
+    validated spec in `assets/app.json`, instead of the owner's web page. The
+    Gradle files, the permission-free manifest and the theme are the SAME
+    strings for both kinds - one toolchain and one permission story.
+    """
+    pkg = package or package_name(name)
+    texts = {
         "settings.gradle.kts": _fill(_SETTINGS_GRADLE, title=_xml(title)),
         "build.gradle.kts": _fill(_BUILD_GRADLE, agp=AGP_VERSION),
         "gradle.properties": _GRADLE_PROPERTIES,
@@ -617,7 +1221,7 @@ def _texts(name: str, title: str, background: str, accent: str) -> dict:
                                       target_sdk=TARGET_SDK),
         "app/src/main/AndroidManifest.xml": _MANIFEST,
         "app/src/main/java/" + pkg.replace(".", "/") + "/MainActivity.kt":
-            _fill(_MAIN_ACTIVITY, package=pkg),
+            _fill(_MAIN_ACTIVITY_SCREENS if native else _MAIN_ACTIVITY, package=pkg),
         "app/src/main/res/values/strings.xml":
             '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
             f'    <string name="app_name">{_xml(title)}</string>\n</resources>\n',
@@ -627,15 +1231,20 @@ def _texts(name: str, title: str, background: str, accent: str) -> dict:
             f'    <color name="jarvis_accent">{accent}</color>\n</resources>\n',
         "app/src/main/res/values/themes.xml": _THEMES,
     }
+    if native:
+        texts[SPEC_ASSET] = spec_text
+    return texts
 
 
-def template_paths(name: str) -> list:
+def template_paths(name: str, *, package: str = "", native: bool = False) -> list:
     """Every path (relative, forward slashes) the template writes: the fixed
-    project first, then the three web files. What the API shows and what a
-    test checks, so nothing in the project is a surprise."""
-    return sorted(_texts(name, "App", "#101828", "#7cc4ff")) + \
-        [f"{ASSET_DIR}/{a}" for a in ASSETS] + \
-        ["gradlew.bat", "gradle/wrapper/gradle-wrapper.jar"]
+    project first, then the three web files - or, for the native-screens kind,
+    the one spec in `assets/`. What the API shows and what a test checks, so
+    nothing in the project is a surprise."""
+    paths = sorted(_texts(name, "App", "#101828", "#7cc4ff", package=package, native=native))
+    if not native:
+        paths += [f"{ASSET_DIR}/{a}" for a in ASSETS]
+    return paths + ["gradlew.bat", "gradle/wrapper/gradle-wrapper.jar"]
 
 
 def is_template(tdir: Path) -> bool:
@@ -644,30 +1253,80 @@ def is_template(tdir: Path) -> bool:
         (Path(tdir) / "app" / "build.gradle.kts").is_file()
 
 
+def task_kind(tdir: Path) -> str:
+    """Which kind of Android project this TASK asks for.
+
+    The task's own files are the choice, so the two cannot drift: a task that
+    carries `app.json` (the model's spec) is native screens, and a task
+    without one is the WebView app. No separate flag exists to fall out of
+    step with what will really be built."""
+    return NATIVE if spec_path(tdir).is_file() else WEBVIEW
+
+
+def project_kind(tdir: Path) -> str:
+    """Which kind a WRITTEN project is, from what it carries: "native" when
+    its assets hold the spec the activity reads, "webview" when they hold the
+    page - and "" when this is not a Jarvis Android project at all."""
+    tdir = Path(tdir)
+    if not is_template(tdir):
+        return ""
+    return NATIVE if (tdir / SPEC_ASSET).is_file() else WEBVIEW
+
+
+def native_facts(tdir: Path) -> tuple:
+    """(the app's name, screen count) when this task carries a native-screens
+    spec, or ("", 0) when it does not or the spec cannot be read.
+
+    For the status read only, so a half-written task still answers instead of
+    raising. The build card checks the spec properly and refuses."""
+    if (project_kind(tdir) or task_kind(tdir)) != NATIVE:
+        return "", 0
+    try:
+        spec, _text = read_spec(tdir, shipped=bool(project_kind(tdir)))
+    except BuildRefused:
+        return "", 0
+    return str(spec["name"]), len(spec["screens"])
+
+
 @dataclass
 class TemplatePlan:
     """What writing the template will do, decided before anything is written."""
     project: str
     task: str
     tdir: Path
+    kind: str = WEBVIEW
     title: str = ""
     background: str = "#101828"
     accent: str = "#7cc4ff"
+    package: str = ""
     assets: dict = field(default_factory=dict)
+    #: The validated native-screens spec, and the exact JSON text written into
+    #: `assets/app.json`. Empty for the WebView kind.
+    spec: dict = field(default_factory=dict)
+    spec_text: str = ""
+    screens: int = 0
+    files: list = field(default_factory=list)
     refused: str = ""
 
     def detail(self) -> dict:
         """What the gate records - no file contents."""
-        return {"project": self.project, "files": len(template_paths(self.project))}
+        files = self.files or template_paths(self.project, package=self.package,
+                                             native=self.kind == NATIVE)
+        return {"project": self.project, "files": len(files), "kind": self.kind,
+                "screens": self.screens}
 
 
 def plan_template(name: str, task: str, *, title: str = "", background: str = "",
                   accent: str = "", assets: Optional[dict] = None) -> TemplatePlan:
     """Every check the template write needs, done BEFORE a byte is written.
 
-    Checks: the app is an Android app, the task's copy exists and has no
-    project yet, the title and both colours are valid, and every asset is one
-    of the three names on the closed list, text, and small enough."""
+    The task's own files choose the kind. For the WebView kind the checks are:
+    the app is an Android app, the task's copy exists and has no project yet,
+    the title and both colours are valid, and every asset is one of the three
+    names on the closed list, text, and small enough. For the native-screens
+    kind the whole `app.json` is validated here instead, and a title, colour or
+    page passed beside it is refused rather than allowed to become a second
+    source of truth."""
     plan = TemplatePlan(project=name, task=task, tdir=W.task_dir(name, task))
     meta = W.app_meta(name)
     if meta["kind"] != KIND:
@@ -688,6 +1347,30 @@ def plan_template(name: str, task: str, *, title: str = "", background: str = ""
                        "(jarvis-android-gradlew.bat, jarvis-android-wrapper.jar) - run " \
                        "apply-patches.ps1 again"
         return plan
+    plan.kind = task_kind(plan.tdir)
+    if plan.kind == NATIVE:
+        if assets:
+            plan.refused = ("this task's app.json makes it a native-screens app, so there "
+                            "is no web page to pass")
+            return plan
+        for what, value in (("a title", title), ("a background colour", background),
+                            ("an accent colour", accent)):
+            if value:
+                plan.refused = (f"this task's app.json makes it a native-screens app, so "
+                                f"{what} comes from app.json, not from the request")
+                return plan
+        try:
+            plan.spec, plan.spec_text = read_spec(plan.tdir)
+            plan.title = plan.spec["name"]
+            plan.background = plan.spec["bg"]
+            plan.accent = plan.spec["accent"]
+            plan.package = native_package(plan.spec)
+            plan.screens = len(plan.spec["screens"])
+        except BuildRefused as exc:
+            plan.refused = str(exc)
+            return plan
+        plan.files = template_paths(plan.project, package=plan.package, native=True)
+        return plan
     try:
         plan.title = check_title(title or meta["title"] or name)
         plan.background = check_colour(background or "#101828", "the background colour")
@@ -695,6 +1378,7 @@ def plan_template(name: str, task: str, *, title: str = "", background: str = ""
     except BuildRefused as exc:
         plan.refused = str(exc)
         return plan
+    plan.package = package_name(name)
     given = assets or {}
     if not isinstance(given, dict):
         plan.refused = "the page must be given as a set of files"
@@ -712,15 +1396,20 @@ def plan_template(name: str, task: str, *, title: str = "", background: str = ""
             plan.refused = f"{key} is larger than {MAX_ASSET_BYTES // 1024} KB"
             return plan
         plan.assets[key] = content
+    plan.files = template_paths(name)
     return plan
 
 
 def write_template(plan: TemplatePlan) -> dict:
-    """Writes the fixed project and the page into the task's copy.
+    """Writes the fixed project and either the page or the validated screens
+    into the task's copy.
 
     No card (APP-BUILDER-DESIGN.md): these files land only in the task's own
     copy and nothing runs them. Every path is a constant of this module or one
-    of three names on a closed list - the caller never supplies a path."""
+    of the closed lists (three web names, or the one spec) - the caller never
+    supplies a path. For the native-screens kind the bytes written into
+    `assets/app.json` are the VALIDATED ones, not the model's original text:
+    what the phone reads is exactly what was checked."""
     if plan.refused:
         raise BuildRefused(plan.refused)
     tdir = plan.tdir
@@ -728,13 +1417,20 @@ def write_template(plan: TemplatePlan) -> dict:
         raise BuildRefused("that task is gone - it was merged or thrown away")
     if is_template(tdir):
         raise BuildRefused("this task already has an Android project")
-    texts = _texts(plan.project, plan.title, plan.background, plan.accent)
-    texts[f"{ASSET_DIR}/index.html"] = plan.assets.get("index.html") or \
-        _fill(_DEFAULT_INDEX, title=_xml(plan.title))
-    texts[f"{ASSET_DIR}/app.css"] = plan.assets.get("app.css") or \
-        _fill(_DEFAULT_CSS, background=plan.background, accent=plan.accent)
-    texts[f"{ASSET_DIR}/app.js"] = plan.assets.get("app.js") or \
-        _fill(_DEFAULT_JS, title=plan.title.replace("'", ""))
+    if plan.kind == NATIVE:
+        if not plan.spec_text:
+            raise BuildRefused("this task's app.json has not been read yet")
+        texts = _texts(plan.project, plan.title, plan.background, plan.accent,
+                       package=plan.package, native=True, spec_text=plan.spec_text)
+    else:
+        texts = _texts(plan.project, plan.title, plan.background, plan.accent,
+                       package=plan.package)
+        texts[f"{ASSET_DIR}/index.html"] = plan.assets.get("index.html") or \
+            _fill(_DEFAULT_INDEX, title=_xml(plan.title))
+        texts[f"{ASSET_DIR}/app.css"] = plan.assets.get("app.css") or \
+            _fill(_DEFAULT_CSS, background=plan.background, accent=plan.accent)
+        texts[f"{ASSET_DIR}/app.js"] = plan.assets.get("app.js") or \
+            _fill(_DEFAULT_JS, title=plan.title.replace("'", ""))
     bat, jar = wrapper_files()
     with W._LOCK:
         for rel, text in texts.items():
@@ -763,8 +1459,9 @@ def write_template(plan: TemplatePlan) -> dict:
                 data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
             target.write_bytes(data)
     _audit("android.template", {"files": len(texts) + 2})
-    return {"ok": True, "files": len(texts) + 2, "package": package_name(plan.project),
-            "title": plan.title}
+    return {"ok": True, "files": len(texts) + 2,
+            "package": plan.package or package_name(plan.project),
+            "title": plan.title, "kind": plan.kind, "screens": plan.screens}
 
 
 # --------------------------------------------------------------------------
@@ -785,10 +1482,17 @@ class CommandPlan:
     refused: str = ""
     #: What the card carries, in words, and never a file's contents.
     says: str = ""
+    #: Which kind of Android app this is ("webview" or "native"), the name the
+    #: phone will show, and how many screens a native one has. Read from the
+    #: written project, so the card names what will really be built.
+    app_kind: str = WEBVIEW
+    title: str = ""
+    screens: int = 0
 
     def detail(self) -> dict:
         return {"project": self.project, "task": self.task,
-                "command": _shown(self.argv), "cwd": str(self.cwd)}
+                "command": _shown(self.argv), "cwd": str(self.cwd),
+                "app_kind": self.app_kind, "screens": self.screens}
 
 
 def _shown(argv) -> str:
@@ -805,6 +1509,10 @@ def build_command(tdir: Path) -> list:
     """THE build command. One function, one place, so a test can pin it."""
     exe = Path(tdir) / ("gradlew.bat" if WINDOWS else "gradlew")
     return [str(exe), GRADLE_TASK]
+
+
+def _screens_words(count: int) -> str:
+    return f"{count} screen" if count == 1 else f"{count} screens"
 
 
 def plan_build(name: str, task: str) -> CommandPlan:
@@ -828,10 +1536,28 @@ def plan_build(name: str, task: str) -> CommandPlan:
     if not have["ready"]:
         plan.refused = "this PC is missing " + ", ".join(have["missing"])
         return plan
+    plan.app_kind = project_kind(plan.tdir)
+    plan.title = name
+    if plan.app_kind == NATIVE:
+        # The spec is checked AGAIN here, from the copy the APK will read, and
+        # before a card is raised: a project whose spec was changed by hand (or
+        # half-written) is refused in plain words rather than built.
+        try:
+            spec, _text = read_spec(plan.tdir, shipped=True)
+        except BuildRefused as exc:
+            plan.refused = str(exc)
+            return plan
+        plan.title = spec["name"]
+        plan.screens = len(spec["screens"])
     plan.argv = build_command(plan.tdir)
     plan.apk = plan.tdir / APK_REL
-    plan.says = (
-        f"Build the Android app \"{name}\" in this task's copy:\n"
+    if plan.app_kind == NATIVE:
+        first = (f'Build the Android app "{plan.title}" - native screens: '
+                 f"{_screens_words(plan.screens)}, drawn by the app itself with ordinary "
+                 "Android views and not a web page, in this task's copy:\n")
+    else:
+        first = f'Build the Android app "{name}" in this task\'s copy:\n'
+    plan.says = first + (
         f"  command: {_shown(plan.argv)}\n"
         f"  folder:  {plan.tdir}\n"
         f"  Android SDK: {have['sdk']}\n"
@@ -976,8 +1702,20 @@ def plan_install(name: str, task: str) -> CommandPlan:
         return plan
     plan.apk = apk
     plan.argv = install_command(adb, apk)
+    plan.app_kind = project_kind(plan.tdir)
+    plan.title = name
+    if plan.app_kind == NATIVE:
+        # Name the app the phone will actually show. A spec that cannot be read
+        # is not a reason to refuse the INSTALL of an APK that already exists -
+        # the build card is where the spec is checked - so fall back to the
+        # folder's name rather than inventing a failure.
+        try:
+            spec, _text = read_spec(plan.tdir, shipped=True)
+            plan.title = spec["name"]
+        except BuildRefused:
+            plan.title = name
     plan.says = (
-        f"Put the app \"{name}\" on your phone:\n"
+        f"Put the app \"{plan.title}\" on your phone:\n"
         f"  command: {_shown(plan.argv)}\n"
         f"  file:    {apk}  ({apk.stat().st_size // 1024} KB)\n\n"
         "This is a SIDELOAD: it replaces the copy already installed, if any, and it never "
@@ -1081,9 +1819,11 @@ def _decide(plan: CommandPlan, token: str, action: str, gate: Callable,
             tier_of: Callable) -> None:
     text = plan.says
     detail = plan.detail()
-    detail.update(what=("build one Android app with Gradle" if plan.kind == "build"
-                        else "put a built Android app on your phone"),
-                  leaves_this_pc=False)
+    what = ("build one Android app with Gradle" if plan.kind == "build"
+            else "put a built Android app on your phone")
+    if plan.app_kind == NATIVE:
+        what += " (native screens)"
+    detail.update(what=what, leaves_this_pc=False)
     app, task = plan.project, plan.task
     try:
         v = gate(action, detail, text)
@@ -1250,7 +1990,10 @@ def status(app: str, task: str) -> dict:
     build = plan_build(app, task)
     install = plan_install(app, task)
     apk = apk_inside(tdir)
+    title, screens = native_facts(tdir)
     return {"ok": True, "app": app, "task": task, "template": is_template(tdir),
+            "kind": project_kind(tdir) or task_kind(tdir), "title": title,
+            "screens": screens,
             "toolchain": {"sdk": have["sdk"], "java": have["java"], "adb": have["adb"],
                           "missing": have["missing"]},
             "build": {"ready": not build.refused, "refused": _sentence(build.refused)

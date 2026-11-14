@@ -1518,6 +1518,12 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
     Settings row, `docs/PIP-DESIGN.md`) is a second phone-only control, saved on
     that phone with no PC counterpart - the desktop's floating face is its
     nearest equivalent, not the same control, so it really has none.
+
+    SIX on 2026-11-13: the phone's own settings backup
+    (`phone-settings-backup`, PR #1233) is the phone-only card that seals THIS
+    phone's settings into a password-locked file, with no backend route and no
+    PC counterpart, so it carries the PC-Only label too and answers the same
+    phone-side sentence.
     """
     phone = [row for row in SOURCE if row["surface"] == "phone"]
     check("there are phone-only rows to check", len(phone) >= 4, len(phone))
@@ -1790,7 +1796,8 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
     """Part B (2026-10-26): the Status line of a phone-only row said "PC-Only".
 
     The phone controls carry the PC-Only label because the phone is the only
-    app with the control; `label_for()` reads that from the row's reason and
+    app with the control (six of them since 2026-11-13, when the phone's own
+    settings backup joined); `label_for()` reads that from the row's reason and
     never looks at `surface`, so the Status line contradicted the "It is on the
     phone only" line in the same answer. `status_label()` derives the Status line
     from `surface` for DISPLAY only. `label_for()`, the contracts' counts and

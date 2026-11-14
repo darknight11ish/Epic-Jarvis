@@ -121,7 +121,7 @@ const READ_ALOUD = "memory_aloud";
 const KEEP_ON_SCREEN = "memory_on_screen";
 
 /** The words for "the card is waiting on you", shared with the other panels. */
-const WAITING = "Waiting for your approval — approve it in the Jarvis bar, on the widget, or on your phone's Home screen.";
+const WAITING = "Waiting for your approval — approve it in the Atlas bar, on the widget, or on your phone's Home screen.";
 
 /**
  * What the read-aloud row says once the move went through. Turning it on is
@@ -130,7 +130,7 @@ const WAITING = "Waiting for your approval — approve it in the Jarvis bar, on 
  * change that has not been approved (rule 4). Turning it off is immediate.
  */
 const READ_ALOUD_WAITING =
-  "Waiting for your approval — approve it in the Jarvis bar, on the widget, or on your phone's Home screen. Nothing changes until you approve it.";
+  "Waiting for your approval — approve it in the Atlas bar, on the widget, or on your phone's Home screen. Nothing changes until you approve it.";
 
 const READ_ALOUD_DONE = "Read aloud. If a card is waiting, nothing changes until you approve it.";
 /** The row's own one-line reminder while nothing is waiting. */

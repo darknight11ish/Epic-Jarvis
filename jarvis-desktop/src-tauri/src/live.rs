@@ -12,7 +12,7 @@
 //!   every sentence goes as `source=live`; the session's first full clip is
 //!   checked for the owner's voice before any words exist, and the session is
 //!   then trusted without checking each sentence - only ever to a server on
-//!   THIS PC), the always-on-top "Jarvis Live" badge, and the watcher.
+//!   THIS PC), the always-on-top "Atlas Live" badge, and the watcher.
 //! * **The watcher**, once a second while Live is on here, reads
 //!   `GET /api/voice/live` and tells every window (`LIVE_STATUS`); the badge
 //!   and the bar draw the sign from it (live-rules.js). It:
@@ -492,7 +492,7 @@ pub(crate) fn adopt(app: &AppHandle) {
                 serde_json::json!({ "do": "stop", "why": "owner", "device": "desktop" }),
             )
             .await;
-            commands::notify_guarded(&app, "Jarvis Live", &why, None);
+            commands::notify_guarded(&app, "Atlas Live", &why, None);
             return;
         }
         CARD_PAUSED.store(false, Ordering::SeqCst);
@@ -643,7 +643,7 @@ pub fn toggle(app: &AppHandle, by: &'static str) {
             start(&app, Some(by), None).await
         };
         if let Err(why) = result {
-            commands::notify_guarded(&app, "Jarvis Live", &why, None);
+            commands::notify_guarded(&app, "Atlas Live", &why, None);
         }
     });
 }
@@ -1033,7 +1033,7 @@ pub fn show_badge(app: &AppHandle) -> Result<(), String> {
         BADGE_LABEL,
         tauri::WebviewUrl::App("live-badge.html".into()),
     )
-    .title("Jarvis Live")
+    .title("Atlas Live")
     .inner_size(BADGE_W, BADGE_H)
     .resizable(false)
     .maximizable(false)

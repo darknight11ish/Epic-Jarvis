@@ -13,7 +13,7 @@
  */
 
 /** The line's words. Plain, and the same everywhere it is quoted. */
-export const WORKING_WORDS = "Jarvis is working on your screen";
+export const WORKING_WORDS = "Atlas is working on your screen";
 
 /** The Stop button's hover text: what it does, and what it does not undo. */
 export const STOP_TITLE =

@@ -377,7 +377,7 @@ if (K) {
     assert.equal((await page.textContent("#jarvis-live-end")).trim(), "End Live");
     assert.equal((await page.textContent("#jarvis-live-mute")).trim(), "Mic off");
     assert.equal(await page.getAttribute("#jarvis-live-toggle", "aria-pressed"), "true");
-    assert.equal(await page.getAttribute("#jarvis-live-toggle", "aria-label"), "Jarvis Live", "one name");
+    assert.equal(await page.getAttribute("#jarvis-live-toggle", "aria-label"), "Atlas Live", "one name");
     assert.equal((await page.textContent("#jarvis-live-toggle")).trim(), "Live", "a visible label");
     assert.ok((await page.textContent("#jarvis-live-hint")).length > 0, "the end hint or the first-time line");
     assert.equal(await page.isHidden("#jarvis-live-more"), true, "20 more minutes only in the last five");

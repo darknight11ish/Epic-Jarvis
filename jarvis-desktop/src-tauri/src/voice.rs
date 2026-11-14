@@ -1865,7 +1865,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
         WakeReadiness::Cannot(why) => Err(why),
         WakeReadiness::Waiting => Err(
             "Waiting for you to approve turning on \"hey Jarvis\". Approve the card \
-             in the Jarvis bar, on the widget, or on your phone's Home screen, \
+             in the Atlas bar, on the widget, or on your phone's Home screen, \
              then turn this on again."
                 .to_string(),
         ),
@@ -1898,7 +1898,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
             if reply.get("pending").and_then(|b| b.as_bool()) == Some(true) {
                 return Err(
                     "\"Hey Jarvis\" is off. Jarvis has asked for your approval to turn it \
-                     on - approve the card in the Jarvis bar, on the widget, or on your \
+                     on - approve the card in the Atlas bar, on the widget, or on your \
                      phone's Home screen, then turn this on again."
                         .to_string(),
                 );

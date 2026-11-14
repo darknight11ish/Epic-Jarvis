@@ -551,7 +551,7 @@ await check("App lock: the widget and the HUD approve nothing, in Rust (apps sec
     assert.doesNotMatch(said, /already/i, name);
   }
   // ...and each names the window the owner actually pressed, not the other one.
-  assert.match(/HUD_APPROVES_IN_BAR: &str = "([\s\S]*?)";/.exec(rules)[1], /not the Jarvis HUD/);
+  assert.match(/HUD_APPROVES_IN_BAR: &str = "([\s\S]*?)";/.exec(rules)[1], /not the Atlas HUD/);
   // The two commands are the widget's, and read or decide nothing more.
   const toml = read("src-tauri/permissions/surfaces.toml");
   const set = toml.slice(toml.indexOf('identifier = "approvals"'));

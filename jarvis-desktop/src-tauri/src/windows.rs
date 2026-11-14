@@ -819,7 +819,7 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     };
     let window =
         tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App(page.into()))
-            .title("Jarvis Desktop — Settings")
+            .title("Atlas Desktop — Settings")
             .inner_size(680.0, 760.0)
             .min_inner_size(520.0, 480.0)
             .center()
@@ -929,7 +929,7 @@ pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
     };
     let window =
         tauri::WebviewWindowBuilder::new(app, BRAIN_LABEL, tauri::WebviewUrl::App(page.into()))
-            .title("Jarvis — Brain")
+            .title("Atlas — Brain")
             .inner_size(1180.0, 820.0)
             .min_inner_size(880.0, 600.0)
             .center()
@@ -975,7 +975,7 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
         FACES_LABEL,
         tauri::WebviewUrl::App("faces.html".into()),
     )
-    .title("Jarvis — Faces")
+    .title("Atlas — Faces")
     .inner_size(1280.0, 900.0)
     .min_inner_size(900.0, 620.0)
     .center()
@@ -1022,7 +1022,7 @@ pub fn show_features(app: &AppHandle) -> Result<(), String> {
         FEATURES_LABEL,
         tauri::WebviewUrl::App("features.html".into()),
     )
-    .title("Jarvis — Everything Jarvis can do")
+    .title("Atlas — Everything Atlas can do")
     .inner_size(760.0, 900.0)
     .min_inner_size(420.0, 480.0)
     .resizable(true)
@@ -1062,7 +1062,7 @@ pub fn show_onboarding(app: &AppHandle) -> Result<(), String> {
         ONBOARDING_LABEL,
         tauri::WebviewUrl::App("onboarding.html".into()),
     )
-    .title("Jarvis — Welcome")
+    .title("Atlas — Welcome")
     .inner_size(480.0, 560.0)
     .resizable(false)
     .maximizable(false)
@@ -1884,7 +1884,7 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
         FLOATING_LABEL,
         tauri::WebviewUrl::App("floating.html".into()),
     )
-    .title("Jarvis")
+    .title("Atlas")
     .inner_size(prefs.size, prefs.size)
     .resizable(false)
     .maximizable(false)

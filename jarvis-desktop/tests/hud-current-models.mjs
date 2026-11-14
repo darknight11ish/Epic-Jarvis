@@ -108,9 +108,9 @@ await check("the separate Current Models button is gone, and the model chip is t
   assert.match(button, /class="chip-door"/, "the door does not take the chip-door class");
   assert.match(button, /aria-haspopup="dialog"/, "the door does not say it opens a dialog");
   assert.match(button, /aria-expanded="false"/, "the door starts claiming to be open");
-  assert.match(button, /aria-label="Current Models: what Jarvis is using and has loaded"/,
+  assert.match(button, /aria-label="Current Models: what Atlas is using and has loaded"/,
     "the door's accessible name is not the owner's ask");
-  assert.match(button, /title="Current Models: what Jarvis is using and has loaded"/,
+  assert.match(button, /title="Current Models: what Atlas is using and has loaded"/,
     "the door's tooltip is not the owner's ask");
   // The chip stays a span INSIDE the door: ten assignments write its text and
   // class after a turn, and none of them may erase the door (HUD audit P1-1).

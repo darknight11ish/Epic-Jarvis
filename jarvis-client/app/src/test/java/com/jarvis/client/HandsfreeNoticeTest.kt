@@ -200,7 +200,7 @@ class HandsfreeNoticeTest {
         assertEquals(ApprovalNotificationPolicy.PUBLIC_WORDS, HandsfreeNotice.PUBLIC)
         // It names no card and no message: it is a count of decisions waiting.
         assertFalse(HandsfreeNotice.PUBLIC.contains("Priya"))
-        assertTrue(HandsfreeNotice.PUBLIC.contains("Jarvis"))
+        assertTrue(HandsfreeNotice.PUBLIC.contains("Atlas"))
     }
 
     @Test

@@ -713,7 +713,7 @@ html[data-state="approval"] .reactor::after {
 }
 
 /* One plain sentence under an attached picture (secrets are covered with black
-   before Jarvis looks). Wraps, unlike the mono metadata line above it. */
+   before Atlas looks). Wraps, unlike the mono metadata line above it. */
 .attachment-note {
   font-size: var(--text-2xs);
   color: var(--text-faint);

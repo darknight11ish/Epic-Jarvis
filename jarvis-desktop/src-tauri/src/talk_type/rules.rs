@@ -93,7 +93,7 @@ pub(crate) const NEEDS_WINDOWS: &str = "Talk-to-type needs Windows.";
 pub(crate) const MIC_SLOW: &str = "The microphone was still starting when you let go, so \
      nothing was typed. Hold the key a moment longer.";
 /// The tray icon's first line while listening.
-pub(crate) const TRAY_LISTENING: &str = "Jarvis — listening to type what you say";
+pub(crate) const TRAY_LISTENING: &str = "Atlas — listening to type what you say";
 
 /// A reason from the PC as a sentence: a capital first, a full stop last.
 pub(crate) fn sentence(reason: &str) -> String {

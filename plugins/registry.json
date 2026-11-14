@@ -151,7 +151,7 @@
       "module": "jarvis_android_builder",
       "install": "handler",
       "stack_order": 168,
-      "summary": "Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for the install. The card for the build names the exact command and says that a first build downloads Gradle and the Android Gradle plugin.",
+      "summary": "Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for the install. The task's own files pick the kind - your index.html/app.js/app.css inside a fixed WebView project, or an app.json that a fixed Android activity draws as up to eight screens of your own (text, list and form). The card for the build names the exact command and says that a first build downloads Gradle and the Android Gradle plugin.",
       "why": "born as a folder: it replaces no patch"
     },
     {

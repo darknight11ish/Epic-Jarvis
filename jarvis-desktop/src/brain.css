@@ -1061,6 +1061,42 @@ body {
   white-space: nowrap;
 }
 
+/* A preview's look (2026-11-14; widget-board.js, board.css). The draft row is
+   a three-column grid, so the preview takes a row of its own under the
+   sentence and the Add button. The card and the panel colours are board.css's
+   - the same rules the widget window draws with, because this is the same
+   `paint()` - and only the spacing is this page's. */
+.widgets-preview-block {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.widgets-preview {
+  /* The widget window is 320px wide (`widget.css` .widget-shell), so the
+     preview is too: stretched across the page it would promise a shape
+     neither app draws. It shrinks rather than overflow a narrow window. */
+  align-self: flex-start;
+  width: 320px;
+  max-width: 100%;
+}
+
+.widgets-look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.widgets-look-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-2xs);
+}
+
 /* Long Fuse's "Start a background job" (2026-10-30; jobs-routes.patch). The
    controls sit in a `row`, which wraps: .row-actions above is nowrap because
    it holds two buttons, and a select, a text box and a button in it would push

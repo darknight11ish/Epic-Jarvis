@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jarvis Desktop — Settings</title>
+    <title>Atlas Desktop — Settings</title>
     <!--
       Theme before first paint. Synchronous from localStorage rather than
       waiting for the IPC round trip, because a window that paints deep-space
@@ -65,7 +65,7 @@
     -->
     <main class="page">
       <header class="page-head">
-        <h1>Jarvis Desktop</h1>
+        <h1>Atlas Desktop</h1>
         <p class="sub" id="version">settings</p>
       </header>
       <!-- "Open the card" (card-link.js): shown while an approval card waits -
@@ -118,8 +118,8 @@
         <div class="settings-jump-group">
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Start here</span>
-            <a href="#first-run">Set up Jarvis</a>
-            <a href="#setup-questionnaire">Personalize Jarvis</a>
+            <a href="#first-run">Set up Atlas</a>
+            <a href="#setup-questionnaire">Personalize Atlas</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Your devices</span>
@@ -215,7 +215,7 @@
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">About this build</span>
-            <a href="#about">About Jarvis</a>
+            <a href="#about">About Atlas</a>
             <a href="#backend-supports">What this backend supports</a>
           </div>
         </div>
@@ -231,7 +231,7 @@
         <button type="button" class="btn-link" id="btn-show-hidden-menus"></button>
       </div>
 
-      <!-- ── Set up Jarvis ──────────────────────────────────────────────────
+      <!-- ── Set up Atlas ──────────────────────────────────────────────────
            The owner's approved option 8A (2026-10-06): "a first-run setup
            page: the important settings in one place, in plain words, each
            raising its card where the rule requires."
@@ -253,7 +253,7 @@
            `commands.rs`'s ONBOARDING_VERSION pattern (a version number, not a
            yes/no, so a later card can be shown once more). -->
       <section class="card" id="first-run">
-        <h2>Set up Jarvis</h2>
+        <h2>Set up Atlas</h2>
         <p class="note" id="fr-body-plain">
           The few choices that matter on the first run, in the order you would
           make them. Everything here is optional — Jarvis works without any of
@@ -335,7 +335,7 @@
            src-tauri/src/setup_questionnaire.rs, setup-questionnaire.js). It is
            written by hand rather than generated: it is not a toggle row.
         -->
-      <!-- ── "Personalize Jarvis" (Wave B, 2026-11-03) ────────────────────────
+      <!-- ── "Personalize Atlas" (Wave B, 2026-11-03) ────────────────────────
            The setup questionnaire, now a 25-question quiz in seven sections
            (Gemini's ruling Q1: sections + a one-at-a-time stepper INSIDE this
            card, not a second window; Q3: a "show only new / unanswered" filter
@@ -369,9 +369,9 @@
         -->
       <section class="card" id="setup-questionnaire">
         <span id="personalize-jarvis" class="place-anchor"></span>
-        <h2 id="sq-title">Personalize Jarvis</h2>
+        <h2 id="sq-title">Personalize Atlas</h2>
         <p class="note" id="sq-kicker">
-          "Set up Jarvis" above is the five choices that matter on day one; this
+          "Set up Atlas" above is the five choices that matter on day one; this
           is the longer pass through settings that already exist, in short
           sections. Step through one at a time, or show them all. Every answer
           changes settings that already exist; nothing here is a new kind of
@@ -1504,7 +1504,7 @@
           </span>
         </label>
 
-        <!-- Wave B (2026-11-03): "Personalize Jarvis" has its own switch -
+        <!-- Wave B (2026-11-03): "Personalize Atlas" has its own switch -
              `notif_setup` -> `setup`, Ruling Q4's "give it a switch in
              Notification Preferences". The row below is GENERATED from
              `backend/jarvis_settings_registry.py` by `tools/gen_settings_cases.py`
@@ -3873,7 +3873,7 @@
            second, separately-maintained copy of the number that could drift
            from the one actually running. -->
       <section class="card" id="about">
-        <h2>About Jarvis</h2>
+        <h2>About Atlas</h2>
         <p class="note">
           A local-first personal assistant. A Python backend on this
           computer, this Tauri shell around it, and a language model that
@@ -3881,7 +3881,7 @@
           private leaves this machine on its own, there is no public tunnel
           into this program, there are no API keys built into it, and there
           is no "approve everything" control anywhere in it — anything
-          risky Jarvis wants to do asks first, one action at a time, and
+          risky Atlas wants to do asks first, one action at a time, and
           "What asks first" lists exactly what asks and what does not.
         </p>
         <dl class="about-facts">

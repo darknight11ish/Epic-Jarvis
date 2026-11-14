@@ -1020,7 +1020,7 @@ fn start_unlock(app: &AppHandle, which: Covered, target: Option<String>) {
             }
             Err(why) => {
                 crate::windows::forget_pending_places();
-                crate::commands::notify(&app, "Jarvis is locked", &format!("{why}."));
+                crate::commands::notify(&app, "Atlas is locked", &format!("{why}."));
             }
         }
     });

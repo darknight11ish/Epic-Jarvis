@@ -54,7 +54,7 @@ await check("every bindable action is listed", async () => {
   const watch = list.find((r) => r.name === "Start or stop Watch with me");
   assert.ok(watch, "Watch with me is not listed");
   assert.equal(watch.key, "Off - pick a key");
-  assert.equal(list[0].name, "Show or hide the Jarvis bar");
+  assert.equal(list[0].name, "Show or hide the Atlas bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
   // moved off Alt+Shift+X if something else on the PC needs that.
@@ -254,7 +254,7 @@ await check("a refused binding says so, and does not say working", async () => {
   });
   const list = await rows(page);
   await page.close();
-  const summon = list.find((r) => r.name === "Show or hide the Jarvis bar");
+  const summon = list.find((r) => r.name === "Show or hide the Atlas bar");
   assert.equal(summon.bound, "false");
   assert.match(summon.state, /in use/i, `said "${summon.state}"`);
   assert.doesNotMatch(summon.state, /working/i);
@@ -412,7 +412,7 @@ await check("each field says which action it belongs to", async () => {
   await page.close();
   // Without this every one of the five announces as a bare combination.
   assert.ok(labels.every((l) => l && l.length > 12), `got ${JSON.stringify(labels)}`);
-  assert.match(labels[0], /Show or hide the Jarvis bar/);
+  assert.match(labels[0], /Show or hide the Atlas bar/);
 });
 
 await check("a refused row is not marked by colour alone", async () => {

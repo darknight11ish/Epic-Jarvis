@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,11 +123,16 @@ internal fun WidgetsSection(canAct: Boolean, privateHidden: Boolean) {
                         Text(JarvisWidgets.PREVIEW_TITLE, style = MaterialTheme.typography.labelMedium,
                             color = chrome.textMid)
                         v.drafts.forEach { d ->
-                            WidgetRow(d, privateHidden) {
-                                Quiet(JarvisWidgets.DISCARD_LABEL, enabled = !busy,
-                                    onClick = { run { JarvisRuntime.widgetDiscard(d.id) } })
-                                Quiet(JarvisWidgets.ADD_LABEL, color = chrome.okInk, enabled = canAct && !busy,
-                                    onClick = { run { JarvisRuntime.widgetAdd(d.id) } })
+                            key(d.id) {
+                                DraftPreview(
+                                    row = d,
+                                    privateHidden = privateHidden,
+                                    canAct = canAct,
+                                    busy = busy,
+                                    refresh = reads,
+                                    onDiscard = { run { JarvisRuntime.widgetDiscard(d.id) } },
+                                    onAdd = { look -> run { JarvisRuntime.widgetAdd(d.id, look) } },
+                                )
                             }
                         }
                         if (v.noCard.isNotEmpty()) {
@@ -210,7 +216,101 @@ internal fun WidgetsSection(canAct: Boolean, privateHidden: Boolean) {
     }
 }
 
-/** One widget or preview: its name, its sentence and parts, then its buttons. */
+/**
+ * One preview waiting for Add (2026-11-14): the widget DRAWN as it will look,
+ * the three look pickers under it, then Add and Discard.
+ *
+ * The list used to show a preview as a row of sentences. These numbers are
+ * real: `GET /api/widgets/show` answers for a preview id too, filled from the
+ * same readers a saved widget uses, and saves nothing - no new route and no
+ * new request type. The look starts at the draft's own (what the owner's
+ * words asked for), every picker tap redraws at once, and Add sends the look
+ * it is showing.
+ *
+ * Add waits until the preview has been read, because it always sends the look
+ * the pickers show and there is no honest look to send before that. A preview
+ * that cannot be read says so and leaves Discard alone.
+ *
+ * With "Hide memory lists and chat history" on, the drawn preview is the
+ * HIDDEN one ([JarvisWidgets.hide]) - the same words the home screen shows
+ * while locked - so this plate cannot reveal what that setting hides.
+ */
+@Composable
+private fun DraftPreview(
+    row: JarvisWidgets.Row,
+    privateHidden: Boolean,
+    canAct: Boolean,
+    busy: Boolean,
+    refresh: Int,
+    onDiscard: () -> Unit,
+    onAdd: (JarvisWidgets.Look) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    var view by remember(row.id) { mutableStateOf<JarvisWidgets.View?>(null) }
+    var look by remember(row.id) { mutableStateOf<JarvisWidgets.Look?>(null) }
+    var failed by remember(row.id) { mutableStateOf(false) }
+
+    // refresh is the plate's own Refresh counter, so the one control that
+    // re-reads the list also re-reads a preview that could not be read.
+    LaunchedEffect(row.id, refresh) {
+        when (val r = JarvisRuntime.widgetShow(row.id)) {
+            is ApiResult.Ok -> {
+                val read = JarvisWidgets.viewOf(r.value)
+                view = read
+                failed = read == null
+                // The draft's own look is the starting point; a later re-read
+                // must not undo a picker the owner has already moved.
+                if (read != null && look == null) look = read.look
+            }
+            is ApiResult.Failed -> {
+                view = null
+                failed = true
+            }
+        }
+    }
+
+    Gap(10)
+    Column(Modifier.fillMaxWidth()) {
+        if (privateHidden) {
+            Text("(hidden) widget", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        } else {
+            Text(row.name.ifEmpty { "Widget" }, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            if (row.said.isNotEmpty()) {
+                Text(row.said, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            }
+        }
+        val drawn = view
+        val chosen = look
+        when {
+            failed -> Text(
+                JarvisWidgets.LOOK_FAILED,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.warnInk,
+            )
+            drawn == null || chosen == null -> Text(
+                JarvisWidgets.LOOK_READING,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+            )
+            else -> {
+                Gap(6)
+                WidgetPreview(if (privateHidden) JarvisWidgets.hide(drawn) else drawn, chosen)
+                Gap(8)
+                LookPickers(chosen, enabled = !busy) { look = it }
+            }
+        }
+        Gap(2)
+        Quiet(JarvisWidgets.DISCARD_LABEL, enabled = !busy, onClick = onDiscard)
+        Quiet(
+            JarvisWidgets.ADD_LABEL,
+            color = chrome.okInk,
+            enabled = canAct && !busy && look != null,
+            onClick = { look?.let(onAdd) },
+        )
+    }
+}
+
+/** One saved widget: its name, its sentence and parts, then its buttons. */
 @Composable
 private fun WidgetRow(row: JarvisWidgets.Row, privateHidden: Boolean, buttons: @Composable () -> Unit) {
     val chrome = LocalChrome.current

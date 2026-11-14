@@ -212,7 +212,7 @@ class QuickTilesTest {
         // 2. The link tile is a MUTE SWITCH ([QuickTiles.muteCommand],
         // LinkTileService). It used to draw "Jarvis" - the app's own name - so
         // tapping the tile with Jarvis's name on it silently muted Jarvis.
-        assertEquals("Mute Jarvis", QuickTiles.LINK_TILE_LABEL)
+        assertEquals("Mute Atlas", QuickTiles.LINK_TILE_LABEL)
         val link = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/service/LinkTileService.kt")
             .readText()
         assertTrue("the tile draws that label", link.contains("tile.label = QuickTiles.LINK_TILE_LABEL"))

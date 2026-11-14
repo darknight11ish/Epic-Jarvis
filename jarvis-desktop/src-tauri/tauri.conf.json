@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "quickbar",
-        "title": "Jarvis",
+        "title": "Atlas",
         "url": "index.html",
         "width": 750,
         "height": 80,
@@ -39,7 +39,7 @@
       },
       {
         "label": "widget",
-        "title": "Jarvis Desktop Widget",
+        "title": "Atlas Desktop Widget",
         "url": "widget.html",
         "width": 320,
         "height": 44,

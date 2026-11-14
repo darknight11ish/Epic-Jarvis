@@ -325,7 +325,7 @@ await check("a face can be chosen, and \"Use this face\" saves it at once (no Sa
   assert.ok(saved[0].face, "no face was saved");
   assert.ok(spec.faces.some((f) => f.id === saved[0].face),
     `saved a face the spec does not have: ${saved[0].face}`);
-  assert.match(said, /is Jarvis's face now/, `said "${said}"`);
+  assert.match(said, /is Atlas's face now/, `said "${said}"`);
   assert.match(said, /phone wears it too/);
   assert.equal(undo, true, "Undo is offered");
 });

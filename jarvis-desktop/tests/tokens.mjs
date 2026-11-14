@@ -155,7 +155,7 @@ await check("CONTROL: no literal colour is left outside a defining block", async
   // The same rule `scripts/check-tokens.py` enforces, asserted here too so a
   // regression fails the JS suite rather than only the Python one.
   const DEFINING = /(?::root\b|\[data-theme[^\]]*\])[^{]*\{/g;
-  for (const name of ["style.css", "widget.css", "settings.css", "brain.css", "theme.css"]) {
+  for (const name of ["style.css", "widget.css", "board.css", "settings.css", "brain.css", "theme.css"]) {
     let src = read(name).replace(/\/\*[\s\S]*?\*\//g, (m) => " ".repeat(m.length));
     const spans = [];
     for (const m of src.matchAll(DEFINING)) {

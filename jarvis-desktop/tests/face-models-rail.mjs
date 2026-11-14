@@ -158,9 +158,9 @@ await check("the icon is a plain button with the rail's own classes and an acces
   assert.match(button, /class="rail-toolbar-btn"/, "the icon does not take the rail's button class");
   assert.match(button, /aria-haspopup="dialog"/, "the icon does not say it opens a panel");
   assert.match(button, /aria-expanded="false"/, "the icon starts claiming to be open");
-  assert.match(button, /aria-label="Jarvis faces: all the face models, and the one it wears"/,
+  assert.match(button, /aria-label="Atlas faces: all the face models, and the one it wears"/,
     "the icon's accessible name does not say what it opens");
-  assert.match(button, /title="Jarvis faces: all the face models, and the one it wears"/,
+  assert.match(button, /title="Atlas faces: all the face models, and the one it wears"/,
     "the icon has no tooltip");
   // Hidden until the shell is there: a plain browser has no command to send.
   assert.match(button, /\bhidden\b/, "the icon is visible with no shell to switch the face");

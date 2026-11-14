@@ -127,7 +127,7 @@ object ChatPicture {
      * (`backend/test_chat_picture.py` checks all three).
      */
     const val SECRETS_COVERED =
-        "Secrets in pictures you attach are covered with black boxes before Jarvis looks."
+        "Secrets in pictures you attach are covered with black boxes before Atlas looks."
 
     /** The PC reads the words in the picture, and nothing else of it. */
     const val WORDS_ONLY =

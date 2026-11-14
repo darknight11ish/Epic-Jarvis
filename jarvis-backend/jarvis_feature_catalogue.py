@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 4faa2a3d708e6e8a407dee9479625116d7c80dd5798d40eebd7d142f4f8fb17d); the apps' Features pages read their own
+`features/features.json` (sha256 5a8fdadddb49c8daf2c63b42411ae695f06e6f4ac17f9eedd8774525d516ecd3); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "4faa2a3d708e6e8a407dee9479625116d7c80dd5798d40eebd7d142f4f8fb17d"
+SOURCE_SHA256 = "5a8fdadddb49c8daf2c63b42411ae695f06e6f4ac17f9eedd8774525d516ecd3"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -308,10 +308,10 @@ FEATURES = (
         "id": "widgets",
         "group": "Talking",
         "title": "Widgets you describe",
-        "what": "Small tiles you asked for, drawn on your desktop widget or your phone's home screen, in one of four arrangements.",
+        "what": "Small tiles you asked for, drawn on your desktop widget or your phone's home screen, in one of four arrangements, in an accent colour, a see-through shade and a contrast you pick.",
         "where": "Brain, Work, Widgets (desktop); Brain, Widgets and a home-screen slot (phone). The desktop widget itself shows with Alt+Shift+W.",
         "asks": "No card.",
-        "limit": "A widget's tile actions are a fixed set, its arrangement is one of four fixed ones, and nothing a widget shows is ever turned into an instruction.",
+        "limit": "A widget's tile actions are a fixed set, its arrangement is one of four fixed ones, and its colour, see-through and contrast are three fixed lists too - not free values. See-through is faintness only, never a blur, and the words are never made faint. Nothing a widget shows is ever turned into an instruction.",
         "surface": "both",
         "aliases": ["draws small widgets i describe on my desktop or phone"],
         "covers": ["brain.work.widgets", "home-overview"],
@@ -1921,10 +1921,10 @@ FEATURES = (
         "id": "android-builder",
         "group": "The PC itself",
         "title": "Build the Android app in a project task",
-        "what": "Build a small Android app from your own index.html/app.js/app.css in a project task, with the Gradle build and the adb install behind their own two approval cards.",
-        "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+        "what": "Build a small Android app in a project task - from your own index.html/app.js/app.css, or from an app.json that draws up to eight screens of your own (text, list, form) natively, with the Gradle build and the adb install behind their own two approval cards.",
+        "where": "In a project task's copy on the PC - but there is no way in yet: no chat sentence, model tool or app button starts it, so only its own tests have called it. When that entry point is written it is a project task. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
         "asks": "Two risky cards, each with the exact command: app_build_android for the build and app_install_android for the install.",
-        "limit": "Only the fixed WebView template (no hand-written Kotlin/manifest, no permissions) in a project task. Needs the Android SDK, a Java 17 JDK and the Gradle wrapper files; the install needs adb and a USB cable with debugging. A first build downloads Gradle and the Android Gradle plugin. No release signing, no Play Store, no adb shell and no uninstall.",
+        "limit": "The template is fixed - the model writes no Kotlin, manifest or Gradle file, and cannot add a permission. The native-screens kind is data only: at most eight screens of three kinds (text, list, form), a closed set of keys, a button that only opens another screen or shows one short line, and a form whose values stay on the phone. In a project task only. Needs the Android SDK, a Java 17 JDK and the Gradle wrapper files; the install needs adb and a USB cable with debugging. A first build downloads Gradle and the Android Gradle plugin. No release signing, no Play Store, no adb shell and no uninstall.",
         "surface": "both",
         "aliases": ["android build", "build the android app"],
         "covers": ["android-builder"],

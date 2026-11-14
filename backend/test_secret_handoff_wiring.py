@@ -418,7 +418,7 @@ def t_the_hud_card_has_the_two_boxes_and_clears_the_secret():
     for marker in ('id="secret-handoff"', 'id="sh-target"', 'id="sh-purpose"',
                    'id="sh-secret"', 'type="password"', 'autocomplete="off"',
                    "Checked by this PC (host-verified target)",
-                   "Jarvis's note (unverified):", 'id="sh-type"', 'id="sh-cancel"',
+                   "Atlas's note (unverified):", 'id="sh-type"', 'id="sh-cancel"',
                    "UNENCRYPTED HTTP"):
         check(f"HUD card contains {marker}", marker in html)
     check("HUD card: the fill path clears the secret before repaint",

@@ -9,7 +9,8 @@
  * net/JarvisWidgets.kt and tools/gen_widget_cases.py, held together by
  * tests/fixtures/widget-cases.json. It draws with DOM calls and
  * `textContent` only: nothing the PC or the model wrote is ever parsed as
- * HTML, and there is no style, colour, link or script to set.
+ * HTML, and the only style it sets is the widget's own look, from this
+ * file's closed lists (`applyLook`).
  *
  * The widget also carries one of four ARRANGEMENTS (`LAYOUTS`, 2026-10-30),
  * and `boardOf` is the one rule that turns a view into what is drawn: which
@@ -19,6 +20,16 @@
  * The apps check again what the PC already checked: a block type or button
  * this file does not know is left out, and a source it does not know is
  * treated as private.
+ *
+ * A widget also carries a LOOK (2026-11-14): an accent, a shade and a
+ * contrast, all three CLOSED lists (`ACCENTS`, `SHADES`, `CONTRASTS` below,
+ * the PC's jarvis_widgets.py and the phone's net/JarvisWidgets.kt, held
+ * equal by tests/fixtures/widget-cases.json). It is a colour and an alpha,
+ * not an arrangement: `boardOf` is untouched by it, and being see-through
+ * never hides a block. `paint` hands it to `applyLook`, which sets colours
+ * and alphas on the box and nothing else - no font, image, size or position,
+ * and every value comes from this file's own lists, so nothing the PC wrote
+ * ever becomes CSS.
  */
 
 export const TITLE = "Widgets";
@@ -51,6 +62,47 @@ export const MAX_WORDS = 300;
  *  because a RemoteViews layout is a resource compiled into the app. */
 export const LAYOUTS = ["stack", "big", "list", "compact"];
 export const LAYOUT_STACK = "stack";
+
+/** The eight accents a widget may wear (2026-11-14): a CLOSED list of NAMED
+ *  colours, the PC's `jarvis_widgets.ACCENTS` and the phone's
+ *  `JarvisWidgets.ACCENTS`. The owner says a colour word, the PC's own model
+ *  maps it to one of these names - never a hex, because a widget nobody can
+ *  read is worse than one in the second-best colour. `cyan` is the default and
+ *  the colour every widget drew in before the look existed. */
+export const ACCENTS = {
+  cyan: { label: "Cyan", hex: "#63F7FF" },
+  sky: { label: "Sky", hex: "#8CC9FF" },
+  violet: { label: "Violet", hex: "#BFA6FF" },
+  pink: { label: "Pink", hex: "#FF93C7" },
+  amber: { label: "Amber", hex: "#FFC661" },
+  lime: { label: "Lime", hex: "#B9E86B" },
+  orange: { label: "Orange", hex: "#FF9E5C" },
+  mono: { label: "Mono", hex: "#E6EEF7" },
+};
+
+/** How see-through a widget is: the CARD's alpha and the PANEL's, as the
+ *  PC's own 0-255 bytes (`jarvis_widgets.SHADES`; the same three numbers in
+ *  widget-cases.json). Text never takes an alpha - a see-through widget still
+ *  has to be readable. There is no blur, on either app. */
+export const SHADES = {
+  solid: { label: "Solid", alpha: 255, surfaceAlpha: 255 },
+  half: { label: "Half see-through", alpha: 191, surfaceAlpha: 159 },
+  clear: { label: "See-through", alpha: 128, surfaceAlpha: 102 },
+};
+
+/** The two palettes (`jarvis_widgets.CONTRASTS`). `normal` is what every
+ *  widget has drawn in until now; `high` is white on black with a lighter
+ *  panel and a lifted muted text, because half a widget is written in it.
+ *  The four keys are the wire's own names, so the fixture compares directly. */
+export const CONTRASTS = {
+  normal: { label: "Normal",
+    colors: { bg: "#04070C", surface: "#0E1822", text_hi: "#E6EEF7", text_muted: "#93A6BA" } },
+  high: { label: "High contrast",
+    colors: { bg: "#000000", surface: "#262626", text_hi: "#FFFFFF", text_muted: "#E0E0E0" } },
+};
+
+/** What a widget with no look key of its own draws in (`look_default`). */
+export const LOOK_DEFAULT = { accent: "cyan", shade: "solid", contrast: "normal" };
 
 /** The five buttons - the phone's Quick Settings tile actions, same words. */
 export const ACTIONS = {
@@ -99,6 +151,22 @@ export function layoutOf(ans) {
   return typeof got === "string" && LAYOUTS.includes(got) ? got : LAYOUT_STACK;
 }
 
+/** The look a widget draws in, from one show answer: each key on ITS closed
+ *  list, else that list's default - so a newer PC's `shade: "frosted"` costs
+ *  the shade and not the widget, exactly as `layoutOf` does for a layout. */
+export function lookOf(ans) {
+  const got = ans && typeof ans === "object" ? ans : {};
+  const pick = (key, table) => {
+    const value = got[key];
+    return typeof value === "string" && Object.hasOwn(table, value) ? value : LOOK_DEFAULT[key];
+  };
+  return {
+    accent: pick("accent", ACCENTS),
+    shade: pick("shade", SHADES),
+    contrast: pick("contrast", CONTRASTS),
+  };
+}
+
 /** The blocks this app draws from one GET /api/widgets/show answer, or null. */
 export function viewOf(ans) {
   if (!ans || typeof ans !== "object" || Array.isArray(ans) || ans.ok !== true) return null;
@@ -136,16 +204,18 @@ export function viewOf(ans) {
       out.push(v);
     }
   }
-  return { name: text(ans.name, LIMITS.name), layout: layoutOf(ans), blocks: out };
+  return { name: text(ans.name, LIMITS.name), layout: layoutOf(ans), ...lookOf(ans), blocks: out };
 }
 
 /** The same view while private words are hidden (App lock, or "Hide
- *  memory lists and chat history"): a private block keeps its label only. */
+ *  memory lists and chat history"): a private block keeps its label only.
+ *  The look goes with it untouched: hiding words never changes a colour. */
 export function hideView(view) {
   if (!view) return null;
   return {
     name: view.name,
     layout: view.layout,
+    ...lookOf(view),
     blocks: view.blocks.map((b) => {
       if (!b.private) return { ...b };
       const h = { ...b, hidden: true, note: HIDDEN_WORDS };
@@ -157,7 +227,15 @@ export function hideView(view) {
   };
 }
 
-/** GET /api/widgets as the Brain reads it. */
+/** GET /api/widgets as the Brain reads it. A row that carries its `blocks`
+ *  (the PC sends them for a widget and for a preview) also carries the `view`
+ *  the Brain draws its preview from: the draft's own shape and its own look,
+ *  so the three pickers under it repaint the real widget rather than a
+ *  mock-up. The list's blocks are the ones the PC validated, NOT filled in -
+ *  only a show fills in live numbers - so the preview shows the shape, the
+ *  labels and the colours, and the numbers arrive with the widget itself.
+ *  A row without blocks (an older PC, or one hiding the private lists) has no
+ *  view, and the Brain simply draws no preview. */
 export function readList(ans) {
   if (!ans || typeof ans !== "object") return null;
   if (ans.available === false) return { available: false, why: String(ans.why || MISSING) };
@@ -165,7 +243,11 @@ export function readList(ans) {
     .filter((w) => w && typeof w.id === "string")
     .map((w) => ({ id: w.id, name: text(w.name, LIMITS.name), said: text(w.said, 400),
       parts: (Array.isArray(w.parts) ? w.parts : []).slice(0, LIMITS.blocks)
-        .map((p) => text(p, 160)).filter(Boolean) }));
+        .map((p) => text(p, 160)).filter(Boolean),
+      view: Array.isArray(w.blocks) && w.blocks.length
+        ? viewOf({ ok: true, name: w.name, layout: w.layout, accent: w.accent,
+          shade: w.shade, contrast: w.contrast, blocks: w.blocks })
+        : null }));
   return { available: true, widgets: rows(ans.widgets), drafts: rows(ans.drafts),
     noCard: text(ans.no_card, 400), hidden: Boolean(ans.hidden) };
 }
@@ -224,10 +306,38 @@ export function boardOf(view) {
 }
 
 /**
+ * Puts a widget's look on the box it is drawn in, as CSS custom properties:
+ * the contrast's four colours, the accent's hex, and the shade's two alphas.
+ * `board.css` reads them, with the app's own theme as the fallback, so a box
+ * that has never been given a look draws exactly as it did.
+ *
+ * Nothing else is set. This is the only place in this file that touches a
+ * style at all, and every value is one of the closed lists above: the PC's
+ * answer only ever picks an ID, never a colour.
+ */
+export function applyLook(box, look) {
+  const chosen = lookOf(look);
+  const shade = SHADES[chosen.shade];
+  const colors = CONTRASTS[chosen.contrast].colors;
+  const set = (name, value) => box.style.setProperty(name, value);
+  set("--board-bg", colors.bg);
+  set("--board-surface", colors.surface);
+  set("--board-text-hi", colors.text_hi);
+  set("--board-text-muted", colors.text_muted);
+  set("--board-accent", ACCENTS[chosen.accent].hex);
+  set("--board-bg-a", cssAlpha(shade.alpha));
+  set("--board-surface-a", cssAlpha(shade.surfaceAlpha));
+}
+
+/** A shade's 0-255 byte as the 0-1 number CSS takes (`color-mix`), to three
+ *  places: 255 is "1", 191 is "0.749", 128 is "0.502". */
+const cssAlpha = (byte) => String(Math.round((byte / 255) * 1000) / 1000);
+
+/**
  * Draws a view into `box` with DOM calls only, in the arrangement
- * `boardOf` chose. `canPress(action)` says whether a button may be pressed
- * now (a stale link greys all but Stop everything and Brief me);
- * `onPress(action)` presses it.
+ * `boardOf` chose, in the view's own look (`applyLook`). `canPress(action)`
+ * says whether a button may be pressed now (a stale link greys all but Stop
+ * everything and Brief me); `onPress(action)` presses it.
  */
 export function paint(box, view, { canPress = () => true, onPress = () => {} } = {}) {
   const doc = box.ownerDocument;
@@ -237,6 +347,11 @@ export function paint(box, view, { canPress = () => true, onPress = () => {} } =
     if (words !== undefined) n.textContent = words;
     return n;
   };
+  // Both surfaces that draw a widget paint through here - the Brain's preview
+  // and the widget window - so the look is applied in one place and neither
+  // can show a colour the other does not. No view is the default look, so an
+  // emptied preview goes back to it rather than keeping the last one.
+  applyLook(box, view);
   const nodes = [];
   if (!view) {
     box.replaceChildren();
@@ -248,7 +363,7 @@ export function paint(box, view, { canPress = () => true, onPress = () => {} } =
     if (b.hidden) node.dataset.hidden = "true";
     const head = el("div", "board-head");
     head.append(el("span", "board-label", b.label));
-    if (b.type === "number" && b.value) head.append(el("span", "board-value mono", b.value));
+    if (b.type === "number" && b.value) head.append(el("span", "board-value board-count mono", b.value));
     if (b.type === "progress" && b.value) head.append(el("span", "board-value", b.value));
     node.append(head);
     if (b.type === "progress") {
@@ -268,7 +383,7 @@ export function paint(box, view, { canPress = () => true, onPress = () => {} } =
           ul.append(li);
         }
         node.append(ul);
-        if (b.more) node.append(el("p", "board-note", `+${b.more} more`));
+        if (b.more) node.append(el("p", "board-note board-more", `+${b.more} more`));
       } else if (!b.note && b.empty) {
         node.append(el("p", "board-note", b.empty));
       }

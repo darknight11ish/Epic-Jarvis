@@ -100,10 +100,10 @@ object QuickTiles {
      * with their name on it and Jarvis stops speaking to them. The subtitle
      * already says "Muted", so the label says what the tap does.
      */
-    const val LINK_TILE_LABEL = "Mute Jarvis"
+    const val LINK_TILE_LABEL = "Mute Atlas"
 
     const val HINT =
-        "Up to three Jarvis tiles for the panel you pull down from the top of the " +
+        "Up to three Atlas tiles for the panel you pull down from the top of the " +
             "screen. Choose what each one does here, then add it: pull the panel down, " +
             "tap Edit (often a pencil), and drag one of the three \"Tap to choose\" " +
             "tiles into place. Each one then says what it does."

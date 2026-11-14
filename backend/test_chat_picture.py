@@ -480,7 +480,7 @@ def t_both_apps_say_the_same_sentence():
     check("the desktop's attachment chip says it, word for word", line in html)
     check("the phone's line under the box says it, word for word", f'"{line}"' in kt)
     check("the sentence is the promise the docs make",
-          line == "Secrets in pictures you attach are covered with black boxes before Jarvis looks.")
+          line == "Secrets in pictures you attach are covered with black boxes before Atlas looks.")
 
 
 def t_a_png_that_inflates_far_past_its_header_is_refused():

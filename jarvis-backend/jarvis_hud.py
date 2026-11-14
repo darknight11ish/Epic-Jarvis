@@ -1924,7 +1924,7 @@ def build_graph() -> dict:
         links.extend(l)
 
     # Anchor everything to a single core so the galaxy holds together.
-    nodes.insert(0, _node("core", "J.A.R.V.I.S.", "core", weight=6))
+    nodes.insert(0, _node("core", "Atlas", "core", weight=6))
     anchored = {"model", "cluster", "source", "skill", "persona", "project"}
     seen = {n["id"] for n in nodes}
     for n in nodes:
@@ -6249,7 +6249,7 @@ def _request_shutdown() -> dict:
 
 
 def main() -> None:
-    print("\n  J.A.R.V.I.S. HUD")
+    print("\n  ATLAS HUD")
     print(f"  settings   {CONFIG_DIR}")
     print(f"  jarvis     {JARVIS_URL}  {'up' if _reachable(JARVIS_URL + '/health') else 'not running yet'}")
     print(f"  ollama     {OLLAMA_URL}  {'up' if _reachable(OLLAMA_URL + '/api/tags') else 'not running'}")

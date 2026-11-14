@@ -99,6 +99,22 @@ def layout_of(ans) -> str:
     return got if isinstance(got, str) and got in W.LAYOUTS else W.DEFAULT_LAYOUT
 
 
+def look_of(ans) -> dict:
+    """The look an app draws from one show answer, never absent: each of the
+    three keys is a value on its own closed list, else that list's default.
+
+    Same rule as `layout_of` and for the same reason - a newer PC's word this
+    app does not know must leave the widget drawable, in today's colours, rather
+    than blank it. (The PC is the other direction: it REFUSES an off-menu value,
+    so nothing off-menu is ever stored.)"""
+    ans = ans if isinstance(ans, dict) else {}
+    out = {}
+    for key, table, default in W.LOOK_KEYS:
+        got = ans.get(key)
+        out[key] = got if isinstance(got, str) and got in table else default
+    return out
+
+
 def app_view(ans):
     """The blocks an app draws from one show answer, or None."""
     if not isinstance(ans, dict) or ans.get("ok") is not True:
@@ -137,7 +153,8 @@ def app_view(ans):
                 v["fraction"] = min(1.0, max(0.0, f))
                 v["value"] = text(b.get("value"), 60)
             out.append(v)
-    return {"name": text(ans.get("name"), W.MAX_NAME), "layout": layout_of(ans), "blocks": out}
+    return {"name": text(ans.get("name"), W.MAX_NAME), "layout": layout_of(ans),
+            **look_of(ans), "blocks": out}
 
 
 def hide(view):
@@ -158,7 +175,9 @@ def hide(view):
             elif b["type"] == "progress":
                 b["fraction"], b["value"] = 0.0, ""
         out.append(b)
-    return {"name": view["name"], "layout": view["layout"], "blocks": out}
+    return {"name": view["name"], "layout": view["layout"],
+            **{key: view[key] for key, _t, _d in W.LOOK_KEYS if key in view},
+            "blocks": out}
 
 
 def arrange(view, layout):
@@ -316,6 +335,25 @@ def cases() -> dict:
                               "layout": "grid", "at": NOW, "blocks": [
         {"type": "title", "text": "Ahead"},
         {"type": "number", "source": "todo_count", "value": "2"}]}
+    # The look (2026-11-14): a whole one, none of it on the lists, and half of it.
+    # The first must survive; the other two must draw in today's colours rather
+    # than blank - the same promise an unknown arrangement gets.
+    out["looked_widget"] = {"ok": True, "id": "w0abcdef123", "name": "Watchlist",
+                            "layout": "big", "accent": "violet", "shade": "clear",
+                            "contrast": "high", "at": NOW, "blocks": [
+        {"type": "title", "text": "Today"},
+        {"type": "number", "source": "todo_count", "private": False, "value": "3"},
+        {"type": "list", "source": "reminders",
+         "items": [{"text": "Call back", "when": "10:30"}]},
+        {"type": "button", "action": "timer"}]}
+    out["newer_pc_look"] = {"ok": True, "id": "w0fedcba98", "name": "From the future",
+                            "layout": "stack", "accent": "chartreuse", "shade": "frosted",
+                            "contrast": "ultra", "at": NOW, "blocks": [
+        {"type": "number", "source": "todo_count", "private": False, "value": "2"}]}
+    out["half_right_look"] = {"ok": True, "id": "w0112233445", "name": "Mixed",
+                              "layout": "stack", "accent": "amber", "shade": "frosted",
+                              "contrast": "high", "at": NOW, "blocks": [
+        {"type": "number", "source": "todo_count", "private": False, "value": "2"}]}
     cases = {}
     for name, ans in out.items():
         view = app_view(ans)
@@ -330,6 +368,16 @@ def render() -> str:
                    "docs/JARVIS-API.md section 86.",
         "actions": [{"id": k, "label": v} for k, v in W.ACTIONS.items()],
         "layouts": list(W.LAYOUTS),
+        # The look's closed lists, with the real values both apps must draw with
+        # (2026-11-14): the hexes and the alphas live in jarvis_widgets.py and
+        # nowhere else, so the phone and the desktop are held to the PC's table
+        # instead of each carrying its own opinion of what "violet" is.
+        "accents": [{"id": k, "label": v[0], "color": v[1]} for k, v in W.ACCENTS.items()],
+        "shades": [{"id": k, "label": v[0], "alpha": v[1], "surface_alpha": v[2]}
+                   for k, v in W.SHADES.items()],
+        "contrasts": [{"id": k, "label": v[0], "colors": v[1]} for k, v in W.CONTRASTS.items()],
+        "look_default": {"accent": W.DEFAULT_ACCENT, "shade": W.DEFAULT_SHADE,
+                         "contrast": W.DEFAULT_CONTRAST},
         "private_sources": PRIVATE,
         "hidden_words": HIDDEN,
         "limits": {"blocks": MAX_BLOCKS, "items": MAX_ITEMS, "name": W.MAX_NAME,

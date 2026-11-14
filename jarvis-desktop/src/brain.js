@@ -355,16 +355,21 @@ import {
   unspokenEnabled as todayUnspokenEnabled,
 } from "./today.js";
 import {
+  ACCENTS as WIDGETS_ACCENTS,
   ADD_LABEL as WIDGETS_ADD_LABEL,
+  CONTRASTS as WIDGETS_CONTRASTS,
   DELETE_LABEL as WIDGETS_DELETE_LABEL,
   DISCARD_LABEL as WIDGETS_DISCARD_LABEL,
   draftArgs as widgetDraftArgs,
   EMPTY as WIDGETS_EMPTY,
+  lookOf as widgetLookOf,
   MAKE_LABEL as WIDGETS_MAKE_LABEL,
   MAKING_LABEL as WIDGETS_MAKING_LABEL,
   MISSING as WIDGETS_MISSING,
+  paint as paintWidgetBoard,
   PREVIEW_TITLE as WIDGETS_PREVIEW_TITLE,
   readList as readWidgets,
+  SHADES as WIDGETS_SHADES,
 } from "./widget-board.js";
 import {
   CHOOSE_NOTE as PHOTO_NOTE,
@@ -10500,10 +10505,79 @@ async function loadWidgets() {
   if (state.view === "work") paintWidgets();
 }
 
+/* The look the owner is choosing for one preview (widget-board.js ACCENTS,
+   SHADES, CONTRASTS and applyLook, 2026-11-14). The look is a colour and an
+   alpha, so it CAN be chosen per widget - unlike the arrangement - and the
+   owner sees it before Add.
+
+   Kept per draft id in this page only: a read every 15 seconds must not undo a
+   choice the owner just made, and the choice is not saved anywhere until Add
+   sends it. It starts at the draft's own look, which is the default when the
+   owner never said a colour. */
+const widLooks = new Map();
+
+/** The look showing for one draft row: the owner's choice, else the draft's. */
+function widLookOf(w) {
+  return widLooks.get(w.id) || widgetLookOf(w.view);
+}
+
+/** One picker: its label, and one of the PC's closed lists, in its own words. */
+function widgetLookPicker(w, key, label, table, repaint) {
+  const id = `widgets-look-${key}-${w.id}`;
+  const box = el("label", "widgets-look-pick");
+  box.setAttribute("for", id);
+  box.append(el("span", "board-pick-label", label));
+  const pick = document.createElement("select");
+  pick.className = "board-pick";
+  pick.id = id;
+  const showing = widLookOf(w)[key];
+  for (const [choice, entry] of Object.entries(table)) {
+    pick.append(new Option(entry.label, choice, false, choice === showing));
+  }
+  pick.addEventListener("change", () => {
+    widLooks.set(w.id, { ...widLookOf(w), [key]: pick.value });
+    repaint();
+  });
+  box.append(pick);
+  return box;
+}
+
+/**
+ * A preview's look, under the preview: the widget itself drawn through the
+ * ONE `paint()` the widget window uses (so the preview cannot promise a colour
+ * the desktop does not draw), and three pickers that repaint it as they
+ * change. Its buttons are drawn disabled: this is a picture, and pressing one
+ * here would be pressing a widget that is not on your desktop yet.
+ */
+function widgetLookBlock(w) {
+  const wrap = el("div", "widgets-preview-block");
+  const card = el("div", "board-blocks widgets-preview");
+  wrap.append(card);
+  const picks = el("div", "widgets-look");
+  const shown = [];
+  const repaint = () => {
+    paintWidgetBoard(card, { ...w.view, ...widLookOf(w) }, { canPress: () => false });
+    for (const [key, pick] of shown) pick.value = widLookOf(w)[key];
+  };
+  for (const [key, label, table] of [
+    ["accent", "Colour", WIDGETS_ACCENTS],
+    ["shade", "See-through", WIDGETS_SHADES],
+    ["contrast", "Contrast", WIDGETS_CONTRASTS],
+  ]) {
+    const picker = widgetLookPicker(w, key, label, table, repaint);
+    picks.append(picker);
+    shown.push([key, picker.querySelector("select")]);
+  }
+  wrap.append(picks);
+  repaint();
+  return wrap;
+}
+
 function widgetRow(w, draft) {
   const actions = draft
     ? [button(WIDGETS_DISCARD_LABEL, () => widgetAct("brain_widgets_discard", { draft: w.id })),
-      button(WIDGETS_ADD_LABEL, () => widgetAct("brain_widgets_add", { draft: w.id }),
+      button(WIDGETS_ADD_LABEL, () => widgetAct("brain_widgets_add",
+        { draft: w.id, ...widLookOf(w) }),
         { live: true })]
     : [button(WIDGETS_DELETE_LABEL, () => widgetAct("brain_widgets_delete", { id: w.id }),
       { live: true, danger: true })];
@@ -10514,6 +10588,10 @@ function widgetRow(w, draft) {
     meta: [w.said, ...w.parts],
     actions,
   });
+  // The preview and its pickers, only where there is a shape to show: the PC
+  // sends the draft's own blocks, and while the private lists are hidden it
+  // blanks them, so a hidden row stays a sentence and nothing more.
+  if (draft && w.view && !(wid.view && wid.view.hidden)) item.append(widgetLookBlock(w));
   item.dataset.id = w.id;
   return item;
 }
@@ -10547,7 +10625,18 @@ function paintWidgets() {
     dom.widgetsMake.disabled = wid.making;
     dom.widgetsMake.textContent = wid.making ? WIDGETS_MAKING_LABEL : WIDGETS_MAKE_LABEL;
   }
+  // The preview's three pickers live in here, and a read every 15 seconds
+  // rebuilds this card. Without this, a picker the owner has open would close
+  // under their hands - the same hazard the menu switches had (2026-10-09,
+  // tests/a11y-forced-colors-and-focus.mjs), and the same fix: put the
+  // keyboard back on the control it was on.
+  const focused = document.activeElement && box.contains(document.activeElement)
+    ? document.activeElement.id : "";
   box.replaceChildren(...out);
+  if (focused) {
+    const again = document.getElementById(focused);
+    if (again && again.isConnected) again.focus();
+  }
 }
 
 async function widgetAct(command, args) {

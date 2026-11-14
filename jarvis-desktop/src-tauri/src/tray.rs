@@ -1,11 +1,11 @@
-//! The Windows notification-area icon: what Jarvis is doing, without a window.
+//! The Windows notification-area icon: what Atlas is doing, without a window.
 //!
 //! DESKTOP-BUILD build-order step 2. The icon is drawn here rather than loaded
 //! from a file because its colour is state, and the state comes off the event
 //! stream:
 //!
 //! ```text
-//! Jarvis — thinking                        (status, disabled)
+//! Atlas — thinking                        (status, disabled)
 //! Power: quiet · set by hand              (status, disabled)
 //! Change power mode ▸ Active / Quiet / Standby
 //! ─────────────────────────────
@@ -13,19 +13,19 @@
 //! Mute spoken interruptions until tomorrow
 //! Stop everything
 //! ─────────────────────────────
-//! Start Jarvis Live
+//! Start Atlas Live
 //! ─────────────────────────────
-//! Show or hide the Jarvis bar              Alt+Space
+//! Show or hide the Atlas bar              Alt+Space
 //! Show the HUD window
 //! Open the Brain
 //! Settings and help…
 //! More… ▸ Start Watch with me · Show or hide the widget · Show or hide the
 //!         floating face · Floating face: bigger · Floating face: smaller ·
-//!         Chat history… · Faces… · Everything Jarvis can do…
+//!         Chat history… · Faces… · Everything Atlas can do…
 //!         Backend: not supervised · Reconnect the event stream · Run a status
-//!         check · Not checked yet · Update Jarvis to <version>
+//!         check · Not checked yet · Update Atlas to <version>
 //! ─────────────────────────────
-//! Quit Jarvis
+//! Quit Atlas
 //! ```
 //!
 //! ## Two update rows: one acts, one reports
@@ -42,7 +42,7 @@
 //! local clock, and invents neither.
 //!
 //! Five groups and four separators, in the order the questions get asked: what
-//! is Jarvis, what wants me, Jarvis Live, where do I look, and the one row that
+//! is Atlas, what wants me, Atlas Live, where do I look, and the one row that
 //! ends the session. `ia.mjs` counts the separators, so a row added without
 //! thinking about the groups is caught rather than silently making the menu
 //! longer again.
@@ -61,7 +61,7 @@
 //! Pressing it **updates both halves**: `update::install_from_tray` runs the same
 //! `update_both` the Settings Install press and an answered chat card run - the
 //! backend is patched first, then Jarvis Desktop installs - after turning the
-//! row into "Updating Jarvis to <version>…" so a second press cannot start a
+//! row into "Updating Atlas to <version>…" so a second press cannot start a
 //! second run. Only where the backend half cannot run at all (the two folders
 //! are not set, or the patch program is missing) does it fall back to the
 //! desktop-only `install_update`, and then it says plainly that the BACKEND was
@@ -75,7 +75,7 @@
 //! because the new version is the running one - the row cannot linger after an
 //! install.
 //!
-//! Jarvis Live keeps a group of its own: it sat right under "Stop everything",
+//! Atlas Live keeps a group of its own: it sat right under "Stop everything",
 //! and a click one row off started or ended it (the Live review, 2026-09-28).
 //! Quit keeps the separator above it for the same kind of reason - it is the one
 //! row that ends the session.
@@ -155,7 +155,7 @@ const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
 const ID_STOP_EVERYTHING: &str = "stop-everything";
-/// Jarvis Live (live.rs): start or end the voice conversation on this PC.
+/// Atlas Live (live.rs): start or end the voice conversation on this PC.
 const ID_LIVE: &str = "jarvis-live";
 /// Watch with me (look.rs): start or stop the session on this PC.
 const ID_WATCH: &str = "jarvis-watch";
@@ -171,7 +171,7 @@ const ID_CHAT_HISTORY: &str = "chat-history";
 /// ask: "have multiple conversation windows open at once").
 const ID_NEW_CHAT_WINDOW: &str = "new-chat-window";
 const ID_SHOW_FACES: &str = "show-faces";
-/// "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, 2026-10-08): the
+/// "Everything Atlas can do" (docs/FEATURES-LIST-DESIGN.md, 2026-10-08): the
 /// whole feature set, in plain words, read-only.
 const ID_SHOW_FEATURES: &str = "show-features";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
@@ -191,7 +191,7 @@ const ID_UPDATE: &str = "update";
 /// "Cannot check · <why>". Always in the menu, always disabled - it reports
 /// the four-state truth from `update.rs` and never acts.
 const ID_UPDATE_STATE: &str = "update-state";
-/// "Setup unfinished - 9 of 25" (Wave B, 2026-11-03): the "Personalize Jarvis"
+/// "Setup unfinished - 9 of 25" (Wave B, 2026-11-03): the "Personalize Atlas"
 /// quiz is not finished. Like the update row it is ABSENT when there is
 /// nothing to do, and it is driven by `setup_offer`'s state - never fetched
 /// from here.
@@ -220,7 +220,7 @@ struct Rows {
     approvals: MenuItem<tauri::Wry>,
     waiting: MenuItem<tauri::Wry>,
     mute: MenuItem<tauri::Wry>,
-    /// "Start Jarvis Live" / "End Jarvis Live".
+    /// "Start Atlas Live" / "End Atlas Live".
     live: MenuItem<tauri::Wry>,
     watch: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
@@ -249,7 +249,7 @@ struct Rows {
 }
 
 /// What was last painted: the two colours, the notch count, the state, and
-/// whether Jarvis Live's mark was on it.
+/// whether Atlas Live's mark was on it.
 type PaintKey = (Rgb, Rgb, u32, &'static str, bool, bool);
 
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
@@ -283,7 +283,7 @@ pub struct TrayFlashGovernor(Mutex<spec::FlashGovernor>);
 /// icon for jarvis I want a menu option that appears if there is an update to
 /// jarvis"*. So **absence is the no-update state** - not a greyed-out row - and
 /// the label is the plain instruction, naming the version when the check gave
-/// one ("Update Jarvis to 0.2.411"), because the row is also the only warning
+/// one ("Update Atlas to 0.2.411"), because the row is also the only warning
 /// the owner gets before pressing it.
 ///
 /// Pure on purpose: this is the whole rule, and a rule this small is the part
@@ -294,9 +294,9 @@ fn update_row(available: Option<&str>) -> Option<String> {
     // A check can know "something newer exists" without a version worth
     // printing; the row still appears, in plain words.
     if version.is_empty() {
-        return Some("Update Jarvis".to_string());
+        return Some("Update Atlas".to_string());
     }
-    Some(format!("Update Jarvis to {version}"))
+    Some(format!("Update Atlas to {version}"))
 }
 
 /// The "checked ..." half of the update status row, or `None` when there is no
@@ -464,7 +464,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // "Stop everything" (continuity audit 2026-09-26): the same as the
     // hotkey (`commands::stop_everything_now`), for a mouse, or when another
     // program holds the key. Never greyed: not by a stale link, App lock or
-    // a waiting card - it only makes Jarvis stop.
+    // a waiting card - it only makes Atlas stop.
     let stop_everything = MenuItem::with_id(
         app,
         ID_STOP_EVERYTHING,
@@ -473,7 +473,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         accel(app, "stop_everything").as_deref(),
     )?;
 
-    // Jarvis Live: never greyed - starting is refused with a reason (a stale
+    // Atlas Live: never greyed - starting is refused with a reason (a stale
     // link, App lock, no voice print), and ending always works. Both rows print
     // their hotkey when the owner has set one: the tray is where most people
     // learn a key exists (see the shield icon's own note), and these two shipped
@@ -523,14 +523,14 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_features = MenuItem::with_id(
         app,
         ID_SHOW_FEATURES,
-        "Everything Jarvis can do…",
+        "Everything Atlas can do…",
         true,
         None::<&str>,
     )?;
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
-        "Show or hide the Jarvis bar",
+        "Show or hide the Atlas bar",
         true,
         // Read, not hardcoded. The tray is the fallback surface for exactly
         // the case where a hotkey was refused or rebound, so a tray that
@@ -593,7 +593,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         // starting text.
         update_label
             .clone()
-            .unwrap_or_else(|| "Update Jarvis".to_string()),
+            .unwrap_or_else(|| "Update Atlas".to_string()),
         true,
         None::<&str>,
     )?;
@@ -612,7 +612,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
-    // The "Personalize Jarvis" row (Wave B, 2026-11-03). Built like any other
+    // The "Personalize Atlas" row (Wave B, 2026-11-03). Built like any other
     // row and parented into "More…" only while the quiz is unfinished - at a
     // fresh launch the state has not been read yet, so it starts absent and
     // `on_setup_state` puts it in when a read says so. The same handle is
@@ -640,7 +640,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Jarvis", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Atlas", true, None::<&str>)?;
 
     // The one submenu the tray trim added (the owner: the menu had "way too
     // many options ... only put the most important ones, it should be half this
@@ -699,7 +699,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,
         &[
-            // What Jarvis is. Both rows are disabled: they report, they do
+            // What Atlas is. Both rows are disabled: they report, they do
             // not offer.
             &activity,
             &power,
@@ -712,7 +712,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &mute,
             &stop_everything,
             &PredefinedMenuItem::separator(app)?,
-            // Jarvis Live on its own line, away from "Stop everything" (the
+            // Atlas Live on its own line, away from "Stop everything" (the
             // review of 2026-09-28: a click one row off started or ended it).
             &live,
             &PredefinedMenuItem::separator(app)?,
@@ -794,15 +794,15 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 /// * **`working` has no binding.** `jarvis_events.ACTIVITY` is `idle,
 ///   listening, thinking, speaking, working, error`; the spec's states are
 ///   `idle, listening, thinking, speaking, approval, standby, error`. `working`
-///   falls to `thinking`, the nearest bound state — Jarvis is busy and not
+///   falls to `thinking`, the nearest bound state — Atlas is busy and not
 ///   talking. Bind a `working` state in the spec and this line stops guessing.
 /// * **`quiet` has no binding either.** The spec has `standby` but no `quiet`,
 ///   so a hand-set Quiet shows the `standby` colour, and only while nothing is
-///   actually happening: if Jarvis is mid-turn the activity colour wins,
+///   actually happening: if Atlas is mid-turn the activity colour wins,
 ///   because that is the question the spec binds colour to.
 ///
 /// Precedence, highest first: an error, then anything waiting on the human,
-/// then what Jarvis is doing, then whether it is awake at all. Approvals sit
+/// then what Atlas is doing, then whether it is awake at all. Approvals sit
 /// above activity deliberately — a tray icon exists to be glanced at, and the
 /// only thing on this bus that needs the human is an approval.
 fn spec_state(link: &LinkState) -> &'static str {
@@ -811,7 +811,7 @@ fn spec_state(link: &LinkState) -> &'static str {
     // owner's rule (2026-09-28) for every face surface, and the faces'
     // own (jarvis-link.js surfaceState): the stream keeps the last activity
     // it heard when it drops, so without this the hollow icon could stay in
-    // the colour of "speaking" or "waiting on you" for as long as Jarvis
+    // the colour of "speaking" or "waiting on you" for as long as Atlas
     // was gone.
     if !link.connected {
         return "standby";
@@ -842,7 +842,7 @@ fn spec_state(link: &LinkState) -> &'static str {
     // the two never contradict each other because a banked system with budget
     // to spend is not a state the arbiter can produce.
     //
-    // One exception (owner, 2026-09-29): a focus session puts Jarvis on Quiet,
+    // One exception (owner, 2026-09-29): a focus session puts Atlas on Quiet,
     // and the animal then shows its focus buddy, awake and working beside the
     // owner - so the icon reads "idle", the same as the faces
     // (jarvis-link.js surfaceState). Only that Quiet: a Quiet the owner set by
@@ -925,7 +925,7 @@ fn clock() -> f64 {
 /// Connectivity is carried by the *shape* and state by the colour, on purpose.
 /// Giving "disconnected" a colour of its own would mean choosing one, and the
 /// spec has no binding for it — a hollow icon says "nothing is coming through"
-/// without claiming to know what Jarvis is doing.
+/// without claiming to know what Atlas is doing.
 fn render_icon(app: &AppHandle, link: &LinkState) -> Option<Image<'static>> {
     let resolved = governed_resolve(app, link);
     Some(paint(link, resolved))
@@ -1037,7 +1037,7 @@ fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> I
     Image::new_owned(pixels, ICON_SIZE, ICON_SIZE)
 }
 
-/// Jarvis Live's colour on the icon: the sign's red dot (theme.css `--bad`
+/// Atlas Live's colour on the icon: the sign's red dot (theme.css `--bad`
 /// in the default theme), with a white ring so it reads on a dark taskbar
 /// and a light one alike.
 const LIVE_DOT: Rgb = Rgb {
@@ -1046,7 +1046,7 @@ const LIVE_DOT: Rgb = Rgb {
     b: 0x4D,
 };
 
-/// Paints Jarvis Live's mark - a small red dot with a light ring - over the
+/// Paints Atlas Live's mark - a small red dot with a light ring - over the
 /// lower-right of the icon, while Live is on on this PC. Over whatever the
 /// disc drew there: the mark is what says the microphone is open.
 fn mark_live(pixels: &mut [u8]) {
@@ -1097,7 +1097,7 @@ fn mark_live(pixels: &mut [u8]) {
 
 /// Watch with me's mark on the icon: a small light "eye" (a ring with a dark
 /// pupil) in the upper right - "the eye on the tray icon" of the design - so
-/// the sign that Jarvis is watching is there whatever window is in front.
+/// the sign that Atlas is watching is there whatever window is in front.
 fn mark_watching(pixels: &mut [u8]) {
     let size = ICON_SIZE as f64;
     let (cx, cy) = (size - 7.0, 7.0);
@@ -1339,7 +1339,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         // `resolved.b` is in the key because `draw` uses it for the rim: a
         // rebind that lands on the same primary but a different secondary
         // repainted nothing and kept the old edge.
-        // Jarvis Live on this PC adds its mark (the design's "a Live mark on
+        // Atlas Live on this PC adds its mark (the design's "a Live mark on
         // the tray icon", missing until the review of 2026-09-28).
         let key = (
             resolved.a,
@@ -1369,8 +1369,8 @@ fn repaint(app: &AppHandle, link: &LinkState) {
 fn activity_label(link: &LinkState) -> String {
     if !link.connected {
         return match &link.error {
-            Some(err) => format!("Jarvis — offline: {}", first_sentence(err)),
-            None => "Jarvis — connecting…".to_string(),
+            Some(err) => format!("Atlas — offline: {}", first_sentence(err)),
+            None => "Atlas — connecting…".to_string(),
         };
     }
     // Connected but stale: the stream is up and `/api/pending` could not be
@@ -1378,18 +1378,18 @@ fn activity_label(link: &LinkState) -> String {
     // "Stale — reconnecting" in amber for exactly this; the tray used to say
     // "idle" as though nothing were wrong.
     if link.stale {
-        return "Jarvis — stale, reconnecting".to_string();
+        return "Atlas — stale, reconnecting".to_string();
     }
     match link.activity.as_str() {
-        "idle" => "Jarvis — idle".to_string(),
-        other => format!("Jarvis — {other}"),
+        "idle" => "Atlas — idle".to_string(),
+        other => format!("Atlas — {other}"),
     }
 }
 
 fn power_label(link: &LinkState) -> String {
     // `set_by` is "override" when a human set the mode, and schedule / idle /
     // auto when the machine did. Saying which matters: JARVIS-API §4 warns that
-    // talking to Jarvis clears the second kind of Quiet and not the first.
+    // talking to Atlas clears the second kind of Quiet and not the first.
     let by = match link.power_set_by.as_deref() {
         Some("override") => " · set by hand",
         Some("schedule") => " · quiet hours",
@@ -1491,9 +1491,9 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
 /// The Live row's words: what clicking it does.
 fn live_label() -> &'static str {
     if crate::live::on_here() {
-        "End Jarvis Live"
+        "End Atlas Live"
     } else {
-        "Start Jarvis Live"
+        "Start Atlas Live"
     }
 }
 
@@ -1525,7 +1525,7 @@ pub fn watch_changed(app: &AppHandle) {
     }
 }
 
-/// Jarvis Live started or ended here: the row, the tooltip and the icon's
+/// Atlas Live started or ended here: the row, the tooltip and the icon's
 /// Live mark follow.
 pub fn live_changed(app: &AppHandle) {
     if let Some(rows) = app
@@ -1551,10 +1551,10 @@ fn tooltip(app: &AppHandle, link: &LinkState) -> String {
         activity_label(link)
     }];
     if crate::live::on_here() {
-        parts.push("Jarvis Live is on".to_string());
+        parts.push("Atlas Live is on".to_string());
     }
     if crate::look::on_here() {
-        parts.push("Jarvis is watching your screen".to_string());
+        parts.push("Atlas is watching your screen".to_string());
     }
     // Not while stale: power, approvals and the brief would be last-known
     // facts presented as current ones - the phone drops the same extras.
@@ -1611,7 +1611,7 @@ pub fn hotkeys_changed(app: &AppHandle) {
     // What the OS actually ACCEPTED, from the state `apply()` has just written:
     // a row must never print a key that was refused, or it points the owner at
     // the one key that cannot work. That is not hypothetical - this PC's
-    // Alt+Space is held by another program, and the Jarvis bar's row said
+    // Alt+Space is held by another program, and the Atlas bar's row said
     // "Alt+Space" while the key was refused (2026-10-08).
     let applied = app.state::<crate::hotkeys::HotkeyState>().snapshot();
     let registered = |id: &str| applied.iter().find(|b| b.id == id).map(|b| b.registered);
@@ -1740,7 +1740,7 @@ pub fn update_started(app: &AppHandle, version: &str) {
     {
         let _ = rows
             .update
-            .set_text(format!("Updating Jarvis to {version}…"));
+            .set_text(format!("Updating Atlas to {version}…"));
         let _ = rows.update.set_enabled(false);
     }
 }
@@ -1858,8 +1858,8 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
-                    "The Jarvis bar could not open.",
+                    "Atlas",
+                    "The Atlas bar could not open.",
                     &err.to_string(),
                     commands::Details::Log,
                 );
@@ -1871,7 +1871,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         // Speech first, then the PC; a notification says what was stopped.
         ID_STOP_EVERYTHING => commands::stop_everything_now(app),
 
-        // Start or end Jarvis Live on this PC (live.rs).
+        // Start or end Atlas Live on this PC (live.rs).
         ID_LIVE => crate::live::toggle_from_tray(app),
         // Start or stop Watch with me on this PC (look.rs).
         ID_WATCH => crate::look::toggle_from_tray(app),
@@ -1881,7 +1881,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: HUD unavailable: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
+                    "Atlas",
                     "The HUD could not open.",
                     &err.to_string(),
                     commands::Details::Log,
@@ -1894,7 +1894,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] faces unavailable: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
+                    "Atlas",
                     "The faces window could not open.",
                     &err.to_string(),
                     commands::Details::Log,
@@ -1907,8 +1907,8 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] feature list unavailable: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
-                    "The list of what Jarvis can do could not open.",
+                    "Atlas",
+                    "The list of what Atlas can do could not open.",
                     &err.to_string(),
                     commands::Details::Log,
                 );
@@ -1920,7 +1920,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: the Brain would not open: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
+                    "Atlas",
                     "The Brain could not open.",
                     &err.to_string(),
                     commands::Details::Log,
@@ -1937,7 +1937,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: a new chat window would not open: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
+                    "Atlas",
                     "A new chat window could not open.",
                     &err,
                     commands::Details::Log,
@@ -1950,7 +1950,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: chat history would not open: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
+                    "Atlas",
                     "Chat history could not open.",
                     &err.to_string(),
                     commands::Details::Log,
@@ -2003,8 +2003,8 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
-                    "The Jarvis bar could not open.",
+                    "Atlas",
+                    "The Atlas bar could not open.",
                     &err.to_string(),
                     commands::Details::Log,
                 );
@@ -2029,7 +2029,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                     eprintln!("[jarvis] tray: mute failed: {err}");
                     commands::notify_failed(
                         &app,
-                        "Jarvis",
+                        "Atlas",
                         "Mute could not be changed.",
                         &err,
                         commands::Details::Log,
@@ -2047,12 +2047,12 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 match commands::set_power_mode(&app, mode).await {
-                    Ok(message) => commands::notify(&app, "Jarvis", &first_sentence(&message)),
+                    Ok(message) => commands::notify(&app, "Atlas", &first_sentence(&message)),
                     Err(err) => {
                         eprintln!("[jarvis] tray: power mode failed: {err}");
                         commands::notify_failed(
                             &app,
-                            "Jarvis",
+                            "Atlas",
                             "The power mode could not be changed.",
                             &err,
                             commands::Details::Log,
@@ -2086,7 +2086,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 eprintln!("[jarvis] tray: settings unavailable: {err}");
                 commands::notify_failed(
                     app,
-                    "Jarvis",
+                    "Atlas",
                     "Settings could not open.",
                     &err.to_string(),
                     commands::Details::Log,
@@ -2097,11 +2097,11 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_RECONNECT => crate::stream::kick(app),
 
         // "Setup unfinished - 9 of 25" (Wave B, 2026-11-03): Settings, at the
-        // "Personalize Jarvis" card. Navigation only - the card's own Apply is
+        // "Personalize Atlas" card. Navigation only - the card's own Apply is
         // still the one write, and this row answers no question.
         ID_SETUP => {
             if let Err(err) = windows::show_settings_at(app, "personalize-jarvis") {
-                eprintln!("[jarvis] tray: the Personalize Jarvis card could not open: {err}");
+                eprintln!("[jarvis] tray: the Personalize Atlas card could not open: {err}");
                 commands::notify_failed(
                     app,
                     crate::setup_offer::TITLE,
@@ -2147,7 +2147,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 /// icon while the bar was already up did nothing visible: the owner's own
 /// request of 2026-10-10, "open jarvis bar ... should also hide it if it is
 /// clicked again after it pops up". It now goes through the one toggle every
-/// other route uses (the `Alt+Space` hotkey, "open the Jarvis bar" said out
+/// other route uses (the `Alt+Space` hotkey, "open the Atlas bar" said out
 /// loud, and the tray menu's own Show/Hide row), so all four agree. The caret
 /// is placed by `toggle_quickbar` itself, which is why there is no
 /// `emit_quickbar` here any more. Not emitted on Linux.
@@ -2167,13 +2167,13 @@ fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
     }
 }
 
-/// The tray's "Update Jarvis to <version>" row: the same both-halves update the
+/// The tray's "Update Atlas to <version>" row: the same both-halves update the
 /// Settings Install press runs, from the context menu. Where the backend half
 /// cannot run on this PC, `install_from_tray` still says so and runs the desktop
 /// half alone rather than pretending.
 ///
 /// Off the main thread on purpose. The press must turn the row into "Updating
-/// Jarvis to <version>…" (so a second press cannot start a second run), and
+/// Atlas to <version>…" (so a second press cannot start a second run), and
 /// Tauri posts every menu call to the main thread and waits for it - so doing
 /// that from inside a menu handler would wait on the thread that is running it.
 fn run_update_from_tray(app: &AppHandle) {
@@ -2209,13 +2209,13 @@ fn run_backend_action(app: &AppHandle) {
                 crate::crash_notes::record("backend", "start", &raw);
                 commands::notify_failed(
                     &handle,
-                    "Jarvis — backend",
+                    "Atlas — backend",
                     "The backend could not be started.",
                     &raw,
                     commands::Details::CrashNotes,
                 );
             }
-            None => commands::notify(&handle, "Jarvis — backend", &outcome),
+            None => commands::notify(&handle, "Atlas — backend", &outcome),
         }
         // The row's label is derived from state that just changed.
         let link = handle.state::<crate::stream::StreamState>().link();
@@ -2234,14 +2234,14 @@ fn run_status_check(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         match commands::check_server_health(handle.clone()).await {
             Ok(report) => {
-                commands::notify(&handle, "Jarvis — Status Check", &report.summary);
+                commands::notify(&handle, "Atlas — Status Check", &report.summary);
                 crate::emit_all(&handle, events::HEALTH_REPORT, report);
             }
             Err(err) => {
                 eprintln!("[jarvis] tray: status check failed: {err}");
                 commands::notify_failed(
                     &handle,
-                    "Jarvis — Status Check",
+                    "Atlas — Status Check",
                     "The status check could not finish.",
                     &err,
                     commands::Details::Log,
@@ -2305,7 +2305,7 @@ mod tests {
         assert_eq!(spec_state(&l), "standby", "quiet borrows standby's binding");
 
         // Something happening outranks being quiet: the spec binds colour to
-        // activity, and a Quiet Jarvis mid-answer is still answering.
+        // activity, and a Quiet Atlas mid-answer is still answering.
         l.activity = "speaking".into();
         assert_eq!(spec_state(&l), "speaking");
 
@@ -2381,7 +2381,7 @@ mod tests {
         l.attention.pending = 3;
         assert_eq!(spec_state(&l), "banked");
 
-        // Foreground wins: the budget governs what Jarvis starts, not what it
+        // Foreground wins: the budget governs what Atlas starts, not what it
         // is in the middle of.
         l.activity = "speaking".into();
         assert_eq!(spec_state(&l), "speaking");
@@ -2559,7 +2559,7 @@ mod tests {
     #[test]
     fn labels_cover_the_offline_case() {
         let cold = LinkState::default();
-        assert_eq!(activity_label(&cold), "Jarvis — connecting…");
+        assert_eq!(activity_label(&cold), "Atlas — connecting…");
         assert_eq!(approvals_label(&cold), "Approvals: unknown while offline");
         // Nothing has been read, so the row says so rather than "nothing
         // waiting" over a digest that was never fetched.
@@ -2571,14 +2571,14 @@ mod tests {
             ),
             ..LinkState::default()
         };
-        assert!(activity_label(&down).starts_with("Jarvis — offline: could not reach"));
+        assert!(activity_label(&down).starts_with("Atlas — offline: could not reach"));
         assert!(activity_label(&down).chars().count() < 90);
 
         // Connected, but the queue could not be confirmed: not "idle", and
         // not "offline" either, and any count is marked as last known.
         let mut stale = link();
         stale.stale = true;
-        assert_eq!(activity_label(&stale), "Jarvis — stale, reconnecting");
+        assert_eq!(activity_label(&stale), "Atlas — stale, reconnecting");
         assert_eq!(
             approvals_label(&stale),
             "Approvals: unknown until the link catches up"
@@ -2889,13 +2889,13 @@ mod tests {
         assert_eq!(update_row(None), None, "a row with no update to offer");
         assert_eq!(
             update_row(Some("0.2.411")).as_deref(),
-            Some("Update Jarvis to 0.2.411"),
+            Some("Update Atlas to 0.2.411"),
             "the row must name the version the owner is about to install"
         );
         // A check can answer "something newer exists" without a label worth
         // printing; the row still belongs in the menu, in plain words.
-        assert_eq!(update_row(Some("")).as_deref(), Some("Update Jarvis"));
-        assert_eq!(update_row(Some("   ")).as_deref(), Some("Update Jarvis"));
+        assert_eq!(update_row(Some("")).as_deref(), Some("Update Atlas"));
+        assert_eq!(update_row(Some("   ")).as_deref(), Some("Update Atlas"));
     }
 
     /// Task-50 (Wave 12): the report row's status, built the way `update.rs`

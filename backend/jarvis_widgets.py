@@ -202,7 +202,66 @@ LAYOUT_PARTS = dict(zip(LAYOUTS, (
     "Arranged: one heading, one thing and the buttons",
 )))
 
-TOP_KEYS = ("name", "layout", "blocks")
+#: The eight accents a widget may wear (2026-11-14): a CLOSED list of NAMED
+#: colours. Unlike a layout, an accent is a runtime value, so one CAN be chosen
+#: per widget - which is exactly why this was a separate owner decision from the
+#: 2026-10-30 arrangements and not part of them. The model maps a colour word the
+#: owner said onto one of these names; a hex from a model is refused, because a
+#: widget nobody can read is worse than a widget in the wrong colour.
+#: Every hex is asserted legible (WCAG AA, 4.5:1) against both the background and
+#: the panel it is written on, in both contrasts, by backend/test_widgets.py.
+ACCENTS = {
+    "cyan": ("Cyan", "#63F7FF"),        # the default: every widget has drawn in it until now
+    "sky": ("Sky", "#8CC9FF"),
+    "violet": ("Violet", "#BFA6FF"),
+    "pink": ("Pink", "#FF93C7"),
+    "amber": ("Amber", "#FFC661"),
+    "lime": ("Lime", "#B9E86B"),
+    "orange": ("Orange", "#FF9E5C"),
+    "mono": ("Mono", "#E6EEF7"),
+}
+
+#: How see-through a widget is: (label, background alpha, panel alpha). Alpha is
+#: the ONLY transparency there is - a RemoteViews layout has no backdrop blur and
+#: neither has a webview - so these words say "see-through" and never "frosted"
+#: or "glass". Text never gets an alpha: a see-through widget still has to be
+#: readable, which is the whole point of the two contrasts.
+SHADES = {
+    "solid": ("Solid", 255, 255),
+    "half": ("Half see-through", 191, 159),
+    "clear": ("See-through", 128, 102),
+}
+
+#: The two palettes: (label, the five colours). "normal" is exactly what every
+#: widget has drawn until now, so a widget with no look key is unchanged.
+CONTRASTS = {
+    "normal": ("Normal", {"bg": "#04070C", "surface": "#0E1822",
+                          "text_hi": "#E6EEF7", "text_muted": "#93A6BA"}),
+    "high": ("High contrast", {"bg": "#000000", "surface": "#262626",
+                               "text_hi": "#FFFFFF", "text_muted": "#E0E0E0"}),
+}
+
+DEFAULT_ACCENT = "cyan"
+DEFAULT_SHADE = "solid"
+DEFAULT_CONTRAST = "normal"
+
+#: (key, its closed list, its default) - the three keys a widget's look has, in
+#: one place, so validation, the stored row, `show` and the apps' override cannot
+#: disagree about which keys exist or what an absent one means.
+LOOK_KEYS = (
+    ("accent", ACCENTS, DEFAULT_ACCENT),
+    ("shade", SHADES, DEFAULT_SHADE),
+    ("contrast", CONTRASTS, DEFAULT_CONTRAST),
+)
+
+#: What each look says when it is not the one the owner got by saying nothing.
+LOOK_REFUSED = {
+    "accent": "That is not one of the colours a widget can wear.",
+    "shade": "That is not one of the ways a widget can be see-through.",
+    "contrast": "That is not one of the contrasts a widget can have.",
+}
+
+TOP_KEYS = ("name", "layout", "blocks", "accent", "shade", "contrast")
 #: Every key any block may have. A key outside this is refused outright.
 ALL_KEYS = tuple(sorted({k for keys in BLOCK_KEYS.values() for k in keys}))
 
@@ -420,6 +479,15 @@ def validate(obj) -> dict:
     layout = obj.get("layout", DEFAULT_LAYOUT)
     if not isinstance(layout, str) or layout not in LAYOUTS:
         raise Refused("the widget is not one of the arrangements a widget can have")
+    # The look, the same way and for the same reason: absent means today's
+    # colours (so a widget saved before 2026-11-14 is unchanged), and PRESENT and
+    # off the list is a refusal, never a quiet fall back to some other colour.
+    look = {}
+    for key, table, default in LOOK_KEYS:
+        got = obj.get(key, default)
+        if not isinstance(got, str) or got not in table:
+            raise Refused(f"the widget is not one a widget can have ({key})")
+        look[key] = got
     name = clean_text(obj["name"], MAX_NAME, "the name")
     blocks = obj["blocks"]
     if not isinstance(blocks, list) or not blocks:
@@ -439,7 +507,7 @@ def validate(obj) -> dict:
     if not name:
         first = next((b for b in out if b["type"] == "title"), None)
         name = first["text"][:MAX_NAME] if first else "My widget"
-    return {"name": name, "layout": layout, "blocks": out}
+    return {"name": name, "layout": layout, **look, "blocks": out}
 
 
 def parse_model(raw) -> dict:
@@ -462,9 +530,10 @@ def describe(widget: dict) -> str:
         else:
             parts.append(SOURCES[b["source"]].describe)
     if not parts:
-        return f"A widget called “{widget.get('name', '')}”{_layout_words(widget)}."
+        return f"A widget called “{widget.get('name', '')}”{_layout_words(widget)}{_look_words(widget)}."
     body = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
-    return f"A widget called “{widget.get('name', '')}” showing {body}{_layout_words(widget)}."
+    return (f"A widget called “{widget.get('name', '')}” showing {body}"
+            f"{_layout_words(widget)}{_look_words(widget)}.")
 
 
 def _layout_words(widget: dict) -> str:
@@ -473,11 +542,45 @@ def _layout_words(widget: dict) -> str:
     return LAYOUT_WORDS.get(widget.get("layout") or DEFAULT_LAYOUT, "")
 
 
+def _look_words(widget: dict) -> str:
+    """The look's own words for the preview sentence: nothing at all for the
+    look a widget gets by saying nothing, so a widget made before 2026-11-14
+    reads exactly as it did. Only the values that DIFFER from the default are
+    named - "cyan, solid, normal" is not something the owner asked for."""
+    bits = []
+    accent = widget.get("accent") or DEFAULT_ACCENT
+    shade = widget.get("shade") or DEFAULT_SHADE
+    contrast = widget.get("contrast") or DEFAULT_CONTRAST
+    if accent in ACCENTS and accent != DEFAULT_ACCENT:
+        bits.append(f"in {ACCENTS[accent][0].lower()}")
+    if shade in SHADES and shade != DEFAULT_SHADE:
+        bits.append(SHADES[shade][0].lower())
+    if contrast in CONTRASTS and contrast != DEFAULT_CONTRAST:
+        bits.append(CONTRASTS[contrast][0].lower())
+    return (", " + ", ".join(bits)) if bits else ""
+
+
+def _look_parts(widget: dict) -> list:
+    """One line per look value that is not the default, for the preview list."""
+    out = []
+    accent = widget.get("accent") or DEFAULT_ACCENT
+    shade = widget.get("shade") or DEFAULT_SHADE
+    contrast = widget.get("contrast") or DEFAULT_CONTRAST
+    if accent in ACCENTS and accent != DEFAULT_ACCENT:
+        out.append(f"Colour: {ACCENTS[accent][0]}")
+    if shade in SHADES and shade != DEFAULT_SHADE:
+        out.append(f"Background: {SHADES[shade][0]}")
+    if contrast in CONTRASTS and contrast != DEFAULT_CONTRAST:
+        out.append(f"Contrast: {CONTRASTS[contrast][0]}")
+    return out
+
+
 def parts(widget: dict) -> list:
     """One plain line per part, in order - the preview both apps show under
     the sentence, before Add. The arrangement comes FIRST: both apps show at
     most MAX_BLOCKS lines, so a line added at the end could be the one cut."""
     out = [LAYOUT_PARTS.get(widget.get("layout") or DEFAULT_LAYOUT, LAYOUT_PARTS[DEFAULT_LAYOUT])]
+    out.extend(_look_parts(widget))
     for b in widget.get("blocks") or []:
         t = b.get("type")
         if t == "title":
@@ -511,6 +614,13 @@ SCHEMA = {
         # `validate` still defaulting it is only for widgets saved before
         # 2026-10-30, which have no key and must keep drawing as they did.
         "layout": {"type": "string", "enum": list(LAYOUTS)},
+        # Optional on purpose, and NOT in `required`: a look is only there when
+        # the owner asked for one, so a plain "my next 3 reminders" comes back
+        # with no colour keys at all and draws in today's cyan. Required here
+        # would make the model invent a colour for every widget.
+        "accent": {"type": "string", "enum": list(ACCENTS)},
+        "shade": {"type": "string", "enum": list(SHADES)},
+        "contrast": {"type": "string", "enum": list(CONTRASTS)},
         "blocks": {
             "type": "array", "minItems": 1, "maxItems": MAX_BLOCKS,
             "items": {
@@ -552,7 +662,14 @@ def prompt(words: str) -> str:
         f"{layouts}\n"
         f"At most {MAX_BLOCKS} blocks and {MAX_BUTTONS} buttons. Give the widget a short "
         "name. If the request asks for something not on these lists, leave it out.\n"
-        'Answer only JSON: {"name": "...", "layout": "...", "blocks": [...]}.\n\n'
+        "If - and ONLY if - the request asks for a colour, for how see-through it is, or "
+        "for high contrast, also give:\n"
+        f"  - \"accent\", one of: {', '.join(f'{k} ({v[0]})' for k, v in ACCENTS.items())}\n"
+        f"  - \"shade\", one of: {', '.join(f'{k} ({v[0]})' for k, v in SHADES.items())}\n"
+        f"  - \"contrast\", one of: {', '.join(f'{k} ({v[0]})' for k, v in CONTRASTS.items())}\n"
+        "Leave all three out when no look was asked for, and never invent one.\n"
+        'Answer only JSON: {"name": "...", "layout": "...", "blocks": [...]} - with '
+        '"accent", "shade" or "contrast" beside them only when a look was asked for.\n\n'
         f"The owner's request: {words}"
     )
 
@@ -679,6 +796,9 @@ class Store:
                 raw = {"name": row.get("name"), "blocks": row.get("blocks")}
                 if "layout" in row:
                     raw["layout"] = row["layout"]
+                for key, _table, _default in LOOK_KEYS:
+                    if key in row:
+                        raw[key] = row[key]
                 w = validate(raw)
             except Refused:
                 continue        # checked again on every read: a hand edit smuggles nothing
@@ -745,9 +865,11 @@ class Store:
         with self._lock:
             return self._drafts.pop(did, None) is not None if isinstance(did, str) else False
 
-    def keep(self, did) -> tuple:
+    def keep(self, did, look: Optional[dict] = None) -> tuple:
         """(widget, None) - the draft, exactly as previewed, now saved - or
-        (None, why)."""
+        (None, why). `look` is the preview's own override (2026-11-14): the
+        owner may change the colour or how see-through it is before tapping Add,
+        and what is saved is what he last looked at."""
         if not isinstance(did, str) or not _DRAFT_ID.fullmatch(did):
             return None, DRAFT_GONE
         with self._lock:
@@ -760,7 +882,9 @@ class Store:
                 return None, TOO_MANY
             w = {"id": "w" + secrets.token_hex(5), "name": d["name"],
                  "layout": d.get("layout") or DEFAULT_LAYOUT, "blocks": d["blocks"],
+                 **{key: d.get(key) or default for key, _t, default in LOOK_KEYS},
                  "created": self.clock()}
+            w.update(look or {})
             self._write(rows + [w])
             del self._drafts[did]
             return w, None
@@ -1112,13 +1236,25 @@ def fill(block: dict, r: Readers) -> dict:
     return out
 
 
+def _look_of(w: dict) -> dict:
+    """The look a widget or draft actually draws in, never absent."""
+    return {key: w.get(key) or default for key, _t, default in LOOK_KEYS}
+
+
 def show(wid, *, readers: Optional[Readers] = None, st: Optional[Store] = None) -> tuple:
-    w = (st or store()).get(wid)
+    st = st or store()
+    w = st.get(wid)
+    if w is None:
+        # A DRAFT is readable the same way (2026-11-14): the phone's preview then
+        # draws the real blocks with real numbers instead of a list of sentences.
+        # Nothing is saved, and the draft still expires on its own.
+        w = (next((d for d in st.drafts() if d["id"] == wid), None)
+             if isinstance(wid, str) else None)
     if w is None:
         return 404, {"ok": False, "error": NO_SUCH}
     r = readers or Readers()
     return 200, {"ok": True, "id": w["id"], "name": w["name"],
-                 "layout": w.get("layout") or DEFAULT_LAYOUT, "at": r.now(),
+                 "layout": w.get("layout") or DEFAULT_LAYOUT, **_look_of(w), "at": r.now(),
                  "blocks": [fill(b, r) for b in w["blocks"]]}
 
 
@@ -1126,6 +1262,13 @@ def menu() -> dict:
     return {"sources": [{"id": k, "block": s.block, "label": s.label, "private": s.private,
                          "describe": s.describe} for k, s in SOURCES.items()],
             "actions": [{"id": k, "label": v} for k, v in ACTIONS.items()],
+            # The look's closed lists (2026-11-14), with their own words, so an
+            # app can build its pickers without hardcoding a second copy of them.
+            "look": {"accents": [{"id": k, "label": v[0]} for k, v in ACCENTS.items()],
+                     "shades": [{"id": k, "label": v[0]} for k, v in SHADES.items()],
+                     "contrasts": [{"id": k, "label": v[0]} for k, v in CONTRASTS.items()],
+                     "default": {"accent": DEFAULT_ACCENT, "shade": DEFAULT_SHADE,
+                                 "contrast": DEFAULT_CONTRAST}},
             "limits": {"blocks": MAX_BLOCKS, "buttons": MAX_BUTTONS, "list": MAX_LIST,
                        "widgets": MAX_WIDGETS, "words": MAX_WORDS}}
 
@@ -1165,7 +1308,19 @@ def handle_post(path: str, body, *, st: Optional[Store] = None,
         # by its provenance.
         return draft(body.get("words"), provenance=body.get("provenance"), ask=ask, st=st)
     if path == ADD_PATH:
-        w, why = st.keep(body.get("draft"))
+        # The preview's own look (2026-11-14): the owner may change the colour or
+        # how see-through it is before tapping Add. Absent means "what the draft
+        # already has"; present and off the list is refused rather than ignored,
+        # because the apps only ever send values from their own closed lists and
+        # a silent default would hide their bug.
+        look = {}
+        for key, table, _default in LOOK_KEYS:
+            if key in body:
+                got = body.get(key)
+                if not isinstance(got, str) or got not in table:
+                    return 400, {"ok": False, "error": LOOK_REFUSED[key]}
+                look[key] = got
+        w, why = st.keep(body.get("draft"), look)
         if w is None:
             return (409 if why == TOO_MANY else 404), {"ok": False, "error": why}
         return 200, {"ok": True, "widget": with_words(w),

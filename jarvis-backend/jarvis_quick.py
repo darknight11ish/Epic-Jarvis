@@ -1590,6 +1590,20 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _forget_range(s, now)
     if got is not None:
         return got
+    # WHERE the chats are kept (2026-11-13, the architect's section 5.6): a
+    # self-fact about storage, history or privacy is answered from this PC's own
+    # code or refused, never composed by the model. Asked "where are the chat
+    # backups stored?", the live backend had told the owner his chats "aren't
+    # stored anywhere ... until you close it or clear them", which is false.
+    # This runs BEFORE `_history_chat` below, and that order is deliberate:
+    # `_history_chat`'s shapes cover clearing, size and expiry as well as
+    # "where are my chats stored", and this answer is the one that names the
+    # switch, the encryption and voice - so the storage questions get it, and
+    # every clearing/size/expiry question still reaches `history_purge`
+    # (docs/JARVIS-API.md section 189.8 says which shapes are whose).
+    got = _chat_history_storage(s)
+    if got is not None:
+        return got
     # the chat history's own numbers - where it is, how big, how many, and how
     # long a batch takes to clear (2026-11-04, the owner's own question). Read
     # from the measured file, before the model/preset lane, because that lane
@@ -5795,6 +5809,156 @@ def _self_knowledge(s: str) -> Optional[Intent]:
     return None
 
 
+#: WHERE THE CHATS ARE KEPT, AND WHAT IS TRUE RIGHT NOW (2026-11-13).
+#:
+#: THE FAILURE THIS ANSWERS, ON THE RECORD. Asked "where are the chat backups
+#: stored?", the live backend answered "Chat backups aren't stored anywhere by
+#: default on this PC - conversations live only in the app's memory until you
+#: close it or clear them. If you want a permanent record, I can help you copy
+#: important chats to a file..." Every clause of that is false, and false in the
+#: worst direction: `jarvis_chat_log.py` has kept chat history - what is said by
+#: voice included - on this PC, encrypted, since the owner's own decision of
+#: 2026-09-24 (that module's header states it). The architect's ruling (Gemini,
+#: 2026-11-13 22:30 PT, section 5.6) is that a self-fact about storage, history,
+#: privacy or settings is answered deterministically from the code, or refused -
+#: never composed by the model.
+#:
+#: ONE SUBJECT, DELIBERATELY NARROW. These shapes ask only where the chats are,
+#: whether they are kept, what happens to what is said by voice, and whether
+#: they are encrypted. Each answer comes from `jarvis_chat_log`'s OWN settings
+#: and its OWN database path, checked at the moment of answering, so the words
+#: cannot claim more than the disk does.
+#:
+#: WHAT IT TAKES, AND WHAT IT LEAVES ALONE. It runs BEFORE `_self_knowledge` and
+#: BEFORE `_history_chat` (see `_match`), and the overlap is exactly one shape
+#: from each: "is my chat history saved/kept" now answers here, with the switch
+#: named, instead of with `SELF_FACTS["chat_history"]`'s fixed sentence; and
+#: "where are my chats stored" answers here instead of
+#: `history_purge`'s clearing paragraph. Everything else keeps its owner -
+#: "do you keep chat history?", "do you have chat history?", "is my chat history
+#: on?" and "how long do you keep my chat history" are still
+#: `_self_knowledge`'s (the article rule below is what keeps them there), and
+#: every clearing, size and expiry shape is still `history_purge`'s. Both are
+#: pinned by `backend/test_self_knowledge_honesty.py`.
+#:
+#: READ-ONLY, AND WHY THE STATE COMES FROM `settings()` AND NOT `status()`.
+#: `status()` also opens the recording cipher, and on a brand-new history that
+#: MINTS the Credential Manager key - a write. This answer writes nothing,
+#: raises no card and never reaches a model. For the same reason it is not in
+#: `_PRIVATE_DETERMINISTIC_READS`: a private chat hands read-only intents to the
+#: model, and this answer's own sibling `self_knowledge` is not there either.
+#:
+#: Refusing rather than inventing: a question about something this PC cannot
+#: read - the exact state when the module is absent, or a backup TIMETABLE, of
+#: which the product has none - is answered by saying so (see
+#: `_run_chat_history_storage`); it is never smoothed into the default sentence.
+_CHAT_THING = (r"(?:chats?|chat\s+histor(?:y|ies)|histor(?:y|ies)|conversations?|"
+               r"messages?)")
+_CHAT_STORAGE_WHERE = re.compile(
+    # "where are my chats stored", "where is my chat history kept",
+    # "where are the chat backups stored"
+    r"(?:tell\s+me\s+)?where\s+(?:are|is)\s+(?:my\s+|our\s+|the\s+|your\s+)?"
+    r"(?:chat\s+backups?|" + _CHAT_THING + r")\s+"
+    r"(?:stored|kept|saved|lives?|living|held|being\s+kept|being\s+stored)"
+    r"(?:\s+.*)?"
+    # "tell me where my chats are stored", "where my chat history is kept"
+    r"|(?:tell\s+me\s+)?where\s+(?:my\s+|our\s+|the\s+|your\s+)?"
+    r"(?:chat\s+backups?|" + _CHAT_THING + r")\s+(?:are|is|get|gets)\s+"
+    r"(?:stored|kept|saved|held)"
+    r"(?:\s+.*)?"
+    # "where do you store my chats", "where does Jarvis put my chats"
+    r"|(?:tell\s+me\s+)?where\s+(?:do|does)\s+(?:you\s+|jarvis\s+)?"
+    r"(?:store|keep|save|put|hold)\s+"
+    r"(?:my\s+|our\s+|the\s+|your\s+)?(?:chat\s+backups?|" + _CHAT_THING + r")(?:\s+.*)?"
+    # "where does my history live" - a "live", never a "go": where a deleted
+    # chat went is a different question and must not get a storage answer.
+    r"|(?:tell\s+me\s+)?where\s+(?:do|does)\s+(?:my\s+|our\s+|the\s+|your\s+)?"
+    r"(?:chat\s+backups?|" + _CHAT_THING + r")\s+(?:live|lives)(?:\s+.*)?"
+    # "where are the chat backups" (no verb at all), "where is the chat history file"
+    r"|(?:tell\s+me\s+)?where\s+(?:are|is)\s+(?:my\s+|our\s+|the\s+|your\s+)?"
+    r"(?:chat\s+backups?|chat\s+history\s+(?:file|database|db|folder)|"
+    r"chat-history\.db)(?:\s+.*)?")
+_CHAT_STORAGE_SAVED = re.compile(
+    # "are my chats saved", "is my chat history kept", "are our conversations stored"
+    r"are\s+(?:my\s+|our\s+|the\s+|your\s+)?(?:chat\s+backups?|" + _CHAT_THING + r")\s+"
+    r"(?:being\s+)?(?:saved|stored|kept|recorded)(?:\s+.*)?"
+    r"|is\s+(?:my\s+|our\s+|the\s+)?(?:(?:chat|conversation)\s+)?histor(?:y|ies)\s+"
+    r"(?:being\s+)?(?:saved|stored|kept|recorded)(?:\s+.*)?"
+    # "do you save my chats", "do you keep the conversation history"
+    # (an article is required: bare "do you keep chat history" is the existing
+    # `_SELF_KNOWLEDGE` family's, and must stay there)
+    r"|do\s+you\s+(?:save|store|keep|record)\s+(?:my\s+|our\s+|the\s+)"
+    r"(?:chats?|chat\s+histor(?:y|ies)|histor(?:y|ies)|conversations?|messages?)"
+    r"(?:\s+.*)?"
+    # "am i being recorded"
+    r"|am\s+i\s+(?:being\s+)?recorded(?:\s+.*)?")
+_CHAT_STORAGE_RECORD = re.compile(
+    # "do you keep a record of this", "do you keep a log of what i say"
+    r"do\s+you\s+(?:keep|have|save|store)\s+(?:a\s+|any\s+)?"
+    r"(?:record|records|log|logs|copy|note)\s+(?:of\s+)?"
+    r"(?:this|that|these|it|our\s+(?:chats?|conversations?)|"
+    r"what\s+i\s+(?:say|said|type|typed)|everything|every\s+chat)(?:\s+.*)?"
+    # "is this chat recorded", "is this conversation being saved"
+    r"|(?:is|are)\s+(?:this|these)\s+(?:chat|chats|conversations?)\s+"
+    r"(?:being\s+)?(?:recorded|kept|saved|stored)(?:\s+.*)?"
+    r"|are\s+you\s+(?:recording|keeping\s+a\s+record)(?:\s+.*)?")
+_CHAT_STORAGE_ENCRYPTED = re.compile(
+    # "is my history encrypted", "is my chat history kept encrypted"
+    r"is\s+(?:my\s+|our\s+|the\s+|your\s+)?(?:(?:chat|conversation)\s+)?"
+    r"histor(?:y|ies)\s+(?:kept\s+)?(?:encrypted|scrambled)(?:\s+.*)?"
+    # "are my chats encrypted", "are our conversations encrypted"
+    r"|are\s+(?:my\s+|our\s+|the\s+)?(?:chats?|conversations?|"
+    r"chat\s+histor(?:y|ies)|messages?)\s+(?:kept\s+)?(?:encrypted|scrambled)(?:\s+.*)?"
+    # "is chat-history.db encrypted", "is the chat history database encrypted"
+    r"|is\s+(?:the\s+)?chat-history\.db\s+(?:encrypted|scrambled)(?:\s+.*)?")
+_CHAT_STORAGE_VOICE = re.compile(
+    # "what happens to my voice transcripts", "what happens to what i say"
+    r"what\s+happens\s+to\s+(?:my\s+|the\s+)?(?:voice\s+)?transcripts?(?:\s+.*)?"
+    r"|what\s+happens\s+to\s+(?:what\s+i\s+(?:say|said)|"
+    r"my\s+voice\s+(?:messages?|recordings?|transcripts?))(?:\s+.*)?"
+    # "are my voice transcripts kept", "is what i say saved"
+    r"|are\s+(?:my\s+|the\s+)?(?:voice\s+)?transcripts?\s+"
+    r"(?:kept|saved|stored|recorded)(?:\s+.*)?"
+    r"|is\s+(?:what\s+i\s+say|my\s+voice)\s+(?:kept|saved|stored|recorded)(?:\s+.*)?"
+    # "do you keep voice transcripts", "do you save my voice messages"
+    r"|do\s+you\s+(?:keep|save|store|record)\s+(?:my\s+|the\s+)?voice\s+"
+    r"(?:transcripts?|messages?|recordings?|notes?)(?:\s+.*)?")
+_CHAT_STORAGE_SCHEDULE = re.compile(
+    # "when do the chat backups run", "when are my chats backed up"
+    r"when\s+(?:do|does|are|is)\s+(?:the\s+|my\s+)?(?:chat\s+)?backups?\s+"
+    r"(?:run|happen|start|occur|get\s+made|made|taken)(?:\s+.*)?"
+    # "what is the chat backup schedule"
+    r"|what(?:'s|\s+is)\s+(?:the\s+|my\s+)?(?:chat\s+)?backup\s+"
+    r"(?:schedule|interval|frequency|timetable)(?:\s+.*)?"
+    # "when are my chats backed up"
+    r"|when\s+(?:are|is)\s+(?:my\s+|the\s+)?(?:chats?|chat\s+histor(?:y|ies)|"
+    r"conversations?)\s+backed\s+up(?:\s+.*)?"
+    # "how often are my chats backed up", "how often do you back up my chats"
+    r"|how\s+often\s+(?:do\s+you\s+)?back\s*up(?:\s+.*)?"
+    r"|how\s+often\s+are\s+(?:my\s+|the\s+)?(?:chats?|chat\s+histor(?:y|ies)|"
+    r"conversations?)\s+backed\s+up(?:\s+.*)?")
+#: The shapes, most specific first, and the `ask` each one answers. A "where"
+#: answer whose own words name a BACKUP is the backup question ("backups").
+_CHAT_STORAGE_SHAPES = (
+    ("schedule", _CHAT_STORAGE_SCHEDULE),
+    ("where", _CHAT_STORAGE_WHERE),
+    ("record", _CHAT_STORAGE_RECORD),
+    ("encrypted", _CHAT_STORAGE_ENCRYPTED),
+    ("voice", _CHAT_STORAGE_VOICE),
+    ("saved", _CHAT_STORAGE_SAVED),
+)
+
+
+def _chat_history_storage(s: str) -> Optional[Intent]:
+    """One of the chat-storage questions above, or None. See the block header."""
+    for ask, rx in _CHAT_STORAGE_SHAPES:
+        if rx.fullmatch(s):
+            if ask == "where" and "backup" in s:
+                ask = "backups"
+            return Intent("chat_history_storage", {"ask": ask})
+    return None
+
+
 #: "What changed in your last update?" / "what's new in you?" (2026-11-07).
 #: The live audit measured this answered by the model with "I haven't changed"
 #: or an invented list, while the newest changelog bullets sat in the record.
@@ -9307,16 +9471,19 @@ def _run_tool_profile(f: dict) -> Optional["Result"]:
 # --------------------------------------------------------------------------
 # Android app building (2026-10-31 honesty fix)
 #
-# Measured: backend/jarvis_android_builder.py builds a FIXED minimal WebView
-# Android project from the task's own index.html/app.js/app.css in one project
-# task - `gradlew.bat assembleDebug` behind the app_build_android card, then
-# `adb install -r <apk>` behind app_install_android. Needs the Android SDK,
-# a Java 17 JDK, the Gradle wrapper files beside jarvis_hud.py, and a cable
-# with USB debugging for the install; the first build downloads Gradle and the
-# Android Gradle plugin. It never writes Kotlin/manifest itself, adds no
-# permissions, no release signing and no Play Store. The live model said "I
-# can't build Android apps... I don't have the tools to write code, compile
-# projects", which is false.
+# Measured: backend/jarvis_android_builder.py builds a FIXED minimal Android
+# project in one project task, of two kinds chosen by the files the task
+# carries - a WebView around the task's own index.html/app.js/app.css, or,
+# when the task carries app.json, a real app with its own screens (at most 8
+# of text, list and form, drawn by a second fixed activity from that JSON).
+# In both cases `gradlew.bat assembleDebug` sits behind the app_build_android
+# card, then `adb install -r <apk>` behind app_install_android. Needs the
+# Android SDK, a Java 17 JDK, the Gradle wrapper files beside jarvis_hud.py,
+# and a cable with USB debugging for the install; the first build downloads
+# Gradle and the Android Gradle plugin. The model never writes Kotlin, the
+# manifest or a Gradle file, and adds no permissions, no release signing and
+# no Play Store. The live model said "I can't build Android apps... I don't
+# have the tools to write code, compile projects", which is false.
 # --------------------------------------------------------------------------
 
 ANDROID_BUILD_ACTION = "app_build_android"
@@ -9349,18 +9516,23 @@ def _run_android(name: str, state) -> "Result":
              "toolchain. Installing raises ONE more card (" + ANDROID_INSTALL_ACTION + ") that "
              "names the exact adb command, APK and size. Never a Play Store upload.")
     if name == "android_capability":
-        return Result("Yes - I can build a small Android app for you. In a project task, ask "
-                      "\"build the Android app\" or \"build my app and put it on my phone\". I write "
-                      "a fixed minimal Android project around your own index.html, app.js and "
-                      "app.css (I do not hand-write Kotlin or the manifest), then Gradle builds it "
-                      "and adb installs it over the cable. " + where + " " +
-                      _android_missing_words(state), "android_capability")
+        return Result("Yes - the Android builder is real: it writes a fixed minimal Android "
+                      "project in one project task, of two kinds. One puts your own index.html, "
+                      "app.js and app.css inside a WebView project. The other is a real app with its "
+                      "own screens: a task that carries an app.json gets up to eight screens of "
+                      "text, list and form, drawn by a fixed Android activity from that file - I "
+                      "write data, never code, and in neither kind do I hand-write Kotlin or the "
+                      "manifest. Then Gradle builds it and adb installs it over the cable. What is "
+                      "still missing is the way in: no chat sentence, model tool or app button "
+                      "starts those routes yet, so only the builder's own tests have run them. " +
+                      where + " " + _android_missing_words(state), "android_capability")
     if name == "android_howto":
-        return Result("Say it in a project task, for example: \"build the Android app\" to build "
-                      "it, or \"build my app and put it on my phone\" to build and install. I write "
-                      "the template project first (no card), then the build card appears with the "
-                      "exact Gradle command, then the install card appears with the exact adb "
-                      "command and the APK. " + _android_missing_words(state), "android_howto")
+        return Result("You cannot yet - and that is the one thing missing. The builder itself "
+                      "is written and tested: it writes the fixed template (no card), then the "
+                      "build card carries the exact Gradle command and the install card the exact "
+                      "adb command and the APK. But no chat sentence, model tool or app button "
+                      "starts those routes, so there is nothing you can say that begins a build "
+                      "today. " + _android_missing_words(state), "android_howto")
     if name == "android_needs":
         return Result("The Android builder needs the Android SDK on this PC, a Java 17 JDK, its "
                       "Gradle wrapper files beside jarvis_hud.py, and - only for the install - adb "
@@ -24297,6 +24469,184 @@ def _run_self_knowledge(f: dict) -> Result:
     return Result(words, "self_knowledge")
 
 
+# ------------------------------------------------- where the chats are kept
+#
+# The words below are the chat-storage answer (2026-11-13). Every one of them
+# is a fact about `jarvis_chat_log.py` itself - its default, its file, its
+# cipher, its switch - and the two that can change (`enabled`, `keep_days`) are
+# read at answering time, never assumed. The switch is named exactly as each
+# app draws it: "Chat history on this PC" is the desktop's Settings, Security
+# heading (jarvis-desktop/src/settings.html:1857, the button beside it at
+# :1860), and "Keep chat history on this PC" is the phone's switch
+# (jarvis-client .../net/ChatLog.kt:86, drawn in HistoryScreen.kt).
+#
+# The file's folder is named WITHOUT the owner's Windows account name on
+# purpose: the same reply travels to the phone, and docs/ARCHITECTURE.md's
+# "kept off a phone" table keeps a folder that names the account off it. The
+# folder itself (.openjarvis) and the file name are what the owner needs to
+# find it on his own PC.
+
+_CHAT_STORAGE_UNREADABLE = (
+    "I can't read the chat history's own records on this PC right now, so I won't guess at "
+    "where your chats are kept. Nothing was changed.")
+
+_CHAT_STORAGE_FILE = ("It is one file, chat-history.db, in Jarvis's own settings folder - "
+                      ".openjarvis in your user folder.")
+
+_CHAT_STORAGE_ON = "Chat history is kept on this PC, and it is on by default."
+
+_CHAT_STORAGE_ON_EMPTY = ("Chat history is on and kept on this PC - it is on by default - "
+                          "but nothing has been written to it yet.")
+
+_CHAT_STORAGE_OFF = "Chat history is off right now. Nothing new is kept."
+
+_CHAT_STORAGE_OFF_EMPTY = ("Chat history is off right now, and nothing has been kept on this "
+                           "PC yet. Nothing new is kept.")
+
+_CHAT_STORAGE_CANNOT_KEEP = (
+    "Chat history cannot keep anything right now: its own settings file cannot be read, so "
+    "nothing is being kept until that is rewritten - turning the switch off and on again "
+    "does that.")
+
+_CHAT_STORAGE_KEPT_SO_FAR = ("What is already kept is still in chat-history.db, in Jarvis's own "
+                             "settings folder - .openjarvis in your user folder - and it stays "
+                             "until you delete it.")
+
+_CHAT_STORAGE_CANNOT_OPEN = (
+    "The file is there - chat-history.db, in Jarvis's own settings folder, .openjarvis in your "
+    "user folder - but this PC cannot open it right now, so I cannot say what is in it.")
+
+_CHAT_STORAGE_ENCRYPTED = (
+    "Everything kept in it is encrypted on this PC with AES-256-GCM, and the key that opens it "
+    "is kept in Windows Credential Manager, not in the file.")
+
+_CHAT_STORAGE_VOICE = (
+    "What you say by voice is kept the same way: the transcript's words are saved as an "
+    "ordinary turn, encrypted like the rest, and the recording itself is not kept.")
+
+_CHAT_STORAGE_SWITCH_ON = (
+    "There is a switch to turn it off: \"Chat history on this PC\" in Settings, Security on the "
+    "PC, and \"Keep chat history on this PC\" on the phone's History screen. Turning it off is "
+    "instant; what is already kept stays until you delete it, and turning it back on raises one "
+    "approval card.")
+
+_CHAT_STORAGE_SWITCH_OFF = (
+    "The switch is \"Chat history on this PC\" in Settings, Security on the PC, and \"Keep chat "
+    "history on this PC\" on the phone's History screen; turning it on raises one approval card.")
+
+#: Answering "where are the chat backups?" with a backup schedule would be
+#: inventing one: the product has none. A backup is a thing the owner asks for
+#: (jarvis_backup.py: the newest KEEP (5) files are kept).
+_CHAT_STORAGE_BACKUPS = (
+    "There is no separate set of chat backups - the chats ARE that one file. A copy of "
+    "everything, this file included, is made only when you ask for one in Settings, Backups, "
+    "and the newest five are kept.")
+
+_CHAT_STORAGE_NO_SCHEDULE = (
+    "There is no chat backup schedule: nothing backs your chats up on a timer. A backup of "
+    "everything, this file included, is made only when you ask for one in Settings, Backups, "
+    "and the newest five are kept.")
+
+
+def _chat_storage_can_read(path: str) -> bool:
+    """True only when this PC can really open `path` for reading.
+
+    The answer must never say a file is there and readable without checking
+    both: `is_file()` says a name exists, this says it can be opened. It reads
+    sixteen bytes and closes the file - no write, no lock held."""
+    try:
+        with open(path, "rb") as fh:
+            fh.read(16)
+        return True
+    except OSError:
+        return False
+
+
+def _chat_storage_retention(days: int) -> str:
+    """`keep_days` said plainly - 0 is "until you delete it" (the default)."""
+    if days <= 0:
+        return "It is kept until you delete it."
+    return f"It is kept for {days} days, then deleted."
+
+
+def _run_chat_history_storage(f: dict) -> Result:
+    """WHERE the chats are kept, and what is TRUE right now - read-only.
+
+    The state comes from `jarvis_chat_log.settings()` (the module's own rule:
+    no settings file means ON, a damaged one means nothing is kept and says
+    why) and from the module's own database path, and the file is checked with
+    `is_file()` AND opened before the answer says it is there. It is
+    deliberately NOT `jarvis_chat_log.status()`: status() also opens the
+    recording cipher, which MINTS the Credential Manager key on a brand-new
+    history - a write, and this answer writes nothing, raises no card and
+    never reaches a model.
+
+    Three states the words must not blur, because the default sentence would be
+    a lie in each: the switch is off; the settings file cannot be read (so
+    nothing is being kept, and the module says why); the file exists but this
+    PC cannot open it. A question about something there is no answer to - a
+    backup timetable - is refused in words (`_CHAT_STORAGE_NO_SCHEDULE`)
+    instead of being smoothed into the default.
+    """
+    ask = str(f.get("ask") or "where")
+    try:
+        import jarvis_chat_log as C
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result(_CHAT_STORAGE_UNREADABLE, "chat_history_storage")
+    try:
+        log = C._log()
+        st = log.settings()
+        db = str(log.db_path)
+    except Exception:                       # noqa: BLE001 - said as "cannot read"
+        return Result(_CHAT_STORAGE_UNREADABLE, "chat_history_storage")
+    enabled = st.get("enabled") is True
+    why = str(st.get("why") or "").strip()
+    try:
+        days = int(st.get("keep_days") or 0)
+    except (TypeError, ValueError):
+        days = 0
+    there = os.path.isfile(db)
+    readable = there and _chat_storage_can_read(db)
+
+    parts = []
+    if ask == "schedule":
+        parts.append(_CHAT_STORAGE_NO_SCHEDULE)
+    elif ask == "backups":
+        parts.append(_CHAT_STORAGE_BACKUPS)
+
+    keeping = enabled and not why
+    if why:
+        # The settings file could not be read or is damaged: nothing is being
+        # kept. The module's own `why` is NOT repeated here - it names the
+        # settings file's full path, which carries the owner's Windows account
+        # name and this reply also travels to the phone (docs/ARCHITECTURE.md's
+        # kept-off-a-phone table). The state is the module's; the words are these.
+        parts.append(_CHAT_STORAGE_CANNOT_KEEP)
+        if there:
+            parts.append(_CHAT_STORAGE_KEPT_SO_FAR if readable else _CHAT_STORAGE_CANNOT_OPEN)
+    elif enabled and readable:
+        parts.append(_CHAT_STORAGE_ON)
+        parts.append(_CHAT_STORAGE_FILE)
+    elif enabled and there:
+        parts.append(_CHAT_STORAGE_ON)
+        parts.append(_CHAT_STORAGE_CANNOT_OPEN)
+    elif enabled:
+        parts.append(_CHAT_STORAGE_ON_EMPTY)
+        parts.append(_CHAT_STORAGE_FILE)
+    elif there:
+        parts.append(_CHAT_STORAGE_OFF)
+        parts.append(_CHAT_STORAGE_KEPT_SO_FAR if readable else _CHAT_STORAGE_CANNOT_OPEN)
+    else:
+        parts.append(_CHAT_STORAGE_OFF_EMPTY)
+
+    if keeping:
+        parts.append(_chat_storage_retention(days))
+    parts.append(_CHAT_STORAGE_ENCRYPTED)
+    parts.append(_CHAT_STORAGE_VOICE)
+    parts.append(_CHAT_STORAGE_SWITCH_ON if keeping else _CHAT_STORAGE_SWITCH_OFF)
+    return Result(" ".join(parts), "chat_history_storage")
+
+
 def _run_settings_where(f: dict) -> Result:
     """Where ONE off-list function really lives (F14, 2026-11-07). Read-only:
     the words are `jarvis_feature_guide.PLACES`, written from the project's own
@@ -26473,6 +26823,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_explain_all()
     if n == "self_knowledge":
         return _run_self_knowledge(f)
+    if n == "chat_history_storage":
+        return _run_chat_history_storage(f)
     if n == "settings_where":
         return _run_settings_where(f)
     if n == "recent_changes":
@@ -27676,6 +28028,10 @@ READ_ONLY_INTENTS = frozenset({
     # record to them.
     "recent_changes", "self_knowledge", "settings_explain_all", "settings_where",
     "heritage",
+    # Where the chats are kept (2026-11-13): it reads the chat log's own
+    # settings and opens its file to check it, and writes nothing, so "cancel
+    # that" must not lose its record to it.
+    "chat_history_storage",
     "settings_browser_mode_bad",
     # Reading the Anti-Slop filter (2026-10-28): "is anti-slop on?" changes
     # nothing, so "cancel that" must not lose its record to it. Its change and

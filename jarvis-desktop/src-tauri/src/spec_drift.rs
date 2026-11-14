@@ -235,7 +235,7 @@ pub fn spawn_startup_check(app: &AppHandle) {
             // interrupts; the rest stay in the log.
             commands::notify(
                 &handle,
-                "Jarvis look spec disagrees with the server",
+                "Atlas look spec disagrees with the server",
                 "This app's built-in look spec differs from what the backend is serving. \
                  See docs/CROSS-CLIENT-CONTRACT-REPLY-2.md.",
             );

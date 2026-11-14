@@ -30,7 +30,7 @@ import * as W from "../src/voice-settings.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
 const C = K.VOICE.cases;
-const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
@@ -221,7 +221,7 @@ await check("a training that ended is said, and a waiting wake-word card is said
   const w = await section(wait);
   await wait.close();
   assert.equal(w.wakeState, "waiting");
-  assert.match(w.wake, /A card to turn it on is waiting\. Approve it in the Jarvis bar, on the widget, or on your phone's Home screen\./);
+  assert.match(w.wake, /A card to turn it on is waiting\. Approve it in the Atlas bar, on the widget, or on your phone's Home screen\./);
 });
 
 await check("an older backend, or no answer, is a sentence and nothing else", async () => {
