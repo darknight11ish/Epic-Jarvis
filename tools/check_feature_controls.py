@@ -522,8 +522,12 @@ def main(argv=None):
     # by `jarvis_feature_guide.control_matrix()` through the real matcher - so
     # 43 -> 44 Switchable, 108 -> 107 Command-Only; 182 features. Measured from
     # the contract, not chosen.
+    # 2026-11-13 (the copy-over wave): the phone's own settings backup joined as
+    # PC-Only Setting - a phone-only card with no backend route, saved and
+    # opened entirely on the phone - so 17 + 1 -> 18 PC-Only, 182 + 1 -> 183
+    # features. Measured from the contract, not chosen.
     expected_label_counts = {
-        LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
+        LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 18,
         LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
     # THE MESSAGE IS BUILT FROM THE PIN, NEVER RETYPED (2026-11-13 audit,
