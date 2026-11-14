@@ -20,7 +20,7 @@
  *
  * ONE OF THE FIFTEEN IS NOT TYPED HERE AT ALL: "What can I say?" is
  * `sayable.js`'s HELP_BODY (the same words `backend/jarvis_sayable.py` serves
- * to the Jarvis bar), imported rather than copied, so the two can never drift.
+ * to the Atlas bar), imported rather than copied, so the two can never drift.
  *
  * NO PAGE, NO TAURI: node can import it, which is how tests/faq.mjs pins the
  * list without a browser.
@@ -73,18 +73,18 @@ export const DESKTOP_FAQ = Object.freeze([
     id: "approve-or-deny",
     q: "Where do I approve or deny what Jarvis wants to do?",
     a: "On a card. When Jarvis wants to do something that is not completely safe, it " +
-      "stops, and a card waits for you in the Jarvis bar, on the widget, or on your " +
-      "phone's Home screen (Alt+Space opens the Jarvis bar). For anything important " +
+      "stops, and a card waits for you in the Atlas bar, on the widget, or on your " +
+      "phone's Home screen (Alt+Space opens the Atlas bar). For anything important " +
       "Windows also shows a notification. Press Approve or Deny on the card; the " +
       "notification can only Deny. Nothing runs until you decide, one thing at a " +
-      "time. An email Jarvis wants to send is approved in the Jarvis bar, where you " +
+      "time. An email Jarvis wants to send is approved in the Atlas bar, where you " +
       "can read all of it first.",
-    where: "The Jarvis bar, the widget, or your phone",
+    where: "The Atlas bar, the widget, or your phone",
   },
   {
     id: "jarvis-live",
     q: "What is Jarvis Live, and how do I end it?",
-    a: "A back-and-forth voice conversation. Click Live in the Jarvis bar (or say " +
+    a: "A back-and-forth voice conversation. Click Live in the Atlas bar (or say " +
       "\"Hey Jarvis, let's talk\") and just talk: no \"Hey Jarvis\" before each " +
       "sentence. Your voice is checked once for the Live session on this PC - one " +
       "full sentence verifies you - and after that this session is not checked " +
@@ -95,7 +95,7 @@ export const DESKTOP_FAQ = Object.freeze([
       "Jarvis, that's all for now\", or just stop talking for 90 seconds. Mic off " +
       "closes the microphone without ending it. Live needs your voice trained first " +
       "(Settings, then Voice).",
-    where: "The Jarvis bar, and Settings → Voice",
+    where: "The Atlas bar, and Settings → Voice",
   },
   {
     id: "no-approve-everything",
@@ -118,7 +118,7 @@ export const DESKTOP_FAQ = Object.freeze([
   {
     id: "what-can-i-say",
     // The words, and the id they are pinned under, come from sayable.js - the
-    // same two constants backend/jarvis_sayable.py serves to the Jarvis bar.
+    // same two constants backend/jarvis_sayable.py serves to the Atlas bar.
     // Typing them a second time here is the drift this module exists to avoid.
     q: HELP_TITLE,
     a: HELP_BODY,
@@ -141,9 +141,9 @@ export const DESKTOP_FAQ = Object.freeze([
   {
     id: "talking-to-jarvis",
     q: "How does talking to Jarvis work?",
-    a: "Hold the microphone button in the Jarvis bar and speak, then let go to send. " +
+    a: "Hold the microphone button in the Atlas bar and speak, then let go to send. " +
       "With the button selected, holding Space or Enter works too. The microphone " +
-      "button in the big HUD window opens the Jarvis bar with its microphone ready, " +
+      "button in the big HUD window opens the Atlas bar with its microphone ready, " +
       "so both lead to the same place. The recording is made on this computer and " +
       "goes only to Jarvis on this computer - never to Microsoft, Google or anyone " +
       "else. Listening for \"hey Jarvis\", the button next to the microphone, is off " +
@@ -154,7 +154,7 @@ export const DESKTOP_FAQ = Object.freeze([
       "company's servers to turn it into text. To have Jarvis type what you say into " +
       "another program instead, turn on Talk-to-type in Voice, then hold Alt+Shift+T " +
       "and speak.",
-    where: "The Jarvis bar, and Settings → Voice",
+    where: "The Atlas bar, and Settings → Voice",
   },
   {
     id: "suddenly-slow",

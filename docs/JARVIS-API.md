@@ -10637,7 +10637,7 @@ No new route and no new field.
   sent with it are still a picture's caption, not the owner's own words. On one
   graphics card no model sees pictures anyway (the words are read as before).
 - **Both apps** say, under an attached picture, in the same words: "Secrets in
-  pictures you attach are covered with black boxes before Jarvis looks."
+  pictures you attach are covered with black boxes before Atlas looks."
   (`jarvis_chat_picture.OWNER_LINE`; the desktop's attachment chip; the phone's
   `ChatPicture.SECRETS_COVERED`; `backend/test_chat_picture.py` checks all
   three). Neither app keeps or re-sends the picture after the message, and

@@ -281,7 +281,7 @@ export const TELEMETRY = {
  * under load rather than on a toy.
  */
 export function makeGraph(scale = 1) {
-  const nodes = [{ id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 }];
+  const nodes = [{ id: "core", label: "Atlas", group: "core", weight: 6 }];
   const links = [];
   const push = (n) => { nodes.push(n); return n.id; };
 
@@ -494,7 +494,7 @@ The direction is the signal — colour alone fails for one man in twelve.`;
 // ---- the stub bridge -----------------------------------------------------
 
 export const HOTKEYS = [
-  { id: "toggle_quickbar", label: "Show or hide the Jarvis bar", hint: "From anywhere, whatever program is in front.",
+  { id: "toggle_quickbar", label: "Show or hide the Atlas bar", hint: "From anywhere, whatever program is in front.",
     accelerator: "Alt+Space", default: "Alt+Space", registered: true, error: null },
   { id: "ingest_clipboard", label: "Attach the clipboard", hint: "Put whatever is on the clipboard into the bar as context.",
     accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },

@@ -42,7 +42,7 @@ const PANEL = read("src/voice-panel.js");
 const S = FIXTURE.statuses;
 const A = (name) => ({ ...FIXTURE.enroll[name].body, http: FIXTURE.enroll[name].code });
 const PLAN = S.strong_ready.gate.training.training;
-const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
 
 const fails = [];
 const check = (name, fn) => {

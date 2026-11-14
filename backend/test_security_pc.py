@@ -306,7 +306,7 @@ def t_ui_control_refuses_jarvis_own_windows():
              "enabled": True}]
     titles = _desktop_titles()
     check("the desktop's titles were found (quickbar, widget, Brain, Settings, HUD page)",
-          {"Jarvis", "Jarvis Desktop Widget", "Jarvis HUD"} <= set(titles)
+          {"Atlas", "Atlas Desktop Widget", "Atlas HUD"} <= set(titles)
           and any("Brain" in t for t in titles) and any("Settings" in t for t in titles),
           titles)
     for window in titles + ["Jarvis HUD - Microsoft\u200b Edge", "  jarvis  "]:

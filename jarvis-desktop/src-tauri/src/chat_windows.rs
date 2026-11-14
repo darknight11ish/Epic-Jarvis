@@ -88,7 +88,7 @@ const CHAT_PAGE: &str = "jarvis_hud.html";
 
 /// A chat window's title. The main HUD is "Jarvis"; an extra one says what it
 /// is, so the taskbar does not show two identical windows.
-const CHAT_TITLE: &str = "Jarvis — Chat";
+const CHAT_TITLE: &str = "Atlas — Chat";
 
 /// The same inner size and minimum the HUD builder declares (`lib.rs`
 /// `build_hud_window`). A chat window is the same surface, so it opens at the
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn every_window_carries_the_same_title_and_never_the_raw_conversation() {
-        assert_eq!(chat_title(None), "Jarvis — Chat");
-        assert_eq!(chat_title(Some("secret-looking-id")), "Jarvis — Chat");
+        assert_eq!(chat_title(None), "Atlas — Chat");
+        assert_eq!(chat_title(Some("secret-looking-id")), "Atlas — Chat");
     }
 }

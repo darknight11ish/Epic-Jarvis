@@ -311,7 +311,7 @@ Three changes, after checking a scouting report against the real code:
    as it came; a picture that cannot be checked is not handed on and the answer
    says so in words (never silent). The note beside the answer says how many
    places were covered (a count). Both apps say, under the attachment: "Secrets
-   in pictures you attach are covered with black boxes before Jarvis looks."
+   in pictures you attach are covered with black boxes before Atlas looks."
    Same limits as above. "Photo to reminder" ("Find a date in it") gets the same check on its words, so a
    proposed reminder never carries a key or card number. JARVIS-API section 36
    and 62.13.

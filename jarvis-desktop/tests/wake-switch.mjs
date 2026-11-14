@@ -76,7 +76,7 @@ await check("wake word off: \"Turn on\" raises a card and turns nothing on", asy
   const after = await look(page);
   await page.close();
   assert.deepEqual(after.changes, [{ enabled: true }]);
-  assert.match(after.status, /^Waiting for your approval\. Approve it in the Jarvis bar, on the widget, or on your phone's Home screen/);
+  assert.match(after.status, /^Waiting for your approval\. Approve it in the Atlas bar, on the widget, or on your phone's Home screen/);
   assert.equal(after.wakeState, "waiting", "the switch shows what was clicked, not what Jarvis says");
   assert.equal(after.onShown, false, "a second card could be asked for while one waits");
   assert.equal(after.offShown, false);

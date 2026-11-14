@@ -402,7 +402,7 @@ await check("the label follows the bar: Open while it is hidden, Hide while it i
   assert.equal(button.textContent, button.title, "the visible label and its tooltip disagree");
 
   run.barState(true);
-  assert.equal(button.textContent, "Hide the Jarvis bar", "the label did not follow the bar being open");
+  assert.equal(button.textContent, "Hide the Atlas bar", "the label did not follow the bar being open");
   // A screen reader must not contradict the visible label (the same wording,
   // not the old "it opens now" line, which would be false here).
   assert.equal(button.title, button.textContent, "the tooltip contradicts the visible label");

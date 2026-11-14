@@ -108,7 +108,7 @@ await check("Settings -> Shortcuts follows a rebind instead of hardcoding one", 
   const shown = await page.evaluate(() =>
     [...document.querySelectorAll("#hotkey-rows .hotkey")]
       .find((row) => row.querySelector(".hotkey-name")?.textContent === "Show or hide the "
-        + "Jarvis bar")?.querySelector(".hotkey-key")?.textContent);
+        + "Atlas bar")?.querySelector(".hotkey-key")?.textContent);
   await page.close();
   assert.equal(shown, "Ctrl + Alt + Backquote", `Shortcuts still shows "${shown}"`);
 });
@@ -122,7 +122,7 @@ await check("a refused binding is marked in Settings -> Shortcuts, in words", as
   const text = await page.evaluate(() =>
     [...document.querySelectorAll("#hotkey-rows .hotkey")]
       .find((row) => row.querySelector(".hotkey-name")?.textContent === "Show or hide the "
-        + "Jarvis bar")?.querySelector(".hotkey-state")?.textContent);
+        + "Atlas bar")?.querySelector(".hotkey-state")?.textContent);
   await page.close();
   // A state word that looks like the working ones and does nothing is worse
   // than no state word at all.
