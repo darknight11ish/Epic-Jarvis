@@ -35722,11 +35722,54 @@ The measured answer is `jarvis_history_purge.capability()`:
 It is wired into `jarvis_quick` as the `history_purge` intent, ahead of the
 model lane, for whole-sentence shapes only: *"how long does it take to clear
 old chats"*, *"can you clear 200 chats"*, *"clear old chats"*, *"is there a way
-to delete chats from last week"*, *"where are my chats stored"*, *"how big is my
-chat history"*, *"do my chats expire"*. `X-Jarvis-Route`'s `quick` field carries
+to delete chats from last week"*, *"how big is my chat history"*, *"do my chats
+expire"*. `X-Jarvis-Route`'s `quick` field carries
 `history_purge`, so an app can tell it from the model's prose. **The retention
 half is not taken on trust**: `keep_days` is the measured switch (0, 30, 90 or
 365) and the sentence says "nothing expires automatically" only when it is 0.
+
+**One shape moved off this intent on 2026-11-13.** *"Where are my chats
+stored"* is answered by `chat_history_storage` (below), not here: the owner
+asked where his chat backups were kept and the live backend told him they
+"aren't stored anywhere ... until you close it or clear them", so the storage
+questions got ONE deterministic answer that states the default, the encryption,
+the file, the voice transcripts and the switch. The clearing, size and expiry
+shapes stay exactly where they were, and `docs/DECISIONS.md` carries the
+ruling.
+
+#### 189.8.1 `chat_history_storage` - where the chats are kept (2026-11-13)
+
+A read-only `jarvis_quick` intent for *"where are my chats stored"*, *"where is
+my chat history kept"*, *"are my chats saved"*, *"do you keep a record of
+this"*, *"where are the chat backups"*, *"is my history encrypted"*, *"what
+happens to my voice transcripts"* and *"when do the chat backups run"*. It
+opens no card, writes nothing, and never reaches a model (architect's ruling,
+Gemini 2026-11-13 22:30 PT, section 5.6: a self-fact about storage, history,
+privacy or settings is answered from the code or refused).
+
+The words come from `jarvis_chat_log`'s OWN state, read at the moment of
+answering: `settings()` (no settings file means on; an unreadable or damaged
+one means nothing is kept) and the module's own `chat-history.db` path, which
+is checked with `is_file()` and then OPENED before the answer says it is there.
+It is deliberately not `jarvis_chat_log.status()`: status() also opens the
+recording cipher, which mints the Credential Manager key on a brand-new
+history, and this answer must write nothing. The reply states: kept on this PC
+and on by default, encrypted with AES-256-GCM with the key in Windows
+Credential Manager, the file (`chat-history.db` in `.openjarvis` in the user
+folder - the folder is named without the Windows account name, because the same
+reply reaches the phone), that voice transcripts are kept as ordinary
+encrypted turns and the recording is not, the retention window, and the switch
+as each app draws it ("Chat history on this PC" in the desktop's Settings,
+Security; "Keep chat history on this PC" in the phone's History screen).
+
+Three states are said out loud instead of the default sentence: the switch is
+off (nothing new is kept, what is kept stays until deleted), the settings file
+cannot be read (nothing is being kept), and the file is there but cannot be
+opened (so its contents are not claimed). A question with no answer - a backup
+TIMETABLE - is refused in words: nothing backs the chats up on a timer, and a
+backup is made only when the owner asks for one in Settings, Backups (the
+newest five are kept). `backend/test_self_knowledge_honesty.py` holds all of
+it, including that an unrelated question is not captured.
 
 ### 189.9 What this section does NOT claim
 
