@@ -73,11 +73,12 @@
 //! `arguments` for Windows to launch a process with, so with no activator it
 //! has nowhere to go; an action's `arguments` ARE that payload, which is the
 //! shape every `*_from_argv` reader below already depends on, and the one the
-//! owner reported as still working (the Deny button). Said plainly: that
-//! action half rests on the table and on the owner's report, not on a click
-//! this session watched - the same limit the Deny path has always carried.
+//! owner did not report as broken (the Deny button). Said plainly: that action
+//! half rests on the table and on the owner's report, not on a click this
+//! session watched - the same limit the Deny path has always carried.
 //!
-//! So this module does the two things that CAN work, and says what it does not:
+//! So this module does the two things that can be done from inside the app, and
+//! says what neither of them can achieve on its own:
 //!
 //! * every toast's body carries a `launch` marker, and
 //!   [`open_request_from_argv`] answers it on BOTH activation paths (a running
