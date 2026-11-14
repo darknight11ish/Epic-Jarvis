@@ -206,7 +206,22 @@
             android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
-            android:resizeableActivity="true">
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- windowSoftInputMode="adjustResize" (2026-11-13, Local AI field
+                 test): with no mode named, Android chose `adjustPan` for this
+                 window on the owner's phone - `dumpsys window windows` read
+                 `sim={adjust=pan}` - and panned the whole surface up when the
+                 keyboard opened. The app already handles the IME itself: the
+                 root applies `imePadding()` (MainActivity's root modifier, the
+                 UI-audit fix), so the pan was a second, invisible handler: on
+                 the Local AI screen it moved the header and the permanent
+                 "runs on this phone" label to [0,0][0,0] while the keyboard
+                 was up, and it is why the old chat plate was clipped. Naming
+                 resize keeps the window in place and lets the app's one inset
+                 do the work. It also changes nothing about edge-to-edge: this
+                 app targets 36, `decorFitsSystemWindows` is false, so the
+                 inset is still delivered to `WindowInsets.ime`. -->
             <!-- resizeableActivity: recommended for the Activity a chat
                  bubble expands into ("Floating Jarvis: Bubble",
                  service/WakeWordService.kt's attachBubble) - the bubble's

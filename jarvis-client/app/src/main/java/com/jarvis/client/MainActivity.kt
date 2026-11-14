@@ -3875,6 +3875,18 @@ class MainActivity : FragmentActivity() {
                         modifier = root,
                     )
 
+                    // "Local AI" (2026-11-13): a small GGUF model running on THIS
+                    // PHONE, with no PC and no internet. Reached from Home's More
+                    // menu; the screen's own switch ships OFF and its engine is
+                    // created inside its Load tap, so opening this screen starts
+                    // nothing and sends nothing. No route, no permission, no
+                    // approval card - and no desktop counterpart on purpose
+                    // (docs/ARCHITECTURE.md section 8).
+                    Screen.LOCAL_AI -> com.jarvis.client.localai.LocalAiScreen(
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
                     // "Edit HUD" (2026-11-02): the phone's own editor for what
                     // its Home screen shows - the four sections, the five
                     // read-only built-in arrangements, the owner's copies and
@@ -4836,6 +4848,11 @@ class MainActivity : FragmentActivity() {
                                 // is added: the new screen reads the same
                                 // `GET /api/schedule`.
                                 onOpenReminders = { nav.go(Screen.REMINDERS) },
+                                // Local AI (2026-11-13): the phone's own
+                                // on-device model screen. It adds no route and
+                                // no card, and the screen ships behind a switch
+                                // that is OFF - opening it starts nothing.
+                                onOpenLocalAi = { nav.go(Screen.LOCAL_AI) },
                                 // Settings from Home's own row (2026-10-08).
                                 // Appearance is Settings-only on the phone since
                                 // 2026-11-02: its own row in Settings still opens

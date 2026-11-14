@@ -1,5 +1,7 @@
 package com.jarvis.client.ui.screens
 
+import com.jarvis.client.localai.LocalAiWords
+
 /**
  * The words of the one "More" menu (the owner's ask of 2026-10-25).
  *
@@ -39,7 +41,8 @@ internal object MoreMenuWords {
     const val SUBTITLE =
         "The Home cards that are not safety controls, then the chat's own " +
             "controls, the modes, and what you can send with a question. Only " +
-            "what this PC offers is listed."
+            "what this PC offers is listed. The Local AI row is the phone's own " +
+            "model, which needs no PC at all."
 
     /**
      * "New chat" - starts a fresh conversation, the same mechanism the idle
@@ -62,6 +65,20 @@ internal object MoreMenuWords {
 
     /** Under "History": what the screen holds, and that it is the PC's own list. */
     const val HISTORY_DETAIL = "Every chat your PC kept."
+
+    /**
+     * "Local AI" (2026-11-13): the phone's own on-device model screen, in
+     * `com.jarvis.client.localai`. The words come from [LocalAiWords.TITLE] so
+     * the menu row and the screen's title can never drift apart.
+     *
+     * It is the one row here that does not touch the PC at all, which is why
+     * its detail says so: the owner must never mistake this chat for the one
+     * whose answers come from the desktop.
+     */
+    const val LOCAL_AI = LocalAiWords.TITLE
+
+    /** Under "Local AI": which machine answers there. */
+    const val LOCAL_AI_DETAIL = LocalAiWords.MORE_DETAIL
 
     /**
      * The one row that holds the chat's three modes now (the owner's choice of
