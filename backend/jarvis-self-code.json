@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "38c06683aadc852b58dca7ba2b23ef0f6c599503",
- "built_at": "2026-11-14T04:49:21-08:00",
+ "ref": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
+ "built_at": "2026-11-14T06:07:02-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6483,6 +6483,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1257 from darknight11ish/integration/wave19-2026-11-14"
+  },
+  {
+   "sha": "56019060c8c36132f7f57b0701f957444b2d9159",
+   "date": "2026-11-14",
+   "subject": "Regenerate the records after folding Atlas and the skip reporting"
+  },
+  {
    "sha": "38c06683aadc852b58dca7ba2b23ef0f6c599503",
    "date": "2026-11-14",
    "subject": "Merge 8a33c2726 into integration/wave19-2026-11-14 (#1253 a machine skip is printed as a skip); generated records keep the integration side, regenerated at the end"
@@ -6571,16 +6581,6 @@
    "sha": "32f1d25086361bafae22a5a1c93d9a434c43262e",
    "date": "2026-11-14",
    "subject": "Merge origin/main again, and regenerate the map rather than merge it"
-  },
-  {
-   "sha": "65629fe48ff6f9beebd72b10cf2a2960ddc5f673",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1231 from darknight11ish/feat/android-local-engine-2026-11-13"
-  },
-  {
-   "sha": "e8412edd7791e8b438c8a27b8e465b21e563c9eb",
-   "date": "2026-11-14",
-   "subject": "Regenerate the two generated records over the archive, and count it honestly"
   }
  ],
  "top_level": [
