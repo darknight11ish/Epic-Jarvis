@@ -508,10 +508,10 @@ def t_outside_the_catalogue_falls_through():
 
 
 # --------------------------------------------------------------------------
-#   6. every one of the 182 rows answers from itself
+#   6. every one of the 183 rows answers from itself
 # --------------------------------------------------------------------------
 def t_every_catalogue_row_answers_from_its_own_words():
-    check("the catalogue has its 182 rows", len(C.FEATURES) == 182,
+    check("the catalogue has its 183 rows", len(C.FEATURES) == 183,
           len(C.FEATURES))
     missing = []
     for row in C.FEATURES:
@@ -526,7 +526,10 @@ def t_every_catalogue_row_answers_from_its_own_words():
               and not any(i in low for i in INVENTED))
         if not ok:
             missing.append(row["id"])
-    check("all 179 rows answer with their own what/where/surface, never a denial",
+    # The count in this line is the catalogue's own length, so it cannot go
+    # stale the way the "179" it replaced did (measured 2026-11-13).
+    check(f"all {len(C.FEATURES)} rows answer with their own what/where/surface, "
+          "never a denial",
           not missing, ", ".join(missing[:8]))
 
 

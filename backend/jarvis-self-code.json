@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "bbfcbd795316348df210673105e96ab7ca39594e",
- "built_at": "2026-11-13T20:49:50-08:00",
+ "ref": "35f216b9604e9f0a23bd2ad37342f44de17f6ad5",
+ "built_at": "2026-11-13T20:50:21-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6375,6 +6375,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "35f216b9604e9f0a23bd2ad37342f44de17f6ad5",
+   "date": "2026-11-13",
+   "subject": "regen: the generated records after the second merge with origin/main, twins copied"
+  },
+  {
    "sha": "bbfcbd795316348df210673105e96ab7ca39594e",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
@@ -6468,11 +6473,6 @@
    "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
    "date": "2026-11-13",
    "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
-  },
-  {
-   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
-   "date": "2026-11-13",
-   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
   }
  ],
  "top_level": [

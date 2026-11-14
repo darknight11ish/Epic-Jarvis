@@ -19,7 +19,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 182,
+  "feature_count": 183,
   "features": [
     {
       "id": "typing",
@@ -9880,6 +9880,56 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "phone-settings-backup",
+      "name": "Set up a new phone from a settings backup",
+      "group": "Phone",
+      "surface": "phone",
+      "where": "Settings, Phone settings backup. Save a backup asks for a password and then opens Android's own file picker; Restore from a backup asks for that password and opens the backup file.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Set up a new phone from a settings backup",
+        "turn_off": "turn off Set up a new phone from a settings backup",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "- (no desktop row: this file holds THIS phone's settings, and the PC's own Backups card is a different file with a different recovery code)",
+        "search": [],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Settings > Phone settings backup (a bespoke plate with no shared settings-registry section, so this checker's evidence test cannot see it)",
+        "search": [
+          "phone settings backup",
+          "Phone settings backup"
+        ],
+        "found": false
+      },
+      "status": "pc-only",
+      "owner": "Session B",
+      "reason": "Phone-only, by the platform: the file holds THIS phone's own settings and never reaches the PC (docs/ARCHITECTURE.md section 8), while the PC's Backups card is a different file with a different recovery code. Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
+      "label_evidence": {
+        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "screen_path": "desktop: no row (nothing to press on the PC); phone: Settings, Phone settings backup"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "app-local",
+        "owner": "Session B",
+        "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+        "settings_gap": null,
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -14349,7 +14399,7 @@
   "label_counts": {
     "Command-Only (Runs When You Ask — No Switch Needed)": 107,
     "Switchable / Adjustable (Typed & Settings)": 44,
-    "PC-Only Setting (Honest Refusal on Phone)": 17,
+    "PC-Only Setting (Honest Refusal on Phone)": 18,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
