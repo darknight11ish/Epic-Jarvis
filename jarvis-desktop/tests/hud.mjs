@@ -4643,6 +4643,58 @@ await check("a History door is one click away in every shell, and the drawer she
   assert.equal(byRail.open, 1, "the rail icon no longer opens the same panel");
 });
 
+// The owner's screenshot, 2026-11-13: opening History greyed out the right
+// ~quarter of the window. `setOpen` puts `hh-open` on <html> for the scroll
+// lock, and the panel's ROW rule used to be a bare `.hh-open` - so the root
+// itself matched that flex row (html display block -> flex, padding-left
+// 0 -> 7px), the shell stopped at 801.83px of a 1280px window, and the bare
+// html showed through as a band on the right. The drawer's own backdrop was
+// measured full-viewport and was not the cause. The row rule is now qualified
+// `.hh-item .hh-open`; this pin opens the real panel at the two sizes the H4
+// geometry checks use, so a future unqualified row selector fails here.
+await check("the History drawer never turns the root into a flex row: the shell still spans 1280 and 1024 (DPR 1)", async () => {
+  for (const [width, height] of [[1280, 820], [1024, 768]]) {
+    const { page, problems } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false },
+      { viewport: { width, height } });
+    await page.waitForTimeout(300);
+    // The strip's door in the drawer shells, the rail's clock icon in the
+    // others, and `window.hudHistory.open()` all call the ONE open routine.
+    const did = await page.evaluate(() => window.hudHistory && window.hudHistory.open());
+    assert.equal(did, true, `${width}x${height}: the History panel is not mounted, so it could not be opened`);
+    await page.waitForTimeout(350); // the drawer slides: let it settle
+    const facts = await page.evaluate(() => {
+      const shell = document.getElementById("shell").getBoundingClientRect();
+      const body = document.body.getBoundingClientRect();
+      return {
+        open: document.getElementById("history-sidebar").classList.contains("hh-on")
+          && window.hudHistory.isOpen(),
+        rootClass: document.documentElement.classList.contains("hh-open"),
+        htmlDisplay: getComputedStyle(document.documentElement).display,
+        htmlPaddingLeft: getComputedStyle(document.documentElement).paddingLeft,
+        shellWidth: shell.width, shellRight: shell.right,
+        bodyWidth: body.width, viewport: innerWidth,
+      };
+    });
+    assert.equal(facts.open, true, `${width}x${height}: the History panel did not open`);
+    assert.equal(facts.rootClass, true, `${width}x${height}: the open drawer no longer marks the root open`);
+    assert.notEqual(facts.htmlDisplay, "flex",
+      `${width}x${height}: <html> became a flex container while History is open (display ${facts.htmlDisplay}) `
+      + "- an unqualified .hh-open row rule is matching the root again");
+    assert.equal(facts.htmlPaddingLeft, "0px",
+      `${width}x${height}: the row rule's 7px padding leaked onto <html> (${facts.htmlPaddingLeft})`);
+    // The bare-html band: the shell must still reach the right edge of the
+    // window. Before the fix it stopped at 801.83px of 1280.
+    assert.ok(facts.shellWidth >= facts.viewport - 1 && facts.shellRight >= facts.viewport - 1,
+      `${width}x${height}: the shell is ${facts.shellWidth}px wide (right edge ${facts.shellRight}) `
+      + `of a ${facts.viewport}px window - the bare html shows as a band on the right`);
+    assert.ok(facts.bodyWidth >= facts.viewport - 1,
+      `${width}x${height}: the body is ${facts.bodyWidth}px of a ${facts.viewport}px window`);
+    await page.close();
+    assert.deepEqual(problems, []);
+  }
+});
+
 await check("one open-the-bar control is drawn; the duplicate pill and dock icon stay dormant", async () => {
   const shelled = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   const withShell = await shelled.page.evaluate(() => {
