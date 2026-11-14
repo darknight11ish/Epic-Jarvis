@@ -29,12 +29,22 @@
  *
  * THE STEPPER (Wave B, ruling Q1). The card shows one question at a time by
  * default, under a row of section tabs, with a "show only new / unanswered"
- * filter. All of that is four pure functions here - `sectionsOf`,
- * `visibleQuestions`, `nextQuestion`, `progressWords` - so the rules can be
- * tested without a browser and the DOM file only paints what they return. A
- * backend that does not send sections or versions yet still works: every
- * question lands in one unnamed section and the filter keeps only the ones with
- * no answer, which is exactly what it should do with no version data.
+ * filter. All of that is pure functions here - `sectionsOf`, `visibleQuestions`,
+ * `nextQuestion`, `nextStep`, `progressWords` - so the rules can be tested
+ * without a browser and the DOM file only paints what they return. A backend
+ * that does not send sections or versions yet still works: every question lands
+ * in one unnamed section and the filter keeps only the ones with no answer,
+ * which is exactly what it should do with no version data.
+ *
+ * THE NEXT PRESS (2026-11-13). `nextStep` is what the stepper's Next DOES -
+ * step, finish, or end with a sentence - so the button's label, the press and
+ * the tests read one rule. Before it, Next worked the step out itself and the
+ * last question was a dead end: the press did nothing, Finish was never painted
+ * and never wired, and the pass could never be recorded as complete. Its other
+ * half was the filter hiding the question on screen, where a `-1` fell through
+ * to the next section. `nextStep` is where both are fixed, and `stepEnd` is the
+ * only place FINISH is ever offered: a pass whose every question has an answer,
+ * not yet recorded, and never before that.
  *
  * HONEST STATES. A change's `effect` is the PC's own: `instant` (it happens at
  * once), `card` (its own existing approval card waits for a person) or
@@ -137,6 +147,23 @@ export const NEXT = "Next";
 export const SKIP = "Skip this one";
 export const FINISH = "Finish";
 export const STEP_POSITION = (at, total) => `Question ${at} of ${total}`;
+/** The three things one press of Next can do (2026-11-13). `nextStep` returns
+ *  ONE of these as its `kind`, so the button's label, the press itself and the
+ *  tests cannot disagree about what Next means. */
+export const STEP_QUESTION = "question";
+export const STEP_FINISH = "finish";
+export const STEP_END = "end";
+/** The line under the stepper when there is nothing after this question and
+ *  every question already has an answer, so there is no pass left to record. */
+export const STEP_END_WORDS =
+  "That is the last question, and every question has an answer. Nothing is " +
+  "left to walk on this pass.";
+/** The same end on a PC whose module predates the versioned pass (`version`
+ *  0): there is no completion record to write, so the press has nothing to
+ *  offer - and says so instead of doing nothing. */
+export const STEP_END_NO_RECORD =
+  "That is the last question. This PC's Jarvis does not keep a record of a " +
+  "finished pass, so there is nothing more to press here.";
 export const NOT_NOW = "Not now";
 export const KEEP_CURRENT = "Keep current settings";
 export const TAKE_AGAIN = "Take it again";
@@ -489,6 +516,140 @@ export function nextQuestion(reading, draft, fromId) {
 }
 
 /**
+ * What pressing the stepper's Next does now - the whole rule, in one place.
+ *
+ * `kind` is always one of three, and `id`/`why` belong to it:
+ *
+ *  * `STEP_QUESTION` with an `id`: step to that question. It is in the PC's own
+ *    order and may live in a later section, which the page's `stepTo` opens.
+ *  * `STEP_FINISH`: there is nothing after this question and every question has
+ *    an answer, so this press is the one that records the pass as complete (the
+ *    cardless `{"keep_current": true}` note - it writes no answer and changes no
+ *    setting; Apply is still the only write to a setting).
+ *  * `STEP_END` with a `why` sentence: there is nothing after this question and
+ *    no pass to record, so the button is turned off and the sentence says what
+ *    is left. Never a press that does nothing.
+ *
+ * WHY IT EXISTS (2026-11-13, reported by the owner). Next used to work the step
+ * out itself, and at the end of the list it fell through to `paintStepNav()`
+ * and returned: the press did nothing, Finish was never painted and wired, and
+ * the pass could never be recorded as complete - so the app kept telling the
+ * owner the quiz was unfinished. The other half of the same bug: `findIndex`
+ * for a question the filter had hidden is `-1`, which fell through to the NEXT
+ * SECTION even when this one still had questions left after it. Both are one
+ * bug - a press with no rule to consult - so both are fixed by this rule.
+ *
+ * The order of the moves: the next question ON SCREEN while there is one; else,
+ * when the question on screen is not in that list (the filter hid it, or a
+ * section change repainted past it), the next question in the PC's own order -
+ * ONE step and never a section; else the next section that still has a question
+ * to show; else the end.
+ */
+export function nextStep(
+  reading,
+  { section = "", filter = false, currentId = "", draft = {} } = {},
+) {
+  const shown = visibleQuestions(reading, { section, filter });
+  const at = shown.findIndex((q) => q.id === plain(currentId));
+  if (at >= 0 && shown[at + 1]) return stepOn(shown[at + 1].id);
+  if (at < 0 && plain(currentId)) {
+    const following = firstShownAfter(reading, currentId, filter);
+    if (following) return stepOn(following.id);
+  }
+  const later = firstShownInLaterSection(reading, section, filter);
+  if (later) return stepOn(later.id);
+  return stepEnd(reading, draft);
+}
+
+/** One "step to this question" answer; `plain` keeps the shape the same even
+ *  when the id arrives as something odd. */
+function stepOn(id) {
+  return { kind: STEP_QUESTION, id: plain(id), why: "" };
+}
+
+/** The first question the filter keeps AFTER `fromId` in the PC's own order:
+ *  ONE step, whatever section it is in, and never a jump of a section. */
+function firstShownAfter(reading, fromId, filter) {
+  const questions = (reading && reading.questions) || [];
+  const at = questions.findIndex((q) => q.id === plain(fromId));
+  for (let i = at + 1; i < questions.length; i += 1) {
+    if (!filter || isNewOrUnanswered(reading, questions[i])) return questions[i];
+  }
+  return null;
+}
+
+/** The first question the filter keeps in the first section AFTER `section` -
+ *  the step that carries on walking once the section on screen is done. */
+function firstShownInLaterSection(reading, section, filter) {
+  const sections = sectionsOf(reading);
+  const here = sections.findIndex((row) => row.id === plain(section));
+  if (here < 0) return null;
+  for (let i = here + 1; i < sections.length; i += 1) {
+    for (const question of sections[i].questions) {
+      if (!filter || isNewOrUnanswered(reading, question)) return question;
+    }
+  }
+  return null;
+}
+
+/** The end of the walk: FINISH when there is a pass to record, otherwise the
+ *  end with its own sentence (see `nextStep`). */
+function stepEnd(reading, draft) {
+  if (!passComplete(reading, draft)) {
+    return { kind: STEP_END, id: "", why: stepOpenWords(reading, draft) };
+  }
+  if (reading && reading.version > 0 && reading.completedVersion < reading.version) {
+    return { kind: STEP_FINISH, id: "", why: "" };
+  }
+  return {
+    kind: STEP_END,
+    id: "",
+    why: reading && reading.version > 0 ? STEP_END_WORDS : STEP_END_NO_RECORD,
+  };
+}
+
+/**
+ * The line under the stepper at the end of the walk when questions still have
+ * no answer: how many, where to find them and - on a PC that has the versioned
+ * pass - the one button that records the pass without an answer.
+ *
+ * A count from the DRAFT, like `progressWords`, so the two lines agree. Empty
+ * when every question has an answer, because then it is not this sentence.
+ */
+export function stepOpenWords(reading, draft) {
+  const open = unansweredCount(reading, draft);
+  if (!open) return "";
+  const count = open === 1 ? "1 question" : `${open} questions`;
+  const have = open === 1 ? "has" : "have";
+  const them = open === 1 ? "it" : "them";
+  const keep = reading && reading.version > 0
+    ? ', or press "Keep current settings"'
+    : "";
+  return `That is the last question. ${count} still ${have} no answer - use the ` +
+    `sections above to find ${them}${keep}.`;
+}
+
+/** How many of the PC's questions the draft has no answer for - the complement
+ *  of the count `progressWords` prints, over the PC's own list. */
+export function unansweredCount(reading, draft) {
+  const questions = (reading && reading.questions) || [];
+  return questions.filter((q) => answerFor(draft, q.id) === null).length;
+}
+
+/**
+ * Is this pass complete - every question the PC has, answered?
+ *
+ * A pass is complete when the DRAFT answers all of them, which is what the
+ * stepper walks; it is not "Apply was pressed". Only a complete pass can be
+ * recorded as finished, so this is the one rule `nextStep`'s FINISH and the
+ * "you have finished this pass" block both read.
+ */
+export function passComplete(reading, draft) {
+  const questions = (reading && reading.questions) || [];
+  return questions.length > 0 && unansweredCount(reading, draft) === 0;
+}
+
+/**
  * The first question the owner has never answered, in the PC's order - where
  * the stepper opens after the walkthrough or "Finish now". Null when every
  * question has an answer.
@@ -527,10 +688,7 @@ export function progressWords(reading, draft) {
 export function finishedPassWords(reading, draft) {
   if (!reading || !(reading.version > 0)) return "";
   if (reading.completedVersion < reading.version) return "";
-  const questions = (reading && reading.questions) || [];
-  const everyOne = questions.length > 0
-    && questions.every((q) => answerFor(draft, q.id) !== null);
-  return `${DONE_HEADING}. ${everyOne ? DONE_WORDS : KEPT_WORDS}`;
+  return `${DONE_HEADING}. ${passComplete(reading, draft) ? DONE_WORDS : KEPT_WORDS}`;
 }
 
 /** "Question 3 of 25", or "" when the id is not one this reading holds. */
