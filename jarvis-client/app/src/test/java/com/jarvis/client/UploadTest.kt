@@ -187,6 +187,36 @@ class UploadTest {
         assertTrue(bigZip!!.contains("4 GB"))
     }
 
+    @Test
+    fun `a photo is accepted by this door as a plain file, and the wrong kind still is not`() {
+        // 2026-11-13: every picture the phone treats as a photo by name is a
+        // kind the Settings folder door sends. The provider's type is not
+        // needed - the name decides, as it does for a document.
+        for (name in listOf(
+            "holiday.jpg", "holiday.jpeg", "holiday.png", "holiday.webp",
+            "holiday.heic", "holiday.heif", "holiday.gif", "holiday.bmp",
+        )) {
+            assertNull(name, Upload.refusal(name, "application/octet-stream", 10,
+                Upload.Purpose.DOCUMENT))
+            assertNull(name, Upload.refusal(name, null, 10, Upload.Purpose.DOCUMENT))
+        }
+        val svg = Upload.refusal("drawing.svg", "image/svg+xml", 10, Upload.Purpose.DOCUMENT)
+        assertNotNull(svg)
+        assertTrue(svg!!.contains("photo"))
+        assertTrue("the refusal names the photo kinds: $svg", svg.contains("JPG"))
+        assertNotNull(Upload.refusal("clip.mp4", "video/mp4", 10, Upload.Purpose.DOCUMENT))
+        assertNotNull(Upload.refusal("notes.tif", "image/tiff", 10, Upload.Purpose.DOCUMENT))
+        // The Notion door is untouched: still a .zip and nothing else.
+        assertNotNull(Upload.refusal("holiday.jpg", "image/jpeg", 10, Upload.Purpose.NOTION))
+        // A photo has the same 50 MB cap as a document.
+        assertNotNull(
+            Upload.refusal("holiday.png", "image/png", Upload.DOCUMENT_MAX + 1,
+                Upload.Purpose.DOCUMENT),
+        )
+        // ...and no extension means no photo kind: the PC decides by the name.
+        assertNotNull(Upload.refusal("scan", "image/png", 10, Upload.Purpose.DOCUMENT))
+    }
+
     // ------------------------------------------------------- answer mapping ---
 
     @Test
@@ -518,6 +548,11 @@ class UploadTest {
         assertTrue(Upload.waitingLine("taxes.pdf").contains("taxes.pdf"))
         assertFalse(Upload.waitingLine("taxes.pdf").contains("2 of 4"))
         assertTrue(Upload.DETAIL.contains("From my phone"))
+        // 2026-11-13: the row says photos as well as documents, and that a
+        // photo is a plain file no model sees on this path.
+        assertTrue(Upload.TITLE.contains("photo"))
+        assertTrue(Upload.DETAIL.contains("photo"))
+        assertTrue(Upload.DETAIL.contains("plain file"))
         assertTrue(Upload.NOT_HERE.contains("not available on this PC"))
         assertTrue(Upload.NO_FOLDERS.contains("Settings, Folders Jarvis may look in"))
     }

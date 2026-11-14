@@ -2,7 +2,8 @@
 # each with the sha256 of every file PyPI has for it, so pip refuses a file
 # that was swapped (hash-checking mode). Made by a tool; do not edit by hand.
 #
-# Covers Windows and Linux, Python 3.11 and newer. Releases younger than
+# Covers Windows and Linux, Python 3.11.5 and newer (soupsieve 4 needs 3.11.5;
+# the last entry in the exceptions below says why). Releases younger than
 # 7 days when it was made were left out on purpose (a hijacked release has
 # time to be noticed and pulled). Made on 2026-09-26 from releases up to
 # 2026-09-19 (made again on 2026-09-28 with the same cut-off, to add
@@ -14,16 +15,18 @@
 # whole file was compiled again on 2026-10-25 - see HISTORY at the bottom).
 #
 # To make it again, from the repository root, with uv (this exact command made
-# this file on 2026-10-25 with uv 0.12.9):
+# this file's body on 2026-11-13 with uv 0.12.9; the 2026-10-25 compile used
+# the same one without the soupsieve exception):
 #
-#   uv pip compile backend/requirements.txt --universal --generate-hashes --python-version 3.11 --exclude-newer 2026-09-19T00:00:00Z --exclude-newer-package markitdown=2026-09-26T00:00:00Z --exclude-newer-package pillow=2026-10-21T00:00:00Z --exclude-newer-package rapidocr=2026-10-13T00:00:00Z --exclude-newer-package certifi=2026-10-20T03:00:00Z --exclude-newer-package filelock=2026-10-17T17:00:00Z --no-header -o backend/requirements.lock
+#   uv pip compile backend/requirements.txt --universal --generate-hashes --python-version 3.11.5 --exclude-newer 2026-09-19T00:00:00Z --exclude-newer-package markitdown=2026-09-26T00:00:00Z --exclude-newer-package pillow=2026-10-21T00:00:00Z --exclude-newer-package rapidocr=2026-10-13T00:00:00Z --exclude-newer-package certifi=2026-10-20T03:00:00Z --exclude-newer-package filelock=2026-10-17T17:00:00Z --exclude-newer-package soupsieve=2026-11-06T00:00:00Z --no-header -o backend/requirements.lock
 #
 # --no-header, because the header below is written by hand and the compile
 # writes only the body; put this header back on top of its output.
 #
-# The five --exclude-newer-package dates are deliberate one-package exceptions
-# to the 7-day wait, and they are what lets a fresh compile reproduce this
-# file's versions exactly:
+# The six --exclude-newer-package dates are deliberate one-package exceptions
+# to the cut-off above, and they are what lets a fresh compile reproduce this
+# file's versions exactly. The first five are also exceptions to the 7-day
+# wait; soupsieve's date IS that wait, measured on the day it was bumped:
 #   markitdown 0.1.8   - the release that brings a pdfminer.six with the fix
 #                        for crafted PDFs (CVE-2025-64512); younger than 7 days
 #                        when the lock was first made. Its wheel's sha256 was
@@ -37,7 +40,7 @@
 #   pillow 13.0.0      - uploaded 2026-10-16T22:15Z; the ONLY release fixing
 #                        Pillow's 24 advisories (no later 12.x release exists,
 #                        and no release after 12.3.0 ships a Python 3.10 wheel -
-#                        hence the 3.11 floor).
+#                        hence the move off 3.10).
 #   certifi 2026.10.19 - the GHSA-6q48-6c7w-9gw2 fix that #670 merged on
 #                        2026-10-20; newer than the 2026-09-19 cut-off.
 #   filelock 4.2.1     - uploaded 2026-10-17T16:48Z; fixes 4.0.0's three
@@ -45,9 +48,17 @@
 #                        GHSA-567q-5qvw-pf92). backend/requirements.txt names
 #                        filelock with >=4.2.1, so this floor cannot quietly
 #                        move back.
+#   soupsieve 4.0.1    - uploaded 2026-11-04T16:36Z; the first release that
+#                        clears BOTH of its advisories (GHSA-4j63-6c4x-wfg4 is
+#                        fixed in 2.10.0, GHSA-mmhr-3c5m-f64f in 4.0.0). The
+#                        date is the 7-day wait on 2026-11-13: 4.0.1 is 9 days
+#                        old and was picked; 4.1 (2026-11-10) is too young. The
+#                        floor moved 3.11 -> 3.11.5 in the same round because
+#                        soupsieve 4 needs 3.11.5, and the newest release below
+#                        it, 2.10, still carries GHSA-mmhr-3c5m-f64f.
 #
 # For a routine remake months later, move the literal --exclude-newer date to
-# seven days before the new make; keep the five exceptions until a change
+# seven days before the new make; keep the six exceptions until a change
 # means to move that package, and change one only for a reason.
 #
 # Then put this header back and run: python3 tools/check_python_advisories.py
@@ -107,6 +118,18 @@
 #     Python 3.10 pins this round deletes, and the fallback imports it serves
 #     (rebuilt jarvis_framework.py, jarvis_tool_updates.py,
 #     jarvis_asks_first.py) only fire below 3.11.
+#
+# 2026-11-13 - soupsieve 2.9.2 -> 4.0.1, the first release that clears both of
+#   its advisories (GHSA-4j63-6c4x-wfg4 is fixed in 2.10.0, GHSA-mmhr-3c5m-f64f
+#   in 4.0.0), and the ONLY body line that moved. The global cut-off stayed at
+#   2026-09-19 and the one package was re-resolved with its own exception, so no
+#   unrelated package moved: uv 0.12.9, the command above, reproduces this body
+#   byte for byte, and diffing that output against the file it replaced shows one
+#   hunk - soupsieve. The Python floor moved 3.11 -> 3.11.5 in the same round
+#   because soupsieve 4 declares requires_python >=3.11.5, and the newest release
+#   that runs below it, 2.10, still carries GHSA-mmhr-3c5m-f64f - a
+#   3.11.0-3.11.4 lane cannot be covered by a clean pin at all. Both lock copies
+#   are byte-identical.
 
 antlr4-python3-runtime==4.9.3 \
     --hash=sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b
@@ -1574,9 +1597,9 @@ six==1.17.0 \
     #   markdownify
     #   python-dateutil
     #   rapidocr
-soupsieve==2.9.2 \
-    --hash=sha256:4a55d8cf158a9c2e587fa4922f1bbb91d68ac829e2d6f25403a85747c71daf74 \
-    --hash=sha256:8089a26fd974ca7a1f30276d3d8492ab266ab15af581642dfe8aa162e0c1c823
+soupsieve==4.0.1 \
+    --hash=sha256:2e68cf7dd5a0f29d81f9d485275ccf294e6475f615e211895d91cb81f8614f04 \
+    --hash=sha256:7621e3c5f6b371ed2c5eabaac5de300ac3d66d05e6d7f34783e31b63c4f90c75
     # via beautifulsoup4
 sqlite-vec==0.1.9 \
     --hash=sha256:1515727990b49e79bcaf75fdee2ffc7d461f8b66905013231251f1c8938e7786 \

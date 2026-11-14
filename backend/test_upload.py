@@ -12,9 +12,11 @@ that it kept every rule the promise was protecting:
      it is denied, times out or is never answered (rule 4, taken at its word);
   2. a folder that is not on the owner's own "Folders Jarvis may look in" list
      is refused - the phone cannot create a grant;
-  3. only the eight kinds, an executable or a script is refused by name AND by
-     bytes, and a `.docx` that is really a renamed archive never reaches a
-     parser (the 2026-10-20 parser audit's guards, imported not copied);
+  3. only the eight document kinds, plus a photo as a PLAIN FILE COPY, and an
+     executable or a script is refused by name AND by bytes; a `.docx` that is
+     really a renamed archive never reaches a parser (the 2026-10-20 parser
+     audit's guards, imported not copied), and a landed photo is still refused
+     by both readers that turn bytes into words;
   4. the sha256 and the size are checked at finish, and a truncated or altered
      upload leaves nothing behind;
   5. staging is invisible to every reader before `finish`, and deleted on every
@@ -652,6 +654,96 @@ def t_the_eight_kinds_and_no_executable():
           sorted(p.name for p in (into / U.SUB).iterdir()))
 
 
+def t_a_photo_lands_as_a_plain_file():
+    """2026-11-13: a photo rides the SAME door, unchanged, and is never read.
+
+    The owner asked Jarvis to send a photo on his phone to the PC and was told
+    it could not. The half that was genuinely missing is this one: the folder
+    door accepted only the eight document kinds. What must stay true is the
+    other half of the answer - no model ever sees the picture's bytes on this
+    path - so this test proves the landing AND both readers' refusals.
+    """
+    fresh()
+    into, = listed("Documents")
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + bytes(48)
+    others = {
+        "holiday.jpg": b"\xff\xd8\xff\xe0" + bytes(60),
+        "scan.gif": b"GIF89a" + bytes(60),
+        "drawing.bmp": b"BM" + bytes(60),
+        "picture.webp": b"RIFF" + (60).to_bytes(4, "little") + b"WEBP" + bytes(60),
+        "photo.heic": b"\x00\x00\x00\x18ftypheic" + bytes(60),
+    }
+    code, out = whole("holiday.png", png, into)
+    landed = into / U.SUB / "holiday.png"
+    check("a photo is accepted by the SAME route, with no new route", code == 200
+          and out.get("saved") is True, (code, out))
+    check("it lands in '<the folder>/From my phone', under its own name",
+          landed.is_file() and out.get("sub") == U.SUB,
+          (code, out, sorted(p.name for p in into.iterdir())))
+    check("it is a PLAIN FILE COPY: every byte is unchanged, no conversion",
+          landed.is_file() and landed.read_bytes() == png, landed)
+    check("the answer's sentence names the folder it went into",
+          "From my phone" in out.get("said", "") and "Documents" in out.get("said", ""),
+          out)
+    for name, data in others.items():
+        U._reset_for_tests()
+        c, o = whole(name, data, into)
+        check(f"the same door carries {name} as a plain file",
+              c == 200 and o.get("saved") is True and (into / U.SUB / name).read_bytes() == data,
+              (c, o))
+
+    # The card says what a photo really is: saved, never read, never modelled.
+    text = U.card("holiday.png", len(png), str(into))
+    check("a photo's card says it is a photo", "It is a photo" in text, text)
+    check("... that Jarvis does not open it or show it to a model on this path",
+          "does not open it" in text and "model" in text, text)
+    check("... and it does not claim a photo's words were read as outside text",
+          "words\nin it count as outside text" not in text, text)
+    check("a document's card is unchanged", "outside text" in U.card(
+        "taxes.pdf", len(png), str(into)))
+
+    # A non-allowed type is STILL refused by name - the allowance is a list,
+    # not a door that opened for everything.
+    for ext in (".svg", ".tif", ".tiff", ".mp4", ".zip", ".exe", ".py"):
+        U._reset_for_tests()
+        c, o = U.request_begin({"name": "thing" + ext, "size": 10, "into": str(into)},
+                               gate=gate_yes(), tier_of=lambda a: "ask",
+                               spawn=run_now, sweep=False)
+        check(f"a photo allowance does not let {ext} through", c == 400
+              and o.get("said") == U.KIND_BAD, (c, o))
+    U._reset_for_tests()
+    c, o = whole("fake.png", b"MZ\x90\x00" + bytes(60), into)
+    check("a program renamed .png is refused by its bytes", c == 200
+          and "not one" in o.get("said", "") and not (into / U.SUB / "fake.png").exists(),
+          (c, o))
+    c, o = whole("fake.heic", b"not a heif at all", into)
+    check("a .heic that is not one is refused too", c == 200
+          and "not one" in o.get("said", ""), (c, o))
+
+    # THE PRIVACY LINE, MEASURED ON THE LANDED FILE - not asserted in a comment.
+    got = D.read(str(landed))
+    check("the documents reader still refuses a landed photo", got.get("ok") is False, got)
+    check("... saying what it does read",
+          "PDF, Word" in got.get("error", "") and "Markdown" in got.get("error", ""), got)
+    check("the index never carries a picture kind",
+          not any(ext in D.TEXT_KINDS or ext in D.DOC_KINDS
+                  for ext in U.PHOTO_EXTENSIONS),
+          (sorted(D.TEXT_KINDS), sorted(D.DOC_KINDS)))
+    check("the index's own kind set excludes every photo extension",
+          not (set(U.PHOTO_EXTENSIONS) & set(D.the_index().kinds)),
+          sorted(D.the_index().kinds))
+    found = D.search("IHDR", roots=[into])
+    check("a folder search never opens a picture",
+          all(row.get("path") != str(landed) for row in found.get("results") or []), found)
+    attachment = A.read({"name": "holiday.png",
+                         "data": base64.b64encode(png).decode("ascii")})
+    check("the chat attachment reader still refuses a photo as a document",
+          attachment.get("ok") is False and attachment.get("why") == A.WHY_PICTURE,
+          attachment)
+    check("a photo is not one of the attachment reader's kinds",
+          ".png" not in A.KINDS and ".heic" not in A.KINDS, sorted(A.KINDS))
+
+
 def t_a_name_with_a_path_is_refused():
     fresh()
     into, = listed("Documents")
@@ -1028,6 +1120,7 @@ def main() -> int:
              t_the_four_mib_body_cap_is_respected,
              t_the_folder_must_be_on_the_owners_list,
              t_the_eight_kinds_and_no_executable,
+             t_a_photo_lands_as_a_plain_file,
              t_a_name_with_a_path_is_refused,
              t_the_staging_folder_is_invisible_before_finish,
              t_expiry_and_the_sweep,

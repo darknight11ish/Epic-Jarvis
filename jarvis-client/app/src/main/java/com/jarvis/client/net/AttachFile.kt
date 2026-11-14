@@ -74,12 +74,55 @@ object AttachFile {
     )
 
     /**
+     * The picture extensions the Settings "Send a document or a photo" row may
+     * carry as a PLAIN FILE COPY into `From my phone` (2026-11-13: the owner's
+     * report that Jarvis denied being able to send a photo to the PC at all).
+     *
+     * THEY ARE NOT KINDS AND MUST NEVER JOIN [KINDS]. [KINDS] is what the chat
+     * "Attach a file" path reads as a document, and a picture there takes
+     * [goesToPicture]'s own road ([ChatPicture], vision, secrets black-boxed).
+     * This list is only the Settings row's transport allowlist - the PC saves
+     * the bytes as a file, and no model is shown them on that path. So a photo
+     * is still `kindOf(...) == null` and still goes to the picture path in
+     * chat, while [photoKindOf] lets the folder door accept it unchanged.
+     *
+     * The eight are [PHOTO_EXTENSIONS]' own set - the same names the picture
+     * router already treats as a picture by name alone - so the phone and the
+     * PC cannot disagree about what a photo is.
+     */
+    val PHOTO_KINDS: List<Kind> = listOf(
+        Kind("jpg", "image/jpeg", "photo"),
+        Kind("jpeg", "image/jpeg", "photo"),
+        Kind("png", "image/png", "photo"),
+        Kind("webp", "image/webp", "photo"),
+        Kind("heic", "image/heic", "photo"),
+        Kind("heif", "image/heif", "photo"),
+        Kind("gif", "image/gif", "photo"),
+        Kind("bmp", "image/bmp", "photo"),
+    )
+
+    /**
+     * The picker's filter for the Settings "Send a document or a photo" row
+     * ONLY: the eight document types plus the eight photo types, as plain file
+     * copies. It is deliberately NOT [MIME_TYPES] and NOT [mimeTypes] - the
+     * chat "Attach a file" row keeps its own list, and its picture wildcard
+     * stays gated on the PC's Pictures feature (a photo there needs vision).
+     * This door needs no Pictures switch: a photo is only being stored.
+     */
+    val SEND_FILE_MIME_TYPES: Array<String> =
+        (KINDS.map { it.mime } + PHOTO_KINDS.map { it.mime }).distinct().toTypedArray()
+
+    /**
      * The system picker's own filter for DOCUMENTS. Narrow on purpose: a
      * picker offering every type would let the owner choose a 400 MB video
      * and learn the cap from a refusal instead of from the list.
      *
      * Since 2026-11-01 the one "Attach a file" row opens this list (or
      * [mimeTypes], which adds images) - there is no separate Photo control.
+     *
+     * Since 2026-11-13 the Settings "Send a document or a photo" row opens
+     * [SEND_FILE_MIME_TYPES] instead: this list plus [PHOTO_KINDS], because
+     * that door copies a photo as a plain file and never shows it to a model.
      */
     val MIME_TYPES: Array<String> = KINDS.map { it.mime }.distinct().toTypedArray()
 
@@ -100,8 +143,7 @@ object AttachFile {
         if (withPictures) MIME_TYPES + IMAGE_MIME else MIME_TYPES
 
     /** Photo extensions that are a picture by name alone, when a provider says nothing useful. */
-    private val PHOTO_EXTENSIONS =
-        setOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp")
+    private val PHOTO_EXTENSIONS: Set<String> = PHOTO_KINDS.map { it.extension }.toSet()
 
     /**
      * Does one pick go down the PICTURE path ([ChatPicture] - vision and
@@ -234,6 +276,20 @@ object AttachFile {
     fun kindFor(name: String?, mime: String?): Kind? =
         kindOf(name) ?: (if (hasNoExtension(name)) kindForMime(mime) else null)
 
+    /**
+     * The kind the Settings "Send a document or a photo" row accepts: a
+     * document exactly as [kindFor] decides it, or a photo by its extension.
+     *
+     * A photo is decided by its NAME alone - never by the provider's type and
+     * never when the name has no extension - because the PC writes the file
+     * under that name and decides what it is from the extension, so a photo
+     * with no extension would be refused there. This is the ONLY place a photo
+     * and the document list meet: the chat row still asks [kindFor], so a photo
+     * picked there still goes to [goesToPicture].
+     */
+    fun transferKindFor(name: String?, mime: String?): Kind? =
+        kindFor(name, mime) ?: photoKindOf(name)
+
     /** The raw bytes as the wire's `data` field: base64, no `data:` prefix. */
     fun base64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
 
@@ -252,6 +308,16 @@ object AttachFile {
     fun kindOf(name: String?): Kind? {
         val ext = extensionOf(name) ?: return null
         return KINDS.firstOrNull { it.extension == ext }
+    }
+
+    /**
+     * The photo kind a file's extension names, for the Settings folder door
+     * only ([transferKindFor]) - or null. Never part of [KINDS], so a photo is
+     * still routed to the picture path in chat.
+     */
+    fun photoKindOf(name: String?): Kind? {
+        val ext = extensionOf(name) ?: return null
+        return PHOTO_KINDS.firstOrNull { it.extension == ext }
     }
 
     /** A file's extension, lowercased, or null when its name has none to speak of. */

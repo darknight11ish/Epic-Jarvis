@@ -5,6 +5,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import androidx.core.content.edit
 import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.MicBargeIn
 import com.jarvis.client.voice.PrivateAloud
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -105,6 +106,30 @@ class ClientSettings(context: Context) {
     fun setHeardSound(value: Boolean) {
         prefs.edit { putBoolean(KEY_HEARD_SOUND, value) }
         _heardSound.value = value
+    }
+
+    private val _micBargeIn = MutableStateFlow(prefs.getBoolean(KEY_MIC_BARGE_IN, MicBargeIn.DEFAULT))
+
+    /**
+     * "Stop speaking when I press the mic" ([MicBargeIn]): THIS PHONE'S OWN,
+     * **ON by default** - the owner's ask of 2026-11-13, *"when I use the top
+     * mic button ... and jarvis is still speaking out from a previous response,
+     * I want it to interrupt its response and process the new thing I said. also
+     * add this to the settings as a changeable Default"*.
+     *
+     * On, a press of the microphone while Jarvis is speaking stops the reply at
+     * once (the stop word's own [com.jarvis.client.voice.VoiceSession.stopSpeaking])
+     * and starts listening for the next thing - the desktop's talk button
+     * behaviour. Off is the old behaviour: the press waits for the reply to
+     * finish. Nothing about it reaches the PC; the new words still go to the
+     * PC's own voice route exactly as before, and the phone transcribes
+     * nothing. A neighbouring phone-only switch, stored the same way.
+     */
+    val micBargeIn: StateFlow<Boolean> = _micBargeIn.asStateFlow()
+
+    fun setMicBargeIn(value: Boolean) {
+        prefs.edit { putBoolean(KEY_MIC_BARGE_IN, value) }
+        _micBargeIn.value = value
     }
 
     private val _readMemoriesAloud =
@@ -438,6 +463,9 @@ class ClientSettings(context: Context) {
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
+
+        /** "Stop speaking when I press the mic" - NOT the retired `barge_in` key above. */
+        const val KEY_MIC_BARGE_IN = "mic_barge_in"
 
         /** The owner's 2026-11-05 setting: off unless he turned it on. */
         const val KEY_READ_MEMORIES_ALOUD = "read_memories_aloud"

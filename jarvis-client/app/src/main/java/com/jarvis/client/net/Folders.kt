@@ -22,7 +22,8 @@ import kotlinx.serialization.json.put
  *  - NO Add: adding a folder is the PC's alone (the PC refuses it from any
  *    other device), so the phone shows the PC's line saying where
  *    (ARCHITECTURE section 8, "One-sided on purpose").
- *  - Since 2026-11-05, TWO doors of its own: "Send a document" and "Bring in
+ *  - Since 2026-11-05, TWO doors of its own: "Send a document or a photo"
+ *    (a photo joined it on 2026-11-13 as a plain file copy) and "Bring in
  *    a Notion export" ([Upload], [NotionImport]). The first uses the same
  *    folder list and never creates a grant; the second starts the PC's own
  *    Notion-import card. The PC's older path-taking import routes stay

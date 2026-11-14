@@ -243,30 +243,64 @@ def t_the_checker_exits_1_on_a_bad_suite():
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def t_the_required_job_runs_it():
-    """`ci.yml`: the checker and this suite reach the REQUIRED backend job.
+def _job_block(text: str, name: str):
+    """One job's lines in ci.yml, from `  <name>:` to the next `  <job>:`, or None.
 
-    Nothing here re-reads YAML semantics; it asks for the two facts that make
-    the check required rather than informational - the command inside the
-    `backend` job's own block, and the audit job still running it too."""
+    A tiny reader rather than a YAML import, the same shape
+    `test_browser_test_guard.py` uses: indentation is the structure, and this
+    must run in the required backend job without a new dependency."""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines)
+                  if line.rstrip() == f"  {name}:"), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(lines))
+                if re.match(r"^  [a-z0-9-]+:$", lines[i])), len(lines))
+    return "\n".join(lines[start:end])
+
+
+def t_the_required_job_runs_it():
+    """`ci.yml`: the checker and this suite reach the REQUIRED backend path.
+
+    WHAT "REQUIRED" MEANS NOW (2026-11-13). The check the ruleset requires is
+    still named `backend`, but since the suite job was sharded that job is an
+    AGGREGATOR over `backend-shard`: it does no work itself and is green only
+    when every shard is. So the checker and this suite are in the required path
+    when the `backend` job runs the checker itself (the shape before sharding),
+    OR when it `needs` the job that does - and the second question is asked
+    only when the first answer is no. Each check still fails if the checker is
+    dropped from the job, or from the job the required one is gated on.
+
+    Nothing here re-reads YAML semantics; it asks for the text that wires it."""
     if not CI.is_file():
         return skip("the checker runs in the required backend job",
                     f"{CI} is not here")
     text = CI.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    start = next((i for i, line in enumerate(lines) if line.strip() == "backend:"), None)
-    if start is None:
+    checker = "tools/check_vacuous_checks.py"
+    # The command as a whole line, so a commented-out or renamed call
+    # (`... .py.disabled`) is not read as the checker running.
+    runs = re.compile(
+        r"^\s*(?:python3?|py\s+-3)\s+tools/check_vacuous_checks\.py\s*$", re.M)
+    backend_job = _job_block(text, "backend")
+    if backend_job is None:
         return check("the required backend job exists in ci.yml", False,
                      "no `backend:` job found")
-    end = next((i for i in range(start + 1, len(lines))
-                if re.match(r"^  [a-z0-9-]+:$", lines[i])), len(lines))
-    job = "\n".join(lines[start:end])
-    check("the required backend job runs tools/check_vacuous_checks.py",
-          "tools/check_vacuous_checks.py" in job,
-          "the command is not in the backend job's steps")
+    if runs.search(backend_job):
+        runs_it, how = True, "the `backend` job runs it directly"
+    else:
+        needed = []
+        for need in re.findall(r"needs:\s*\[?([^\]\n]+)\]?", backend_job):
+            for name in re.split(r"[,\s]+", need.strip()):
+                block = _job_block(text, name) if name else None
+                if block and runs.search(block):
+                    needed.append(name)
+        runs_it = bool(needed)
+        how = (f"`backend` needs {', '.join(needed)}, which runs it" if needed
+               else "neither `backend` nor a job it needs runs it")
+    check("the required backend check runs tools/check_vacuous_checks.py",
+          runs_it, how)
     check("...and the audit job still runs it too",
-          text.count("tools/check_vacuous_checks.py") >= 2,
-          text.count("tools/check_vacuous_checks.py"))
+          text.count(checker) >= 2, text.count(checker))
     check("...and this suite is a backend/test_*.py, so the sweep runs it here",
           (HERE / "test_vacuous_checks.py").is_file())
 
