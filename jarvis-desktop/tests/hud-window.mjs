@@ -1,6 +1,6 @@
 /**
  * hud-window.mjs - "The big HUD window": the switch that shows or hides the
- * "Open the Jarvis bar" button in the big "Jarvis" window (the owner's
+ * "Open the Atlas bar" button in the big "Jarvis" window (the owner's
  * request of 2026-10-06; src/hud-window.js, src/hud-window-settings.js and
  * src-tauri/src/hud_bootstrap.js).
  *
@@ -327,7 +327,7 @@ await check("with nothing saved, the button is drawn beside the box - the approv
   const run = runBootstrap({ shell: true });
   const button = run.button();
   assert.ok(button, "no #hud-open-bar was created with nothing stored");
-  assert.equal(button.textContent, "Open the Jarvis bar");
+  assert.equal(button.textContent, "Open the Atlas bar");
   assert.equal(button.type, "button");
   assert.equal(button.className, "act primary hud-open-bar");
   // Beside the box, before it, exactly as PR #85 left it.
@@ -390,7 +390,7 @@ await check("pressing the button asks the shell to open the Jarvis bar, and send
 
 await check("the label follows the bar: Open while it is hidden, Hide while it is shown", () => {
   // THE OWNER'S ASK (2026-10-09, with a screenshot): the button beside the
-  // HUD's chat box said "Open the Jarvis bar" whether the bar was open or
+  // HUD's chat box said "Open the Atlas bar" whether the bar was open or
   // not. Whether it is on screen reaches this page from the shell, which
   // knows (src-tauri/src/windows.rs `publish_bar_state`, pushed on the feed's
   // own "bar" channel) - never guessed from a click.
@@ -398,7 +398,7 @@ await check("the label follows the bar: Open while it is hidden, Hide while it i
   const button = run.button();
 
   // Nothing has said the bar is up: the label is the wording that was there.
-  assert.equal(button.textContent, "Open the Jarvis bar");
+  assert.equal(button.textContent, "Open the Atlas bar");
   assert.equal(button.textContent, button.title, "the visible label and its tooltip disagree");
 
   run.barState(true);
@@ -409,7 +409,7 @@ await check("the label follows the bar: Open while it is hidden, Hide while it i
   assert.doesNotMatch(button.title, /opens now/, "a bar already open is still announced as opening");
 
   run.barState(false);
-  assert.equal(button.textContent, "Open the Jarvis bar", "the label did not follow the bar closing");
+  assert.equal(button.textContent, "Open the Atlas bar", "the label did not follow the bar closing");
   assert.equal(button.title, button.textContent, "the tooltip contradicts the visible label");
 });
 
@@ -466,7 +466,7 @@ await check("a change made in Settings while the window is open is obeyed at onc
   off.store[S.OPEN_BAR_KEY] = "true";
   off.storageEvent(S.OPEN_BAR_KEY);
   assert.ok(off.button(), "the button did not come back when the setting was turned on");
-  assert.equal(off.document.getElementById("hud-open-bar").textContent, "Open the Jarvis bar");
+  assert.equal(off.document.getElementById("hud-open-bar").textContent, "Open the Atlas bar");
 });
 
 await check("another window's unrelated write changes nothing", () => {
@@ -493,7 +493,7 @@ await check("the card is on the Settings page, with every id its module reaches 
   assert.doesNotMatch(card, /\bhidden\b/, "the card starts hidden");
   // The switch itself, and what it does, in the owner's own words.
   assert.match(card, /<input id="hud-open-bar-show" type="checkbox"/);
-  assert.match(card, /Show the "Open the Jarvis bar" button/);
+  assert.match(card, /Show the "Open the Atlas bar" button/);
   assert.match(card, /changes at once|at once/);
   const ids = [...SETTINGS_JS.matchAll(/\$\("([\w-]+)"\)/g)].map((m) => m[1]);
   assert.ok(ids.length >= 2, `only ${ids.length} ids read - is the module still wired up?`);

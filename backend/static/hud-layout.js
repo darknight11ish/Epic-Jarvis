@@ -246,7 +246,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "bar_launcher",
-    label: "Open the Jarvis bar",
+    label: "Open the Atlas bar",
     region: "left_rail",
     order: 3,
     col_span: 12,

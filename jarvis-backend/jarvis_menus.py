@@ -651,7 +651,7 @@ MENUS: tuple = (
        why="Otherwise nothing hidden could be shown again.",
        names=("show or hide menus", "menus", "the menu list")),
     # The big "Jarvis" window (the owner's request of 2026-10-06): its own chat
-    # box, and the one switch for whether the "Open the Jarvis bar" button is
+    # box, and the one switch for whether the "Open the Atlas bar" button is
     # drawn beside it. Desktop only, like the card itself.
     _m("settings.hud-window", "The big HUD window",
        "Its own chat box, and the button that opens the Jarvis bar.", (DESKTOP,),

@@ -59,7 +59,7 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
-/* ── 1. The "Open the Jarvis bar" button switch ──────────────────────────── */
+/* ── 1. The "Open the Atlas bar" button switch ──────────────────────────── */
 
 function paintOpenBar() {
   const on = openBarShown();

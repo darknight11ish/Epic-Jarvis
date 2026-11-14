@@ -20,10 +20,10 @@ from pathlib import Path
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
     'Widgets wear their own colours',
+    'The button beside the big window\'s chat box is called "Open the Atlas bar"',
     'Fifty-three field-test records are in the repository instead of only on one PC',
     'Jarvis builds apps with real screens, not just a page in a phone window',
     '"How do I activate Hey Jarvis on my Android app?" now answers from the feature list, not from the model',
-    'The undo notice after an approved card times out after 15 seconds',
 )
 
 
