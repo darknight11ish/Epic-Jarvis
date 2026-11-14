@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "69428294081ee150aefe347399e36531787b5f01",
- "built_at": "2026-11-13T22:15:18-08:00",
+ "ref": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
+ "built_at": "2026-11-13T23:15:42-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6352,6 +6352,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
+   "date": "2026-11-13",
+   "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
+  },
+  {
    "sha": "69428294081ee150aefe347399e36531787b5f01",
    "date": "2026-11-13",
    "subject": "Regenerate the whole-repo records against the merged tree"
@@ -6445,11 +6450,6 @@
    "sha": "0ed6e78520d03fb14804db96fa5c8ffd3f371755",
    "date": "2026-11-13",
    "subject": "Merge feat/photo-from-phone into integration/wave18-2026-11-13 (#1249 photo from phone); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "8510516a793ca984a87bb9ed9a2ee18010b36bba",
-   "date": "2026-11-13",
-   "subject": "Merge origin/fix/quiz-finish-dead-end-2026-11-13 into integration/wave18-2026-11-13 (#1240 quiz finish)"
   }
  ],
  "top_level": [
