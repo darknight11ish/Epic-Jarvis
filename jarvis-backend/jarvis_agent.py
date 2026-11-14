@@ -11480,6 +11480,17 @@ TOOL_HINTS = {
                          r"on-screen"),
     "control_phone": (r"\bphone\b", r"\bandroid\b", r"\btap\b", r"\bswipe\b",
                       r"\bscreenshot\b"),
+    # The Android app builder's way in (DEF-068, 2026-11-14). `android` alone is
+    # already on control_phone, so the words that narrow this one are the words
+    # that mean a real app being MADE or PUT ON the phone; "what's on my phone"
+    # and "tap the screen" still land on control_phone alone. Without this entry
+    # `test_tool_eval.py` fails: it refuses to let a new tool land where the diet
+    # can never show it (the required `backend` job caught exactly that on PR
+    # #1260, shard 3/4).
+    "android_app": (r"\bandroid app\b", r"\bapk\b", r"\bapp for my phone\b",
+                    r"\b(?:make|build|write|install)\b[\s\S]{0,30}\bapp\b",
+                    r"\bput\b.*\bapp\b.*\bphone\b",
+                    r"\bnative (?:app|screen)\b"),
     "browser_control": (r"\bbrowser\b", r"\btab\b", r"\bchrome\b", r"\bedge\b",
                         r"\bfirefox\b", r"page element"),
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",

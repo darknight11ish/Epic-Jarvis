@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
- "built_at": "2026-11-14T12:59:15-08:00",
+ "ref": "e43379848911d09db748f5c6b3612e1579575e27",
+ "built_at": "2026-11-14T13:47:11-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6492,6 +6492,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "e43379848911d09db748f5c6b3612e1579575e27",
+   "date": "2026-11-14",
+   "subject": "The desktop's raw-tool list is eight now, and its test says so"
+  },
+  {
+   "sha": "81f05a38609e0212f7812d9a26e67532987d3db1",
+   "date": "2026-11-14",
+   "subject": "Read the tool-action rows as a table, and stop ranking git walks"
+  },
+  {
    "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
    "date": "2026-11-14",
    "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
@@ -6580,16 +6590,6 @@
    "sha": "165e9afbf47f7795c97a635b0193f61da1cf34dd",
    "date": "2026-11-14",
    "subject": "rules: on this PC a green backend run from a checkout is not a green CI run"
-  },
-  {
-   "sha": "76c7c83793253406f8a7260148b8e110d584fe9d",
-   "date": "2026-11-14",
-   "subject": "Regenerate the records the label rename moved, and drop the scratch script"
-  },
-  {
-   "sha": "ebd271b34860f46b87822751d862a4fd6df40642",
-   "date": "2026-11-14",
-   "subject": "docs(field-test): record the wave-19 deploy as its own matrix (2026-11-14)"
   }
  ],
  "top_level": [
