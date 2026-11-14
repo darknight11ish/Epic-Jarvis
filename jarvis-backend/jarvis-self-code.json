@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "45ed79defbf624ae86e12ff39030da9692d30c94",
- "built_at": "2026-11-13T22:27:53-08:00",
+ "ref": "939d06efe673c4ed01a6d59ab90041a7a1c65937",
+ "built_at": "2026-11-13T22:56:18-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6377,6 +6377,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "939d06efe673c4ed01a6d59ab90041a7a1c65937",
+   "date": "2026-11-13",
+   "subject": "fix(claims): C167 says the phone's on-device AI is built, which this branch makes true"
+  },
+  {
+   "sha": "972ca5350431f44c72e1cc271277d61d0ce2702f",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
+  },
+  {
    "sha": "45ed79defbf624ae86e12ff39030da9692d30c94",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
@@ -6465,16 +6475,6 @@
    "sha": "1c1a516da21eed1afd0210d4798b6ea9bec5068b",
    "date": "2026-11-13",
    "subject": "fix: VoiceStudio's phone absence and its feature-list cover - #1238's backend was red on both"
-  },
-  {
-   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
-   "date": "2026-11-13",
-   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
-  },
-  {
-   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
-   "date": "2026-11-13",
-   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
   }
  ],
  "top_level": [
