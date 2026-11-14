@@ -237,7 +237,7 @@ await check("the Brain's Help tab has the real button, and the page's own status
   const html = read("src/brain.html");
   const inTutorials = html.slice(html.indexOf('id="view-tutorials"'),
     html.indexOf("</section>", html.indexOf('id="view-tutorials"')));
-  assert.match(inTutorials, /<button class="btn" id="open-features" type="button">Everything Jarvis can do<\/button>/,
+  assert.match(inTutorials, /<button class="btn" id="open-features" type="button">Everything Atlas can do<\/button>/,
     "the button is not in the Brain's Help tab, in the style every other row uses");
   assert.match(inTutorials, /<span class="status" id="features-status" role="status">/,
     "the button has no live status line for a failure");
@@ -254,7 +254,7 @@ await check("the Brain's Help tab has the real button, and the page's own status
 await check("the tray can open it too, and the command is wired end to end", () => {
   const tray = read("src-tauri/src/tray.rs");
   assert.match(tray, /const ID_SHOW_FEATURES: &str = "show-features"/);
-  assert.match(tray, /ID_SHOW_FEATURES,[\s\S]{0,40}?"Everything Jarvis can do…"/, "no tray row");
+  assert.match(tray, /ID_SHOW_FEATURES,[\s\S]{0,40}?"Everything Atlas can do…"/, "no tray row");
   assert.match(tray, /ID_SHOW_FEATURES => \{[\s\S]*?windows::show_features\(app\)/,
     "the tray row does not open the window");
   assert.match(read("src-tauri/src/lib.rs"), /commands::open_features,/, "the command is not registered");

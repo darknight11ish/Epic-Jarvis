@@ -80,22 +80,22 @@ pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, s
      Settings, Accounts, Sign-in options (a PIN is enough), then try again.";
 /// Why the widget did not approve while App lock is on (apps security audit
 /// M3). No "already" in it (see above), and it says what happens instead.
-pub const WIDGET_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Jarvis \
-     bar, not the widget. The Jarvis bar is opening - approve it there";
+pub const WIDGET_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Atlas \
+     bar, not the widget. The Atlas bar is opening - approve it there";
 /// The same refusal for the HUD, which could not answer an approval at all
 /// until 2026-10-16 (the owner's ask: "i should also be able to approve any
 /// card from the jarvis hud directly on my desktop"). App lock covers that
 /// window too (`Covered::Hud`) - it is hidden while the lock is on - so the
 /// rule is belt and braces on the command, exactly as the widget's is, and the
 /// sentence names the window the owner actually pressed.
-pub const HUD_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Jarvis bar, \
-     not the Jarvis HUD. The Jarvis bar is opening - approve it there";
+pub const HUD_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Atlas bar, \
+     not the Atlas HUD. The Atlas bar is opening - approve it there";
 /// Why the widget did not send a note while App lock is on (the owner's
 /// decision of 2026-09-26: App lock covers task notes too, like approval
 /// notes). A note steers what Jarvis does next, so it waits for the unlocked
 /// Jarvis bar.
-pub const WIDGET_NOTES_IN_BAR: &str = "App lock is on, so notes to Jarvis are added in the \
-     Jarvis bar, not the widget. Open the Jarvis bar and confirm it is you to add one";
+pub const WIDGET_NOTES_IN_BAR: &str = "App lock is on, so notes to Atlas are added in the \
+     Atlas bar, not the widget. Open the Atlas bar and confirm it is you to add one";
 /// Whether a note (to a running task, or kept with a card) is refused
 /// because it came from the widget while App lock is on.
 pub fn widget_note_refused(from_widget: bool, app_lock: bool) -> bool {

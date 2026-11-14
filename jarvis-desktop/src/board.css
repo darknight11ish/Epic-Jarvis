@@ -1,0 +1,245 @@
+/* ==========================================================================
+   "Widgets you describe" - the blocks a widget is drawn from
+   --------------------------------------------------------------------------
+   ONE file for the two surfaces that draw a widget, because they must not be
+   able to disagree: the widget window's "Your widget" (widget.html) and the
+   Brain's preview (brain.html) both paint through widget-board.js's `paint()`,
+   and both load this sheet. It was inside widget.css until 2026-11-14, which
+   the Brain does not load - a preview with no styles at all would have been
+   the first thing the look's own preview showed.
+
+   THE LOOK. A widget carries an accent (one of eight named colours), a shade
+   (how see-through its card is, and the fill of a button or a bar's track)
+   and a contrast (one of two palettes). `paint()` hands all three to
+   widget-board.js `applyLook()`, which writes them onto the painted box as CSS
+   custom properties:
+
+       --board-bg            the contrast's background colour (the card)
+       --board-bg-a          the shade's background alpha, 0-1
+       --board-surface       the contrast's panel colour (a button, a bar track)
+       --board-surface-a     the shade's panel alpha, 0-1
+       --board-text-hi       the contrast's main text colour
+       --board-text-muted    the contrast's muted text colour
+       --board-accent        the accent's hex
+
+   THE PANEL IS A BUTTON'S AND A BAR'S, NOT A BLOCK'S. The phone paints no
+   panel behind a block (JarvisBoardWidget.kt `Part`), only behind a button
+   (`PillButton`) and a bar's track (`LinearProgressIndicator`); a block here
+   with a panel of its own made the same described widget two pictures
+   (2026-11-14).
+
+   Every rule below falls back to the app's own theme when a box has none, so
+   a widget saved before the look existed draws as it always has.
+
+   WHY `color-mix`. A theme token can carry its own alpha (`--bg-window` is
+   `rgba(4, 7, 12, 0.86)`), and CSS cannot take an alpha out of a colour and
+   replace it. Mixing the colour with `transparent` at N% is how: at 100% the
+   colour is untouched, so the no-look fallback is exact rather than close.
+   brain.css and projects.css already use `color-mix` for the same reason.
+
+   NO BLUR, EVER. A phone widget has no backdrop blur and neither does a
+   webview: see-through is alpha over whatever is behind the card, and
+   nothing else. Text never takes an alpha - a see-through widget still has to
+   be readable, which is what the two contrasts are for.
+   ========================================================================== */
+
+/* "Your widget" (widget-board.js; JARVIS-API.md section 86): the owner's
+   own widget, drawn in place of the face from a fixed menu of blocks. */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board[hidden],
+.board-blocks[hidden] {
+  display: none;
+}
+
+.board-pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-2xs);
+}
+
+.board-pick-label {
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+/* The picker row and its select are the widget window's own chrome, drawn
+   here because the Brain's look pickers are the same control. `--bg-sunken`
+   and `--line-soft` are widget.css's local aliases, so each carries the
+   theme token behind it as a fallback: the Brain loads no widget.css. */
+.board-pick {
+  max-width: 180px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-sunken, var(--surface-sunken));
+  border: 1px solid var(--line-soft, var(--border));
+  border-radius: var(--radius-chip, 4px);
+  padding: 2px 4px;
+}
+
+/* The CARD: the widget's own background, see-through by its shade. */
+.board-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 6px;
+  background: color-mix(
+    in srgb,
+    var(--board-bg, var(--bg-window)) calc(var(--board-bg-a, 1) * 100%),
+    transparent
+  );
+}
+
+.board-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--board-text-hi, var(--text));
+}
+
+/* NO PANEL behind a block. The phone paints none (JarvisBoardWidget.kt `Part`
+   has no background), and the panel colour is only ever a BUTTON's fill and a
+   BAR's track - so a block here must not have one either, or the same
+   described widget is two different pictures in the two apps (2026-11-14).
+   This is the rule widget.css carried before the look, unchanged. */
+.board-part {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-2xs);
+}
+
+.board-label {
+  color: var(--board-text-muted, var(--text-muted));
+  font-weight: 600;
+}
+
+.board-value {
+  color: var(--board-text-hi, var(--text));
+}
+
+/* The accent's places. The phone has always given it four (JarvisBoardWidget.kt:
+   `BigCount`, `Count`'s value, "+N more", and every pill button's words - this
+   wave only changed `BoardPalette.Accent` to the widget's own `palette.Accent`),
+   and the widget must not be one colour on the home screen and another here.
+   The bar is the fifth. Without them a widget with no bar and no big number has
+   no accent anywhere, and the Colour picker would look inert.
+   These are the desktop's only additions to what the phone already draws: the
+   rest of this file is the pre-look rule, colour for colour. */
+.board-count,
+.board-more,
+.board-blocks .board-button {
+  color: var(--board-accent, var(--accent));
+}
+
+/* "big" (widget-board.js boardOf, 2026-10-30): the widget's first number is
+   drawn at about three times a block's value, with its label small above it,
+   so a count is what the eye lands on. Only that one part carries the class,
+   so nothing else in the widget changes size. */
+.board-big .board-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.board-big .board-value {
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 700;
+  color: var(--board-accent, var(--accent));
+}
+
+.board-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-2xs);
+}
+
+.board-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--board-text-hi, var(--text));
+}
+
+.board-when {
+  color: var(--board-text-muted, var(--text-muted));
+  flex: none;
+}
+
+.board-note {
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--board-text-muted, var(--text-muted));
+}
+
+.board-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The panel colour, where the phone puts it (JarvisBoardWidget.kt
+   `PillButton`: `.background(Surface1)`): a button's own fill, see-through by
+   the shade's panel alpha. Nothing else in a widget carries it - not a block,
+   not the card. */
+.board-blocks .board-button {
+  background: color-mix(
+    in srgb,
+    var(--board-surface, var(--surface-1)) calc(var(--board-surface-a, 1) * 100%),
+    transparent
+  );
+}
+
+/* A widget's bar is the widget's own, in its accent. These are the widget
+   window's `.meter-track` rules repeated under the board, because the Brain
+   does not load widget.css and the preview has to draw the same bar: the
+   track is the panel colour - the phone's
+   `LinearProgressIndicator(backgroundColor = Surface1)` - so it is visible on
+   both contrasts, and the fill is the accent, the one hue a widget owns.
+   `paint()` still carries the value as `transform: scaleX()`, which is why
+   nothing here animates. */
+.board-blocks .meter-track {
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(
+    in srgb,
+    var(--board-surface, var(--surface-1)) calc(var(--board-surface-a, 1) * 100%),
+    transparent
+  );
+}
+
+.board-blocks .meter-track i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  transform-origin: left center;
+  background: var(--board-accent, var(--accent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--board-accent, var(--accent)) 50%, transparent);
+}

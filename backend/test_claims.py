@@ -40,6 +40,14 @@ so deleting the safety guard still read as built. So this file now proves:
   * the allow-list is keyed to the suite that needs it: an `icacls` reason
     proves a `test_data_backup` row and proves nothing for another suite's row.
 
+  * and an allowed skip is never silent (2026-11-13). `backend/test_owner_check.py`
+    skips the one check it cannot run on Windows - the REAL Windows Hello path
+    would raise a real prompt - and the owner's desk read claim C163 red because
+    that reason was not in the allow-list. So this file also proves the entry is
+    there, that it accepts the reason the suite really prints, and that the run
+    NAMES the suite, quotes the skip and counts the rows it did not look at,
+    whether or not `-v` was typed.
+
 And the environment the suites are started with (2026-10-25). `JARVIS_BACKEND`
 is set for the owner's Windows account on this PC and names the LIVE backend
 folder, and `backend/_where.py` puts that folder first on `sys.path`, so the
@@ -57,6 +65,24 @@ So this file also proves the checker holds the same contract:
   * end to end, on one throwaway suite that fails on purpose (so its output is
     quoted rather than swallowed): the child does not see the ambient value, and
     does see it when the flag asks for it.
+
+And the suites run OFFLINE (2026-11-13), with the same six switches
+`backend/run_suites.py` forces. Without them the Live settings parity suite
+fetched five model files from Hugging Face inside one turn, and the empty
+`memory.db` it created tripped its own check that a carded change writes no
+settings file - claim C101 read red at the desk while CI, whose runner forces the
+switches, was green. So this file also proves the checker's `OFFLINE_ENVS` IS the
+runner's dictionary, that a caller's own `HF_HUB_OFFLINE=0` cannot switch a
+download back on, and end to end that a suite the checker starts sees
+`HF_HUB_OFFLINE=1`.
+
+And a suite RUN leaves no bytecode behind (2026-11-13), the runner's other
+hermetic switch (`PYTHONDONTWRITEBYTECODE=1`, `backend/run_suites.py:1452-1453`).
+Without it the desk's SECOND register run was red on D06: the first run's suites
+imported base-only modules and left `jarvis-backend/__pycache__`, which
+`backend/test_base_matches_repo.py` refuses. So this file also proves the checker
+forces that switch, and end to end that a suite it starts can import a module
+and leave no `__pycache__` behind.
 
 And on the real register, four things the checker cannot say about itself:
 
@@ -120,19 +146,34 @@ def check(name, cond, detail=""):
 
 HEADER = "# id\tclaim\tcheck\tstate\tsource\n"
 
+#: How long a run of the WHOLE register may take here, in seconds. The checker's
+#: own ceiling is 900 s for ONE suite (`tools/check_claims.py`'s TEST_TIMEOUT),
+#: and the register has more than a hundred `test:` rows, so a harness ceiling of
+#: 600 s can kill a checker that is still working - which is a red test with no
+#: verdict about the register, not a finding. Measured 2026-11-13 on a loaded PC:
+#: the 600 s call raised TimeoutExpired before the first full run finished. A
+#: one-row throwaway register keeps the short ceiling; only these two calls need
+#: this one.
+REGISTER_TIMEOUT = 1800
 
-def run(*args, env=None):
+
+def run(*args, env=None, timeout=600):
     """(exit code, output) for one run of the checker, from the repo root.
 
     `env` is the environment the CHECKER is started with; None inherits this
     process's own, which is what every check except the `JARVIS_BACKEND` ones
     wants. Those pass a dict so the ambient value is a value this test chose,
     not whatever the machine happens to carry.
+
+    `timeout` is this harness's own ceiling. The two calls that check the whole
+    real register pass `REGISTER_TIMEOUT`, because 600 s is shorter than the
+    checker's own per-suite ceiling and can expire while it is still working;
+    everything else drives one or two throwaway rows and stays at 600 s.
     """
     done = subprocess.run(
         [sys.executable, str(CHECKER), *args], cwd=str(REPO),
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=600, env=env)
+        timeout=timeout, env=env)
     return done.returncode, (done.stdout or "") + (done.stderr or "")
 
 
@@ -167,7 +208,7 @@ def t_the_checker_exists():
 
 
 def t_the_committed_register_is_green():
-    code, out = run()
+    code, out = run(timeout=REGISTER_TIMEOUT)
     check("the register passes today (the first run after it lands is green)",
           code == 0, out[-1500:])
     check("the green line says a number of rows, so 'nothing is wrong' cannot "
@@ -180,7 +221,7 @@ def t_the_committed_register_is_green():
 
 
 def t_list_prints_every_row_it_checked():
-    code, out = run("--list")
+    code, out = run("--list", timeout=REGISTER_TIMEOUT)
     check("--list still exits 0 on the real register", code == 0, out[-800:])
     rows = data_rows(REGISTER.read_text(encoding="utf-8"))
     missing = [row["id"] for row in rows if row["id"] not in out]
@@ -656,6 +697,80 @@ def t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it():
               "backend/test_settings_tool.py", settings) is None, settings)
 
 
+#: The skip `backend/test_owner_check.py` really prints on Windows, measured
+#: 2026-11-13, kept exactly as the suite prints it - the word `skip`, then TWO
+#: spaces, then the suite's own reason. The suite skips the one check it cannot
+#: run on Windows: it proves "off Windows there is no Windows Hello, so a risky
+#: approval fails closed" by driving the REAL path, and on Windows that path
+#: raises a real Windows Hello prompt, which no test may do. Pinned here so a
+#: reworded reason is a visible test change rather than a quiet widening of what
+#: the checker accepts.
+OWNER_CHECK_SKIP = (
+    "skip  off Windows there is no Windows Hello so a risky approval fails "
+    "closed: on Windows the real check would raise a real prompt, so this test "
+    "does not run it. It did NOT run, and it did NOT pass.")
+
+
+def t_the_owner_check_skip_is_named_and_not_counted_as_a_pass():
+    """C163 read red at the owner's desk (2026-11-13) because one machine-limit
+    skip withheld the row's proof. The entry that fixes it must accept the reason
+    the suite really prints - and an accepted skip must still be named and
+    counted, never read as a pass."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+
+    suite = REPO / "backend" / "test_owner_check.py"
+    # The suite's own source, with adjacent string literals joined the way Python
+    # joins them, so this pin is the text a reader of the source sees and not a
+    # copy of the output that could drift from it.
+    source = " ".join(re.sub(r'"\s*\n\s*"', "",
+                             suite.read_text(encoding="utf-8")).split())
+    reason = " ".join(OWNER_CHECK_SKIP.split())[len("skip "):]
+    check("the skip this test pins is what backend/test_owner_check.py prints",
+          reason in source,
+          "the suite no longer prints the pinned reason - change this pin and "
+          "ENVIRONMENT_SKIPS together")
+    check("the entry is in ENVIRONMENT_SKIPS, keyed to that one suite",
+          "backend/test_owner_check.py" in check_claims.ENVIRONMENT_SKIPS,
+          sorted(check_claims.ENVIRONMENT_SKIPS))
+    check("... and it accepts the reason the suite really prints, so C163 is "
+          "proven again", check_claims.skip_that_withholds_proof(
+              "backend/test_owner_check.py", OWNER_CHECK_SKIP) is None,
+          OWNER_CHECK_SKIP)
+    check("... while the same skip proves nothing for a suite that never needed "
+          "it, so the allow-list is still keyed to one suite",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_api_doc.py", OWNER_CHECK_SKIP) is not None,
+          OWNER_CHECK_SKIP)
+    # End to end on a PLAIN run (`-v` not typed), because a skip a reader only
+    # sees with `-v` is exactly the silence this test exists to stop. The suite
+    # sits in a throwaway `--repo` under the same repo-relative path, because
+    # that path is what the allow-list is keyed by - so the REAL entry is what
+    # accepts it, and removing the entry reddens this row.
+    fake_repo = Path(tempfile.mkdtemp(prefix="claims-owner-check-"))
+    (fake_repo / "backend").mkdir()
+    (fake_repo / "backend" / "test_owner_check.py").write_text(
+        f"print({OWNER_CHECK_SKIP!r})\n"
+        f"print('252 passed, 1 skipped, 0 failed')\n", encoding="utf-8")
+    path = register_with(
+        "C163\tthe tool-switch approval card works on the phone too\t"
+        "test:backend/test_owner_check.py\tbuilt\tCLAUDE.md:1\n")
+    code, out = run("--repo", str(fake_repo), str(path))
+    check("a row whose only suite skipped a machine-limit check still exits 0, "
+          "so the desk is not red for a limit of the machine", code == 0,
+          out[-1200:])
+    check("... and the plain run NAMES the suite it skipped",
+          "backend/test_owner_check.py" in out, out[-1200:])
+    check("... quotes the skip's own reason, so a reader can judge it",
+          "on Windows the real check would raise a real prompt" in out,
+          out[-1200:])
+    check("... and counts the row that was NOT looked at by that check",
+          "1 claim row(s) name a suite that SKIPPED" in out and "C163" in out,
+          out[-1200:])
+    check("... and says out loud that the skipped check is NOT a pass",
+          "NOT counted as a pass" in out, out[-1200:])
+
+
 # ---------------------------------------------------------------------------
 #   What environment a `test:` row's suite is started with
 # ---------------------------------------------------------------------------
@@ -743,6 +858,108 @@ def t_the_ambient_backend_variable_is_ignored_unless_asked_for():
           still_there == LOOKS_LIVE, still_there)
 
 
+def t_the_model_loaders_are_forced_offline_like_the_runner():
+    """C101 (2026-11-13): the checker used to start suites with the caller's own
+    network settings, so the Live settings parity suite fetched five model files
+    inside one turn, and the empty `memory.db` that created tripped a check that
+    a carded change writes no settings file - a desk red CI never saw, because
+    `backend/run_suites.py` has forced the model loaders offline since
+    2026-10-18. The checker now holds the runner's own rule."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+    sys.path.insert(0, str(REPO / "backend"))
+    import run_suites
+
+    check("the checker's OFFLINE_ENVS is the runner's dictionary, not a second "
+          "list that can drift",
+          check_claims.OFFLINE_ENVS == run_suites.OFFLINE_ENVS,
+          (check_claims.OFFLINE_ENVS, run_suites.OFFLINE_ENVS))
+    check("... all six switch names and values",
+          len(check_claims.OFFLINE_ENVS) == 6,
+          sorted(check_claims.OFFLINE_ENVS))
+    # Forced, not defaulted: a caller who sets one of them to 0 cannot switch a
+    # download back on. This process's own environment is restored afterwards.
+    before = {key: os.environ.get(key) for key in check_claims.OFFLINE_ENVS}
+    os.environ["HF_HUB_OFFLINE"] = "0"
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            env = check_claims._suite_env()
+    finally:
+        for key, value in before.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    check("... and a caller's own HF_HUB_OFFLINE=0 cannot switch a download "
+          "back on", all(env.get(k) == v
+                         for k, v in check_claims.OFFLINE_ENVS.items()),
+          {k: env.get(k) for k in check_claims.OFFLINE_ENVS})
+    # End to end, on ONE throwaway suite that FAILS on purpose so the checker
+    # quotes what the child saw: the environment the checker hands a suite is
+    # offline whatever the checker's own parent carries.
+    suite = Path(tempfile.mkstemp(suffix=".py")[1])
+    suite.write_text(
+        "import os, sys\n"
+        "print('HF=' + str(os.environ.get('HF_HUB_OFFLINE')))\n"
+        "sys.exit(1)\n", encoding="utf-8")
+    path = register_with(
+        f"X16\ta suite must not fetch a model\ttest:{suite}\tbuilt\t"
+        f"CLAUDE.md:1\n")
+    code, out = run(str(path), env=env_with_ambient() | {"HF_HUB_OFFLINE": "0"})
+    check("a suite the checker starts sees HF_HUB_OFFLINE=1", "HF=1" in out, out)
+
+
+def t_a_suite_leaves_no_bytecode_in_the_tree():
+    """D06 went red on the desk's SECOND register run (2026-11-13): the first
+    run's suites imported base-only modules without the runner's
+    `PYTHONDONTWRITEBYTECODE=1`, left `jarvis-backend/__pycache__`, and
+    `backend/test_base_matches_repo.py` refused a base carrying generated files.
+    A check must not dirty the tree it is checking for the next check."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+
+    check("the checker's NO_BYTECODE_ENVS is the runner's one switch",
+          check_claims.NO_BYTECODE_ENVS == {"PYTHONDONTWRITEBYTECODE": "1"},
+          check_claims.NO_BYTECODE_ENVS)
+    # Forced, not defaulted: a caller who sets it to 0 cannot switch bytecode
+    # writing back on. This process's own environment is restored afterwards.
+    before = os.environ.get("PYTHONDONTWRITEBYTECODE")
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "0"
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            env = check_claims._suite_env()
+    finally:
+        if before is None:
+            os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+        else:
+            os.environ["PYTHONDONTWRITEBYTECODE"] = before
+    check("... and a caller's own 0 cannot switch bytecode writing back on",
+          env.get("PYTHONDONTWRITEBYTECODE") == "1",
+          env.get("PYTHONDONTWRITEBYTECODE"))
+    # End to end: a suite that IMPORTS a module of its own, started by the
+    # checker, must leave no __pycache__ behind. It fails on purpose so the
+    # checker quotes what the child saw rather than swallowing it.
+    scratch = Path(tempfile.mkdtemp(prefix="claims-bytecode-"))
+    (scratch / "claims_probe_module.py").write_text("VALUE = 1\n",
+                                                    encoding="utf-8")
+    suite = Path(tempfile.mkstemp(suffix=".py")[1])
+    suite.write_text(
+        "import os, sys\n"
+        f"sys.path.insert(0, {str(scratch)!r})\n"
+        "import claims_probe_module\n"
+        "print('BYTECODE=' + str(os.environ.get('PYTHONDONTWRITEBYTECODE')))\n"
+        "sys.exit(1)\n", encoding="utf-8")
+    path = register_with(
+        f"X17\ta suite must not write bytecode into the tree\ttest:{suite}\tbuilt\t"
+        f"CLAUDE.md:1\n")
+    code, out = run(str(path), env=env_with_ambient())
+    check("a suite the checker starts sees PYTHONDONTWRITEBYTECODE=1",
+          "BYTECODE=1" in out, out)
+    check("... and importing a module in that run wrote no __pycache__",
+          not (scratch / "__pycache__").exists(),
+          sorted(p.name for p in scratch.iterdir()))
+
+
 def t_a_suite_the_checker_runs_does_not_see_the_ambient_value():
     """End to end, on ONE throwaway suite: the checker starts it with `env=`
     explicitly, so the value its parent carries does not reach it - and with the
@@ -799,8 +1016,11 @@ if __name__ == "__main__":
                t_a_clean_suite_still_proves_a_row,
                t_a_skip_count_with_no_reason_is_not_proof,
                t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it,
+               t_the_owner_check_skip_is_named_and_not_counted_as_a_pass,
                t_the_parser_offers_the_opt_in_flag,
                t_the_ambient_backend_variable_is_ignored_unless_asked_for,
+               t_the_model_loaders_are_forced_offline_like_the_runner,
+               t_a_suite_leaves_no_bytecode_in_the_tree,
                t_a_suite_the_checker_runs_does_not_see_the_ambient_value):
         print(f"\n--- {fn.__name__} ---")
         try:

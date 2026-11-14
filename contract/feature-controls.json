@@ -8623,7 +8623,7 @@
       "name": "Build the Android app in a project task",
       "group": "The PC itself",
       "surface": "both",
-      "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+      "where": "In a project task's copy on the PC - but there is no way in yet: no chat sentence, model tool or app button starts it, so only its own tests have called it. When that entry point is written it is a project task. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8634,7 +8634,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
+        "location": "Not reachable yet: the Android builder works, but no chat sentence, model tool or app button starts it. When that entry point exists it is in a project task.",
         "search": [
           "Build the Android app in a project task"
         ],
@@ -8642,7 +8642,7 @@
       },
       "phone": {
         "section": null,
-        "location": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
+        "location": "Not reachable yet: the Android builder works, but no chat sentence, model tool or app button starts it. When that entry point exists it is in a project task.",
         "search": [
           "build the android app in a project task"
         ],
@@ -11003,7 +11003,8 @@
         "set up jarvis",
         "first run setup",
         "the setup page",
-        "getting started with jarvis"
+        "getting started with jarvis",
+        "set up atlas"
       ],
       "app": "desktop",
       "where": "settings",
@@ -11583,6 +11584,18 @@
         "phone notifications",
         "reading phone notifications",
         "notifications on my phone"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": false,
+      "in_phone_settings": true
+    },
+    {
+      "id": "phone-backup",
+      "names": [
+        "phone settings backup",
+        "back up my phone settings",
+        "restore my phone settings"
       ],
       "app": "phone",
       "where": "settings",

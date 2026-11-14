@@ -11,6 +11,10 @@ import re, sys, pathlib
 
 FILES = ["style.css", "widget.css", "settings.css", "brain.css", "theme.css", "projects.css",
          "forget-range.css", "retirement.css",
+         # The widget's own blocks (2026-11-14): one sheet for the widget
+         # window and the Brain's preview, and it obeys the same rule - its
+         # colours are `--board-*` properties, never a literal.
+         "board.css",
          # 2026-09-27 (UI audit item 11, Q6): the one page here that is not a
          # plain stylesheet. `only_style_block` below keeps this check to its
          # `<style>` element and blanks out the rest of the page, so a colour

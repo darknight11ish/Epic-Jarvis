@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jarvis Widget</title>
+    <title>Atlas Widget</title>
     <!--
       Theme before first paint. Synchronous from localStorage rather than
       waiting for the IPC round trip, because a window that paints deep-space
@@ -26,6 +26,7 @@
       }
     </script>
     <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="board.css" />
     <link rel="stylesheet" href="widget.css" />
   </head>
   <body>
@@ -38,7 +39,7 @@
       <!-- The window had no heading, so its heading list was empty and there
            was nothing to tell a screen reader which of the four Jarvis windows
            it had landed in. -->
-      <h1 class="sr-only">Jarvis widget</h1>
+      <h1 class="sr-only">Atlas widget</h1>
       <!-- ── Compact bar: always visible, doubles as the drag handle ────── -->
       <header class="widget-bar" data-tauri-drag-region>
         <div class="status-indicator" data-tauri-drag-region>
@@ -85,12 +86,12 @@
                The compact bar is a fixed 320px, and the route pill between the
                two groups is `flex: 1 1 auto; min-width: 0`, so it gives up the
                room and the gear is never pushed off the end. -->
-          <button class="icon-btn" id="btn-settings" title="Jarvis settings">
+          <button class="icon-btn" id="btn-settings" title="Atlas settings">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
               <path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />
             </svg>
-            <span class="sr-only">Jarvis settings</span>
+            <span class="sr-only">Atlas settings</span>
           </button>
         </div>
       </header>
@@ -116,7 +117,7 @@
            everything key. No step's words and no window's name: the widget
            sits outside App lock. -->
       <div class="screen-strip" id="screen-strip" hidden>
-        <span class="screen-word" id="screen-word">Jarvis is working on your screen</span>
+        <span class="screen-word" id="screen-word">Atlas is working on your screen</span>
         <span class="screen-clock mono" id="screen-clock" aria-label="How long it has been working">0:00</span>
         <button class="btn btn-quiet" type="button" id="screen-stop">Stop</button>
       </div>
@@ -139,7 +140,7 @@
         <div class="face-wrap" id="face-wrap">
           <iframe
             id="face-frame"
-            title="Jarvis"
+            title="Atlas"
             tabindex="-1"
             aria-hidden="true"
           ></iframe>
@@ -157,271 +158,282 @@
           <div class="board-pick-row">
             <label for="board-pick" class="board-pick-label">Your widget</label>
             <select id="board-pick" class="board-pick">
-              <option value="">Jarvis's face</option>
+              <option value="">Atlas's face</option>
             </select>
           </div>
           <div class="board-blocks" id="board-blocks" hidden></div>
         </section>
 
-        <!-- The widget's way out of an offline state. The dot in the compact
-             bar reports it but sits inside the drag region, where a click is a
-             drag; this row is the action, in the half of the window that has
-             room for a sentence. -->
-        <!-- Shown while the link is down OR connected-but-stale: in both,
-             nothing can be approved, and the second used to show no words at
-             all. `data-tone` is red for offline, amber for stale or
-             connecting (jarvis-link.js linkWords). -->
-        <div class="widget-offline" id="widget-offline" data-tone="bad" hidden>
-          <span id="widget-offline-text">Jarvis is not answering.</span>
-          <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
-        </div>
+        <!-- Everything BELOW the widget, in one wrapper (2026-11-14). While a
+             described widget is drawn, the window's own colour gives way so
+             the widget's shade reaches the desktop; these rows keep the tray's
+             own tint and gradient (`.tray-solid` in widget.css), so the
+             meters, the approval card and the notes rows read exactly as they
+             do in face mode. In every other state the wrapper paints nothing
+             and its columns and gaps are the tray's own, so it changes no
+             layout. -->
+        <div class="tray-solid" id="tray-solid">
 
-        <!-- The PC is answering and its own model is not (2026-10-13: both of
-             the owner's Ollama lanes were dead for about five hours and this
-             window said nothing - the health dot was green, because the probe
-             it used asked the wrong port and this row did not exist).
-
-             Its own state, NOT the offline row above: that one means this
-             window cannot reach the PC at all, this one means the PC is
-             answering perfectly and cannot think. Same words as the HUD
-             window, from the one file both import (lane-warning.js).
-
-             ONE ACTION since the owner's decision of 2026-10-13: "Start the
-             local model" asks the PC to run its OWN Windows logon task for the
-             lane the chat uses (lane-start.js), and then asks again until the
-             lane really answers. Starting is not arriving, so the press does
-             NOT clear this row; only the lane answering does. Nothing here
-             invents a fix of its own.
-
-             Filled by widget.js applyHealth from `check_server_health`, whose
-             Ollama row is the backend's own /api/status verdict - the same
-             field the chat itself uses, so a lane on another port is judged
-             where it really is. -->
-        <p class="widget-model" id="widget-model" hidden>
-          <b id="widget-model-text"></b>
-          <span id="widget-model-fix"></span>
-          <button class="btn btn-quiet" type="button" id="widget-model-start" hidden></button>
-          <span id="widget-model-start-note" hidden></span>
-        </p>
-
-        <!-- What JARVIS did about it, by itself (lane-auto.js; the owner's
-             decision of 2026-10-14: "Also restart the lane automatically when
-             it dies").
-
-             Its own row, not a line in the one above: that row is hidden the
-             moment the lane answers, and "it went down and Jarvis started it
-             again" is news about a lane that is now WORKING. The words are the
-             backend's own sentence (`auto_note`), drawn here and composed
-             nowhere, so this window, the bar and the phone say one thing.
-
-             The button is what tells an automatic restart apart from a
-             deliberate stop - a dead process carries no intent, so only the
-             owner can say which it was. Off is immediate; turning it back on is
-             the same action the button above takes in the same second. -->
-        <p class="widget-model widget-auto" id="widget-auto" hidden>
-          <span id="widget-auto-text"></span>
-          <button class="btn btn-quiet" type="button" id="widget-auto-switch" hidden></button>
-        </p>
-
-        <!-- What Jarvis is doing right now, one bounded step at a time -
-             docs/AUTONOMY-PROPOSALS.md §3c. `announce()` already fires this
-             text on the backend today; this is the first place on the
-             desktop that shows it, rather than only the coarse "thinking"
-             face. Empty and hidden whenever there is nothing to say. -->
-        <p class="widget-progress" id="widget-progress" hidden></p>
-
-        <!-- Pause/stop/inject a task already running - docs/AUTONOMY-
-             PROPOSALS.md §3d. Shown while `activity` is "working" or
-             "paused", next to the progress line it belongs to. DRAFT: the
-             backend routes these calls hit are not confirmed to exist
-             (jarvis_gate.py/jarvis_hud.py are not in this repo) - a failure
-             surfaces honestly rather than claiming the task actually paused
-             or stopped when nothing answered. Pause/Resume swap ONLY on the
-             server's own next `activity` report, never on the click itself
-             - see widget.js's syncTaskControls(). -->
-        <div class="task-controls" id="task-controls" hidden>
-          <div class="task-buttons">
-            <button
-              type="button"
-              class="btn btn-quiet"
-              id="btn-task-pause"
-              title="Pause the task Jarvis is currently running"
-            >Pause</button>
-            <button
-              type="button"
-              class="btn btn-quiet"
-              id="btn-task-resume"
-              hidden
-              title="Resume the paused task"
-            >Resume</button>
-            <button
-              type="button"
-              class="btn btn-deny"
-              id="btn-task-stop"
-              title="Stop the task Jarvis is currently running"
-            >Stop</button>
+          <!-- The widget's way out of an offline state. The dot in the compact
+               bar reports it but sits inside the drag region, where a click is a
+               drag; this row is the action, in the half of the window that has
+               room for a sentence. -->
+          <!-- Shown while the link is down OR connected-but-stale: in both,
+               nothing can be approved, and the second used to show no words at
+               all. `data-tone` is red for offline, amber for stale or
+               connecting (jarvis-link.js linkWords). -->
+          <div class="widget-offline" id="widget-offline" data-tone="bad" hidden>
+            <span id="widget-offline-text">Atlas is not answering.</span>
+            <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
           </div>
-          <div class="task-note-row">
-            <input
-              id="task-note"
-              class="appr-note-input"
-              type="text"
-              spellcheck="true"
-              autocomplete="off"
-              placeholder="Add something before it continues…"
-            />
-            <button
-              class="icon-btn"
-              id="btn-task-note-send"
-              title="Send this note - it applies to what Jarvis does next, not what is already running"
-              aria-label="Send note"
-            >↵</button>
-          </div>
-        </div>
 
-        <section class="telemetry-grid">
-          <div class="meter" id="meter-vram">
-            <div class="meter-head">
-              <span class="label">VRAM</span>
-              <span class="val mono" id="vram-val">-- / -- GB</span>
+          <!-- The PC is answering and its own model is not (2026-10-13: both of
+               the owner's Ollama lanes were dead for about five hours and this
+               window said nothing - the health dot was green, because the probe
+               it used asked the wrong port and this row did not exist).
+
+               Its own state, NOT the offline row above: that one means this
+               window cannot reach the PC at all, this one means the PC is
+               answering perfectly and cannot think. Same words as the HUD
+               window, from the one file both import (lane-warning.js).
+
+               ONE ACTION since the owner's decision of 2026-10-13: "Start the
+               local model" asks the PC to run its OWN Windows logon task for the
+               lane the chat uses (lane-start.js), and then asks again until the
+               lane really answers. Starting is not arriving, so the press does
+               NOT clear this row; only the lane answering does. Nothing here
+               invents a fix of its own.
+
+               Filled by widget.js applyHealth from `check_server_health`, whose
+               Ollama row is the backend's own /api/status verdict - the same
+               field the chat itself uses, so a lane on another port is judged
+               where it really is. -->
+          <p class="widget-model" id="widget-model" hidden>
+            <b id="widget-model-text"></b>
+            <span id="widget-model-fix"></span>
+            <button class="btn btn-quiet" type="button" id="widget-model-start" hidden></button>
+            <span id="widget-model-start-note" hidden></span>
+          </p>
+
+          <!-- What JARVIS did about it, by itself (lane-auto.js; the owner's
+               decision of 2026-10-14: "Also restart the lane automatically when
+               it dies").
+
+               Its own row, not a line in the one above: that row is hidden the
+               moment the lane answers, and "it went down and Jarvis started it
+               again" is news about a lane that is now WORKING. The words are the
+               backend's own sentence (`auto_note`), drawn here and composed
+               nowhere, so this window, the bar and the phone say one thing.
+
+               The button is what tells an automatic restart apart from a
+               deliberate stop - a dead process carries no intent, so only the
+               owner can say which it was. Off is immediate; turning it back on is
+               the same action the button above takes in the same second. -->
+          <p class="widget-model widget-auto" id="widget-auto" hidden>
+            <span id="widget-auto-text"></span>
+            <button class="btn btn-quiet" type="button" id="widget-auto-switch" hidden></button>
+          </p>
+
+          <!-- What Jarvis is doing right now, one bounded step at a time -
+               docs/AUTONOMY-PROPOSALS.md §3c. `announce()` already fires this
+               text on the backend today; this is the first place on the
+               desktop that shows it, rather than only the coarse "thinking"
+               face. Empty and hidden whenever there is nothing to say. -->
+          <p class="widget-progress" id="widget-progress" hidden></p>
+
+          <!-- Pause/stop/inject a task already running - docs/AUTONOMY-
+               PROPOSALS.md §3d. Shown while `activity` is "working" or
+               "paused", next to the progress line it belongs to. DRAFT: the
+               backend routes these calls hit are not confirmed to exist
+               (jarvis_gate.py/jarvis_hud.py are not in this repo) - a failure
+               surfaces honestly rather than claiming the task actually paused
+               or stopped when nothing answered. Pause/Resume swap ONLY on the
+               server's own next `activity` report, never on the click itself
+               - see widget.js's syncTaskControls(). -->
+          <div class="task-controls" id="task-controls" hidden>
+            <div class="task-buttons">
+              <button
+                type="button"
+                class="btn btn-quiet"
+                id="btn-task-pause"
+                title="Pause the task Atlas is currently running"
+              >Pause</button>
+              <button
+                type="button"
+                class="btn btn-quiet"
+                id="btn-task-resume"
+                hidden
+                title="Resume the paused task"
+              >Resume</button>
+              <button
+                type="button"
+                class="btn btn-deny"
+                id="btn-task-stop"
+                title="Stop the task Atlas is currently running"
+              >Stop</button>
             </div>
-            <div class="meter-track"><i id="vram-bar" style="transform: scaleX(0)"></i></div>
-          </div>
-
-          <div class="meter" id="meter-cpu">
-            <div class="meter-head">
-              <span class="label">CPU</span>
-              <span class="val mono" id="cpu-val">--%</span>
+            <div class="task-note-row">
+              <input
+                id="task-note"
+                class="appr-note-input"
+                type="text"
+                spellcheck="true"
+                autocomplete="off"
+                placeholder="Add something before it continues…"
+              />
+              <button
+                class="icon-btn"
+                id="btn-task-note-send"
+                title="Send this note - it applies to what Atlas does next, not what is already running"
+                aria-label="Send note"
+              >↵</button>
             </div>
-            <div class="meter-track"><i id="cpu-bar" style="transform: scaleX(0)"></i></div>
           </div>
 
-          <div class="meter" id="meter-gpu">
-            <div class="meter-head">
-              <span class="label">GPU</span>
-              <span class="val mono" id="gpu-val">--% · --°</span>
+          <section class="telemetry-grid">
+            <div class="meter" id="meter-vram">
+              <div class="meter-head">
+                <span class="label">VRAM</span>
+                <span class="val mono" id="vram-val">-- / -- GB</span>
+              </div>
+              <div class="meter-track"><i id="vram-bar" style="transform: scaleX(0)"></i></div>
             </div>
-            <div class="meter-track"><i id="gpu-bar" style="transform: scaleX(0)"></i></div>
-          </div>
 
-          <!-- Every graphics card, one line each, when there are two or more
-               (I12): the meters above are the first card's. -->
-          <ul class="gpu-cards mono" id="gpu-cards" aria-label="Graphics cards" hidden></ul>
-        </section>
+            <div class="meter" id="meter-cpu">
+              <div class="meter-head">
+                <span class="label">CPU</span>
+                <span class="val mono" id="cpu-val">--%</span>
+              </div>
+              <div class="meter-track"><i id="cpu-bar" style="transform: scaleX(0)"></i></div>
+            </div>
 
-        <!-- Pending autonomy gate -->
-        <section
-          class="approval-card"
-          id="approval-card"
-          hidden
-          role="group"
-          aria-labelledby="appr-action"
-        >
-          <!-- Same reasoning as the quickbar: no modality, no focus trap, so
-               no `alertdialog`. Announced through the shared live region
-               instead, which also fixes writing to a hidden region. -->
-          <!-- One card on every screen (card-words.js): the label, then the
-               PC's own title for it (notice.title) - never the code name. -->
-          <div class="approval-header">
-            <span class="warn-badge" id="appr-kicker">Needs your OK</span>
-            <!-- Which of how many, as in the quickbar. The next card replacing
-                 the answered one under the cursor, with no sign more were
-                 waiting, is how a click lands on a card nobody read. Display
-                 only: there is no control here that acts on more than one. -->
-            <span class="appr-count mono" id="appr-count" hidden></span>
-          </div>
-          <p class="appr-title" id="appr-action">Jarvis is asking for your approval</p>
-          <!-- Outside text tried to rush the reader and the tier went up.
-               The chip and the quote; the surrounding context stays on the
-               quickbar's card, because this window is 320px wide and a
-               disclosure nobody can read is worse than a pointer to the one
-               that can. Never a control that clears the latch. -->
-          <div class="appr-raised" id="appr-raised" hidden>
-            <span class="appr-raised-chip" id="appr-raised-chip"></span>
-            <span class="appr-raised-quote" id="appr-raised-quote"></span>
-          </div>
-          <p class="appr-detail" id="appr-detail">--</p>
-          <!-- What getting the answer wrong costs. `risk` is derived by the
-               gate at read time and is the only thing that tells send_email
-               apart from switch_model, which are both tier `ask`. -->
-          <p class="appr-risk" id="appr-risk" data-reversible="no">--</p>
+            <div class="meter" id="meter-gpu">
+              <div class="meter-head">
+                <span class="label">GPU</span>
+                <span class="val mono" id="gpu-val">--% · --°</span>
+              </div>
+              <div class="meter-track"><i id="gpu-bar" style="transform: scaleX(0)"></i></div>
+            </div>
 
-          <!-- Multiple concrete options - docs/AUTONOMY-PROPOSALS.md §3a.
-               Empty and hidden when the plan carries zero or one option; the
-               card then behaves exactly as it always has (the static
-               Approve button below). Each option here IS a full, bounded
-               plan of its own, never a checkbox on one shared plan. -->
-          <div
-            class="appr-options"
-            id="appr-options"
+            <!-- Every graphics card, one line each, when there are two or more
+                 (I12): the meters above are the first card's. -->
+            <ul class="gpu-cards mono" id="gpu-cards" aria-label="Graphics cards" hidden></ul>
+          </section>
+
+          <!-- Pending autonomy gate -->
+          <section
+            class="approval-card"
+            id="approval-card"
             hidden
             role="group"
-            aria-label="Choose which version to approve"
-          ></div>
-          <!-- Why Approve is missing, in words on the card - it used to be a
-               tooltip on a disabled button, which the keyboard cannot reach. -->
-          <p class="appr-options-why" id="appr-options-why" hidden></p>
+            aria-labelledby="appr-action"
+          >
+            <!-- Same reasoning as the quickbar: no modality, no focus trap, so
+                 no `alertdialog`. Announced through the shared live region
+                 instead, which also fixes writing to a hidden region. -->
+            <!-- One card on every screen (card-words.js): the label, then the
+                 PC's own title for it (notice.title) - never the code name. -->
+            <div class="approval-header">
+              <span class="warn-badge" id="appr-kicker">Needs your OK</span>
+              <!-- Which of how many, as in the quickbar. The next card replacing
+                   the answered one under the cursor, with no sign more were
+                   waiting, is how a click lands on a card nobody read. Display
+                   only: there is no control here that acts on more than one. -->
+              <span class="appr-count mono" id="appr-count" hidden></span>
+            </div>
+            <p class="appr-title" id="appr-action">Atlas is asking for your approval</p>
+            <!-- Outside text tried to rush the reader and the tier went up.
+                 The chip and the quote; the surrounding context stays on the
+                 quickbar's card, because this window is 320px wide and a
+                 disclosure nobody can read is worse than a pointer to the one
+                 that can. Never a control that clears the latch. -->
+            <div class="appr-raised" id="appr-raised" hidden>
+              <span class="appr-raised-chip" id="appr-raised-chip"></span>
+              <span class="appr-raised-quote" id="appr-raised-quote"></span>
+            </div>
+            <p class="appr-detail" id="appr-detail">--</p>
+            <!-- What getting the answer wrong costs. `risk` is derived by the
+                 gate at read time and is the only thing that tells send_email
+                 apart from switch_model, which are both tier `ask`. -->
+            <p class="appr-risk" id="appr-risk" data-reversible="no">--</p>
 
-          <!-- A note before the first decision - §3b. Submitting sends it
-               back for a NEW proposal; it never edits the one on screen,
-               same rule as everything else here: a plan that can change
-               after being shown is not fully enumerated any more. -->
-          <div class="appr-note-row">
+            <!-- Multiple concrete options - docs/AUTONOMY-PROPOSALS.md §3a.
+                 Empty and hidden when the plan carries zero or one option; the
+                 card then behaves exactly as it always has (the static
+                 Approve button below). Each option here IS a full, bounded
+                 plan of its own, never a checkbox on one shared plan. -->
+            <div
+              class="appr-options"
+              id="appr-options"
+              hidden
+              role="group"
+              aria-label="Choose which version to approve"
+            ></div>
+            <!-- Why Approve is missing, in words on the card - it used to be a
+                 tooltip on a disabled button, which the keyboard cannot reach. -->
+            <p class="appr-options-why" id="appr-options-why" hidden></p>
+
+            <!-- A note before the first decision - §3b. Submitting sends it
+                 back for a NEW proposal; it never edits the one on screen,
+                 same rule as everything else here: a plan that can change
+                 after being shown is not fully enumerated any more. -->
+            <div class="appr-note-row">
+              <input
+                id="appr-note"
+                class="appr-note-input"
+                type="text"
+                spellcheck="true"
+                autocomplete="off"
+                placeholder="Add something before deciding…"
+              />
+              <button
+                class="icon-btn"
+                id="btn-appr-note-send"
+                title="Send this note - Atlas will propose again"
+                aria-label="Send note"
+              >↵</button>
+            </div>
+
+            <!-- Why the two buttons are grey, when they are: the queue cannot be
+                 confirmed, or a decision is already on its way. -->
+            <p class="appr-why" id="appr-why" role="status" hidden></p>
+            <!-- Deny on the left, Approve on the right - the same order on every
+                 screen, the phone's included (docs/ARCHITECTURE.md §3). -->
+            <div class="approval-actions">
+              <button class="btn btn-deny" id="btn-appr-no">Deny</button>
+              <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
+            </div>
+            <p class="appr-hint">Nothing runs until you decide.</p>
+          </section>
+
+          <!-- One-shot capture -->
+          <p class="note-targets-line" id="note-targets-line" role="status">Checking which note apps are set up on your PC…</p>
+          <section class="capture-row" id="capture-row" hidden>
+            <button
+              type="button"
+              class="capture-target mono"
+              id="capture-target"
+              data-target="logseq"
+              aria-label="Capture target: Logseq journal. Activate to switch to the next note app."
+            >#log</button>
             <input
-              id="appr-note"
-              class="appr-note-input"
+              id="capture-input"
+              class="capture-input"
               type="text"
-              spellcheck="true"
+              spellcheck="false"
               autocomplete="off"
-              placeholder="Add something before deciding…"
+              placeholder="Capture a note…"
             />
             <button
-              class="icon-btn"
-              id="btn-appr-note-send"
-              title="Send this note - Jarvis will propose again"
-              aria-label="Send note"
+              class="icon-btn send-btn"
+              id="btn-capture-send"
+              title="File it (↵)"
+              aria-label="File this capture"
             >↵</button>
-          </div>
+          </section>
 
-          <!-- Why the two buttons are grey, when they are: the queue cannot be
-               confirmed, or a decision is already on its way. -->
-          <p class="appr-why" id="appr-why" role="status" hidden></p>
-          <!-- Deny on the left, Approve on the right - the same order on every
-               screen, the phone's included (docs/ARCHITECTURE.md §3). -->
-          <div class="approval-actions">
-            <button class="btn btn-deny" id="btn-appr-no">Deny</button>
-            <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
-          </div>
-          <p class="appr-hint">Nothing runs until you decide.</p>
-        </section>
-
-        <!-- One-shot capture -->
-        <p class="note-targets-line" id="note-targets-line" role="status">Checking which note apps are set up on your PC…</p>
-        <section class="capture-row" id="capture-row" hidden>
-          <button
-            type="button"
-            class="capture-target mono"
-            id="capture-target"
-            data-target="logseq"
-            aria-label="Capture target: Logseq journal. Activate to switch to the next note app."
-          >#log</button>
-          <input
-            id="capture-input"
-            class="capture-input"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="Capture a note…"
-          />
-          <button
-            class="icon-btn send-btn"
-            id="btn-capture-send"
-            title="File it (↵)"
-            aria-label="File this capture"
-          >↵</button>
-        </section>
-
-        <p class="widget-flash" id="widget-flash" hidden></p>
+          <p class="widget-flash" id="widget-flash" hidden></p>
+        </div>
       </main>
     </div>
 

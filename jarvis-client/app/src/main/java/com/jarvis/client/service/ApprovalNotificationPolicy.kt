@@ -57,7 +57,7 @@ object ApprovalNotificationPolicy {
      * construction - no card title, no summary, no action name - and the one
      * sentence the owner asked to see there.
      */
-    const val PUBLIC_WORDS = "Jarvis: 1 approval waiting"
+    const val PUBLIC_WORDS = "Atlas: 1 approval waiting"
 
     /** One button a notification may carry. */
     enum class Action {

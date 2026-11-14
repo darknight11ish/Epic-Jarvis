@@ -67,7 +67,7 @@ MAX_PICTURES = 3
 #: The sentence both apps show where a picture is attached (the desktop's
 #: attachment chip, the phone's line under the box). One source of truth:
 #: backend/test_chat_picture.py checks both apps say exactly this.
-OWNER_LINE = "Secrets in pictures you attach are covered with black boxes before Jarvis looks."
+OWNER_LINE = "Secrets in pictures you attach are covered with black boxes before Atlas looks."
 
 NOT_INSTALLED = "the part of Jarvis that checks pictures is not installed"
 NOT_A_DATA_PICTURE = "it is not a picture this PC can open (only pictures sent inside the message are used)"

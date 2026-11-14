@@ -1188,9 +1188,16 @@ class JarvisApi(
     /** `GET /api/widgets` - the saved widgets, the previews and the menu ([JarvisWidgets]). A read. */
     suspend fun widgets(): ApiResult<JsonObject> = probe(JarvisWidgets.LIST_PATH)
 
-    /** `GET /api/widgets/show?id=` - one widget, filled in now on the PC. A read. */
+    /**
+     * `GET /api/widgets/show?id=` - one widget, filled in now on the PC. A read.
+     *
+     * Since 2026-11-14 a PREVIEW id ("d...") is read the same way: the PC
+     * fills a draft from the same readers and saves nothing, so Brain ->
+     * Widgets can draw a real live preview instead of a list of sentences.
+     * No new route and no new request type - [JarvisWidgets.showableId].
+     */
     suspend fun widgetShow(id: String): ApiResult<JsonObject> {
-        if (!JarvisWidgets.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a widget id"))
+        if (!JarvisWidgets.showableId(id)) return ApiResult.Failed(ApiError.Malformed("not a widget id"))
         return probe(JarvisWidgets.SHOW_PATH + "?id=" + id)
     }
 

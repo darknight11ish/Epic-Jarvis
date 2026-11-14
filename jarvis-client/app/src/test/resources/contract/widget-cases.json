@@ -1,4 +1,46 @@
 {
+ "accents": [
+  {
+   "color": "#63F7FF",
+   "id": "cyan",
+   "label": "Cyan"
+  },
+  {
+   "color": "#8CC9FF",
+   "id": "sky",
+   "label": "Sky"
+  },
+  {
+   "color": "#BFA6FF",
+   "id": "violet",
+   "label": "Violet"
+  },
+  {
+   "color": "#FF93C7",
+   "id": "pink",
+   "label": "Pink"
+  },
+  {
+   "color": "#FFC661",
+   "id": "amber",
+   "label": "Amber"
+  },
+  {
+   "color": "#B9E86B",
+   "id": "lime",
+   "label": "Lime"
+  },
+  {
+   "color": "#FF9E5C",
+   "id": "orange",
+   "label": "Orange"
+  },
+  {
+   "color": "#E6EEF7",
+   "id": "mono",
+   "label": "Mono"
+  }
+ ],
  "actions": [
   {
    "id": "focus",
@@ -336,6 +378,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "fraction": 0.4,
@@ -390,10 +433,13 @@
       "type": "button"
      }
     ],
+    "contrast": "normal",
     "layout": "list",
-    "name": "Desk"
+    "name": "Desk",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "fraction": 0.4,
@@ -458,8 +504,124 @@
       "type": "button"
      }
     ],
+    "contrast": "normal",
     "layout": "list",
-    "name": "Desk"
+    "name": "Desk",
+    "shade": "solid"
+   }
+  },
+  "half_right_look": {
+   "answer": {
+    "accent": "amber",
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "private": false,
+      "source": "todo_count",
+      "type": "number",
+      "value": "2"
+     }
+    ],
+    "contrast": "high",
+    "id": "w0112233445",
+    "layout": "stack",
+    "name": "Mixed",
+    "ok": true,
+    "shade": "frosted"
+   },
+   "boards": {
+    "big": {
+     "big": {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     },
+     "blocks": [],
+     "buttons": []
+    },
+    "compact": {
+     "big": null,
+     "blocks": [
+      {
+       "text": "Mixed",
+       "type": "title"
+      },
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "2"
+      }
+     ],
+     "buttons": []
+    },
+    "list": {
+     "big": null,
+     "blocks": [
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "2"
+      }
+     ],
+     "buttons": []
+    },
+    "stack": {
+     "big": null,
+     "blocks": [
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "2"
+      }
+     ],
+     "buttons": []
+    }
+   },
+   "hidden": {
+    "accent": "amber",
+    "blocks": [
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     }
+    ],
+    "contrast": "high",
+    "layout": "stack",
+    "name": "Mixed",
+    "shade": "solid"
+   },
+   "view": {
+    "accent": "amber",
+    "blocks": [
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     }
+    ],
+    "contrast": "high",
+    "layout": "stack",
+    "name": "Mixed",
+    "shade": "solid"
    }
   },
   "hostile": {
@@ -891,6 +1053,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "action": "timer",
@@ -920,10 +1083,13 @@
       "value": ""
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "Evil namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    "name": "Evil namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "action": "timer",
@@ -974,8 +1140,267 @@
       "value": "12"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "Evil namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    "name": "Evil namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "shade": "solid"
+   }
+  },
+  "looked_widget": {
+   "answer": {
+    "accent": "violet",
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "text": "Today",
+      "type": "title"
+     },
+     {
+      "private": false,
+      "source": "todo_count",
+      "type": "number",
+      "value": "3"
+     },
+     {
+      "items": [
+       {
+        "text": "Call back",
+        "when": "10:30"
+       }
+      ],
+      "source": "reminders",
+      "type": "list"
+     },
+     {
+      "action": "timer",
+      "type": "button"
+     }
+    ],
+    "contrast": "high",
+    "id": "w0abcdef123",
+    "layout": "big",
+    "name": "Watchlist",
+    "ok": true,
+    "shade": "clear"
+   },
+   "boards": {
+    "big": {
+     "big": {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "3"
+     },
+     "blocks": [
+      {
+       "text": "Today",
+       "type": "title"
+      },
+      {
+       "empty": "",
+       "hidden": false,
+       "items": [
+        {
+         "text": "Call back",
+         "when": "10:30"
+        }
+       ],
+       "label": "",
+       "more": 0,
+       "note": "",
+       "private": true,
+       "type": "list"
+      }
+     ],
+     "buttons": [
+      {
+       "action": "timer",
+       "label": "10-min timer",
+       "type": "button"
+      }
+     ]
+    },
+    "compact": {
+     "big": null,
+     "blocks": [
+      {
+       "text": "Today",
+       "type": "title"
+      },
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "3"
+      }
+     ],
+     "buttons": [
+      {
+       "action": "timer",
+       "label": "10-min timer",
+       "type": "button"
+      }
+     ]
+    },
+    "list": {
+     "big": null,
+     "blocks": [
+      {
+       "text": "Today",
+       "type": "title"
+      },
+      {
+       "empty": "",
+       "hidden": false,
+       "items": [
+        {
+         "text": "Call back",
+         "when": "10:30"
+        }
+       ],
+       "label": "",
+       "more": 0,
+       "note": "",
+       "private": true,
+       "type": "list"
+      },
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "3"
+      }
+     ],
+     "buttons": [
+      {
+       "action": "timer",
+       "label": "10-min timer",
+       "type": "button"
+      }
+     ]
+    },
+    "stack": {
+     "big": null,
+     "blocks": [
+      {
+       "text": "Today",
+       "type": "title"
+      },
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "3"
+      },
+      {
+       "empty": "",
+       "hidden": false,
+       "items": [
+        {
+         "text": "Call back",
+         "when": "10:30"
+        }
+       ],
+       "label": "",
+       "more": 0,
+       "note": "",
+       "private": true,
+       "type": "list"
+      }
+     ],
+     "buttons": [
+      {
+       "action": "timer",
+       "label": "10-min timer",
+       "type": "button"
+      }
+     ]
+    }
+   },
+   "hidden": {
+    "accent": "violet",
+    "blocks": [
+     {
+      "text": "Today",
+      "type": "title"
+     },
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "3"
+     },
+     {
+      "empty": "",
+      "hidden": true,
+      "items": [],
+      "label": "",
+      "more": 0,
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     }
+    ],
+    "contrast": "high",
+    "layout": "big",
+    "name": "Watchlist",
+    "shade": "clear"
+   },
+   "view": {
+    "accent": "violet",
+    "blocks": [
+     {
+      "text": "Today",
+      "type": "title"
+     },
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "3"
+     },
+     {
+      "empty": "",
+      "hidden": false,
+      "items": [
+       {
+        "text": "Call back",
+        "when": "10:30"
+       }
+      ],
+      "label": "",
+      "more": 0,
+      "note": "",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     }
+    ],
+    "contrast": "high",
+    "layout": "big",
+    "name": "Watchlist",
+    "shade": "clear"
    }
   },
   "missing_private_flag": {
@@ -1058,6 +1483,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "fraction": 0.0,
@@ -1069,10 +1495,13 @@
       "value": ""
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "M"
+    "name": "M",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "fraction": 0.5,
@@ -1084,8 +1513,10 @@
       "value": "5:00 left"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "M"
+    "name": "M",
+    "shade": "solid"
    }
   },
   "morning": {
@@ -1355,6 +1786,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "text": "Good morning",
@@ -1398,10 +1830,13 @@
       "type": "button"
      }
     ],
+    "contrast": "normal",
     "layout": "big",
-    "name": "Morning"
+    "name": "Morning",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "text": "Good morning",
@@ -1454,8 +1889,10 @@
       "type": "button"
      }
     ],
+    "contrast": "normal",
     "layout": "big",
-    "name": "Morning"
+    "name": "Morning",
+    "shade": "solid"
    }
   },
   "newer_pc_layout": {
@@ -1551,6 +1988,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "text": "Ahead",
@@ -1565,10 +2003,13 @@
       "value": ""
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "From the future"
+    "name": "From the future",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "text": "Ahead",
@@ -1583,8 +2024,124 @@
       "value": "2"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "From the future"
+    "name": "From the future",
+    "shade": "solid"
+   }
+  },
+  "newer_pc_look": {
+   "answer": {
+    "accent": "chartreuse",
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "private": false,
+      "source": "todo_count",
+      "type": "number",
+      "value": "2"
+     }
+    ],
+    "contrast": "ultra",
+    "id": "w0fedcba98",
+    "layout": "stack",
+    "name": "From the future",
+    "ok": true,
+    "shade": "frosted"
+   },
+   "boards": {
+    "big": {
+     "big": {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     },
+     "blocks": [],
+     "buttons": []
+    },
+    "compact": {
+     "big": null,
+     "blocks": [
+      {
+       "text": "From the future",
+       "type": "title"
+      },
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "2"
+      }
+     ],
+     "buttons": []
+    },
+    "list": {
+     "big": null,
+     "blocks": [
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "2"
+      }
+     ],
+     "buttons": []
+    },
+    "stack": {
+     "big": null,
+     "blocks": [
+      {
+       "hidden": false,
+       "label": "",
+       "note": "",
+       "private": false,
+       "type": "number",
+       "value": "2"
+      }
+     ],
+     "buttons": []
+    }
+   },
+   "hidden": {
+    "accent": "cyan",
+    "blocks": [
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     }
+    ],
+    "contrast": "normal",
+    "layout": "stack",
+    "name": "From the future",
+    "shade": "solid"
+   },
+   "view": {
+    "accent": "cyan",
+    "blocks": [
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     }
+    ],
+    "contrast": "normal",
+    "layout": "stack",
+    "name": "From the future",
+    "shade": "solid"
    }
   },
   "not_ok": {
@@ -1812,6 +2369,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "fraction": 1.0,
@@ -1859,10 +2417,13 @@
       "type": "list"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": ""
+    "name": "",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "fraction": 1.0,
@@ -1910,8 +2471,10 @@
       "type": "list"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": ""
+    "name": "",
+    "shade": "solid"
    }
   },
   "quick_access": {
@@ -2059,6 +2622,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "hidden": false,
@@ -2086,10 +2650,13 @@
       "value": "3.0 GB used of 12 GB"
      }
     ],
+    "contrast": "normal",
     "layout": "compact",
-    "name": "Quick access"
+    "name": "Quick access",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "hidden": false,
@@ -2117,8 +2684,10 @@
       "value": "3.0 GB used of 12 GB"
      }
     ],
+    "contrast": "normal",
     "layout": "compact",
-    "name": "Quick access"
+    "name": "Quick access",
+    "shade": "solid"
    }
   },
   "too_many_blocks": {
@@ -2339,6 +2908,7 @@
     }
    },
    "hidden": {
+    "accent": "cyan",
     "blocks": [
      {
       "text": "T0",
@@ -2373,10 +2943,13 @@
       "type": "title"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "Many"
+    "name": "Many",
+    "shade": "solid"
    },
    "view": {
+    "accent": "cyan",
     "blocks": [
      {
       "text": "T0",
@@ -2411,12 +2984,36 @@
       "type": "title"
      }
     ],
+    "contrast": "normal",
     "layout": "stack",
-    "name": "Many"
+    "name": "Many",
+    "shade": "solid"
    }
   }
  },
  "comment": "Made by tools/gen_widget_cases.py - do not edit by hand. docs/JARVIS-API.md section 86.",
+ "contrasts": [
+  {
+   "colors": {
+    "bg": "#04070C",
+    "surface": "#0E1822",
+    "text_hi": "#E6EEF7",
+    "text_muted": "#93A6BA"
+   },
+   "id": "normal",
+   "label": "Normal"
+  },
+  {
+   "colors": {
+    "bg": "#000000",
+    "surface": "#262626",
+    "text_hi": "#FFFFFF",
+    "text_muted": "#E0E0E0"
+   },
+   "id": "high",
+   "label": "High contrast"
+  }
+ ],
  "hidden_words": "Hidden - open Jarvis to see it.",
  "layouts": [
   "stack",
@@ -2431,6 +3028,11 @@
   "name": 40,
   "text": 60
  },
+ "look_default": {
+  "accent": "cyan",
+  "contrast": "normal",
+  "shade": "solid"
+ },
  "private_sources": [
   "current_task",
   "now_playing",
@@ -2438,5 +3040,25 @@
   "timers",
   "today",
   "todo"
+ ],
+ "shades": [
+  {
+   "alpha": 255,
+   "id": "solid",
+   "label": "Solid",
+   "surface_alpha": 255
+  },
+  {
+   "alpha": 191,
+   "id": "half",
+   "label": "Half see-through",
+   "surface_alpha": 159
+  },
+  {
+   "alpha": 128,
+   "id": "clear",
+   "label": "See-through",
+   "surface_alpha": 102
+  }
  ]
 }
