@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d85796a23a2857f8d36ec2710d19c05277352006",
- "built_at": "2026-11-13T16:12:17-08:00",
+ "ref": "086ada370e189e2cf2a5cd613553cbb25293a833",
+ "built_at": "2026-11-13T19:57:59-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1039,6 +1039,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ChatPins.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ContactsLookup.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FaceTuning.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FloatingAvatar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/HistoryViewPrefs.kt",
@@ -1058,6 +1059,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenNever.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenRate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/SettingsBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/TokenStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/WakeResume.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/face/AnimalNow.kt",
@@ -1089,6 +1091,20 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/face/gl/TokamakRenderer.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/handsfree/HandsfreeClip.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/handsfree/HandsfreeFlow.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/DeviceTiers.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/DeviceTiersAndroid.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/GgufMetadata.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LlamaEngine.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LlamaNative.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiController.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiPrompt.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiScreen.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiSettings.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalAiWords.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalEngine.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/LocalEnginePolicy.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/ModelStore.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/localai/ModelStoreAndroid.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/ActivityEvent.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/AlsoOnPhone.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/AnimalOptions.kt",
@@ -1370,6 +1386,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcHelpPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcNotifyPlate.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneBackupPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneNotificationsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhotoReminderDialog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PicturesPlate.kt",
@@ -1424,6 +1441,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/JarvisTheme.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Themes.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/CardVoice.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/HoldEndRule.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveAudioRoute.kt",
@@ -1459,6 +1477,8 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetPin.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetRuntime.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/widget/WidgetStates.kt",
+    "jarvis-client/app/src/main/jniLibs/arm64-v8a/libjarvis_llama.so",
+    "jarvis-client/app/src/main/jniLibs/x86_64/libjarvis_llama.so",
     "jarvis-client/app/src/main/res/anim/notification_frame_in.xml",
     "jarvis-client/app/src/main/res/anim/notification_frame_out.xml",
     "jarvis-client/app/src/main/res/drawable/ic_notification.xml",
@@ -1797,16 +1817,27 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/YoutubeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/BaseUrlTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/ChatPinsTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/data/EncryptedBackupTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceSizeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceTuningTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/LookTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/PhoneAddressTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/DeviceTiersTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/FakeLocalEngine.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/GgufMetadataTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LlamaEngineTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiControllerTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiPromptTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalAiShipsOffTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/LocalEnginePolicyTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/localai/ModelStoreTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/net/WriteLikeMeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/platform/LocalNetworkPermissionTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/VoicePressTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/theme/ThemeContrastTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/update/ApkUpdaterTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/voice/HoldEndRuleTest.kt",
     "jarvis-client/app/src/test/resources/chat-stream-cases.json",
     "jarvis-client/app/src/test/resources/contract/animal-cases.json",
@@ -1865,6 +1896,15 @@
     "jarvis-client/app/src/test/resources/critter-drift-golden.json",
     "jarvis-client/app/src/test/resources/critter-pose-golden.json",
     "jarvis-client/app/src/test/resources/critter-zs-golden.json",
+    "jarvis-client/app/src/test/resources/gguf/bad-magic.gguf",
+    "jarvis-client/app/src/test/resources/gguf/bad-type.gguf",
+    "jarvis-client/app/src/test/resources/gguf/huge-count.gguf",
+    "jarvis-client/app/src/test/resources/gguf/missing-fields.gguf",
+    "jarvis-client/app/src/test/resources/gguf/no-arch.gguf",
+    "jarvis-client/app/src/test/resources/gguf/qwen2-valid.gguf",
+    "jarvis-client/app/src/test/resources/gguf/too-big.gguf",
+    "jarvis-client/app/src/test/resources/gguf/truncated.gguf",
+    "jarvis-client/app/src/test/resources/gguf/v1.gguf",
     "jarvis-client/app/src/test/resources/jarvis-visual-spec.json",
     "jarvis-client/app/src/test/resources/lipsync-golden.json",
     "jarvis-client/app/src/test/resources/pattern-golden.json",
@@ -1878,13 +1918,25 @@
     "jarvis-client/gradle/wrapper/gradle-wrapper.properties",
     "jarvis-client/gradlew",
     "jarvis-client/gradlew.bat",
+    "jarvis-client/native/BUILD-INFO-arm64-v8a.txt",
+    "jarvis-client/native/BUILD-INFO-x86_64.txt",
+    "jarvis-client/native/CMakeLists.txt",
+    "jarvis-client/native/PROVENANCE.json",
+    "jarvis-client/native/README.md",
+    "jarvis-client/native/REPORT.md",
+    "jarvis-client/native/build-native.ps1",
+    "jarvis-client/native/jni/jarvis_llama_jni.cpp",
+    "jarvis-client/native/licenses/LICENSE-PrivateLM-plugin",
+    "jarvis-client/native/licenses/LICENSE-PrivateLM-repo",
+    "jarvis-client/native/licenses/LICENSE-llama.cpp",
+    "jarvis-client/native/licenses/llama.cpp-tree.sha256",
     "jarvis-client/settings.gradle.kts",
     "jarvis-client/tools/gen_feature_directory.py",
     "server/README.md",
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 970,
+   "file_count": 1022,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4614,7 +4666,10 @@
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-phone-on-device-model-engine.md",
+    "changelog.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
+    "changelog.d/2026-11-13-settings-plate-and-local-ai-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4778,7 +4833,10 @@
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-phone-on-device-model-engine.md",
+    "decisions.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
+    "decisions.d/2026-11-13-settings-plate-tells-the-truth.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5227,7 +5285,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 864,
+   "file_count": 870,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6314,6 +6372,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "086ada370e189e2cf2a5cd613553cbb25293a833",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
+  },
+  {
+   "sha": "0b6e5a96798ef34a8fe047f7f66ae7f93799f009",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1238 from darknight11ish/fix/awareness-of-new-features-2026-11-13"
+  },
+  {
+   "sha": "0a195e9493b2ec66ad573a747278ea13ba4352d3",
+   "date": "2026-11-13",
+   "subject": "fix: restore the Tauri 'features' capability, which my last commit overwrote"
+  },
+  {
+   "sha": "1c1a516da21eed1afd0210d4798b6ea9bec5068b",
+   "date": "2026-11-13",
+   "subject": "fix: VoiceStudio's phone absence and its feature-list cover - #1238's backend was red on both"
+  },
+  {
    "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
    "date": "2026-11-13",
    "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
@@ -6324,9 +6402,19 @@
    "subject": "docs: the About page's claim totals follow the four rows this PR adds"
   },
   {
+   "sha": "f2aada5a167f61f98e5e9897af6348022d75ac8d",
+   "date": "2026-11-13",
+   "subject": "fix: renumber the new defect row to DEF-066"
+  },
+  {
    "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
    "date": "2026-11-13",
    "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
+  },
+  {
+   "sha": "5d741578781ff4a591930ef8c726b47206751869",
+   "date": "2026-11-13",
+   "subject": "fix(phone): the Settings plate tells the truth about Local AI, plus four smaller fixes"
   },
   {
    "sha": "e46ff2d65262080868f08091056af77852183383",
@@ -6382,36 +6470,6 @@
    "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
    "date": "2026-11-13",
    "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
-  },
-  {
-   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
-  },
-  {
-   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
-  },
-  {
-   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
-   "date": "2026-11-13",
-   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
-   "date": "2026-11-13",
-   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
@@ -6428,7 +6486,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 930
+   "files": 982
   },
   {
    "path": "docs/",
@@ -6448,7 +6506,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 247
+   "files": 250
   },
   {
    "path": "videos/",
@@ -6458,7 +6516,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 164
+   "files": 167
   },
   {
    "path": "plugins/",
@@ -6532,8 +6590,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5659,
-  "covered": 5177,
+  "tracked_files": 5717,
+  "covered": 5235,
   "excluded": 482,
   "subsystems": 27
  },
