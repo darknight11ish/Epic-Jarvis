@@ -11,11 +11,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/net/SettingsCatalog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt",
     "owner decisions 2026-10-22 (Settings-only allowlist; multi-field typed adjustment)",
-    "jarvis_feature_guide.control_matrix() + SETTINGS_GAPS (joined after #734)",
-    "jarvis_feature_guide.control_matrix() + SETTINGS_GAPS (joined after #734)",
-    "jarvis_feature_guide.control_matrix() + SETTINGS_GAPS (joined after #734)",
-    "jarvis_feature_guide.control_matrix() + SETTINGS_GAPS (joined after #734)",
-    "jarvis_feature_guide.control_matrix() + SETTINGS_GAPS (joined after #734)",
     "jarvis_feature_guide.control_matrix() + SETTINGS_GAPS (joined after #734)"
   ],
   "owners": {
@@ -2407,7 +2402,7 @@
       "name": "Your past chats",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, History. In the HUD, the History button in the left column. On the phone, the History row in the Brain.",
+      "where": "Brain, History. In the HUD, the History button in the left column. On the phone it also opens from the More menu's History row on Home; the Brain's History row is still there.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -2420,7 +2415,7 @@
       },
       "desktop": {
         "section": "security",
-        "location": "Brain, History. On the phone, the History row in the Brain.",
+        "location": "Brain, History. In the HUD, the History button in the left column. On the phone it also opens from the More menu's History row on Home; the Brain's History row is still there.",
         "search": [
           "Your past chats"
         ],
@@ -2428,7 +2423,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Brain, History.",
+        "location": "Brain, History. In the HUD, the History button in the left column. On the phone it also opens from the More menu's History row on Home; the Brain's History row is still there.",
         "search": [
           "your past chats"
         ],
@@ -9723,51 +9718,60 @@
       "name": "A second voice program (VoiceStudio)",
       "group": "The PC itself",
       "surface": "desktop",
-      "where": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+      "where": "Off by default and not connected to the voice Jarvis answers in yet. Turn it on in Settings, The PC itself (\"A second voice program (VoiceStudio)\"), or say \"turn on voicestudio\"; turning it off is instant. The program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
       "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on A second voice program (VoiceStudio)",
-        "turn_off": "turn off A second voice program (VoiceStudio)",
+        "type": "title",
+        "setting_keys": [
+          "voicestudio.enabled"
+        ],
+        "turn_on": "turn on voicestudio",
+        "turn_off": "turn off voicestudio",
         "adjust": [],
-        "intent": "feature_switch_refused"
+        "intent": "voicestudio_set"
       },
       "desktop": {
-        "section": null,
-        "location": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "section": "voicestudio",
+        "location": "Off by default and not connected to the voice Jarvis answers in yet. Turn it on in Settings, The PC itself (\"A second voice program (VoiceStudio)\"), or say \"turn on voicestudio\"; turning it off is instant. The program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
         "search": [
+          "voicestudio",
           "A second voice program (VoiceStudio)"
         ],
         "found": true
       },
       "phone": {
         "section": null,
-        "location": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "location": "Off by default and not connected to the voice Jarvis answers in yet. Turn it on in Settings, The PC itself (\"A second voice program (VoiceStudio)\"), or say \"turn on voicestudio\"; turning it off is instant. The program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
         "search": [
+          "voicestudio",
           "a second voice program (voicestudio)"
         ],
         "found": false
       },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "pc-only",
+      "owner": "voiceprint-wiring",
+      "reason": "PC-only by nature (docs/ARCHITECTURE.md section 8): the program is a separate PowerShell-started program on this PC and the phone has no switch for it - a phone that could start a program on the PC would be a new power. Its switch is ONE change_own_config card plus Windows Hello to turn on, instant to turn off, and the speaking-voice wiring is still the next slice, so switching it on changes nothing you would hear.",
+      "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "turn on A second voice program (VoiceStudio)",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "example_phrase": "turn on voicestudio",
+        "screen_path": "desktop Settings: voicestudio; phone: All features and abilities"
       },
       "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "The VoiceStudio client has no typed command and no Settings control yet: the speaking-voice wiring and its one-card switch are the named next slice.",
+        "status": "adjust",
+        "reason_code": "command",
+        "owner": "voiceprint-wiring",
+        "reason": "",
         "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+        "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
-      "own_keys": [],
-      "own_intents": [],
+      "own_keys": [
+        "voicestudio.enabled"
+      ],
+      "own_intents": [
+        "voicestudio_set",
+        "voicestudio_state"
+      ],
       "own_actions": {},
-      "label_note": ""
+      "label_note": "The switch is typed and carded on the PC (one change_own_config card to turn it on, instant to turn it off) and the desktop Settings card named here draws it. The PHONE has no switch for it at all, by nature, so it shows the honest refusal instead."
     },
     {
       "id": "wifi-auto-reconnect",
@@ -11137,6 +11141,19 @@
         "the auto wi-fi reconnect",
         "reconnect wi-fi automatically",
         "automatic wi-fi reconnection"
+      ],
+      "app": "desktop",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
+    },
+    {
+      "id": "voicestudio",
+      "names": [
+        "voicestudio",
+        "voice studio",
+        "the second voice program",
+        "a second voice program"
       ],
       "app": "desktop",
       "where": "settings",
@@ -13866,7 +13883,7 @@
   },
   "multi_field_count": 19,
   "labels": {
-    "Switchable / Adjustable (Typed & Settings)": "A real switch or choice: type it or change it in Settings. Today 10 enforced, 30 planned, 0 PC-only; a planned row says 'Still being wired'.",
+    "Switchable / Adjustable (Typed & Settings)": "A real switch or choice: type it or change it in Settings. Today what the rows below say (15 enforced); a planned row says 'Still being wired'.",
     "Settings-Only (By Design — Security Boundary)": "Changed only on the PC Settings page, never by typing (credentials, restore backup) — a security boundary by design.",
     "PC-Only Setting (Honest Refusal on Phone)": "A setting/ability that exists on one app only today; the other app honestly refuses rather than faking a control.",
     "Command-Only (Runs When You Ask — No Switch Needed)": "No switch exists: you ask and Jarvis runs it (or it is a read-only info page).",
@@ -14330,8 +14347,8 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 108,
-    "Switchable / Adjustable (Typed & Settings)": 43,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 107,
+    "Switchable / Adjustable (Typed & Settings)": 44,
     "PC-Only Setting (Honest Refusal on Phone)": 17,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2

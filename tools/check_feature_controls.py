@@ -515,9 +515,16 @@ def main(argv=None):
     # own modify_own_code card, so there is no stored setting to turn on/off.
     # 107 + 1 -> 108 Command-Only, 181 + 1 -> 182 features. Measured from the
     # contract, not chosen.
+    # 2026-11-13 (the awareness audit's GAP-9): the VoiceStudio row left
+    # Command-Only for Switchable/Adjustable - it has a real typed switch now
+    # ("turn on voicestudio" is ONE change_own_config card plus Windows Hello,
+    # "turn off voicestudio" is instant) and its own Settings card, both proved
+    # by `jarvis_feature_guide.control_matrix()` through the real matcher - so
+    # 43 -> 44 Switchable, 108 -> 107 Command-Only; 182 features. Measured from
+    # the contract, not chosen.
     expected_label_counts = {
-        LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
-        LAB_COMMAND: 108, LAB_ALWAYS: 12,
+        LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
+        LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,

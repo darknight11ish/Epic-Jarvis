@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "cf04b31139669a2cbb70ee42ea2de538b0cc26a2",
- "built_at": "2026-11-13T05:14:40-08:00",
+ "ref": "d85796a23a2857f8d36ec2710d19c05277352006",
+ "built_at": "2026-11-13T16:12:17-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1039,7 +1039,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ChatPins.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ContactsLookup.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FaceTuning.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FloatingAvatar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/HistoryViewPrefs.kt",
@@ -1059,7 +1058,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenNever.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenRate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/data/SettingsBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/TokenStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/WakeResume.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/face/AnimalNow.kt",
@@ -1372,7 +1370,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcHelpPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcNotifyPlate.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneBackupPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneNotificationsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhotoReminderDialog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PicturesPlate.kt",
@@ -1427,7 +1424,6 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/JarvisTheme.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Themes.kt",
-    "jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/CardVoice.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/HoldEndRule.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveAudioRoute.kt",
@@ -1801,7 +1797,6 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/YoutubeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/BaseUrlTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/ChatPinsTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/data/EncryptedBackupTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceSizeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceTuningTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/LookTest.kt",
@@ -1812,7 +1807,6 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/VoicePressTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/theme/ThemeContrastTest.kt",
-    "jarvis-client/app/src/test/java/com/jarvis/client/update/ApkUpdaterTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/voice/HoldEndRuleTest.kt",
     "jarvis-client/app/src/test/resources/chat-stream-cases.json",
     "jarvis-client/app/src/test/resources/contract/animal-cases.json",
@@ -1890,7 +1884,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 976,
+   "file_count": 970,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -3843,6 +3837,7 @@
     "backend/test_failure_detail.py",
     "backend/test_fault_probes.py",
     "backend/test_feature_answers.py",
+    "backend/test_feature_control_phrases.py",
     "backend/test_feature_controls.py",
     "backend/test_feature_detail.py",
     "backend/test_feature_guide.py",
@@ -4327,7 +4322,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 689,
+   "file_count": 690,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4615,9 +4610,10 @@
     "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
+    "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
+    "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
-    "changelog.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4778,9 +4774,10 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
+    "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
-    "decisions.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5230,7 +5227,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 862,
+   "file_count": 864,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6317,111 +6314,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "cf04b31139669a2cbb70ee42ea2de538b0cc26a2",
+   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
    "date": "2026-11-13",
-   "subject": "chore(records): re-take the self-code map after the generated files landed"
+   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
   },
   {
-   "sha": "d98f63866aaaa3be1a0230b4678558db52bfa8a4",
+   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
    "date": "2026-11-13",
-   "subject": "chore(records): regenerate the feature catalogue, recent changes and self-code map"
+   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
   },
   {
-   "sha": "b2bf4e79656dd6e308112eaed37bec154180a684",
+   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
    "date": "2026-11-13",
-   "subject": "feat(phone): encrypted settings backup and a sha256-pinned update manifest"
+   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
   },
   {
-   "sha": "a6f8496fee511e6d1c0e54dc0f569d42d1f2bcb2",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1223 from darknight11ish/feat/phone-more-history-2026-11-10"
+   "sha": "e46ff2d65262080868f08091056af77852183383",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-after-the-phone-fix"
   },
   {
-   "sha": "384f662f50833e56225737ec6b2cab12cdbb2278",
-   "date": "2026-11-12",
-   "subject": "Merge pull request #1226 from darknight11ish/integration/github-union-02447-2026-11-11"
+   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
+   "date": "2026-11-13",
+   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
   },
   {
-   "sha": "dd32b991c2dae2bed85b09be83a1c490e317211e",
-   "date": "2026-11-12",
-   "subject": "merge(union): carry the github_search card-free fix and the regenerated map into the phone PR"
+   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
   },
   {
-   "sha": "f41a119d8b06c030dc23f7dc1116f62733a593b0",
-   "date": "2026-11-12",
-   "subject": "records(union): regenerate the self-code map after the github_search card-free fix"
+   "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
   },
   {
-   "sha": "bfbe4328e905fc6d6a842fd822cce8928b5d6885",
-   "date": "2026-11-12",
-   "subject": "fix(github): the sixth card-free read is github_search, and the outbound check now knows it"
+   "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
   },
   {
-   "sha": "7112262fb5c8d8871b8baa1f365e54d9561e69bf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the union map fix"
+   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
+   "date": "2026-11-13",
+   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
   },
   {
-   "sha": "3ab2f8522ec9892050c97eb9ea66741d643678ca",
-   "date": "2026-11-12",
-   "subject": "Merge commit '47e9c0524b01a6168fb51591d3b2b5477951094f' into fix/pr1223-merge-2026-11-12"
+   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
   },
   {
-   "sha": "47e9c0524b01a6168fb51591d3b2b5477951094f",
-   "date": "2026-11-12",
-   "subject": "records(union): regenerate the self-code map after the patch-history index landed"
+   "sha": "43ff622708f70142a1ad58a533053991bd75f634",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map with the new suite tracked"
   },
   {
-   "sha": "c7777dbbbde6a367fb275de099641378a112bd25",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate recent-changes and the self-code map after the union merge"
+   "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
+   "date": "2026-11-13",
+   "subject": "fix(github): a free-plan 403 on branch rules means no rules, not a blind token"
   },
   {
-   "sha": "e77e0aadd41242a99caf9d14ed332a009a9c4ddc",
-   "date": "2026-11-12",
-   "subject": "Merge commit '264484aee5a411f26b2bb013e4fcbb9fa5096e32' into fix/pr1223-merge-2026-11-12"
+   "sha": "379e106a094818492c11987146dea40e4b45863e",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
-   "sha": "f178829082997f509029cb143cb3497adfe19dbf",
-   "date": "2026-11-12",
-   "subject": "records(pr1223): regenerate the self-code map after the main merge"
+   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
+   "date": "2026-11-13",
+   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
   },
   {
-   "sha": "a6d143702320dfcc8788b4ed06e47de20fa285a9",
-   "date": "2026-11-12",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/pr1223-merge-2026-11-12"
+   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
   },
   {
-   "sha": "264484aee5a411f26b2bb013e4fcbb9fa5096e32",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the gate base the state the patch stack really installs"
+   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
   },
   {
-   "sha": "2b3b2758bec1413d04890ccb311be0d1a79582ec",
-   "date": "2026-11-12",
-   "subject": "fix(union): make the 2026-11-11 rulings actually cohere - page rows, gate rows, patch stack, default list"
+   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
   },
   {
-   "sha": "9aa650fde87f2261bb4cc9ea51abfa7c08eeea82",
-   "date": "2026-11-12",
-   "subject": "fix(union): resolve CI audit zero-jargon, asks-first frontend test, and backend Windows test failures"
+   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
   },
   {
-   "sha": "87a7cbd843c4eb0e245801d4cf08679dffa7c449",
-   "date": "2026-11-11",
-   "subject": "fix(union): 0.2.448 pins, records and the two 2026-11-11 field-test defects"
+   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
+   "date": "2026-11-13",
+   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
-   "sha": "8475a145e864e64fa899ae32bd178acaca568b86",
-   "date": "2026-11-11",
-   "subject": "fix(base): the base README is its own document, not a copy of backend/README.md"
+   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
+   "date": "2026-11-13",
+   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1444
+   "files": 1445
   },
   {
    "path": "jarvis-desktop/",
@@ -6431,7 +6428,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 936
+   "files": 930
   },
   {
    "path": "docs/",
@@ -6451,7 +6448,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 246
+   "files": 247
   },
   {
    "path": "videos/",
@@ -6461,7 +6458,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 163
+   "files": 164
   },
   {
    "path": "plugins/",
@@ -6535,8 +6532,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5662,
-  "covered": 5180,
+  "tracked_files": 5659,
+  "covered": 5177,
   "excluded": 482,
   "subsystems": 27
  },
