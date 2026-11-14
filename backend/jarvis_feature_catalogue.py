@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 96b793140284b2777796d57e6d85da5714f56fdcd424eb54aee743b689ca3b37); the apps' Features pages read their own
+`features/features.json` (sha256 34334156ab71f6e557d0cc9f03f336c725f2d0327925ed7676d859ab5c96c7ad); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "96b793140284b2777796d57e6d85da5714f56fdcd424eb54aee743b689ca3b37"
+SOURCE_SHA256 = "34334156ab71f6e557d0cc9f03f336c725f2d0327925ed7676d859ab5c96c7ad"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -562,7 +562,7 @@ FEATURES = (
         "title": "Forget a time frame",
         "what": "Forget what Jarvis learned or said over a stretch of days. It lists every fact and chat from then and says how long it should take, leaves pinned chats out (and keeps them), and asks a second yes before anything is removed.",
         "where": "Brain, History, Forget a time frame.",
-        "asks": "ONE card listing every item - never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
+        "asks": "ONE card giving the count and the days - every title and date stays on the screen you ticked, never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
         "limit": "No item cap: any number of facts and chats is listed in full and offered in one action. Above 200 - the old cap, now only the size at which both apps say a large wipe - it says so in words, and the card and the second yes are unchanged. Facts are RETIRED, not erased - their words stay in the history, and no backup is ever touched. After the 10 minutes the chats are gone for good.",
         "surface": "both",
         "covers": ["brain.history.forget-range", "memory", "records"],

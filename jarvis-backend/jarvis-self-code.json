@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1985e79cad2748d1815149b86e12be38dc09f9fb",
- "built_at": "2026-11-13T20:58:38-08:00",
+ "ref": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
+ "built_at": "2026-11-13T22:19:30-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4618,6 +4618,7 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
+    "changelog.d/2026-11-13-forget-range-card-shows-the-count.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
@@ -4785,6 +4786,7 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
+    "decisions.d/2026-11-13-forget-range-card-shows-the-count.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
@@ -5240,7 +5242,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 870,
+   "file_count": 872,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6327,9 +6329,39 @@
  ],
  "recent_commits": [
   {
+   "sha": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
+  },
+  {
+   "sha": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
+  },
+  {
+   "sha": "6f013f5490257a7902bba82f6fbe26d7a79a6582",
+   "date": "2026-11-13",
+   "subject": "fix(features): record the phone's settings backup in the feature matrix"
+  },
+  {
+   "sha": "ac59576d0f88b32294bb910664d31ed86e386b3d",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map and recent changes after merging current main"
+  },
+  {
    "sha": "1985e79cad2748d1815149b86e12be38dc09f9fb",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
+  },
+  {
+   "sha": "2933d248754cd5131821ba87b93d67af35ddfac3",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
+   "sha": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
   },
   {
    "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
@@ -6345,6 +6377,21 @@
    "sha": "9a092636cc5fc2d4add3b8212c46e35e245b8ced",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
+  },
+  {
+   "sha": "7465c066731de583df9f8c63447f930c135cf904",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main (0b6e5a9) into fix/forget-card-fits-2026-11-13"
+  },
+  {
+   "sha": "6f1c3f3eb0935ae33923ea51c2f79070d252290a",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the self-code map and the recent-changes bullets"
+  },
+  {
+   "sha": "365690decf27cce398a99aacdffb12c74cbd5916",
+   "date": "2026-11-13",
+   "subject": "fix(memory): a big Forget-a-time-frame card carries the count, so it can be approved"
   },
   {
    "sha": "8e4c8b27210f7dda4fb8b8d3be92eb95ac37d32a",
@@ -6380,58 +6427,13 @@
    "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
    "date": "2026-11-13",
    "subject": "docs: the About page's claim totals follow the four rows this PR adds"
-  },
-  {
-   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
-   "date": "2026-11-13",
-   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
-  },
-  {
-   "sha": "ffaa42e711cecbc8d78089ffaffe150bf57d28f0",
-   "date": "2026-11-13",
-   "subject": "fix(phone): a settings restore cannot re-point the pairing token (DEF-065)"
-  },
-  {
-   "sha": "e46ff2d65262080868f08091056af77852183383",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-after-the-phone-fix"
-  },
-  {
-   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
-   "date": "2026-11-13",
-   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
-  },
-  {
-   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
-  },
-  {
-   "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
-  },
-  {
-   "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
-  },
-  {
-   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
-   "date": "2026-11-13",
-   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
-  },
-  {
-   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1445
+   "files": 1446
   },
   {
    "path": "jarvis-desktop/",
@@ -6461,7 +6463,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 250
+   "files": 251
   },
   {
    "path": "videos/",
@@ -6471,7 +6473,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 167
+   "files": 168
   },
   {
    "path": "plugins/",
@@ -6545,15 +6547,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5672,
-  "covered": 5190,
-  "excluded": 482,
+  "tracked_files": 5675,
+  "covered": 5192,
+  "excluded": 483,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 226,
+   "count": 227,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
