@@ -22,9 +22,8 @@ BULLETS = (
     'The undo notice after an approved card times out after 15 seconds',
     'The to-do list understands a second sentence after the list name',
     'The deploy tool now sees a patch that was EXTENDED in place, and upgrades the live github-tools block instead of reporting it already present',
+    "The setup quiz's last question now finishes the pass",
     'A photo can be sent from your phone into "From my phone", exactly as a document is',
-    "The patch history is rebuilt after the union's patch edits, so the required `backend` and `backend-windows` jobs pass again",
-    'A free-plan 403 on branch rules means "no rules", not "blind token" - so the owner-approved merge in the field-test repository can land',
 )
 
 

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
- "built_at": "2026-11-13T20:23:51-08:00",
+ "ref": "4e24021b56a6fc6d2ea4af89b2d1c70eca24f60d",
+ "built_at": "2026-11-13T21:28:25-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1431,6 +1431,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveMicGate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveRules.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/MemoryAloud.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/voice/MicBargeIn.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/MicNow.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/MicOwner.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/OrtTurnModel.kt",
@@ -1633,6 +1634,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/MemoryWordsContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MenuVisibilityTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MeshFacesTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/MicBargeInTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicHandsfreeRulesTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicOwnerTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicWordsTest.kt",
@@ -1885,7 +1887,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 971,
+   "file_count": 973,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -3024,6 +3026,7 @@
     "jarvis-desktop/tests/hud-presets.mjs",
     "jarvis-desktop/tests/hud-prompt-window.mjs",
     "jarvis-desktop/tests/hud-rail-tools.mjs",
+    "jarvis-desktop/tests/hud-read-aloud-flow.mjs",
     "jarvis-desktop/tests/hud-read-aloud-voice.mjs",
     "jarvis-desktop/tests/hud-replace-confirm.mjs",
     "jarvis-desktop/tests/hud-safety.mjs",
@@ -3165,6 +3168,7 @@
     "jarvis-desktop/tests/voice-settings.mjs",
     "jarvis-desktop/tests/voice-speech.mjs",
     "jarvis-desktop/tests/voice-speed.mjs",
+    "jarvis-desktop/tests/voice-stop-aside-failure.mjs",
     "jarvis-desktop/tests/voice-training-plan.mjs",
     "jarvis-desktop/tests/voice-training.mjs",
     "jarvis-desktop/tests/voicecheck.mjs",
@@ -3178,7 +3182,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1250,
+   "file_count": 1252,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -4612,11 +4616,20 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
+    "changelog.d/2026-11-13-bar-stop-silences-speech.md",
+    "changelog.d/2026-11-13-ci-backend-timeout-120.md",
     "changelog.d/2026-11-13-forget-range-card-shows-the-count.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
+    "changelog.d/2026-11-13-hud-model-up-unfreezes-replies.md",
+    "changelog.d/2026-11-13-hud-read-aloud-flow.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
+    "changelog.d/2026-11-13-notification-body-opens-jarvis.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-phone-mic-press-interrupts.md",
+    "changelog.d/2026-11-13-photo-from-phone.md",
+    "changelog.d/2026-11-13-quiz-finish-dead-end.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
+    "changelog.d/2026-11-13-todo-list-sentence-shapes.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4777,12 +4790,21 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-13-aside-dropped-not-queued.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
+    "decisions.d/2026-11-13-ci-backend-timeout-120.md",
     "decisions.d/2026-11-13-forget-range-card-shows-the-count.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
+    "decisions.d/2026-11-13-hud-online-refreshed-by-every-read.md",
+    "decisions.d/2026-11-13-hud-read-aloud-flow.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
+    "decisions.d/2026-11-13-notification-body-opens-jarvis.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-phone-mic-press-interrupts.md",
+    "decisions.d/2026-11-13-photo-from-phone.md",
+    "decisions.d/2026-11-13-quiz-finish-records-not-applies.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
+    "decisions.d/2026-11-13-todo-list-sentence-shapes.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5232,7 +5254,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 868,
+   "file_count": 886,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6319,6 +6341,76 @@
  ],
  "recent_commits": [
   {
+   "sha": "4e24021b56a6fc6d2ea4af89b2d1c70eca24f60d",
+   "date": "2026-11-13",
+   "subject": "Merge origin/ci/backend-timeout-120 into integration/wave18-2026-11-13 (120-minute backend ceiling)"
+  },
+  {
+   "sha": "851582b30590dc7a8ec22adec6c3a47b1f4f2e2d",
+   "date": "2026-11-13",
+   "subject": "Merge fix/todo-list-sentence-shapes into integration/wave18-2026-11-13 (to-do list sentence shapes); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "0ed6e78520d03fb14804db96fa5c8ffd3f371755",
+   "date": "2026-11-13",
+   "subject": "Merge feat/photo-from-phone into integration/wave18-2026-11-13 (#1249 photo from phone); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "8510516a793ca984a87bb9ed9a2ee18010b36bba",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/quiz-finish-dead-end-2026-11-13 into integration/wave18-2026-11-13 (#1240 quiz finish)"
+  },
+  {
+   "sha": "87b56c8b744c91dd5ab343d5b61cb69f5732c015",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/notification-body-opens-jarvis-2026-11-13 into integration/wave18-2026-11-13 (#1242 notification Open)"
+  },
+  {
+   "sha": "8ca7c90464a44980e9ca376113c291cae7fe82c0",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/hud-read-aloud-smooth-2026-11-13 into integration/wave18-2026-11-13 (#1244 HUD read-aloud)"
+  },
+  {
+   "sha": "f91702c7f6c691e166d8f5213d805002abb41ef8",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/bar-stop-silences-speech-2026-11-13 into integration/wave18-2026-11-13 (#1245 bar Stop)"
+  },
+  {
+   "sha": "7eac7a4c535fe47ae595cba91f17d8927b142b8d",
+   "date": "2026-11-13",
+   "subject": "Merge origin/feat/phone-mic-barge-in-2026-11-13 into integration/wave18-2026-11-13 (#1243 phone barge-in)"
+  },
+  {
+   "sha": "0c30f6a7a8bc6cb8a6dbe8d93bdbae5250701249",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/model-offline-line-once-2026-11-13 into integration/wave18-2026-11-13 (#1241 frozen Send)"
+  },
+  {
+   "sha": "e3cf94f3459cc8cc1c336d57a75b13fadfcfe192",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/forget-card-fits-2026-11-13 into integration/wave18-2026-11-13 (#1246 forget card)"
+  },
+  {
+   "sha": "244b39c816725a8c3442ef5b733c9e90e255f01c",
+   "date": "2026-11-13",
+   "subject": "fix: the to-do list owns a colon or a second sentence after the list name"
+  },
+  {
+   "sha": "964b3f0386f06e8c98323a60b0d0f1a30eb0c64d",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/photo-from-phone"
+  },
+  {
+   "sha": "daf74a7cf5ce1293912223a9eb4bdebdf5e68995",
+   "date": "2026-11-13",
+   "subject": "feat: a photo can be sent from the phone into \"From my phone\" as a plain file"
+  },
+  {
+   "sha": "2933d248754cd5131821ba87b93d67af35ddfac3",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
    "sha": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
@@ -6327,6 +6419,11 @@
    "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
    "date": "2026-11-13",
    "subject": "Merge pull request #1237 from darknight11ish/fix/undo-notice-timeout-2026-11-13"
+  },
+  {
+   "sha": "43bbc5d9f6d255cfa589d780a7c7829a0da5fb7c",
+   "date": "2026-11-13",
+   "subject": "ci: the two required backend jobs get 120 minutes, so a slow run is not a red one (Gemini 5.1)"
   },
   {
    "sha": "7465c066731de583df9f8c63447f930c135cf904",
@@ -6342,81 +6439,6 @@
    "sha": "365690decf27cce398a99aacdffb12c74cbd5916",
    "date": "2026-11-13",
    "subject": "fix(memory): a big Forget-a-time-frame card carries the count, so it can be approved"
-  },
-  {
-   "sha": "8e4c8b27210f7dda4fb8b8d3be92eb95ac37d32a",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
-  },
-  {
-   "sha": "15625d0dbc9057712958c526a70f0549519fa1cf",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
-  },
-  {
-   "sha": "0b6e5a96798ef34a8fe047f7f66ae7f93799f009",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1238 from darknight11ish/fix/awareness-of-new-features-2026-11-13"
-  },
-  {
-   "sha": "0a195e9493b2ec66ad573a747278ea13ba4352d3",
-   "date": "2026-11-13",
-   "subject": "fix: restore the Tauri 'features' capability, which my last commit overwrote"
-  },
-  {
-   "sha": "1c1a516da21eed1afd0210d4798b6ea9bec5068b",
-   "date": "2026-11-13",
-   "subject": "fix: VoiceStudio's phone absence and its feature-list cover - #1238's backend was red on both"
-  },
-  {
-   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
-   "date": "2026-11-13",
-   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
-  },
-  {
-   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
-   "date": "2026-11-13",
-   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
-  },
-  {
-   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
-   "date": "2026-11-13",
-   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
-  },
-  {
-   "sha": "e46ff2d65262080868f08091056af77852183383",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-after-the-phone-fix"
-  },
-  {
-   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
-   "date": "2026-11-13",
-   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
-  },
-  {
-   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
-  },
-  {
-   "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
-  },
-  {
-   "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
-  },
-  {
-   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
-   "date": "2026-11-13",
-   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
-  },
-  {
-   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
   }
  ],
  "top_level": [
@@ -6428,12 +6450,12 @@
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1258
+   "files": 1260
   },
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 931
+   "files": 933
   },
   {
    "path": "docs/",
@@ -6453,7 +6475,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 249
+   "files": 258
   },
   {
    "path": "videos/",
@@ -6463,7 +6485,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 166
+   "files": 175
   },
   {
    "path": "plugins/",
@@ -6537,8 +6559,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5665,
-  "covered": 5182,
+  "tracked_files": 5687,
+  "covered": 5204,
   "excluded": 483,
   "subsystems": 27
  },
