@@ -291,7 +291,7 @@ jobs:
     # cancelled required check can never satisfy the ruleset, so the cap is 90
     # minutes and the honest limit is the suite's own runtime, not a clock that
     # turns a passing run into a red one.
-    timeout-minutes: 90
+    timeout-minutes: 120
     # KEEP THE CODE-ONLY CHECKS IN CI (review of #861, 2026-10-26). The four
     # suites that drive jarvis_chatbot_web's visible browser -
     # test_chatbot_sites.py, test_chatbot_gemini.py, test_handoff.py and
@@ -797,7 +797,7 @@ jobs:
     # is slower and has no graphics card. The frontend
     # job above was CANCELLED at 45 minutes with every test still passing, so
     # this ceiling is deliberately generous rather than tight.
-    timeout-minutes: 90
+    timeout-minutes: 120
     # SAME REASON AS THE `backend` JOB, and it matters more here: this job runs
     # the four guarded suites DIRECTLY by name in the list below, not through
     # run_suites.py, so the runner's layer-2 skip does not apply. Without the
