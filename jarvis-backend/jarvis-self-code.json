@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "15625d0dbc9057712958c526a70f0549519fa1cf",
- "built_at": "2026-11-13T18:49:49-08:00",
+ "ref": "e28924675d82a16d9568a27271492d12bd02e374",
+ "built_at": "2026-11-13T21:47:22-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4614,6 +4614,7 @@
     "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
+    "changelog.d/2026-11-13-owner-check-environment-skip.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
@@ -4779,6 +4780,7 @@
     "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
+    "decisions.d/2026-11-13-owner-check-environment-skip.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
@@ -5230,7 +5232,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 866,
+   "file_count": 868,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6317,6 +6319,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "e28924675d82a16d9568a27271492d12bd02e374",
+   "date": "2026-11-13",
+   "subject": "fix(claims): a machine skip is printed, and suites run offline like the runner"
+  },
+  {
+   "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1237 from darknight11ish/fix/undo-notice-timeout-2026-11-13"
+  },
+  {
+   "sha": "8e4c8b27210f7dda4fb8b8d3be92eb95ac37d32a",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
    "sha": "15625d0dbc9057712958c526a70f0549519fa1cf",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
@@ -6400,21 +6417,6 @@
    "sha": "379e106a094818492c11987146dea40e4b45863e",
    "date": "2026-11-13",
    "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
-   "date": "2026-11-13",
-   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
-  },
-  {
-   "sha": "65c10195c7ee8e1d44881cb54a3d7b0dd7b88da9",
-   "date": "2026-11-13",
-   "subject": "fix(phone): the undo notice after an approved card times out after 15 seconds"
-  },
-  {
-   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
@@ -6451,7 +6453,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 248
+   "files": 249
   },
   {
    "path": "videos/",
@@ -6461,7 +6463,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 165
+   "files": 166
   },
   {
    "path": "plugins/",
@@ -6535,8 +6537,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5662,
-  "covered": 5180,
+  "tracked_files": 5664,
+  "covered": 5182,
   "excluded": 482,
   "subsystems": 27
  },

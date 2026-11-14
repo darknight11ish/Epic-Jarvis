@@ -21,6 +21,22 @@ and `--use-env-backend` passes it through on purpose. That environment is passed
 to `subprocess.run(env=...)` explicitly, so nothing inherited from a parent
 process can put the value back.
 
+AND EVERY SUITE IS STARTED OFFLINE (2026-11-13), with the same six switches
+`backend/run_suites.py` forces (`OFFLINE_ENVS`). The runner's rule is that a model
+download is never something a hermetic suite run may opt into, and this checker
+did not hold it: on the owner's PC the Live settings parity suite (claim C101)
+fetched five model files inside one turn and created an empty `memory.db`, which
+tripped a check that a carded change writes no settings file - a desk red that CI,
+where the runner forces the switches, never saw. With them the same suite runs
+1042 checks green and fetches nothing.
+
+AND A SUITE RUN LEAVES NO BYTECODE IN THE TREE (2026-11-13), for the same
+reason and from the same place: `backend/run_suites.py:1452-1453` starts every
+suite with `PYTHONDONTWRITEBYTECODE=1`. Without it, the desk's SECOND register
+run was red on D06 - the first run's suites imported base-only modules and left
+`jarvis-backend/__pycache__`, which `backend/test_base_matches_repo.py` refuses.
+A check must not make the tree it is checking dirty for the next check.
+
 WHY THIS EXISTS. This project writes down what it knows in prose - a decision
 log, audit reports, design docs - and for a long time nothing checked any of
 it. On 2026-10-05 five false statements reached the owner in one day, and every
@@ -110,6 +126,14 @@ environmental skip with a new wording makes its row red until its reason is
 added to that list - loud, never silent. A suite that skips in a convention it
 never prints, and prints no summary this check can read, can still hide one;
 nothing can read what a suite does not say.
+
+AN ACCEPTED SKIP IS STILL PRINTED (2026-11-13). Being a limit of this machine
+buys the row its proof; it does not buy silence. A row proven through
+`ENVIRONMENT_SKIPS` was NOT looked at by the check that suite skipped, so every
+run names the suite, quotes the skip line and counts the rows that rest on it -
+whether or not `-v` was typed. That is the same rule as `docs/FIELD-TEST`'s
+"BLOCKED and NOT-TESTABLE are never counted as passes", applied to a suite: the
+row may stay proven, but the skip never reads as a pass.
 
 WHAT COUNTS AS "THERE". Every path a row names is judged against the TRACKED
 tree - `git ls-files` - and not against the folder this happens to run in. A
@@ -205,6 +229,38 @@ TEST_TIMEOUT = 900
 #: so nobody has to learn a second name for the choice they already made once.
 USE_ENV_BACKEND_FLAG = "--use-env-backend"
 
+#: The model loaders are OFFLINE in every suite's environment, with the same six
+#: switches and the same values `backend/run_suites.py` forces on every run it
+#: starts (`OFFLINE_ENVS`, added 2026-10-18). A claims check starts suites the
+#: way the runner does; without this it did not, and on 2026-11-13 that was not
+#: theoretical. Claim C101's Live settings parity suite imports the memory store,
+#: and that store fetches its five model files from Hugging Face on a cold cache:
+#: at the owner's desk it spent about two and a half minutes inside one turn and
+#: created an empty `memory.db` in the suite's own config folder - which tripped a
+#: check that a carded change writes no settings file. With the runner's own
+#: offline switches the same suite is 1042 checks green and fetches nothing.
+#: Forced, not defaulted: `run_suites.py`'s rule is that a download is never
+#: something a hermetic suite run may opt into, so a caller's `HF_HUB_OFFLINE=0`
+#: cannot switch it back on in a claims run either.
+OFFLINE_ENVS = {
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "HF_DATASETS_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "DO_NOT_TRACK": "1",
+    "ANONYMIZED_TELEMETRY": "False",
+}
+
+#: The runner also starts every suite with bytecode writing OFF
+#: (`PYTHONDONTWRITEBYTECODE=1`, `backend/run_suites.py:1452-1453`), so a suite
+#: run leaves no `.pyc` anywhere in the checkout it is checking. This checker did
+#: not hold that rule either, and on 2026-11-13 it was measurable: the desk's
+#: SECOND register run was red on D06, because the first run's suites had
+#: imported base-only modules and left `jarvis-backend/__pycache__`, which
+#: `backend/test_base_matches_repo.py` correctly refuses. Nothing a `test:` row
+#: does may leave a file in the tree it is checking.
+NO_BYTECODE_ENVS = {"PYTHONDONTWRITEBYTECODE": "1"}
+
 #: How the shipped suites print a skip. Three shapes are real in this tree
 #: (measured 2026-10-24): `skip  <why>` (test_api_doc, test_media_index,
 #: test_fault_probes, ...), `skip  <name> - <why>` (test_data_backup) and
@@ -259,7 +315,26 @@ ENVIRONMENT_SKIPS = {
     # refusals. Measured in the REQUIRED backend job's own environment on
     # 2026-11-09, where the optional package is absent.
     "backend/test_attached_file.py": ("markitdown is not installed",),
+    # `backend/test_owner_check.py` (2026-11-13). On Windows the check that
+    # would prove "off Windows there is no Windows Hello, so a risky approval
+    # fails closed" cannot run: exercising the REAL path would raise a real
+    # Windows Hello prompt, and no test may do that. The suite skips it and says
+    # so in its own summary - a limit of the machine the suite is running on,
+    # not a missing guard, because the same check runs in full on a machine that
+    # is not Windows. Before this entry the skip withheld proof from claim C163
+    # (the tool-switch approval card), so the register read red at the owner's
+    # desk while nothing was wrong with the code. The skip is still printed by
+    # every run, never counted as a pass (see ACCEPTED_ENVIRONMENT_SKIPS).
+    "backend/test_owner_check.py": (
+        "on windows the real check would raise a real prompt",),
 }
+
+#: The environment skips THIS RUN accepted: `(suite, line)` pairs, appended by
+#: `check_test` and printed by `main`. A row proven through `ENVIRONMENT_SKIPS`
+#: was NOT looked at by the check its suite skipped, so the skip is named on
+#: every run - a skip that only shows with `-v` is a skip a reader of the plain
+#: run never sees. Reset at the start of `main` (2026-11-13).
+ACCEPTED_ENVIRONMENT_SKIPS: list[tuple[str, str]] = []
 
 #: The summary line a suite may print for itself - `N passed, M skipped,
 #: K failed` in any order (test_media_index prints the skipped count last).
@@ -633,6 +708,20 @@ def skip_that_withholds_proof(suite: str, output: str) -> str | None:
     return None
 
 
+def accepted_environment_skips(suite: str, output: str) -> list[str]:
+    """Every skip this machine's allow-list accepted, flattened to one line each.
+
+    `skip_that_withholds_proof` answers "may this row be proven at all"; this
+    answers "which skips did this machine have to accept", so the one place that
+    decides can also be the one place that says it out loud. Returns [] when any
+    skip withholds proof - that reason is `skip_that_withholds_proof`'s own, and
+    it is printed as the row's failure instead.
+    """
+    if skip_that_withholds_proof(suite, output) is not None:
+        return []
+    return [" ".join(block.split()) for block in skip_blocks(output)]
+
+
 def exception_lines(text: str, limit: int = 2) -> list[str]:
     """The line(s) a Python traceback ENDS on, from a suite's stderr.
 
@@ -663,6 +752,22 @@ def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
     the copy this returns and NEVER reaches a suite; `--use-env-backend` puts it
     back on purpose.
 
+    THE MODEL LOADERS ARE OFFLINE IN EVERY RUN, the same six switches and values
+    `backend/run_suites.py` forces (`OFFLINE_ENVS`, 2026-10-18). Without them a
+    suite that imports the memory store could fetch a model from Hugging Face
+    mid-run: on 2026-11-13 that spent two and a half minutes inside one turn of
+    the Live settings parity suite and created an empty `memory.db`, which
+    reddened claim C101 at the desk for something a suite run must never do.
+    Forced, not defaulted - a download is not a choice a hermetic run gets.
+
+    AND BYTECODE WRITING IS OFF (`NO_BYTECODE_ENVS`), the runner's own
+    `PYTHONDONTWRITEBYTECODE=1` (run_suites.py:1452-1453). Without it a suite
+    that imports a base-only module leaves `jarvis-backend/__pycache__`, and the
+    very next check in the same sweep - `backend/test_base_matches_repo.py` -
+    refuses a base carrying generated files. That was the desk's second register
+    run red on D06 (2026-11-13): running the checks twice in a row must not make
+    the second one fail.
+
     A line says which value was ignored, because silently ignoring a setting is
     its own surprise (the same sentence `run_suites.py` prints, adapted to this
     checker). Nothing here mutates `os.environ`: the caller passes the result to
@@ -670,6 +775,8 @@ def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
     value back behind this function's own back.
     """
     env = dict(os.environ)
+    env.update(OFFLINE_ENVS)
+    env.update(NO_BYTECODE_ENVS)
     if use_env_backend:
         return env
     ambient = env.pop("JARVIS_BACKEND", None)
@@ -710,10 +817,20 @@ def check_test(suite: str, env: dict[str, str] | None = None):
     except OSError as err:
         return False, f"{suite} could not be run ({err})"
     if done.returncode == 0:
-        why = skip_that_withholds_proof(
-            relative(chosen), (done.stdout or "") + "\n" + (done.stderr or ""))
+        suite_relative = relative(chosen)
+        combined = (done.stdout or "") + "\n" + (done.stderr or "")
+        why = skip_that_withholds_proof(suite_relative, combined)
         if why is not None:
             return False, f"{suite} exited 0 but SKIPPED: {why}"
+        # An allowed skip is still a skip: collect it so `main` can name it and
+        # count the rows that rest on it, whether or not `-v` was typed. The row
+        # stays proven because the reason is a limit of this machine - but the
+        # check it skipped did NOT run, and nothing here may read as a pass.
+        accepted = accepted_environment_skips(suite_relative, combined)
+        if accepted:
+            line = " | ".join(accepted)
+            ACCEPTED_ENVIRONMENT_SKIPS.append((suite_relative, line))
+            return True, f"{suite} exits 0, with a skip this machine cannot run: {line}"
         return True, f"{suite} exits 0"
     tail = [line for line in (done.stdout or "").strip().splitlines()[-3:]
             if line.strip()]
@@ -904,6 +1021,9 @@ def main() -> int:
     # 2026-10-21, which this check did not (2026-10-25). Built here, once, so
     # the note is printed once rather than once per row.
     suite_env = _suite_env(args.use_env_backend)
+    # A second `main()` in one process (a test) starts with no skips carried over
+    # from the first.
+    ACCEPTED_ENVIRONMENT_SKIPS.clear()
 
     rows, problems = read_register(register)
     if not rows and not problems:
@@ -923,6 +1043,7 @@ def main() -> int:
     regressed: list[tuple[dict, str]] = []
     closed: list[tuple[dict, str]] = []
     unclear: list[tuple[dict, str]] = []
+    rows_on_environment_skips: list[tuple[dict, str, str]] = []
 
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
@@ -931,7 +1052,13 @@ def main() -> int:
                 print(f"  {row['id']:<7} unverifiable  {row['claim']}")
                 print(f"          cannot be checked: {row['check']}")
             continue
+        # Which skips this row's suite had to accept, if any: `check_test` collects
+        # them, and the difference is this row's own (2026-11-13).
+        accepted_before = len(ACCEPTED_ENVIRONMENT_SKIPS)
         passed, detail = run_row(row, env=suite_env)
+        if len(ACCEPTED_ENVIRONMENT_SKIPS) > accepted_before:
+            suite, line = ACCEPTED_ENVIRONMENT_SKIPS[-1]
+            rows_on_environment_skips.append((row, suite, line))
         if passed is None:
             unclear.append((row, detail))
             if listing:
@@ -975,6 +1102,21 @@ def main() -> int:
               "evaluate is a row nobody checked:")
         for problem in problems:
             print(f"  {problem}")
+
+    # A skip this machine cannot avoid still buys the row its proof - but it did
+    # not run, and the project's rule is that a skip is never a pass. So it is
+    # named here, with its reason, and the rows that rest on it are counted, on
+    # EVERY run and not only with `-v` (2026-11-13).
+    if rows_on_environment_skips:
+        by_suite: dict[str, tuple[str, list[str]]] = {}
+        for row, suite, line in rows_on_environment_skips:
+            by_suite.setdefault(suite, (line, []))[1].append(row["id"])
+        print(f"{len(rows_on_environment_skips)} claim row(s) name a suite that "
+              f"SKIPPED a check this machine cannot run - that check was NOT "
+              f"looked at, and it is NOT counted as a pass:")
+        for suite, (line, ids) in by_suite.items():
+            print(f"  {suite}  (rows {', '.join(ids)})")
+            print(f"      skip:  {line}")
 
     if regressed or closed or problems:
         return 1
