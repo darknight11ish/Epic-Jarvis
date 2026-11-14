@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 e391c8fe07dcd9cb1861e38174d75e30614f29a455b4a3304f769644c131db67); the apps' Features pages read their own
+`features/features.json` (sha256 ade7e1c95854626cb94e9cc4abd4a9f290746feed5fb5551c84fe3333e6f99a3); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "e391c8fe07dcd9cb1861e38174d75e30614f29a455b4a3304f769644c131db67"
+SOURCE_SHA256 = "ade7e1c95854626cb94e9cc4abd4a9f290746feed5fb5551c84fe3333e6f99a3"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -899,12 +899,12 @@ FEATURES = (
         "id": "document-from-phone",
         "group": "Notes and files",
         "title": "Send a document from your phone",
-        "what": "You pick one document on the phone and it lands on this PC, in a folder Jarvis may look in.",
-        "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+        "what": "You pick one document or one photo on the phone and it lands on this PC, in a folder Jarvis may look in - a photo is saved as a plain file and never shown to a model on that path.",
+        "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document or a photo. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, HEIF, GIF or BMP), then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. A photo is copied exactly as it is, and Jarvis never reads it or shows it to a model on this path. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
         "asks": "One approval card on the PC before anything lands, naming the file, its size and the folder. While it waits the phone says \"Sent to your PC - approve the card on your PC\"; a no, a timeout or a dropped link writes nothing.",
-        "limit": "One file at a time, up to 50 MB, and only the kinds Jarvis can read: PDF, Word, Excel, PowerPoint, text, Markdown (both .md and .markdown) and CSV. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
+        "limit": "One file at a time, up to 50 MB, and only the kinds this door accepts: PDF, Word, Excel, PowerPoint, text, Markdown (both .md and .markdown), CSV, and photos (JPG, JPEG, PNG, WebP, HEIC, HEIF, GIF, BMP). A photo is stored only - it is never opened, converted, read for words or shown to a model on this path, which is why it does not need the Pictures feature; attaching a picture in chat is the separate path that does read it. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
         "surface": "both",
-        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc"],
+        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc", "send a photo from my phone to my pc"],
         "covers": [],
     },
     {
