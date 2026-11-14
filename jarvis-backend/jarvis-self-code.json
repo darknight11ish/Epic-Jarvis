@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6f1c3f3eb0935ae33923ea51c2f79070d252290a",
- "built_at": "2026-11-13T19:21:18-08:00",
+ "ref": "15625d0dbc9057712958c526a70f0549519fa1cf",
+ "built_at": "2026-11-13T18:49:49-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1772,6 +1772,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/TopicsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/TouchTargetAndInsetsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/TutorialsTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/UndoNoticeTimeoutTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/UpdateCheckTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/UpdateSecurityTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/UploadTest.kt",
@@ -1884,7 +1885,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 970,
+   "file_count": 971,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4611,11 +4612,11 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
-    "changelog.d/2026-11-13-forget-range-card-shows-the-count.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
+    "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4776,11 +4777,11 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
-    "decisions.d/2026-11-13-forget-range-card-shows-the-count.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
+    "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -6316,14 +6317,59 @@
  ],
  "recent_commits": [
   {
-   "sha": "6f1c3f3eb0935ae33923ea51c2f79070d252290a",
+   "sha": "15625d0dbc9057712958c526a70f0549519fa1cf",
    "date": "2026-11-13",
-   "subject": "chore(records): regenerate the self-code map and the recent-changes bullets"
+   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
   },
   {
-   "sha": "365690decf27cce398a99aacdffb12c74cbd5916",
+   "sha": "0b6e5a96798ef34a8fe047f7f66ae7f93799f009",
    "date": "2026-11-13",
-   "subject": "fix(memory): a big Forget-a-time-frame card carries the count, so it can be approved"
+   "subject": "Merge pull request #1238 from darknight11ish/fix/awareness-of-new-features-2026-11-13"
+  },
+  {
+   "sha": "0a195e9493b2ec66ad573a747278ea13ba4352d3",
+   "date": "2026-11-13",
+   "subject": "fix: restore the Tauri 'features' capability, which my last commit overwrote"
+  },
+  {
+   "sha": "1c1a516da21eed1afd0210d4798b6ea9bec5068b",
+   "date": "2026-11-13",
+   "subject": "fix: VoiceStudio's phone absence and its feature-list cover - #1238's backend was red on both"
+  },
+  {
+   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
+   "date": "2026-11-13",
+   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
+  },
+  {
+   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
+   "date": "2026-11-13",
+   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
+  },
+  {
+   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
+   "date": "2026-11-13",
+   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
+  },
+  {
+   "sha": "e46ff2d65262080868f08091056af77852183383",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-after-the-phone-fix"
+  },
+  {
+   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
+   "date": "2026-11-13",
+   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
+  },
+  {
+   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
+   "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
   },
   {
    "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
@@ -6341,6 +6387,11 @@
    "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
   },
   {
+   "sha": "43ff622708f70142a1ad58a533053991bd75f634",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map with the new suite tracked"
+  },
+  {
    "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
    "date": "2026-11-13",
    "subject": "fix(github): a free-plan 403 on branch rules means no rules, not a blind token"
@@ -6351,76 +6402,26 @@
    "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
   },
   {
+   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
+   "date": "2026-11-13",
+   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
+  },
+  {
+   "sha": "65c10195c7ee8e1d44881cb54a3d7b0dd7b88da9",
+   "date": "2026-11-13",
+   "subject": "fix(phone): the undo notice after an approved card times out after 15 seconds"
+  },
+  {
    "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
    "date": "2026-11-13",
    "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
-  },
-  {
-   "sha": "ae2ccf44e832621a23cd32b2cdb00faefed06eb0",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1229 from darknight11ish/feature/roamies-capabilities"
-  },
-  {
-   "sha": "25041e8fa595522c06fd7d244a12e3a5d5d8f894",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1228 from darknight11ish/feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "a942cc40cbbdca8b53c88d80c5519c2f5ed58ba6",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1227 from darknight11ish/feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "74606cb57701e0c9b2a848ca4237ba7999f517cf",
-   "date": "2026-11-13",
-   "subject": "Merge B1 (PR #1235 at a6891bd) into fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
-   "date": "2026-11-13",
-   "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
-  },
-  {
-   "sha": "4e71da569b3bb018c5440ea33babd62a70207c32",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (ad895ed) into fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "0eb5d93124b5ae7b7df13b851c5b525b1fd391e1",
-   "date": "2026-11-13",
-   "subject": "Merge H2 (PR #1228 at 5da9ba6) and H1 (PR #1227 at 50a2db3), with origin/main (ad895ed), into feature/roamies-capabilities"
-  },
-  {
-   "sha": "5da9ba6759d2ffa6113a44f2ba4685447177439e",
-   "date": "2026-11-13",
-   "subject": "Merge H1 (PR #1227 at 50a2db3) and origin/main (ad895ed) into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "50a2db3dbe65abff2b2b1b6d2b2460884180bd2c",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (ad895ed) into feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "ad895ed1c013bda37904357bc77e63fef22a3ae6",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1234 from darknight11ish/fix/patch-history-rebuild-2026-11-13"
-  },
-  {
-   "sha": "06832e9ce9b3ab72992777c72c0ee4daf844f85a",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the recent-changes module and the self-code map"
-  },
-  {
-   "sha": "ba742a9b82efcfb83376227ab9af1f87efd56f0a",
-   "date": "2026-11-13",
-   "subject": "docs(records): record the 2026-11-13 github-tools delta false green"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1446
+   "files": 1445
   },
   {
    "path": "jarvis-desktop/",
@@ -6430,7 +6431,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 930
+   "files": 931
   },
   {
    "path": "docs/",
@@ -6535,14 +6536,14 @@
  ],
  "coverage": {
   "tracked_files": 5662,
-  "covered": 5179,
-  "excluded": 483,
+  "covered": 5180,
+  "excluded": 482,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 227,
+   "count": 226,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
