@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c16ed2466caf51a4c195b38b01d583c4ce74bc480cfd22da1c25f7576541a862); the apps' Features pages read their own
+`features/features.json` (sha256 e391c8fe07dcd9cb1861e38174d75e30614f29a455b4a3304f769644c131db67); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c16ed2466caf51a4c195b38b01d583c4ce74bc480cfd22da1c25f7576541a862"
+SOURCE_SHA256 = "e391c8fe07dcd9cb1861e38174d75e30614f29a455b4a3304f769644c131db67"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1952,7 +1952,7 @@ FEATURES = (
         "surface": "desktop",
         "surface_reason": "The program runs on this PC and is started by a PowerShell script on this PC. The phone has no switch for it, and a phone that could start a program on the PC would be a new power.",
         "aliases": ["voicestudio", "voice studio", "the second voice program"],
-        "covers": [],
+        "covers": ["settings.voicestudio"],
     },
     {
         "id": "wifi-auto-reconnect",

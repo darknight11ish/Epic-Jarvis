@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e46ff2d65262080868f08091056af77852183383",
- "built_at": "2026-11-13T14:29:19-08:00",
+ "ref": "d85796a23a2857f8d36ec2710d19c05277352006",
+ "built_at": "2026-11-13T16:12:17-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6314,6 +6314,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
+   "date": "2026-11-13",
+   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
+  },
+  {
+   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
+   "date": "2026-11-13",
+   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
+  },
+  {
+   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
+   "date": "2026-11-13",
+   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
+  },
+  {
    "sha": "e46ff2d65262080868f08091056af77852183383",
    "date": "2026-11-13",
    "subject": "chore-records-regenerate-after-the-phone-fix"
@@ -6397,21 +6412,6 @@
    "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
    "date": "2026-11-13",
    "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
-  },
-  {
-   "sha": "4e71da569b3bb018c5440ea33babd62a70207c32",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (ad895ed) into fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "0eb5d93124b5ae7b7df13b851c5b525b1fd391e1",
-   "date": "2026-11-13",
-   "subject": "Merge H2 (PR #1228 at 5da9ba6) and H1 (PR #1227 at 50a2db3), with origin/main (ad895ed), into feature/roamies-capabilities"
-  },
-  {
-   "sha": "5da9ba6759d2ffa6113a44f2ba4685447177439e",
-   "date": "2026-11-13",
-   "subject": "Merge H1 (PR #1227 at 50a2db3) and origin/main (ad895ed) into feature/code-obfuscation-tools"
   }
  ],
  "top_level": [

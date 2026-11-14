@@ -3474,7 +3474,9 @@
     "limit": "Off by default. It needs about 1.95 GB of the 8 GB graphics card, and beside Jarvis's own models the machine had 382 MiB free at its peak - so it is started only when it is needed and never kept loaded beside them. The two model licences are personal, non-commercial use only, and they must be accepted once, by you, in VoiceStudio's own terms before it will speak at all.",
     "surface": "desktop",
     "surface_reason": "The program runs on this PC and is started by a PowerShell script on this PC. The phone has no switch for it, and a phone that could start a program on the PC would be a new power.",
-    "covers": [],
+    "covers": [
+      "settings.voicestudio"
+    ],
     "aliases": [
       "voicestudio",
       "voice studio",
