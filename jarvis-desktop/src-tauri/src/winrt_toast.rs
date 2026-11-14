@@ -47,6 +47,58 @@
 //! it does) rather than never touching it - a real gap from Android's
 //! shape, not hidden here.
 //!
+//! ## A click on a toast's BODY (2026-11-13) - measured, and what it means
+//!
+//! The owner reported that clicking the body of an approval toast did nothing,
+//! and expected the ordinary Windows behaviour: the click opens the app, and
+//! for an approval it opens that card. It really did nothing, and this PC can
+//! show why:
+//!
+//! * the toast was in Windows' own notification store - id 2566, group
+//!   `jarvis-approval`, 2026-11-13 17:51:50, the owner's exact words and the
+//!   one Deny button - carrying `activationType="foreground"
+//!   launch="jarvis-open"`;
+//! * 34 seconds later Windows logged "Some toast notifications have been
+//!   cleared" (the toast left the store, which is what a click or a dismissal
+//!   produces), and `jarvis-desktop.log` records NO second launch and no
+//!   folded second instance at that time. Nothing was started: the click
+//!   reached Windows and stopped there;
+//! * the Start Menu shortcuts carry the AppUserModelID this module claims
+//!   (`com.jarvis.desktop`) and **no `ToastActivatorCLSID`** - read back
+//!   through the shell's own shortcut properties, not assumed.
+//!
+//! Microsoft's own table for an unpackaged Win32 app is the other half:
+//! visuals and **actions** are supported without a COM activator, and
+//! in-process ("ongoing") activation is not. A body click carries no
+//! `arguments` for Windows to launch a process with, so with no activator it
+//! has nowhere to go; an action's `arguments` ARE that payload, which is the
+//! shape every `*_from_argv` reader below already depends on, and the one the
+//! owner did not report as broken (the Deny button). Said plainly: that action
+//! half rests on the table and on the owner's report, not on a click this
+//! session watched - the same limit the Deny path has always carried.
+//!
+//! So this module does the two things that can be done from inside the app, and
+//! says what neither of them can achieve on its own:
+//!
+//! * every toast's body carries a `launch` marker, and
+//!   [`open_request_from_argv`] answers it on BOTH activation paths (a running
+//!   app's single-instance callback and a cold start) - so a body click does
+//!   the right thing the moment Windows delivers one, and an approval's marker
+//!   names its card so that click opens that card;
+//! * an approval toast offers **Open** as an action, which rides exactly the
+//!   activation `Deny` rides, so the owner has one press that opens the card.
+//!
+//! WHAT IS NOT DONE, AND WHY. Making the body click itself arrive needs the
+//! installer to put a `ToastActivatorCLSID` on the Start Menu shortcut (in the
+//! "stub CLSID" form of Microsoft's table, enough for launch activation; the
+//! COM-activator form additionally needs an `INotificationActivationCallback`
+//! server and a registry entry). That is install-time plumbing this change
+//! does not add: it cannot be watched firing from here, and a wrong CLSID left
+//! on a shortcut or in the registry outlives the app that wrote it - the
+//! failure mode this module's doc already refuses for the Deny button. When
+//! that plumbing lands, the two functions above answer it and no toast XML has
+//! to change.
+//!
 //! ## The two ways a Deny click arrives
 //!
 //! Both end in `commands::deny_from_notification` - the same sending path
@@ -99,10 +151,28 @@ pub(crate) const STOP_LABEL: &str = "Stop";
 /// (2026-10-27, the owner's request): the SAME job id only, never the address
 /// or the path. The PC reads the target back from its own answer and checks it
 /// again (`reminder_open.rs`), so a launch argument cannot choose what opens.
+///
+/// NOT the body-click marker below, though the two words are close: this one
+/// leads `jarvis-openjob:` and names a schedule job, that one leads
+/// `jarvis-open` and names nothing or an approval card. One argv, one meaning -
+/// [`open_request_from_argv`] must never answer this one.
 const OPEN_PREFIX: &str = "jarvis-openjob:";
+
+/// The marker a click on the BODY of one of this module's toasts carries: the
+/// `<toast>` element's own `launch` attribute. With an approval card's id after
+/// a colon (`jarvis-open:<id>`) it also names the card to open.
+///
+/// This is the one activation Windows has nowhere to deliver without a toast
+/// activator - see this module's doc, which measured that on this PC. It is
+/// written all the same: it costs nothing, and it is the half that will already
+/// be right when the installer starts carrying the activator.
+const OPEN_TOAST_PREFIX: &str = "jarvis-open";
 
 /// The word on that button. "Open", never "Continue" or "Go": it says what
 /// happens before it happens, and it is the same word the HUD's own row uses.
+///
+/// The approval toast's own Open action (2026-11-13) uses this word too: one
+/// word for "open this in Jarvis", whichever notification carries it.
 pub(crate) const OPEN_LABEL: &str = "Open";
 
 /// True when this exe is sitting in a cargo output directory rather than
@@ -227,10 +297,10 @@ const APPROVE_WHERE_TOAST: &str =
 /// full words are on the card itself.
 const BODY_MAX_LINES: u8 = 2;
 
-/// The toast's XML. Deny is the ONLY action, whatever the arguments: Approve
-/// never goes on a notification (docs/ARCHITECTURE.md §3, rule 2). An empty
-/// body (App lock: the title only) leaves out its line - and the
-/// where-to-approve line with it, because that case says nothing else.
+/// The toast's XML. Open and Deny are the only actions, whatever the
+/// arguments: Approve never goes on a notification (docs/ARCHITECTURE.md §3,
+/// rule 2). An empty body (App lock: the title only) leaves out its line - and
+/// the where-to-approve line with it, because that case says nothing else.
 ///
 /// ORDER MATTERS, and the where-to-approve line goes SECOND (2026-10-13). It
 /// used to be emitted after the card's own words, which meant a card with a
@@ -239,6 +309,16 @@ const BODY_MAX_LINES: u8 = 2;
 /// mid-word, one Deny button, and no sentence saying where the other half of
 /// the decision was. Both defences are load-bearing: the line is second, and
 /// the body is capped at [`BODY_MAX_LINES`].
+///
+/// OPEN CAME WITH THE BODY-CLICK REPORT (2026-11-13, see the module doc).
+/// Windows does not deliver a click on the body of an unpackaged app's toast
+/// without a toast activator, and this install has none, so the sentence
+/// "open Jarvis to approve" described a gesture nothing could receive. Open is
+/// that gesture as a real action - the activation Windows DOES route, the same
+/// one Deny uses - and it carries the same marker the body does, so the two
+/// cannot open different things. It is placed first because it is the decision
+/// the sentence points at, and because the phone's own approval notification
+/// puts Review before Deny. Deny's own XML is untouched.
 fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String {
     // The where-to-approve line first, so it cannot be crowded out by a long
     // body; the body then takes what is left, bounded by BODY_MAX_LINES.
@@ -260,21 +340,43 @@ fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String
     } else {
         ""
     };
+    // ONE marker for the body click and for the Open action: the card's id
+    // when this toast has one, so both open THAT card (and the Jarvis bar
+    // fallback names it too - `commands::open_approval_in_quickbar`).
+    let marker = escape_xml(&open_marker(id));
     format!(
-        r#"<toast activationType="foreground" launch="jarvis-open">
+        r#"<toast activationType="foreground" launch="{marker}">
   <visual>
     <binding template="ToastGeneric">
       <text>{title}</text>{where_line}{body_line}
     </binding>
   </visual>{audio}
   <actions>
+    <action content="{open}" arguments="{marker}" activationType="foreground"/>
     <action content="Deny" arguments="{prefix}{id}" activationType="foreground"/>
   </actions>
 </toast>"#,
         title = escape_xml(title),
         prefix = DENY_PREFIX,
         id = escape_xml(id),
+        open = OPEN_LABEL,
     )
+}
+
+/// The `launch` marker a toast carries: the body-click marker on its own, or
+/// with the approval card's id after a colon when the toast has one.
+///
+/// A card id that is not plain letters, digits, `-` or `_` still goes into the
+/// XML (it is the PC's own id, and Deny carries it the same way) - but
+/// [`open_request_from_argv`] will not read it back as a card. That click then
+/// falls to the ordinary second-launch path: the window still comes up, and no
+/// card this module could not name is opened by a launch argument.
+fn open_marker(id: &str) -> String {
+    if id.is_empty() {
+        OPEN_TOAST_PREFIX.to_string()
+    } else {
+        format!("{OPEN_TOAST_PREFIX}:{id}")
+    }
 }
 
 fn try_notify_approval(
@@ -404,7 +506,7 @@ pub(crate) fn alarm_xml(title: &str, body: &str, snooze: Option<(&str, &str)>) -
         })
         .unwrap_or_default();
     format!(
-        r#"<toast scenario="alarm" activationType="foreground" launch="jarvis-open">
+        r#"<toast scenario="alarm" activationType="foreground" launch="{marker}">
   <visual>
     <binding template="ToastGeneric">
       <text>{title}</text>
@@ -418,6 +520,7 @@ pub(crate) fn alarm_xml(title: &str, body: &str, snooze: Option<(&str, &str)>) -
 </toast>"#,
         title = escape_xml(title),
         body = escape_xml(body),
+        marker = OPEN_TOAST_PREFIX,
     )
 }
 
@@ -445,7 +548,7 @@ pub fn notify_alarm(app: &AppHandle, title: &str, body: &str, snooze: Option<(&s
 /// (`brain/schedule.rs` `heard_late`, the owner's decision of 2026-09-26).
 pub(crate) fn quiet_xml(title: &str, body: &str) -> String {
     format!(
-        r#"<toast activationType="foreground" launch="jarvis-open">
+        r#"<toast activationType="foreground" launch="{marker}">
   <visual>
     <binding template="ToastGeneric">
       <text>{title}</text>
@@ -456,6 +559,7 @@ pub(crate) fn quiet_xml(title: &str, body: &str) -> String {
 </toast>"#,
         title = escape_xml(title),
         body = escape_xml(body),
+        marker = OPEN_TOAST_PREFIX,
     )
 }
 
@@ -689,7 +793,7 @@ fn fired_xml(title: &str, body: &str, id: &str, label: &str, open: Option<&str>)
         None => String::new(),
     };
     format!(
-        r#"<toast activationType="foreground" launch="jarvis-open">
+        r#"<toast activationType="foreground" launch="{marker}">
   <visual>
     <binding template="ToastGeneric">
       <text>{title}</text>
@@ -709,6 +813,7 @@ fn fired_xml(title: &str, body: &str, id: &str, label: &str, open: Option<&str>)
         stop_label = STOP_LABEL,
         stop_prefix = STOP_PREFIX,
         open_action = open_action,
+        marker = OPEN_TOAST_PREFIX,
     )
 }
 
@@ -878,9 +983,128 @@ pub fn stop_at_startup(app: &AppHandle) {
     stop_detached(id);
 }
 
+// ---------------------------------------------------------------------------
+// A click on a toast's BODY, and the Open action beside Deny (2026-11-13)
+// ---------------------------------------------------------------------------
+
+/// What a click on the BODY of one of this module's toasts asks for: the
+/// `<toast>`'s own `launch` attribute. See this module's doc for what Windows
+/// does and does not deliver here on this PC, and why the Open action exists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ToastOpen {
+    /// No card named - a timer, an alarm, a "heard late" notice, or an
+    /// approval whose toast had no id. Bring Jarvis forward.
+    Window,
+    /// An approval's card id. Bring Jarvis forward AND open that card, through
+    /// the same command Settings' "Open the card" button calls.
+    Card(String),
+}
+
+/// The longest card id a launch argument may name - the same cap
+/// `commands::open_approval_in_quickbar` puts on an id a page sends.
+const MAX_CARD_ID: usize = 200;
+
+/// Whether `id` is a card id a launch argument may name: non-empty, short, and
+/// letters, digits, `-` or `_` only.
+///
+/// The id is only ever handed to `open_approval_in_quickbar`, which decides
+/// nothing and opens no window of its own - but a launch argument is written by
+/// whoever launched the process, so it is not given a free shape to carry.
+fn card_id_ok(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_CARD_ID
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Reads a body click's request out of a launch's argv. `None` for every
+/// ordinary launch, and for every OTHER toast button's launch: `jarvis-deny:`,
+/// `jarvis-snooze:`, `jarvis-stop:` and `jarvis-openjob:` each have their own
+/// reader above, and one argv must have exactly one meaning.
+pub(crate) fn open_request_from_argv(argv: &[String]) -> Option<ToastOpen> {
+    argv.iter().find_map(|arg| {
+        let rest = arg.strip_prefix(OPEN_TOAST_PREFIX)?;
+        if rest.is_empty() {
+            // The marker on its own: a toast that names no card.
+            return Some(ToastOpen::Window);
+        }
+        let id = rest.strip_prefix(':')?;
+        // `jarvis-openjob:` lands here with "job:..." and is refused by the
+        // colon check - the reminder's Open button is not a body click.
+        card_id_ok(id).then(|| ToastOpen::Card(id.to_string()))
+    })
+}
+
+/// The surface an approval's Open asks for. `"hud"` is the value
+/// [`crate::commands::card_open_target`] maps to the full HUD window - the
+/// surface that shows the whole card with its own Approve and Deny, and the
+/// one `card-link.js` already asks for.
+const CARD_TARGET: &str = "hud";
+
+/// Answers a body click, or the Open action, on one of this module's toasts.
+///
+/// Deliberately NOT a new way to focus a window. A click that names no card
+/// goes through [`crate::windows::show_hud`] - the one door the tray, the
+/// hotkey and an ordinary second launch already use, so the window is
+/// un-minimised and focused exactly as those do it. An approval goes through
+/// [`crate::commands::open_approval_in_quickbar`], the SAME command
+/// `card-link.js`'s "Open the card" button calls with the same `"hud"` target,
+/// so the two cannot open different surfaces.
+///
+/// Decides nothing: the card still needs its own Approve and its Windows
+/// Hello, and the App-lock rule still applies inside both doors.
+pub(crate) fn open_from_toast(app: &AppHandle, request: &ToastOpen) {
+    let opened = match request {
+        ToastOpen::Window => crate::windows::show_hud(app),
+        ToastOpen::Card(id) => crate::commands::open_approval_in_quickbar(
+            app.clone(),
+            Some(id.clone()),
+            Some(CARD_TARGET.to_string()),
+        ),
+    };
+    if let Err(e) = opened {
+        // Logged, not toasted: a toast about a toast that could not open is
+        // noise, and the owner is already looking at the notification.
+        crate::logfile::log(&format!(
+            "[jarvis] a notification click could not open Jarvis: {e}"
+        ));
+    }
+}
+
+/// A body click (or Open) that STARTED this process.
+///
+/// The single-instance callback only fires when a process is already running -
+/// the same gap the Deny button had, and the reason `decide_denied_at_startup`
+/// exists. Without this, a click on a toast that started Jarvis opened the
+/// window and then did nothing about what was clicked, including an approval's
+/// card.
+pub fn open_at_startup(app: &AppHandle) {
+    let argv: Vec<String> = std::env::args().collect();
+    let Some(request) = open_request_from_argv(&argv) else {
+        return;
+    };
+    crate::logfile::log("[jarvis] a notification click started Jarvis");
+    open_from_toast(app, &request);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One function's body, from its signature to the first line that closes
+    /// it, so a pin can hold a CALL rather than the whole file (the shape
+    /// `notifications.rs` uses for the same job).
+    fn body<'a>(src: &'a str, name: &str) -> &'a str {
+        let at = src
+            .find(name)
+            .unwrap_or_else(|| panic!("{name} is gone from this file"));
+        let rest = &src[at..];
+        let end = rest
+            .find("\n}\n")
+            .expect("that function has no closing line");
+        &rest[..end]
+    }
 
     #[test]
     fn a_missed_alarm_is_shown_without_a_sound_or_a_button() {
@@ -1136,11 +1360,15 @@ mod tests {
     }
 
     #[test]
-    fn the_toast_offers_deny_and_never_approve() {
+    fn the_toast_offers_open_and_deny_and_never_approve() {
+        // Two actions since 2026-11-13: Open (which opens the card in Jarvis,
+        // the gesture the body click cannot carry - see the module doc) and
+        // Deny. Neither approves anything.
         for silent in [false, true] {
             let xml = approval_toast_xml("Jarvis wants to search the web", "Why.", "a1", silent);
             assert!(xml.contains(r#"<action content="Deny""#));
-            assert_eq!(xml.matches("<action ").count(), 1);
+            assert!(xml.contains(&format!(r#"<action content="{OPEN_LABEL}""#)));
+            assert_eq!(xml.matches("<action ").count(), 2);
             assert_eq!(xml.contains(r#"<audio silent="true"/>"#), silent);
         }
     }
@@ -1172,14 +1400,21 @@ mod tests {
             );
             assert_eq!(
                 xml.matches("<action ").count(),
-                1,
-                "a notification carries exactly one action:\n{xml}"
+                2,
+                "a notification carries Open and Deny, and nothing else:\n{xml}"
             );
             let actions = xml.split("<actions>").nth(1).unwrap_or_default();
             assert!(
                 !actions.to_lowercase().contains("approve"),
                 "a notification must never carry an approving action - Windows \
                  Hello cannot be asked for from a toast:\n{xml}"
+            );
+            // And Open is not an approving action: it opens the card, where
+            // the card's own Approve and Windows Hello still are.
+            assert!(
+                actions.contains(&format!(r#"content="{OPEN_LABEL}""#)),
+                "the Open action is gone, so the toast's own sentence points at \
+                 a gesture Windows cannot deliver:\n{xml}"
             );
         }
     }
@@ -1251,7 +1486,7 @@ mod tests {
             "the bound must be on the card's words themselves:\n{xml}"
         );
         // ...and the rule this module exists to keep still holds.
-        assert_eq!(xml.matches("<action ").count(), 1, "{xml}");
+        assert_eq!(xml.matches("<action ").count(), 2, "{xml}");
         assert!(!xml
             .split("<actions>")
             .nth(1)
@@ -1299,5 +1534,272 @@ mod tests {
             body.contains("crash_notes::scrub"),
             "the PC's own sentence is neither shown safely nor logged scrubbed:\n{body}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // A click on the BODY, and the Open action (2026-11-13)
+    // -----------------------------------------------------------------------
+
+    /// The owner's report of 2026-11-13, as a test. "Deny here, or open Jarvis
+    /// to approve" described a gesture Windows cannot deliver to this app (the
+    /// module doc measures it), so the toast now carries the gesture as an
+    /// action - and the action and the body click name the SAME marker, so the
+    /// two can never open different things.
+    #[test]
+    fn the_approval_toast_s_open_action_opens_the_card_and_never_approves() {
+        let id = "07653f169571";
+        let xml = approval_toast_xml(
+            "Jarvis wants to forget what it learned and delete chats from the days you chose",
+            "forgets the facts and deletes the chats listed on the card.",
+            id,
+            false,
+        );
+        // Deny is untouched: the same words, the same arguments, the same
+        // activation type it has always had.
+        assert!(
+            xml.contains(&format!(
+                r#"<action content="Deny" arguments="{DENY_PREFIX}{id}" activationType="foreground"/>"#
+            )),
+            "the Deny button changed shape:\n{xml}"
+        );
+        // The one new press: Open, with the same marker a body click carries.
+        assert!(
+            xml.contains(&format!(
+                r#"<action content="{OPEN_LABEL}" arguments="{OPEN_TOAST_PREFIX}:{id}" activationType="foreground"/>"#
+            )),
+            "the Open action is not on the toast, so the sentence points at a \
+             gesture Windows cannot deliver:\n{xml}"
+        );
+        // ...and the body click's own marker names the same card.
+        assert!(
+            xml.contains(&format!(
+                r#"<toast activationType="foreground" launch="{OPEN_TOAST_PREFIX}:{id}">"#
+            )),
+            "the body click's marker does not name the card:\n{xml}"
+        );
+        // Exactly those two, and neither approves anything.
+        assert_eq!(xml.matches("<action ").count(), 2, "{xml}");
+        let actions = xml
+            .split("<actions>")
+            .nth(1)
+            .unwrap_or_default()
+            .to_lowercase();
+        assert!(!actions.contains("approve"), "{xml}");
+        assert!(!actions.contains(SNOOZE_PREFIX), "{xml}");
+        assert!(!actions.contains(STOP_PREFIX), "{xml}");
+    }
+
+    /// A queue row with no id still gets a working Open and a body marker -
+    /// the bare marker, never a colon with nothing after it (`jarvis-open:` is
+    /// not a request this module can read back).
+    #[test]
+    fn an_id_less_approval_still_gets_a_working_open_and_a_body_marker() {
+        let xml = approval_toast_xml("Jarvis wants to restart", "", "", false);
+        assert!(
+            xml.contains(&format!(
+                r#"<toast activationType="foreground" launch="{OPEN_TOAST_PREFIX}">"#
+            )),
+            "{xml}"
+        );
+        assert!(
+            xml.contains(&format!(
+                r#"<action content="{OPEN_LABEL}" arguments="{OPEN_TOAST_PREFIX}" activationType="foreground"/>"#
+            )),
+            "{xml}"
+        );
+        assert!(!xml.contains(&format!("{OPEN_TOAST_PREFIX}:")), "{xml}");
+        assert_eq!(xml.matches("<action ").count(), 2, "{xml}");
+    }
+
+    /// One argv, exactly one meaning. A body click names either the window or
+    /// ONE card; every other button's marker - and anything a launcher could
+    /// invent - reads as "not a body click", so the single-instance handler
+    /// falls through to the ordinary second-launch path.
+    #[test]
+    fn a_body_click_names_a_window_or_one_card_and_nothing_else() {
+        assert_eq!(
+            open_request_from_argv(&["jarvis-desktop.exe".to_string()]),
+            None
+        );
+        assert_eq!(
+            open_request_from_argv(&[
+                "jarvis-desktop.exe".to_string(),
+                OPEN_TOAST_PREFIX.to_string()
+            ]),
+            Some(ToastOpen::Window)
+        );
+        assert_eq!(
+            open_request_from_argv(&[
+                "jarvis-desktop.exe".to_string(),
+                format!("{OPEN_TOAST_PREFIX}:07653f169571"),
+            ]),
+            Some(ToastOpen::Card("07653f169571".to_string()))
+        );
+        // An id with a hyphen or an underscore is still one card: the gate's
+        // ids are strings, and a test fixture already looks like `appr_abc123`.
+        for id in ["appr_abc123", "07653f169571", "a-b_c"] {
+            assert_eq!(
+                open_request_from_argv(&[format!("{OPEN_TOAST_PREFIX}:{id}")]),
+                Some(ToastOpen::Card(id.to_string())),
+                "{id}"
+            );
+        }
+        // The OTHER buttons' markers are not body clicks, and neither is a
+        // marker that does not lead the argument.
+        for other in [
+            "jarvis-deny:07653f169571".to_string(),
+            "jarvis-snooze:s0123456789".to_string(),
+            "jarvis-stop:s0123456789".to_string(),
+            "jarvis-openjob:s0123456789".to_string(),
+            format!("x{OPEN_TOAST_PREFIX}:07653f169571"),
+        ] {
+            assert_eq!(
+                open_request_from_argv(std::slice::from_ref(&other)),
+                None,
+                "{other}"
+            );
+        }
+        // A card id this module would not hand the command is not a card.
+        for bad in [
+            format!("{OPEN_TOAST_PREFIX}:"),
+            format!("{OPEN_TOAST_PREFIX}:../x"),
+            format!("{OPEN_TOAST_PREFIX}:a b"),
+            format!("{OPEN_TOAST_PREFIX}:a:b"),
+            format!("{OPEN_TOAST_PREFIX}:a/b"),
+        ] {
+            assert_eq!(
+                open_request_from_argv(std::slice::from_ref(&bad)),
+                None,
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            open_request_from_argv(&[format!(
+                "{OPEN_TOAST_PREFIX}:{}",
+                "a".repeat(MAX_CARD_ID + 1)
+            )]),
+            None,
+            "an over-long id is not a card this app will name"
+        );
+    }
+
+    /// The marker WRITTEN into every toast is the marker the reader looks for -
+    /// a round trip, so a rename on one side cannot leave the other silent.
+    #[test]
+    fn the_marker_in_every_toast_is_the_one_the_reader_looks_for() {
+        let launch_of = |xml: &str| -> String {
+            xml.split("launch=\"")
+                .nth(1)
+                .expect("every toast carries a launch marker")
+                .split('"')
+                .next()
+                .expect("the attribute value ends")
+                .to_string()
+        };
+        // An approval names its card...
+        let approval = approval_toast_xml("Jarvis wants to restart", "Why.", "07653f169571", false);
+        let marker = launch_of(&approval);
+        assert_eq!(
+            open_request_from_argv(std::slice::from_ref(&marker)),
+            Some(ToastOpen::Card("07653f169571".to_string())),
+            "{marker}"
+        );
+        // ...and the toasts that name no card ask for the window.
+        for xml in [
+            quiet_xml("Alarm", "Missed at 07:00."),
+            alarm_xml("Alarm", "Wake up", Some(("s0123456789", "Snooze"))),
+            fired_xml("Timer done", "Done.", "s0123456789", "Snooze", None),
+            approval_toast_xml("Jarvis wants to restart", "", "", false),
+        ] {
+            let marker = launch_of(&xml);
+            assert_eq!(
+                open_request_from_argv(std::slice::from_ref(&marker)),
+                Some(ToastOpen::Window),
+                "{marker}\n{xml}"
+            );
+        }
+    }
+
+    /// A body click goes through the app's EXISTING doors - never a new
+    /// window, a new tray icon or a second focus path. A plain click uses the
+    /// one `show_hud` every other "show me Jarvis" press uses; an approval
+    /// uses the `open_approval_in_quickbar` command `card-link.js`'s "Open the
+    /// card" already calls, with the same surface.
+    #[test]
+    fn a_body_click_opens_the_window_through_the_one_door_that_already_exists() {
+        let src = include_str!("winrt_toast.rs");
+        let opened = body(src, "pub(crate) fn open_from_toast(");
+        assert!(
+            opened.contains("crate::windows::show_hud(app)"),
+            "a body click no longer goes through the one show-the-HUD door:\n{opened}"
+        );
+        assert!(
+            opened.contains("crate::commands::open_approval_in_quickbar("),
+            "an approval's click no longer uses the app's own open-the-card \
+             command:\n{opened}"
+        );
+        assert!(
+            opened.contains("CARD_TARGET"),
+            "the open-the-card command is called with a surface this module \
+             picked itself:\n{opened}"
+        );
+        // Nothing here creates a window or a tray icon.
+        for forbidden in [
+            "WebviewWindowBuilder",
+            "TrayIconBuilder",
+            "set_focus()",
+            "set_focus(",
+        ] {
+            assert!(
+                !opened.contains(forbidden),
+                "open_from_toast is building its own focus path ({forbidden}):\n{opened}"
+            );
+        }
+        // The surface is the one `commands::card_open_target` maps to the HUD.
+        assert_eq!(CARD_TARGET, "hud");
+    }
+
+    /// A click that arrives while Jarvis is running (the single-instance
+    /// callback) AND one that starts it (a cold start) must both answer a body
+    /// click. Handling only one is the exact half-fix the Deny button had to
+    /// learn, and it looks identical from the owner's chair.
+    #[test]
+    fn both_launch_paths_answer_a_body_click() {
+        let lib = include_str!("lib.rs");
+        // The running case: the marker must be read BEFORE the ordinary
+        // "second launch folded" fallback, or the window comes up and the card
+        // is never opened.
+        let start = lib
+            .find("tauri_plugin_single_instance::init(")
+            .expect("the single-instance callback is gone");
+        let fallback = lib[start..]
+            .find("second launch folded into the running instance")
+            .expect("the ordinary second-launch fallback is gone");
+        let callback = &lib[start..start + fallback];
+        assert!(
+            callback.contains("winrt_toast::open_request_from_argv(&_argv)"),
+            "a body click that reaches a running Jarvis is folded into an \
+             ordinary second launch:\n{callback}"
+        );
+        assert!(
+            callback.contains("winrt_toast::open_from_toast(app, &request)"),
+            "the single-instance callback reads the body click and does \
+             nothing with it:\n{callback}"
+        );
+        // The cold-start case: a click that started the app.
+        assert!(
+            lib.contains("winrt_toast::open_at_startup(&handle)"),
+            "a body click that STARTS Jarvis opens the window and does nothing \
+             about what was clicked"
+        );
+        // ...and `open_at_startup` really does the work rather than logging.
+        let startup = body(src_of_self(), "pub fn open_at_startup(");
+        assert!(startup.contains("open_request_from_argv"), "{startup}");
+        assert!(startup.contains("open_from_toast"), "{startup}");
+    }
+
+    /// This file's own text, for the pin above.
+    fn src_of_self() -> &'static str {
+        include_str!("winrt_toast.rs")
     }
 }

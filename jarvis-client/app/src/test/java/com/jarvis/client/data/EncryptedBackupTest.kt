@@ -51,6 +51,9 @@ class EncryptedBackupTest {
     private fun realisticPrefs(): Map<String, Map<String, Any?>> = linkedMapOf(
         "jarvis_secure" to linkedMapOf("token_blob" to tokenBlob),
         "jarvis_client" to linkedMapOf(
+            // The desktop's address, as a paired phone really stores it. It is
+            // on the phone and NOT in a backup: the exclusion is what the
+            // restore test below pins, so the fixture keeps it on purpose.
             "host" to "jarvis-pc.owner-tailnet.ts.net",
             "interrupt" to "voice",
             "one_moment" to true,
@@ -102,7 +105,10 @@ class EncryptedBackupTest {
         val opened = open(seal(snapshotJson()))
         val restored = SettingsBackup.read(opened)
         val settings = requireNotNull(restored.files["jarvis_client"])
-        assertEquals(SettingsBackup.Value.Text("jarvis-pc.owner-tailnet.ts.net"), settings["host"])
+        // `host` is deliberately NOT here: it is excluded (see the test below)
+        // because the phone's pairing token belongs to the address it was
+        // paired with. Another string setting proves the text type survives.
+        assertEquals(SettingsBackup.Value.Text("voice"), settings["interrupt"])
         assertEquals(SettingsBackup.Value.Flag(true), settings["one_moment"])
         assertEquals(SettingsBackup.Value.Flag(false), settings["heard_sound"])
         assertEquals(SettingsBackup.Value.Whole(120), settings["screen_hz"])
@@ -125,6 +131,56 @@ class EncryptedBackupTest {
         // The cache and chat stores are not settings files at all.
         assertFalse("jarvis_models_cache" in restored.files)
         assertFalse("jarvis_pinned_chats" in restored.files)
+    }
+
+    @Test
+    fun `a snapshot carrying a host cannot change the stored address on restore`() {
+        // THE DEFECT THIS EXISTS FOR (2026-11-13, HIGH). `host` is the
+        // desktop's address, and a restore used to write it into
+        // `jarvis_client` while the pairing token stayed put in
+        // `jarvis_secure` - so a backup could send a credential the phone
+        // already held to whatever address the file named. Both halves are
+        // checked, because either one alone would leave the other door open:
+        // the writer must not carry the address, and the reader - the map
+        // `SettingsBackupStore.restore` writes from - must drop it from an
+        // older or crafted file that still has one.
+
+        // 1. Writer: a real phone's preferences (the fixture DOES contain
+        //    `host`) go through the allow-list, and the address stays home.
+        val plain = snapshotJson()
+        assertFalse(
+            "a new backup must not carry the desktop's address",
+            contains(plain, "jarvis-pc.owner-tailnet.ts.net"),
+        )
+        val written = SettingsBackup.read(plain)
+        val afterSave = requireNotNull(written.files["jarvis_client"])
+        assertFalse("host is the paired phone's own state, not a restorable setting", "host" in afterSave)
+        // The rest of the same snapshot is still restored, so this cannot pass
+        // by excluding the whole file.
+        assertEquals(SettingsBackup.Value.Text("voice"), afterSave["interrupt"])
+        assertEquals(SettingsBackup.Value.Flag(true), afterSave["one_moment"])
+
+        // 2. Reader: a backup made before the exclusion, or a crafted one,
+        //    still names a host. `restore` applies exactly this map, so the
+        //    address must be gone and every other setting kept.
+        val older = """
+            {"format":1,"appVersion":"0.2.448","createdAtMillis":1,
+             "files":{"jarvis_client":{
+                "host":{"t":"s","v":"someone-elses-desktop.tailnet.ts.net"},
+                "interrupt":{"t":"s","v":"text"},
+                "screen_hz":{"t":"i","v":90}}}}
+        """.trimIndent()
+        val restored = SettingsBackup.read(older.toByteArray(Charsets.UTF_8))
+        val afterRestore = requireNotNull(restored.files["jarvis_client"])
+        assertFalse("an old backup's host must never reach the stored address", "host" in afterRestore)
+        assertEquals(SettingsBackup.Value.Text("text"), afterRestore["interrupt"])
+        assertEquals(SettingsBackup.Value.Whole(90), afterRestore["screen_hz"])
+        // And the Android half writes only what that read returned.
+        val store = SourceFile.read("jarvis-client/app/src/main/java/com/jarvis/client/data/SettingsBackup.kt")
+        assertTrue(
+            "restore must apply the parsed snapshot's files, never the raw JSON",
+            store.contains("for ((name, values) in snapshot.files)"),
+        )
     }
 
     // --------------------------------------------------------- fail-closed
@@ -224,6 +280,30 @@ class EncryptedBackupTest {
     }
 
     @Test
+    fun `a file that asks for more key derivation than this app writes is refused`() {
+        // The iteration count sits in the plaintext header, so the FILE picks
+        // it - and the key is derived before the first tag can fail. A crafted
+        // file used to be able to ask for 10,000,000 PBKDF2 rounds. The ceiling
+        // is what this app writes: DEFAULT_ITERATIONS.
+        val tooMany = seal(snapshotJson(), iterations = EncryptedBackup.DEFAULT_ITERATIONS + 1)
+        try {
+            open(tooMany)
+            fail("a file that picks a slower key derivation than this app writes was accepted")
+        } catch (expected: InvalidBackupException) {
+            // The existing refusal sentence for an out-of-range header, not a
+            // new one.
+            assertEquals("Damaged backup header", expected.message)
+        }
+        // The count this app writes is accepted, so the boundary really is the
+        // constant and not "anything smaller happened to pass".
+        val normal = seal(snapshotJson(), iterations = EncryptedBackup.DEFAULT_ITERATIONS)
+        assertEquals(
+            EncryptedBackup.DEFAULT_ITERATIONS,
+            EncryptedBackup.readHeader(ByteArrayInputStream(normal)).iterations,
+        )
+    }
+
+    @Test
     fun `a newer snapshot inside a valid container is refused`() {
         val json = String(snapshotJson(), Charsets.UTF_8).replace("\"format\":1", "\"format\":2")
         try {
@@ -252,9 +332,11 @@ class EncryptedBackupTest {
 
     @Test
     fun `an unknown value type is refused instead of guessed`() {
+        // Not `host`: that key is excluded, so it is skipped before its value
+        // is read and this would test nothing.
         val crafted = """
             {"format":1,"appVersion":"9.9.9","createdAtMillis":1,
-             "files":{"jarvis_client":{"host":{"t":"q","v":"x"}}}}
+             "files":{"jarvis_client":{"interrupt":{"t":"q","v":"x"}}}}
         """.trimIndent()
         try {
             SettingsBackup.read(crafted.toByteArray(Charsets.UTF_8))
@@ -288,9 +370,10 @@ class EncryptedBackupTest {
             assertFalse("the ciphertext carries '$secret'", contains(sealed, secret))
         }
         // A real setting IS in both, so the search above is not passing
-        // because the snapshot is empty.
-        assertTrue(contains(plain, "jarvis-pc.owner-tailnet.ts.net"))
-        assertFalse("the ciphertext is not plaintext at all", contains(sealed, "jarvis-pc.owner-tailnet.ts.net"))
+        // because the snapshot is empty. (The fixture's value, not `host`: the
+        // address is excluded from the payload now.)
+        assertTrue(contains(plain, "midnight"))
+        assertFalse("the ciphertext is not plaintext at all", contains(sealed, "midnight"))
 
         val restored = SettingsBackup.read(open(sealed))
         assertFalse("a restored snapshot names the token's file", "jarvis_secure" in restored.files)

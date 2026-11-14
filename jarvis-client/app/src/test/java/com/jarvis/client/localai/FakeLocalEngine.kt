@@ -1,5 +1,7 @@
 package com.jarvis.client.localai
 
+import java.util.concurrent.CountDownLatch
+
 /**
  * A deterministic engine for JVM tests: no library, no threads of its own, no
  * timing guesses.
@@ -28,6 +30,14 @@ class FakeLocalEngine(
         private set
     var destroyCalls: Int = 0
         private set
+
+    /** The thread that called [destroy], so a test can prove where the free ran. */
+    @Volatile
+    var destroyThread: Thread? = null
+        private set
+
+    /** Counts down on [destroy], so a test can wait for the free instead of sleeping. */
+    val destroyed = CountDownLatch(1)
 
     var lastPath: String? = null
         private set
@@ -100,6 +110,8 @@ class FakeLocalEngine(
 
     override fun destroy() {
         destroyCalls++
+        destroyThread = Thread.currentThread()
+        destroyed.countDown()
         modelLoaded = false
         lastStats = null
     }

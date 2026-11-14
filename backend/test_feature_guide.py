@@ -1538,6 +1538,10 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
     check("no phone-only row is ever said to change 'on this PC'", not bad, bad[:8])
     settings_rows = [row for row in phone if FG.label_for(row) in
                      (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
+    # SIX on 2026-11-13: the phone's own settings backup
+    # (`phone-settings-backup`, PR #1233) is the phone-only card that seals THIS
+    # phone's settings into a password-locked file, with no backend route and no
+    # PC counterpart, so it carries the PC-Only label too.
     check("...the six phone controls are the PC-Only-labelled ones",
           len(settings_rows) == 6, [r["id"] for r in settings_rows])
     # Each names its OWN path and says what is true of the PC, in both the change
@@ -2582,6 +2586,162 @@ def t_a_tool_switch_row_never_says_it_has_no_switch():
               and "names no on/off switch" not in how.lower(), how[:400])
 
 
+def t_the_wake_word_row_is_wired_and_not_planned():
+    """The wake-word row says it is wired, in the catalogue's own words (2026-11-13).
+
+    THE MEASURED WRONG ANSWER. The owner asked "How do I activate Hey Jarvis on
+    my Android app?" and Jarvis answered that saying "Hey Jarvis" out loud when
+    the app is open turns it on - the feature described as self-activating. It
+    is not: the catalogue says "Turn it on in Settings, Voice, then tap Listen
+    on the phone" and "Turning it on raises one approval card on the PC.
+    Turning it off is instant", and the phone's own VoiceSwitchesPlate.kt says
+    its listening is never on by default or after a restart.
+
+    THE GUIDE'S CONTRIBUTION TO THAT LIE. Its wake-word row said `planned` with
+    "no own switch or typed control is wired today", so `how_to()` answered
+    "The feature list names no on/off switch ... Command-Only ... no fixed
+    sentence" - three false sentences about a switch that ships, and a typed
+    phrase ("turn on the wake word") that really changes it. This pins the
+    honest shape: not planned, its own phrase, and the catalogue's where/asks
+    word for word.
+    """
+    cat = next(r for r in CAT.FEATURES if r["id"] == "wake-word")
+    mine = next(r for r in FG.control_matrix() if r["id"] == "wake-word")
+    check("the wake-word row is no longer planned",
+          mine["status"] != "planned", mine["status"])
+    check("... it is classified by its real typed switch",
+          mine["status"] == "adjust", mine["status"])
+    check("... and it no longer carries an allowlist excuse",
+          "wake-word" not in FG.NO_COMMAND_REASON)
+    check("... its own phrase reaches the wake-word switch",
+          any(a.get("phrase") == "turn on the wake word"
+              and a.get("intent") == "settings_wake_word"
+              for a in mine["adjust"]), mine["adjust"])
+    got = match("turn on the wake word")
+    check("... and that phrase really resolves to settings_wake_word",
+          got is not None and got.name == "settings_wake_word"
+          and got.f.get("on") is True, got)
+    check("... its where is the catalogue's own line, word for word",
+          mine["where"] == cat["where"], (mine["where"], cat["where"]))
+    low = str(FG.how_to("wake-word", True)["words"] or "").lower()
+    check("'how do I turn on the wake word' names Settings, Voice and Listen on the phone",
+          "settings, voice" in low and "listen on the phone" in low, low)
+    check("... and the one approval card, with none of the old 'no switch' claims",
+          "approval card" in low
+          and "command-only" not in low
+          and "no on/off switch" not in low
+          and "no fixed sentence" not in low, low)
+    check("... and it names the real typed sentence, not the voice-speed section-mate",
+          "turn on the wake word" in low and "speak faster" not in low, low)
+
+
+def t_no_planned_row_says_it_has_no_switch_or_a_fixed_phrase():
+    """A row kept in PLANNED_SWITCHABLE may never claim there is no control.
+
+    THE BLIND SPOT THE WAKE WORD FELL THROUGH (2026-11-13). `PLANNED_SWITCHABLE`
+    means "no own typed control is wired today", but the answer paths treated
+    it as "no control at all": `state()`, `how_to()` and `ability_explanation()`
+    said "The feature list names no on/off switch ... Command-Only ... no fixed
+    sentence". For the wake word that was three false sentences beside a `where`
+    that said Settings, Voice, then Listen on the phone - and its typed phrase
+    really worked, because `OWN_CONTROLS` had no entry for the row, so
+    `_own_words()` could never attribute the intent and the matrix could not
+    prove the control. Read-aloud's Settings switch ships today with the same
+    false sentence. This guard makes both recurring mistakes fail here: a
+    planned row that gains an own control or an adjust phrase, and an answer
+    that says it has no switch or invents a fixed phrase.
+    """
+    rows = {r["id"]: r for r in FG.control_matrix()}
+    for fid in FG.PLANNED_SWITCHABLE:
+        row = FG.row_by_id(fid)
+        mine = rows.get(fid) or {}
+        check(f"{fid}: a planned row is still a catalogue feature", row is not None)
+        check(f"{fid}: a planned row is still classified planned",
+              mine.get("status") == "planned", mine.get("status"))
+        check(f"{fid}: a planned row has no switch of its own",
+              not mine.get("switch_keys"), mine.get("switch_keys"))
+        # The matrix's own proof of a typed path IS its adjust list: a planned
+        # row with a working phrase here would mean a real control is still
+        # marked planned (the wake-word shape). An OWN_CONTROLS entry alone is
+        # not that - home-status names settings_asks_first/home_read there and
+        # is still honestly planned because no typed sentence is wired.
+        check(f"{fid}: a planned row shows no typed phrase",
+              not mine.get("adjust"), mine.get("adjust"))
+        check(f"{fid}: a planned row carries no adjust phrase by hand",
+              fid not in FG.FEATURE_ADJUST_PHRASES,
+              FG.FEATURE_ADJUST_PHRASES.get(fid))
+        if row is None:
+            continue
+        said = FG.ability_explanation(row).lower()
+        check(f"{fid}: 'turn it on' never calls it Command-Only",
+              "command-only" not in said, said)
+        check(f"{fid}: ... never says it has no on/off switch",
+              "no on/off switch" not in said, said)
+        check(f"{fid}: ... and says the typed path is not wired yet",
+              "not wired yet" in said, said)
+        how = str(FG.how_to(fid, True)["words"] or "").lower()
+        check(f"{fid}: 'how do I turn it on' never calls it Command-Only",
+              "command-only" not in how, how)
+        check(f"{fid}: ... never says it has no on/off switch",
+              "no on/off switch" not in how, how)
+        check(f"{fid}: ... and says the typed path is not wired yet",
+              "not wired yet" in how, how)
+        state_words = str(FG.state(fid)["words"] or "").lower()
+        check(f"{fid}: 'is it on?' does not guess, and says it cannot read a state",
+              "not wired yet" in state_words
+              and "could not read" in state_words, state_words)
+
+
+def t_the_layer_one_shapes_reach_every_catalogue_title():
+    """Every title answers the four Layer 1 routing shapes (2026-11-13).
+
+    THE RULING'S GAPS, measured on origin/main `0b6e5a967` through the real
+    matcher: "how do I activate <title>" never reached `feature_howto` for any
+    of the 182 rows (127 went to the generic capability answer and 55 matched
+    nothing), "<title> turned on?" reached the feature state for 9 (with the
+    wrong intent), and "why isn't <title> working" for 3. Those are the
+    questions a person actually asks about a feature and they now answer from
+    the row. This walks ALL 182 titles for each shape, so a new row or a
+    reordered grammar fails here rather than at a live conversation.
+    """
+    shapes = (
+        ("how do I activate {}", "feature_howto"),
+        ("{} turned on?", "feature_state"),
+        ("why isn't {} working", "feature_detail"),
+    )
+    misses, thin = [], []
+    for row in SOURCE:
+        title = _flat(row["title"])
+        for template, want in shapes:
+            ask = template.format(title)
+            got = match(ask)
+            if (got is None or got.name != want
+                    or str(got.f.get("id") or "") != row["id"]):
+                misses.append((row["id"], template,
+                               got.name if got is not None else None,
+                               got.f.get("id") if got is not None else None))
+                continue
+            out = say(got)
+            text = out.reply if out is not None else ""
+            low = text.lower()
+            if want == "feature_detail":
+                facts = row["title"] in text and "the honest limit:" in low
+            elif want == "feature_state":
+                facts = row["title"] in text and any(
+                    marker in low for marker in
+                    ("right now", "no on/off switch", "could not read",
+                     "not wired yet"))
+            else:
+                facts = row["title"] in text and row["where"] in text
+            if not facts:
+                thin.append((row["id"], template, text[:160]))
+    check("activate / turned-on / why-not-working reach all 182 titles",
+          not misses, misses[:8])
+    check("...and each answer carries the row's own facts", not thin, thin[:8])
+    check("_FEATURE_HOWTO is in the shapes the honesty families step aside for",
+          Q._FEATURE_HOWTO in Q._FEATURE_QUESTION_SHAPES)
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -2630,7 +2790,10 @@ if __name__ == "__main__":
                t_an_unreadable_module_says_could_not_read,
                t_every_rows_where_names_a_real_place,
                t_a_named_choice_answers_state_and_how_to,
-               t_a_tool_switch_row_never_says_it_has_no_switch):
+               t_a_tool_switch_row_never_says_it_has_no_switch,
+               t_the_wake_word_row_is_wired_and_not_planned,
+               t_no_planned_row_says_it_has_no_switch_or_a_fixed_phrase,
+               t_the_layer_one_shapes_reach_every_catalogue_title):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

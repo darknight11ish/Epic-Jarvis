@@ -22,7 +22,7 @@
  * contain the token blob - it cannot reach the plaintext, the ciphertext, or
  * the format's own field list.
  *
- * The snapshot itself is JSON: `jarvis_client.host` is a typed value, not a
+ * The snapshot itself is JSON: every value is a typed value, not a bare
  * string, so a boolean stays a boolean and a string set stays a string set
  * when it is restored. The JSON is then sealed by [EncryptedBackup].
  */
@@ -81,7 +81,7 @@ object SettingsBackup {
      * silently vanishing from every backup.
      */
     val FILES: Map<String, String> = linkedMapOf(
-        "jarvis_client" to "this phone's own settings: the desktop's address, voice, display and update switches",
+        "jarvis_client" to "this phone's own settings: voice, display and update switches",
         "jarvis_appearance" to "the face, colours and theme",
         "jarvis_menus" to "which menus are shown",
         "jarvis_history_view" to "how the chat history list is sorted and filtered",
@@ -103,13 +103,22 @@ object SettingsBackup {
     )
 
     /**
-     * Keys inside a listed file that are STATE rather than a preference, so a
-     * backup does not carry them: a resume point and update caches belong to
-     * the phone that made the backup, and the one-time offer flags must be
-     * allowed to happen on a fresh install.
+     * Keys inside a listed file that a backup does not carry. Most are STATE
+     * rather than a preference: a resume point and update caches belong to the
+     * phone that made the backup, and the one-time offer flags must be allowed
+     * to happen on a fresh install.
+     *
+     * `host` is the exception, and it protects a credential. The pairing token
+     * lives in `jarvis_secure`, which no backup touches, so writing a restored
+     * address over the stored one would send the token the phone already holds
+     * to whatever desktop the backup names.
      */
     val EXCLUDED_KEYS: Map<String, Set<String>> = mapOf(
         "jarvis_client" to setOf(
+            // Never restored: a restore must not re-point a credential the
+            // phone already holds. The address is typed again when the phone
+            // pairs, exactly as after a reinstall.
+            "host",
             "last_event_id",
             "update_last_try_ms",
             "update_newer_line",
@@ -143,9 +152,11 @@ object SettingsBackup {
     }
 
     // ------------------------------------------------------------ plain words
-    // Failures are sentences the owner can act on. Every one of them ends the
+    // Failures are sentences the owner can act on. Every READ failure ends the
     // same way - nothing on this phone was changed - because that is the
-    // property a failed restore has to have.
+    // property a failed restore has to have. WRITE_FAILED is the one sentence
+    // that cannot promise it: the settings files are written one at a time, so
+    // an earlier file may already have been replaced when a later one fails.
 
     const val WRONG_PASSWORD =
         "Either the password is wrong or this file has been damaged. It was not opened, and " +
@@ -167,7 +178,8 @@ object SettingsBackup {
         "There are no settings on this phone to back up yet."
 
     const val WRITE_FAILED =
-        "The settings could not be written on this phone. Nothing was changed."
+        "The settings could not all be written on this phone. Some settings may already have " +
+            "been restored, and the rest were not."
 
     const val SAVE_FAILED =
         "The backup file could not be written, so nothing was saved. Nothing on this phone was changed."

@@ -188,6 +188,26 @@ object LocalAiWords {
     const val TOO_BIG_ACTION =
         "Jarvis will not load this one, so the phone cannot be pushed into closing the app."
 
+    /**
+     * The line under a file whose header could not be read. Its own sentence,
+     * not the too-big one: the phone does not know the model's size, so the
+     * refusal is about the unreadable file rather than a measured size.
+     */
+    const val UNREADABLE_ACTION =
+        "Jarvis will not load a file whose header it cannot read, because it cannot " +
+            "check whether the model would fit."
+
+    /**
+     * The line under a model the tier refused, or null when it fits. One place
+     * for the choice, so the screen and [LocalAiController.load] cannot give
+     * the same refusal two different reasons.
+     */
+    fun refusalLine(verdict: DeviceTiers.ModelVerdict): String? = when (verdict) {
+        is DeviceTiers.ModelVerdict.Fits -> null
+        is DeviceTiers.ModelVerdict.TooBig -> TOO_BIG_ACTION
+        is DeviceTiers.ModelVerdict.Unknown -> UNREADABLE_ACTION
+    }
+
     /** Shown while the model list is being read. */
     const val READING = "Reading the models on this phone…"
 }

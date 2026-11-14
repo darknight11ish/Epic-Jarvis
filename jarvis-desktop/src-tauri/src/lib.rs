@@ -975,6 +975,19 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // A click on a toast's BODY, or its Open action (2026-11-13): the
+            // one activation that ASKS for the window, so it is answered here
+            // rather than folded into "an ordinary second launch" below. For
+            // an approval the marker carries the card's id, and opening it
+            // goes through the same command Settings' "Open the card" button
+            // calls. Answered FIRST because it is the only one of these that
+            // wants a window on screen.
+            #[cfg(windows)]
+            if let Some(request) = winrt_toast::open_request_from_argv(&_argv) {
+                logfile::log("[jarvis] a notification click asked for Jarvis");
+                winrt_toast::open_from_toast(app, &request);
+                return;
+            }
             // A Deny click's own relaunch, not an ordinary second launch -
             // see winrt_toast.rs's own doc for why this is the argv shape a
             // toast action produces. Answered and left alone: raising the
@@ -2106,6 +2119,12 @@ pub fn run() {
             // nothing, so there is nothing to wait for.
             #[cfg(windows)]
             winrt_toast::stop_at_startup(&handle);
+            // And a click on a toast's BODY, or its Open action, while Jarvis
+            // was closed (2026-11-13). The window is up either way - this only
+            // asks, so it has nothing to wait for - but an approval's marker
+            // carries its card's id, and that card has to be opened with it.
+            #[cfg(windows)]
+            winrt_toast::open_at_startup(&handle);
 
             // What the LAST desktop update really did. The Windows installer
             // ends this process (`std::process::exit(0)` inside

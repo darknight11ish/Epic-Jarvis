@@ -28,6 +28,12 @@ resumable or chunked transfer ..." (docs/DECISIONS.md:4943). The owner's ask of
 rest of that sentence (a document preview, a second image path and an "attach
 anything" share target stay not built). The reversal is recorded in
 decisions.d/2026-11-05-phone-upload.md; this paragraph is the code's copy of it.
+On 2026-11-13 the door gained PHOTOS as plain file copies. That is not the
+"second image path" the same sentence refused: no picture decoder, vision
+model, OCR or secret cleaner runs here, and no model is shown the bytes. It is
+a file landing in a folder, exactly as a document does; the record of THAT
+change is decisions.d/2026-11-13-photo-from-phone.md, and the chat picture
+path (`jarvis_chat_picture.py` / `ChatPicture`) is untouched.
 
 THE ROUTES (docs/JARVIS-API.md section 196)
 
@@ -75,16 +81,26 @@ card that matters is the existing `import_notion_export` one, raised by
 database counts on it (backend/JARVIS-API.md section 152). One card per import,
 and the vault is never touched before it.
 
-THE EIGHT KINDS, AND NO MORE. `.pdf .docx .xlsx .pptx .md .markdown .txt .csv`
-- exactly `jarvis_attached_file.KINDS` and exactly the phone's own picker. A
-Notion `.zip` is the second purpose's business. No pictures (they have their
-own path and their own secret cleaner), no audio or video (a different index),
-and never an executable or a script: nothing uploaded is ever run, and a kind
-Jarvis cannot read has no reason to be stored. The allowlist is enforced twice
-- `begin` checks the NAME, `finish` checks the BYTES - and the byte check is
-`jarvis_attached_file`'s own magic-byte, encrypted-PDF and zip-bomb guards, so
-a `.docx` that is really a renamed archive is refused rather than handed to a
-parser.
+THE EIGHT DOCUMENT KINDS, PLUS EIGHT PHOTO KINDS ON THE SAME DOOR.
+`.pdf .docx .xlsx .pptx .md .markdown .txt .csv` are exactly
+`jarvis_attached_file.KINDS` and exactly the phone's document picker. A Notion
+`.zip` is the second purpose's business. No audio or video (a different index),
+and never an executable or a script: nothing uploaded is ever run. Since
+2026-11-13 the same door also carries a PHOTO - `.jpg .jpeg .png .webp .heic
+.heif .gif .bmp` - as a PLAIN FILE COPY (the owner's report that Jarvis denied
+being able to send a photo to the PC at all). A photo is `PHOTO_EXTENSIONS`
+here, never `jarvis_attached_file.IMAGE_KINDS` and never a new entry in its
+`KINDS`: that module's list is what the chat attachment READER accepts, and
+widening it would let a picture's bytes be read as a document. This module
+still never opens a document as text, indexes it or converts it; a photo's
+only inspection is a header check (`_photo_problem`) so a renamed program is
+not stored as a picture. Nothing on this path shows a model a photo's bytes.
+
+The allowlist is enforced twice - `begin` checks the NAME, `finish` checks the
+BYTES - and the byte check is `jarvis_attached_file`'s own magic-byte,
+encrypted-PDF and zip-bomb guards for the document kinds, plus the header
+check above for a photo, so a `.docx` that is really a renamed archive is
+refused rather than handed to a parser.
 
 WHAT `finish` CHECKS BEFORE ANYTHING LANDS
   1. the bytes that really arrived equal the size the phone declared (a
@@ -183,6 +199,18 @@ CARD_ACTION = "receive_uploaded_document"
 #: grant, and it says where the file came from.
 SUB = "From my phone"
 
+#: The picture extensions this door may carry as a PLAIN FILE COPY, and no
+#: others. The same eight names the phone's picture router already treats as a
+#: picture by name alone (`jarvis-client/.../AttachFile.kt`, PHOTO_KINDS).
+#:
+#: DELIBERATELY NOT `jarvis_attached_file.IMAGE_KINDS` and never added to its
+#: `KINDS`: that module is the chat attachment READER, and its `read()` must
+#: keep refusing a picture's bytes as a document (it does, in `WHY_PICTURE`).
+#: This list only says what the folder door may STORE; the backend test
+#: `test_upload.t_a_photo_lands_as_a_plain_file` proves a landed photo is still
+#: refused by both `jarvis_documents.read` and `jarvis_attached_file.read`.
+PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp")
+
 #: The purpose a `begin` body may carry. "document" is one file into a listed
 #: folder; "notion" is one export zip, staged for the Obsidian import.
 PURPOSES = ("document", "notion")
@@ -243,7 +271,8 @@ FULL = ("Jarvis is already holding as many files as it will hold at once - let o
 NAME_BAD = ("That file's name is not one Jarvis can save. A name with no folder part, "
             "no dot at the front and under 150 characters is what it needs.")
 KIND_BAD = ("Jarvis saves PDF, Word, Excel, PowerPoint, Markdown, text and CSV files from "
-            "your phone, and that one is not one of them.")
+            "your phone, and photos (JPG, PNG, WebP, HEIC, GIF or BMP), and that one is not "
+            "one of them.")
 NOTION_KIND_BAD = "The Notion export must be the .zip file Notion made."
 FOLDER_NOT_LISTED = "It can only go into a folder on the list - add the folder first."
 FOLDER_GONE = "That folder is not there any more."
@@ -343,8 +372,26 @@ def _sentence(text: str) -> str:
 
 
 def _kinds() -> dict:
-    """The eight kinds, in the words a person reads - never a second list."""
+    """The eight DOCUMENT kinds, in the words a person reads - never a second list.
+
+    This stays document-only on purpose: it is what `jarvis_attached_file`
+    reads, and the chat attachment reader's list must not grow a picture.
+    [PHOTO_EXTENSIONS] is this door's own storage allowlist, asked by
+    [_landing_kinds] beside it.
+    """
     return dict(attached.KINDS) if attached is not None else {}
+
+
+def _landing_kinds() -> dict:
+    """Every extension this door may STORE: the eight documents plus the eight photos."""
+    kinds = _kinds()
+    kinds.update({ext: "photo" for ext in PHOTO_EXTENSIONS})
+    return kinds
+
+
+def _is_photo(name) -> bool:
+    """Is this file a picture by its extension? Storage decisions only."""
+    return _ext(name) in PHOTO_EXTENSIONS
 
 
 def _ext(name: str) -> str:
@@ -578,6 +625,12 @@ def card(name: str, size: int, folder: str, purpose: str = "document") -> str:
             "",
             "If you say no: nothing is kept.",
         ])
+    how = ("It is a photo, so it is saved exactly as it is: Jarvis does not open it, read "
+           "words from it or show it to a model on this path (only its first few bytes are "
+           "checked, to be sure it really is a picture), and nothing in it is saved as a "
+           "fact about you." if _is_photo(name) else
+           "It is never opened, run or sent anywhere while it is being saved, and the words "
+           "in it count as outside text: they are never saved as a fact about you.")
     return "\n".join([
         "Let Jarvis save this file from your phone?",
         "",
@@ -587,8 +640,7 @@ def card(name: str, size: int, folder: str, purpose: str = "document") -> str:
         "",
         CARD_HOW.format(sub=SUB, folder=folder_name),
         "",
-        "It is never opened, run or sent anywhere while it is being saved, and the words "
-        "in it count as outside text: they are never saved as a fact about you.",
+        how,
         "",
         "If you did not just send this from your phone, say no.",
         "",
@@ -689,7 +741,10 @@ def request_begin(body, *, gate: Optional[Callable] = None,
         return 400, {"ok": False, "said": _sentence(exc), "reason": str(exc)}
     ext = _ext(name)
     if purpose == "document":
-        if ext not in _kinds():
+        # The eight document kinds AND the eight photo kinds (a photo is a
+        # plain file copy; see PHOTO_EXTENSIONS). This is the door's storage
+        # allowlist, not `jarvis_attached_file.KINDS`.
+        if ext not in _landing_kinds():
             return 400, {"ok": False, "said": KIND_BAD, "reason": "kind"}
     elif ext != ".zip":
         return 400, {"ok": False, "said": NOTION_KIND_BAD, "reason": "notion needs .zip"}
@@ -866,9 +921,48 @@ def _bytes_of(data) -> tuple:
 #   finish - the only moment a file becomes real
 # --------------------------------------------------------------------------
 
+#: The ISO base-media brands a `.heic`/`.heif` may carry in its `ftyp` box.
+#: The brands Apple and Android cameras write, plus the generic HEIF ones.
+HEIF_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1")
+
+
+def _photo_problem(path: str, ext: str) -> str:
+    """'' when the bytes on disk really are the picture the name claims.
+
+    A HEADER check and nothing more: it reads at most 64 bytes, never decodes
+    the image, never runs OCR and never hands the bytes to a model. It exists
+    for the same reason `_magic_problem` does - a `.png` that is really a
+    program must be refused rather than stored under a picture's name.
+    """
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(64)
+    except OSError:
+        return COULD_NOT_SAVE
+    if ext in (".jpg", ".jpeg"):
+        ok = head.startswith(b"\xff\xd8\xff")
+    elif ext == ".png":
+        ok = head.startswith(b"\x89PNG\r\n\x1a\n")
+    elif ext == ".gif":
+        ok = head.startswith((b"GIF87a", b"GIF89a"))
+    elif ext == ".bmp":
+        ok = head.startswith(b"BM")
+    elif ext == ".webp":
+        ok = len(head) >= 12 and head.startswith(b"RIFF") and head[8:12] == b"WEBP"
+    else:                                    # .heic/.heif: an ISO base-media file
+        ok = len(head) >= 12 and head[4:8] == b"ftyp" and head[8:12] in HEIF_BRANDS
+    if not ok:
+        return NOT_WHAT_NAME.format(kind="a photo")
+    return ""
+
+
 def _magic_problem(path: str, ext: str) -> str:
     """'' when the bytes on disk are what the name claims, else a sentence."""
-    kind = _kinds().get(ext, "that file")
+    kind = _landing_kinds().get(ext, "that file")
+    if ext in PHOTO_EXTENSIONS:
+        # A photo is stored and never read. Its header check is the whole of
+        # this door's inspection - no decoder, no OCR, no model.
+        return _photo_problem(path, ext)
     try:
         if ext == ".pdf":
             with open(path, "rb") as fh:

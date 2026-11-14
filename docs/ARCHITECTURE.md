@@ -487,9 +487,24 @@ frame", the owner's decision of 2026-09-28; `jarvis_forget_range.py`,
 docs/JARVIS-API.md §64). The one place a single card forgets and deletes
 many things at once - and it keeps the four steps: `preview()` lists every
 fact and chat from the chosen days (touching nothing), the apps show each
-one ticked and the owner unticks any to keep; `card_text()` lists EVERY
-item still ticked in full - each fact word for word, each chat's title and
-dates; the gate asks once (action `memory_forget_range`, tier `ask` only,
+one ticked and the owner unticks any to keep; `card_text()` carries the
+COUNT of facts and chats and the date range ("3 facts and 125 chats from 2
+to 8 November 2026"), the facts' own words while they fit, the pinned chats
+kept and the estimate - every chat's title and date stays on that checked
+list, one click away. **That is the owner's ruling of 2026-11-13, "Show the
+count, allow it", and it overrules the older rule that the CARD had to list
+every item in full** (which this section said until then): the reason is
+measured, not stylistic - `jarvis_gate` keeps a card's detail as
+`json.dumps(detail)[:4000]`, so a card listing every chat reached the HUD
+cut off mid-JSON with Approve disabled, and the owner's own 125-chat range
+was 4,000 characters of invalid JSON that expired un-approvable (125 chats
+measured 14,546 characters; 25 fitted at 3,918). The full list was never
+the thing that made the decision - the checked list is, and it is
+unchanged. A card that would STILL be cut is refused before it is raised,
+with a plain sentence, by the same rule the model tool path uses
+(`jarvis_agent._card_would_be_cut`, imported from its owner - never a
+copy); the gate's 4,000 cap and the HUD's cut-off rule are untouched. The
+gate asks once (action `memory_forget_range`, tier `ask` only,
 never loosened; risky, so Windows Hello or the phone's lock); `apply()`
 runs only on a person's "approved", and only on ids re-checked against the
 days. A spoken "yes" approves nothing. Undo (10 minutes, no card) only
@@ -4405,7 +4420,7 @@ are deliberate and recorded rather than left to be discovered:
 | The Jarvis Live Quick Settings tile, the headset button in Live, and the 10-minute "Live ended - Resume" notification (the Jarvis Live extras), 2026-09-28 | Phone things: a tile lives in Android's pulled-down shade, a headset button reaches a phone's media session, and a notification is how a phone in a pocket offers Resume. The PC has the tray row and the Live hotkey (the desktop table) and its badge shows "Resume Live" for 15 seconds, in the Jarvis bar until the 10 minutes are up. |
 | Preferring a Bluetooth headset's microphone in Live, and saying which microphone is in use (the Jarvis Live extras), 2026-09-28 | On the phone Jarvis picks the microphone (Android's communication device; no Bluetooth permission). On the PC Windows picks it - Live opens the default microphone, both the plain and the echo-cancelled way (`aec.rs`) - so a Bluetooth headset is used when Windows makes it the default, and the Voice settings already say which microphone that is. Choosing a different microphone on the PC is a larger change to both capture paths, not made here. |
 | "Talk about this in Live" in Android's Share sheet (the Jarvis Live extras), 2026-09-28 | A Share sheet is Android's. The text is outside text exactly as a share to Home is (`provenance: "shared"`, JARVIS-API §18); the PC's quickbar already takes clipboard text with its own "clipboard" tag, in Live as anywhere. |
-| **Sending a document from the phone, and bringing a Notion export in from the phone** (`POST /api/upload/begin` / `/chunk` / `/finish`, `GET /api/notion/vaults`, `POST /api/notion/phone-import`; the owner's ask of 2026-11-05; `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`; `phone-only` in `tools/check_parity.py`) | Written with the phone's half. **The desktop needs no upload screen**: a file already goes into a folder Jarvis looks in with Windows' own copy or drag-and-drop, and the PC's Notion import is its Windows picker plus the two path-taking routes (`/api/notion/preview`, `/api/notion/import`), which stay PC-only and unchanged. The phone has no way to name a path on the PC, so its document door takes a folder path ONLY as `GET /api/folders` returned it (never free text) and its Notion door takes an uploaded `.zip` id plus a vault id the PC offered - it cannot create a grant and cannot type a vault. The PC's ONE card is unchanged in either case (`receive_uploaded_document` for a document, `import_notion_export` for a Notion import): nothing lands before the owner says yes, and both phone buttons are held on a stale link. Nothing is kept on the phone (the file is streamed in 1 MiB chunks and dropped), and a PC without the routes answers 404, which the screen says in its own words and sends nothing for. A desktop screen on the two new no-path routes is a named follow-up, not a rule for the phone to wait for. **The feature list says `both` apps for both abilities, and that is not a contradiction of this row (2026-11-06):** the phone's half is the two buttons above; on the PC the same ability is reached the way it always was - copy a file into a listed folder, and the Notion plugin's own preview and import - so no PC screen is promised and none is missing. `features/features.json` rows `document-from-phone` and `notion-import` carry `surface: "both"`, and this sentence is the record that a person checked that claim: the catalogue checker can only check a `surface`'s shape, not its truth. |
+| **Sending a document (or, since 2026-11-13, a photo as a plain file copy) from the phone, and bringing a Notion export in from the phone** (`POST /api/upload/begin` / `/chunk` / `/finish`, `GET /api/notion/vaults`, `POST /api/notion/phone-import`; the owner's ask of 2026-11-05; `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`; `phone-only` in `tools/check_parity.py`) | Written with the phone's half. **The desktop needs no upload screen**: a file already goes into a folder Jarvis looks in with Windows' own copy or drag-and-drop, and the PC's Notion import is its Windows picker plus the two path-taking routes (`/api/notion/preview`, `/api/notion/import`), which stay PC-only and unchanged. The phone has no way to name a path on the PC, so its document door takes a folder path ONLY as `GET /api/folders` returned it (never free text) and its Notion door takes an uploaded `.zip` id plus a vault id the PC offered - it cannot create a grant and cannot type a vault. The PC's ONE card is unchanged in either case (`receive_uploaded_document` for a document, `import_notion_export` for a Notion import): nothing lands before the owner says yes, and both phone buttons are held on a stale link. Nothing is kept on the phone (the file is streamed in 1 MiB chunks and dropped), and a PC without the routes answers 404, which the screen says in its own words and sends nothing for. A desktop screen on the two new no-path routes is a named follow-up, not a rule for the phone to wait for. **The feature list says `both` apps for both abilities, and that is not a contradiction of this row (2026-11-06):** the phone's half is the two buttons above; on the PC the same ability is reached the way it always was - copy a file into a listed folder, and the Notion plugin's own preview and import - so no PC screen is promised and none is missing. `features/features.json` rows `document-from-phone` and `notion-import` carry `surface: "both"`, and this sentence is the record that a person checked that claim: the catalogue checker can only check a `surface`'s shape, not its truth. |
 
 **The fading-card radar and the "Mark my answer" button were phone-only in
 slice 22B (2026-10-17) and are on BOTH apps since 2026-10-21.** The two PC
@@ -5196,7 +5211,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **The phone's own settings backup and the checksum-pinned update manifest
   are the phone's, and that is one-sided on purpose** (2026-11-13, the
-  owner-approved copy-over wave; `docs/JARVIS-API.md` section 220;
+  owner-approved copy-over wave; `docs/JARVIS-API.md` section 222;
   `COPY-OVER-SPEC-2026-11-13.md` sections A1-A2). **Backup:** Settings ->
   "Phone settings backup" seals THIS PHONE'S OWN settings - the face and
   colours, the menus shown, the voice and display switches, which apps Jarvis
@@ -5259,18 +5274,20 @@ what is missing is only the Settings screen agreeing about who turned it off.
   2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B Q4_K_M
   each produced a real reply to `Hello, who are you?`, at 27.1, 13.8 and
   7.7 tokens/s as shown on the screen and matched by the engine's own
-  `generated N token(s) in M ms` line, and the 3B model was accepted by the
-  RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The in-app
-  **Import** (SAF picker) was not exercised - the models were `adb push`ed -
-  so that row is NOT-TESTED, not PASS. Screenshots are black because the
-  activity sets `FLAG_SECURE`, which is correct, so the evidence is
-  uiautomator XML and logcat. Two usability defects the test found are fixed
-  in the same pull request: the composer (draft, Send, Clear) is pinned above
-  the keyboard inset instead of being a list item the keyboard clipped out of
-  the accessibility tree, and the draft gained a Clear action.
-  `features/features.json` stays unchanged until a feature row is measured on
-  the real screen; `tools/check_parity.py` has nothing to classify because no
-  route is added.
+  `generated N token(s) in M ms` line; with the keyboard up, two further sends
+  measured 34.5 and 34.3 tokens/s on the same screen. The 3B model was accepted
+  by the RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The
+  in-app **Import** (SAF picker) was not exercised - the models were `adb
+  push`ed - so that row is NOT-TESTED, not PASS. Screenshots are black because
+  the activity sets `FLAG_SECURE`, which is correct, so the evidence is
+  uiautomator XML and logcat, and a screenshot row stays BLOCKED rather than
+  PASS. Two usability defects the test found are fixed in the same pull
+  request: the composer (draft, Send, Clear) is pinned above the keyboard inset
+  instead of being a list item the keyboard clipped out of the accessibility
+  tree, and the draft gained a Clear action. `features/features.json` is
+  unchanged in this pull request - the screen has now been measured, but the
+  measurement lives in this paragraph, not in that list; `tools/check_parity.py`
+  has nothing to classify because no route is added.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

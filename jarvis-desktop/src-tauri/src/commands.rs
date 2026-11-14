@@ -110,6 +110,13 @@ pub struct ServiceStatus {
     pub url: String,
     /// True when the service answered with a 2xx.
     pub online: bool,
+    /// What the backend's own `ollama` field said, when this row is the model
+    /// row built by [`ollama_status`]: `Some(true)`/`Some(false)` are measured
+    /// values, and `None` means the backend did not report it - an older
+    /// backend, never "the model is down". Every probed row leaves it `None`.
+    /// [`summarise_health`] reads it so an unmeasured model is never summarised
+    /// as fine, and the same cached value travels to the windows in the report.
+    pub model_online: Option<bool>,
     /// HTTP status code, when the connection succeeded at all.
     pub http_status: Option<u16>,
     /// Round-trip time in milliseconds.
@@ -134,7 +141,9 @@ pub struct ServiceStatus {
 pub struct HealthReport {
     /// Milliseconds since the Unix epoch.
     pub checked_at: u128,
-    /// True when every probed service answered.
+    /// True only when every counted service answered AND the backend's own
+    /// field measured its model server as up. `false` when that field is
+    /// missing: "not measured" is not "all online".
     pub all_online: bool,
     pub online_count: usize,
     pub total_count: usize,
@@ -1671,6 +1680,7 @@ async fn probe(
                 name,
                 url,
                 online: status.is_success(),
+                model_online: None,
                 http_status: Some(status.as_u16()),
                 latency_ms,
                 detail: if status.is_success() {
@@ -1695,6 +1705,7 @@ async fn probe(
                 name,
                 url,
                 online: false,
+                model_online: None,
                 http_status: None,
                 latency_ms: started.elapsed().as_millis(),
                 detail,
@@ -1793,7 +1804,7 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
     let (online_count, total_count, summary) = summarise_health(&services);
     Ok(HealthReport {
         checked_at: now_ms(),
-        all_online: online_count == total_count,
+        all_online: all_measured_online(online_count, total_count, ollama_field),
         online_count,
         total_count,
         summary,
@@ -1833,6 +1844,7 @@ fn ollama_status(field: Option<bool>, latency_ms: u128) -> ServiceStatus {
         name: "Ollama",
         url: "/api/status (the backend's own check)".to_string(),
         online,
+        model_online: field,
         http_status: None,
         latency_ms,
         detail,
@@ -1989,10 +2001,40 @@ pub async fn set_model_lane_auto(app: AppHandle, on: bool) -> Result<serde_json:
     Err(server_sentence(status.as_u16(), PATH, &detail))
 }
 
-/// The counts and the one-line summary. An optional service (the cloud
-/// escalation lane) is counted only when it answers; when it does not, the
-/// summary says so in a separate, calm sentence instead of listing it as
-/// offline.
+/// Whether a report may say everything is well: every counted service
+/// answered, AND the backend's own field measured its model server as up.
+///
+/// `None` is an older backend that never reported the field, and "not
+/// measured" is not "all online" - so it is `false`, exactly like a model the
+/// backend named as down. [`HealthReport::all_online`] is the only caller.
+pub(crate) fn all_measured_online(
+    online_count: usize,
+    total_count: usize,
+    model: Option<bool>,
+) -> bool {
+    online_count == total_count && model == Some(true)
+}
+
+/// The counts and the one-line summary.
+///
+/// **"All N services online" is gone (2026-11-13).** The count came from
+/// probes that only prove something answered, and the model row counted as
+/// online whenever the backend said nothing - so a PC whose model server was
+/// down, or never measured, could read as every service healthy. That is the
+/// owner's own complaint, in his words: "3 of 3 services are running but
+/// jarvis is still not replying properly". The summary now says only what was
+/// measured: that Jarvis answered, and what the backend's own `ollama` field
+/// said about its model server - answering, not answering, or not reported.
+///
+/// Nothing here asks anything. The model verdict rides on the row as
+/// [`ServiceStatus::model_online`], filled by [`ollama_status`] from the
+/// `/api/status` body [`check_server_health`] already fetched - one cached
+/// reading of a value the app already polls, never a second request and never
+/// a model generation.
+///
+/// An optional service (the cloud escalation lane) is counted only when it
+/// answers; when it does not, the summary says so in a separate, calm sentence
+/// instead of listing it as offline.
 pub(crate) fn summarise_health(services: &[ServiceStatus]) -> (usize, usize, String) {
     let counted: Vec<&ServiceStatus> = services
         .iter()
@@ -2005,13 +2047,42 @@ pub(crate) fn summarise_health(services: &[ServiceStatus]) -> (usize, usize, Str
         .filter(|s| !s.online)
         .map(|s| s.name)
         .collect();
-    let mut summary = if offline.is_empty() {
-        format!("All {total_count} services online.")
-    } else {
-        format!(
+
+    // The model row is the only service this shell does not probe itself: its
+    // verdict is the backend's own field, so it has three readings, not two.
+    let model = services.iter().find(|s| s.id == "ollama");
+    let core_answered = services
+        .iter()
+        .find(|s| s.id == "jarvis")
+        .is_some_and(|s| s.online);
+
+    let mut summary = match model {
+        // The backend answered and named its own model server as down. Plain
+        // words and no count: the PC is fine while the thing that answers is
+        // not, and "all services online" is exactly the sentence that hid it.
+        Some(row) if core_answered && row.model_online == Some(false) => {
+            "Jarvis is reachable, the model server is not answering.".to_string()
+        }
+        // An older backend answered without the field. It never said the model
+        // was fine, so this must not be summarised as fine.
+        Some(row) if core_answered && row.model_online.is_none() => {
+            "Jarvis is reachable; the model server's state is unknown (this PC's \
+             backend does not report it)."
+                .to_string()
+        }
+        // Every counted service answered, and the model was measured as up -
+        // or this report has no model row to judge.
+        _ if offline.is_empty() => {
+            if core_answered && model.is_some() {
+                "Jarvis is reachable and the model server is answering.".to_string()
+            } else {
+                "Every service this check asked answered.".to_string()
+            }
+        }
+        _ => format!(
             "{online_count}/{total_count} online — offline: {}",
             offline.join(", ")
-        )
+        ),
     };
     for s in services.iter().filter(|s| s.optional && !s.online) {
         summary.push_str(&format!(
@@ -7204,7 +7275,7 @@ pub fn quit_app(app: AppHandle) {
 
 #[cfg(test)]
 mod health_tests {
-    use super::{ollama_status, summarise_health, ServiceStatus};
+    use super::{all_measured_online, ollama_status, summarise_health, ServiceStatus};
 
     fn svc(id: &'static str, name: &'static str, online: bool, optional: bool) -> ServiceStatus {
         ServiceStatus {
@@ -7212,12 +7283,22 @@ mod health_tests {
             name,
             url: String::new(),
             online,
+            model_online: None,
             http_status: None,
             latency_ms: 0,
             detail: String::new(),
             payload: None,
             optional,
         }
+    }
+
+    /// The model row, as [`ollama_status`] builds it: the backend's own field,
+    /// not a probe of this shell's. `None` counts as answering (nothing said
+    /// the model is down) but is not a measurement that it is up.
+    fn model_row(state: Option<bool>) -> ServiceStatus {
+        let mut row = svc("ollama", "Ollama", state != Some(false), false);
+        row.model_online = state;
+        row
     }
 
     /// The everyday state: no cloud lane set up. The backend still answers the
@@ -7227,11 +7308,14 @@ mod health_tests {
     fn a_cloud_lane_that_is_not_set_up_is_not_an_outage() {
         let (online, total, summary) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
-            svc("ollama", "Ollama", true, false),
+            model_row(Some(true)),
             svc("cloud_lane", "Cloud model", false, true),
         ]);
         assert_eq!((online, total), (2, 2));
-        assert!(summary.starts_with("All 2 services online."), "{summary}");
+        assert!(
+            summary.starts_with("Jarvis is reachable and the model server is answering."),
+            "{summary}"
+        );
         assert!(!summary.contains("offline"), "{summary}");
         assert!(summary.contains("Cloud model is not running"), "{summary}");
     }
@@ -7241,22 +7325,77 @@ mod health_tests {
     fn a_cloud_lane_that_answers_is_counted() {
         let (online, total, _) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
-            svc("ollama", "Ollama", true, false),
+            model_row(Some(true)),
             svc("cloud_lane", "Cloud model", true, true),
         ]);
         assert_eq!((online, total), (3, 3));
     }
 
-    /// CONTROL: a required service being down is still reported as down.
+    /// The owner's complaint, as a control: when the backend knows its model
+    /// server is down, the tray says so in plain words and still counts it as
+    /// an outage - it never falls back to "all services online".
     #[test]
-    fn ollama_down_is_still_an_outage() {
+    fn a_model_server_that_is_down_is_an_outage_in_plain_words() {
         let (online, total, summary) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
-            svc("ollama", "Ollama", false, false),
+            model_row(Some(false)),
             svc("cloud_lane", "Cloud model", false, true),
         ]);
         assert_eq!((online, total), (1, 2));
-        assert!(summary.contains("offline: Ollama"), "{summary}");
+        assert!(
+            summary.contains("Jarvis is reachable, the model server is not answering."),
+            "{summary}"
+        );
+        assert!(!summary.contains("services online"), "{summary}");
+    }
+
+    /// An older backend answers `/api/status` without the `ollama` field. It
+    /// never said the model is fine, so the summary must not either - this is
+    /// the exact overclaim the old "All N services online" made.
+    #[test]
+    fn an_unreported_model_is_unknown_and_never_fine() {
+        let (online, total, summary) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            model_row(None),
+            svc("cloud_lane", "Cloud model", false, true),
+        ]);
+        // Unknown still counts as answering, because nothing said it is down.
+        // The counts are unchanged; only the sentence is allowed to say less.
+        assert_eq!((online, total), (2, 2));
+        assert!(summary.contains("unknown"), "{summary}");
+        assert!(!summary.contains("is answering"), "{summary}");
+        assert!(!summary.contains("services online"), "{summary}");
+    }
+
+    /// CONTROL: no reading of the model produces the old claim, because it was
+    /// never what the probes measured.
+    #[test]
+    fn no_summary_claims_all_services_online() {
+        for state in [Some(true), Some(false), None] {
+            let (_, _, summary) = summarise_health(&[
+                svc("jarvis", "Jarvis Core", true, false),
+                model_row(state),
+                svc("cloud_lane", "Cloud model", false, true),
+            ]);
+            assert!(
+                !summary.to_lowercase().contains("services online"),
+                "model {state:?}: {summary}"
+            );
+            assert!(!summary.starts_with("All "), "model {state:?}: {summary}");
+        }
+    }
+
+    /// "All online" needs a measured model. An older backend that does not
+    /// report the field is unknown, not well.
+    #[test]
+    fn all_online_needs_a_measured_model() {
+        assert!(all_measured_online(2, 2, Some(true)));
+        assert!(!all_measured_online(2, 2, Some(false)));
+        assert!(
+            !all_measured_online(2, 2, None),
+            "an unmeasured model is not all-online"
+        );
+        assert!(!all_measured_online(1, 2, Some(true)));
     }
 
     /// The owner's own backend field, all three readings of it.
@@ -7264,15 +7403,18 @@ mod health_tests {
     /// This is the fix for 2026-10-13 in one place: the app's idea of "the
     /// model is running" now comes from the field the backend sets by asking
     /// the lane the model is really on, not from this shell's own probe of
-    /// 11434 (his everyday lane is 11436).
+    /// 11434 (his everyday lane is 11436). It is also the value the summary
+    /// carries as `model_online`, which is what makes "unknown" sayable.
     #[test]
     fn the_model_row_follows_the_backends_own_field() {
         let up = ollama_status(Some(true), 12);
         assert!(up.online, "{up:?}");
+        assert_eq!(up.model_online, Some(true), "{up:?}");
         assert!(up.detail.contains("online"), "{}", up.detail);
 
         let down = ollama_status(Some(false), 12);
         assert!(!down.online, "{down:?}");
+        assert_eq!(down.model_online, Some(false), "{down:?}");
         assert!(down.detail.contains("not running"), "{}", down.detail);
         // And it says WHICH of the two things is wrong: the PC answered.
         assert!(
@@ -7282,9 +7424,11 @@ mod health_tests {
         );
 
         // An older backend with no such field: unknown, counted as answering.
-        // Drawing "the model is down" from a field nobody sent is inventing it.
+        // Drawing "the model is down" from a field nobody sent is inventing it,
+        // and drawing "all services online" from it is inventing the other half.
         let unknown = ollama_status(None, 12);
         assert!(unknown.online, "{unknown:?}");
+        assert_eq!(unknown.model_online, None, "{unknown:?}");
         assert!(unknown.detail.contains("unknown"), "{}", unknown.detail);
     }
 

@@ -746,11 +746,13 @@ class MainActivity : FragmentActivity() {
     }
 
     // ------------------------------------- phone upload (2026-11-05) ---------
-    // Two doors on Settings' Folders row: "Send a document" and "Bring in a
-    // Notion export". Both use the same `OpenDocument()` picker as the attach
-    // row (no storage permission: the owner chooses one file, and the app may
-    // read that one, twice - once to measure it, once to send it). Neither
-    // reads the file into memory: `JarvisRuntime` streams it in 1 MiB chunks.
+    // Two doors on Settings' Folders row: "Send a document or a photo" and
+    // "Bring in a Notion export". Both use the same `OpenDocument()` picker as
+    // the attach row (no storage permission: the owner chooses one file, and
+    // the app may read that one, twice - once to measure it, once to send it).
+    // Neither reads the file into memory: `JarvisRuntime` streams it in 1 MiB
+    // chunks. A photo takes this door as a plain file copy (2026-11-13) and
+    // never the chat picture path.
 
     /** The listed folder the next picked document goes into, or null. */
     private val sendDocumentInto = mutableStateOf<String?>(null)
@@ -759,9 +761,16 @@ class MainActivity : FragmentActivity() {
     private val notionVaultId = mutableStateOf<String?>(null)
 
     /**
-     * "Send a document": the eight kinds `my_files` already reads
-     * ([AttachFile.MIME_TYPES] - never a picture here). The folder was chosen
-     * one tap earlier, from the PC's own list.
+     * "Send a document or a photo": the eight kinds `my_files` already reads
+     * plus the eight photo kinds, as PLAIN FILE COPIES
+     * ([AttachFile.SEND_FILE_MIME_TYPES] - never the chat picture path). The
+     * folder was chosen one tap earlier, from the PC's own list.
+     *
+     * A photo picked here is NOT routed to [AttachFile.goesToPicture] or
+     * [ChatPicture]: the PC saves its bytes as a file and no model sees them
+     * on this path (2026-11-13, the owner's report that Jarvis denied being
+     * able to send a photo to the PC at all). Nothing needs the Pictures
+     * feature for this door, because nothing reads the image.
      *
      * The provider's name, size and type are read first, and the pick is
      * refused in plain words BEFORE a byte leaves the phone ([Upload.refusal]);
@@ -1287,6 +1296,11 @@ class MainActivity : FragmentActivity() {
         val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
+        // "Stop speaking when I press the mic" - this phone's own switch, ON by
+        // default (the owner's ask of 2026-11-13). Its row is drawn just below
+        // "Interrupting Jarvis", which is the other way a reply gets cut short
+        // (voice.MicBargeIn says which is which).
+        val micBargeInOn by JarvisRuntime.settings.micBargeIn.collectAsState()
         // The owner's own setting of 2026-11-05, this phone's and off by
         // default: may a mic-press question on an unlocked phone read out an
         // answer that uses what Jarvis remembers? (voice.MemoryAloud.)
@@ -1384,6 +1398,12 @@ class MainActivity : FragmentActivity() {
             // And whether the "I heard you" sound plays.
             heardSound = heardSoundOn,
             onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
+            // The owner's 2026-11-13 switch: while Jarvis is speaking, a press
+            // of the microphone stops the reply and starts listening. ON by
+            // default, and this phone's alone - the words still go to the PC's
+            // own voice route exactly as before.
+            micBargeIn = micBargeInOn,
+            onMicBargeIn = { on -> JarvisRuntime.settings.setMicBargeIn(on) },
             // The owner's 2026-11-05 setting: read out an answer that uses
             // what Jarvis remembers, on this phone's own mic press, while it
             // was unlocked. Off by default and this phone's alone - nothing
@@ -1973,6 +1993,12 @@ class MainActivity : FragmentActivity() {
         val voiceStrict by voice.strict.collectAsState()
         val transcript by voice.transcript.collectAsState()
         val voiceNotice by voice.notice.collectAsState()
+        // "Stop speaking when I press the mic" (voice/MicBargeIn): this phone's
+        // own switch, ON by default (the owner's ask of 2026-11-13). With it on
+        // and a reply being spoken, the microphone stays usable while the
+        // answer streams, because the press stops the speech instead of waiting
+        // for it (HomeState.micPressStopsSpeech).
+        val micBargeInOn by JarvisRuntime.settings.micBargeIn.collectAsState()
         // Held as State and read only inside drawBehind — a microphone
         // delivers ~50 levels a second and this must not recompose anything.
         val micLevelState = voice.micLevel.collectAsState()
@@ -4114,16 +4140,18 @@ class MainActivity : FragmentActivity() {
                         // class as the theme. A phone with no desktop still has
                         // a Home screen to arrange.
                         onOpenEditHud = { nav.go(Screen.EDIT_HUD) },
-                        // "Send a document" and "Bring in a Notion export", on
-                        // the Folders row (the owner's ask of 2026-11-05). The
-                        // folder, or the vault, was chosen on that row one tap
-                        // earlier from the PC's own lists; these only open the
-                        // system picker and hand the URI's stream to the
-                        // runtime. Nothing is copied, and a pick that is the
-                        // wrong kind or too big is refused before a byte is read.
+                        // "Send a document or a photo" and "Bring in a Notion
+                        // export", on the Folders row (the owner's ask of
+                        // 2026-11-05; photos joined the first door on
+                        // 2026-11-13 as plain file copies). The folder, or the
+                        // vault, was chosen on that row one tap earlier from
+                        // the PC's own lists; these only open the system picker
+                        // and hand the URI's stream to the runtime. Nothing is
+                        // copied, and a pick that is the wrong kind or too big
+                        // is refused before a byte is read.
                         onSendDocument = { path ->
                             sendDocumentInto.value = path
-                            pickSendDocument.launch(AttachFile.MIME_TYPES)
+                            pickSendDocument.launch(AttachFile.SEND_FILE_MIME_TYPES)
                         },
                         onPickNotionZip = { vault ->
                             notionVaultId.value = vault
@@ -4335,6 +4363,7 @@ class MainActivity : FragmentActivity() {
                             face = face,
                             bindings = bindings,
                             voicePhase = voicePhase,
+                            micBargeIn = micBargeInOn,
                             voiceOffered = voiceStatus.canPushToTalk,
                             // Read here rather than in HomeScreen so the one
                             // reader of the permission is the recorder itself.

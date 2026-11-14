@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -14,6 +15,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -45,7 +47,13 @@ class LocalAiControllerTest {
         val root = File(temporary.root, "models")
         val store = ModelStore(root, freeSpace = { 10L * 1024 * 1024 * 1024 }, minFreeBytes = 0L)
         for (name in names) {
-            val source = if (name == "too-big.gguf") fixture("too-big.gguf") else fixture()
+            val source = when (name) {
+                "too-big.gguf" -> fixture("too-big.gguf")
+                // A real fixture whose header cannot be read: its verdict is
+                // Unknown with fits = false, not TooBig.
+                "bad-magic.gguf" -> fixture("bad-magic.gguf")
+                else -> fixture()
+            }
             val result = store.import(name, source.size.toLong(), ByteArrayInputStream(source))
             check(result is ModelStore.ImportResult.Ok) { "could not place $name: $result" }
         }
@@ -235,6 +243,43 @@ class LocalAiControllerTest {
     }
 
     @Test
+    fun aModelWhoseHeaderCannotBeReadIsRefusedTooEvenThoughItIsNotTooBig() = runBlocking {
+        val engine = FakeLocalEngine()
+        val controller = controller(engine = engine, store = storeWith("bad-magic.gguf"))
+        try {
+            controller.setSwitch(true)
+            val model = controller.state.value.models.single()
+            assertTrue(
+                "the fixture must be an unreadable header, not a too-big size",
+                model.verdict is DeviceTiers.ModelVerdict.Unknown,
+            )
+            assertFalse("an unreadable header does not fit", model.verdict.fits)
+
+            controller.load("bad-magic.gguf")
+
+            assertEquals("no engine may be created for a refused model", 0, engine.createCalls)
+            assertEquals("nothing may be loaded", 0, engine.loadCalls)
+            assertNull(controller.state.value.loadedModel)
+            assertEquals(EngineState.OFF, controller.state.value.engine)
+            val notice = requireNotNull(controller.state.value.notice)
+            assertTrue(
+                "the notice must say the header could not be read, was: $notice",
+                notice.contains("could not read"),
+            )
+            assertTrue(
+                "the too-big sentence would be wrong for an unreadable header, was: $notice",
+                !notice.contains(LocalAiWords.TOO_BIG_ACTION),
+            )
+            assertTrue(
+                "the notice must carry the unreadable-header action, was: $notice",
+                notice.contains(LocalAiWords.UNREADABLE_ACTION),
+            )
+        } finally {
+            controller.close()
+        }
+    }
+
+    @Test
     fun aMissingLibraryLeavesTheScreenOnAndSaysWhy() = runBlocking {
         val engine = FakeLocalEngine(failCreate = "No on-device engine in this build.")
         val controller = controller(engine = engine)
@@ -383,8 +428,33 @@ class LocalAiControllerTest {
         controller.setSwitch(true)
         controller.load("small.gguf")
         controller.close()
+        // The free is handed to the engine dispatcher now, so wait for it
+        // rather than reading the counter on the caller's thread.
+        assertTrue("leaving the screen must still free the model", engine.destroyed.await(2, TimeUnit.SECONDS))
         assertEquals(1, engine.destroyCalls)
         assertEquals(EngineState.OFF, controller.state.value.engine)
+    }
+
+    @Test
+    fun theModelIsFreedOffTheThreadThatCalledClose() = runBlocking {
+        // `close()` runs in `onDispose` on the Compose main thread. Freeing a
+        // loaded multi-gigabyte model there would stall that frame, so the
+        // handle must really be destroyed on the controller's own dispatcher.
+        val engine = FakeLocalEngine()
+        val controller = controller(engine = engine)
+        controller.setSwitch(true)
+        controller.load("small.gguf")
+        val caller = Thread.currentThread()
+
+        controller.close()
+
+        assertTrue("the model must still be freed", engine.destroyed.await(2, TimeUnit.SECONDS))
+        assertEquals(1, engine.destroyCalls)
+        assertNotSame(
+            "freeing the model must not run on the caller's thread",
+            caller,
+            engine.destroyThread,
+        )
     }
 
     @Test
@@ -484,6 +554,7 @@ class LocalAiControllerTest {
         controller.close()
         assertEquals("the handle must not be destroyed underneath the load", 0, engine.destroyCalls)
         loading.join()
+        assertTrue("the deferred free must still happen", engine.destroyed.await(2, TimeUnit.SECONDS))
         assertEquals(1, engine.destroyCalls)
         assertEquals(EngineState.OFF, controller.state.value.engine)
         assertNull(controller.state.value.loadedModel)
