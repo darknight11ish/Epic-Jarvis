@@ -99,6 +99,83 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   Board mode (2026-11-14; widget.js applyFaceVisibility, board.css)
+
+   While a DESCRIBED WIDGET is drawn, the window's own coloured backdrop gives
+   way, so the widget's own shade is what the owner sees over his desktop.
+   Without this, "See-through" is a setting that looks applied and is not: the
+   card's 50% sits on this shell's 86% and composites to 93%, which is what
+   `tests/widget-board.mjs` measures now.
+
+   What goes is the FILL and nothing else. The border, the radius and the
+   shadow stay; the compact bar keeps the colour it has today; the shell's 4%
+   sheen wash stays too, because it is a wash painted behind the card rather
+   than a fill; and every row that is not the widget keeps the tray's own tint
+   and gradient through `.tray-solid`, so the meters, the approval card and the
+   notes rows read exactly as they do in face mode.
+
+   The class is only on while the tray is OPEN with a widget drawn, so the
+   face, an approval, a message and the collapsed pill are untouched: they
+   never carry it, and this block is the only thing that reads it.
+   -------------------------------------------------------------------------- */
+
+.widget-shell.board-mode {
+  background-color: transparent;
+}
+
+.widget-shell.board-mode .widget-bar {
+  background: var(--bg);
+}
+
+.widget-shell.board-mode .widget-tray {
+  background: none;
+}
+
+/* The picker row travels with the card, so it gives way with it; it keeps the
+   window's own colour as a band, and reaches over the tray's own top and side
+   padding, or those 9px and 12px would show the desktop as bright stripes
+   beside it. The padding is given back, so the row's words and the select sit
+   exactly where they sit in every other state.
+
+   It is lifted above the card's frame shadow (below) on purpose: that shadow
+   reaches 12px up, and two 86% fills stacked would paint a 98% strip across
+   the row's bottom edge instead of the one fill the rest of the band has. */
+.widget-shell.board-mode .board-pick-row {
+  position: relative;
+  z-index: 1;
+  margin: -9px -12px 0;
+  padding: 9px 12px 0;
+  background: var(--bg);
+}
+
+/* The tray's 12px gutter around the card, and the 6px gap under the picker
+   row. A spread shadow paints OUTSIDE the box and never inside it, which is
+   the one thing that can tint the frame without tinting the widget: the card's
+   own rounded rectangle stays the only see-through part of the window. */
+.widget-shell.board-mode .board-blocks {
+  box-shadow: 0 0 0 12px var(--bg);
+}
+
+/* The rows below the widget, grouped: the tray's own columns and gaps, so the
+   wrapper changes no layout in any state, and no paint until board mode. */
+.tray-solid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ...and in board mode they reach over the tray's side and bottom padding, the
+   same way, and take the compact bar's own fill rather than the tray's darker
+   gradient: the frame around the widget is then ONE tint (bar, picker band,
+   gutter, these rows), so the only thing the desktop shows through is the
+   card, and the frame has no seams. */
+.widget-shell.board-mode .tray-solid {
+  margin: 0 -12px -11px;
+  padding: 0 12px 11px;
+  background: var(--bg);
+}
+
+/* --------------------------------------------------------------------------
    Compact bar
    -------------------------------------------------------------------------- */
 
@@ -1034,131 +1111,10 @@ body {
 }
 
 /* "Your widget" (widget-board.js; JARVIS-API.md section 86): the owner's
-   own widget, drawn in place of the face from a fixed menu of blocks. */
-.board {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.board[hidden],
-.board-blocks[hidden] {
-  display: none;
-}
-
-.board-pick-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: var(--text-2xs);
-}
-
-.board-pick-label {
-  color: var(--text-muted);
-  letter-spacing: 0.6px;
-  font-weight: 600;
-}
-
-.board-pick {
-  max-width: 180px;
-  font: inherit;
-  color: var(--text);
-  background: var(--bg-sunken);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-chip, 4px);
-  padding: 2px 4px;
-}
-
-.board-blocks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.board-title {
-  margin: 0;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.board-part {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.board-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: var(--text-2xs);
-}
-
-.board-label {
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.board-value {
-  color: var(--text);
-}
-
-/* "big" (widget-board.js boardOf, 2026-10-30): the widget's first number is
-   drawn at about three times a block's value, with its label small above it,
-   so a count is what the eye lands on. Only that one part carries the class,
-   so nothing else in the widget changes size. */
-.board-big .board-head {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-}
-
-.board-big .board-value {
-  font-size: 30px;
-  line-height: 1.05;
-  font-weight: 700;
-}
-
-.board-items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--text-2xs);
-}
-
-.board-items li {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.board-item {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.board-when {
-  color: var(--text-muted);
-  flex: none;
-}
-
-.board-note {
-  margin: 0;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-
-.board-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
+   own widget, drawn in place of the face from a fixed menu of blocks. Its
+   `.board-*` rules live in board.css (2026-11-14), because the Brain's
+   preview draws the same blocks through the same `paint()` and must not be
+   able to promise a colour this window does not draw. */
 
 /* Windows high-contrast (forced-colors): the system palette replaces ours, so
    box-shadows and tinted fills vanish. Keep every control's edge and its focus

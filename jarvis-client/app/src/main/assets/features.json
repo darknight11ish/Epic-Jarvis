@@ -481,10 +481,10 @@
     "id": "widgets",
     "group": "Talking",
     "title": "Widgets you describe",
-    "what": "Small tiles you asked for, drawn on your desktop widget or your phone's home screen, in one of four arrangements.",
+    "what": "Small tiles you asked for, drawn on your desktop widget or your phone's home screen, in one of four arrangements, in an accent colour, a see-through shade and a contrast you pick.",
     "where": "Brain, Work, Widgets (desktop); Brain, Widgets and a home-screen slot (phone). The desktop widget itself shows with Alt+Shift+W.",
     "asks": "No card.",
-    "limit": "A widget's tile actions are a fixed set, its arrangement is one of four fixed ones, and nothing a widget shows is ever turned into an instruction.",
+    "limit": "A widget's tile actions are a fixed set, its arrangement is one of four fixed ones, and its colour, see-through and contrast are three fixed lists too - not free values. See-through is faintness only, never a blur, and the words are never made faint. Nothing a widget shows is ever turned into an instruction.",
     "surface": "both",
     "covers": [
       "brain.work.widgets",

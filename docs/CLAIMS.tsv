@@ -63,7 +63,7 @@ A12	"graphics memory" is offered as a fixed widget source and reads every card's
 A13	"tokens per second" is offered as a fixed widget source	grep:jarvis-desktop/src/widget-board.js:tokens_per_s	built	docs/DECISIONS.md:1723
 A14	a saved widget can be edited	grep:backend:/api/widgets/edit	open	docs/DECISIONS.md:1724
 A15	the widget builder shows a preview before a widget is added	grep:jarvis-desktop/src/widget-board.js:Preview - not added yet	built	docs/DECISIONS.md:1726
-A16	per-widget transparency, accent and high contrast can be set	grep:jarvis-desktop/src/widget-board.js:transparency	open	docs/DECISIONS.md:1725
+A16	per-widget transparency, accent and high contrast can be set	grep:jarvis-desktop/src/widget-board.js:export function applyLook	built	docs/DECISIONS.md:1725
 A17	"Pin to home screen" exists for a Brain section or a chat (NOT the 2026-10-30 widget pin: that one is "Put it on my home screen", JarvisWidgets.kt PIN_LABEL / WidgetPin.kt requestPinAppWidget, a different feature)	grep:jarvis-client:Pin to home screen	open	docs/DECISIONS.md:1726
 A18	after an approve the desktop says in one line which Undo exists	grep:jarvis-desktop/src/main.js:function desktopUndoNotice	built	docs/DECISIONS.md:1728
 A19	after an approve the phone says in one line which Undo exists	grep:jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt:private fun undoNoticeFor	built	docs/DECISIONS.md:1729
