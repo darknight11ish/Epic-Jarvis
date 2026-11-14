@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
- "built_at": "2026-11-13T22:19:30-08:00",
+ "ref": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
+ "built_at": "2026-11-13T22:19:48-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6329,6 +6329,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
+  },
+  {
    "sha": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
@@ -6422,11 +6427,6 @@
    "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
    "date": "2026-11-13",
    "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
-  },
-  {
-   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
-   "date": "2026-11-13",
-   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
   }
  ],
  "top_level": [

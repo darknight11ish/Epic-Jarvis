@@ -11336,6 +11336,18 @@
       "in_phone_settings": true
     },
     {
+      "id": "phone-backup",
+      "names": [
+        "phone settings backup",
+        "back up my phone settings",
+        "restore my phone settings"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": false,
+      "in_phone_settings": true
+    },
+    {
       "id": "updates",
       "names": [
         "updates",
