@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f27ab8d2857bb32024dbe483eba7c912dbac7ae0",
- "built_at": "2026-11-14T00:00:39-08:00",
+ "ref": "6373b00ef752a703b70910dc645cd32946a88923",
+ "built_at": "2026-11-14T02:06:28-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6412,6 +6412,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "6373b00ef752a703b70910dc645cd32946a88923",
+   "date": "2026-11-14",
+   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
+  },
+  {
+   "sha": "cf4a2797f2c4b388f95c66813435081650bb9fa3",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1233 from darknight11ish/feat/phone-backup-updater-2026-11-13"
+  },
+  {
+   "sha": "8dfbf1047906bf3eee23afb22ca1723b02efbb85",
+   "date": "2026-11-14",
+   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
+   "sha": "8d48d8afa422f8799b58257476122e010bc4c22e",
+   "date": "2026-11-14",
+   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
+  },
+  {
+   "sha": "98b82d643adc589f6004541f4a520398ccb08481",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
+  },
+  {
    "sha": "f27ab8d2857bb32024dbe483eba7c912dbac7ae0",
    "date": "2026-11-14",
    "subject": "chore(records): regenerate after carrying #1233 and the wave-18 batch"
@@ -6485,31 +6510,6 @@
    "sha": "69428294081ee150aefe347399e36531787b5f01",
    "date": "2026-11-13",
    "subject": "Regenerate the whole-repo records against the merged tree"
-  },
-  {
-   "sha": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main into integration/wave18-2026-11-13 (current main after #1246 landed)"
-  },
-  {
-   "sha": "f2366ba75440aaabe2666aaadab3643dcadf3dc0",
-   "date": "2026-11-13",
-   "subject": "Merge fix/self-knowledge-places-and-counts-2026-11-13 into integration/wave18-2026-11-13 (self-knowledge places and counts); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
-  },
-  {
-   "sha": "6f013f5490257a7902bba82f6fbe26d7a79a6582",
-   "date": "2026-11-13",
-   "subject": "fix(features): record the phone's settings backup in the feature matrix"
-  },
-  {
-   "sha": "a9bd71f9a273be6c5d462c9cd90f7bc379336ace",
-   "date": "2026-11-13",
-   "subject": "Merge fix/tray-and-readme-truth-2026-11-13 into integration/wave18-2026-11-13 (tray wording + README truth); generated records keep the integration side, regenerated at the end"
   }
  ],
  "top_level": [
