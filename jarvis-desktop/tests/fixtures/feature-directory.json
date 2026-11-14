@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "62daae9c50b854437166051f37f814c9c3d14fa1a0d4ea0b00778094c1c50e5c",
+  "source_sha256": "eea3dd3d38e335dbc9671f8e9cccefaf3436f7b6f4fc04754458624dc605e0fe",
   "feature_count": 182,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -72,14 +72,14 @@
       "group": "Talking",
       "surface": "both",
       "label": "Switchable / Adjustable (Typed & Settings)",
-      "status": "planned",
-      "label_note": "no own switch or typed control is wired today; a planned row, not a fake phrase",
-      "example": "turn on Say \"Hey Jarvis\"",
+      "status": "enforced",
+      "label_note": "Two switches: the PC's wake-word switch in Settings, Voice (one approval card to turn on, instant to turn off, and it decides whether Jarvis takes wake-word clips at all), then Listen on the phone (the handset's microphone, never on by default or after a restart). Saying \"Hey Jarvis\" out loud does not switch either on.",
+      "example": "turn on the wake word",
       "example_ok": true,
       "where": "desktop Settings: voice; phone: All features and abilities",
       "where_desktop": "voice",
       "where_phone": "All features and abilities",
-      "note": "Still being wired (owner: voiceprint-wiring): no own switch or typed control is wired today; a planned row, not a fake phrase",
+      "note": "Two switches: the PC's wake-word switch in Settings, Voice (one approval card to turn on, instant to turn off, and it decides whether Jarvis takes wake-word clips at all), then Listen on the phone (the handset's microphone, never on by default or after a restart). Saying \"Hey Jarvis\" out loud does not switch either on.",
       "not_a_control": true
     },
     {

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "4e24021b56a6fc6d2ea4af89b2d1c70eca24f60d",
- "built_at": "2026-11-13T21:28:25-08:00",
+ "ref": "80e96d85ea280d1b1aa85d062c92f9b61b367216",
+ "built_at": "2026-11-13T21:39:31-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4631,6 +4631,7 @@
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
     "changelog.d/2026-11-13-todo-list-sentence-shapes.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
+    "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4806,6 +4807,7 @@
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
     "decisions.d/2026-11-13-todo-list-sentence-shapes.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
+    "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5254,7 +5256,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 886,
+   "file_count": 888,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6341,9 +6343,29 @@
  ],
  "recent_commits": [
   {
+   "sha": "80e96d85ea280d1b1aa85d062c92f9b61b367216",
+   "date": "2026-11-13",
+   "subject": "Merge origin/fix/wake-word-self-answer-2026-11-13 into integration/wave18-2026-11-13 (#1248 wake word + Layer 1 routing); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "8d807ec394e835510cdb8325245d0a0559d049b1",
+   "date": "2026-11-13",
+   "subject": "Regenerate the whole-repo records for the integration branch"
+  },
+  {
    "sha": "4e24021b56a6fc6d2ea4af89b2d1c70eca24f60d",
    "date": "2026-11-13",
    "subject": "Merge origin/ci/backend-timeout-120 into integration/wave18-2026-11-13 (120-minute backend ceiling)"
+  },
+  {
+   "sha": "30169150753b4d9403843280a3218d2b4dacf1e7",
+   "date": "2026-11-13",
+   "subject": "Records: re-take the self-code map after the routing changes"
+  },
+  {
+   "sha": "51fb8e231ec34124edb40334d5229199f3b91877",
+   "date": "2026-11-13",
+   "subject": "Feature routing: activate, turned-on and why-not-working reach every title"
   },
   {
    "sha": "851582b30590dc7a8ec22adec6c3a47b1f4f2e2d",
@@ -6406,39 +6428,19 @@
    "subject": "feat: a photo can be sent from the phone into \"From my phone\" as a plain file"
   },
   {
+   "sha": "e817a02e246b74f261f6fae83df6f800d7e60125",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/wake-word-self-answer-2026-11-13"
+  },
+  {
+   "sha": "38bd1023739d5abd8e9e6d3ef85c538d84051dd8",
+   "date": "2026-11-13",
+   "subject": "Wake word: answer activation from the catalogue, not the model"
+  },
+  {
    "sha": "2933d248754cd5131821ba87b93d67af35ddfac3",
    "date": "2026-11-13",
    "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
-  },
-  {
-   "sha": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
-  },
-  {
-   "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1237 from darknight11ish/fix/undo-notice-timeout-2026-11-13"
-  },
-  {
-   "sha": "43bbc5d9f6d255cfa589d780a7c7829a0da5fb7c",
-   "date": "2026-11-13",
-   "subject": "ci: the two required backend jobs get 120 minutes, so a slow run is not a red one (Gemini 5.1)"
-  },
-  {
-   "sha": "7465c066731de583df9f8c63447f930c135cf904",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (0b6e5a9) into fix/forget-card-fits-2026-11-13"
-  },
-  {
-   "sha": "6f1c3f3eb0935ae33923ea51c2f79070d252290a",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the self-code map and the recent-changes bullets"
-  },
-  {
-   "sha": "365690decf27cce398a99aacdffb12c74cbd5916",
-   "date": "2026-11-13",
-   "subject": "fix(memory): a big Forget-a-time-frame card carries the count, so it can be approved"
   }
  ],
  "top_level": [
@@ -6475,7 +6477,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 258
+   "files": 259
   },
   {
    "path": "videos/",
@@ -6485,7 +6487,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 175
+   "files": 176
   },
   {
    "path": "plugins/",
@@ -6559,8 +6561,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5687,
-  "covered": 5204,
+  "tracked_files": 5689,
+  "covered": 5206,
   "excluded": 483,
   "subsystems": 27
  },
