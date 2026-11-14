@@ -190,6 +190,13 @@ FORBIDDEN = (
     # send-file (2026-10-31): the bytes leave the PC for the phone, so it is
     # outbound and must not be a fresh-install default - same rule as the rest.
     "send_file_to_phone",
+    # The Android app builder's way in (DEF-068, 2026-11-14). "build" starts
+    # Gradle, which is another program running other people's build code with
+    # the owner's own Windows permissions, and its first run downloads from the
+    # internet; "install" changes what is on the phone. That is the same class
+    # as shell_exec and control_phone, so it ships OFF and is switched on in
+    # Settings -> Tools, where its row is ("Raw and powerful").
+    "android_app",
 )
 
 TEMPLATE = REPO / "backend" / "rebuilt" / "jarvis-framework.toml"

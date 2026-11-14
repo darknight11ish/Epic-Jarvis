@@ -1386,6 +1386,21 @@ _TOOL_ACTIONS: dict[str, str] = {
     # own four lines, so this patch must be applied AFTER it.
     "approve_web_search_for_conversation": "grant_web_search_conversation",
     "stop_web_search_approval": "revoke_web_search_grant",
+    # The Android app builder's way in (DEF-068, 2026-11-14): the model tool
+    # `android_app` puts its build and install halves to the gate under the
+    # builder module's OWN action names (jarvis_android_builder.BUILD_ACTION /
+    # INSTALL_ACTION), so each name maps to itself here - the shape
+    # send_file_to_phone above uses. Both actions already carry their risky
+    # `_RISK` rows (the two "no" rows above), their `_NO_RULE_FROM_DENIAL`
+    # membership and their "ask" lines in both shipped settings copies; these
+    # entries are only what makes `action_for_tool()` answer the specific
+    # action instead of "unclassified_tool". The Android builder itself
+    # shipped in the base with NO patch (2026-10-30), so on a live install
+    # these two lines arrive the same way its `_RISK` rows did - see
+    # tools/repair_live_backend_gaps.py - and jarvis_agent._one_call passes the
+    # action name through as a belt until they do.
+    "app_build_android": "app_build_android",
+    "app_install_android": "app_install_android",
 }
 
 # Arguments that ESCALATE a shell-class tool. Regex on model-written text is

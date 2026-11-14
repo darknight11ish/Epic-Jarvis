@@ -515,6 +515,14 @@ TIER_B = (
 TIER_C = (
     "shell_exec", "run_data_script", "control_computer", "control_phone",
     "browser_control", "read_web_page", "connect_account", "rea_investigate",
+    # The Android app builder's way in (DEF-068, 2026-11-14): "build" runs
+    # Gradle, which runs other people's build code with the owner's own Windows
+    # permissions, and "install" changes what is on the phone - the same class
+    # as shell_exec and control_phone, which is why it is in this group and NOT
+    # one of the shipped defaults. Its own switch here is REAL (the turn reads
+    # `[tools].enabled`, and that line is the only way in), and each act still
+    # raises its own card.
+    "android_app",
 )
 TIER_UNLISTED = (
     "calculator", "memory_search", "file_read", "web_search", "my_files",

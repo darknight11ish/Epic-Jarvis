@@ -130,10 +130,12 @@ OFFERED_FRESH = [
 #: ask rides with `web_search` - it is not a capability, and its card is the
 #: permission.
 CATALOGUE = [
-    # Every tool that exists, sorted, pinned in full (79 at the GitHub union
-    # of 2026-11-11). A future tool must be added here, which forces the
+    # Every tool that exists, sorted, pinned in full (80 at the Android app
+    # builder's entry point, DEF-068, 2026-11-14; 79 at the GitHub union of
+    # 2026-11-11). A future tool must be added here, which forces the
     # three lists above to be looked at in the same edit; the per-tool
     # commentary this block used to carry lives in the profiles and docs.
+    "android_app",
     "append_logseq_journal",
     "append_obsidian_daily",
     "approval_policy",

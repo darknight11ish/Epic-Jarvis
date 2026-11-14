@@ -279,6 +279,11 @@ TOOL_NAMES = {
                   "choice in it (read-only; you press Apply on the PC)",
     "review_changes": "The review packet: what changed, and what usually goes wrong",
     "check_records": "The record check before a push: READY, or what is missing",
+    # The Android app builder's way in (DEF-068, 2026-11-14). test_reach.py
+    # requires plain words for every tool in jarvis_agent.TOOLS; both halves are
+    # named because the tool does both, and neither is free.
+    "android_app": "Building an Android app with Gradle in one of your app tasks, "
+                   "or putting a built one on your phone (one card each)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

@@ -101,6 +101,7 @@ CHILD_ENV         = "backend/jarvis_child_env.py"
 UI_CONTROL        = "backend/jarvis_ui_control.py"
 PROTECTION        = "backend/jarvis_protection.py"
 ANDROID_CONTROL   = "backend/jarvis_android_control.py"
+ANDROID_BUILDER   = "backend/jarvis_android_builder.py"
 PHONE_APPS        = "backend/jarvis_phone_apps.py"
 PLUGINS           = "backend/jarvis_plugins.py"
 BROWSER_CONTROL   = "backend/jarvis_browser_control.py"
@@ -2755,6 +2756,54 @@ PROFILES: dict = {
         "enable_hint": "Always available - it is offered whenever web search is.",
         "sources": [AGENT, ASKS_FIRST, REBUILT_FRAMEWORK],
     },
+
+    # DEF-068 (2026-11-14): the Android app builder's way in from a chat turn.
+    # The builder itself shipped on 2026-10-30 with four PC-only routes and
+    # nothing in the tree that called them; this tool is that caller, and it is
+    # the only one of the three possible doors that can write the page
+    # `plan_template` needs. It is an in-app switch (jarvis_asks_first.TIER_C,
+    # "Raw and powerful") and NOT a shipped default, because "build" runs Gradle
+    # - other people's build code with the owner's own Windows permissions.
+    "android_app": {
+        "id": "android_app",
+        "title": "Build an Android app, or put it on your phone",
+        "what": "Makes a real, small Android app in one of the owner's app "
+                "projects: Jarvis writes its own fixed project - the Gradle files, "
+                "a manifest with no permission at all, and one Kotlin activity - "
+                "and the local model supplies only the page (index.html, app.js, "
+                "app.css) or one validated app.json of native screens, plus the "
+                "app's name. Then it builds the app with Gradle, or installs the "
+                "APK it built onto the phone over its cable.",
+        "gives": [
+            "Make a sideloadable Android app from a sentence in an app task",
+            "Build it with `gradlew.bat assembleDebug`, exactly, in the task's copy",
+            "Put the built APK on the owner's phone with `adb install -r`, exactly",
+            "Use the native-screens kind when the task already carries app.json",
+        ],
+        "touches": "process, files, network service",
+        "limits": [
+            "ONE card before Gradle runs and ONE before adb runs, each naming the "
+            "exact command, folder, SDK and JDK; nothing runs before a person's yes",
+            "The model writes no Kotlin, no manifest and no Gradle file, so the app "
+            "gets no permission at all - not even INTERNET - and never reaches Jarvis",
+            "A first build downloads about 130 MB of Gradle and the Android Gradle "
+            "plugin; nothing of the owner's is sent. Debug key only, sideload only, "
+            "never the Play Store",
+            "Not in the shipped `[tools].enabled` list, so it is off until the owner "
+            "turns it on in Settings -> Tools",
+        ],
+        "combines": {
+            "project_read": "project_read shows a task's own files; android_app "
+                            "builds the app in that task's copy.",
+            "phone_apps": "phone_apps manages which apps Jarvis may OPEN on the "
+                          "phone; android_app makes and installs a new app.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"android app\" in Settings -> Tools under \"Raw and "
+                       "powerful\" (it is an in-app switch). Each build and each "
+                       "install still asks on its own card at the \"ask\" tier.",
+        "sources": [AGENT, ANDROID_BUILDER, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
 }
 
 
@@ -2946,9 +2995,11 @@ FAMILIES: dict = {
         "what": "Checking GitHub for an existing library before building one, "
                 "reading your own repositories, pull requests, issues, CI and "
                 "files, running a real command on this PC, planning several "
-                "steps as one card, and statically inspecting a program, APK, "
+                "steps as one card, building a real Android app in one of your "
+                "app tasks, and statically inspecting a program, APK, "
                 "capture or database.",
         "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate",
+                  "android_app",
                   "github_list", "github_read_file", "github_ci_status",
                   "github_pr_scan", "github_comment", "github_open_issue",
                   "github_rerun_workflow", "github_create_repo",
