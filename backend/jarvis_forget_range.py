@@ -10,8 +10,9 @@ The owner may ask, by voice or typing, to forget what Jarvis learned or said
 in a time frame ("forget what you learned last week", "delete my chats from
 1 to 15 September"). Nothing is removed at once: both apps show the exact
 facts and chats from that time, each ticked; the owner can untick any; ONE
-approval card listing every item is decided by tapping only - never by
-voice. Approved, the facts are FORGOTTEN (retired, exactly as Forget does -
+approval card carrying the count of facts and chats and the dates (the full
+list stays on the screen that was ticked) is decided by tapping only - never
+by voice. Approved, the facts are FORGOTTEN (retired, exactly as Forget does -
 never erased) and the chats DELETED, with 10 minutes to Undo. Erasing a
 fact's words for good stays the separate, per-fact "Erase the words". This
 is the one exception to "irreversible bulk actions stay off the API"
@@ -78,11 +79,18 @@ THE CARD
 action `memory_forget_range`, tier "ask" only (anything else and the route
 answers 503 - a line in the settings file can never become the owner's
 yes), and never an "always allow": What asks first cannot loosen it
-(jarvis_asks_first.HARD_LIMITS). Its text lists EVERY fact word for word and
-every chat's title, with their dates (ARCHITECTURE section 3), the pinned
-chats kept and the measured estimate. The gate's risk line calls it local
-and NOT reversible (after the 10 minutes the chats are gone for good), so
-approving it is a risky approval: Windows Hello on the PC, the screen lock
+(jarvis_asks_first.HARD_LIMITS). Its text carries the COUNT of facts and
+chats and the date range - "3 facts and 125 chats from 2 to 8 November
+2026" - the facts' own words while they fit, the pinned chats kept and the
+measured estimate. Every chat's title and date stays on the checked list the
+owner ticked, one click away: the CARD carries the count, the LIST carries
+every item (the owner's ruling, 2026-11-13, verbatim "Show the count, allow
+it"; ARCHITECTURE section 3 - before it, every item was on the card, and a
+125-chat range made a 14,546-character card that the gate cut at 4,000, so
+it could never be approved). A card that still would not fit is refused
+before it is raised, in one plain sentence. The gate's risk line calls it
+local and NOT reversible (after the 10 minutes the chats are gone for good),
+so approving it is a risky approval: Windows Hello on the PC, the screen lock
 on the phone. Nothing changes before a person approves. A spoken "yes"
 approves nothing - there is no approving by voice anywhere in Jarvis - and
 the card itself changes nothing either: it holds the items for the second
@@ -690,35 +698,67 @@ def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
 # --------------------------------------------------------------------------
 
 
-def card_text(frame: Frame, facts: list, chats: list, pinned_kept_count: int = 0,
-              estimate_text: str = "", large_wipe: bool = False) -> str:
-    """Every fact word for word and every chat's title, with their dates,
-    the pinned chats kept, the measured estimate, and the second yes."""
+#: The most the card's own text may hold. jarvis_gate keeps a card's detail as
+#: `json.dumps(detail)[:4000]`, and this action's detail carries a "what", the
+#: frame in words, both counts and the pinned count beside the text - about
+#: 200 characters - so the text is built to stay under this. It is the CARD
+#: that must fit; the full list stays on the checked list the owner ticked
+#: from (the preview route). Anything that still would not fit is refused
+#: before the card is raised, by jarvis_agent's own `_card_would_be_cut`.
+CARD_TEXT_LIMIT = 3400
+
+#: Where the full list is, when the card carries the count instead of it (the
+#: owner's ruling, 2026-11-13: "Show the count, allow it"). Both branches below
+#: add their own words before it, so it reads as one sentence either way.
+LIST_ON_SCREEN = "on the Forget a time frame screen, where you ticked them."
+
+
+def _card_lines(frame: Frame, facts: list, chats: list, pinned_kept_count: int,
+                estimate_text: str, large_wipe: bool,
+                show_facts: bool, show_chats: bool) -> list:
+    """The card's lines, with the two lists either written out or replaced by
+    the count of what they hold. `show_facts`/`show_chats` are the fit's three
+    steps, largest first: everything, then the chats' count only, then both
+    counts only."""
+    nf, nc = len(facts), len(chats)
     lines = [f"Forget what Jarvis learned and delete your chats from {frame.said}?"
              if facts and chats else
              f"Forget what Jarvis learned from {frame.said}?" if facts else
              f"Delete your chats from {frame.said}?", ""]
+    if nf or nc:
+        # The count and the dates, word for word the sentence the checked list
+        # itself carries (`_summary`, which is `preview()`'s `said`): the CARD
+        # carries the count, the LIST carries every item (owner, 2026-11-13).
+        lines.append(_summary(nf or None, nc or None, frame.said))
     if large_wipe:
-        lines += [large_wipe_words(len(facts) + len(chats)), ""]
+        lines.append(large_wipe_words(nf + nc))
+    lines.append("")
     if pinned_kept_count:
         lines += [f"{_pinned_words(pinned_kept_count)}. {PINNED_WHY}", ""]
     if facts:
-        lines.append(f"Jarvis will forget {'this fact' if len(facts) == 1 else f'these {len(facts)} facts'}"
-                     " - it stops using them, and they stay in the history as forgotten:")
-        for i, f in enumerate(facts, 1):
-            lines.append(f"{i}. \"{f['text']}\" - {f['label'][:1].lower() + f['label'][1:]}")
+        lines.append(f"Jarvis will forget {'this fact' if nf == 1 else f'these {nf} facts'}"
+                     " - it stops using them, and they stay in the history as forgotten"
+                     + (":" if show_facts else
+                        ". Their words are " + LIST_ON_SCREEN))
+        if show_facts:
+            for i, f in enumerate(facts, 1):
+                lines.append(f"{i}. \"{f['text']}\" - {f['label'][:1].lower() + f['label'][1:]}")
         lines.append("")
     if chats:
-        lines.append(f"Jarvis will delete {'this chat' if len(chats) == 1 else f'these {len(chats)} chats'}"
-                     " from this PC:")
-        for i, c in enumerate(chats, 1):
-            lines.append(f"{i}. \"{c['title']}\" - {c['label']}")
-            if c.get("kind") == "support":
-                lines.append("   This is a customer-support chat's record - you ticked it, "
-                             "so it is deleted too.")
-            if c.get("spills"):
-                lines.append("   It also has messages from outside these days: the whole chat "
-                             "is deleted.")
+        lines.append(f"Jarvis will delete {'this chat' if nc == 1 else f'these {nc} chats'}"
+                     " from this PC"
+                     + (":" if show_chats else
+                        f" - {_count(sum(int(c['turns']) for c in chats), 'message')} in all. "
+                        "The full list, every title and date, is " + LIST_ON_SCREEN))
+        if show_chats:
+            for i, c in enumerate(chats, 1):
+                lines.append(f"{i}. \"{c['title']}\" - {c['label']}")
+                if c.get("kind") == "support":
+                    lines.append("   This is a customer-support chat's record - you ticked it, "
+                                 "so it is deleted too.")
+                if c.get("spills"):
+                    lines.append("   It also has messages from outside these days: the whole chat "
+                                 "is deleted.")
         # What deleting a chat does not touch (the second chat audit,
         # 2026-09-28): the same sentence every delete dialog says.
         lines.append("Facts you did not tick stay. Copies in older backups stay until they age out.")
@@ -738,7 +778,59 @@ def card_text(frame: Frame, facts: list, chats: list, pinned_kept_count: int = 0
         "",
         "If you did not just ask for this, say no.",
     ]
-    return "\n".join(lines)
+    return lines
+
+
+def card_text(frame: Frame, facts: list, chats: list, pinned_kept_count: int = 0,
+              estimate_text: str = "", large_wipe: bool = False) -> str:
+    """The card: the COUNT of facts and chats with the date range ("3 facts
+    and 125 chats from 2 to 8 November 2026"), the facts' own words while they
+    fit, the pinned chats kept, the measured estimate and the second yes.
+
+    THE OWNER'S RULING (2026-11-13, verbatim: "Show the count, allow it"). The
+    card used to list every fact word for word and every chat's title. Past a
+    few hundred items that card no longer fits: jarvis_gate keeps
+    `json.dumps(detail)[:4000]`, so a long card reached the HUD cut off
+    mid-JSON, with Approve disabled - the owner's own 125-chat range was
+    exactly 4,000 characters of invalid JSON and expired un-approvable
+    (measured 2026-11-13: 25 chats = 3,918 characters, 30 = 4,448, 125 =
+    14,546). So the CARD carries the count and the dates, and the PREVIEW
+    screen carries the full list, one click away - nothing was removed
+    there. The facts themselves stay while they fit, because the owner asked
+    to see what he loses; a big range drops the chats first (the many long
+    lines), then the facts, to their counts.
+
+    A card that would still be cut is refused before it is raised - see
+    `request()` and `_would_be_cut()`, which imports jarvis_agent's own rule
+    rather than copying it."""
+    # Both lists in full first, so a small forget reads exactly as it always
+    # did; then the chats' count, then both. The first that fits is the card.
+    text = ""
+    for show_facts, show_chats in ((True, True), (True, False), (False, False)):
+        text = "\n".join(_card_lines(frame, facts, chats, pinned_kept_count,
+                                     estimate_text, large_wipe, show_facts, show_chats))
+        if len(text) <= CARD_TEXT_LIMIT:
+            return text
+    # Nothing fitted even as counts. Return it anyway: request() asks the
+    # gate's own rule and refuses, so this can never become a card.
+    return text
+
+
+def _would_be_cut(text: str) -> bool:
+    """Would jarvis_gate keep this card whole? The rule is jarvis_agent's
+    `_card_would_be_cut` - imported from the module that owns it, never copied
+    here, so the gate's 4,000 cap is written down in exactly one place."""
+    import jarvis_agent
+    return bool(jarvis_agent._card_would_be_cut(ACTION, ACTION, text))
+
+
+#: What the route answers when even the counted card would be cut. Nothing is
+#: asked, so nothing can be approved by mistake, and the owner is told in one
+#: plain sentence instead of being shown a card the HUD cannot approve.
+TOO_LONG = ("That is too much to put on one approval card, so nothing was asked and nothing "
+            "was removed. Try again, or choose a shorter time frame.")
+TOO_LONG_UNCHECKED = ("Jarvis could not check that this fits on one approval card, so nothing "
+                      "was asked and nothing was removed. Try again.")
 
 
 # --------------------------------------------------------------------------
@@ -1062,6 +1154,17 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
     large = (len(facts) + len(chat_items)) > LARGE_WIPE_ITEMS
     text = card_text(frame, facts, chat_items, kept_count, est["text"],
                      large_wipe=large)
+    # Fail closed on this path too (2026-11-13): the model tool path already
+    # refuses a card the gate would cut (jarvis_agent.py's `_card_would_be_cut`,
+    # called before its own cards are raised); this route raises one straight
+    # through `check`, so it asks the same rule itself. Refused BEFORE a card
+    # exists: no row in the approvals table, nothing to approve, nothing lost.
+    try:
+        cut = _would_be_cut(text)
+    except Exception:
+        return 503, {"ok": False, "error": TOO_LONG_UNCHECKED}
+    if cut:
+        return 400, {"ok": False, "error": TOO_LONG}
     counts = {"facts": len(facts), "chats": len(chat_items)}
     token = uuid.uuid4().hex
     with _LOCK:

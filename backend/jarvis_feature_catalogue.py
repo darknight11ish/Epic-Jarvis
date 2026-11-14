@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 e391c8fe07dcd9cb1861e38174d75e30614f29a455b4a3304f769644c131db67); the apps' Features pages read their own
+`features/features.json` (sha256 59f9687b0fbceba6f55019cbdb23c2d3c4fe7864debcc6876fffa3971d41b6bf); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "e391c8fe07dcd9cb1861e38174d75e30614f29a455b4a3304f769644c131db67"
+SOURCE_SHA256 = "59f9687b0fbceba6f55019cbdb23c2d3c4fe7864debcc6876fffa3971d41b6bf"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -72,7 +72,7 @@ FEATURES = (
         "group": "Talking",
         "title": "Jarvis reads its answers aloud",
         "what": "Jarvis reads its answers aloud, in the voice you chose; a finished answer can be read out again from its own speaker button.",
-        "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. Settings, Voice, \"Read replies out loud\" turns the automatic reading off and back on, and saying \"stop reading your replies out loud\" in chat or Jarvis Live does the same (\"read your replies out loud\" turns it back on). The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; Settings, HUD, \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
+        "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. Settings, The big HUD window, \"Read replies out loud\" turns the automatic reading off and back on, and saying \"stop reading your replies out loud\" in chat or Jarvis Live does the same (\"read your replies out loud\" turns it back on). The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; the same card's \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
         "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
         "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
         "surface": "both",
@@ -275,7 +275,7 @@ FEATURES = (
         "group": "Talking",
         "title": "Timers, alarms, reminders and lists",
         "what": "Jarvis keeps your timers, alarms, reminders, to-do lists and the standby schedule on this PC, and shows them to the phone too.",
-        "where": "Just ask - \"remind me at six\", \"remind me in 30 minutes to check my phone\", \"make a reminder for 30 minutes from now\", \"set a timer for 10 minutes\" - or see them in Brain, Work, Coming up and the HUD's Reminders panel (#rail-reminders).",
+        "where": "Just ask - \"remind me at six\", \"remind me in 30 minutes to check my phone\", \"make a reminder for 30 minutes from now\", \"set a timer for 10 minutes\", \"add milk to my to-do list\" or \"what's on my to-do list\" - or see them in Brain, Work, Coming up and the HUD's Reminders panel (#rail-reminders).",
         "asks": "A plain timer, a one-time reminder, a repeating reminder, an alarm and the standby schedule need no card. The morning briefing and \"tell me when\" raise one.",
         "limit": "The PC is the clock. When one goes off, while Jarvis is running on the PC it shows a Windows notification: an alarm keeps ringing, a reminder or timer shows once. With the Jarvis app fully closed no notification appears then, but the job is kept and shows when it opens; a late alarm rings only if at most 10 minutes late, after that it is a quiet missed note. While the phone is connected to the PC the same job also shows an Android notification; the phone sets no alarm of its own. The morning briefing and \"tell me when\" raise one approval card.",
         "surface": "both",
@@ -562,7 +562,7 @@ FEATURES = (
         "title": "Forget a time frame",
         "what": "Forget what Jarvis learned or said over a stretch of days. It lists every fact and chat from then and says how long it should take, leaves pinned chats out (and keeps them), and asks a second yes before anything is removed.",
         "where": "Brain, History, Forget a time frame.",
-        "asks": "ONE card listing every item - never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
+        "asks": "ONE card giving the count and the days - every title and date stays on the screen you ticked, never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
         "limit": "No item cap: any number of facts and chats is listed in full and offered in one action. Above 200 - the old cap, now only the size at which both apps say a large wipe - it says so in words, and the card and the second yes are unchanged. Facts are RETIRED, not erased - their words stay in the history, and no backup is ever touched. After the 10 minutes the chats are gone for good.",
         "surface": "both",
         "covers": ["brain.history.forget-range", "memory", "records"],
@@ -899,12 +899,12 @@ FEATURES = (
         "id": "document-from-phone",
         "group": "Notes and files",
         "title": "Send a document from your phone",
-        "what": "You pick one document on the phone and it lands on this PC, in a folder Jarvis may look in.",
-        "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+        "what": "You pick one document or one photo on the phone and it lands on this PC, in a folder Jarvis may look in - a photo is saved as a plain file and never shown to a model on that path.",
+        "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document or a photo. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, HEIF, GIF or BMP), then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. A photo is copied exactly as it is, and Jarvis never reads it or shows it to a model on this path. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
         "asks": "One approval card on the PC before anything lands, naming the file, its size and the folder. While it waits the phone says \"Sent to your PC - approve the card on your PC\"; a no, a timeout or a dropped link writes nothing.",
-        "limit": "One file at a time, up to 50 MB, and only the kinds Jarvis can read: PDF, Word, Excel, PowerPoint, text, Markdown (both .md and .markdown) and CSV. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
+        "limit": "One file at a time, up to 50 MB, and only the kinds this door accepts: PDF, Word, Excel, PowerPoint, text, Markdown (both .md and .markdown), CSV, and photos (JPG, JPEG, PNG, WebP, HEIC, HEIF, GIF, BMP). A photo is stored only - it is never opened, converted, read for words or shown to a model on this path, which is why it does not need the Pictures feature; attaching a picture in chat is the separate path that does read it. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
         "surface": "both",
-        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc"],
+        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc", "send a photo from my phone to my pc"],
         "covers": [],
     },
     {
@@ -1398,8 +1398,8 @@ FEATURES = (
         "id": "setup-questionnaire",
         "group": "The PC itself",
         "title": "First-time setup questionnaire",
-        "what": "Fourteen questions about how you want Jarvis to behave, in one card. Jarvis says what each answer would change, in its own words, and whether the change happens at once or asks you on a card - and changes nothing until you read that summary and apply it.",
-        "where": "Desktop: Settings, First-time setup. Phone: Settings, First-time setup - the same questions and the same read-only plan, and the changes are made on the PC.",
+        "what": "A guided set of questions about how you want Jarvis to behave, in one card. Jarvis says what each answer would change, in its own words, and whether the change happens at once or asks you on a card - and changes nothing until you read that summary and apply it.",
+        "where": "Desktop: Settings, Personalize Jarvis. Phone: Settings, Personalize Jarvis. Both show the same questions and the same read-only plan; the changes are made on the PC.",
         "asks": "No card to see the plan: it writes nothing. Applying is your explicit second press, and anything that loosens a rule still raises its own existing approval card on the PC, one at a time.",
         "limit": "A guided path through settings that already exist, not a second set of rules. The preset answer only RECOMMENDS a setup and switches no model. The phone is read-only: applying is the PC's step, where each approval card can wait for you.",
         "surface": "both",
@@ -1550,7 +1550,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Cloud (an API service you choose)",
         "what": "Send a hard question to the one cloud API service you chose after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
-        "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
+        "where": "HUD, the Presets button in the left column, then the Cloud row: pick a provider whose key is saved, and the standing \"Escalate to the cloud when the work is too complex\" switch is in that same row. The per-question Try the cloud model button is under an offered answer in either app. On the phone the Cloud state is readable, but choosing and switching are the PC's.",
         "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
         "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
         "surface": "both",
@@ -1801,7 +1801,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Thinking levels",
         "what": "Choose Off, Quick, Deep or Auto thinking for the running model: how much it reasons before it answers.",
-        "where": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
+        "where": "Settings, How Jarvis talks, the Thinking levels rows; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
         "asks": "Changes take effect at once and need no card; both apps show one row for each running model.",
         "limit": "Per running model - switching model or lane can change which level applies, and the level cannot make a model see more than its context allows.",
         "surface": "both",
@@ -1946,7 +1946,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "A second voice program (VoiceStudio)",
         "what": "A separate program on this PC that can speak in its own voices. Jarvis can ask it for one sentence over a loopback address on this PC and gets a sound file back; nothing else is sent.",
-        "where": "Off by default and not connected to the voice Jarvis answers in yet. Turn it on in Settings, The PC itself (\"A second voice program (VoiceStudio)\"), or say \"turn on voicestudio\"; turning it off is instant. The program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "where": "Off by default and not connected to the voice Jarvis answers in yet. There is no switch for it in Settings; say \"turn on voicestudio\" in the Jarvis bar (one approval card plus Windows Hello; turning it off is instant), or set [voicestudio] enabled in jarvis-framework.toml by hand. Settings, A second voice program (VoiceStudio), explains it. The program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
         "asks": "Turning it on raises one approval card plus Windows Hello; turning it off is instant and shows no card. Nothing starts by itself either way: no boot task and no service is made, and the sentence never leaves this PC.",
         "limit": "Off by default. It needs about 1.95 GB of the 8 GB graphics card, and beside Jarvis's own models the machine had 382 MiB free at its peak - so it is started only when it is needed and never kept loaded beside them. The two model licences are personal, non-commercial use only, and they must be accepted once, by you, in VoiceStudio's own terms before it will speak at all.",
         "surface": "desktop",
@@ -2135,8 +2135,8 @@ FEATURES = (
         "id": "card-summary",
         "group": "Safety",
         "title": "A short card, then Explain more",
-        "what": "Approval cards can open short with an Explain more button, or show everything at once; both apps read the same setting.",
-        "where": "Settings, Approval cards; both apps read /api/card-prefs.",
+        "what": "On the phone, approval cards can open short with an Explain more button, or show everything at once. The desktop draws the whole card, with no fold yet.",
+        "where": "Settings, Approval cards, on the phone. That is the only place it can be changed today; the desktop draws the whole card and has no fold or Explain more button yet.",
         "asks": "No card to read or expand a card; the setting is stored on this PC.",
         "limit": "Only how much of a card is shown at first, not whether it asks or what it does. Start short is the default; Always full is the other choice.",
         "surface": "both",

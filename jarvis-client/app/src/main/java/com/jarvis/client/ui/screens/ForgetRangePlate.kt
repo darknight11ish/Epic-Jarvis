@@ -48,8 +48,9 @@ import kotlinx.coroutines.launch
  * ticked - and the pinned chats it is KEEPING beside them (owner, 2026-11-04):
  * drawn as kept, never tickable, never counted, never sent. The owner unticks
  * anything to keep and taps "Forget these"; the PC raises ONE approval card
- * listing every item, answered on the card like any other - never by voice,
- * and never from here.
+ * carrying the COUNT and the days (this list is where every title and date
+ * stays - the owner's ruling of 2026-11-13, "Show the count, allow it"),
+ * answered on the card like any other - never by voice, and never from here.
  *
  * The two yeses: the card is the FIRST and changes nothing. Approving it makes
  * the PC hold the checked items for two minutes and the status carries

@@ -40,10 +40,12 @@ import kotlinx.coroutines.launch
  * alone (the PC refuses it from the phone), and the PC's own line says where.
  *
  * TWO DOORS OF ITS OWN, since the owner's ask of 2026-11-05:
- *  - **Send a document** ([Upload]): pick a document, choose one of the listed
- *    folders, and the PC puts it in `From my phone` inside that folder after
- *    its ONE card. The folder list is the PC's own (`GET /api/folders`), so the
- *    phone can only use a grant the owner already gave.
+ *  - **Send a document or a photo** ([Upload]): pick a document or a photo,
+ *    choose one of the listed folders, and the PC puts it in `From my phone`
+ *    inside that folder after its ONE card. A photo is a PLAIN FILE COPY - it
+ *    is not the chat picture path, and no model is shown it (2026-11-13). The
+ *    folder list is the PC's own (`GET /api/folders`), so the phone can only
+ *    use a grant the owner already gave.
  *  - **Bring in a Notion export** ([NotionImport]): the owner exports from
  *    Notion himself and picks the `.zip`; the phone sends it to the PC, which
  *    plans the import, then asks for ONE card and writes the vault.

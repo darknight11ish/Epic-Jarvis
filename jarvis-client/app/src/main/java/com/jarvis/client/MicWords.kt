@@ -17,7 +17,9 @@ package com.jarvis.client
  *    that outlives the tap; it does NOT send until the second tap or a pause.
  *  - On top of that, a disabled microphone said nothing about why. The button
  *    is disabled whenever `state.link != LinkState.CONNECTED ||
- *    state.streaming`, and home never said which. That is the defect this file
+ *    state.streaming` (and, since 2026-11-13, NOT while a press would stop the
+ *    reply being spoken - see [heldLine]'s `bargeIn`), and home never said
+ *    which. That is the defect this file
  *    fixes: every reason a tap can do nothing is named here, in the order a tap
  *    meets them, and the words are pure so a JVM test can hold them still.
  *
@@ -74,21 +76,29 @@ object MicWords {
      *     and this is the same sentence the rest of Home already shows under a
      *     control it has greyed for the link;
      *  2. the microphone is not allowed on this phone;
-     *  3. an answer is already streaming;
+     *  3. an answer is already streaming - unless this press is a barge-in
+     *     that will stop the reply being spoken ([bargeIn]);
      *  4. the PC has not offered push-to-talk.
      *
      * @param voiceOffered `VoiceStatus.canPushToTalk` - false on a PC whose
      *   voice check is not trained, and on one with no transcription engine.
+     * @param bargeIn this press will stop the reply that is still arriving:
+     *   "Stop speaking when I press the mic" is ON and Jarvis is speaking
+     *   ([com.jarvis.client.voice.MicBargeIn]). Then the button is enabled and
+     *   [ANSWERING] is not shown, because "wait for it to finish" is no longer
+     *   what the press does.
      */
     fun heldLine(
         link: LinkState,
         streaming: Boolean,
         micAllowed: Boolean,
         voiceOffered: Boolean,
+        bargeIn: Boolean = false,
     ): String? = when {
         link != LinkState.CONNECTED -> LinkWords.composerHeldLine(link)
         !micAllowed -> NO_PERMISSION
-        streaming -> ANSWERING
+        // Still the answer's own sentence when this press could not stop it.
+        streaming && !bargeIn -> ANSWERING
         !voiceOffered -> NOT_OFFERED
         else -> null
     }

@@ -2265,7 +2265,7 @@ neither app says it would.
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted (the deletion runs before the window is saved, and a failure there answers 500 with what really happened - see §18.3). Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
-| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item, the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
+| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, carrying the COUNT of facts and chats and the date range (every title and date stays on the checked list `/preview` returned), the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `400` a card that would still be cut by the gate's 4,000-character detail limit: it is refused before it is raised, in one plain sentence, so nothing is shown that the HUD could not approve (the owner's ruling of 2026-11-13). `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
 | `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis - `pinned_kept`'s titles with them, `redact()` in `brain/forget_range.rs`) | `JarvisRuntime.forgetRangeRead` (the same words out while hidden: `ForgetRange.redact`) | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
 | `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | `forget_range_write("confirm")`: the held id and a literal `true`, refused while the list is hidden, held on a stale link | `JarvisRuntime.forgetRangeWrite("confirm")`, the same body and the same holds | `forget-range.patch` - **§64**. **ported.** The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Both apps show the PC's `confirm.text` and the minutes left, send nothing but the id and `true`, say every `400`/`409` in the PC's own words, and keep the 10-minute Undo the `200` starts. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the second yes: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
@@ -4939,8 +4939,9 @@ of 2026-09-28: **"Forget a time frame" (§64)** forgets the facts and deletes
 the chats from some days together. It is made safe by three things this
 route does not need: the apps first SHOW every fact and chat, each ticked,
 and the owner unticks any to keep; ONE approval card (action
-`memory_forget_range`, tier `ask`) lists every item in full and is decided
-by a tap, never by voice; and for 10 minutes afterwards one tap on Undo puts
+`memory_forget_range`, tier `ask`) carries the count and the days - the full
+list stays on that screen, one click away - and is decided by a tap, never by
+voice; and for 10 minutes afterwards one tap on Undo puts
 everything back. Nothing else deletes in bulk.
 
 `POST /api/history/pin {"id": "<conversation id>", "pinned": true|false}`
@@ -15199,7 +15200,9 @@ ask, by voice or typing, to forget what Jarvis learned or said in a time
 frame - "forget what you learned last week", "delete my chats from 1 to 15
 September". Nothing is removed at once: both apps show the exact facts and
 chats from that time, each ticked; the owner can untick any; ONE approval
-card listing every item is decided by tapping only - never by voice, and
+card carrying the count of facts and chats and the days (every title and
+date stays on the screen that was ticked) is decided by tapping only - never
+by voice, and
 since 2026-11-04 it is the FIRST of two yesses. After the second yes the
 facts are **forgotten** (retired, exactly as Forget does - never erased)
 and the chats **deleted**, with **10 minutes to Undo**.
@@ -15381,16 +15384,41 @@ the owner's yes. What asks first cannot loosen it (`HARD_LIMITS`,
 the 10 minutes the chats are gone for good) - so approving it is a risky
 approval: Windows Hello on the PC, the screen lock on the phone. Title:
 "Jarvis wants to forget what it learned and delete chats from the days you
-chose". Its text lists EVERY fact word for word and every chat's title,
-with their dates and the "whole chat is deleted" note, the pinned chats
-kept ("3 pinned chats are kept. Pinning a chat keeps it out of this list and
-away from this Forget."), the measured estimate, and the two yesses: "This
+chose".
+
+**The card carries the COUNT, the checked list carries every item** - the
+owner's ruling of 2026-11-13, verbatim "Show the count, allow it". Its text
+says "3 facts and 125 chats from 2 to 8 November 2026" (word for word the
+sentence `preview()` returns as `said`), then, while they fit, each fact's
+own words with its saved date, the pinned chats kept ("3 pinned chats are
+kept. Pinning a chat keeps it out of this list and away from this Forget."),
+the measured estimate, and where the full list is:
+"The full list, every title and date, is on the Forget a time frame screen,
+where you ticked them." A big selection replaces the chats' titles with that
+count line, and then the facts too if it must, so that the card always fits;
+the facts' words are kept wherever they can be. Then the two yesses: "This
 card is the first yes: nothing is removed when you approve it. You are
 asked to say yes a second time (\"Yes, forget them\"), and only then does it
 happen." Then: "For 10 minutes after the second yes, one tap on Undo puts
 everything back ... Nothing is removed unless you approve this card AND say
 yes again. Saying yes out loud does not approve it." A "no" is never turned
 into a proposed memory (`_NO_RULE_FROM_DENIAL`).
+
+**Why, and the refusal.** `jarvis_gate` keeps a card's `detail` as
+`json.dumps(detail)[:4000]`, and the HUD disables Approve for a detail that
+long that no longer parses ("This request was cut off before it reached this
+card"). A card that listed every chat broke both: measured 2026-11-13, 18
+chats = 3,176 characters, 25 = 3,918 (the largest that fitted), 30 = 4,448,
+and the owner's own 125 = 14,546 - his card sat at exactly 4,000 characters
+of invalid JSON and expired un-approvable. Before, the route raised its card
+straight through `jarvis_gate.check` and never ran the check written for
+exactly this case; now a card that would STILL be cut is refused **before**
+it is raised: `400` and "That is too much to put on one approval card, so
+nothing was asked and nothing was removed. Try again, or choose a shorter
+time frame." The rule is `jarvis_agent._card_would_be_cut`, imported from
+the module that owns it - the same check the model tool path makes - never a
+copy. The gate's 4,000 limit and the HUD's cut-off rule are unchanged: they
+stay the last line of defence.
 
 ### 64.4 The first yes, the second yes, and Undo
 
@@ -27423,6 +27451,26 @@ the draft. "Take it again" clears the draft and starts at the first question,
 and a partial retake now keeps every earlier answer, because the PC merges the
 submitted answers into the saved ones instead of replacing them.
 
+**Next always does something, and the last question finishes the pass**
+(2026-11-13). One pure rule, `nextStep` in `setup-questionnaire.js`, decides
+every press, and the button's label, its enabled state and the line under the
+row all come from it: it steps to the next question on screen; when the filter
+has hidden the question on screen it steps ONE question forward in the PC's own
+order and never jumps a section; at the end of a section it opens the next one
+that still has a question to show; and at the end of the whole walk it either
+offers **Finish** or turns the button off with a sentence saying what is left -
+never a press that does nothing. **Finish is offered in one state only**: every
+question has an answer (counted from the draft, like "N of M answered") and the
+PC has not recorded this pass yet, so an incomplete pass never offers it.
+Pressing Finish records the pass as complete through the same cardless
+`{"keep_current": true}` note "Keep current settings" sends: no answer is
+written, no setting changes, no card is raised, and the answers still change
+only through the two-press Apply. Before this the page worked the step out
+itself: at the end of the list Next painted the row and returned, Finish was
+painted only while a single question happened to be on screen and nothing was
+wired to it, and the pass could never be recorded - so the offer, the HUD
+banner and the chat line kept telling the owner the quiz was unfinished.
+
 Changing an answer asks `POST /api/setup/plan` and draws every change
 in the PC's own sentence with its effect - **Instant**, **Asks you on a card**
 or **Blocked** - plus everything the PC says would not change and why, and the
@@ -27506,7 +27554,10 @@ from `backend/jarvis_setup.py`'s own `QUESTIONS`; the desktop suite runs
 `--check` and compares it to the live module), so a reworded question fails a
 test until the fixture is regenerated. The desktop suite is
 `jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real 25 questions, the
-seven sections, the stepper's next-question rule, the "new / unanswered" filter,
+seven sections, the stepper's next-question rule and its Finish rule - the last
+question finishes the pass, a question the filter hid is stepped over one at a
+time and never by a section, and an incomplete pass offers no Finish - the
+"new / unanswered" filter,
 the draft and "All"/"None", the read-only plan body, the one apply body, the
 three progress bodies, the stale-link gate, honest outcomes, the bridge's four
 calls, and source pins that no route or gate action is in the page, nothing
@@ -36654,7 +36705,7 @@ huge file, and the `my_files` action through `jarvis_documents` and
 `jarvis_agent`'s own runner. The decision is
 `decisions.d/2026-11-05-project-repomap-first.md`.
 
-## 196. A document from your phone: three upload routes, ONE card a file, and the file lands as a desktop file (backend only, the phone's screen is the next lane, added 2026-11-05)
+## 196. A document or a photo from your phone: three upload routes, ONE card a file, and the file lands as a desktop file (the backend routes, used by the phone's screen, added 2026-11-05; photos joined as plain file copies 2026-11-13)
 
 **What it is.** The owner's ask - "upload any documents through the jarvis app and have it be fully processed as if I was uploading it to the jarvis desktop" - was never missing the processing. `jarvis_documents.py` already finds a file by name the moment it appears, indexes notes and text files on the next search, and converts PDF, Word, Excel and PowerPoint files on request; `jarvis_notion_obsidian.py` already turns a Notion export into a vault; and `jarvis_attached_file.py` already reads one file in one chat turn. What did not exist was a way for a paired phone to put a byte on this PC's disk, so this section is the pipe and nothing else.
 
@@ -36679,9 +36730,9 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 | `POST /api/upload/chunk` | `200 {"ok": true, "received": <bytes so far>}`; `400` for a body that is not an object, a bad index or undecodable base64; `409 {"ok": false, "waiting": true}` while the card is unanswered, and the same code for a piece out of turn; `403 {"ok": false, "denied": true}` once the card is denied or timed out; `410 {"ok": false}` for an id that expired or never existed; `413` for a piece over 1 MiB or one that would run past the declared size; `507` when this PC cannot write |
 | `POST /api/upload/finish` | `200 {"ok": true, "saved": true, "name": "taxes.pdf", "folder": "Documents", "sub": "From my phone", "size": 412345, "said": "Saved in \"Documents\", in the \"From my phone\" folder inside it. Ask Jarvis about it whenever you like."}` for a document; `200 {"ok": true, "ready": true, "id", "name", "size", "said": "Your export arrived. ..."}` for a Notion export, which is staged and NOT landed; `200 {"ok": false, "said": "<why>", "reason": "<code>"}` when the bytes are not what the name claims, the size or sha256 does not match, or the upload arrived short; `403`/`409`/`410` as above |
 
-**The card comes first, and one file is one card.** For `purpose: "document"` the action is `receive_uploaded_document`, tier `ask` (`backend/rebuilt/jarvis-framework.toml`), and it is in **both** `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`, so no app and no settings line can turn the card into a standing yes; `jarvis_card_words` gives it "save a document your phone sent", and the asks-first page lists it under "This PC and your phone". The card carries the file's name, its size and the **folder's name** - never a full path, never a byte of the file, never its contents - and `jarvis_upload.request_begin` refuses any tier but `ask` rather than read a looser line as consent (the same shape `phone_notifications_read` keeps). A denied, timed-out or refused card writes nothing and deletes anything staged. **For a Notion export there is no card here at all:** the export is only staged, and the card that matters is the existing `import_notion_export` one, raised later with the real note, attachment and database counts on it.
+**The card comes first, and one file is one card.** For `purpose: "document"` the action is `receive_uploaded_document`, tier `ask` (`backend/rebuilt/jarvis-framework.toml`), and it is in **both** `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`, so no app and no settings line can turn the card into a standing yes; `jarvis_card_words` gives it "save a document your phone sent", and the asks-first page lists it under "This PC and your phone". The card carries the file's name, its size and the **folder's name** - never a full path, never a byte of the file, never its contents - and `jarvis_upload.request_begin` refuses any tier but `ask` rather than read a looser line as consent (the same shape `phone_notifications_read` keeps). A denied, timed-out or refused card writes nothing and deletes anything staged. A photo raises the same action and the same tier, and the card's body says it is a photo and that Jarvis does not open it or show it to a model on this path. **For a Notion export there is no card here at all:** the export is only staged, and the card that matters is the existing `import_notion_export` one, raised later with the real note, attachment and database counts on it.
 
-**Where it lands.** `<the chosen listed folder>\From my phone\<name>`, created on the first successful upload. A name already taken there is never overwritten: the new file gets a number (`taxes (2).pdf`, `taxes (3).pdf`), the same rule the Notion importer uses. It is inside a folder the owner already granted, so no new grant and no second card for a folder, and the index walks it on the next search with no new code.
+**Where it lands.** `<the chosen listed folder>\From my phone\<name>`, created on the first successful upload. A name already taken there is never overwritten: the new file gets a number (`taxes (2).pdf`, `taxes (3).pdf`), the same rule the Notion importer uses. It is inside a folder the owner already granted, so no new grant and no second card for a folder, and the index walks it on the next search with no new code. A photo lands the same way and **unchanged, byte for byte**: it is a file copy, not a converted or re-encoded image.
 
 **What processing runs is exactly what runs for a desktop file - there is no new step, and nothing here forks the reader.**
 
@@ -36692,7 +36743,9 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 
 **The folder is chosen by equality, never typed by the phone.** The only folder-shaped field is `into`, and it is accepted only when it equals one of `jarvis_documents.folders()` - the same test `import_notion` makes - so a phone cannot create a grant; it can only use one the owner already gave, on the PC, with a card. An empty list answers with the PC's own line (`PHONE_ADD`), a damaged list with the module's own sentence, and a folder that is not on the list with "it can only go into a folder on the list - add the folder first".
 
-**The types: the same eight, and no more.** `.pdf .docx .xlsx .pptx .md .markdown .txt .csv` - exactly `jarvis_attached_file.KINDS`, exactly the phone's own picker. No `.zip` in this path (a zip is the Notion export's business), no pictures (they have their own path and their own secret cleaner), no audio or video, and never an executable or a script: nothing uploaded is ever run, and a kind Jarvis cannot read has no reason to be stored. The allowlist is enforced twice - `begin` checks the NAME, `finish` checks the BYTES - and the byte check is `jarvis_attached_file`'s own guards: `%PDF-` for a PDF, an encrypted PDF refused from its own trailer, `PK\x03\x04` plus the right `word/`/`xl/`/`ppt/` member for the three Office kinds, the declared unpacked total judged by `jarvis_documents.zip_bomb_problem`, and UTF-8 with no NUL characters for a note, text file or CSV. A name with a path in it, a leading dot, a control character, a Windows reserved name (`CON`, `NUL`, `COM1`...) or more than 150 characters is refused before a card is raised.
+**The types: the eight documents, plus eight photos as plain file copies (2026-11-13).** `.pdf .docx .xlsx .pptx .md .markdown .txt .csv` - exactly `jarvis_attached_file.KINDS`, exactly the phone's document picker. Beside them the SAME door and the SAME purpose accept `.jpg .jpeg .png .webp .heic .heif .gif .bmp` (`jarvis_upload.PHOTO_EXTENSIONS`) as a PLAIN FILE COPY, which is the half the owner's "send this photo to the computer" report found missing. No `.zip` in this path (a zip is the Notion export's business), no audio or video, and never an executable or a script: nothing uploaded is ever run. **A PHOTO ON THIS PATH IS NOT THE CHAT PICTURE PATH, and the two must not be merged:** a picture attached in chat goes to `ChatPicture`/`jarvis_chat_picture.py` - decoded, OCR'd, secrets black-boxed, then shown to the vision model - while a photo here is stored and nothing reads it. That is why `jarvis_attached_file.KINDS` is NOT widened (a photo is still refused as a chat document with `WHY_PICTURE`), why `goesToPicture`/`ChatPicture` are untouched, and why the phone's chat "Attach a file" row keeps its own list. The allowlist is enforced twice - `begin` checks the NAME, `finish` checks the BYTES - and the byte check is `jarvis_attached_file`'s own guards for the document kinds (`%PDF-` for a PDF, an encrypted PDF refused from its own trailer, `PK\x03\x04` plus the right `word/`/`xl/`/`ppt/` member for the three Office kinds, the declared unpacked total judged by `jarvis_documents.zip_bomb_problem`, and UTF-8 with no NUL characters for a note, text file or CSV) plus, for a photo, a HEADER check of at most 64 bytes (`jarvis_upload._photo_problem`). A name with a path in it, a leading dot, a control character, a Windows reserved name (`CON`, `NUL`, `COM1`...) or more than 150 characters is refused before a card is raised.
+
+**A landed photo is still unreadable to every reader that turns bytes into words.** Proved, not assumed, in `backend/test_upload.py`'s `t_a_photo_lands_as_a_plain_file`, which lands a real PNG and then asks the real modules: `jarvis_documents.read` refuses it (its `TEXT_KINDS`/`DOC_KINDS` gate at `jarvis_documents.py:2171-2173`; `.png` is in neither, at `:271-272`), the search index's default kind set is `TEXT_KINDS` and its reconcile skips anything else (`:1258`, `:1387`), the word scan opens `TEXT_KINDS` only (`:1772-1773`), `jarvis_attached_file.read` refuses it as a picture (`:526-527`; `KINDS` at `:135-144` has no image), and so does the repository map. Nothing on this route calls a picture decoder, OCR, a vision model or the chat picture path.
 
 **What `finish` checks, and the one moment a file becomes real.** It measures the bytes that actually arrived (never the declared size), refuses an upload that arrived short, verifies the sha256 when one was given, runs the byte guards above, and then does ONE `os.replace` on the same volume, so the move is atomic. A refusal at any point deletes the staging and leaves nothing behind - the owner's folder is not touched, so there is never a half file to clean up.
 
@@ -36703,19 +36756,19 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 | limit | value | why |
 |---|---|---|
 | one piece | 1 MiB of raw bytes | about 1.37 MB of base64 and JSON, a third of the server's 4 MiB request-body cap (MAX_BODY), and the same number `import_history.py` already reads in |
-| a document | 50 MiB | the number the desktop reader already handles (`jarvis_documents.MAX_DOC_BYTES`), so nothing can be stored that Jarvis cannot open |
+| a document or a photo | 50 MiB | the number the desktop reader already handles (`jarvis_documents.MAX_DOC_BYTES`), so nothing can be stored that Jarvis cannot open; a photo is stored, never opened by a reader, and the phone checks the same cap before a byte leaves |
 | a Notion export | 4 GiB | it is stored and unpacked, never parsed as a document; the PC's unpacked ceiling is its own 4 GB check (`EXPORT_UNCOMPRESSED_MAX`), and the 250 MiB of 2026-11-05 was raised by the owner on 2026-11-09 |
 | uploads in flight | 3 | so a stolen token cannot keep a queue of half files |
 | staged in all | 4 GiB | the disk ceiling before anything is landed; raised with the Notion cap so one full export can be staged |
 | an id's life | 30 minutes | one `finish`, then the id and its bytes are gone; a sweep on the next `begin` clears what a phone that died left |
 
-**Every way it refuses, in plain words.** At `begin`: no such folder on the list, an empty list, a damaged list, a name with a path or a reserved word in it, an extension outside the eight, a declared size over the cap, a fourth upload in flight, the staging quota, a protected destination and a "Protected from Jarvis" block. At `chunk`: an unknown or expired id, the card still waiting (409), the card denied (403), a piece out of turn (409), a piece over 1 MiB (413) and a piece past the declared size (413). At `finish`: bytes that do not match the name, an encrypted PDF, a zip bomb, zero bytes, a short upload, a sha256 that does not match, a destination that disappeared, a link where a folder should be, and a disk that will not take it (a sentence, never a stack trace).
+**Every way it refuses, in plain words.** At `begin`: no such folder on the list, an empty list, a damaged list, a name with a path or a reserved word in it, an extension outside the eight documents and the eight photos, a declared size over the cap, a fourth upload in flight, the staging quota, a protected destination and a "Protected from Jarvis" block. At `chunk`: an unknown or expired id, the card still waiting (409), the card denied (403), a piece out of turn (409), a piece over 1 MiB (413) and a piece past the declared size (413). At `finish`: bytes that do not match the name, a photo that is not one, an encrypted PDF, a zip bomb, zero bytes, a short upload, a sha256 that does not match, a destination that disappeared, a link where a folder should be, and a disk that will not take it (a sentence, never a stack trace).
 
-**Tests.** `backend/test_upload.py` - 180 checks and no skips on a machine whose temp folder takes a write: the chunked begin/chunk/finish happy path with the landed bytes compared byte for byte and `find` finding it, ONE card raised before anything is on disk and a 409 for every piece while it waits, a denied card and a timed-out card leaving nothing at all, the sha256 and size refusals, both caps and the 4 MiB body arithmetic, an unlisted folder, an empty and a damaged list, every refused extension, a renamed `.docx`, a `.docx` zip bomb, an encrypted PDF, a text file that is really binary, a name with a path in it, the staging folder invisible to `allowed_path`/`find`/`read` before `finish` and gone after, expiry and the sweep, the three-in-flight cap and the staging quota, the Notion dry run writing nothing into the vault and the import raising exactly ONE card and keeping its Undo, the two PC-only Notion routes still refusing a phone, the twins, the plugin catalogue and the gate tables. On a machine whose temp folder refuses a write, the Notion dry-run/import checks print `skip` and are **NOT RUN, never a pass**. `backend/test_documents.py`, `backend/test_notion_obsidian.py`, `backend/test_asks_first.py`, `backend/test_card_words.py` and `backend/test_plugin_catalogue.py` run unchanged.
+**Tests.** `backend/test_upload.py` - 210 checks and no skips on a machine whose temp folder takes a write: the chunked begin/chunk/finish happy path with the landed bytes compared byte for byte and `find` finding it, ONE card raised before anything is on disk and a 409 for every piece while it waits, a denied card and a timed-out card leaving nothing at all, the sha256 and size refusals, both caps and the 4 MiB body arithmetic, an unlisted folder, an empty and a damaged list, every refused extension, a renamed `.docx`, a `.docx` zip bomb, an encrypted PDF, a text file that is really binary, a name with a path in it, the staging folder invisible to `allowed_path`/`find`/`read` before `finish` and gone after, expiry and the sweep, the three-in-flight cap and the staging quota, the Notion dry run writing nothing into the vault and the import raising exactly ONE card and keeping its Undo, the two PC-only Notion routes still refusing a phone, **a real PNG and seven other photo kinds landing unchanged in `From my phone` with a `.svg`/`.tif`/`.tiff`/`.mp4`/`.zip`/`.exe`/`.py` still refused by name and a renamed program refused by its bytes, and then the docs reader, the search index and the chat attachment reader each proved to still refuse the landed photo**, the twins, the plugin catalogue and the gate tables. On a machine whose temp folder refuses a write, the Notion dry-run/import checks print `skip` and are **NOT RUN, never a pass**. `backend/test_documents.py`, `backend/test_notion_obsidian.py`, `backend/test_asks_first.py`, `backend/test_card_words.py` and `backend/test_plugin_catalogue.py` run unchanged.
 
-**One-sided, and said out loud.** This is the backend half. The phone's "Send a document" button, its folder picker, its progress chip and its result sentence are the next lane; the desktop deliberately gets no screen, because it already has every door this uses. `docs/ARCHITECTURE.md` section 8 records both, and `tools/check_parity.py` keeps the three routes in its backend-only register until an app calls one - at which point the checker fails and asks for the reclassification, which is the point of the register.
+**One-sided, and said out loud.** This is the backend half. The phone's side is its Settings, Folders Jarvis may look in row - "Send a document or a photo", its folder picker, its progress chip and its result sentence. The desktop deliberately gets no screen, because it already has every door this uses. `docs/ARCHITECTURE.md` section 8 records both, and `tools/check_parity.py` carries the three routes as `phone-only`: the phone is their only caller and the desktop needs none.
 
-**The decision this reverses is recorded.** On 2026-10-29 the record said, in as many words, "Deliberately not built, now or later: an upload endpoint, a resumable or chunked transfer, a document preview, a second image path, and any 'attach anything' share target on the phone" (`docs/DECISIONS.md:4943`). This section is the reversal of **"an upload endpoint"** and **"a resumable or chunked transfer"**, and of nothing else: there is no document preview here, no second image path and no share target on the phone, and pictures, audio and video are refused. `decisions.d/2026-11-05-phone-upload.md` records it.
+**The decision this reverses is recorded.** On 2026-10-29 the record said, in as many words, "Deliberately not built, now or later: an upload endpoint, a resumable or chunked transfer, a document preview, a second image path, and any 'attach anything' share target on the phone" (`docs/DECISIONS.md:4943`). This section is the reversal of **"an upload endpoint"** and **"a resumable or chunked transfer"**, and of nothing else: there is no document preview here, no second image path (a photo is only stored as a plain file and never decoded, OCR'd or shown to a model - 2026-11-13, `decisions.d/2026-11-13-photo-from-phone.md`), no share target on the phone, and audio and video are refused. `decisions.d/2026-11-05-phone-upload.md` records the upload half.
 ## 197. Packs: add and remove a skill from a folder or a `.zip`, with the full scan on the card (added 2026-11-05)
 
 The owner asked for a manager that can "add/remove plug-ins and skills from a wide variety of sources, with a full pre-install scan (safety, compatibility, effectiveness)". This is **phase 1**: one kind of pack (`skill`), two local sources (a folder on this PC, a `.zip` on this PC), the full scan report, the ledger that makes removal complete, and four chat doors. Phase 1 deliberately installs **no code packs** and has **no git, URL or marketplace source** - see 197.7.

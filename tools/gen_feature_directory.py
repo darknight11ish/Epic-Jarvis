@@ -68,6 +68,14 @@ LABELS = (
 #: exists but whose typed path is still being wired (2026-10-22):
 PLANNED_NOTE = "Settings control today; typed path still being wired."
 
+#: The one label whose rows can carry either planned note: the note is about a
+#: Settings control AND a typed path, and only this label claims both. A
+#: Command-Only row has no Settings control, an Always-On one has no switch, a
+#: Settings-Only one is never typed by design, and a PC-Only one is never typed
+#: on the phone - saying "typed path still being wired" of any of them is a
+#: false bullet in the owner's own directory (2026-11-13, the audit's finding 2).
+SWITCHABLE = "Switchable / Adjustable (Typed & Settings)"
+
 
 def _resolves(phrase: str) -> bool:
     try:
@@ -163,8 +171,19 @@ def rows(data: dict) -> list:
     for row in data.get("features") or []:
         fid = row["id"]
         evidence = row.get("label_evidence") or {}
+        # THE NOTE IS FOR A PLANNED ROW, AND ONLY A PLANNED ONE (2026-11-13).
+        # It used to be decided from `known_gaps` and the multi-field boards
+        # alone. Two things followed from that, and both were false bullets in
+        # the owner's own directory: a feature that had become `enforced` while
+        # a stale gap row still said `planned` printed "Still being wired", and
+        # a board member that is not a setting at all (Command-Only, Always-On,
+        # Settings-Only, PC-Only) was told its "typed path" was still being
+        # wired. The row's own status AND label are the authority now, so the
+        # note cannot be stamped on a row that is not planned.
+        planned_row = (str(row.get("status") or "") == "planned"
+                       and str(row.get("label") or "") == SWITCHABLE)
         note = ""
-        if fid in multi and str(row.get("status") or "") != "enforced":
+        if planned_row and fid in multi:
             # A feature named by a multi-field board gets the board's honest
             # note ONLY while it has no enforced typed path of its own. Since
             # 2026-10-26 the faces row IS enforced ("change your face to
@@ -173,7 +192,7 @@ def rows(data: dict) -> list:
             # whole row "typed path still being wired" would contradict its
             # own example sentence on the page.
             note = PLANNED_NOTE
-        elif fid in planned:
+        elif planned_row and fid in planned:
             gap = planned[fid]
             reason = str(gap.get("reason") or "").strip()
             owner = str(gap.get("owner") or "").strip()
