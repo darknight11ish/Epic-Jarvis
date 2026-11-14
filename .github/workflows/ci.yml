@@ -241,7 +241,42 @@ jobs:
           echo "All frontend shards succeeded."
 
 
-  backend:
+  # SHARDED 2026-11-13 - ONE JOB, SHARDED, AND THE REQUIRED NAME KEPT.
+  #
+  # WHY. This job ran `python backend/run_suites.py` once over every
+  # `backend/test_*.py` - 75,829 tests - and by 2026-11-13 that step had grown
+  # to the job's whole 90-minute cap. The cost is the sweep's own: a PASSING run
+  # of the job (43549014566, job 132306898351) took 79m20s, of which 75m54s was
+  # the suite step (its 618 suites reported 4,550.8 s between them; checkout,
+  # setup, pip, Playwright and the two fail-fast checks are 1m15s, and the
+  # contract checks after the sweep are 2m09s). PR #1241's run 43547214198 was
+  # CANCELLED at 90m16s with 88m41s of it in the suite step - the wall, not a
+  # check, decided that run. PR #1245 was still running at 72 minutes and #1247
+  # at 46. Raising the cap (PR #1247 proposes 120) buys headroom and not one
+  # minute less per run; this splits the work instead, so a shard waits a
+  # fraction of the wall while they all run at once.
+  #
+  # THE SHARD COUNT HAS ONE DEFINITION: the `matrix.shard` list below. Nothing
+  # here types the number again - the job name reads `strategy.job-total`, and
+  # the runner is given `${{ matrix.shard }}/${{ strategy.job-total }}`, both
+  # set by GitHub from that list - so a matrix of four cannot be run with a
+  # total of five and silently drop a shard's worth of suites (the failure mode
+  # the 2026-10-27 test audit found in the frontend job, fixed there the same
+  # way).
+  #
+  # WHAT A SHARD RUNS. `run_suites.py --shard I/N` slices its own sorted
+  # `test_*.py` list by position (`position % N == I - 1`), so every suite runs
+  # in exactly one shard and the split is the same on every run. WHICH suites
+  # exist, which are skipped by name, and what counts as a pass do not change
+  # at all. A shard that selects no suite is a FAILURE, not an empty green;
+  # `backend/test_suites_shard.py` proves the split over shard counts 1..8, the
+  # range refusals, and that empty-shard rule.
+  #
+  # THE NAME `backend` IS STILL THE REQUIRED CHECK. The shards fan into the
+  # small `backend` aggregator below this job; it does no work of its own and
+  # is green only when every shard is, the same shape as `frontend-shard` +
+  # `frontend` above.
+  backend-shard:
     # The backend suites, including every contract test (the ones that read
     # the phone's Kotlin and the desktop's Rust and JS and check them against
     # the real Python).
@@ -265,9 +300,9 @@ jobs:
     # why with a file:line each: test_events_pump.py, test_ollama_direct.py and
     # test_tool_calling_wiring.py read text newer than the base's last re-take
     # and fail against it. They run in the informational `backend-owner-env`
-    # job below, which prints each as a SKIPPED line and is never a pass. This
-    # job's run still ends with one `SKIPPED BY NAME` line naming every suite
-    # that did not run, and the Summary carries it.
+    # job below, which prints each as a SKIPPED line and is never a pass. Every
+    # shard's run still ends with one `SKIPPED BY NAME` line naming every suite
+    # in that shard that did not run, and each shard's Summary carries its own.
     #
     # AND NOTHING HERE MAY PASS BY SKIPPING (same evening, item 3): a suite
     # that exits 0 having passed no check is a FAILURE, with no allowlist. That
@@ -277,21 +312,28 @@ jobs:
     # `cryptography` (chat history is encrypted); nothing else from it is needed,
     # and the memory ones (onnxruntime and the meaning model, sqlite-vec) are left out on purpose -
     # the suites use a hash embedder and must pass without them.
+    name: backend-shard (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    # Measured 2026-10-25: 32m43s (PR #813), 35m07s (this PR's previous head),
-    # then 40m11s CANCELLED by the old 40-minute cap on 88dfb6b9f - the only
-    # thing wrong with that run was that the suite and a loaded shared runner
-    # came within five minutes of the cap. 60 gives the real work room without
-    # hiding a genuine hang.
-    # 2026-11-04: the backend suites are now 55-60 minutes of real work.
-    # Measured on this night: #1132's suite step took 55m20s (whole job 58m44s)
-    # and #1115's whole job passed at 59m44s, while four required backend jobs
-    # were CANCELLED at this 60-minute cap rather than failing a test - #1126 at
-    # 60m03s and #1128 at 60m25s (every step they reached was success). A
-    # cancelled required check can never satisfy the ruleset, so the cap is 90
-    # minutes and the honest limit is the suite's own runtime, not a clock that
-    # turns a passing run into a red one.
-    timeout-minutes: 90
+    # THE TIMEOUT IS FOR ONE SHARD, NOT FOR THE SWEEP (2026-11-13). The old
+    # single job's history is kept here because it is what this replaces:
+    # 32m43s on 2026-10-25 (PR #813), 55m20s on 2026-11-04 (#1132), 79m20s on a
+    # PASSING run (43549014566), and 90m16s CANCELLED for #1241 on this date.
+    # A shard is a quarter of that sweep by count - about 19 minutes of suites
+    # from the 75m54s step. It is not perfectly even: the position split puts
+    # the two slowest suites (test_claims.py 16m29s and test_chatbot_sites.py
+    # 8m08s on that run) in the same shard, and that shard measures 35.5 minutes
+    # of suites while the other three are 17.2, 12.0 and 11.2. Add the 3m24s of
+    # setup and contract checks every shard carries and the worst honest shard
+    # is about 39 minutes; 60 is about 1.5x that - generous, like
+    # `frontend-shard`'s 60 for an 18-minute shard, and below the old 90
+    # because a shard that really runs for an hour is a hang, not a slow suite.
+    timeout-minutes: 60
+    strategy:
+      # One red shard must not cancel the other three: a failed run should list
+      # every failing suite it found, the same rule as `frontend-shard`'s.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # KEEP THE CODE-ONLY CHECKS IN CI (review of #861, 2026-10-26). The four
     # suites that drive jarvis_chatbot_web's visible browser -
     # test_chatbot_sites.py, test_chatbot_gemini.py, test_handoff.py and
@@ -425,7 +467,18 @@ jobs:
       # two contract checks that shared its step stay where they are.
       - name: Task patch is what its generator builds (fail fast)
         run: python tools/gen_tasks_patch.py --check
-      - name: Backend suites (the ones that need no file from the owner's PC)
+      - name: Backend suites in this shard (the ones that need no file from the owner's PC)
+        # SHARD: the matrix value; SHARDS: the length of the matrix list. The
+        # runner is handed `SHARD/SHARDS` and slices its own sorted suite list
+        # by position, so this step runs the same command as before plus the
+        # one flag - not a hand-picked list of suites, which is what would drift
+        # from the fleet the moment a suite was added.
+        env:
+          SHARD: ${{ matrix.shard }}
+          # The ONE place this number is not a literal: strategy.job-total is
+          # the length of the matrix.shard list above, so SHARDS cannot drift
+          # from the matrix and silently skip a shard's worth of suites.
+          SHARDS: ${{ strategy.job-total }}
         # The FAILING SUITE NAMES are the useful part of a red run, and they
         # were only in a thirteen-minute log - which needs a signed-in browser
         # to read, so a failure here could not be diagnosed from a terminal
@@ -439,7 +492,7 @@ jobs:
         # did.
         run: |
           set +e
-          python backend/run_suites.py 2>&1 | tee "$RUNNER_TEMP/backend-suites.txt"
+          python backend/run_suites.py --shard "${SHARD}/${SHARDS}" 2>&1 | tee "$RUNNER_TEMP/backend-suites.txt"
           status=${PIPESTATUS[0]}
           set -e
           fails=$(grep -E '^FAIL ' "$RUNNER_TEMP/backend-suites.txt" || true)
@@ -448,7 +501,9 @@ jobs:
             # lines: the failing checks are the useful part, and an annotation
             # can be read through the public checks API - no log, no browser.
             # Each suite is re-run on its own through run_suites.py, so it gets
-            # the same staged backend the sweep gave it.
+            # the same staged backend the sweep gave it. Deliberately WITHOUT
+            # --shard: the name is the selection here, and the suite has already
+            # been proved to belong to this shard by the run above.
             while IFS= read -r line; do
               name=$(echo "$line" | awk '{print $2}')
               [ -n "$name" ] || continue
@@ -458,10 +513,10 @@ jobs:
             done <<< "$fails"
           fi
           {
-            echo "### Backend suites (Ubuntu)"
+            echo "### Backend suites (Ubuntu), shard ${SHARD}/${SHARDS}"
             echo ""
             echo '```'
-            grep -E '^(FAIL |skip |SKIPPED|[0-9]+ passed)' "$RUNNER_TEMP/backend-suites.txt" | head -120 || true
+            grep -E '^(FAIL |skip |SKIPPED|[0-9]+ passed|shard: )' "$RUNNER_TEMP/backend-suites.txt" | head -120 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
@@ -571,6 +626,33 @@ jobs:
       # commands for real (bug audit 2026-09-27, desktop-rust finding #2).
       - name: Desktop command ACL parity
         run: python tools/check_command_acl.py
+
+  # This is the required check named "backend". It does no work of its own: it
+  # exists so the ruleset's check name survives sharding, exactly like
+  # `frontend` above. GitHub aggregates a matrix job's result into
+  # needs.backend-shard.result, so "success" here means every shard passed; a
+  # failed or cancelled shard turns this job red.
+  #
+  # `if: always()` matters: without it a cancelled matrix would SKIP this job,
+  # and a required check that never reports blocks a merge just as hard as a
+  # red one - which is the failure this aggregator exists to make visible.
+  backend:
+    name: backend
+    needs: [backend-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every backend shard to be green
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="${{ needs.backend-shard.result }}"
+          echo "backend-shard result: ${result}"
+          if [ "${result}" != "success" ]; then
+            echo "::error::one or more backend shards did not succeed (${result})"
+            exit 1
+          fi
+          echo "All backend shards succeeded."
 
   # THE SUITES THAT STILL NEED THE OWNER'S OWN FILES - INFORMATIONAL.
   #
