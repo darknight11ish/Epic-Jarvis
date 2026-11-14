@@ -14,11 +14,13 @@ import java.util.Base64
 import java.util.Locale
 
 /**
- * A document (or, since 2026-11-13, a photo as a plain file copy) - or a Notion
- * export `.zip` - sent from the phone INTO a folder Jarvis already looks in, in
- * three steps (the owner's ask of 2026-11-05; the design is
- * `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`, section C0; the PC's
- * half is `backend/jarvis_upload.py`, built by its own lane).
+ * ANY file (2026-11-13) - or a Notion export `.zip` - sent from the phone INTO a
+ * folder Jarvis already looks in, in three steps (the owner's ask of 2026-11-05;
+ * the design is `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`,
+ * section C0; the PC's half is `backend/jarvis_upload.py`, built by its own
+ * lane). A document, a photo, an archive, a program or a file with no extension
+ * all take the same road: the bytes cross, the PC stores them as a plain file,
+ * and nothing on this path runs, opens, parses, indexes or models them.
  *
  * A PHOTO ON THIS PATH IS NOT THE CHAT PICTURE PATH. The Settings row sends
  * the bytes exactly as they are, the PC writes them into `From my phone`, and
@@ -49,16 +51,19 @@ import java.util.Locale
  * WHY 1 MiB. It keeps every request at about 1.4 MB of base64 + JSON, a third
  * of the PC's 4 MiB body ceiling (`AttachFile.BACKEND_MAX_BODY`), and it is
  * the same chunk size the PC's own history importer uses. The number is not
- * new to the project.
+ * new to the project. 2 GiB is 2,048 such requests - the same loop and the same
+ * per-request size that already carry a 4 GiB Notion export.
  *
- * TWO CAPS, THE OWNER'S DECISIONS: 50 MB for a document (exactly what the PC's
- * reader already handles, so nothing can be stored that Jarvis cannot open -
- * `jarvis_documents.MAX_DOC_BYTES`) and 4 GB for a Notion export (raised from
- * 250 MB on 2026-11-09, when the owner chose to send the same export from the
- * phone that the PC imports). The Notion one is the RAW ZIP BYTES that cross
- * his private network, not the PC's unpacked ceiling - that ceiling is 4 GB too,
- * but it answers a different question (what the archive expands to) and it is
- * checked on the PC. They are checked here before a byte leaves the phone, and
+ * TWO CAPS, AND ONE NUMBER EACH. Files of ANY type go up to 2 GiB (raised from
+ * 50 MB on 2026-11-13, the owner's "reasonably large size"): the PC stores the
+ * bytes as a plain file, so the ceiling is no longer tied to the reader's own
+ * 50 MiB (`jarvis_documents.MAX_DOC_BYTES`), which still applies when the owner
+ * asks Jarvis to READ a landed document. A Notion export goes up to 4 GB
+ * (raised from 250 MB on 2026-11-09, when the owner chose to send the same
+ * export the PC imports). The Notion one is the RAW ZIP BYTES that cross his
+ * private network, not the PC's unpacked ceiling - that ceiling is 4 GB too, but
+ * it answers a different question (what the archive expands to) and it is
+ * checked on the PC. Both are checked here before a byte leaves the phone, and
  * again by the PC.
  *
  * HONEST DEGRADATION. A PC without these routes answers 404 (an older backend,
@@ -87,8 +92,8 @@ object Upload {
     /** Raw bytes per chunk: the PC's own number, and a third of its body cap. */
     const val CHUNK_BYTES = 1_048_576
 
-    /** Most raw bytes one document may carry - the PC's `MAX_DOC_BYTES`. */
-    const val DOCUMENT_MAX = 50L * 1024 * 1024
+    /** Most raw bytes one file may carry - the PC's `MAX_FILE_BYTES`, any type. */
+    const val DOCUMENT_MAX = 2L * 1024 * 1024 * 1024
 
     /** Most raw bytes one Notion export may carry, as it is sent - the owner's 4 GB (was 250 MB; raised 2026-11-09). */
     const val NOTION_MAX = 4L * 1024 * 1024 * 1024
@@ -102,15 +107,17 @@ object Upload {
     // ------------------------------------------------------------- words ---
 
     /** The Folders screen's own action, under the list (DESIGN.md C0.5). */
-    const val TITLE = "Send a document or a photo"
+    const val TITLE = "Send a file from your phone"
 
     /** The sentence under the action, and the promise behind it. */
-    const val DETAIL = "Pick a document or a photo and it goes into a folder Jarvis may look " +
-        "in, into a new folder called From my phone. A photo is saved as a plain file and is " +
-        "never shown to a model on this path. Your PC asks you once before anything lands."
+    val DETAIL: String = "Pick any file and it goes into a folder Jarvis may look in, into a " +
+        "new folder called From my phone. It is saved as a plain file: never run, never " +
+        "opened, never added to the search index, and never shown to a model on this path. " +
+        "Files up to ${capWords(Purpose.DOCUMENT)} can be sent, and your PC asks you once " +
+        "before anything lands."
 
     /** A PC without the upload routes: its own state, in its own words. */
-    const val NOT_HERE = "Sending a document or a photo from your phone is not available on this PC yet."
+    const val NOT_HERE = "Sending a file from your phone is not available on this PC yet."
 
     /** The same fact for the Notion door. */
     const val NOT_HERE_NOTION =
@@ -143,36 +150,36 @@ object Upload {
     /** The PC refused without a sentence of its own. */
     const val REFUSED = "Your PC did not take that file, and did not say why."
 
-    /** A file whose kind this door does not send. */
-    fun wrongKind(name: String): String =
-        "$name is not a kind this door sends. Send a PDF, Word, Excel, PowerPoint, text, " +
-            "Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, GIF or BMP) - or bring a " +
-            "Notion export in with the row below."
-
     /** A Notion pick that is not a `.zip`. */
     const val WRONG_ZIP = "That is not a .zip. In Notion, choose Settings, Export all workspace " +
         "content, as Markdown & CSV, and pick the .zip it makes."
 
-    /** Why a document is refused for its size: the number, the cap, and the one alternative. */
+    /** Why a file is refused for its size: the number, the cap, and the one alternative. */
     fun tooBig(bytes: Long, purpose: Purpose): String =
         "That file is ${AttachFile.sizeWords(bytes)}. " +
-            (if (purpose == Purpose.NOTION) "Notion exports" else "Documents") +
+            (if (purpose == Purpose.NOTION) "Notion exports" else "Files") +
             " up to ${capWords(purpose)} can be sent from your phone."
 
     /** The same refusal when the size is not knowable - "bigger than" is then the honest word. */
     fun overCap(purpose: Purpose): String =
         "That file is bigger than ${capWords(purpose)}. " +
-            (if (purpose == Purpose.NOTION) "Notion exports" else "Documents") +
+            (if (purpose == Purpose.NOTION) "Notion exports" else "Files") +
             " up to ${capWords(purpose)} can be sent from your phone."
 
     /**
-     * The cap in the owner's own words: 50 MB for a document, 4 GB for a
-     * Notion export (the 250 MB of 2026-11-05 was raised on 2026-11-09). NOT
-     * [AttachFile.sizeWords] of the byte count: 50 MiB measures 52.4 MB in
-     * decimal units, and the owner decided a number he can read as fifty.
+     * The cap in the owner's own words, DERIVED from the one constant - never a
+     * second, typed copy of it. A whole number of gigabytes is said as "2 GB"
+     * (the PC's `MAX_FILE_BYTES`, pinned by `UploadTest`), so the phone's
+     * pre-check, its refusal sentence and the PC's card/sentence agree.
      */
-    fun capWords(purpose: Purpose): String =
-        if (purpose == Purpose.NOTION) "4 GB" else "50 MB"
+    fun capWords(purpose: Purpose): String {
+        val cap = cap(purpose)
+        val gib = 1024L * 1024 * 1024
+        if (cap >= gib && cap % gib == 0L) return "${cap / gib} GB"
+        val mib = 1024L * 1024
+        if (cap >= mib && cap % mib == 0L) return "${cap / mib} MB"
+        return AttachFile.sizeWords(cap)
+    }
 
     /** The one cap for a purpose. */
     fun cap(purpose: Purpose): Long =
@@ -188,8 +195,18 @@ object Upload {
     fun progress(name: String, sent: Int, total: Int): String =
         "Sending $name - $sent of $total"
 
-    /** The chip while the file is still being measured (its size and SHA-256 known). */
-    fun preparing(name: String): String = "Getting $name ready…"
+    /**
+     * The chip while the file is still being measured (its size and SHA-256
+     * known). A 2 GiB file is read once before a single byte is sent, so the
+     * chip says how much of it has been read - a still sentence on a big file
+     * looks frozen even when it is working.
+     */
+    fun preparing(name: String, read: Long = 0L): String =
+        if (read <= 0L) {
+            "Getting $name ready…"
+        } else {
+            "Getting $name ready… ${AttachFile.sizeWords(read)} read"
+        }
 
     /** The waiting chip. */
     fun waitingLine(name: String): String = "Waiting for your yes on the PC - $name is not sent yet."
@@ -309,16 +326,24 @@ object Upload {
         data class TooBig(val limit: Long) : Measured
     }
 
+    /** How much is read between [measure]'s progress reports, in bytes. */
+    const val READ_REPORT = 8L * 1024 * 1024
+
     /**
      * One pass over the file: its real size and SHA-256, or the first refusal.
-     * At most one byte over [limit] is read, so a 4 GB video is refused without
-     * being read in full. Nothing is kept.
+     * At most one buffer over [limit] is read, so a 4 GB video is refused
+     * without being read in full. Nothing is kept.
+     *
+     * [onRead] hears how much has been read, at most every [READ_REPORT] bytes;
+     * it is what keeps the chip moving during the one unavoidable full read of
+     * a big file. Its own failures never fail the measurement.
      */
-    fun measure(input: InputStream, limit: Long): Measured {
+    fun measure(input: InputStream, limit: Long, onRead: (Long) -> Unit = {}): Measured {
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(64 * 1024)
         var total = 0L
         var first = true
+        var reported = 0L
         try {
             while (true) {
                 val n = input.read(buffer)
@@ -328,6 +353,15 @@ object Upload {
                 total += n
                 if (total > limit) return Measured.TooBig(limit)
                 digest.update(buffer, 0, n)
+                if (total - reported >= READ_REPORT) {
+                    reported = total
+                    try {
+                        onRead(total)
+                    } catch (_: Exception) {
+                        // The chip is cosmetic; a listener that throws must not
+                        // turn a good measurement into an "unreadable" file.
+                    }
+                }
             }
         } catch (e: Exception) {
             return Measured.Unreadable
@@ -650,15 +684,12 @@ object Upload {
 
     /**
      * The first refusal for a pick, said before a byte is read, or null when
-     * the pick is worth measuring. The name's extension decides the kind - a
-     * provider's MIME type is only a fallback for a name with none, the same
-     * rule [AttachFile.kindFor] uses, so a `.zip` a provider mislabels can
-     * never be let through the document door.
+     * the pick is worth measuring.
      *
-     * A PHOTO is accepted here on the same terms (2026-11-13), by its own
-     * extension ([AttachFile.transferKindFor]); it is sent as a plain file and
-     * the PC saves it without reading it. The chat row still asks
-     * [AttachFile.kindFor], so this does not widen what a chat document is.
+     * Since 2026-11-13 the DOCUMENT door takes ANY file type (the owner's "any
+     * file type"): the only early refusal left is the size, and the PC stores
+     * an unfamiliar extension as a plain file. The Notion door is unchanged:
+     * still a `.zip` and nothing else.
      */
     fun refusal(name: String?, mime: String?, stated: Long, purpose: Purpose): String? {
         val shown = AttachFile.shownName(name)
@@ -666,9 +697,7 @@ object Upload {
         if (purpose == Purpose.NOTION) {
             val ext = shown.substringAfterLast('.', "").lowercase(Locale.ROOT)
             if (ext != "zip") return WRONG_ZIP
-            return null
         }
-        if (AttachFile.transferKindFor(name, mime) == null) return wrongKind(shown)
         return null
     }
 }

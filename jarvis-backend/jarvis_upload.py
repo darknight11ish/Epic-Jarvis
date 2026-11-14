@@ -81,26 +81,41 @@ card that matters is the existing `import_notion_export` one, raised by
 database counts on it (backend/JARVIS-API.md section 152). One card per import,
 and the vault is never touched before it.
 
-THE EIGHT DOCUMENT KINDS, PLUS EIGHT PHOTO KINDS ON THE SAME DOOR.
-`.pdf .docx .xlsx .pptx .md .markdown .txt .csv` are exactly
-`jarvis_attached_file.KINDS` and exactly the phone's document picker. A Notion
-`.zip` is the second purpose's business. No audio or video (a different index),
-and never an executable or a script: nothing uploaded is ever run. Since
-2026-11-13 the same door also carries a PHOTO - `.jpg .jpeg .png .webp .heic
-.heif .gif .bmp` - as a PLAIN FILE COPY (the owner's report that Jarvis denied
-being able to send a photo to the PC at all). A photo is `PHOTO_EXTENSIONS`
-here, never `jarvis_attached_file.IMAGE_KINDS` and never a new entry in its
-`KINDS`: that module's list is what the chat attachment READER accepts, and
-widening it would let a picture's bytes be read as a document. This module
-still never opens a document as text, indexes it or converts it; a photo's
-only inspection is a header check (`_photo_problem`) so a renamed program is
-not stored as a picture. Nothing on this path shows a model a photo's bytes.
+ANY FILE, AS A PLAIN FILE COPY - AND THE READERS STILL DECIDE WHAT THEY OPEN.
+Since 2026-11-13 the owner asked to "transfer any file type ... up to a
+reasonably large size", so `begin` no longer keeps an extension allowlist: a
+`.zip`, an `.exe`, a `.dat` or a file with no extension at all is STORED, byte
+for byte, exactly as a document is. That is not a widening of what Jarvis READS.
+A known document kind still goes through the same byte checks as before
+(`jarvis_attached_file.KINDS`: `%PDF-`, an Office zip's own members, UTF-8 with
+no NULs for text, and a photo's 64-byte header), because a `.pdf` that is really
+a program must not be stored under a PDF's name. An UNKNOWN kind is not
+inspected at all - there is nothing it claims to be - and it is never opened,
+parsed, converted, indexed or sent to a model on this path.
+`jarvis_documents.read` still accepts only TEXT_KINDS and DOC_KINDS, the index
+still reconciles TEXT_KINDS only, and `jarvis_attached_file.read` still refuses
+an unknown extension, so a file landing in a folder does not make it readable. A
+`.zip` sent to the DOCUMENT purpose is one of those unknown kinds: it is stored
+and never unpacked (the Notion purpose's zip is a different door with its own
+checks).
 
-The allowlist is enforced twice - `begin` checks the NAME, `finish` checks the
-BYTES - and the byte check is `jarvis_attached_file`'s own magic-byte,
-encrypted-PDF and zip-bomb guards for the document kinds, plus the header
-check above for a photo, so a `.docx` that is really a renamed archive is
-refused rather than handed to a parser.
+A PHOTO IS STILL A PLAIN FILE COPY. Since 2026-11-13 the same door also carries
+`.jpg .jpeg .png .webp .heic .heif .gif .bmp` (the owner's report that Jarvis
+denied being able to send a photo to the PC at all). A photo is
+`PHOTO_EXTENSIONS` here, never `jarvis_attached_file.IMAGE_KINDS` and never a new
+entry in its `KINDS`: that module's list is what the chat attachment READER
+accepts, and widening it would let a picture's bytes be read as a document. This
+module still never opens a document as text, indexes it or converts it; a
+photo's only inspection is a header check (`_photo_problem`) so a renamed program
+is not stored as a picture. Nothing on this path shows a model a photo's bytes.
+
+The byte checks are still enforced for every kind that claims to be something:
+`begin` checks the NAME (bare name, no path, no hidden file, no reserved name)
+and `finish` checks the BYTES with `jarvis_attached_file`'s own magic-byte,
+encrypted-PDF and zip-bomb guards for the document kinds, plus the header check
+above for a photo, so a `.docx` that is really a renamed archive, a `.pdf` that
+is really a program, or a `.png` that is not a picture is refused rather than
+stored under a name that lies about it.
 
 WHAT `finish` CHECKS BEFORE ANYTHING LANDS
   1. the bytes that really arrived equal the size the phone declared (a
@@ -131,18 +146,24 @@ WHAT IT NEVER DOES
 
 LIMITS, IN ONE PLACE
 
-    MAX_DOC_BYTES      50 MiB    a document (the number the desktop reader uses)
+    MAX_FILE_BYTES      2 GiB    ONE file from the phone, of ANY type (the
+                                 owner's 2026-11-13 number, raised from 50 MiB).
+                                 The card, the refusal sentence and the phone's
+                                 own pre-check all read this one line
     MAX_NOTION_BYTES    4 GiB    one Notion export zip, AS THE PHONE SENDS IT
                                  (raw compressed bytes; the owner's 2026-11-05
                                  number was 250 MiB and he raised it to 4 GiB on
                                  2026-11-09 so a phone may send the same export
                                  the PC takes. NOT the unpacked ceiling - that
                                  is the PC's 4 GB check, a DIFFERENT number)
-    CHUNK_BYTES         1 MiB    raw bytes per chunk request
+    CHUNK_BYTES         1 MiB    raw bytes per chunk request; 2 GiB is 2,048
+                                 requests, each about a third of the 4 MiB body
+                                 cap, and the same transport already carries a
+                                 4 GiB Notion export
     MAX_ACTIVE             3     uploads in flight at once
-    STAGING_MAX         4 GiB    everything staged, all uploads together
-                                 (raised 2026-11-09 with the phone's cap, so one
-                                 full export can be staged at all)
+    STAGING_MAX         4 GiB    everything staged, all uploads together (one
+                                 full 2 GiB file fits; two in flight at once do
+                                 not, and the second is refused with FULL)
     LIFETIME_MINUTES      30     an id expires, and its staging goes with it
 
 Standard library only. Nothing here opens a socket, starts a program or reads a
@@ -184,7 +205,7 @@ except Exception:                        # pragma: no cover
 #   What it is called, and the limits it works inside
 # --------------------------------------------------------------------------
 
-TITLE = "A document from your phone"
+TITLE = "A file from your phone"
 BEGIN_ROUTE = "/api/upload/begin"
 CHUNK_ROUTE = "/api/upload/chunk"
 FINISH_ROUTE = "/api/upload/finish"
@@ -215,7 +236,20 @@ PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", 
 #: folder; "notion" is one export zip, staged for the Obsidian import.
 PURPOSES = ("document", "notion")
 
-MAX_DOC_BYTES = 50 * 1024 * 1024             # jarvis_documents.MAX_DOC_BYTES
+#: The ONE cap for a file sent from the phone into a folder, and the only place
+#: the number is written down. The card's own limit line, the "too big" refusal
+#: sentence and (through a JVM test that parses this line) the phone's
+#: `Upload.DOCUMENT_MAX` all read it, so the three cannot disagree.
+#:
+#: It is DELIBERATELY no longer `jarvis_documents.MAX_DOC_BYTES` (50 MiB): that
+#: is the READER's cap on turning a document into text, and it still applies when
+#: the owner asks Jarvis to read a landed file. This door only stores a plain
+#: file, of any type, so its ceiling is its own number. A landed file bigger than
+#: the reader's cap is still findable by name and is simply not opened.
+MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024        # 2 GiB, the owner's 2026-11-13 number
+#: The old name, kept so an importer of this module keeps working. It is the
+#: same number, not a second one: never give it its own literal.
+MAX_DOC_BYTES = MAX_FILE_BYTES
 #: ONE NOTION EXPORT, BY THE BYTES THE PHONE SENDS - a DIFFERENT limit from the
 #: PC's unpacked ceiling (`jarvis_documents.EXPORT_UNCOMPRESSED_MAX`): that one
 #: was 250 MiB and became 4 GB on 2026-11-09, and the owner raised THIS one from
@@ -270,9 +304,6 @@ FULL = ("Jarvis is already holding as many files as it will hold at once - let o
         "finish first.")
 NAME_BAD = ("That file's name is not one Jarvis can save. A name with no folder part, "
             "no dot at the front and under 150 characters is what it needs.")
-KIND_BAD = ("Jarvis saves PDF, Word, Excel, PowerPoint, Markdown, text and CSV files from "
-            "your phone, and photos (JPG, PNG, WebP, HEIC, GIF or BMP), and that one is not "
-            "one of them.")
 NOTION_KIND_BAD = "The Notion export must be the .zip file Notion made."
 FOLDER_NOT_LISTED = "It can only go into a folder on the list - add the folder first."
 FOLDER_GONE = "That folder is not there any more."
@@ -297,6 +328,11 @@ EXPORT_ARRIVED = ("Your export arrived. Choose the vault to bring it into, and J
 CARD_HOW = ("It goes in the \"{sub}\" folder inside \"{folder}\", and from then on Jarvis "
             "can find it by name in your listed folders and read it when you ask - exactly "
             "as a file you put there yourself.")
+#: The same promise for a file Jarvis will NOT read: it is found by name and that
+#: is all. Used for a photo, an unfamiliar type, and a document bigger than the
+#: reader's own cap; [_card_safety] then says what is (not) done with the bytes.
+CARD_HOW_ANY = ("It goes in the \"{sub}\" folder inside \"{folder}\", and from then on Jarvis "
+                "can find it by name in your listed folders.")
 
 
 # --------------------------------------------------------------------------
@@ -357,12 +393,35 @@ def _spawn(fn: Callable[[], None]) -> None:
     threading.Thread(target=fn, name="jarvis-upload-card", daemon=True).start()
 
 
+_GIB = 1024 * 1024 * 1024
+
+
 def _said_size(n) -> str:
-    """A size in the words the owner reads - jarvis_attached_file's own."""
+    """A size in the words the owner reads: GB for a big one, else the reader's words.
+
+    The GB branch is this door's own (a 2 GiB cap would otherwise read
+    "2048.0 MB"): whole gigabytes are said as "2 GB", a part as "1.5 GB".
+    """
     try:
-        return attached.said_size(n) if attached is not None else f"{int(n)} bytes"
+        n = int(n)
     except Exception:
         return "that size"
+    if n >= _GIB:
+        return f"{n / _GIB:g} GB"
+    try:
+        return attached.said_size(n) if attached is not None else f"{n} bytes"
+    except Exception:
+        return "that size"
+
+
+def _cap_words(purpose: str) -> str:
+    """The cap for a purpose, said the owner's way - the ONE number, in words.
+
+    A suite that raises [MAX_FILE_BYTES] (a small file instead of 2 GiB) makes
+    every sentence and the card read the raised number, which is how the test
+    proves they all read this constant rather than a copy of it.
+    """
+    return _said_size(_cap_for(purpose))
 
 
 def _sentence(text: str) -> str:
@@ -372,26 +431,31 @@ def _sentence(text: str) -> str:
 
 
 def _kinds() -> dict:
-    """The eight DOCUMENT kinds, in the words a person reads - never a second list.
+    """The kinds `jarvis_attached_file` READS, in the words a person reads.
 
-    This stays document-only on purpose: it is what `jarvis_attached_file`
-    reads, and the chat attachment reader's list must not grow a picture.
-    [PHOTO_EXTENSIONS] is this door's own storage allowlist, asked by
-    [_landing_kinds] beside it.
+    This stays document-only on purpose: it is what the chat attachment reader
+    accepts, and its list must not grow a picture. It is also the set whose
+    BYTES this door checks at `finish`; every other extension is stored
+    un-inspected as a plain file.
     """
     return dict(attached.KINDS) if attached is not None else {}
 
 
-def _landing_kinds() -> dict:
-    """Every extension this door may STORE: the eight documents plus the eight photos."""
-    kinds = _kinds()
-    kinds.update({ext: "photo" for ext in PHOTO_EXTENSIONS})
-    return kinds
+def _kind_label(ext: str) -> str:
+    """What a refusal calls the bytes a name claims - never a second kind list."""
+    if ext in PHOTO_EXTENSIONS:
+        return "a photo"
+    return _kinds().get(ext, "that file")
 
 
 def _is_photo(name) -> bool:
     """Is this file a picture by its extension? Storage decisions only."""
     return _ext(name) in PHOTO_EXTENSIONS
+
+
+def _doc_kinds() -> tuple:
+    """The kinds whose BYTES are opened by the reader (and so have a size cap)."""
+    return tuple(getattr(attached, "DOC_KINDS", ()))
 
 
 def _ext(name: str) -> str:
@@ -423,7 +487,7 @@ def safe_name(name) -> str:
 
 
 def _cap_for(purpose: str) -> int:
-    return MAX_NOTION_BYTES if purpose == "notion" else MAX_DOC_BYTES
+    return MAX_NOTION_BYTES if purpose == "notion" else MAX_FILE_BYTES
 
 
 def _which_purpose(body: dict) -> str:
@@ -604,8 +668,51 @@ def _protection():
 #   The card - name, size and the folder's NAME, and nothing else
 # --------------------------------------------------------------------------
 
+def _readable_kind(name: str, size: int) -> bool:
+    """Will `jarvis_documents.read` really turn this landed file into words?
+
+    A known note/text/CSV is read (its first 4 MB); a known PDF/Word/Excel/
+    PowerPoint file is read only while it is inside the READER's own
+    `MAX_DOC_BYTES` (50 MiB, a different number from this door's 2 GiB storage
+    cap); a photo is never read, and an unfamiliar kind is not a kind the reader
+    opens at all. The card's promise is chosen from this answer, not guessed.
+    """
+    ext = _ext(name)
+    if ext not in _kinds():
+        return False
+    if ext in _doc_kinds():
+        cap = int(getattr(docs, "MAX_DOC_BYTES", 0) or 0) if docs is not None else 0
+        return bool(cap) and int(size) <= cap
+    return True
+
+
+def _card_safety(name: str, size: int, readable: bool) -> str:
+    """The one sentence on the card that says what happens to the bytes."""
+    if _is_photo(name):
+        return ("It is a photo, so it is saved exactly as it is: Jarvis does not open it, "
+                "read words from it or show it to a model on this path (only its first few "
+                "bytes are checked, to be sure it really is a picture), and nothing in it is "
+                "saved as a fact about you.")
+    if _ext(name) in _kinds() and not readable:
+        cap = int(getattr(docs, "MAX_DOC_BYTES", 0) or 0) if docs is not None else 0
+        return (f"It is bigger than the {_said_size(cap)} the reader opens, so Jarvis will "
+                "not read its contents. It is never run or sent anywhere, and nothing in it "
+                "is saved as a fact about you.")
+    if not readable:
+        return ("It is not a kind Jarvis reads, so it is saved exactly as it is: Jarvis does "
+                "not open it, run it, read it, index it or show it to a model on this path, "
+                "and nothing in it is saved as a fact about you.")
+    return ("It is never opened, run or sent anywhere while it is being saved, and the words "
+            "in it count as outside text: they are never saved as a fact about you.")
+
+
 def card(name: str, size: int, folder: str, purpose: str = "document") -> str:
-    """What the one approval card says. No path, no bytes, no contents."""
+    """What the one approval card says. No path, no bytes, no contents.
+
+    It names the file, its size and the folder's NAME, and it carries the ONE
+    cap in words ([_cap_words]) so the number on the card, the number in the
+    refusal and the phone's own pre-check are the same number.
+    """
     folder_name = _folder_name(folder)
     if purpose == "notion":
         return "\n".join([
@@ -613,6 +720,7 @@ def card(name: str, size: int, folder: str, purpose: str = "document") -> str:
             "",
             f"File: {name}",
             f"Size: {_said_size(size)}",
+            f"Exports up to {_cap_words(purpose)} can be sent from your phone.",
             "",
             "Your phone sent Jarvis a zip of your own Notion export. It waits in Jarvis's "
             "own temporary folder, and Jarvis shows you what is inside it - how many "
@@ -625,20 +733,18 @@ def card(name: str, size: int, folder: str, purpose: str = "document") -> str:
             "",
             "If you say no: nothing is kept.",
         ])
-    how = ("It is a photo, so it is saved exactly as it is: Jarvis does not open it, read "
-           "words from it or show it to a model on this path (only its first few bytes are "
-           "checked, to be sure it really is a picture), and nothing in it is saved as a "
-           "fact about you." if _is_photo(name) else
-           "It is never opened, run or sent anywhere while it is being saved, and the words "
-           "in it count as outside text: they are never saved as a fact about you.")
+    readable = _readable_kind(name, size)
+    how = _card_safety(name, size, readable)
+    where = CARD_HOW if readable else CARD_HOW_ANY
     return "\n".join([
         "Let Jarvis save this file from your phone?",
         "",
         f"File: {name}",
         f"Size: {_said_size(size)}",
         f"Into: {folder_name} > {SUB}",
+        f"Files up to {_cap_words(purpose)} can be sent from your phone.",
         "",
-        CARD_HOW.format(sub=SUB, folder=folder_name),
+        where.format(sub=SUB, folder=folder_name),
         "",
         how,
         "",
@@ -678,6 +784,9 @@ def _ask(uid: str, name: str, size: int, folder: str, *, gate: Callable,
     detail = {"text": text, "what": "save one file your phone sent",
               "setting": "a file arriving from another device",
               "file": name, "size": int(size), "folder": _folder_name(folder),
+              # The ONE cap, so the approval detail carries the same number the
+              # sentence does (a suite raises MAX_FILE_BYTES and reads it here).
+              "max_bytes": _cap_for("document"),
               "leaves_this_pc": False}
     try:
         verdict = gate(CARD_ACTION, detail, text)
@@ -734,20 +843,19 @@ def request_begin(body, *, gate: Optional[Callable] = None,
                      "reason": "need an object"}
     purpose = _which_purpose(body)
     if not purpose:
-        return 400, {"ok": False, "said": KIND_BAD, "reason": "bad purpose"}
+        return 400, {"ok": False, "said": "Say whether this is a file or a Notion export.",
+                     "reason": "bad purpose"}
     try:
         name = safe_name(body.get("name"))
     except ValueError as exc:
         return 400, {"ok": False, "said": _sentence(exc), "reason": str(exc)}
     ext = _ext(name)
-    if purpose == "document":
-        # The eight document kinds AND the eight photo kinds (a photo is a
-        # plain file copy; see PHOTO_EXTENSIONS). This is the door's storage
-        # allowlist, not `jarvis_attached_file.KINDS`.
-        if ext not in _landing_kinds():
-            return 400, {"ok": False, "said": KIND_BAD, "reason": "kind"}
-    elif ext != ".zip":
+    if purpose == "notion" and ext != ".zip":
         return 400, {"ok": False, "said": NOTION_KIND_BAD, "reason": "notion needs .zip"}
+    # ANY extension is accepted for `purpose: "document"` (2026-11-13, the
+    # owner's "any file type"): the file is STORED as a plain copy. The known
+    # document kinds still have their bytes checked at `finish`; an unfamiliar
+    # kind claims nothing, so there is nothing to check it against.
     try:
         size = int(body.get("size"))
     except Exception:
@@ -758,7 +866,7 @@ def request_begin(body, *, gate: Optional[Callable] = None,
     cap = _cap_for(purpose)
     if size > cap:
         said = (TOO_BIG_NOTION if purpose == "notion" else TOO_BIG_DOC).format(
-            size=_said_size(size), cap=_said_size(cap))
+            size=_said_size(size), cap=_cap_words(purpose))
         return 413, {"ok": False, "said": said, "reason": "too big", "max_bytes": cap}
 
     folder, why = "", ""
@@ -957,8 +1065,15 @@ def _photo_problem(path: str, ext: str) -> str:
 
 
 def _magic_problem(path: str, ext: str) -> str:
-    """'' when the bytes on disk are what the name claims, else a sentence."""
-    kind = _landing_kinds().get(ext, "that file")
+    """'' when the bytes on disk are what the name claims, else a sentence.
+
+    Only the kinds that CLAIM something are checked: a photo's header, a PDF's
+    `%PDF-` and its trailer, and an Office zip's own members and declared unpack
+    size. Any other extension - a `.zip`, an `.exe`, a `.dat`, a file with no
+    extension - claims nothing, so it is stored un-inspected as a plain file and
+    this returns "".
+    """
+    kind = _kind_label(ext)
     if ext in PHOTO_EXTENSIONS:
         # A photo is stored and never read. Its header check is the whole of
         # this door's inspection - no decoder, no OCR, no model.
@@ -1001,7 +1116,7 @@ def _magic_problem(path: str, ext: str) -> str:
 def _text_problem(path: str) -> str:
     """'' for a note, text file or CSV, else why not: no NULs, real UTF-8.
 
-    Read in pieces rather than whole: a 50 MB text file is allowed, and
+    Read in pieces rather than whole: a 2 GiB text file is allowed, and
     decoding it into one string to throw the string away is work nobody needs.
     """
     import codecs
@@ -1140,7 +1255,7 @@ def request_finish(body, *, launch: Optional[Callable[[dict], tuple]] = None) ->
     if received > _cap_for(entry["purpose"]):
         _forget(str(uid))
         return 413, {"ok": False, "said": TOO_BIG_DOC.format(
-            size=_said_size(received), cap=_said_size(_cap_for(entry["purpose"]))),
+            size=_said_size(received), cap=_cap_words(entry["purpose"])),
             "reason": "too big"}
 
     want = str(body.get("sha256") or entry.get("sha256") or "").strip().lower()[:64]
@@ -1329,8 +1444,8 @@ def _send(self, code: int, payload: dict):
 
 
 if __name__ == "__main__":
-    print(f"  {TITLE}: {len(ROUTES)} routes, {_said_size(MAX_DOC_BYTES)} a document, "
-          f"{_said_size(MAX_NOTION_BYTES)} a Notion export")
+    print(f"  {TITLE}: {len(ROUTES)} routes, any file up to {_cap_words('document')}, "
+          f"a Notion export up to {_cap_words('notion')}")
     print(f"  the Notion staging folder is {uploads_root()}")
     print(f"  the parts of Jarvis this needs are "
           + ("here" if (docs is not None and attached is not None) else "NOT here"))
