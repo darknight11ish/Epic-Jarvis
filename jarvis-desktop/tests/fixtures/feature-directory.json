@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "35f377782a60e9a4f18efca00c024a360e2767b4e195e281f37c46d80a4b1bf5",
+  "source_sha256": "04fb51ddc4e291cbfd3a0e85e5d6f88bc61c22c6c0e1ef501349f143145f3b80",
   "feature_count": 183,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -2940,9 +2940,9 @@
       "label_note": "",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "example_ok": false,
-      "where": "desktop: no row (nothing to press on the PC); phone: Settings, Phone settings backup",
-      "where_desktop": "desktop: no row (nothing to press on the PC); phone: Settings, Phone settings backup",
-      "where_phone": "desktop: no row (nothing to press on the PC); phone: Settings, Phone settings backup",
+      "where": "desktop: no row (phone-only); phone: Settings, Phone settings backup",
+      "where_desktop": "desktop: no row (phone-only); phone: Settings, Phone settings backup",
+      "where_phone": "desktop: no row (phone-only); phone: Settings, Phone settings backup",
       "note": "",
       "not_a_control": true
     }

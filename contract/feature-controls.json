@@ -9890,33 +9890,35 @@
       "control": {
         "type": "refused",
         "setting_keys": [],
-        "turn_on": "turn on Set up a new phone from a settings backup",
-        "turn_off": "turn off Set up a new phone from a settings backup",
+        "turn_on": null,
+        "turn_off": null,
         "adjust": [],
-        "intent": "feature_switch_refused"
+        "intent": null
       },
       "desktop": {
         "section": null,
-        "location": "- (no desktop row: this file holds THIS phone's settings, and the PC's own Backups card is a different file with a different recovery code)",
-        "search": [],
+        "location": "No desktop card: the backup is this phone's own file, sealed with a password and written where the owner picks on the phone. Listed in Settings, All features and abilities.",
+        "search": [
+          "Set up a new phone from a settings backup"
+        ],
         "found": true
       },
       "phone": {
-        "section": null,
-        "location": "Settings > Phone settings backup (a bespoke plate with no shared settings-registry section, so this checker's evidence test cannot see it)",
+        "section": "all-features",
+        "location": "Settings, Phone settings backup - its own card, and listed in All features and abilities.",
         "search": [
           "phone settings backup",
-          "Phone settings backup"
+          "Set up a new phone from a settings backup"
         ],
-        "found": false
+        "found": true
       },
       "status": "pc-only",
       "owner": "Session B",
-      "reason": "Phone-only, by the platform: the file holds THIS phone's own settings and never reaches the PC (docs/ARCHITECTURE.md section 8), while the PC's Backups card is a different file with a different recovery code. Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+      "reason": "Phone-only, by the platform: the backup holds this phone's own settings, is sealed with the owner's password and written where the owner picks, with no backend route to change it. The phone's Settings card is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop: no row (nothing to press on the PC); phone: Settings, Phone settings backup"
+        "screen_path": "desktop: no row (phone-only); phone: Settings, Phone settings backup"
       },
       "command": {
         "status": "not-a-setting",
