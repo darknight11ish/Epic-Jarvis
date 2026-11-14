@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9e97c28e11ea603e70714e4c72c5c3ed9e7638ac",
- "built_at": "2026-11-13T19:50:51-08:00",
+ "ref": "24e895684879e5d19b3ff79c3752c3febf971404",
+ "built_at": "2026-11-13T20:15:00-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1772,6 +1772,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/TopicsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/TouchTargetAndInsetsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/TutorialsTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/UndoNoticeTimeoutTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/UpdateCheckTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/UpdateSecurityTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/UploadTest.kt",
@@ -1884,7 +1885,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 970,
+   "file_count": 971,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4616,6 +4617,7 @@
     "changelog.d/2026-11-13-notification-body-opens-jarvis.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
+    "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4781,6 +4783,7 @@
     "decisions.d/2026-11-13-notification-body-opens-jarvis.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
+    "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5229,7 +5232,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 866,
+   "file_count": 868,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6316,6 +6319,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "24e895684879e5d19b3ff79c3752c3febf971404",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the self-code map and the recent-changes bullets after the merge"
+  },
+  {
    "sha": "9e97c28e11ea603e70714e4c72c5c3ed9e7638ac",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/pr-1242"
@@ -6409,11 +6417,6 @@
    "sha": "379e106a094818492c11987146dea40e4b45863e",
    "date": "2026-11-13",
    "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
-   "date": "2026-11-13",
-   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
   }
  ],
  "top_level": [
@@ -6430,7 +6433,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 930
+   "files": 931
   },
   {
    "path": "docs/",
@@ -6450,7 +6453,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 248
+   "files": 249
   },
   {
    "path": "videos/",
@@ -6460,7 +6463,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 165
+   "files": 166
   },
   {
    "path": "plugins/",
@@ -6534,8 +6537,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5661,
-  "covered": 5179,
+  "tracked_files": 5664,
+  "covered": 5182,
   "excluded": 482,
   "subsystems": 27
  },
