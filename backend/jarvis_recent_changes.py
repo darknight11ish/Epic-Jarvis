@@ -23,7 +23,7 @@ BULLETS = (
     "The patch history is rebuilt after the union's patch edits, so the required `backend` and `backend-windows` jobs pass again",
     'A free-plan 403 on branch rules means "no rules", not "blind token" - so the owner-approved merge in the field-test repository can land',
     "GitHub's git endpoint needs Basic auth, not Bearer - so the prepare clone and the fix push can authenticate again",
-    'On-device AI and offline sync are a design, not a shipped mock',
+    "The awareness audit's fixes, and VoiceStudio's typed switch, in one PR",
 )
 
 

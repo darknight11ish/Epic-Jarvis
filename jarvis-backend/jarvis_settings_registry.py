@@ -304,6 +304,13 @@ SECTIONS: tuple = (
                                "the auto wi-fi reconnect",
                                "reconnect wi-fi automatically",
                                "automatic wi-fi reconnection"), app="desktop"),
+    # A second voice program (VoiceStudio), 2026-11-13: settings.html's
+    # id="voicestudio" card. The card is the honest row the awareness audit's
+    # GAP-9 asked for - the switch itself is typed (one change_own_config card
+    # on, instant off), and the card says so until the Tauri command that would
+    # give it a checkbox exists.
+    Section("voicestudio", ("voicestudio", "voice studio", "the second voice program",
+                            "a second voice program"), app="desktop"),
     Section("voices", ("jarvis's voice", "jarvis's voices", "custom voices",
                        "how jarvis sounds")),
     Section("web-search", ("web search", "search settings", "the search provider")),
@@ -1451,6 +1458,18 @@ def set_second_card_suggest_correction(on: bool, *, peer=None, local=None) -> Ou
 #: What the owner might call each of the four readable things and the three
 #: note-writes jarvis_asks_first.LOOSE already lists (its own action names).
 _ASKS_FIRST_TARGETS = {
+    # The GitHub READS switch (`github_inspect`, a LOOSE row since 2026-11-10
+    # 23:00) had no spoken names at all until 2026-11-13, so the owner's own
+    # sentences - the awareness audit's CONTROL-MATRIX C-3, the one cell that
+    # matrix marked NOT VERIFIED - resolved to nothing and went to the model.
+    # These are NAMES only, exactly like the seven below: the tier, the card,
+    # the Windows Hello step and the PC-only refusal are all still
+    # `jarvis_asks_first.request_tier`'s, and nothing here loosens anything.
+    # ON is "ask me first" (the row's own ON), OFF is "stop asking" - the same
+    # two states the Settings row has, reached by the same two cards.
+    "github_inspect": ("my github", "reading my github", "the github reads",
+                       "github reads", "my github reads", "you read my github",
+                       "you read my git hub", "reading your github"),
     "calendar_read": ("my calendar", "the calendar", "reading my calendar"),
     "email_read": ("my email", "reading my email", "my mail"),
     "notes_search": ("my notes", "reading my notes", "searching my notes"),

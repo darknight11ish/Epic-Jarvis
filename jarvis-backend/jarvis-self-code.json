@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "61b44d6181e23a49442d023f98a3ce84edc365d5",
- "built_at": "2026-11-13T12:28:45-08:00",
+ "ref": "d85796a23a2857f8d36ec2710d19c05277352006",
+ "built_at": "2026-11-13T16:12:17-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3837,6 +3837,7 @@
     "backend/test_failure_detail.py",
     "backend/test_fault_probes.py",
     "backend/test_feature_answers.py",
+    "backend/test_feature_control_phrases.py",
     "backend/test_feature_controls.py",
     "backend/test_feature_detail.py",
     "backend/test_feature_guide.py",
@@ -4321,7 +4322,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 689,
+   "file_count": 690,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4609,6 +4610,7 @@
     "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
+    "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
@@ -4772,6 +4774,7 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-13-awareness-of-new-features.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
@@ -5224,7 +5227,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 862,
+   "file_count": 864,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6311,9 +6314,59 @@
  ],
  "recent_commits": [
   {
+   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
+   "date": "2026-11-13",
+   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
+  },
+  {
+   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
+   "date": "2026-11-13",
+   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
+  },
+  {
+   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
+   "date": "2026-11-13",
+   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
+  },
+  {
+   "sha": "e46ff2d65262080868f08091056af77852183383",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-after-the-phone-fix"
+  },
+  {
+   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
+   "date": "2026-11-13",
+   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
+  },
+  {
+   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
+   "sha": "8d83ce6f765e5ae9a6347fa282113b65f1895e0c",
+   "date": "2026-11-13",
+   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
+  },
+  {
+   "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
+  },
+  {
+   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
+   "date": "2026-11-13",
+   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
+  },
+  {
    "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
+  },
+  {
+   "sha": "43ff622708f70142a1ad58a533053991bd75f634",
+   "date": "2026-11-13",
+   "subject": "chore: regenerate the self-code map with the new suite tracked"
   },
   {
    "sha": "a9a60e1a7653b59b711024efc61c598c1368806a",
@@ -6324,6 +6377,11 @@
    "sha": "379e106a094818492c11987146dea40e4b45863e",
    "date": "2026-11-13",
    "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
+  },
+  {
+   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
+   "date": "2026-11-13",
+   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
   },
   {
    "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
@@ -6354,68 +6412,13 @@
    "sha": "a6891bd4c82bb9b0b50c9c4fc69a980a2799c235",
    "date": "2026-11-13",
    "subject": "Merge H3 (PR #1229 at 0eb5d93), which carries H1 and H2, into fix/github-git-auth-basic-2026-11-13"
-  },
-  {
-   "sha": "4e71da569b3bb018c5440ea33babd62a70207c32",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (ad895ed) into fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "0eb5d93124b5ae7b7df13b851c5b525b1fd391e1",
-   "date": "2026-11-13",
-   "subject": "Merge H2 (PR #1228 at 5da9ba6) and H1 (PR #1227 at 50a2db3), with origin/main (ad895ed), into feature/roamies-capabilities"
-  },
-  {
-   "sha": "5da9ba6759d2ffa6113a44f2ba4685447177439e",
-   "date": "2026-11-13",
-   "subject": "Merge H1 (PR #1227 at 50a2db3) and origin/main (ad895ed) into feature/code-obfuscation-tools"
-  },
-  {
-   "sha": "50a2db3dbe65abff2b2b1b6d2b2460884180bd2c",
-   "date": "2026-11-13",
-   "subject": "Merge origin/main (ad895ed) into feature/on-device-ai-and-mobile-harness"
-  },
-  {
-   "sha": "ad895ed1c013bda37904357bc77e63fef22a3ae6",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1234 from darknight11ish/fix/patch-history-rebuild-2026-11-13"
-  },
-  {
-   "sha": "06832e9ce9b3ab72992777c72c0ee4daf844f85a",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the recent-changes module and the self-code map"
-  },
-  {
-   "sha": "ba742a9b82efcfb83376227ab9af1f87efd56f0a",
-   "date": "2026-11-13",
-   "subject": "docs(records): record the 2026-11-13 github-tools delta false green"
-  },
-  {
-   "sha": "e929b7c18b5db886c75d17f4306c92661ec2dbd6",
-   "date": "2026-11-13",
-   "subject": "test(deploy): pin the extended github-tools false green and the in-place upgrade"
-  },
-  {
-   "sha": "a695fca361e5e80f91e5161f70592ff75f005378",
-   "date": "2026-11-13",
-   "subject": "fix(deploy): detect an extended github-tools block and upgrade it in place"
-  },
-  {
-   "sha": "9f2720dc807246c7d2a88fbc467c22d40cdcdc05",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the self-code map and recent-changes module for the patch-history fragments"
-  },
-  {
-   "sha": "fa71d60fe0a09ee666efb10f8c4b8b8dfc76497a",
-   "date": "2026-11-13",
-   "subject": "Merge H2d (PR #1228 at a90eace36), the self-code map rebuilt on its head"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1444
+   "files": 1445
   },
   {
    "path": "jarvis-desktop/",
@@ -6445,7 +6448,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 246
+   "files": 247
   },
   {
    "path": "videos/",
@@ -6455,7 +6458,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 163
+   "files": 164
   },
   {
    "path": "plugins/",
@@ -6529,8 +6532,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5656,
-  "covered": 5174,
+  "tracked_files": 5659,
+  "covered": 5177,
   "excluded": 482,
   "subsystems": 27
  },

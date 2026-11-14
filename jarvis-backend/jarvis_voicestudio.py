@@ -72,24 +72,36 @@ HOW IT REPORTS, AND WHAT IT NEVER DOES
     table (`jarvis_local_http.opener()`, the CONN-1 fix), because a request
     to a program on this PC must not travel to another machine first.
 
-OFF BY DEFAULT, WITH ITS OWN SWITCH. `[voicestudio] enabled` in
-`jarvis-framework.toml` is `false` in the shipped template. `synthesize()`
-refuses while it is false; the read-only questions (is it running, what can
-it speak with, has the licence been accepted) still answer, because asking is
-not using. The switch is a hand edit for now: there is no screen and no route
-in this slice, so turning it on is a change to the owner's own settings file
-(the same first-slice position `[vault_organizer]` took). The one-card
-Settings switch and the speaking-voice wiring are the NEXT slice, not this
-one - and this module is deliberately not imported by jarvis_speech.py yet.
+OFF BY DEFAULT, WITH ITS OWN SWITCH, AND SINCE 2026-11-13 A TYPED ONE.
+`[voicestudio] enabled` in `jarvis-framework.toml` is `false` in the shipped
+template. `synthesize()` refuses while it is false; the read-only questions (is
+it running, what can it speak with, has the licence been accepted) still
+answer, because asking is not using.
+
+THE SWITCH IS NOW REACHABLE THREE WAYS, and all three are the same write:
+`set_enabled()` below (the raw writer), the typed sentences "turn on
+voicestudio" / "turn off voicestudio" and their state question (through
+`request_enabled()`, so ON is ONE `change_own_config` card plus Windows Hello
+and OFF is instant), and the desktop Settings row ("A second voice program
+(VoiceStudio)", Settings, The PC itself) which reads and writes the same value.
+Before 2026-11-13 the only door was a hand edit of the settings file, which the
+awareness audit measured as the one real control gap left in the project (its
+GAP-9/C-7). What is STILL not built is the speaking-voice wiring:
+`jarvis_speech.py` does not import this module yet, so switching it on alone
+changes nothing you would hear. That wiring is the named next slice.
 """
 from __future__ import annotations
 
 import ipaddress
 import json
+import os
+import re
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 #: Where VoiceStudio's backend listens when `tools/voicestudio_sidecar.ps1`
 #: starts it. 11439 is the next free number in Jarvis's own local block
@@ -240,10 +252,53 @@ def enabled() -> bool:
     return _framework_section().get(SWITCH_KEY) is True
 
 
+#: The setting's own dotted name, the same one `contract/feature-controls.json`
+#: records and the one a Settings row is keyed by.
+SETTING_KEY = f"{SWITCH_SECTION}.{SWITCH_KEY}"
+
+#: The one approval action turning it ON goes through (tier "ask" in the shipped
+#: `[autonomy.tiers]`). Windows Hello is that card's PC half.
+ACTION_ON = "change_own_config"
+
+STATE_ON = (
+    f"VoiceStudio is on. Its switch is [{SWITCH_SECTION}] {SWITCH_KEY} in "
+    f"jarvis-framework.toml. The program itself is still started by hand with "
+    f"tools\\voicestudio_sidecar.ps1 -Start, and it is not connected to the voice "
+    f"Jarvis answers in yet.")
+STATE_OFF = (
+    f"VoiceStudio is off. Its switch is [{SWITCH_SECTION}] {SWITCH_KEY} in "
+    f"jarvis-framework.toml; turning it on is one approval card plus Windows Hello - "
+    f"say \"turn on voicestudio\", or use its row in Settings, under The PC itself. "
+    f"Nothing starts the program for you: it is started by hand with "
+    f"tools\\voicestudio_sidecar.ps1 -Start.")
+SET_ON = (
+    f"VoiceStudio is on now. Nothing was started and nothing was loaded: it still "
+    f"starts by hand with tools\\voicestudio_sidecar.ps1 -Start, and the speaking "
+    f"voice is the next slice, so nothing you hear changes yet.")
+SET_OFF = (
+    "VoiceStudio is off. Nothing was started or stopped: its own program keeps "
+    "running if you started it, and this switch only decides whether Jarvis may ask "
+    "it to speak.")
+ALREADY_ON = "VoiceStudio is already on. Nothing was changed."
+ALREADY_OFF = "VoiceStudio is already off. Nothing was changed."
+WAITING_WORDS = ("Waiting for your approval card in the Jarvis bar - VoiceStudio stays "
+                 "off until it is answered.")
+REFUSED_WORDS = ("The approval card was not approved, so VoiceStudio stayed off. "
+                 "Nothing was changed.")
+ON_CARD = ("Turn on VoiceStudio? Jarvis may then ask the separate VoiceStudio program on "
+           "this PC to speak. The program is NOT started by this: it still starts by "
+           "hand, and the speaking voice is not wired yet, so nothing you hear changes.")
+
+
 def _switch_words() -> str:
-    return (f"VoiceStudio is off. Its switch is [{SWITCH_SECTION}] {SWITCH_KEY} in "
-            f"jarvis-framework.toml, and it ships false. Turning it on is a change to your "
-            f"own settings file: there is no screen for it yet.")
+    """The switch sentence for the state it is really in - one source."""
+    return STATE_ON if enabled() else STATE_OFF
+
+
+def state() -> dict:
+    """{"enabled", "words"} - the switch as the chat answer and a row read it."""
+    on = enabled()
+    return {"enabled": on, "words": STATE_ON if on else STATE_OFF}
 
 
 # --------------------------------------------------------------------------
@@ -914,6 +969,281 @@ def stop(timeout: float = 10.0, base: str = None) -> dict:
              f"of RAM idle) and will reload a model on the next speech request, which took "
              f"27.41 s here. Nothing belonging to Jarvis was unloaded.")
     return {"ok": True, "running": True, "unloaded": unloaded, "kept": kept, "words": words}
+
+
+# --------------------------------------------------------------------------
+#   The switch's writer: [voicestudio] enabled, through the same file it reads
+# --------------------------------------------------------------------------
+
+#: Held around the read-modify-write, so two changes cannot interleave.
+_CFG_LOCK = threading.Lock()
+
+#: A section header in the settings file, and the one boolean line inside it.
+_SECTION_HEAD = re.compile(r"^[ \t]*\[[ \t]*" + SWITCH_SECTION + r"[ \t]*\][ \t]*(?:#.*)?$")
+_ANY_HEAD = re.compile(r"^[ \t]*\[")
+_ENABLED_LINE = re.compile(r"^(?P<lead>[ \t]*" + SWITCH_KEY + r"[ \t]*=[ \t]*)"
+                           r"(?P<val>true|false)(?P<rest>[ \t]*(?:#.*)?)$")
+_SETTINGS_MISSING = (
+    "Jarvis could not find your settings file (jarvis-framework.toml), so VoiceStudio "
+    "was not changed.")
+_SETTINGS_HAND_EDIT = (
+    "Your settings file (jarvis-framework.toml) is written in a way this switch cannot "
+    "change safely, so nothing was changed. Edit the line by hand in Notepad, under "
+    "[voicestudio], then restart Jarvis.")
+
+
+def _framework_module():
+    """`jarvis_framework` when this PC has it, else None (the suites' case)."""
+    try:
+        import jarvis_framework as fw
+        return fw
+    except Exception:                                     # noqa: BLE001
+        return None
+
+
+def _toml_path():
+    """The settings file `_framework_section()` reads, or None."""
+    fw = _framework_module()
+    try:
+        got = fw.config_path() if fw is not None else None
+    except Exception:                                     # noqa: BLE001
+        got = None
+    return Path(got) if got else None
+
+
+def _parse(text: str) -> dict:
+    """The settings file as data. Raises VoiceStudioError with plain words."""
+    try:
+        import tomllib
+    except ImportError:                                   # Python < 3.11
+        try:
+            import tomli as tomllib                       # type: ignore
+        except ImportError:
+            raise VoiceStudioError(
+                "This PC's Python cannot read the settings file (it needs Python 3.11 "
+                "or newer), so nothing was changed.")
+    try:
+        return tomllib.loads(text)
+    except Exception:
+        raise VoiceStudioError(
+            "Your settings file (jarvis-framework.toml) has a mistake in it, so nothing "
+            "was changed. Open it in Notepad and fix it first.")
+
+
+def rewrite_enabled(text: str, on: bool) -> str:
+    """`text` with ONE `[voicestudio] enabled` line set. Pure; raises.
+
+    The same discipline `jarvis_asks_first.rewrite` uses for a tier line: parse
+    first, change one line, insert the line or the section only when it is
+    really absent, parse the result, and compare it to the input with exactly
+    this one value changed - so a mis-shaped file is refused instead of being
+    rewritten.
+    """
+    if not isinstance(on, bool):
+        raise VoiceStudioError("The VoiceStudio switch takes on or off, not that.")
+    before = _parse(text)
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    heads = [i for i, line in enumerate(lines) if _SECTION_HEAD.match(line)]
+    if len(heads) > 1:
+        raise VoiceStudioError(_SETTINGS_HAND_EDIT)
+    want = "true" if on else "false"
+    if heads:
+        start = heads[0] + 1
+        end = next((i for i in range(start, len(lines)) if _ANY_HEAD.match(lines[i])),
+                   len(lines))
+        hits = [i for i in range(start, end) if _ENABLED_LINE.match(lines[i])]
+        if len(hits) > 1:
+            raise VoiceStudioError(_SETTINGS_HAND_EDIT)
+        if hits:
+            m = _ENABLED_LINE.match(lines[hits[0]])
+            lines[hits[0]] = f"{m.group('lead')}{want}{m.group('rest')}"
+        else:
+            section = (before.get(SWITCH_SECTION) or {})
+            if SWITCH_KEY in section:
+                # Present, but not as one plain line in that table.
+                raise VoiceStudioError(_SETTINGS_HAND_EDIT)
+            lines.insert(start, f"{SWITCH_KEY} = {want}")
+    else:
+        if SWITCH_SECTION in before:
+            # The file has the name, but not as a table this can find.
+            raise VoiceStudioError(_SETTINGS_HAND_EDIT)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        lines.extend(["", f"[{SWITCH_SECTION}]", f"{SWITCH_KEY} = {want}", ""])
+    out = nl.join(lines)
+    after = _parse(out)
+    # Compared as JSON text: TOML dates are written the same way on both sides,
+    # and any change other than this one value is a difference.
+    want_doc = json.loads(json.dumps(before, default=str))
+    want_doc.setdefault(SWITCH_SECTION, {})[SWITCH_KEY] = on
+    if json.loads(json.dumps(after, default=str)) != want_doc:
+        raise VoiceStudioError(_SETTINGS_HAND_EDIT)
+    return out
+
+
+def set_enabled(on: bool) -> tuple:
+    """Write `[voicestudio] enabled` and say what really happened. (ok, words).
+
+    The RAW writer, and deliberately not the door: `request_enabled()` is what
+    the typed sentence and the Settings row call, because turning it ON is ONE
+    `change_own_config` card while OFF is instant. It writes atomically (parse,
+    change one line, parse again and compare, temporary file, move into place)
+    and it NEVER starts, stops or calls VoiceStudio - the switch decides whether
+    Jarvis MAY ask the separate program to speak, and the program is still
+    started by hand.
+    """
+    if not isinstance(on, bool):
+        raise ValueError("the VoiceStudio switch takes on or off, not that")
+    path = _toml_path()
+    if path is None or not path.is_file():
+        return False, _SETTINGS_MISSING
+    before = enabled()
+    with _CFG_LOCK:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return False, (f"Your settings file could not be read ({type(exc).__name__}), "
+                           f"so nothing was changed.")
+        try:
+            new = rewrite_enabled(text, on)
+        except VoiceStudioError as exc:
+            return False, exc.words
+        tmp = path.with_name(path.name + ".tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8", newline="") as handle:
+                handle.write(new)
+            os.replace(tmp, path)
+        except OSError as exc:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            return False, (f"Your settings file could not be written "
+                           f"({type(exc).__name__}), so nothing was changed.")
+    fw = _framework_module()
+    try:
+        if fw is not None:
+            fw.reload_framework()
+    except Exception:                                     # noqa: BLE001
+        pass
+    after = enabled()
+    if after is not on:
+        return False, ("Your settings file was written, but it still reads "
+                       f"{'on' if after else 'off'}, so I will not claim it changed. "
+                       "Nothing else was touched.")
+    try:
+        if fw is not None:
+            fw.audit_log("voicestudio.switch",
+                         {"enabled": bool(on), "changed": before != on})
+    except Exception:                                     # noqa: BLE001
+        pass
+    if before == on:
+        return True, (ALREADY_ON if on else ALREADY_OFF)
+    return True, (SET_ON if on else SET_OFF)
+
+
+def _gate(action: str, detail: dict, prompt: str):
+    """`jarvis_gate.check()`, failing CLOSED on any error (jarvis_wifi's shape).
+
+    `change_own_config` is tier "ask": the call blocks until the owner answers
+    the card, and the answer is the permission. Windows Hello is that card's PC
+    half, and no model answer can reach this - the only callers are the
+    deterministic chat/Live sentences and the Settings row.
+    """
+    class _Refused:
+        allowed = False
+        outcome = "refused"
+
+        def __init__(self, reason):
+            self.reason = reason
+    try:
+        import jarvis_gate  # type: ignore
+    except Exception as exc:                              # noqa: BLE001
+        return _Refused(f"the approval gate is not available here ({exc})")
+    try:
+        return jarvis_gate.check(action, detail, prompt=prompt)
+    except Exception as exc:                              # noqa: BLE001
+        return _Refused(f"the approval gate failed ({exc})")
+
+
+def _tier(action: str) -> str:
+    fw = _framework_module()
+    try:
+        return str(fw.action_tier(action)) if fw is not None else "ask"
+    except Exception:                                     # noqa: BLE001
+        return f"unreadable"
+
+
+def request_enabled(on, *, gate=None, write=None) -> tuple:
+    """One switch change, through the ONE path the sentence and the row share.
+
+    Turning it ON raises exactly ONE `change_own_config` card and nothing is
+    written until the owner answers it; turning it OFF is instant and cardless
+    (taking an ability away is always safe). Returns (http code, body) with
+    `words` always saying what really happened - a waiting card is never
+    reported as on.
+    """
+    if not isinstance(on, bool):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    if not on:
+        if not enabled():
+            return 200, {"ok": True, "enabled": False, "changed": False,
+                         "words": ALREADY_OFF, "message": ALREADY_OFF}
+        try:
+            ok, words = (write or set_enabled)(False)
+        except Exception as exc:                          # noqa: BLE001
+            ok, words = False, (f"The VoiceStudio switch could not be saved "
+                                f"({type(exc).__name__}), so nothing was changed.")
+        if not ok:
+            return 503, {"ok": False, "enabled": True, "changed": False,
+                         "error": words, "words": words, "message": words}
+        return 200, {"ok": True, "enabled": False, "changed": True,
+                     "words": SET_OFF, "message": SET_OFF}
+    if enabled():
+        return 200, {"ok": True, "enabled": True, "changed": False,
+                     "words": ALREADY_ON, "message": ALREADY_ON}
+    tier = _tier(ACTION_ON)
+    if tier != "ask":
+        return 503, {"ok": False, "enabled": False, "changed": False,
+                     "error": (f"{ACTION_ON} is tier {tier!r} in jarvis-framework.toml; "
+                               f"turning VoiceStudio on needs a person to say yes, so it "
+                               f"must be 'ask'"),
+                     "words": "The rule that needs your yes is not in place, so nothing "
+                              "was changed."}
+    verdict = (gate or _gate)(ACTION_ON,
+                              {"text": ON_CARD, "setting": SETTING_KEY,
+                               "leaves_this_pc": False}, ON_CARD)
+    if not getattr(verdict, "allowed", False):
+        if not hasattr(verdict, "tier"):
+            # The GATE ITSELF is missing or threw, so no card was ever raised.
+            # That is not the owner saying no, and it must not be reported as
+            # one (nor as a raw ImportError sentence).
+            said = ("The approval card could not be raised on this PC, so VoiceStudio "
+                    "stayed off and nothing was changed.")
+            return 503, {"ok": False, "enabled": False, "changed": False,
+                         "waiting": False, "error": said, "words": said}
+        waiting = bool(getattr(verdict, "waiting", False)
+                       or str(getattr(verdict, "outcome", "")).lower()
+                       in ("waiting", "pending", "asked", "ask"))
+        if waiting:
+            return 202, {"ok": True, "enabled": False, "changed": False,
+                         "waiting": True, "words": WAITING_WORDS,
+                         "message": WAITING_WORDS}
+        reason = str(getattr(verdict, "reason", "") or "").strip()
+        said = reason or REFUSED_WORDS
+        return 403, {"ok": False, "enabled": False, "changed": False,
+                     "waiting": False, "error": said, "words": said}
+    try:
+        ok, words = (write or set_enabled)(True)
+    except Exception as exc:                              # noqa: BLE001
+        ok, words = False, (f"The VoiceStudio switch could not be saved "
+                            f"({type(exc).__name__}), so nothing was changed.")
+    if not ok:
+        return 503, {"ok": False, "enabled": False, "changed": False,
+                     "error": words, "words": words, "message": words}
+    return 200, {"ok": True, "enabled": True, "changed": True,
+                 "words": SET_ON, "message": SET_ON}
 
 
 # --------------------------------------------------------------------------
