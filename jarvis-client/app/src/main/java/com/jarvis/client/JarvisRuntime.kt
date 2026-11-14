@@ -3607,7 +3607,11 @@ object JarvisRuntime {
         if (purpose == Upload.Purpose.NOTION) {
             "application/zip"
         } else {
-            AttachFile.kindFor(name, provider)?.mime
+            // A photo has no `AttachFile.KINDS` entry on purpose (the chat row
+            // must keep routing pictures to ChatPicture), so the folder door's
+            // own list is asked second: the PC saves a photo under its
+            // extension, and this is the type the card and the file claim.
+            AttachFile.transferKindFor(name, provider)?.mime
                 ?: provider?.trim()?.lowercase(java.util.Locale.ROOT)?.substringBefore(';')
                     ?.takeIf { it.isNotBlank() }
                 ?: "application/octet-stream"
