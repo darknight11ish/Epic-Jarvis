@@ -332,6 +332,16 @@ object OpenPlace {
         // than staying here - and docs/ARCHITECTURE.md section 8 records the
         // one-sided slice until then.
         "handsfree",
+        // The second voice program, VoiceStudio (2026-11-13, the awareness
+        // audit's GAP-9; its card is settings.html's, and the registry's own
+        // Section for it says app="desktop"). The switch is typed on the PC -
+        // one change_own_config card to turn it on, instant off - and there is
+        // no version of it on the phone: VoiceStudio is a program on that PC,
+        // and this build has no screen that could start it or show its state.
+        // So "open voice studio" answers with the honest PC-only sentence
+        // rather than opening a screen that does not have it, and
+        // docs/ARCHITECTURE.md section 8 records the one-sided slice.
+        "voicestudio",
     )
 
     /**

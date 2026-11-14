@@ -337,6 +337,11 @@ def t_chat_routing_and_honest_answers():
     print("\n--- t_chat_routing_and_honest_answers ------------------")
     want = {
         "what are your desktop companion capabilities": "companion_overview",
+        # The owner's own phrasing (2026-11-13, the awareness audit's GAP-4).
+        # It used to be answered by the catalogue capability lane with the
+        # Anti-Slop filter's words, because no feature-list row is called
+        # "desktop companion" - so the honest overview never got a chance.
+        "what can you do with the desktop companion": "companion_overview",
         "explain your holographic avatar": "companion_avatar_info",
         "how does screen guidance work": "companion_guidance_info",
         "what is the cursor ask bar": "companion_askbar_info",

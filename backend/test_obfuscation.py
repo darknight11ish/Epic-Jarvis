@@ -275,7 +275,13 @@ def t_chat_refusal_never_promises_a_card():
     for text in ("obfuscate project sample-dashboard",
                  "harden project analytics with pyarmor hardened",
                  "apply code obfuscation to my project",
-                 "protect my app"):
+                 "protect my app",
+                 # The owner's own QUESTION shape (2026-11-13, the awareness
+                 # audit's GAP-4): it matched nothing at all before this, so the
+                 # model answered it and could promise an engine that does not
+                 # exist. The honest refusal is the right answer to the question
+                 # as well as to the request.
+                 "how do I obfuscate my project"):
         r = ask(text)
         check(f"'{text}' gets the honest refusal",
               r is not None and r.intent == "project_obfuscate_unavailable",

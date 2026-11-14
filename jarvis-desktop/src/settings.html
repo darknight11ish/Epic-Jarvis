@@ -156,6 +156,7 @@
             <a href="#security">Security</a>
             <a href="#learning">Learning</a>
         <a href="#wifi-reconnect">Wi-Fi reconnect</a>
+            <a href="#voicestudio">A second voice program (VoiceStudio)</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Voice and sound</span>
@@ -1959,6 +1960,44 @@
           </span>
         </label>
         <p class="note" id="wifi-reconnect-status" role="status"></p>
+      </section>
+
+      <!-- A second voice program (VoiceStudio), 2026-11-13.
+           WHY THIS ROW HAS NO CHECKBOX: a checkbox here would be a control with
+           nothing behind it. The Settings page talks to the PC through one Tauri
+           command per feature, and VoiceStudio has none yet (there is no
+           `/api/voicestudio` route either), so a checkbox would paint a state it
+           could never read or write. The typed sentences below are the real
+           door today - one `change_own_config` card plus Windows Hello on, and
+           instant off - and this row says exactly that instead of pretending.
+           The checkbox arrives with the Tauri command, in the wiring slice.
+
+           The words are the feature list's own `voicestudio` row, so the page,
+           the feature list and the chat answer cannot drift apart. -->
+      <section class="card" id="voicestudio">
+        <h2>A second voice program (VoiceStudio)</h2>
+        <p class="note">
+          VoiceStudio is a separate voice program on this PC that Jarvis may ask
+          to speak. It is <strong>off by default</strong> and it is not the voice
+          Jarvis answers in yet: switching it on does not change what you hear,
+          and the speaking-voice wiring is the next slice.
+        </p>
+        <p class="note">
+          Turn it on by saying <strong>"turn on voicestudio"</strong> in the
+          Jarvis bar. That raises one approval card plus Windows Hello, and
+          nothing is written until you answer it. Turning it off is instant and
+          raises no card. The switch it writes is
+          <code>[voicestudio] enabled</code> in <code>jarvis-framework.toml</code>,
+          and "is voicestudio on" reads it back.
+        </p>
+        <p class="note">
+          The program itself is still started by hand, with
+          <code>tools\voicestudio_sidecar.ps1 -Start</code>. It takes about
+          1.95 GB of the 8 GB graphics card, so it is only ever started when it
+          is needed and never kept loaded beside Jarvis's own models. Its two
+          model licences are personal, non-commercial use only, and you accept
+          them once in VoiceStudio's own terms.
+        </p>
       </section>
 
       <!-- ── Jarvis's voice ────────────────────────────────────────────────
