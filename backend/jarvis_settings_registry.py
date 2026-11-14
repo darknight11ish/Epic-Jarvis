@@ -521,19 +521,6 @@ SECTIONS: tuple = (
             app="phone"),
     Section("phone-notify", ("phone notifications", "reading phone notifications",
                             "notifications on my phone"), app="phone"),
-    # "Phone settings backup" (2026-11-13, the copy-over wave; PR #1233): the
-    # phone's own Settings row that seals THIS phone's settings into a
-    # password-locked file and restores them. Phone only - the PC's Backups
-    # card is a different file with a different recovery code and cannot read
-    # or write this one (docs/ARCHITECTURE.md section 8 records the one-sided
-    # decision). It is a Section because the feature row's own words name it
-    # ("Settings, Phone settings backup"), and a feature's Settings place has
-    # to be a place the registry can prove; it is deliberately given NO menu
-    # entry (`test_menu_visibility.py`'s `inside` list), so the row is always
-    # drawn - hiding the only place that saves and restores this phone's
-    # settings could strand the owner.
-    Section("phone-backup", ("phone settings backup", "back up my phone settings",
-                             "restore my phone settings"), app="phone"),
     # "Look at this and Watch with me" (2026-09-29: its own card on the
     # desktop, holding the Never look at list and picture mode; on the phone
     # its own Settings row for picture mode).
