@@ -21,9 +21,9 @@ from pathlib import Path
 BULLETS = (
     '"How do I activate Hey Jarvis on my Android app?" now answers from the feature list, not from the model',
     'The undo notice after an approved card times out after 15 seconds',
+    "The tray's status check now says only what it measured, and the README stops naming a live version",
     'The to-do list understands a second sentence after the list name',
     "soupsieve 4.0.1 clears all four of its published advisories, and the Python lock's floor moves to 3.11.5",
-    'The deploy tool now sees a patch that was EXTENDED in place, and upgrades the live github-tools block instead of reporting it already present',
 )
 
 

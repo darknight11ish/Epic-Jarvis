@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "eea3dd3d38e335dbc9671f8e9cccefaf3436f7b6f4fc04754458624dc605e0fe",
+  "source_sha256": "dd3dff4da81a0cd4456cdce91116b5b1d86e4dfbe3429fafc6f9f929faadfa9e",
   "feature_count": 182,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -287,7 +287,7 @@
       "where": "desktop Settings: idle-new; phone: that app's own Settings",
       "where_desktop": "idle-new",
       "where_phone": "that app's own Settings",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -367,7 +367,7 @@
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -527,7 +527,7 @@
       "where": "desktop Settings: learning; phone: All features and abilities",
       "where_desktop": "learning",
       "where_phone": "All features and abilities",
-      "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
+      "note": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact.",
       "not_a_control": true
     },
     {
@@ -1151,7 +1151,7 @@
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -1487,7 +1487,7 @@
       "where": "desktop Settings: Jarvis Calendar; phone: Jarvis Calendar",
       "where_desktop": "Jarvis Calendar",
       "where_phone": "Jarvis Calendar",
-      "note": "Still being wired (owner: setup-ui): typed switch and four routes built; desktop and phone Settings rows are the calendar UI slice's",
+      "note": "The switch is in Settings on both apps now. The events themselves are added, changed and deleted in the HUD's Calendar card and on the phone's Calendar screen.",
       "not_a_control": true
     },
     {
@@ -2239,7 +2239,7 @@
       "where": "desktop Settings: backup; phone: All features and abilities",
       "where_desktop": "backup",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -2623,7 +2623,7 @@
       "where": "desktop Settings: approval-cards; phone: All features and abilities",
       "where_desktop": "approval-cards",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
