@@ -677,7 +677,8 @@ SUBSYSTEMS = (
                    "the dozens of audits and handoffs, the dated decisions and the "
                    "per-pull-request changelog fragments.",
         "modules": (),
-        "paths": ("docs/*", "changelog.d/*", "decisions.d/*", "README.md",
+        "paths": ("docs/*", "field-test-archive/*", "changelog.d/*",
+                  "decisions.d/*", "README.md",
                   "CLAUDE.md", "CHANGELOG.md",
                   "HANDOFF-SETTINGS-AND-INSTALLER.md",
                   "JARVIS-SELF-IMPROVEMENT-DESIGN-FOR-REVIEW.md", "LICENSE",
@@ -801,6 +802,8 @@ TOP_LEVEL = {
     "jarvis-client": "the Android app that talks to the backend, in Kotlin",
     "jarvis-android": "the older Android app, kept for reference; it cannot reach the backend",
     "docs": "the documentation, the audits and the records",
+    "field-test-archive": "the field-test records behind the matrix's verdicts, "
+                           "copied verbatim from the gitignored scratch folders",
     "changelog.d": "one bullet per pull request, rolled into CHANGELOG.md",
     "decisions.d": "one dated decision per pull request, rolled into DECISIONS.md",
     "features": "the feature catalogue's own data file",
@@ -833,6 +836,7 @@ _AREA_OF_DIR = {
     "jarvis-client": "android",
     "jarvis-android": "android",
     "docs": "docs",
+    "field-test-archive": "docs",
     "tools": "tools",
     "scripts": "tools",
     "changelog.d": "docs",
