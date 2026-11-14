@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
- "built_at": "2026-11-14T08:47:55-08:00",
+ "ref": "ed884fbc423f1072fc953f3998e27980c4596b6f",
+ "built_at": "2026-11-14T10:05:45-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3874,6 +3874,7 @@
     "backend/test_decided_by_attribution.py",
     "backend/test_decision_lab.py",
     "backend/test_decks.py",
+    "backend/test_def068_entry.py",
     "backend/test_degrade_filter.py",
     "backend/test_deploy_hud_whitelist.py",
     "backend/test_devices.py",
@@ -4383,7 +4384,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 692,
+   "file_count": 693,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4702,6 +4703,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-field-test-archive.md",
+    "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-widget-look.md",
     "changelog.d/README.md",
@@ -4894,6 +4896,7 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-field-test-archive.md",
+    "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5024,6 +5027,7 @@
     "docs/FIELD-TEST-HOW-TO-READ-THE-APPS.md",
     "docs/FIELD-TEST-MATRIX-2026-10-11.md",
     "docs/FIELD-TEST-MATRIX-2026-11-09.md",
+    "docs/FIELD-TEST-MATRIX-2026-11-14.md",
     "docs/FIELD-TEST-PLAN-2026-10-14.md",
     "docs/FILE-GUARDIAN-DESIGN.md",
     "docs/FINANCE-DESIGN.md",
@@ -5397,7 +5401,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 973,
+   "file_count": 976,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6484,6 +6488,46 @@
  ],
  "recent_commits": [
   {
+   "sha": "ed884fbc423f1072fc953f3998e27980c4596b6f",
+   "date": "2026-11-14",
+   "subject": "Merge feat/def068-builder-entry-2026-11-14 into integration/wave20-2026-11-14 (DEF-068 builder entry point)"
+  },
+  {
+   "sha": "7a7eedf096731e884fa916b262453d0e62c09b66",
+   "date": "2026-11-14",
+   "subject": "Merge fix/atlas-tray-copy-2026-11-14 into integration/wave20-2026-11-14 (tray offline sentence says Atlas)"
+  },
+  {
+   "sha": "ecad10f1af5371d5ca7e5014239447dcf157595d",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main into integration/wave20-2026-11-14 (current main)"
+  },
+  {
+   "sha": "6f99ab00a8b0c701278acac45d7b6fddcc843a48",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1258 from darknight11ish/fix/atlas-hud-labels-2026-11-14"
+  },
+  {
+   "sha": "c4b81662b206f5a0c5470c1047522c81d722ef6b",
+   "date": "2026-11-14",
+   "subject": "Add the Android app builder's way in: a model tool, one card per act (DEF-068)"
+  },
+  {
+   "sha": "7ea2a873b555b01fd6bd213e72909c854b42b32b",
+   "date": "2026-11-14",
+   "subject": "desktop: the offline sentence a person reads says Atlas, not Jarvis"
+  },
+  {
+   "sha": "76c7c83793253406f8a7260148b8e110d584fe9d",
+   "date": "2026-11-14",
+   "subject": "Regenerate the records the label rename moved, and drop the scratch script"
+  },
+  {
+   "sha": "ebd271b34860f46b87822751d862a4fd6df40642",
+   "date": "2026-11-14",
+   "subject": "docs(field-test): record the wave-19 deploy as its own matrix (2026-11-14)"
+  },
+  {
    "sha": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
    "date": "2026-11-14",
    "subject": "Say \"Open the Atlas bar\": the last label the visible rename missed"
@@ -6542,53 +6586,13 @@
    "sha": "c76cec4449219d74bd8d6a5a57d86c61afb85042",
    "date": "2026-11-14",
    "subject": "Repair the HUD file the earlier resolution had rolled back, and pin Atlas's note"
-  },
-  {
-   "sha": "da1f764f8c5a9d388086436827d1e060b046fd0a",
-   "date": "2026-11-14",
-   "subject": "Keep both sides of the defect register: mine becomes DEF-068"
-  },
-  {
-   "sha": "38c3e60c3df8c023a227468bcbbd0f1cc8e854dc",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main into the chat-history answer (second time)"
-  },
-  {
-   "sha": "b284c38fa6b464e7a92fce33a66e87c0138747e6",
-   "date": "2026-11-14",
-   "subject": "The native-screens kind clears the three record gates CI found"
-  },
-  {
-   "sha": "f75b34e1fb2d712fb353e119eddb0e55b9a2be1f",
-   "date": "2026-11-14",
-   "subject": "docs(about): quote the register's real totals after the widget claim went built"
-  },
-  {
-   "sha": "794e0ce3ce8e50cacdb519ae0bab41b44ad1ea1c",
-   "date": "2026-11-14",
-   "subject": "chore(records): regenerate the self-code map after merging main into the widget look"
-  },
-  {
-   "sha": "8a33c2726a462eccadc10cbaafc8462b629860f7",
-   "date": "2026-11-14",
-   "subject": "chore(records): regenerate the self-code map after merging main into the claims-checker work"
-  },
-  {
-   "sha": "60a1b034e374b133072002dc8be787bae8ad8c59",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main (PR #1231, android local engine) into feat/any-file-transfer-2026-11-13"
-  },
-  {
-   "sha": "723ad5c4ef2960e6aa30f02c909f69d2bd215625",
-   "date": "2026-11-14",
-   "subject": "Regenerate the self-code map from the merged tree"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1448
+   "files": 1449
   },
   {
    "path": "jarvis-desktop/",
@@ -6603,7 +6607,7 @@
   {
    "path": "docs/",
    "line": "the documentation, the audits and the records",
-   "files": 492
+   "files": 493
   },
   {
    "path": "jarvis-backend/",
@@ -6613,7 +6617,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 275
+   "files": 276
   },
   {
    "path": "tools/",
@@ -6628,7 +6632,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 191
+   "files": 192
   },
   {
    "path": "plugins/",
@@ -6707,8 +6711,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5830,
-  "covered": 5347,
+  "tracked_files": 5834,
+  "covered": 5351,
   "excluded": 483,
   "subsystems": 27
  },

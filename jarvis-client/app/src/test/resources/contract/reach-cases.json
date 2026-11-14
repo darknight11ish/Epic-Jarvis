@@ -1552,6 +1552,10 @@
      "name": "Putting the card back in front of every web search in this chat (instant, no card)"
     },
     {
+     "id": "android_app",
+     "name": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)"
+    },
+    {
      "id": "browser_control",
      "name": "Browser control"
     }

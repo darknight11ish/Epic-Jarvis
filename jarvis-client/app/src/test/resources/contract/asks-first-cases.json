@@ -1979,7 +1979,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -2263,6 +2264,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -4731,7 +4740,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -5015,6 +5025,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -7479,7 +7497,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -7763,6 +7782,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -10240,7 +10267,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -10524,6 +10552,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -13001,7 +13037,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -13285,6 +13322,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -15757,7 +15802,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -16041,6 +16087,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -18508,7 +18562,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -18792,6 +18847,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -21279,7 +21342,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -21563,6 +21627,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -24041,7 +24113,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -24325,6 +24398,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -26788,7 +26869,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -27072,6 +27154,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -29553,7 +29643,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -29837,6 +29928,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -32309,7 +32408,8 @@
        "browser_control",
        "read_web_page",
        "connect_account",
-       "rea_investigate"
+       "rea_investigate",
+       "android_app"
       ],
       "title": "Raw and powerful"
      },
@@ -32593,6 +32693,14 @@
       "last": null,
       "on": false,
       "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "android_app",
+      "last": null,
+      "on": false,
+      "title": "Building an Android app with Gradle in one of your app tasks, or putting a built one on your phone (one card each)",
       "waiting": false
      },
      {
@@ -33146,6 +33254,7 @@
   "read_web_page",
   "connect_account",
   "rea_investigate",
+  "android_app",
   "calculator",
   "memory_search",
   "file_read",
