@@ -39095,7 +39095,7 @@ nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `ja
 (`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
 `docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.
 
-## 222. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
+## 224. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
 
 This section is the record of the owner-approved copy-over wave
 (`COPY-OVER-SPEC-2026-11-13.md`, sections A1-A2). Neither feature is an API
