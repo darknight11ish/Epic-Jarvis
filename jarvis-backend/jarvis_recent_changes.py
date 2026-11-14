@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    '"How do I activate Hey Jarvis on my Android app?" now answers from the feature list, not from the model',
     'The undo notice after an approved card times out after 15 seconds',
-    'The deploy tool now sees a patch that was EXTENDED in place, and upgrades the live github-tools block instead of reporting it already present',
-    'The phone can now save its own settings to a locked file, and an update download is checked against a checksum published with the build',
-    'The phone can run a small AI model on itself, in its own Local AI screen',
-    "The patch history is rebuilt after the union's patch edits, so the required `backend` and `backend-windows` jobs pass again",
+    "The tray's status check now says only what it measured, and the README stops naming a live version",
+    'The to-do list understands a second sentence after the list name',
+    "soupsieve 4.0.1 clears all four of its published advisories, and the Python lock's floor moves to 3.11.5",
 )
 
 
