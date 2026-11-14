@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b6e06c4d37f25e04770d30ed2473c63ca5d3bdc0",
- "built_at": "2026-11-14T00:00:27-08:00",
+ "ref": "f27ab8d2857bb32024dbe483eba7c912dbac7ae0",
+ "built_at": "2026-11-14T00:00:39-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6412,6 +6412,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "f27ab8d2857bb32024dbe483eba7c912dbac7ae0",
+   "date": "2026-11-14",
+   "subject": "chore(records): regenerate after carrying #1233 and the wave-18 batch"
+  },
+  {
    "sha": "b6e06c4d37f25e04770d30ed2473c63ca5d3bdc0",
    "date": "2026-11-14",
    "subject": "Merge branch 'resolve-1233' into resolve-1231-merge"
@@ -6505,11 +6510,6 @@
    "sha": "a9bd71f9a273be6c5d462c9cd90f7bc379336ace",
    "date": "2026-11-13",
    "subject": "Merge fix/tray-and-readme-truth-2026-11-13 into integration/wave18-2026-11-13 (tray wording + README truth); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "7f9339bf9ef24e247a450cb8e88b11fdb315cd3a",
-   "date": "2026-11-13",
-   "subject": "Merge ci/backend-shard-2026-11-13 into integration/wave18-2026-11-13 (backend job sharded four ways, 60-minute shard ceiling; backend-windows keeps 120)"
   }
  ],
  "top_level": [
