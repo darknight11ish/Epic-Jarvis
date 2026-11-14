@@ -446,13 +446,14 @@ LOOSE = {
     "create_logseq_page": "auto",
     "power_manage": "auto",
     # The GitHub READS (2026-11-10 23:00 PT, the owner's "make GitHub reads
-    # card-free"): github_inspect is the one action the four read tools share
-    # (github_list, github_read_file, github_ci_status and the PR cockpit
-    # github_pr_scan). It is here so the owner can turn "ask first" off from
-    # the page - ONE card plus Windows Hello on the PC - instead of the old
-    # "no switch for this one" dead end. "auto" is what loosening writes back:
-    # READS ONLY, nothing on GitHub changes. The twelve GitHub WRITES keep their
-    # own ask actions and did NOT join this list.
+    # card-free"): github_inspect is the one action the five read tools share
+    # (github_list, github_read_file, github_ci_status, the PR cockpit
+    # github_pr_scan and the one-pull-request read github_pr_detail). It is here
+    # so the owner can turn "ask first" off from the page - ONE card plus Windows
+    # Hello on the PC - instead of the old "no switch for this one" dead end.
+    # "auto" is what loosening writes back: READS ONLY, nothing on GitHub
+    # changes. The twelve GitHub WRITES keep their own ask actions and did NOT
+    # join this list.
     "github_inspect": "auto",
 }
 SWITCHABLE = tuple(LOOSE)

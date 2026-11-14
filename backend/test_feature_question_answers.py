@@ -267,6 +267,77 @@ def t_unknown_feature_names_are_answered_honestly():
 
 
 # --------------------------------------------------------------------------
+#   3b. the DESIGN-ONLY features answer honestly, and name no ability
+# --------------------------------------------------------------------------
+#: The 2026-11-13 awareness audit's GAP-3/GAP-4. These three features are
+#: deliberately NOT rows in `features/features.json` (a row there is drawn in
+#: both apps' Features pages, so it would be the claim each of them exists to
+#: remove), so none of them can be answered from the catalogue - and before this
+#: suite's three cases existed two of them were answered by the WRONG owner:
+#: "can you run a model on my phone" was read as a request to open a program
+#: called "model on my phone", and "what can you do with the desktop companion"
+#: was answered with the Anti-Slop filter's own words.
+NOT_BUILT = (
+    # (sentence, intent name, a phrase the answer must contain)
+    ("can you run a model on my phone", "ondevice_model", "not in this build"),
+    ("how do I obfuscate my project", "project_obfuscate_unavailable",
+     "cannot obfuscate"),
+    ("what can you do with the desktop companion", "companion_overview",
+     "not built"),
+)
+
+#: A sentence the answer must never contain: the wording of a claim that the
+#: thing really exists and works.
+ABILITY_CLAIMS = ("i will obfuscate", "i can obfuscate your", "i have asked this pc",
+                  "here is what my feature list says")
+
+
+def t_design_only_features_answer_honestly():
+    for sentence, intent_name, needle in NOT_BUILT:
+        res, intent = _answer(sentence)
+        check(f"deterministic, never the model: {sentence[:52]}",
+              intent is not None and res is not None, repr(intent))
+        if intent is None or res is None:
+            continue
+        check(f"... from its own honest owner: {sentence[:52]}",
+              intent.name == intent_name, intent.name)
+        check(f"... saying it is not built: {sentence[:52]}",
+              needle in res.reply.lower(), res.reply[:240])
+        check(f"... and claiming no ability: {sentence[:52]}",
+              not any(bad in res.reply.lower() for bad in ABILITY_CLAIMS),
+              res.reply[:240])
+        check(f"... and quoting no catalogue row: {sentence[:52]}",
+              not any(t and t in res.reply for t in TITLES), res.reply[:200])
+        # The three are NOT rows: adding one would be the false claim.
+        for absent in ("on-device-model", "code-protection", "desktop-companion"):
+            check(f"the feature list carries no {absent} row", absent not in BY_ID)
+
+
+def t_the_phone_history_answer_names_both_doors():
+    """GAP-3: the sentence was written before the More menu had a History row.
+
+    It said the phone's only door was the Brain's History row. Since #1223 there
+    are two (`MoreMenuWords.kt` `HISTORY`, drawn by `HomeMoreMain`), and the
+    feature list's `history` row, the guide and this answer all read that one
+    sentence - so this case pins the words the owner is actually given.
+    """
+    res, intent = _answer("where is history on my phone")
+    check("the phone History question is deterministic", res is not None, repr(intent))
+    if res is None:
+        return
+    check("... it reads the history row", _row_of(intent) == "history",
+          _row_of(intent))
+    check("... naming the More menu", "More" in res.reply, res.reply[:300])
+    check("... and the History row", "History" in res.reply, res.reply[:300])
+    check("... while the Brain's row is still said to exist",
+          "Brain" in res.reply, res.reply[:300])
+    row = BY_ID.get("history") or {}
+    check("the feature list row says the same thing",
+          "More menu" in str(row.get("where") or "")
+          and "History" in str(row.get("where") or ""), str(row.get("where"))[:200])
+
+
+# --------------------------------------------------------------------------
 #   4. the model entry point is never called, preset-free
 # --------------------------------------------------------------------------
 def t_model_entry_point_is_never_called():
@@ -412,6 +483,8 @@ def main():
                t_the_measured_echo_is_gone,
                t_what_can_you_tell_me_about_a_known_feature,
                t_unknown_feature_names_are_answered_honestly,
+               t_design_only_features_answer_honestly,
+               t_the_phone_history_answer_names_both_doors,
                t_model_entry_point_is_never_called,
                t_the_coding_preset_cannot_change_the_words,
                t_the_model_prompt_does_not_carry_the_catalogue,

@@ -2638,13 +2638,14 @@ enabled = false
 # needed (tools\voicestudio_sidecar.ps1 -Start), released when it is done, and
 # never resident beside Jarvis.
 #
-# Turning this on is a hand edit for now: there is no screen and no route in
-# this slice (the same first-slice position [vault_organizer] took above). The
-# read-only questions still answer while it is false - asking is not using -
-# and jarvis_speech.py does not call this module yet, so switching it on alone
-# changes nothing you would hear. The next slice wires the speaking voice, adds
-# the one-card Settings switch, and only then does ON mean "Jarvis may speak
-# with it".
+# Turning this on has three doors since 2026-11-13, and all three write this
+# one line: say "turn on voicestudio" (ONE change_own_config card plus Windows
+# Hello - nothing is written until it is answered), say "turn off voicestudio"
+# (instant, no card), or use its row in Settings, The PC itself. A hand edit of
+# this line still works. The read-only questions still answer while it is false
+# - asking is not using - and jarvis_speech.py does not call this module yet, so
+# switching it on alone changes nothing you would hear. The next slice wires the
+# speaking voice, and only then does ON mean "Jarvis may speak with it".
 #
 # The weights are not covered by this switch and are never shipped: two model
 # licences (k2-fsa/OmniVoice, CC-BY-NC; eustlb/higgs-audio-v2-tokenizer) are

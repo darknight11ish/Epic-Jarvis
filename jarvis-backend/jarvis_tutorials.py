@@ -248,7 +248,11 @@ CATALOGUE = (
                      "a switch turns that off. Incognito chats are not kept at "
                      "all. Crisis chats are kept but titled \"A difficult "
                      "moment\", never with your words.",
-             "where": "Brain → History"},
+             # Both doors named since 2026-11-13: the phone's More menu gained
+             # its own History row on Home, and the Brain's row is still there
+             # (the same sentence the feature list's `history` row carries).
+             "where": "Brain → History, and on the phone the More menu's "
+                      "History row on Home"},
             {"title": "The approval list is read-only",
              "body": "Every card you decided - approved, denied or timed out - is "
                      "listed with when it happened and which device asked.",
