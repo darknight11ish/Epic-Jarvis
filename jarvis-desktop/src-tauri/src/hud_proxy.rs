@@ -294,7 +294,7 @@ pub struct HudReply {
 
 fn reach_error(base: &str, e: &reqwest::Error) -> String {
     if e.is_connect() {
-        format!("could not reach the Jarvis server at {base}")
+        format!("could not reach the Atlas server at {base}")
     } else if e.is_timeout() {
         "the Jarvis server did not answer in time".to_string()
     } else {
