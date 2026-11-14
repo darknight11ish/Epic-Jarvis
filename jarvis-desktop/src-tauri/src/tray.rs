@@ -1637,9 +1637,9 @@ fn first_sentence(text: &str) -> String {
     let text = text.trim();
     // A full stop only ends a sentence when whitespace or the end follows it.
     // Without that test the first offline message the owner ever sees - "could
-    // not reach the Jarvis server at http://127.0.0.1:4719. Is it running?" -
+    // not reach the Atlas server at http://127.0.0.1:4719. Is it running?" -
     // was cut at the dot inside the address, and the tray read, literally,
-    // "Jarvis - offline: could not reach the Jarvis server at http://127".
+    // "Atlas - offline: could not reach the Atlas server at http://127".
     // The 403 message lost the half that names JARVIS_HUD_ORIGINS, which is
     // the actual fix, for the same reason.
     let bytes = text.as_bytes();
@@ -2567,7 +2567,7 @@ mod tests {
 
         let down = LinkState {
             error: Some(
-                "could not reach the Jarvis server at http://127.0.0.1:4719. Is it running?".into(),
+                "could not reach the Atlas server at http://127.0.0.1:4719. Is it running?".into(),
             ),
             ..LinkState::default()
         };
