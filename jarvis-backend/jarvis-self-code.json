@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e28924675d82a16d9568a27271492d12bd02e374",
- "built_at": "2026-11-13T21:47:22-08:00",
+ "ref": "03d7c697d84e1a8e77c006e1eb06bff3301a3f6e",
+ "built_at": "2026-11-13T23:25:18-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6319,7 +6319,7 @@
  ],
  "recent_commits": [
   {
-   "sha": "e28924675d82a16d9568a27271492d12bd02e374",
+   "sha": "03d7c697d84e1a8e77c006e1eb06bff3301a3f6e",
    "date": "2026-11-13",
    "subject": "fix(claims): a machine skip is printed, and suites run offline like the runner"
   },
