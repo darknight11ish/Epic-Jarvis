@@ -22,8 +22,9 @@
  * Rules this page keeps:
  * - Everything the PC wrote reaches the page as text (`textContent`).
  * - Nothing is removed from here: "Forget these" only asks the PC, which
- *   raises ONE approval card listing every item, answered in the Jarvis
- *   bar like any other. This page never approves anything.
+ *   raises ONE approval card carrying the count and the days (this list holds
+ *   every title and date - the owner's ruling of 2026-11-13), answered in the
+ *   Jarvis bar like any other. This page never approves anything.
  * - The pinned chats the PC is keeping are drawn as KEPT: no tick box, never
  *   in the count on "Forget these", and never in what it sends.
  * - "Forget these" and the second yes are greyed while the link is stale or
@@ -625,9 +626,11 @@ function listPart(s) {
   const go = button(forgetLabel(count), forgetNow, { isLive: true, danger: true,
     id: "forget-range-go" });
   go.dataset.title = p.largeWipe
-    ? "Asks you first, with ONE approval card listing everything ticked - this is a "
-      + "large wipe, so you will be asked to say yes a second time after the card."
-    : "Asks you first, with ONE approval card listing everything ticked.";
+    ? "Asks you first, with ONE approval card carrying the count and the days (the full "
+      + "list is above) - this is a large wipe, so you will be asked to say yes a second "
+      + "time after the card."
+    : "Asks you first, with ONE approval card carrying the count and the days - the full "
+      + "list is above.";
   if (!count || s.waiting || s.confirm || s.undo) {
     go.dataset.off = "true";
     syncLive(go);

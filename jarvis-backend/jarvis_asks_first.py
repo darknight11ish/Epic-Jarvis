@@ -284,9 +284,10 @@ NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs an
                      "yes it never asks again, and this cannot be changed from an app.")
 #: "Forget a time frame" (jarvis_forget_range.py, the owner's decision of
 #: 2026-09-28): one card for the whole list, then 10 minutes to undo.
-NOTE_FORGET_RANGE = ("Always asks, with ONE card listing every fact and chat - approved by "
-                     "tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. "
-                     "This cannot be changed from an app.")
+NOTE_FORGET_RANGE = ("Always asks, with ONE card giving the count and the days - every title "
+                     "and date stays on the screen you ticked - approved by tapping, never by "
+                     "voice. For 10 minutes afterwards, Undo puts it all back. This cannot be "
+                     "changed from an app.")
 NOTE_SUPPORT = ("Always asks: one card lists every detail Jarvis may give in that chat. "
                 "This cannot be changed from an app.")
 NOTE_SUPPORT_OFFER = ("Always asks, one card per offer, showing the exact reply - nothing is "
