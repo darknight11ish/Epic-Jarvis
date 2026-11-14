@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e03b61684492c31338635626c0244ccdb157ff42",
- "built_at": "2026-11-14T10:06:06-08:00",
+ "ref": "8e8872bf31cd72044cd1c98f37b2800093bc6698",
+ "built_at": "2026-11-14T10:18:06-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4702,6 +4702,7 @@
     "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
+    "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
@@ -4895,6 +4896,7 @@
     "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
+    "decisions.d/2026-11-14-atlas-copy-scope.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-widget-look.md",
@@ -5401,7 +5403,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 976,
+   "file_count": 978,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6488,6 +6490,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "8e8872bf31cd72044cd1c98f37b2800093bc6698",
+   "date": "2026-11-14",
+   "subject": "The Brain window's copy says Atlas, and the builder's six 'no way in yet' sentences become true"
+  },
+  {
+   "sha": "fee00d72f810a70eb13685433eabb72b4531e658",
+   "date": "2026-11-14",
+   "subject": "desktop: the Brain window's own explanatory copy says Atlas"
+  },
+  {
    "sha": "e03b61684492c31338635626c0244ccdb157ff42",
    "date": "2026-11-14",
    "subject": "Regenerate the records after folding the wave-20 workstreams"
@@ -6576,16 +6588,6 @@
    "sha": "cf20c50d1a65b3e75b7947f94e9963baee85566d",
    "date": "2026-11-14",
    "subject": "Merge 38c3e60c3 into integration/wave19-2026-11-14 (#1251 answer where chats are kept from the code); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "213d070cb52613ca7d6ba5282959fa54820b0031",
-   "date": "2026-11-14",
-   "subject": "Merge 723ad5c4e into integration/wave19-2026-11-14 (#1254 archive the 53 field-test records); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "ea2299d4d180adee1a68954d001250e48b6725b0",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1252 from darknight11ish/feat/any-file-transfer-2026-11-13"
   }
  ],
  "top_level": [
@@ -6617,7 +6619,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 276
+   "files": 277
   },
   {
    "path": "tools/",
@@ -6632,7 +6634,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 192
+   "files": 193
   },
   {
    "path": "plugins/",
@@ -6711,8 +6713,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5834,
-  "covered": 5351,
+  "tracked_files": 5836,
+  "covered": 5353,
   "excluded": 483,
   "subsystems": 27
  },
