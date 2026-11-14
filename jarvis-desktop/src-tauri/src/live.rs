@@ -137,7 +137,7 @@ pub(crate) const LIVE_MISSING: &str = "This PC's Jarvis does not have Jarvis Liv
      scripts\\apply-patches.ps1 on the PC to add it.";
 const STALE_HELD: &str = "The connection to Jarvis is catching up, so Jarvis Live is held \
      until it does - try again in a moment.";
-pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Jarvis bar \
+pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Atlas bar \
      and unlock it with Windows Hello, then start Jarvis Live.";
 /// The talk button while Live has the microphone (live-rules.js
 /// `SEEN.busy_mic`, the same words on the phone).

@@ -575,8 +575,8 @@ await check("browser: the one launcher focuses the chat box (and the dock duplic
   });
   assert.equal(launcher.pillShown, true, "a browser shows no launcher at all");
   assert.equal(launcher.dockShown, false, "a browser shows two launchers (dock lightning is visible too)");
-  assert.match(launcher.pillWords, /Open the Jarvis bar/, "the launcher's words do not say what it does");
-  assert.equal(launcher.pillTitle, "Open the Jarvis bar", "the launcher's tooltip does not say what it does");
+  assert.match(launcher.pillWords, /Open the Atlas bar/, "the launcher's words do not say what it does");
+  assert.equal(launcher.pillTitle, "Open the Atlas bar", "the launcher's tooltip does not say what it does");
   assert.equal(launcher.openBar, "function", "window.__jarvisOpenBar is not wired in a browser");
   // The click is dispatched on the element itself: an element.click() is the
   // same DOM event the page's own listener receives.

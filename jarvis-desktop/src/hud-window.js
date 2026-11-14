@@ -1,16 +1,16 @@
 /**
- * hud-window.js - "The big HUD window": whether the "Open the Jarvis bar"
+ * hud-window.js - "The big HUD window": whether the "Open the Atlas bar"
  * button shows in it, and the words this PC's Settings card shows.
  *
  * THE OWNER'S REQUEST (2026-10-06). Looking at the big "Jarvis" window (the
- * HUD, jarvis_hud.html), the owner asked for its "Open the Jarvis bar"
+ * HUD, jarvis_hud.html), the owner asked for its "Open the Atlas bar"
  * button to be replaced by a text box he could type into directly, and then
  * chose: keep the button beside the box, and add an option in Settings that
  * controls whether the button shows in that window at all.
  *
  * The box is PR #85's work and is not rebuilt here. This module is only the
  * option. Its default is ON, because that is the state the owner already
- * approved on 2026-10-06 ("The 'Open the Jarvis bar' button stays in that
+ * approved on 2026-10-06 ("The 'Open the Atlas bar' button stays in that
  * window, beside the box").
  *
  * WHERE IT IS KEPT, AND WHY NOT SOMEWHERE ELSE. It is a per-computer
@@ -106,7 +106,7 @@ export function describeOpenBar(on) {
    WHERE IT IS KEPT, AND WHY THE SAME PLACE AS THE OPEN-BAR SWITCH ABOVE. It is
    a per-computer cosmetic choice with no effect on what Jarvis does, so it
    lives in the HUD window origin's `localStorage` under the key below -
-   exactly the mechanism the "Open the Jarvis bar" button setting already uses,
+   exactly the mechanism the "Open the Atlas bar" button setting already uses,
    and the same reason: one key, read by the Settings window that changes it and
    by the HUD window that obeys it, and no roundtrip to the backend. A change
    made while the HUD is open reaches it through the shared `storage` event.

@@ -378,7 +378,7 @@
       "row_id": null,
       "label_span": null,
       "detail_span": "hud-open-bar-detail",
-      "label": "Show the \"Open the Jarvis bar\" button",
+      "label": "Show the \"Open the Atlas bar\" button",
       "detail": "On: the button sits beside the big window's own chat box, and\nopens the Jarvis bar ready to type. Off: the button is not drawn\nthere. The chat box, its Send and the microphone button are\nunchanged, and Alt+Space still opens the Jarvis bar.\n",
       "fallback": false,
       "checked": false,

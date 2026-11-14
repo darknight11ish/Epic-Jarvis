@@ -87,7 +87,7 @@ pub const ACTIONS: &[Action] = &[
         // (main.js, "quick-note-summon").
         label: "Quick note",
         default: "Alt+Shift+N",
-        hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
+        hint: "Open the Atlas bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     },
     Action {
         id: "toggle_widget",

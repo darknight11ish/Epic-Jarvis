@@ -784,7 +784,7 @@ await check("with the shell, the HUD's own chat box is usable, and the button op
   // the bar, in both directions, and never contradicts itself.
   assert.deepEqual(whileOpen, { label: "Hide the Atlas bar", title: "Hide the Atlas bar" },
     "the label did not follow the bar being open");
-  assert.deepEqual(afterClose, { label: "Open the Jarvis bar", title: "Open the Jarvis bar" },
+  assert.deepEqual(afterClose, { label: "Open the Atlas bar", title: "Open the Atlas bar" },
     "the label did not come back when the bar closed");
   // And it is ONE button that toggles: the second click is a hide.
   assert.deepEqual(barCalls(invoked), ["hud_open_bar"], JSON.stringify(barCalls(invoked)));
@@ -794,7 +794,7 @@ await check("with the shell, the HUD's own chat box is usable, and the button op
   assert.equal(composed.inputTabIndex, 0, "the box is out of the tab order");
   assert.equal(composed.sendTabIndex, 0, "Send is out of the tab order");
   assert.deepEqual(visible, { input: true, send: true, button: true }, "a control is not shown");
-  assert.equal(composed.button, "Open the Jarvis bar");
+  assert.equal(composed.button, "Open the Atlas bar");
   assert.equal(composed.title, composed.button, "the tooltip and the label disagree");
   assert.ok(chats.length >= 1, "typing in the HUD's own box never reached /api/chat");
   assert.equal(chats.at(-1).messages.at(-1).content, "typed in the HUD");

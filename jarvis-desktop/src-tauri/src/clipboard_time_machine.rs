@@ -206,7 +206,7 @@ const WATCH_EVERY: Duration = Duration::from_millis(700);
 /// The plain words the drawer shows when App lock would ask before anything
 /// private here may be read or changed.
 const LOCKED_WORDS: &str =
-    "Jarvis is locked. Open the Jarvis bar and unlock it, then open clipboard history again.";
+    "Jarvis is locked. Open the Atlas bar and unlock it, then open clipboard history again.";
 
 // ---------------------------------------------------------------------------
 //   The ring
