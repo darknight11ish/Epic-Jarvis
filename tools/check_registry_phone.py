@@ -152,6 +152,15 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"hud-window",',
     },
+    "settings.voicestudio": {
+        "name": "VoiceStudio",
+        "why": ("The second voice program runs on this PC, beside Jarvis's own models, and is "
+                "started by a PowerShell script here. The phone has no switch for it, and a phone "
+                "that could start a program on the PC would be a new power (ARCHITECTURE "
+                "section 8)."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"voicestudio",',
+    },
     "settings.first-run": {
         "name": "Set up Jarvis",
         "why": ("The first-run card is the page a new owner meets on the PC; the phone's first "

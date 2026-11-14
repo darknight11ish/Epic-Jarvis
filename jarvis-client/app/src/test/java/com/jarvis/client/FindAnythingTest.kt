@@ -290,8 +290,16 @@ class FindAnythingTest {
             // to add; the catalogue still carries both names so the finder can
             // say "only in Jarvis on your PC" for them, which is the same reason
             // `settings.skills-menu` and `settings.wifi-reconnect` moved it.
+            //
+            // 135 -> 136 (2026-11-13, the VoiceStudio card): the awareness
+            // audit's GAP-9 added `settings.voicestudio`, a DESKTOP ONLY
+            // settings card for the second voice program (the registry section
+            // says app="desktop"), so `phone` is false and there is no phone
+            // place to add - the same shape as the Wi-Fi card above. The
+            // catalogue still carries the name so the finder can say it is on
+            // the PC only.
             "the catalogue must still carry the names at all",
-            135,
+            136,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

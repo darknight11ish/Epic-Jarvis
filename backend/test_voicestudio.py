@@ -626,8 +626,12 @@ def t_the_switch_ships_off_and_refuses_speech():
             check("switch: speaking is refused while off", True)
             check("switch: the words name the exact switch",
                   "[voicestudio] enabled" in exc.words, exc.words)
-            check("switch: the words say there is no screen yet",
-                  "no screen" in exc.words, exc.words)
+            # The sentence used to end "there is no screen for it yet". Since
+            # 2026-11-13 there IS one (the typed sentence and the Settings row),
+            # so the words must name the doors instead of denying them.
+            check("switch: the words name both doors",
+                  "turn on voicestudio" in exc.words
+                  and "Settings" in exc.words, exc.words)
         check("switch: a refusal does not reach the network",
               FAKE.calls("POST", "/v1/audio/speech") == [])
         # The read-only questions still answer: asking is not using.
@@ -657,6 +661,231 @@ def t_the_shipped_template_really_says_false():
         section = "\n".join(line for line in tail.splitlines()[:8])
         check("the [voicestudio] section ships enabled = false",
               "enabled = false" in section, section)
+
+
+# --------------------------------------------------------------------------
+#   7b. The typed switch (2026-11-13, the awareness audit's GAP-9)
+# --------------------------------------------------------------------------
+
+class FakeFramework:
+    """`jarvis_framework`, with a real settings file on disk and no network.
+
+    `load_framework()` really parses the file, so a write is proved by reading
+    it back the same way the shipped module reads it - never by trusting what
+    `set_enabled` returned.
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.tiers = {"change_own_config": "ask"}
+        self.audit = []
+
+    def load_framework(self, *_a, **_k):
+        import tomllib
+        return tomllib.loads(self.path.read_text(encoding="utf-8"))
+
+    def config_path(self):
+        return self.path
+
+    def reload_framework(self):
+        return self.load_framework()
+
+    def action_tier(self, action):
+        return self.tiers.get(action, "ask")
+
+    def audit_log(self, event, detail=None):
+        self.audit.append((event, detail))
+        return True
+
+
+def _with_fake_framework(text: str, body):
+    """Run `body(fake)` with a temp settings file and this module's own reader."""
+    folder = Path(tempfile.mkdtemp(prefix="jarvis-vs-switch-"))
+    path = folder / "jarvis-framework.toml"
+    path.write_text(text, encoding="utf-8")
+    fake = FakeFramework(path)
+    saved_module = sys.modules.get("jarvis_framework")
+    saved_reader = V._framework_section
+    sys.modules["jarvis_framework"] = fake
+    V._framework_section = lambda: (fake.load_framework() or {}).get("voicestudio", {}) or {}
+    try:
+        return body(fake, path)
+    finally:
+        V._framework_section = saved_reader
+        if saved_module is None:
+            sys.modules.pop("jarvis_framework", None)
+        else:
+            sys.modules["jarvis_framework"] = saved_module
+        import shutil
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+TOML_OFF = ("[autonomy.tiers]\nchange_own_config = \"ask\"\n\n"
+            "[voicestudio]\nenabled = false\n\n[tools]\nenabled = []\n")
+
+
+def t_the_switch_writes_one_line_and_reads_it_back():
+    def body(fake, path):
+        check("switch: it ships off", V.enabled() is False)
+        ok, words = V.set_enabled(True)
+        check("switch: turning it on reports success", ok is True, words)
+        check("switch: ... and says nothing was started",
+              "Nothing was started" in words and "by hand" in words, words)
+        text = path.read_text(encoding="utf-8")
+        check("switch: the file really says true",
+              "[voicestudio]\nenabled = true" in text, text)
+        check("switch: nothing else in the file changed",
+              text.replace("enabled = true", "enabled = false") == TOML_OFF, text)
+        check("switch: the module reads the new value back", V.enabled() is True)
+        ok, words = V.set_enabled(False)
+        check("switch: turning it off reports success", ok is True, words)
+        check("switch: the file is exactly what it was",
+              path.read_text(encoding="utf-8") == TOML_OFF,
+              path.read_text(encoding="utf-8"))
+        check("switch: an audit line was written, without a value",
+              fake.audit and fake.audit[-1][0].startswith("voicestudio."), fake.audit)
+        check("switch: nothing was left behind beside the settings file",
+              sorted(p.name for p in path.parent.iterdir()) == ["jarvis-framework.toml"],
+              sorted(p.name for p in path.parent.iterdir()))
+    _with_fake_framework(TOML_OFF, body)
+
+
+def t_the_switch_creates_the_section_when_it_is_absent():
+    def body(fake, path):
+        ok, words = V.set_enabled(True)
+        check("switch: an older file with no section still works", ok is True, words)
+        check("switch: ... and the section was added",
+              "[voicestudio]" in path.read_text(encoding="utf-8")
+              and V.enabled() is True, path.read_text(encoding="utf-8"))
+    _with_fake_framework("[autonomy.tiers]\nchange_own_config = \"ask\"\n", body)
+
+
+def t_the_switch_refuses_a_file_it_cannot_change_safely():
+    bad = "[voicestudio]\nenabled = \"yes\"\n"
+    def body(fake, path):
+        ok, words = V.set_enabled(True)
+        check("switch: a hand-edited value is refused, not rewritten", ok is False, words)
+        check("switch: ... and the answer says nothing was changed",
+              "nothing was changed" in words, words)
+        check("switch: ... and the file is untouched",
+              path.read_text(encoding="utf-8") == bad, path.read_text(encoding="utf-8"))
+    _with_fake_framework(bad, body)
+
+
+def t_a_failed_write_changes_nothing():
+    from unittest import mock
+    def body(fake, path):
+        with mock.patch.object(V.os, "replace", side_effect=OSError("denied")):
+            ok, words = V.set_enabled(True)
+        check("switch: a write that fails reports failure", ok is False, words)
+        check("switch: ... in words that say nothing changed",
+              "nothing was changed" in words, words)
+        check("switch: ... and the file still says false",
+              path.read_text(encoding="utf-8") == TOML_OFF,
+              path.read_text(encoding="utf-8"))
+        check("switch: ... and no temporary file was left",
+              sorted(p.name for p in path.parent.iterdir()) == ["jarvis-framework.toml"],
+              sorted(p.name for p in path.parent.iterdir()))
+    _with_fake_framework(TOML_OFF, body)
+
+
+def t_on_is_one_card_and_off_is_instant():
+    def body(fake, path):
+        calls = []
+
+        class Verdict:
+            allowed = True
+            outcome = "approved"
+            tier = "ask"
+
+        def gate(action, detail, prompt):
+            calls.append((action, detail, prompt))
+            return Verdict()
+
+        code, out = V.request_enabled(False, gate=gate)
+        check("switch: OFF is instant and raises no card",
+              code == 200 and not calls and out.get("enabled") is False, out)
+        # OFF while already off is a no-op that says so.
+        code, out = V.request_enabled(False, gate=gate)
+        check("switch: OFF when already off says nothing changed",
+              code == 200 and "already off" in out.get("words", "").lower(), out)
+        code, out = V.request_enabled(True, gate=gate)
+        check("switch: ON raises exactly ONE card", len(calls) == 1, calls)
+        check("switch: ... under change_own_config",
+              calls and calls[0][0] == "change_own_config", calls[:1])
+        check("switch: ... whose words say the program is not started",
+              calls and "NOT started" in calls[0][2], calls[:1])
+        check("switch: ... and the switch is on afterwards",
+              code == 200 and out.get("enabled") is True and V.enabled() is True, out)
+
+        # A refused card writes nothing.
+        ok, _ = V.set_enabled(False)
+
+        class Refused:
+            allowed = False
+            outcome = "denied"
+            tier = "ask"
+            reason = "you denied it"
+
+        code, out = V.request_enabled(True, gate=lambda *a: Refused())
+        check("switch: a denied card leaves it off",
+              code == 403 and out.get("enabled") is False and V.enabled() is False, out)
+        check("switch: ... and the answer says so",
+              "denied" in out.get("words", ""), out)
+
+        # A waiting card is never reported as on.
+        class Waiting:
+            allowed = False
+            outcome = "waiting"
+            waiting = True
+            tier = "ask"
+            reason = ""
+
+        code, out = V.request_enabled(True, gate=lambda *a: Waiting())
+        check("switch: a waiting card is reported as waiting, never as on",
+              code == 202 and out.get("waiting") is True
+              and out.get("enabled") is False and V.enabled() is False, out)
+
+        # A gate that cannot be raised at all is NOT the owner saying no, and
+        # it must never come back as a raw ImportError sentence.
+        class NoGate:
+            allowed = False
+            outcome = "refused"
+            reason = "the approval gate is not available here (No module named 'jarvis_gate')"
+
+        code, out = V.request_enabled(True, gate=lambda *a: NoGate())
+        check("switch: a gate that cannot be raised says so in plain words",
+              code == 503 and "could not be raised" in out.get("words", "")
+              and "jarvis_gate" not in out.get("words", ""), out)
+        check("switch: ... and it stays off",
+              V.enabled() is False and out.get("enabled") is False, out)
+    _with_fake_framework(TOML_OFF, body)
+
+
+def t_the_typed_switch_never_starts_the_program():
+    reset()
+    def body(fake, path):
+        before = list(STATE["calls"])
+        V.set_enabled(True)
+        V.request_enabled(False)
+        check("switch: no HTTP request was made to VoiceStudio",
+              FAKE.calls() == [], FAKE.calls())
+        check("switch: ... and no program was started",
+              list(STATE["calls"]) == before, STATE["calls"])
+        check("switch: the module still imports no subprocess",
+              "subprocess" not in SRC.read_text(encoding="utf-8"))
+    _with_fake_framework(TOML_OFF, body)
+
+
+def t_the_state_answer_reads_the_file():
+    on = TOML_OFF.replace("enabled = false", "enabled = true")
+    def body(fake, path):
+        state = V.state()
+        check("state: a hand-edited true is read as on", state["enabled"] is True, state)
+        check("state: ... and the words say on", "is on" in state["words"], state["words"])
+        check("state: ... and still name the hand-start command",
+              "voicestudio_sidecar.ps1 -Start" in state["words"], state["words"])
+    _with_fake_framework(on, body)
 
 
 def t_the_status_card_never_raises_and_reports_the_measured_cost():
@@ -737,9 +966,21 @@ def t_a_request_to_this_pc_never_goes_through_a_proxy():
 # --------------------------------------------------------------------------
 
 def t_the_module_is_stdlib_plus_our_own_opener():
+    """Stdlib only, ONE file written, and it still never starts a program.
+
+    Until 2026-11-13 this test also said "no file write" - the module only ever
+    spoke HTTP. The typed switch (the awareness audit's GAP-9) makes it the
+    writer of ONE line in the owner's own settings file, so the blanket
+    prohibition is replaced by what is now the real boundary: exactly one write
+    (`[voicestudio] enabled`, through `rewrite_enabled`), no `open()` anywhere
+    else, and still NOTHING that starts, stops or imports VoiceStudio.
+    """
     tree = ast.parse(SRC.read_text(encoding="utf-8"), filename=str(SRC))
-    allowed = {"__future__", "ipaddress", "json", "time", "urllib", "urllib.error", "urllib.parse",
-               "urllib.request", "jarvis_local_http", "jarvis_framework"}
+    allowed = {"__future__", "ipaddress", "json", "os", "re", "threading", "time",
+               "pathlib", "tomllib", "tomli",
+               "urllib", "urllib.error", "urllib.parse",
+               "urllib.request", "jarvis_local_http", "jarvis_framework",
+               "jarvis_gate"}
     imported = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -755,14 +996,36 @@ def t_the_module_is_stdlib_plus_our_own_opener():
     check("imports: no omnivoice / VoiceStudio import",
           not any("omnivoice" in name.lower() or name.startswith("backend") for name in imported),
           sorted(imported))
-    check("imports: no file-writing stdlib (pathlib/shutil/tempfile)",
-          not (imported & {"pathlib", "shutil", "tempfile"}), sorted(imported))
+    check("imports: nothing that could copy, move or delete a tree",
+          not (imported & {"shutil", "tempfile", "glob"}), sorted(imported))
     calls = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             calls.add(node.func.id)
-    check("code: no open() and no exec()/eval()", not (calls & {"open", "exec", "eval"}),
-          sorted(calls & {"open", "exec", "eval"}))
+    check("code: no exec()/eval()", not (calls & {"exec", "eval"}),
+          sorted(calls & {"exec", "eval"}))
+    # The ONE file this module may write: `open(tmp, "w", ...)` inside
+    # set_enabled, then os.replace. A second bare open() would be a new file
+    # write nobody decided.
+    opens = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == "open"]
+    check("code: exactly one open(), and it is the settings write",
+          len(opens) == 1, len(opens))
+    if opens:
+        modes = [a.value for a in opens[0].args
+                 if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+        check("... opened for writing, utf-8",
+              "w" in modes and any(
+                  k.arg == "encoding" and getattr(k.value, "value", "") == "utf-8"
+                  for k in opens[0].keywords), modes)
+    check("code: it never starts or imports a program",
+          not (imported & {"subprocess"})
+          and not any(isinstance(n, ast.Attribute) and n.attr in
+                      ("system", "startfile", "spawn", "spawnl", "popen", "fork")
+                      for n in ast.walk(tree))
+          and not any(isinstance(n, ast.Name) and n.id in
+                      ("Popen", "system", "startfile") for n in ast.walk(tree)),
+          "a process-start call appeared")
     text = SRC.read_text(encoding="utf-8")
     check("code: the proxy-free opener is used, never plain urlopen",
           "ProxyHandler({})" in text and "urlopen(" not in text.replace("_opener", ""),
@@ -817,6 +1080,13 @@ def main():
              t_stop_is_idempotent_when_nothing_runs,
              t_the_switch_ships_off_and_refuses_speech,
              t_the_shipped_template_really_says_false,
+             t_the_switch_writes_one_line_and_reads_it_back,
+             t_the_switch_creates_the_section_when_it_is_absent,
+             t_the_switch_refuses_a_file_it_cannot_change_safely,
+             t_a_failed_write_changes_nothing,
+             t_on_is_one_card_and_off_is_instant,
+             t_the_typed_switch_never_starts_the_program,
+             t_the_state_answer_reads_the_file,
              t_the_status_card_never_raises_and_reports_the_measured_cost,
              t_a_request_to_this_pc_never_goes_through_a_proxy,
              t_the_module_is_stdlib_plus_our_own_opener,
