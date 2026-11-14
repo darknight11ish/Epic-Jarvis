@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jarvis</title>
+    <title>Atlas</title>
     <!--
       Theme before first paint. Synchronous from localStorage rather than
       waiting for the IPC round trip, because a window that paints deep-space
@@ -40,11 +40,11 @@
     <main id="shell" class="shell">
       <!-- The page had no heading of any level. A screen reader's heading list
            — one of the two ways people navigate a page without reading it —
-           was empty, and "Ask Jarvis" existed only as a label on the textarea.
+           was empty, and "Ask Atlas" existed only as a label on the textarea.
            It is `sr-only` because the window is a 44px bar: the heading is
-           structure, not decoration, and the visible equivalent is Jarvis's
+           structure, not decoration, and the visible equivalent is Atlas's
            face and the input beside it. -->
-      <h1 class="sr-only">Jarvis</h1>
+      <h1 class="sr-only">Atlas</h1>
       <!-- ── Input row ─────────────────────────────────────────────────── -->
       <div class="bar" id="bar" data-tauri-drag-region>
         <!-- The miniature of the owner's chosen face (the owner's request,
@@ -78,7 +78,7 @@
         </span>
 
         <div class="field" id="prompt-field">
-          <label class="sr-only" for="prompt">Ask Jarvis</label>
+          <label class="sr-only" for="prompt">Ask Atlas</label>
           <textarea
             id="prompt"
             class="prompt"
@@ -87,7 +87,7 @@
             autocomplete="off"
             autocapitalize="off"
             autocorrect="off"
-            placeholder="Ask Jarvis anything…"
+            placeholder="Ask Atlas anything…"
           ></textarea>
         </div>
 
@@ -153,7 +153,7 @@
                shape are new. There is deliberately no "Screen" chip: "Look at
                this" is a KEY (look.rs; docs/SCREEN-DESIGN.md; the comment at
                the top of this block), because pressing a button in this bar
-               would put Jarvis's own window in front of what it was asked to
+               would put Atlas's own window in front of what it was asked to
                look at. Watch with me is the button this bar has always had. -->
           <div class="mode-strip" role="group" aria-label="Modes">
 
@@ -165,14 +165,14 @@
                #mic then just shows that it is listening and stops
                responding to being held, since there is nothing left to
                hold it FOR. Recording always happens in Rust and is posted
-               only to the local Jarvis server - never to a cloud vendor,
+               only to the local Atlas server - never to a cloud vendor,
                unlike the disabled Web Speech API path this replaces. -->
           <button
             id="mic"
             class="icon-button mode-chip"
             type="button"
             aria-pressed="false"
-            title="Hold to talk to Jarvis"
+            title="Hold to talk to Atlas"
           >
             <!-- The HUD's own composer microphone, drawn as a line glyph on
                  the bar's 16-unit grid (every HUD rail glyph is 24-unit,
@@ -186,7 +186,7 @@
             <!-- The button's name. main.js setAutoListening rewrites it, so a
                  screen reader is not told to hold a button that no longer
                  responds to being held. -->
-            <span class="sr-only" id="mic-label">Hold to talk to Jarvis - hold Space or Enter, speak, then let go</span>
+            <span class="sr-only" id="mic-label">Hold to talk to Atlas - hold Space or Enter, speak, then let go</span>
           </button>
 
           <!-- Switches #mic between push-to-talk and listening for "hey
@@ -211,7 +211,7 @@
             <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
-          <!-- Jarvis Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md): a
+          <!-- Atlas Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md): a
                back-and-forth voice conversation, started and ended here.
                No wake word between turns; the voice check still runs on
                every sentence. Its id is jarvis-live-*. A visible "Live"
@@ -222,8 +222,8 @@
             class="icon-button live-toggle mode-chip"
             type="button"
             aria-pressed="false"
-            aria-label="Jarvis Live"
-            title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
+            aria-label="Atlas Live"
+            title="Atlas Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M3 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 3 6.5Zm2.5-2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM8 2.5a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-1.5 0v-9.5A.75.75 0 0 1 8 2.5Zm2.5 2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM13 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 13 6.5Z" />
@@ -235,14 +235,14 @@
                session the owner starts and stops, with a sign on screen the
                whole time. No card; the sign is the safeguard. "Look at this"
                is a KEY, not a button: pressing a button in this bar would
-               put Jarvis's own window in front of what it was to look at. -->
+               put Atlas's own window in front of what it was to look at. -->
           <button
             id="watch-toggle"
             class="icon-button live-toggle mode-chip"
             type="button"
             aria-pressed="false"
             aria-label="Watch with me"
-            title="Watch with me: Jarvis looks at your screen when you ask, and pauses on passwords. A sign stays on screen."
+            title="Watch with me: Atlas looks at your screen when you ask, and pauses on passwords. A sign stays on screen."
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M8 3.5c-3.2 0-5.5 2.6-6.3 4.1a.8.8 0 0 0 0 .8c.8 1.5 3.1 4.1 6.3 4.1s5.5-2.6 6.3-4.1a.8.8 0 0 0 0-.8C13.5 6.1 11.2 3.5 8 3.5Zm0 1.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 1.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z" />
@@ -264,7 +264,7 @@
             class="icon-button mode-chip"
             type="button"
             aria-pressed="false"
-            title="Start an incognito chat: Jarvis won't use memory, keep anything, or run tools"
+            title="Start an incognito chat: Atlas won't use memory, keep anything, or run tools"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M8 1.75a3.25 3.25 0 0 0-3.25 3.25v2.25H4.2a.9.9 0 0 0-.9.9v5.1c0 .5.4.9.9.9h7.6c.5 0 .9-.4.9-.9v-5.1a.9.9 0 0 0-.9-.9h-.55V5A3.25 3.25 0 0 0 8 1.75Zm-1.75 5.5V5a1.75 1.75 0 1 1 3.5 0v2.25h-3.5Z" />
@@ -329,14 +329,14 @@
             id="open-settings"
             class="icon-button"
             type="button"
-            aria-label="Jarvis settings"
-            title="Jarvis settings"
+            aria-label="Atlas settings"
+            title="Atlas settings"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
               <path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />
             </svg>
-            <span class="sr-only">Jarvis settings</span>
+            <span class="sr-only">Atlas settings</span>
           </button>
 
           <!-- Hiding the bar from the bar itself (the owner's request,
@@ -351,13 +351,13 @@
             id="hide-bar"
             class="icon-button"
             type="button"
-            aria-label="Hide the Jarvis bar"
-            title="Hide the Jarvis bar (Esc)"
+            aria-label="Hide the Atlas bar"
+            title="Hide the Atlas bar (Esc)"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M4.2 4.2a.75.75 0 0 1 1.06 0L8 6.94l2.74-2.74a.75.75 0 1 1 1.06 1.06L9.06 8l2.74 2.74a.75.75 0 0 1-1.06 1.06L8 9.06l-2.74 2.74a.75.75 0 0 1-1.06-1.06L6.94 8 4.2 5.26a.75.75 0 0 1 0-1.06Z" />
             </svg>
-            <span class="sr-only">Hide the Jarvis bar</span>
+            <span class="sr-only">Hide the Atlas bar</span>
           </button>
           </div>
         </div>
@@ -381,7 +381,7 @@
           <button class="palette-close" id="palette-close" type="button"
                   aria-label="Close the finder">Close</button>
         </div>
-        <label class="sr-only" for="palette-search">Search what Jarvis can do</label>
+        <label class="sr-only" for="palette-search">Search what Atlas can do</label>
         <input id="palette-search" class="palette-search" type="text"
                autocomplete="off" autocapitalize="off" autocorrect="off"
                spellcheck="false" role="combobox" aria-expanded="false"
@@ -523,16 +523,16 @@
         <!-- ...and its name is set from the PC's own answer when the panel is
              mounted (prompt-coach-panel.js), not written here. -->
         <section class="coach" id="coach-panel" hidden></section>
-        <!-- Jarvis Live's sign in the bar: fixed words and minutes (the PC's
+        <!-- Atlas Live's sign in the bar: fixed words and minutes (the PC's
              jarvis_live.py), its buttons, and the tap buttons after a spoken
              question. The always-on-top badge (live-badge.html) shows the
              same sign while the bar is hidden. The sign's words reach a
              screen reader through the bar's own announcer (a live region
              inside a hidden box would announce nothing). -->
-        <section class="jarvis-live" id="jarvis-live-strip" hidden aria-label="Jarvis Live">
+        <section class="jarvis-live" id="jarvis-live-strip" hidden aria-label="Atlas Live">
           <div class="jarvis-live-sign">
             <span class="jarvis-live-dot" aria-hidden="true"></span>
-            <strong id="jarvis-live-title">Jarvis Live</strong>
+            <strong id="jarvis-live-title">Atlas Live</strong>
             <span id="jarvis-live-detail"></span>
           </div>
           <p class="jarvis-live-hint" id="jarvis-live-hint" hidden></p>
@@ -555,10 +555,10 @@
              the program the owner asked about and stays on their screen. The
              always-on-top badge (watch-badge.html) shows the sign while the
              bar is hidden. -->
-        <section class="watch-strip" id="watch-strip" hidden aria-label="Jarvis and your screen">
+        <section class="watch-strip" id="watch-strip" hidden aria-label="Atlas and your screen">
           <div class="watch-sign">
             <span class="watch-dot" aria-hidden="true"></span>
-            <strong id="watch-title">Jarvis is watching</strong>
+            <strong id="watch-title">Atlas is watching</strong>
             <span id="watch-detail"></span>
           </div>
           <p class="watch-note" id="watch-note" hidden></p>
@@ -604,11 +604,11 @@
               <!-- Said in the same words on the phone (net/ChatPicture.kt) and by the
                    backend (jarvis_chat_picture.OWNER_LINE): the PC covers anything that
                    looks like a key or a card number with black before any model looks. -->
-              <span class="attachment-note" id="capture-safety">Secrets in pictures you attach are covered with black boxes before Jarvis looks.</span>
+              <span class="attachment-note" id="capture-safety">Secrets in pictures you attach are covered with black boxes before Atlas looks.</span>
             </div>
             <!-- "Photo to reminder" (photo-reminder.js): the PC reads the
                  dates in the capture and PROPOSES a reminder below. Nothing
-                 is set up until "Add a Jarvis reminder" is tapped. -->
+                 is set up until "Add a Atlas reminder" is tapped. -->
             <button class="text-button" type="button" id="capture-find-date">Find a date in it</button>
             <button class="icon-button" type="button" id="capture-remove" title="Remove capture">
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -738,7 +738,7 @@
              either, and stale used to show no words at all. `data-tone` is
              red for offline, amber for stale or connecting. -->
         <div class="offline" id="offline" data-tone="bad" hidden>
-          <span id="offline-text">Jarvis is not answering.</span>
+          <span id="offline-text">Atlas is not answering.</span>
           <span class="offline-actions">
             <button class="text-button" type="button" id="offline-retry">Reconnect</button>
             <span class="offline-where">Settings live in the tray menu</span>
@@ -755,7 +755,7 @@
           <button class="text-button" type="button" id="parked-show">Show it</button>
         </div>
 
-        <!-- What Jarvis is doing right now, one bounded step at a time -
+        <!-- What Atlas is doing right now, one bounded step at a time -
              docs/AUTONOMY-PROPOSALS.md §3c. Mirrors the widget's own
              #widget-progress: same source (`link.activity`/
              `activityDetail`), same rule that it is empty and hidden
@@ -775,7 +775,7 @@
               type="button"
               class="text-button"
               id="btn-task-pause"
-              title="Pause the task Jarvis is currently running"
+              title="Pause the task Atlas is currently running"
             >Pause</button>
             <button
               type="button"
@@ -788,7 +788,7 @@
               type="button"
               class="text-button"
               id="btn-task-stop"
-              title="Stop the task Jarvis is currently running"
+              title="Stop the task Atlas is currently running"
             >Stop</button>
           </div>
           <div class="task-note-row">
@@ -804,7 +804,7 @@
               class="icon-button"
               type="button"
               id="btn-task-note-send"
-              title="Send this note - it applies to what Jarvis does next, not what is already running"
+              title="Send this note - it applies to what Atlas does next, not what is already running"
               aria-label="Send note"
             >↵</button>
           </div>
@@ -848,7 +848,7 @@
               <!-- One card on every screen (card-words.js): the label, then
                    the PC's own title for it - never the code name. -->
               <span class="approval-kicker" id="approval-kicker">Needs your OK</span>
-              <strong id="approval-action">Jarvis is asking for your approval</strong>
+              <strong id="approval-action">Atlas is asking for your approval</strong>
             </div>
             <!-- Which of how many. Answering one and having the next appear
                  instantly under the cursor, with no sense of how many are left,
@@ -946,7 +946,7 @@
               class="icon-button"
               type="button"
               id="approval-note-send"
-              title="Send this note - Jarvis will propose again"
+              title="Send this note - Atlas will propose again"
               aria-label="Send note"
             >↵</button>
           </div>
@@ -1040,9 +1040,9 @@
                  the table under a spending answer's sentence. Drawn with
                  textContent only, kept in memory only, never read aloud; the
                  words "Spending table hidden" instead while the private
-                 lists are hidden or App lock has locked Jarvis. -->
+                 lists are hidden or App lock has locked Atlas. -->
             <section class="spending-host" id="spending-table" hidden></section>
-            <!-- Jarvis Live's tap buttons, under the answer they answer (the
+            <!-- Atlas Live's tap buttons, under the answer they answer (the
                  review: they sat in the sign's row, looking like its
                  controls). Each is sent as the owner's TYPED words. -->
             <div class="jarvis-live-chips" id="jarvis-live-chips" role="group" aria-label="Quick answers" hidden></div>
@@ -1052,8 +1052,8 @@
                  (plain-errors.js; the phone shows the same words). -->
             <div class="answer-problem" id="answer-problem" hidden>
               <button class="text-button" type="button" id="problem-action" hidden></button>
-              <!-- "Jarvis isn't running" only (ease-of-use audit #2): opens
-                   Settings at "Starting Jarvis for you", More options open. -->
+              <!-- "Atlas isn't running" only (ease-of-use audit #2): opens
+                   Settings at "Starting Atlas for you", More options open. -->
               <button class="text-button" type="button" id="problem-where" hidden>Show me where</button>
               <details class="problem-details" id="problem-details" hidden>
                 <summary>Details</summary>
@@ -1114,7 +1114,7 @@
                probe the health dots use, which now reads the backend's own
                `/api/status` verdict rather than asking the wrong port.
 
-               Its own state, NOT "Jarvis isn't connected": the PC is fine here,
+               Its own state, NOT "Atlas isn't connected": the PC is fine here,
                only answers are. Same words as the widget and the HUD window
                (lane-warning.js).
 
@@ -1139,7 +1139,7 @@
 
                Its OWN element, deliberately, and not a line inside the notice
                above: that one is hidden the moment the lane answers, and "the
-               local model went down and Jarvis started it again" is news about
+               local model went down and Atlas started it again" is news about
                a lane that is now WORKING. The words are the backend's own
                sentence, carried in `auto_note` - this window draws that string
                and composes nothing, so the bar, the widget and the phone cannot
@@ -1148,7 +1148,7 @@
                The button is what tells an automatic restart apart from a
                deliberate stop: a dead process carries no intent, so the owner
                is the only one who can say which it was. Off is immediate and
-               only narrows what Jarvis does; turning it back on is the same
+               only narrows what Atlas does; turning it back on is the same
                action the button above takes in the same second, so neither
                direction raises a card. -->
           <p class="model-notice model-auto" id="model-auto" hidden>

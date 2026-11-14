@@ -206,8 +206,13 @@ SECTIONS: tuple = (
     # desktop Settings screen, holding the five choices that matter on a
     # first run. Desktop only - the phone has no such page, so OpenPlace.kt
     # lists it PC-only and the phone answers "only on your PC".
+    # "set up atlas" joined 2026-11-13 (the visible-only rename): the card's
+    # own heading and jump link now say Atlas, and the owner may call it that.
+    # The Jarvis words stay because in-chat wording still says Jarvis until
+    # that later pass, and `test_self_portrait` pins the FIRST alias.
     Section("first-run", ("set up jarvis", "first run setup", "the setup page",
-                          "getting started with jarvis"), app="desktop"),
+                          "getting started with jarvis", "set up atlas"),
+            app="desktop"),
     # "Phone settings backup" (2026-11-13, the copy-over wave; PR #1233): the
     # phone's own Settings row that seals THIS phone's settings into a
     # password-locked file and restores them. Phone only - the PC's Backups

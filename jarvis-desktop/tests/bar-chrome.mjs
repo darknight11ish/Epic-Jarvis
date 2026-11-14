@@ -63,7 +63,7 @@ function blockFor(source, marker, span = 700) {
 
 check("index.html has a settings button on the bar", () => {
   assert.match(indexHtml, /id="open-settings"/, "no #open-settings on the bar");
-  assert.match(indexHtml, /<span class="sr-only">Jarvis settings<\/span>/,
+  assert.match(indexHtml, /<span class="sr-only">Atlas settings<\/span>/,
     "the gear needs a name for a screen reader");
 });
 
@@ -89,7 +89,7 @@ check("main.js knows the gear's element", () => {
 
 check("index.html has a hide button on the bar", () => {
   assert.match(indexHtml, /id="hide-bar"/, "no #hide-bar on the bar");
-  assert.match(indexHtml, /<span class="sr-only">Hide the Jarvis bar<\/span>/,
+  assert.match(indexHtml, /<span class="sr-only">Hide the Atlas bar<\/span>/,
     "the hide button needs a name for a screen reader");
 });
 
@@ -122,7 +122,7 @@ check("the quickbar window is granted both commands", () => {
 
 check("widget.html has a settings button on its own bar", () => {
   assert.match(widgetHtml, /id="btn-settings"/, "no #btn-settings on the widget bar");
-  assert.match(widgetHtml, /<span class="sr-only">Jarvis settings<\/span>/,
+  assert.match(widgetHtml, /<span class="sr-only">Atlas settings<\/span>/,
     "the widget's gear needs a name for a screen reader");
 });
 
@@ -156,7 +156,7 @@ check("the HUD has a settings gear, added by the shell's bootstrap", () => {
   // the Jarvis bar" button is added.
   assert.match(hudBootstrap, /gear\.id = "hud-settings"/,
     "the bootstrap does not add a #hud-settings gear");
-  assert.match(hudBootstrap, /var GEAR_SAID = "Jarvis settings";/,
+  assert.match(hudBootstrap, /var GEAR_SAID = "Atlas settings";/,
     "the HUD's gear needs the same name the bar's and the widget's carry");
   assert.match(hudBootstrap, /gear\.setAttribute\("aria-label", GEAR_SAID\)/,
     "the gear needs a name for a screen reader");

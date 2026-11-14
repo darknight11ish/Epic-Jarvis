@@ -11003,7 +11003,8 @@
         "set up jarvis",
         "first run setup",
         "the setup page",
-        "getting started with jarvis"
+        "getting started with jarvis",
+        "set up atlas"
       ],
       "app": "desktop",
       "where": "settings",
@@ -11583,6 +11584,18 @@
         "phone notifications",
         "reading phone notifications",
         "notifications on my phone"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": false,
+      "in_phone_settings": true
+    },
+    {
+      "id": "phone-backup",
+      "names": [
+        "phone settings backup",
+        "back up my phone settings",
+        "restore my phone settings"
       ],
       "app": "phone",
       "where": "settings",

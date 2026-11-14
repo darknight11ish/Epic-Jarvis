@@ -626,7 +626,7 @@ pub fn decide_denied_detached(app: &AppHandle, id: &str) {
             crate::logfile::log(&format!(
                 "[jarvis] notification Deny for {id} not sent: the event stream stayed stale"
             ));
-            crate::commands::notify(&app, "Jarvis", &deny_not_sent_words(LINK_NEVER_CAME));
+            crate::commands::notify(&app, "Atlas", &deny_not_sent_words(LINK_NEVER_CAME));
             return;
         }
         // No option: a toast Deny names no plan, and denying never needs to -
@@ -642,13 +642,13 @@ pub fn decide_denied_detached(app: &AppHandle, id: &str) {
                 DenyFailure::AlreadyDecided => {
                     remove_approval(&id);
                     if !crate::commands::toast_privacy_on(&app) {
-                        notify_quiet(&app, "Jarvis", ALREADY_DECIDED);
+                        notify_quiet(&app, "Atlas", ALREADY_DECIDED);
                     }
                 }
                 DenyFailure::NotSent { plain } => {
                     crate::commands::notify_guarded(
                         &app,
-                        "Jarvis",
+                        "Atlas",
                         &deny_not_sent_words(&plain),
                         None,
                     );
@@ -946,7 +946,7 @@ pub fn open_detached(app: &AppHandle, id: &str) {
                 "That reminder could not be opened. {}",
                 crate::commands::DETAILS_IN_LOG
             );
-            crate::commands::notify_guarded(&app, "Jarvis", &e, Some(&locked_body));
+            crate::commands::notify_guarded(&app, "Atlas", &e, Some(&locked_body));
         }
     });
 }

@@ -895,7 +895,7 @@ await check("turning it ON raises a card and shows waiting, like learning - it i
   const toast = await page.locator("#toast").innerText();
   await page.close();
   assert.deepEqual(sent, [{ enabled: true, keepDays: null }]);
-  assert.match(line, /Waiting for your approval to turn chat history on\. Approve it in the Jarvis bar/);
+  assert.match(line, /Waiting for your approval to turn chat history on\. Approve it in the Atlas bar/);
   assert.equal(checked, false, "shown as on before the card was approved");
   assert.match(toast, /Waiting for your approval/);
   assert.doesNotMatch(toast, /Chat history is (on|off)/);

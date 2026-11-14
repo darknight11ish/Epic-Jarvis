@@ -793,7 +793,7 @@ pub fn show_badge(app: &AppHandle) -> Result<(), String> {
         BADGE_LABEL,
         tauri::WebviewUrl::App("watch-badge.html".into()),
     )
-    .title("Jarvis is watching")
+    .title("Atlas is watching")
     .inner_size(BADGE_W, BADGE_H)
     .resizable(false)
     .maximizable(false)

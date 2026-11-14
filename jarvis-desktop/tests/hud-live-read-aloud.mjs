@@ -114,12 +114,12 @@ await check("A: the Live button carries the BAR's own name and on/off words", ()
   // The bar's resting title, spelled in index.html, and its two words for the
   // two states as main.js writes them. The HUD must say the same things: one
   // control in two windows, not two vocabularies.
-  assert.match(BAR, /title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"/,
+  assert.match(BAR, /title="Atlas Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"/,
     "the bar's own Live title has moved - read it again before changing the HUD's");
   const live = between(HUD, 'id="rail-live"', "</button>", 1400);
-  assert.match(live, /aria-label="Jarvis Live"/,
+  assert.match(live, /aria-label="Atlas Live"/,
     "the HUD's Live button must use the bar's name for a screen reader");
-  assert.match(live, /title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"/,
+  assert.match(live, /title="Atlas Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"/,
     "the HUD's resting title must be the bar's, word for word");
   assert.match(HUD, /"Jarvis Live is on - click to end it"/,
     "the HUD must say what the bar says while Live is on");
@@ -168,7 +168,7 @@ await check("A: a refused start shows a readable popup in the stage", () => {
     "the popup has no empty line for the PC's reason");
   assert.match(STAGE, /<button class="lr-close" id="live-refusal-close" type="button">Close<\/button>/,
     "the popup has no real, plainly labelled Close button");
-  assert.match(STAGE, /<strong class="lr-title">Jarvis Live didn't start<\/strong>/,
+  assert.match(STAGE, /<strong class="lr-title">Atlas Live didn't start<\/strong>/,
     "the popup has no honest heading");
 });
 
@@ -581,7 +581,7 @@ if (K) {
         "the page refused one of its own scripts - the Live button would be dead");
       assert.equal(seen.visible, true, "the Live button is not reachable in the shell");
       assert.equal(seen.inToolbar, true, "the Live button is not in the left rail's toolbar");
-      assert.equal(seen.label, "Jarvis Live", "the button does not use the bar's name");
+      assert.equal(seen.label, "Atlas Live", "the button does not use the bar's name");
       assert.equal(seen.text, "Live", "the button's visible word is not Live");
       assert.equal(seen.pressed, "false", "the button does not start unpressed");
 
