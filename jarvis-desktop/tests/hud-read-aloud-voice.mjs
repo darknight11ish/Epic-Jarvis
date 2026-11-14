@@ -137,7 +137,12 @@ check("the answer menu draws Pause / Resume and Stop reading beside Read out lou
   assert.match(bootstrap, /stopItem\.hidden = !reading;/);
   assert.match(bootstrap, /speech\.stateFor\(msg\)/,
     "the menu does not ask the page which answer is being read");
-  assert.match(bootstrap, /if \(speechStateHere\(\) === "paused"\) speech\.resume\(\);/);
+  // TASK-51b (2026-11-13): the item's next tap is decided by the page's state,
+  // and both calls still go to the page's one player.
+  assert.match(bootstrap, /var resuming = speechStateHere\(\) === "paused";/,
+    "the menu no longer reads the player state to decide Pause or Resume");
+  assert.match(bootstrap, /acted = resuming \? speech\.resume\(\) : speech\.pause\(\);/,
+    "the menu does not call the page's own pause and resume");
   assert.match(bootstrap, /speech\.pause\(\)/);
   assert.match(bootstrap, /speech\.stop\(\)/);
 });

@@ -47,7 +47,9 @@ WHAT IT PINS, with no browser started anywhere:
      so a NEW suite that imports it is noticed) and the one live suite's
      headless override. Whether any OTHER known importer launches visibly is
      not statically decidable from an import, and is not claimed.
-  5. THE CODE-ONLY HALVES STILL RUN IN CI. Both CI backend jobs carry
+  5. THE CODE-ONLY HALVES STILL RUN IN CI. The CI job that runs the backend
+     sweep (`backend-shard` since the job was sharded on 2026-11-13; `backend`
+     before that) and `backend-windows` both carry
      `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"`; no runner installs a Playwright
      browser, so each suite runs its code checks and its real-browser half
      prints `SKIP the real-browser half: playwright is not installed` and exits
@@ -101,8 +103,10 @@ BROWSER_CONTROL_IMPORTERS = (
     "test_browser_control.py", "test_browser_control_live.py",
     "test_browser_engine.py", "test_duet_d2.py", "test_form_review.py")
 
-#: The workflow whose two backend jobs run the suites on a machine with no
-#: Playwright browser, and must therefore carry the opt-in.
+#: The workflow whose backend jobs run the suites on a machine with no
+#: Playwright browser, and must therefore carry the opt-in. The sweep job is
+#: `backend-shard` since 2026-11-13 (`backend` is the aggregator over it);
+#: `t_ci_keeps_the_code_only_checks` accepts either shape.
 CI_YML = HERE.parent / ".github" / "workflows" / "ci.yml"
 
 #: Every backend suite that drives jarvis_chatbot_web's visible window.
@@ -601,16 +605,32 @@ def t_ci_keeps_the_code_only_checks():
         check("ci.yml is where this test expects it", False, str(CI_YML))
         return
     text = CI_YML.read_text(encoding="utf-8")
-    for job in ("backend", "backend-windows"):
-        block = _job_block(text, job)
-        check(f"ci.yml has the `{job}` job", bool(block), job)
-        check(f"ci.yml's `{job}` job carries the opt-in, so the four suites' "
-              f"code-only checks still run on a runner with no Playwright browser",
-              bool(re.search(r'JARVIS_ALLOW_VISIBLE_BROWSER_TESTS:\s*["\']1["\']',
-                             block)), block[:500])
+    # THE JOB THAT RUNS THE SWEEP (2026-11-13). It was `backend`; since the
+    # job was sharded it is `backend-shard`, and `backend` is the aggregator
+    # that needs every shard - so the opt-in must be on the job that starts
+    # the suites, and the required check must still be gated on that job.
+    # Either shape is accepted, and each check below fails if the opt-in, the
+    # job, or the gate goes away.
+    backend_block = _job_block(text, "backend")
+    shard_block = _job_block(text, "backend-shard")
+    if shard_block and "backend/run_suites.py" in shard_block:
+        sweep_job, sweep_block = "backend-shard", shard_block
+    else:
+        sweep_job, sweep_block = "backend", backend_block
+    check(f"ci.yml has the `{sweep_job}` job that runs the backend suite sweep",
+          bool(sweep_block), sweep_job)
+    check(f"ci.yml's `{sweep_job}` job carries the opt-in, so the four suites' "
+          f"code-only checks still run on a runner with no Playwright browser",
+          bool(re.search(r'JARVIS_ALLOW_VISIBLE_BROWSER_TESTS:\s*["\']1["\']',
+                         sweep_block or "")), (sweep_block or "")[:500])
+    if shard_block:
+        check("the required `backend` check is the aggregator over `backend-shard`",
+              bool(re.search(r"needs:\s*\[?[^\]\n]*backend-shard",
+                             backend_block or "")), (backend_block or "")[:400])
     # The Windows job names the four directly (the runner layer does not apply
     # there). Quoted entries only: the comment above its `env:` names them too.
     windows = _job_block(text, "backend-windows")
+    check("ci.yml has the `backend-windows` job", bool(windows), "backend-windows")
     for suite in GUARDED:
         check(f"ci.yml's `backend-windows` job still runs {suite} by name",
               f"'{suite}'" in windows)

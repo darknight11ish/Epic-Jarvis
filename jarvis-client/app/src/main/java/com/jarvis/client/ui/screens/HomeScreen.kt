@@ -356,6 +356,14 @@ data class HomeState(
     /** OFF unless a voice turn is in flight. */
     val voicePhase: VoiceSession.Phase,
     /**
+     * "Stop speaking when I press the mic" - this phone's own switch
+     * ([com.jarvis.client.voice.MicBargeIn]), ON by default (the owner's ask of
+     * 2026-11-13). With it on and a reply being spoken, the microphone stays
+     * usable while an answer streams too, because the press stops the speech
+     * instead of waiting for it. See [micPressStopsSpeech].
+     */
+    val micBargeIn: Boolean = com.jarvis.client.voice.MicBargeIn.DEFAULT,
+    /**
      * Whether to show the microphone at all.
      *
      * False hides it rather than showing one that posts audio into a 404 —
@@ -807,6 +815,23 @@ data class HomeState(
      */
     val promptCoach: com.jarvis.client.net.PromptCoach.View? = null,
 )
+
+/**
+ * Will a press of the microphone stop the reply being spoken right now?
+ *
+ * ONLY when this phone's "Stop speaking when I press the mic" is on
+ * ([com.jarvis.client.voice.MicBargeIn], ON by default) AND a voice turn is
+ * really SPEAKING - a reply that is THINKING or VERIFYING makes no sound, so
+ * there is nothing to stop. That one answer keeps the microphone usable while
+ * an answer streams (the press is the way out now), and it drops the "Jarvis is
+ * answering. Tap Stop..." line for exactly that press - see [MicWords.heldLine]
+ * and [com.jarvis.client.voice.VoiceSession.begin].
+ */
+internal fun HomeState.micPressStopsSpeech(): Boolean =
+    com.jarvis.client.voice.MicBargeIn.interrupts(
+        micBargeIn,
+        voicePhase == VoiceSession.Phase.SPEAKING,
+    )
 
 /**
  * Home's notice: [Notice], with a failure's one fix button and its "Details"
@@ -5582,8 +5607,13 @@ private fun Composer(
         if (state.voiceOffered) {
             Spacer(Modifier.width(8.dp))
             VoiceButton(
-                enabled = state.link == LinkState.CONNECTED && !state.streaming &&
-                    !handsfreeNow.listening,
+                // A press that would stop the reply being spoken keeps the
+                // button usable while the answer streams (the owner's ask of
+                // 2026-11-13, "Stop speaking when I press the mic"). Without
+                // it the greyed button made the press impossible, which was
+                // half of what the owner was reporting.
+                enabled = state.link == LinkState.CONNECTED && !handsfreeNow.listening &&
+                    (!state.streaming || state.micPressStopsSpeech()),
                 capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                 micLevel = micLevel,
                 onBegin = actions.onVoiceBegin,
@@ -5639,6 +5669,9 @@ private fun Composer(
             streaming = state.streaming,
             micAllowed = state.micAllowed,
             voiceOffered = state.voiceOffered,
+            // A press that stops the reply being spoken is not "Jarvis is
+            // answering" - the line would name a reason that no longer holds.
+            bargeIn = state.micPressStopsSpeech(),
         )?.let { why ->
             Text(
                 why,
@@ -5854,7 +5887,8 @@ private fun VoiceBar(
                     if (state.voiceOffered) {
                         VoiceButton(
                             enabled = state.voiceOffered &&
-                                state.link == LinkState.CONNECTED && !state.streaming,
+                                state.link == LinkState.CONNECTED &&
+                                (!state.streaming || state.micPressStopsSpeech()),
                             capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                             micLevel = micLevel,
                             onBegin = actions.onVoiceBegin,
@@ -5899,6 +5933,9 @@ private fun VoiceBar(
             streaming = state.streaming,
             micAllowed = state.micAllowed,
             voiceOffered = state.voiceOffered,
+            // A press that stops the reply being spoken is not "Jarvis is
+            // answering" - the line would name a reason that no longer holds.
+            bargeIn = state.micPressStopsSpeech(),
         )?.let { why ->
             Gap(6)
             Text(

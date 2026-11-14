@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -148,6 +149,73 @@ class AttachFileTest {
         assertFalse(AttachFile.MIME_TYPES.contains("image/*"))
         assertFalse(AttachFile.MIME_TYPES.contains("video/*"))
         assertFalse(AttachFile.MIME_TYPES.contains("audio/*"))
+    }
+
+    // --------------------------- the Settings folder door: photos as files ---
+    //
+    // 2026-11-13, the owner's report: "send this file which was a photo to the
+    // computer" was answered with "I can't receive or send files between
+    // devices". The Settings "Send a document" row now carries a photo as a
+    // PLAIN FILE COPY into `From my phone` - not the chat picture path, and no
+    // model sees it. These tests pin that it is the folder door only.
+
+    @Test
+    fun `the folder door's filter adds exactly the eight photo kinds`() {
+        assertEquals(
+            listOf(
+                "image/jpeg", "image/png", "image/webp",
+                "image/heic", "image/heif", "image/gif", "image/bmp",
+            ),
+            AttachFile.PHOTO_KINDS.map { it.mime }.distinct(),
+        )
+        assertEquals(
+            AttachFile.MIME_TYPES.toList() + AttachFile.PHOTO_KINDS.map { it.mime }.distinct(),
+            AttachFile.SEND_FILE_MIME_TYPES.toList(),
+        )
+        // The chat row's own list is untouched, and no wildcard crept in.
+        assertFalse(AttachFile.MIME_TYPES.contains("image/jpeg"))
+        assertFalse(AttachFile.SEND_FILE_MIME_TYPES.contains("image/*"))
+        assertFalse(AttachFile.SEND_FILE_MIME_TYPES.contains("*/*"))
+        assertEquals(AttachFile.SEND_FILE_MIME_TYPES.distinct(), AttachFile.SEND_FILE_MIME_TYPES.toList())
+    }
+
+    @Test
+    fun `the folder door accepts a photo by its extension, and KINDS stays document-only`() {
+        for (ext in listOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp")) {
+            assertNotNull("$ext", AttachFile.photoKindOf("holiday.$ext"))
+            assertNotNull("$ext upper", AttachFile.photoKindOf("HOLIDAY.${ext.uppercase()}"))
+            assertNotNull("$ext through the folder door", AttachFile.transferKindFor("holiday.$ext", null))
+            // ...and the chat document list still does not claim it.
+            assertNull("$ext must stay out of KINDS", AttachFile.kindOf("holiday.$ext"))
+        }
+        assertEquals("image/jpeg", AttachFile.photoKindOf("holiday.jpg")!!.mime)
+        assertEquals("image/heic", AttachFile.photoKindOf("IMG_0001.HEIC")!!.mime)
+        assertNull(AttachFile.photoKindOf("holiday.tif"))
+        assertNull(AttachFile.photoKindOf("notes.zip"))
+        assertNull(AttachFile.photoKindOf("scan"))
+        // A document is still a document through the same door.
+        assertEquals(
+            "application/pdf",
+            AttachFile.transferKindFor("taxes.pdf", "image/jpeg")!!.mime,
+        )
+        // A photo with no extension has no kind: the PC decides by the name,
+        // so trying to send one would only be refused there.
+        assertNull(AttachFile.transferKindFor("scan", "image/jpeg"))
+    }
+
+    @Test
+    fun `a photo is still the picture path in chat, and only the folder door differs`() {
+        // The routing decision is UNCHANGED: every photo extension still goes
+        // to ChatPicture in chat, because none of them joined KINDS.
+        for (ext in listOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp")) {
+            assertTrue(
+                "$ext must still go to the picture path in chat",
+                AttachFile.goesToPicture("holiday.$ext", "application/octet-stream"),
+            )
+        }
+        // ...while the folder door's own kind is the plain-file one.
+        assertNotNull(AttachFile.transferKindFor("holiday.png", null))
+        assertEquals("photo", AttachFile.photoKindOf("holiday.png")!!.label)
     }
 
     // ------------------------------------- one Attach row: documents OR photos ---

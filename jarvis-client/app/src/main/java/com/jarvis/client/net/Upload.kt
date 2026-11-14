@@ -14,10 +14,18 @@ import java.util.Base64
 import java.util.Locale
 
 /**
- * A document - or a Notion export `.zip` - sent from the phone INTO a folder
- * Jarvis already looks in, in three steps (the owner's ask of 2026-11-05; the
- * design is `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`, section
- * C0; the PC's half is `backend/jarvis_upload.py`, built by its own lane).
+ * A document (or, since 2026-11-13, a photo as a plain file copy) - or a Notion
+ * export `.zip` - sent from the phone INTO a folder Jarvis already looks in, in
+ * three steps (the owner's ask of 2026-11-05; the design is
+ * `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`, section C0; the PC's
+ * half is `backend/jarvis_upload.py`, built by its own lane).
+ *
+ * A PHOTO ON THIS PATH IS NOT THE CHAT PICTURE PATH. The Settings row sends
+ * the bytes exactly as they are, the PC writes them into `From my phone`, and
+ * nothing reads them, converts them or shows them to a model. The chat
+ * "Attach a file" row is unchanged: a picture picked there still goes to
+ * [ChatPicture] ([AttachFile.goesToPicture]), with vision and the secret
+ * cleaner. The two doors share a destination list and nothing else.
  *
  * WHY THIS FILE EXISTS AT ALL. The 2026-10-29 record said "an upload endpoint,
  * a resumable or chunked transfer ... not built, now or later"; the owner
@@ -94,14 +102,15 @@ object Upload {
     // ------------------------------------------------------------- words ---
 
     /** The Folders screen's own action, under the list (DESIGN.md C0.5). */
-    const val TITLE = "Send a document"
+    const val TITLE = "Send a document or a photo"
 
     /** The sentence under the action, and the promise behind it. */
-    const val DETAIL = "Pick a document and it goes into a folder Jarvis may look in, into a " +
-        "new folder called From my phone. Your PC asks you once before anything lands."
+    const val DETAIL = "Pick a document or a photo and it goes into a folder Jarvis may look " +
+        "in, into a new folder called From my phone. A photo is saved as a plain file and is " +
+        "never shown to a model on this path. Your PC asks you once before anything lands."
 
     /** A PC without the upload routes: its own state, in its own words. */
-    const val NOT_HERE = "Sending a document from your phone is not available on this PC yet."
+    const val NOT_HERE = "Sending a document or a photo from your phone is not available on this PC yet."
 
     /** The same fact for the Notion door. */
     const val NOT_HERE_NOTION =
@@ -137,7 +146,8 @@ object Upload {
     /** A file whose kind this door does not send. */
     fun wrongKind(name: String): String =
         "$name is not a kind this door sends. Send a PDF, Word, Excel, PowerPoint, text, " +
-            "Markdown or CSV file - or bring a Notion export in with the row below."
+            "Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, GIF or BMP) - or bring a " +
+            "Notion export in with the row below."
 
     /** A Notion pick that is not a `.zip`. */
     const val WRONG_ZIP = "That is not a .zip. In Notion, choose Settings, Export all workspace " +
@@ -644,6 +654,11 @@ object Upload {
      * provider's MIME type is only a fallback for a name with none, the same
      * rule [AttachFile.kindFor] uses, so a `.zip` a provider mislabels can
      * never be let through the document door.
+     *
+     * A PHOTO is accepted here on the same terms (2026-11-13), by its own
+     * extension ([AttachFile.transferKindFor]); it is sent as a plain file and
+     * the PC saves it without reading it. The chat row still asks
+     * [AttachFile.kindFor], so this does not widen what a chat document is.
      */
     fun refusal(name: String?, mime: String?, stated: Long, purpose: Purpose): String? {
         val shown = AttachFile.shownName(name)
@@ -653,7 +668,7 @@ object Upload {
             if (ext != "zip") return WRONG_ZIP
             return null
         }
-        if (AttachFile.kindFor(name, mime) == null) return wrongKind(shown)
+        if (AttachFile.transferKindFor(name, mime) == null) return wrongKind(shown)
         return null
     }
 }

@@ -117,8 +117,10 @@ export async function planSetup(body) {
 
 /**
  * The progress note (`POST /api/setup/progress`) - Wave B, ruling Q6. Call it
- * from the stepper (where the owner is), from "Not now" and from "Keep current
- * settings". `body` is `setup-questionnaire.js`'s `progressBody(...)`, which is
+ * from the stepper (where the owner is), from "Not now", from "Keep current
+ * settings" and from Finish (2026-11-13) - which is that same
+ * `{"keep_current": true}` note: it records the pass, it applies nothing.
+ * `body` is `setup-questionnaire.js`'s `progressBody(...)`, which is
  * one of three small shapes and never carries `confirm`.
  *
  * It is NOT held on a stale link: it records where the owner is, which is not a

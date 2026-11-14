@@ -978,6 +978,25 @@ def _no_switch_words(row: dict) -> str:
     return said
 
 
+def _planned_reason(row: dict) -> str:
+    """Why this row is still marked planned - its own table's words, never a new guess.
+
+    THE WAKE-WORD LIE (2026-11-13). A planned row has no phrase the matrix can
+    prove, so three answer paths (`state()`, `how_to()` and
+    `ability_explanation()`) fell through to "The feature list names no on/off
+    switch ... Command-Only ... no fixed sentence". The wake-word row's own
+    `where` said "Turn it on in Settings, Voice, then tap Listen on the phone"
+    while the answer said there was nothing to turn on - and "turn on the wake
+    word" worked. Read-aloud's row says the same thing today (its Settings
+    switch ships; only the registry phrase is missing). So a planned row now
+    says the TYPED path is not wired yet, in its own PLANNED_SWITCHABLE reason,
+    and never that the feature has no switch.
+    """
+    mine = _matrix_row(row) or {}
+    return (str(mine.get("reason") or "").strip()
+            or "no own typed control is wired for it yet.")
+
+
 def _state_clause(rows: list, row: Optional[dict] = None) -> str:
     """One plain sentence about the switches, or the honest no-reader sentence."""
     if not rows:
@@ -2559,6 +2578,11 @@ def state(words) -> dict:
                         "state": value, "switches": tool, "words": words}
             has_control = (str((_matrix_row(row) or {}).get("status") or "")
                            in _HAS_A_CONTROL)
+            if str((_matrix_row(row) or {}).get("status") or "") == "planned":
+                words = (f"{row['title']}: it is not wired yet, so I could not "
+                         f"read a state for it. {_planned_reason(row)}")
+                return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                        "state": None, "switches": [], "words": words}
             words = (f"{row['title']}: {_no_switch_words(row)}" if has_control else
                      f"{row['title']} has no on/off switch in the feature list, "
                      f"so there is no state for me to read.")
@@ -2647,6 +2671,10 @@ def how_to(words, on: bool) -> dict:
             # "I cannot read that switch" instead (2026-11-04 audit).
             has_control = (str((_matrix_row(row) or {}).get("status") or "")
                            in _HAS_A_CONTROL)
+            if str((_matrix_row(row) or {}).get("status") or "") == "planned":
+                return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                        "switches": [], "words": (
+                            base + f" It is not wired yet: {_planned_reason(row)}")}
             tail = (_no_switch_words(row) if has_control else
                     "The feature list names no on/off switch for it, so there is "
                     "nothing to turn on or off there. " + ability_explanation(row))
@@ -2820,7 +2848,9 @@ NO_COMMAND_REASON = {
     # The three planned Switchable rows (2026-10-23) still need an allowlist
     # reason for matrix_rows_without_reason(); their label stays Switchable and
     # their row status stays planned, so this reason is reported, not a hidden pass.
-    "wake-word": ("planned", "no own switch or typed control is wired today; planned row", "voiceprint-wiring"),
+    # (wake-word left this table and PLANNED_SWITCHABLE on 2026-11-13: it has
+    # its own typed switch, so it is command-controllable and an allowlist row
+    # for it would now be a stale excuse.)
     "read-aloud": ("planned", "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.", "voiceprint-wiring"),
     "spoken-style": ("planned", "spoken style is automatic, not a registered switch or typed control yet", "voiceprint-wiring"),
     "home-status": ("planned", "no own typed phrase is wired for the home-status feature yet", "voiceprint-wiring"),
@@ -3115,8 +3145,14 @@ EXTRA_ADJUST = {
 #: planned with its own honest reason, and show no fixed phrase - the directory
 #: says "Still being wired" instead of a phrase that changes a different thing.
 PLANNED_SWITCHABLE = {
-    "wake-word": ("voiceprint-wiring",
-                  "no own switch or typed control is wired today; a planned row, not a fake phrase"),
+    # The wake-word row LEFT this table on 2026-11-13. Its claim ("no own switch
+    # or typed control is wired today") was false when measured: "turn on/off
+    # the wake word" is a real typed control (`settings_wake_word`, one approval
+    # card to turn on, instant to turn off) and Settings, Voice on the PC draws
+    # the switch. The row now carries its own phrase in FEATURE_ADJUST_PHRASES
+    # and its own intent in OWN_CONTROLS; the suite fails if a row named here
+    # IS controllable, which is why the stale entry is deleted rather than
+    # reworded.
     "read-aloud": ("voiceprint-wiring",
                    "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin."),
     "spoken-style": ("voiceprint-wiring",
@@ -3130,6 +3166,14 @@ PLANNED_SWITCHABLE = {
 #: but "stop asking before my calendar" is not the email feature's words.
 FEATURE_ADJUST_PHRASES = {
     "email-read": ("asks-first", "stop asking before reading my email"),
+    # The wake word's own typed switch (2026-11-13). "turn on/off the wake
+    # word" is `settings_wake_word` in jarvis_quick, wired to
+    # `jarvis_settings_registry.set_wake_word` -> `jarvis_speech.set_wake_enabled`
+    # - the same function POST /api/voice/wake calls. It is not a BOOL_SETTINGS
+    # row (the desktop draws it as a button in Settings, Voice, not a toggle),
+    # so the `voice` section's representative phrase ("speak faster") must be
+    # REPLACED for this row, never inherited: that was the old, untrue answer.
+    "wake-word": ("voice", "turn on the wake word"),
 }
 
 #: Owner-approved 2026-10-23 label corrections (Gemini ADJ-Q1): these three
@@ -3174,6 +3218,11 @@ OWN_CONTROLS = {
     "web-search": (("web_search",), ("search_use", "settings_bool"), {}),
     "what-asks-first": ((), ("settings_asks_first",), {}),
     "write-like-me": (("write_like_me",), ("settings_bool",), {}),
+    # The wake word (2026-11-13): its switch is NOT a BoolSetting - it is
+    # `jarvis_speech.set_wake_enabled`, drawn as a button in Settings, Voice -
+    # but the typed sentence "turn on/off the wake word" really changes it, and
+    # it is this row's own control (`settings_wake_word`), not a section-mate's.
+    "wake-word": ((), ("settings_wake_word",), {}),
     # The Jarvis calendar (2026-10-29): its typed switch is its own control,
     # linked by EXTRA_CONTROLS because no Settings card draws it yet.
     "jarvis-calendar": (("jarvis_calendar",), ("settings_bool",), {}),
@@ -3931,6 +3980,31 @@ def ability_explanation(row: dict) -> str:
     if label == LABEL_SETTINGS_ONLY:
         return (f"{title} is Settings-Only by your decision and is never typed "
                 f"or spoken. Open {path} on the PC.")
+    # A planned row must not be given the Command-Only sentence (2026-11-13):
+    # its typed path is not wired yet, but its Settings control may well ship -
+    # read-aloud's does - and "nothing to turn on or off" would contradict the
+    # row's own `where`. Say the planned truth and name that place instead.
+    if str((_matrix_row(row) or {}).get("status") or "") == "planned":
+        where = str(row.get("where") or "").strip()
+        return (f"{title} is not wired yet: {_planned_reason(row)}"
+                + (f" Where: {where}" if where else ""))
+    # A Switchable/Adjustable row whose only proof is a typed ADJUST phrase has
+    # a real control, but no boolean switch `switch_target` could name - the
+    # wake word, attention budget, topics, the captcha hand-off and eleven more.
+    # The Command-Only sentence was false for every one of them (2026-11-13);
+    # name the phrase that really works and the place it lives instead.
+    mine = _matrix_row(row) or {}
+    if str(mine.get("status") or "") == "adjust" and (mine.get("adjust") or ()):
+        phrase = str((mine["adjust"][0] or {}).get("phrase") or "").strip()
+        where = str(row.get("where") or "").strip()
+        said = f"{title} is Switchable/Adjustable."
+        if phrase:
+            said += f' To change it, say "{phrase}".'
+        if where:
+            said += f" Where: {where}"
+            if not said.endswith("."):
+                said += "."
+        return said
     why = str(row.get("what") or "").strip()
     example = example_phrase_words(row).rstrip(".")
     return (f"{title} is a Command-Only ability (runs when you ask, no switch "

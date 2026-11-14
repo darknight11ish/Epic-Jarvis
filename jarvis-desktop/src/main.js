@@ -1399,7 +1399,9 @@ function threadPairs() {
 }
 
 /** The one quiet line about the chat itself: a new conversation after a
- *  while, a chat carried on, a chat deleted. Said to a screen reader too. */
+ *  while, a chat carried on, a chat deleted - and, because it is the bar's
+ *  only quiet line under the card's head, a spoken answer whose voice could
+ *  not be made (`saySpeechFailedOnce`). Said to a screen reader too. */
 function showChatNote(line) {
   if (!dom.chatNote || !line) return;
   dom.chatNote.textContent = line;
@@ -3853,6 +3855,22 @@ function abortStream() {
   abort();
 }
 
+/** The owner pressed Stop: cancelling the stream is not enough on its own.
+ *
+ *  The sentences already queued behind the one playing are spoken by the
+ *  drain, not by the stream, so they outlive the cancellation - and
+ *  `finishStream` queues the rest of what had arrived (its tail) unless the
+ *  turn is muted first. Without this, Stop could START more talking.
+ *
+ *  The same two calls push-to-talk makes when the owner barges in
+ *  (`startPushToTalk`), in the same order: `noteCutOff` only notes anything
+ *  while Jarvis is really talking, so it has to run before `stopSpeaking` -
+ *  whose `speechMuted` is what stops the tail being enqueued at all. */
+function silenceStoppedAnswer() {
+  noteCutOff();
+  stopSpeaking();
+}
+
 /**
  * Streams through the Rust backend over a Tauri channel.
  *
@@ -3904,6 +3922,10 @@ async function streamViaBackend(payload) {
   state.abort = () => {
     settled = true;
     invoke("cancel_chat");
+    // Stop is the owner saying "enough" out loud. The voice goes with the
+    // stream, before `finishStream` runs: this is what silences the sentence
+    // playing, the sentences still queued, and the tail it is about to queue.
+    silenceStoppedAnswer();
     finishStream("done", "Stopped");
   };
 
@@ -4010,6 +4032,10 @@ async function streamViaFetch(payload) {
     finishStream(state.phase === "error" ? "error" : "done");
   } catch (error) {
     if (error && error.name === "AbortError") {
+      // The same Stop in the browser-preview transport (`streamViaFetch`):
+      // its `state.abort` is only the fetch controller, so the voice is
+      // silenced here, where the two paths report the same "Stopped".
+      silenceStoppedAnswer();
       finishStream("done", "Stopped");
       return;
     }
@@ -4383,6 +4409,9 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   // above, so a push-to-talk barge-in whose send() was refused because the
   // old answer is still streaming leaves that old answer muted.
   speechMuted = false;
+  // ...and the last answer's "could not read this aloud" is one answer's,
+  // not every answer's (saySpeechFailedOnce).
+  speechFailedSaid = false;
   // A new question supersedes whatever of the last answer was still
   // waiting to be said: its queued sentences, and a clip already made
   // ahead for it, are dropped (a clip playing right now finishes). Kept,
@@ -5050,6 +5079,17 @@ let currentAudio = null;
  *  complete sentence - and the tail in `finishStream` - queued itself again
  *  a moment later and Jarvis carried on talking. */
 let speechMuted = false;
+/** Said once per answer when the PC could not make the voice for a line of
+ *  it: the bar's own fixed sentence, the same one the HUD draws under an
+ *  answer it could not read (jarvis_hud.html `READ_FAILED_LINE`). Never a
+ *  guess at the reason - that stays in the console - and never an error:
+ *  the answer itself arrived, only its sound did not. */
+const SPEECH_FAILED_LINE =
+  "Jarvis's voice could not read this aloud, so nothing was spoken.";
+/** Whether this answer has already said it. Reset by the next `send()`, the
+ *  way `state.privateLineSaid` is: one line per answer, not one per
+ *  sentence that failed. */
+let speechFailedSaid = false;
 /** Bumped by every `stopSpeaking`. A `speak_reply` that was already on its
  *  way to the backend when "stop" landed comes back with an older number,
  *  and its clip is dropped instead of played. */
@@ -5246,6 +5286,19 @@ function sayPrivateLineOnce() {
   drainSpeechQueue();
 }
 
+/** The PC could not make the voice for a line of a spoken answer - an empty
+ *  answer to `speak_reply`, or a request that was refused. Said once per
+ *  answer, in the bar's one quiet line (`showChatNote`), and never as a
+ *  failed answer: the words are already on screen, and one clip's worth of
+ *  silence is not worth an error banner. The rest of the answer is still
+ *  asked for - one bad request is not a dead voice. */
+function saySpeechFailedOnce() {
+  if (speechFailedSaid) return;
+  speechFailedSaid = true;
+  console.info("[quickbar] a sentence of the answer could not be spoken");
+  showChatNote(SPEECH_FAILED_LINE);
+}
+
 /** The next queued line to ask a sound for, or undefined. Checked here, as
  *  its sound is asked for: a tool may have run since it was queued - then
  *  the rest of the answer is dropped and the fixed line comes instead. */
@@ -5340,7 +5393,15 @@ async function drainSpeechQueue() {
         }
         continue;
       }
-      if (!dataUri) continue;
+      // The PC could not make this line's voice (a refused request and an
+      // empty answer both come back as nothing here). Silently skipping it
+      // is how a spoken answer could be entirely mute with no word to the
+      // owner, so it is said once - and the next line is asked for as
+      // usual, in case it was that one request.
+      if (!dataUri) {
+        saySpeechFailedOnce();
+        continue;
+      }
       await playClip(dataUri, generation, clip.text);
       if (generation !== speechGeneration) return;
     }
@@ -7583,6 +7644,15 @@ if (dom.liveToggle) {
 /** One fixed line, said on its own - not part of any answer, so none of an
  *  answer's queue or privacy rules apply to it, and it never stops one. */
 async function sayAside(line) {
+  // Never over an answer: a fixed line that arrives while Jarvis is speaking
+  // is DROPPED, not deferred - the rule the focus callout already follows
+  // (`playFocusCallout`). Nothing is lost by dropping it: every caller also
+  // puts the same words on screen (the timer's own toast, the Live strip,
+  // `liveRefused`), and a timer that fired three minutes into an answer is
+  // about now, not about the moment the answer ends. Waiting would need a
+  // second queue of things to say - a second speech path, and one that
+  // talks over the NEXT answer instead of this one.
+  if (jarvisTalking()) return;
   // Jarvis Live: the microphone is held closed while a fixed line plays, so
   // Jarvis's own voice is not sent as a sentence (live.rs `live_hold`).
   const holdMic = liveOnHere();
