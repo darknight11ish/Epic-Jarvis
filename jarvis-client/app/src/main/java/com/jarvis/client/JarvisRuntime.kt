@@ -7308,13 +7308,16 @@ object JarvisRuntime {
         return widgetPost(com.jarvis.client.net.JarvisWidgets.DRAFT_PATH, body, "Not made. ")
     }
 
-    /** Keep ONE preview, exactly as shown. No card. Held on a stale link. */
-    suspend fun widgetAdd(draft: String): Pair<Boolean, String> {
+    /**
+     * Keep ONE preview, exactly as shown - including the look the pickers are
+     * showing (2026-11-14). No card. Held on a stale link.
+     */
+    suspend fun widgetAdd(draft: String, look: com.jarvis.client.net.JarvisWidgets.Look): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         if (!com.jarvis.client.net.JarvisWidgets.validDraft(draft)) return false to "That preview has expired."
         return widgetPost(
             com.jarvis.client.net.JarvisWidgets.ADD_PATH,
-            com.jarvis.client.net.JarvisWidgets.idBody("draft", draft), "Not added. ",
+            com.jarvis.client.net.JarvisWidgets.addBody(draft, look), "Not added. ",
         )
     }
 

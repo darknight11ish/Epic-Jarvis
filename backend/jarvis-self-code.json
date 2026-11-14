@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6373b00ef752a703b70910dc645cd32946a88923",
- "built_at": "2026-11-14T02:06:28-08:00",
+ "ref": "459e075e85e6b9f9c7aab662de2f82d6463d7bc7",
+ "built_at": "2026-11-14T02:27:02-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1436,6 +1436,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WatchNotifyPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WatchPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WebSearchPlate.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetPreview.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WikiPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
@@ -1939,7 +1940,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 1025,
+   "file_count": 1026,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -2656,6 +2657,7 @@
     "jarvis-desktop/src/backup-settings.js",
     "jarvis-desktop/src/barge-in.js",
     "jarvis-desktop/src/big-coder-settings.js",
+    "jarvis-desktop/src/board.css",
     "jarvis-desktop/src/brain.css",
     "jarvis-desktop/src/brain.html",
     "jarvis-desktop/src/brain.js",
@@ -3234,7 +3236,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1252,
+   "file_count": 1253,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -4693,6 +4695,7 @@
     "changelog.d/2026-11-13-tray-and-readme-truth.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
+    "changelog.d/2026-11-14-widget-look.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4877,6 +4880,7 @@
     "decisions.d/2026-11-13-tray-and-readme-truth.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/2026-11-13-wake-word-not-planned.md",
+    "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5325,7 +5329,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 904,
+   "file_count": 906,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6412,19 +6416,19 @@
  ],
  "recent_commits": [
   {
-   "sha": "6373b00ef752a703b70910dc645cd32946a88923",
+   "sha": "459e075e85e6b9f9c7aab662de2f82d6463d7bc7",
    "date": "2026-11-14",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
+   "subject": "Merge origin/main into the widget look, keeping both sides' records"
+  },
+  {
+   "sha": "21272517ee680060d8829fde39a953b81b32de2f",
+   "date": "2026-11-14",
+   "subject": "Widgets wear their own look: accent, shade and contrast, three closed lists"
   },
   {
    "sha": "cf4a2797f2c4b388f95c66813435081650bb9fa3",
    "date": "2026-11-14",
    "subject": "Merge pull request #1233 from darknight11ish/feat/phone-backup-updater-2026-11-13"
-  },
-  {
-   "sha": "8dfbf1047906bf3eee23afb22ca1723b02efbb85",
-   "date": "2026-11-14",
-   "subject": "fix(phone): the settings-backup Section needs a phone navigation decision, so OpenPlaceTest can reach it"
   },
   {
    "sha": "8d48d8afa422f8799b58257476122e010bc4c22e",
@@ -6437,16 +6441,6 @@
    "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
   },
   {
-   "sha": "f27ab8d2857bb32024dbe483eba7c912dbac7ae0",
-   "date": "2026-11-14",
-   "subject": "chore(records): regenerate after carrying #1233 and the wave-18 batch"
-  },
-  {
-   "sha": "b6e06c4d37f25e04770d30ed2473c63ca5d3bdc0",
-   "date": "2026-11-14",
-   "subject": "Merge branch 'resolve-1233' into resolve-1231-merge"
-  },
-  {
    "sha": "30a9a9793fba9c5d66132cddbe15572dba13b531",
    "date": "2026-11-13",
    "subject": "chore(records): regenerate after the restack onto the wave-18 batch"
@@ -6455,11 +6449,6 @@
    "sha": "48acf718776a72466d1b4ba6c50086517d9c900c",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/integration/wave18-2026-11-13' into resolve-1233"
-  },
-  {
-   "sha": "0f0cd1969100e13853169b9312fcc280558f3ba0",
-   "date": "2026-11-13",
-   "subject": "fix(features): the phone's settings backup is a real Settings Section, so the feature guide can prove its place"
   },
   {
    "sha": "1ebb76696b8fecde790bcaefd7e2b286f1698575",
@@ -6477,26 +6466,6 @@
    "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
   },
   {
-   "sha": "939d06efe673c4ed01a6d59ab90041a7a1c65937",
-   "date": "2026-11-13",
-   "subject": "fix(claims): C167 says the phone's on-device AI is built, which this branch makes true"
-  },
-  {
-   "sha": "972ca5350431f44c72e1cc271277d61d0ce2702f",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
-  },
-  {
-   "sha": "45ed79defbf624ae86e12ff39030da9692d30c94",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
-  },
-  {
-   "sha": "41e0c19b26b5bba90de98c7961da3b31acd4a98b",
-   "date": "2026-11-13",
-   "subject": "records(feature-controls): the phone settings backup row, so the catalogue's records agree (183)"
-  },
-  {
    "sha": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
    "date": "2026-11-13",
    "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
@@ -6510,6 +6479,41 @@
    "sha": "69428294081ee150aefe347399e36531787b5f01",
    "date": "2026-11-13",
    "subject": "Regenerate the whole-repo records against the merged tree"
+  },
+  {
+   "sha": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main into integration/wave18-2026-11-13 (current main after #1246 landed)"
+  },
+  {
+   "sha": "f2366ba75440aaabe2666aaadab3643dcadf3dc0",
+   "date": "2026-11-13",
+   "subject": "Merge fix/self-knowledge-places-and-counts-2026-11-13 into integration/wave18-2026-11-13 (self-knowledge places and counts); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
+  },
+  {
+   "sha": "6f013f5490257a7902bba82f6fbe26d7a79a6582",
+   "date": "2026-11-13",
+   "subject": "fix(features): record the phone's settings backup in the feature matrix"
+  },
+  {
+   "sha": "a9bd71f9a273be6c5d462c9cd90f7bc379336ace",
+   "date": "2026-11-13",
+   "subject": "Merge fix/tray-and-readme-truth-2026-11-13 into integration/wave18-2026-11-13 (tray wording + README truth); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "7f9339bf9ef24e247a450cb8e88b11fdb315cd3a",
+   "date": "2026-11-13",
+   "subject": "Merge ci/backend-shard-2026-11-13 into integration/wave18-2026-11-13 (backend job sharded four ways, 60-minute shard ceiling; backend-windows keeps 120)"
+  },
+  {
+   "sha": "db4309bbdf2f3c7468afc59c684a66ad66c05bf3",
+   "date": "2026-11-13",
+   "subject": "chore(records): regenerate the recent-changes bullets and the self-code map for the new fragments"
   }
  ],
  "top_level": [
@@ -6521,12 +6525,12 @@
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1260
+   "files": 1261
   },
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 985
+   "files": 986
   },
   {
    "path": "docs/",
@@ -6541,7 +6545,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 267
+   "files": 268
   },
   {
    "path": "tools/",
@@ -6556,7 +6560,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 184
+   "files": 185
   },
   {
    "path": "plugins/",
@@ -6630,8 +6634,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5758,
-  "covered": 5275,
+  "tracked_files": 5762,
+  "covered": 5279,
   "excluded": 483,
   "subsystems": 27
  },

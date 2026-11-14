@@ -28,6 +28,12 @@ Runs anywhere; no model, no network (the model is a stand-in). What it proves:
 7. The routes: behind the token and origin checks, a body size cap, and
    switched on by jarvis_brain_reads.install() (no patch of its own).
 8. The model is asked only on this PC.
+9. The look (2026-11-14): accent, shade and contrast are closed lists of their
+   own; absent means today's look so every older widget is unchanged, off the
+   list is refused rather than defaulted, the preview's pickers may change it
+   before Add, a draft is readable so the phone can draw a live preview, and
+   every colour on the three lists is READABLE (WCAG AA, 4.5:1) on both
+   backgrounds in both contrasts - measured, not eyeballed.
 """
 from __future__ import annotations
 
@@ -241,8 +247,10 @@ def t_the_arrangement_is_a_closed_list():
         why = refused({"name": "x", "layout": bad,
                        "blocks": [{"type": "title", "text": "a"}]})
         check(f"refused: the arrangement {bad!r}", bool(why), json.dumps(bad, default=str))
-    # An arrangement is not a place to put styling or code.
-    for key in ("colour", "color", "style", "columns", "grid", "accent", "font"):
+    # An arrangement is not a place to put styling or code. `accent` left this
+    # list on 2026-11-14, when it became a real key with a closed list of its
+    # own (t_the_look_is_a_closed_list); every name still here is still refused.
+    for key in ("colour", "color", "style", "columns", "grid", "font", "hex"):
         why = refused({"name": "x", key: "x", "blocks": [{"type": "title", "text": "a"}]})
         check(f"refused: a {key!r} key", bool(why))
     # The preview shows what was asked for, and "stack" adds no new words.
@@ -288,6 +296,212 @@ def t_the_arrangement_is_a_closed_list():
     st.path.write_text(json.dumps(bad), "utf-8")
     check("a hand-edited arrangement off the list is not read",
           st.get(bad["widgets"][0]["id"]) is None)
+
+
+def t_the_look_is_a_closed_list():
+    """The look (2026-11-14): accent, shade and contrast are three CLOSED LISTS -
+    absent means today's look, off the list is refused, and each one survives Add,
+    the file and show(). Plus the rule that makes a list of colours safe to offer
+    at all: every colour on it is LEGIBLE on both backgrounds, in both contrasts,
+    measured here as WCAG AA (4.5:1) rather than eyeballed."""
+    check("exactly the eight accents",
+          list(W.ACCENTS) == ["cyan", "sky", "violet", "pink", "amber", "lime",
+                              "orange", "mono"], list(W.ACCENTS))
+    check("exactly the three shades", list(W.SHADES) == ["solid", "half", "clear"],
+          list(W.SHADES))
+    check("exactly the two contrasts", list(W.CONTRASTS) == ["normal", "high"],
+          list(W.CONTRASTS))
+    check("every accent carries a name and a hex",
+          all(isinstance(v[0], str) and v[0] and len(v[1]) == 7 and v[1][0] == "#"
+              for v in W.ACCENTS.values()), str(list(W.ACCENTS.values())[:2]))
+    check("every shade carries a name and two alphas",
+          all(isinstance(v[0], str) and v[0] and 0 <= v[2] <= v[1] <= 255
+              for v in W.SHADES.values()), str(list(W.SHADES.values())))
+    check("solid is the only wholly opaque shade and it is the default",
+          [k for k, v in W.SHADES.items() if v[1] == 255] == ["solid"]
+          and W.DEFAULT_SHADE == "solid")
+    check("every contrast carries the four colours",
+          all(set(v[1]) == {"bg", "surface", "text_hi", "text_muted"}
+              for v in W.CONTRASTS.values()))
+
+    # Absent = today's look, so every widget saved before today is unchanged.
+    plain = W.validate({"name": "x", "blocks": [{"type": "title", "text": "a"}]})
+    check("no look key means today's look",
+          (plain["accent"], plain["shade"], plain["contrast"])
+          == ("cyan", "solid", "normal"), str(plain))
+
+    # Every value on every list is kept.
+    for key, table in (("accent", W.ACCENTS), ("shade", W.SHADES),
+                       ("contrast", W.CONTRASTS)):
+        for value in table:
+            got = W.validate({"name": "x", key: value,
+                              "blocks": [{"type": "title", "text": "a"}]})[key]
+            check(f"kept: the {key} {value!r}", got == value, got)
+
+    # Off the list is refused, and a refusal names the reason - it is never a
+    # quiet fall back to some other colour.
+    for key in ("accent", "shade", "contrast"):
+        for bad in ("Chartreuse", "chartreuse", "#BFA6FF", "", " ", "violet ",
+                    " violet", "Violet", "grid", "<script>", None, True, False, 0, 3,
+                    ["violet"], {"accent": "violet"}):
+            why = refused({"name": "x", key: bad, "blocks": [{"type": "title", "text": "a"}]})
+            check(f"refused: the {key} {bad!r}", bool(why), json.dumps(bad, default=str))
+    # A look is not a place to smuggle styling, code or a second colour axis.
+    for key in ("colour", "color", "colors", "hex", "alpha", "opacity", "transparency",
+                "font", "fontsize", "size", "style", "grid", "theme", "image"):
+        why = refused({**GOOD, key: "x"})
+        check(f"refused: a {key!r} key", bool(why))
+
+    # The preview sentence and its lines only mention what differs from today.
+    looked = W.validate({"name": "x", "accent": "violet", "shade": "clear",
+                         "contrast": "high",
+                         "blocks": [{"type": "title", "text": "A"}]})
+    check("the default sentence says nothing about a look",
+          "cyan" not in W.describe(plain) and "solid" not in W.describe(plain)
+          and "contrast" not in W.describe(plain), W.describe(plain))
+    check("a chosen look is said in the sentence",
+          "in violet" in W.describe(looked) and "See-through".lower() in W.describe(looked)
+          and "high contrast" in W.describe(looked), W.describe(looked))
+    check("the default preview has no look line",
+          not any(p.startswith(("Colour:", "Background:", "Contrast:")) for p in W.parts(plain)))
+    check("a chosen look has its own lines",
+          W.parts(looked)[1].startswith("Colour: Violet")
+          and W.parts(looked)[2].startswith("Background: See-through")
+          and W.parts(looked)[3].startswith("Contrast: High contrast"), str(W.parts(looked)))
+    # The look line comes FIRST among the look, right after the arrangement,
+    # because both apps show at most MAX_BLOCKS lines and one added at the end
+    # is the one that gets cut.
+    check("the look lines sit directly after the arrangement",
+          W.parts(looked)[0].startswith("Arranged:")
+          and all(not p.startswith("Arranged:") for p in W.parts(looked)[1:]))
+
+    # The model is offered the lists and is told to leave them alone otherwise.
+    check("the schema offers exactly the eight accents",
+          W.SCHEMA["properties"]["accent"]["enum"] == list(W.ACCENTS))
+    check("the schema offers exactly the three shades",
+          W.SCHEMA["properties"]["shade"]["enum"] == list(W.SHADES))
+    check("the schema offers exactly the two contrasts",
+          W.SCHEMA["properties"]["contrast"]["enum"] == list(W.CONTRASTS))
+    check("the schema does not require a look, so a plain request gets none",
+          not ({"accent", "shade", "contrast"} & set(W.SCHEMA["required"])))
+    prompt = W.prompt("x")
+    check("the prompt offers each accent", all(k in prompt for k in W.ACCENTS))
+    check("the prompt says to leave the look out when none was asked for",
+          "Leave all three out" in prompt)
+
+    # It survives Add, the file, and a re-read of the file.
+    st = fresh_store()
+    d = st.add_draft(W.validate(dict(GOOD, accent="violet", shade="half", contrast="high")))
+    w, _ = st.keep(d["id"])
+    check("a saved widget keeps its look",
+          w is not None and (w["accent"], w["shade"], w["contrast"]) == ("violet", "half", "high"),
+          str(w and {k: w.get(k) for k in ("accent", "shade", "contrast")}))
+    code, out = W.show(w["id"], st=st, readers=readers())
+    check("show answers the look",
+          code == 200 and (out["accent"], out["shade"], out["contrast"])
+          == ("violet", "half", "high"), str(out.get("accent")))
+    again = fresh_store()
+    d2 = again.add_draft(W.validate(dict(GOOD, accent="amber")))
+    w2, _ = again.keep(d2["id"])
+    check("the look is on disk, not only in memory",
+          [x["accent"] for x in W.Store(again.path).widgets()] == ["amber"],
+          str([x["accent"] for x in W.Store(again.path).widgets()]))
+
+    # A file written before 2026-11-14 has no keys and must still read.
+    old = json.loads(again.path.read_text("utf-8"))
+    for row in old["widgets"]:
+        for key in ("accent", "shade", "contrast"):
+            row.pop(key, None)
+    again.path.write_text(json.dumps(old), "utf-8")
+    read_back = again.widgets()
+    check("a widget saved before 2026-11-14 reads in today's colours",
+          [(x["accent"], x["shade"], x["contrast"]) for x in read_back]
+          == [("cyan", "solid", "normal")] * len(old["widgets"]),
+          str([(x["accent"], x["shade"], x["contrast"]) for x in read_back]))
+    # A hand-edited one is checked again on read, like every other value.
+    bad = json.loads(again.path.read_text("utf-8"))
+    bad["widgets"][0]["accent"] = "chartreuse"
+    again.path.write_text(json.dumps(bad), "utf-8")
+    check("a hand-edited colour off the list is not read",
+          again.get(bad["widgets"][0]["id"]) is None)
+
+    # A DRAFT is readable through show too (2026-11-14): this is what lets the
+    # phone's preview draw the real thing with real numbers, without a new route.
+    st3 = fresh_store()
+    d3 = st3.add_draft(W.validate(dict(GOOD, accent="pink", shade="clear")))
+    code, preview = W.show(d3["id"], st=st3, readers=readers())
+    check("show answers a draft id, for the live preview",
+          code == 200 and preview["ok"] and preview["id"] == d3["id"], str(code))
+    check("the draft preview carries its look and its blocks",
+          (preview["accent"], preview["shade"]) == ("pink", "clear") and preview["blocks"],
+          str(preview.get("accent")))
+    check("reading a draft saves nothing", st3.widgets() == [])
+    check("a widget id that does not exist is still 404",
+          W.show("w0000000000", st=st3, readers=readers())[0] == 404)
+
+    # The preview's own pickers may change the look before Add - and only to a
+    # value on the list, or it is refused instead of quietly ignored.
+    st4 = fresh_store()
+    d4 = st4.add_draft(W.validate(dict(GOOD, accent="violet")))
+    code, out = W.handle_post(W.ADD_PATH, {"draft": d4["id"], "accent": "amber",
+                                           "contrast": "high"}, st=st4)
+    check("Add takes the look the owner last chose", code == 200, str(code))
+    saved = st4.widgets()
+    check("the chosen look is what was saved",
+          saved and (saved[0]["accent"], saved[0]["contrast"]) == ("amber", "high"),
+          str(saved and {k: saved[0].get(k) for k in ("accent", "contrast")}))
+    d5 = st4.add_draft(W.validate(GOOD))
+    code, out = W.handle_post(W.ADD_PATH, {"draft": d5["id"], "shade": "frosted"}, st=st4)
+    check("an off-list override is a 400 with a reason",
+          code == 400 and out.get("ok") is False and out.get("error") == W.LOOK_REFUSED["shade"],
+          f"{code} {out}")
+    check("a refused override adds nothing", len(st4.widgets()) == 1)
+
+    # The apps can build their pickers from the menu instead of hardcoding.
+    menu = W.menu()
+    check("the menu carries the eight accents with their names",
+          [a["id"] for a in menu["look"]["accents"]] == list(W.ACCENTS)
+          and menu["look"]["accents"][2]["label"] == "Violet", str(menu["look"]["accents"][:1]))
+    check("the menu carries the shades and contrasts",
+          [s["id"] for s in menu["look"]["shades"]] == list(W.SHADES)
+          and [c["id"] for c in menu["look"]["contrasts"]] == list(W.CONTRASTS))
+    check("the menu names today's look as the default",
+          menu["look"]["default"] == {"accent": "cyan", "shade": "solid",
+                                      "contrast": "normal"})
+
+    # ---- and the one that makes a colour list safe: nothing is unreadable ----
+    def _channel(c):
+        c = c / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    def _luminance(hexes):
+        h = hexes.lstrip("#")
+        return (0.2126 * _channel(int(h[0:2], 16)) + 0.7152 * _channel(int(h[2:4], 16))
+                + 0.0722 * _channel(int(h[4:6], 16)))
+
+    def _ratio(a, b):
+        hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+        return (hi + 0.05) / (lo + 0.05)
+
+    worst = (99.0, "")
+    for name, (_label, palette) in W.CONTRASTS.items():
+        for colour in ("text_hi", "text_muted"):
+            for ground in ("bg", "surface"):
+                r = _ratio(palette[colour], palette[ground])
+                worst = min(worst, (r, f"{name} {colour} on {ground}"))
+                check(f"readable: {name} {colour} on {ground} (>= 4.5)",
+                      r >= 4.5, f"{r:.2f}:1")
+        for accent, (_alabel, ahex) in W.ACCENTS.items():
+            for ground in ("bg", "surface"):
+                r = _ratio(ahex, palette[ground])
+                worst = min(worst, (r, f"{name} accent {accent} on {ground}"))
+                check(f"readable: {name} accent {accent} on {ground} (>= 4.5)",
+                      r >= 4.5, f"{r:.2f}:1")
+    print(f"        (the least readable pair on the whole look: {worst[1]} at "
+          f"{worst[0]:.2f}:1)")
+    check("high contrast is not a paler version of normal",
+          _ratio(W.CONTRASTS["high"][1]["text_hi"], W.CONTRASTS["high"][1]["bg"])
+          >= _ratio(W.CONTRASTS["normal"][1]["text_hi"], W.CONTRASTS["normal"][1]["bg"]))
 
 
 # ================================================== 3. drafts, from the owner's words only
@@ -341,7 +555,13 @@ def t_drafts_from_own_words_only():
                                     "Bar: Disk free - the free space on your PC's main drive",
                                     "Button: 10-min timer"], out["draft"]["parts"])
     check("the draft keeps no words, only the checked widget",
-          set(st.drafts()[0]) == {"id", "name", "layout", "blocks", "expires"})
+          set(st.drafts()[0]) == {"id", "name", "layout", "accent", "shade", "contrast",
+                                  "blocks", "expires"},
+          str(set(st.drafts()[0])))
+    # ... and "no words" is the point, not the key count: the owner's sentence
+    # itself is in none of them, whatever keys the look added on 2026-11-14.
+    check("the draft keeps none of the owner's own words",
+          words not in json.dumps(st.drafts()[0]), words)
 
 
 def t_the_model_is_asked_only_on_this_pc():
@@ -641,6 +861,7 @@ def t_the_apps_cases_are_up_to_date():
 if __name__ == "__main__":
     for fn in (t_the_apps_cases_are_up_to_date, t_on_the_menu_is_kept, t_off_the_menu_is_refused, t_the_buttons_are_the_tile_actions,
                t_text_is_cleaned, t_raw_json_is_strict, t_the_arrangement_is_a_closed_list,
+               t_the_look_is_a_closed_list,
                t_drafts_from_own_words_only,
                t_the_model_is_asked_only_on_this_pc, t_the_store, t_filling_in, t_chat, t_routes):
         print(f"\n--- {fn.__name__} ---")

@@ -34,6 +34,12 @@ import kotlinx.serialization.json.put
  * drawn LARGE, in what order the rest go, and the buttons last. It is a closed
  * list because Android decides a widget's layout when the app is built: the
  * APK can only draw arrangements compiled into it.
+ *
+ * THE LOOK (2026-11-14): a colour, an alpha and a contrast ([Look]), also
+ * closed lists because a colour and an alpha are runtime values while a layout
+ * is not. The look never changes WHAT is drawn or where - [boardOf] is
+ * untouched by it - only the colours and the alpha of the card and its panels
+ * ([argb]; text is never transparent).
  */
 object JarvisWidgets {
     const val LIST_PATH = "/api/widgets"
@@ -59,6 +65,12 @@ object JarvisWidgets {
     const val EMPTY = "No widgets yet."
     const val MISSING = "Your PC's Jarvis cannot make widgets yet - run apply-patches.ps1 on the PC."
     const val PREVIEW_TITLE = "Preview - not added yet"
+    // The look pickers under a preview (2026-11-14).
+    const val LOOK_ACCENT = "Accent colour"
+    const val LOOK_SHADE = "How see-through"
+    const val LOOK_CONTRAST = "Contrast"
+    const val LOOK_READING = "Reading the preview…"
+    const val LOOK_FAILED = "Couldn't read this preview."
     const val MAKE_LABEL = "Make a preview"
     const val MAKING_LABEL = "Making…"
     const val ADD_LABEL = "Add"
@@ -154,6 +166,105 @@ object JarvisWidgets {
     val LAYOUTS = listOf("stack", "big", "list", "compact")
     const val LAYOUT_STACK = "stack"
 
+    /**
+     * THE LOOK (2026-11-14, "the widget's own look"; docs/JARVIS-API.md
+     * section 86.6): a colour, an alpha and a contrast, carried BY THE WIDGET
+     * so the same described widget draws in the same colours on the desktop
+     * and on the phone's home screen.
+     *
+     * These three lists are CLOSED, for the same reason [LAYOUTS] is: a
+     * colour a model invented could be unreadable, and this app already
+     * refuses to let colour alone carry meaning. The PC refuses a value off
+     * its lists (400); this app FALLS BACK to the default for a word it does
+     * not know, so a newer PC's word never blanks a widget. Held to the PC's
+     * (`jarvis_widgets.ACCENTS`, `SHADES`, `CONTRASTS`) and the desktop's by
+     * contract/widget-cases.json.
+     */
+    data class Accent(val id: String, val label: String, val color: String)
+
+    /** The eight accents. Every one is legible on both contrasts; that is
+     *  measured on the PC (backend/test_widgets.py), not eyeballed here. */
+    val ACCENTS = listOf(
+        Accent("cyan", "Cyan", "#63F7FF"),
+        Accent("sky", "Sky", "#8CC9FF"),
+        Accent("violet", "Violet", "#BFA6FF"),
+        Accent("pink", "Pink", "#FF93C7"),
+        Accent("amber", "Amber", "#FFC661"),
+        Accent("lime", "Lime", "#B9E86B"),
+        Accent("orange", "Orange", "#FF9E5C"),
+        Accent("mono", "Mono", "#E6EEF7"),
+    )
+
+    /**
+     * The transparency axis: [alpha] is applied to the widget's background and
+     * [surfaceAlpha] to its panels (buttons, a bar's track) - and to nothing
+     * else. Text is never given an alpha (rule 3).
+     *
+     * There is NO blur: `RemoteViews` has none, so these words say
+     * "see-through" and never "frosted" or "glass". It is alpha over whatever
+     * is behind the card.
+     */
+    data class Shade(val id: String, val label: String, val alpha: Int, val surfaceAlpha: Int)
+
+    val SHADES = listOf(
+        Shade("solid", "Solid", 255, 255),
+        Shade("half", "Half see-through", 191, 159),
+        Shade("clear", "See-through", 128, 102),
+    )
+
+    /** The two palettes. `normal` is exactly the widget's old fixed colours,
+     *  so every widget saved before 2026-11-14 looks as it did. */
+    data class Contrast(
+        val id: String,
+        val label: String,
+        val bg: String,
+        val surface: String,
+        val textHi: String,
+        val textMuted: String,
+    )
+
+    val CONTRASTS = listOf(
+        Contrast("normal", "Normal", "#04070C", "#0E1822", "#E6EEF7", "#93A6BA"),
+        Contrast("high", "High contrast", "#000000", "#262626", "#FFFFFF", "#E0E0E0"),
+    )
+
+    /** One widget's look, always a set of ids from the three lists above. */
+    data class Look(val accent: String, val shade: String, val contrast: String)
+
+    /** Absent means this: today's colours, opaque, for every widget made before 2026-11-14. */
+    val LOOK_DEFAULT = Look(accent = "cyan", shade = "solid", contrast = "normal")
+
+    fun accentOf(id: String?): Accent =
+        ACCENTS.firstOrNull { it.id == id } ?: ACCENTS.first { it.id == LOOK_DEFAULT.accent }
+
+    fun shadeOf(id: String?): Shade =
+        SHADES.firstOrNull { it.id == id } ?: SHADES.first { it.id == LOOK_DEFAULT.shade }
+
+    fun contrastOf(id: String?): Contrast =
+        CONTRASTS.firstOrNull { it.id == id } ?: CONTRASTS.first { it.id == LOOK_DEFAULT.contrast }
+
+    /**
+     * The look a `GET /api/widgets/show` answer carries, resolved: never
+     * absent, and EACH KEY independently falling back to its own default. A
+     * newer PC's `"accent": "chartreuse"` draws Cyan; it loses nothing else,
+     * and the widget still draws.
+     */
+    fun lookOf(ans: JsonObject?): Look = Look(
+        accent = accentOf(str(ans?.get("accent"))).id,
+        shade = shadeOf(str(ans?.get("shade"))).id,
+        contrast = contrastOf(str(ans?.get("contrast"))).id,
+    )
+
+    /**
+     * A "#RRGGBB" colour as a 32-bit ARGB int, with [alpha] (0..255) in the
+     * top byte. Pure Kotlin, so the JVM tests hold the exact colour the widget
+     * draws - and the alpha a [Shade] asks for is the alpha actually handed to
+     * the launcher, not quietly rounded to opaque.
+     */
+    fun argb(hex: String, alpha: Int = 255): Int =
+        (alpha.coerceIn(0, 255) shl 24) or
+            ((hex.removePrefix("#").toLongOrNull(16) ?: 0L).toInt() and 0xFFFFFF)
+
     /** Sources whose words are the owner's own (or another program's). */
     val PRIVATE_SOURCES = listOf("current_task", "now_playing", "reminders", "timers", "today", "todo")
     private val KNOWN_SOURCES = PRIVATE_SOURCES + listOf(
@@ -179,7 +290,17 @@ object JarvisWidgets {
         ) : Block
     }
 
-    data class View(val name: String, val layout: String, val blocks: List<Block>)
+    data class View(
+        val name: String,
+        val layout: String,
+        val blocks: List<Block>,
+        val accent: String = LOOK_DEFAULT.accent,
+        val shade: String = LOOK_DEFAULT.shade,
+        val contrast: String = LOOK_DEFAULT.contrast,
+    ) {
+        /** The one look this view is drawn in. */
+        val look: Look get() = Look(accent, shade, contrast)
+    }
 
     /**
      * One widget arranged for drawing: [big] is drawn large at the top (or
@@ -291,6 +412,7 @@ object JarvisWidgets {
     /** The blocks this app draws from one `GET /api/widgets/show` answer, or null. */
     fun viewOf(ans: JsonObject?): View? {
         if (ans == null || !isTrue(ans["ok"])) return null
+        val look = lookOf(ans)
         val blocks = (ans["blocks"] as? JsonArray) ?: JsonArray(emptyList())
         val out = mutableListOf<Block>()
         for (el in blocks.take(MAX_BLOCKS)) {
@@ -330,6 +452,12 @@ object JarvisWidgets {
             // off its list, so nothing off-menu is ever stored.)
             layout = str(ans["layout"])?.takeIf { it in LAYOUTS } ?: LAYOUT_STACK,
             blocks = out,
+            // Same rule again, for each of the look's three keys: the values
+            // here are always ids on the closed lists above (lookOf resolves
+            // them), so everything downstream can index them safely.
+            accent = look.accent,
+            shade = look.shade,
+            contrast = look.contrast,
         )
     }
 
@@ -385,6 +513,14 @@ object JarvisWidgets {
     /** A preview's id: "d" and ten hex digits. */
     fun validDraft(id: String?): Boolean = id != null && Regex("d[0-9a-f]{10}").matches(id)
 
+    /**
+     * An id `GET /api/widgets/show` can read: a saved widget OR, since
+     * 2026-11-14, a preview. The PC fills a draft from the same readers and
+     * saves nothing, so the phone's preview draws REAL values instead of a
+     * list of sentences - no new route, no new request type.
+     */
+    fun showableId(id: String?): Boolean = validId(id) || validDraft(id)
+
     /** The draft's body: the owner's typed words. The phone cannot tell a
      *  paste from typing in a Compose text field, so it always says typed. */
     fun draftBody(words: String): String? {
@@ -397,6 +533,26 @@ object JarvisWidgets {
     }
 
     fun idBody(key: String, id: String): String = buildJsonObject { put(key, id) }.toString()
+
+    /**
+     * The Add body: the preview and the look the pickers are showing.
+     *
+     * All three look keys are ALWAYS sent. The PC validates each against its
+     * own closed lists and answers 400 for a value off them, so this app must
+     * only ever send from its own - [accentOf] and friends make an
+     * unrecognised value the default here, which is the same fallback
+     * [lookOf] makes when reading. (Omitting a key would mean "use the
+     * draft's own value", which is not what the pickers are showing.)
+     */
+    fun addBody(draft: String, look: Look): String {
+        val safe = Look(accentOf(look.accent).id, shadeOf(look.shade).id, contrastOf(look.contrast).id)
+        return buildJsonObject {
+            put("draft", draft)
+            put("accent", safe.accent)
+            put("shade", safe.shade)
+            put("contrast", safe.contrast)
+        }.toString()
+    }
 
     /** A POST's answer: (changed, the sentence to show). */
     fun said(code: Int, obj: JsonObject?): Pair<Boolean, String> {
