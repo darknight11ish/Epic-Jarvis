@@ -3755,12 +3755,19 @@ await check("Studio: the two host cards own full-width rows, and hidden stage ca
   assert.deepEqual(problems, []);
 });
 
-await check("a HUD voice is used only when it is on this computer (and typed answers are silent)", async () => {
+await check("a HUD voice is used only when it is on this computer - and none is chosen for the caller (typed answers are silent)", async () => {
   // Wave 9 (owner, 2026-11-06/07): a TYPED answer is never read aloud, so the
   // typed box produces no voice at all - and the shell's wrapper still refuses
   // an online voice, which is the rule this test has always protected. Drive
   // the wrapper directly (the page's own `voice.speak`) rather than through
   // speech the owner asked to remove.
+  //
+  // 2026-11-13: the wrapper no longer CHOOSES a voice. The rule that did - the
+  // first English local voice, else the first local voice - is the rule that
+  // once read HUD replies in Microsoft David, so an utterance with no voice is
+  // refused instead of being handed the browser's own choice (which could be an
+  // online voice). A LOCAL voice the caller names itself still speaks; an
+  // ONLINE one is still dropped.
   const online = { name: "Microsoft Libby Online (Natural) - English (United Kingdom)", lang: "en-GB", localService: false };
   const local = { name: "Microsoft Hazel - English (United Kingdom)", lang: "en-GB", localService: true };
   const { page, problems } = await openHud(browser,
@@ -3768,11 +3775,22 @@ await check("a HUD voice is used only when it is on this computer (and typed ans
   await send(page, "hi");
   const typed = await page.evaluate(() => window.__spokenWith);
   assert.deepEqual(typed, [], "a typed HUD answer was read aloud automatically");
-  await page.evaluate(() => window.speechSynthesis.speak(new window.SpeechSynthesisUtterance("a direct test of the voice wrapper")));
-  const direct = await page.evaluate(() => window.__spokenWith);
+  const direct = await page.evaluate(() => {
+    // 1. No voice set: the wrapper must not choose one for the caller.
+    window.speechSynthesis.speak(new window.SpeechSynthesisUtterance("a direct test of the voice wrapper"));
+    // 2. An ONLINE voice named by the caller: refused.
+    var bad = new window.SpeechSynthesisUtterance("a direct test with an online voice");
+    bad.voice = { name: "Microsoft Libby Online (Natural) - English (United Kingdom)", localService: false };
+    window.speechSynthesis.speak(bad);
+    // 3. A LOCAL voice named by the caller: still spoken, in that voice.
+    var good = new window.SpeechSynthesisUtterance("a direct test with the local voice");
+    good.voice = { name: "Microsoft Hazel - English (United Kingdom)", localService: true };
+    window.speechSynthesis.speak(good);
+    return window.__spokenWith.slice();
+  });
   await page.close();
   assert.deepEqual(direct, [local.name],
-    "the wrapper did not use the local voice, so the words could go to Microsoft");
+    "the wrapper chose a voice for the caller, or refused a local voice it was given");
   assert.deepEqual(problems, []);
 
   const only = await openHud(browser,
