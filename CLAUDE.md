@@ -248,6 +248,31 @@ draft and mistaking it for the source file.
   file in front of you, say so. (Written up as one of the dead ends in
   `docs/FIELD-TEST-HOW-TO-READ-THE-APPS.md`.)
 
+- **On this PC, a green backend run from a checkout is not a green CI run yet.**
+  `JARVIS_BACKEND` is set at **user level** to the live backend folder
+  (`C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program`), so
+  `backend/_where.py` reads `BACKEND` as that folder and the suites test **the
+  installed copy, not the checkout**. Measured 2026-11-14: three suites in a
+  worktree with a two-line change in them refused with *"Not run: this suite
+  would have tested this repository's copy instead of the one your backend
+  uses"* and the run read like a failure of the change.
+
+  Two things follow, and both cost a cycle if forgotten:
+
+  - **Clear it before any backend run you intend to trust**:
+    `$env:JARVIS_BACKEND=$null` (PowerShell, this session only) or
+    `Remove-Item Env:JARVIS_BACKEND`. **CI never sets it** - `ci.yml:730` is a
+    comment recording that it is unset, so the runner always reads the
+    checkout.
+  - **A refusal is not a pass and not a test.** `_where.require_shipped`
+    (`backend/_where.py:1835`, called by **326** `backend/test_*.py`) stops with
+    exit 1 when the live folder's copy of a module differs from the checkout -
+    which is exactly the normal state of a worktree mid-change. Read the
+    *"Not run"* line as NOT-TESTABLE and re-run with the variable cleared.
+
+  The rule is the same shape as the tree rule above: know which copy the
+  instrument read before believing its answer.
+
 ## How the Android apps get built
 
 **A local Android build DOES exist on the owner's PC**, and this section used

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
- "built_at": "2026-11-14T08:47:55-08:00",
+ "ref": "165e9afbf47f7795c97a635b0193f61da1cf34dd",
+ "built_at": "2026-11-14T09:03:23-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6484,9 +6484,9 @@
  ],
  "recent_commits": [
   {
-   "sha": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
+   "sha": "165e9afbf47f7795c97a635b0193f61da1cf34dd",
    "date": "2026-11-14",
-   "subject": "Say \"Open the Atlas bar\": the last label the visible rename missed"
+   "subject": "rules: on this PC a green backend run from a checkout is not a green CI run"
   },
   {
    "sha": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
