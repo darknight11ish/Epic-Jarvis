@@ -45,7 +45,7 @@
  *     layout is never read or written from here; the desktop store is only
  *     reachable through Tauri IPC, which this script never calls.
  *   * the launcher: in a browser there is no Windows quickbar to open, so the
- *     one "Open the Jarvis bar" control focuses the page's own chat input.
+ *     one "Open the Atlas bar" control focuses the page's own chat input.
  *   * web voice: the client-side `SpeechRecognition` path has been removed
  *     from the page (a client must not do speech-to-text). The mic here says
  *     so plainly; browser voice waits for the HTTPS/AudioWorklet slice.
@@ -856,7 +856,7 @@
   }
 
   /* ---------------------------------------------------------------- *
-   * 8. Launcher: the browser's "Open the Jarvis bar" focuses the chat box
+   * 8. Launcher: the browser's "Open the Atlas bar" focuses the chat box
    * ---------------------------------------------------------------- */
 
   function focusChatInput() {
@@ -878,9 +878,9 @@
     var pill = document.getElementById("rail-quickbar");
     if (!pill) return;
     var label = pill.querySelector(".qp-label");
-    if (label) label.textContent = "Open the Jarvis bar";
-    pill.title = "Open the Jarvis bar";
-    pill.setAttribute("aria-label", "Open the Jarvis bar");
+    if (label) label.textContent = "Open the Atlas bar";
+    pill.title = "Open the Atlas bar";
+    pill.setAttribute("aria-label", "Open the Atlas bar");
     var show = function () {
       try {
         // The P0.6 CSS hides this duplicate on the desktop; in a browser it is

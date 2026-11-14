@@ -10787,7 +10787,7 @@
     },
     {
       "id": "hud-open-bar-show",
-      "label": "Show the \"Open the Jarvis bar\" button",
+      "label": "Show the \"Open the Atlas bar\" button",
       "section": "hud-window",
       "owner": "desktop",
       "phone_key": null,

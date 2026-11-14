@@ -151,7 +151,7 @@ WORDS = {
     "esc_label": "Esc: end chat",
     "ended_saved": "Chat ended. Kept chats are in Brain > History.",
     "hud_opens_bar": "Chat with Jarvis in the Jarvis bar - it opens now.",
-    "hud_open_bar": "Open the Jarvis bar",
+    "hud_open_bar": "Open the Atlas bar",
     # -- other screens -------------------------------------------------------
     "game_temporary": ("This looks like a game or role-play, so it's an incognito chat: nothing "
                        "is kept or learned."),

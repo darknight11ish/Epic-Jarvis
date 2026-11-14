@@ -723,7 +723,7 @@ CATALOGUE = (
              "body": "The main chat box on the PC: type or talk, see the "
                      "answer, and reach History and the settings. The big HUD "
                      "window has its own box too, with its own conversation, and "
-                     "the \"Open the Jarvis bar\" button is still there beside it.",
+                     "the \"Open the Atlas bar\" button is still there beside it.",
              "where": "The Jarvis bar"},
             {"title": "Approval cards and the widget",
              "body": "A card appears over whatever you are doing, and the small "

@@ -205,7 +205,7 @@ await check("A: the refusal words are the PC's, in plain language", () => {
   const stale = "The connection to Jarvis is catching up, so Jarvis Live is held "
     + "until it does - try again in a moment.";
   assert.equal(words(stale), stale, "the PC's stale-link sentence was rewritten");
-  const locked = "Jarvis is locked (App lock). Open the Jarvis bar and unlock it "
+  const locked = "Jarvis is locked (App lock). Open the Atlas bar and unlock it "
     + "with Windows Hello, then start Jarvis Live.";
   assert.equal(words(locked), locked, "the PC's App-lock sentence was rewritten");
   // Never an empty box, and never a claim that Live started.

@@ -45,7 +45,7 @@
      there - so the desktop path is exactly as before. In a plain browser it
      pairs this device, runs the live stream over fetch(), keeps this
      browser's own HUD layout, and focuses the chat box from the one
-     "Open the Jarvis bar" control. Nothing here holds the pairing key on
+     "Open the Atlas bar" control. Nothing here holds the pairing key on
      disk: the PC's HttpOnly cookie is the session. -->
 <script src="hud-web-bridge.js"></script>
 <!-- three.js r128 (2026-10-27): the drawing library the Galaxy's eight 3D
@@ -2820,7 +2820,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
   }
 
   /* One open-the-bar control, not three. The shell injects the real
-     "Open the Jarvis bar" button beside the composer; the HUD's own footer
+     "Open the Atlas bar" button beside the composer; the HUD's own footer
      pill and Studio dock lightning duplicated it and read as two extra
      launching controls. They stay in the DOM for old tests/ids but are never
      drawn. */
@@ -3415,7 +3415,7 @@ html[data-hud-shell="split-stage"] .dock-label{
  *  NOTHING is removed for any shell: every id below is in the document in
  *  all six shells; they are CSS Grid/Flexbox, order and visibility only
  *  (the page's own tests query those ids). The shell-created controls the
- *  bootstrap injects - the "Open the Jarvis bar" button, the link line -
+ *  bootstrap injects - the "Open the Atlas bar" button, the link line -
  *  keep their ids and words in every shell too.
  * ==================================================================== -->
 <body data-hud-shell="three-column" data-hud-density="comfortable">

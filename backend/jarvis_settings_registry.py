@@ -562,7 +562,7 @@ SECTIONS: tuple = (
     Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
                                 "the menus", "menus")),
     # "The big HUD window" (the owner's request of 2026-10-06): the one switch
-    # that shows or hides the "Open the Jarvis bar" button in the big "Jarvis"
+    # that shows or hides the "Open the Atlas bar" button in the big "Jarvis"
     # window. Desktop only - the phone has no such row, so OpenPlace.kt lists it
     # PC-only. Cosmetic, so it is "open"-only here: the change itself is made by
     # the page (jarvis-desktop/src/hud-window.js, in this computer's
@@ -2127,7 +2127,7 @@ SETTINGS_ROWS: tuple = (
         "",
         "",
         "hud-open-bar-detail",
-        'Show the "Open the Jarvis bar" button',
+        'Show the "Open the Atlas bar" button',
         (
         "On: the button sits beside the big window's own chat box, and\n"
         'opens the Jarvis bar ready to type. Off: the button is not drawn\n'

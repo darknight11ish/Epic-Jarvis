@@ -116,7 +116,7 @@ pub(crate) const PICTURE_MISSING: &str = "This PC's Jarvis is missing this featu
      on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
 const STALE_HELD: &str = "Reconnecting to Jarvis. Looking at the screen waits until the \
      connection is back - try again in a moment.";
-pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Jarvis bar and \
+pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Atlas bar and \
      unlock it with Windows Hello, then ask Jarvis to look.";
 pub(crate) const NOT_THIS_PC: &str = "Jarvis only looks at the screen of the PC it runs on, and \
      this app is set to a Jarvis on another machine. Change the address in Settings, Connection, \

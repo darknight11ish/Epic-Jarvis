@@ -1021,7 +1021,7 @@ pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// The HUD's "Open the Jarvis bar" button: bring the Jarvis bar up with its
+/// The HUD's "Open the Atlas bar" button: bring the Jarvis bar up with its
 /// box ready to type in, beside the HUD's own chat box (the owner's decision
 /// of 2026-10-06, reversing the 2026-09-28 one-box rule). That window's own
 /// box chats as itself, filed in History as HUD; it deliberately has no

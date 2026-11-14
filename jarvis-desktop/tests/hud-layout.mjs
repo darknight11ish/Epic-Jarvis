@@ -403,8 +403,8 @@ await check("F8: every registry label with a page heading matches that heading",
       `${id} is missing from the registry (${why})`);
   }
   assert.equal(L.CARD_REGISTRY.find((entry) => entry.id === "bar_launcher").label,
-    "Open the Jarvis bar");
-  assert.ok(page.includes("Open the Jarvis bar"), "the bar button's word is gone");
+    "Open the Atlas bar");
+  assert.ok(page.includes("Open the Atlas bar"), "the bar button's word is gone");
 });
 
 await check("FT-1/L1: Focus presets start OPEN in Cockpit and Studio (owner collapse is remembered)", () => {

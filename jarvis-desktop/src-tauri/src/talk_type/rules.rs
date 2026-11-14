@@ -59,7 +59,7 @@ pub(crate) const NOT_ON_THIS_PC: &str =
      apply-patches.ps1, then try again.";
 pub(crate) const STALE: &str =
     "The connection to Jarvis is catching up, so nothing was typed. Try again in a moment.";
-pub(crate) const LOCKED: &str = "Jarvis is locked, so it did not listen. Open the Jarvis bar \
+pub(crate) const LOCKED: &str = "Jarvis is locked, so it did not listen. Open the Atlas bar \
      and unlock it with Windows Hello, then try again.";
 pub(crate) const NOT_THIS_PC: &str = "Talk-to-type works only when Jarvis runs on this PC, so \
      your voice never leaves it. Settings, Connection points Jarvis somewhere else.";
