@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
- "built_at": "2026-11-13T20:23:51-08:00",
+ "ref": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
+ "built_at": "2026-11-13T22:14:30-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4612,6 +4612,7 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
+    "changelog.d/2026-11-13-chat-history-storage-answer.md",
     "changelog.d/2026-11-13-forget-range-card-shows-the-count.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
@@ -4778,6 +4779,7 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
+    "decisions.d/2026-11-13-chat-history-storage-answer.md",
     "decisions.d/2026-11-13-forget-range-card-shows-the-count.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
@@ -5232,7 +5234,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 868,
+   "file_count": 870,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6319,6 +6321,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
+  },
+  {
+   "sha": "2933d248754cd5131821ba87b93d67af35ddfac3",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
    "sha": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
@@ -6407,16 +6419,6 @@
    "sha": "0b19b405293e772b57ca06255e8f2699019e1e9c",
    "date": "2026-11-13",
    "subject": "Merge pull request #1239 from darknight11ish/fix/merge-plan-limited-rules-2026-11-13"
-  },
-  {
-   "sha": "bcb6715287d4094e581315a89a6d90da28b82068",
-   "date": "2026-11-13",
-   "subject": "chore(self-code): regenerate the map and the recent-changes bullets after the merge"
-  },
-  {
-   "sha": "61b44d6181e23a49442d023f98a3ce84edc365d5",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/merge-plan-limited-rules-2026-11-13"
   }
  ],
  "top_level": [
@@ -6453,7 +6455,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 249
+   "files": 250
   },
   {
    "path": "videos/",
@@ -6463,7 +6465,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 166
+   "files": 167
   },
   {
    "path": "plugins/",
@@ -6537,8 +6539,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5665,
-  "covered": 5182,
+  "tracked_files": 5667,
+  "covered": 5184,
   "excluded": 483,
   "subsystems": 27
  },

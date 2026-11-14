@@ -33,15 +33,29 @@ holds the fixed answers that replaced the model's guesses:
    answer is read from the same table the model digest uses.
 8. Q3: a two-part capability question returns EVERY row it really names, in
    the owner's order, up to three - newline-joined, never just the first.
+9. WHERE THE CHATS ARE KEPT (2026-11-13): "where are my chats stored?", "are my
+   chats saved?", "do you keep a record of this?", "where are the chat backups
+   stored?", "is my history encrypted?" and "what happens to my voice
+   transcripts?" reach `chat_history_storage`, answered from
+   `jarvis_chat_log`'s own settings and its own file - on by default,
+   encrypted, where it lives, voice included, and the switch that turns it off
+   named as each app draws it. When the switch is off, or the record cannot be
+   read, the answer says THAT rather than the default sentence; an unrelated
+   question is not captured; and the false answer the live backend gave the
+   owner - "Chat backups aren't stored anywhere ... until you close it or clear
+   them" - never comes back in any state.
 
 Everything here is read-only: the setters are replaced with raising stubs
 where a change path is exercised, so no card can be raised and no file can be
-written by this suite.
+written by this suite. That includes the chat-storage checks: their history is
+a scratch ChatLog in a temporary folder and its key provider is never called.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -256,6 +270,216 @@ def test_two_part_capability_question_joins_every_row():
     assert "chat" in words.lower() and "email" in words.lower(), words[:300]
 
 
+# ---------------------------------------------------------------------------
+# WHERE THE CHATS ARE KEPT (2026-11-13, the owner's own question)
+# ---------------------------------------------------------------------------
+# Asked "where are the chat backups stored?", the live backend answered that
+# they "aren't stored anywhere ... conversations live only in the app's memory
+# until you close it or clear them" - false, and false in the worst direction:
+# chat history, voice included, has been kept on this PC, encrypted, since the
+# owner's decision of 2026-09-24 (jarvis_chat_log.py's own header).
+#
+# The architect's ruling (Gemini, 2026-11-13 22:30 PT, section 5.6) is that a
+# self-fact about storage, history, privacy or settings is answered
+# deterministically from the code, or refused - never composed by the model.
+# Every check below FAILS if the rule is deleted: the shape then matches nothing
+# (and reaches the model, whose answer was the false one) or answers with
+# another intent.
+
+STORAGE_ASKED = (
+    "where are my chats stored?",
+    "are my chats saved?",
+    "do you keep a record of this?",
+    "where are the chat backups stored?",
+    "is my history encrypted?",
+    "what happens to my voice transcripts?",
+)
+
+#: The exact false answer the live backend gave the owner on 2026-11-13. Not
+#: one phrase of it may come back, in any state.
+THE_OLD_LIE = (
+    "aren't stored anywhere",
+    "are not stored anywhere",
+    "not stored anywhere",
+    "only in the app's memory",
+    "in the app's memory",
+    "until you close it",
+    "clear them",
+    "throwaway",
+)
+
+
+def _storage_log(state="on", db="present"):
+    """A scratch ChatLog, plus its folder. `state`: on / off / damaged.
+
+    `db` is present or missing. No key is ever needed: the answer reads
+    `settings()` and whether the file can be OPENED, never the cipher, so the
+    provider below is never called - which is also the proof that answering
+    this question writes nothing (a key would be minted only by the cipher).
+    """
+    import jarvis_chat_log as C
+    d = Path(tempfile.mkdtemp(prefix="jarvis-chat-storage-"))
+    settings = d / "chat-history.json"
+    if state == "off":
+        settings.write_text(json.dumps({"enabled": False, "keep_days": 0}), encoding="utf-8")
+    elif state == "damaged":
+        settings.write_text("{ this is not json", encoding="utf-8")
+    db_path = d / "chat-history.db"
+    if db == "present":
+        db_path.write_bytes(b"SQLite format 3\x00")
+    return d, C.ChatLog(db_path, settings, lambda: b"\x00" * 32)
+
+
+def test_chat_storage_questions_are_deterministic():
+    Q = _quick()
+    import jarvis_chat_log as C
+    old = C._DEFAULT
+    _, log = _storage_log()
+    try:
+        C.use(log)
+        for ask in STORAGE_ASKED:
+            got = Q.match(ask)
+            assert got is not None and got.name == "chat_history_storage", (ask, got)
+            out = Q.answer(ask)
+            assert out is not None, f"{ask} reached the model"
+            assert out.intent == "chat_history_storage", (ask, out.intent)
+            assert out.made == [], (ask, "a job was made: " + repr(out.made))
+            assert out.open_settings is None, (ask, out.open_settings)
+    finally:
+        C.use(old)
+
+
+def test_chat_storage_answer_states_the_true_facts():
+    Q = _quick()
+    import jarvis_chat_log as C
+    old = C._DEFAULT
+    _, log = _storage_log()
+    try:
+        C.use(log)
+        words = str(Q.answer("where are my chats stored?").reply)
+    finally:
+        C.use(old)
+    low = words.lower()
+    for need in ("on by default", "encrypted", "aes-256-gcm", "credential manager",
+                 "chat-history.db", ".openjarvis", "voice",
+                 "chat history on this pc", "keep chat history on this pc",
+                 "turn it off", "approval card"):
+        assert need in low, (need, words[:400])
+    for lie in THE_OLD_LIE:
+        assert lie not in low, ("the old false answer came back", lie, words[:400])
+    assert "chat_history_storage" not in words, "a raw intent name leaked: " + words[:200]
+
+
+def test_chat_storage_says_off_when_the_switch_is_off():
+    Q = _quick()
+    import jarvis_chat_log as C
+    old = C._DEFAULT
+    _, log = _storage_log(state="off")
+    try:
+        C.use(log)
+        words = str(Q.answer("are my chats saved?").reply)
+        raw = str(Q.answer("where are my chats stored?").reply)
+    finally:
+        C.use(old)
+    for said in (words, raw):
+        low = said.lower()
+        assert "off right now" in low, said[:300]
+        assert "on by default" not in low, said[:300]
+        assert "nothing new is kept" in low, said[:300]
+        # where it lives and that it is encrypted are still true when off
+        assert "chat-history.db" in low and "encrypted" in low, said[:300]
+        assert "turning it on raises one approval card" in low, said[:300]
+        for lie in THE_OLD_LIE:
+            assert lie not in low, (lie, said[:300])
+
+
+def test_chat_storage_never_claims_what_it_cannot_read():
+    Q = _quick()
+    import jarvis_chat_log as C
+    old = C._DEFAULT
+    # (a) a settings file that cannot be read: nothing is being kept, and the
+    # answer says that instead of the default sentence.
+    d, log = _storage_log(state="damaged")
+    try:
+        C.use(log)
+        words = str(Q.answer("where are my chats stored?").reply)
+    finally:
+        C.use(old)
+    low = words.lower()
+    assert "cannot keep anything right now" in low, words[:300]
+    assert "on by default" not in low, words[:300]
+    for lie in THE_OLD_LIE:
+        assert lie not in low, (lie, words[:300])
+    # ... and the settings file's own path, which carries the owner's Windows
+    # account name, is not repeated into a reply that also reaches the phone.
+    assert str(d).lower() not in low, ("the settings path leaked", words[:400])
+
+    # (b) the module cannot be read at all: refuse, and claim nothing.
+    _, log2 = _storage_log()
+    real = C._log
+    try:
+        C.use(log2)
+        C._log = lambda: (_ for _ in ()).throw(RuntimeError("unreadable"))
+        said = Q.answer("where are my chats stored?")
+    finally:
+        C._log = real
+        C.use(old)
+    assert said is not None, "the question reached the model"
+    low = str(said.reply).lower()
+    assert "won't guess" in low, said.reply[:300]
+    for claim in ("on by default", "encrypted", "chat-history.db", ".openjarvis"):
+        assert claim not in low, ("claimed what it could not read", claim, said.reply[:300])
+
+
+def test_chat_storage_is_not_a_general_q_and_a():
+    Q = _quick()
+    for ask in ("save this chat to a file",
+                "save my chat as a note",
+                "where are my notes stored",
+                "where are my photos kept",
+                "where are my reminders stored",
+                "delete my chat history",
+                "clear my chat history",
+                "where is my history",
+                "do you keep a record of my passwords"):
+        got = Q.match(ask)
+        assert got is None or got.name != "chat_history_storage", (ask, got)
+    # The families that already owned their shapes still own them.
+    kept = Q.match("how long do you keep my chat history, and can I change that by asking?")
+    assert kept is not None and kept.name == "self_knowledge", kept
+    for ask in ("do you keep chat history?", "do you have chat history?",
+                "is my chat history on?"):
+        kept = Q.match(ask)
+        assert kept is not None and kept.name == "self_knowledge", (ask, kept)
+    # ... and so do the clearing / size / expiry shapes history_purge answers.
+    purge = Q.match("how big is my chat history")
+    assert purge is not None and purge.name == "history_purge", purge
+    # The rule this test is the fence around must still BE there: a suite that
+    # only proved "nothing is captured" would pass with the whole rule deleted.
+    assert Q.match("where are the chat backups stored?").name == "chat_history_storage"
+
+
+def test_chat_storage_writes_nothing_and_raises_no_card():
+    Q = _quick()
+    import jarvis_chat_log as C
+    old = C._DEFAULT
+    _, log = _storage_log()
+    called = []
+    real_set = log.set_enabled
+    real_req = C.request_settings
+    try:
+        C.use(log)
+        log.set_enabled = lambda *a, **k: called.append("set_enabled")
+        C.request_settings = lambda *a, **k: called.append("request_settings")
+        said = Q.answer("where are the chat backups stored?")
+    finally:
+        log.set_enabled = real_set
+        C.request_settings = real_req
+        C.use(old)
+    assert called == [], ("a write path was taken", called)
+    assert said is not None and said.made == [], said
+
+
 def main():
     checks = [
         ("approval policy is deterministic", test_approval_policy_is_deterministic),
@@ -267,6 +491,12 @@ def main():
         ("off-list places answer", test_off_list_places_answer_the_real_place),
         ("heritage both halves", test_heritage_both_halves_and_named_borrows),
         ("two-part capability joins rows", test_two_part_capability_question_joins_every_row),
+        ("chat storage questions are deterministic", test_chat_storage_questions_are_deterministic),
+        ("chat storage answer states the true facts", test_chat_storage_answer_states_the_true_facts),
+        ("chat storage says off when the switch is off", test_chat_storage_says_off_when_the_switch_is_off),
+        ("chat storage claims only what it can read", test_chat_storage_never_claims_what_it_cannot_read),
+        ("chat storage is not a general Q and A", test_chat_storage_is_not_a_general_q_and_a),
+        ("chat storage writes nothing and raises no card", test_chat_storage_writes_nothing_and_raises_no_card),
     ]
     for name, fn in checks:
         check(name, fn)
