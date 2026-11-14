@@ -2265,7 +2265,7 @@ neither app says it would.
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted (the deletion runs before the window is saved, and a failure there answers 500 with what really happened - see §18.3). Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
-| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item, the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
+| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, carrying the COUNT of facts and chats and the date range (every title and date stays on the checked list `/preview` returned), the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `400` a card that would still be cut by the gate's 4,000-character detail limit: it is refused before it is raised, in one plain sentence, so nothing is shown that the HUD could not approve (the owner's ruling of 2026-11-13). `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
 | `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis - `pinned_kept`'s titles with them, `redact()` in `brain/forget_range.rs`) | `JarvisRuntime.forgetRangeRead` (the same words out while hidden: `ForgetRange.redact`) | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
 | `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | `forget_range_write("confirm")`: the held id and a literal `true`, refused while the list is hidden, held on a stale link | `JarvisRuntime.forgetRangeWrite("confirm")`, the same body and the same holds | `forget-range.patch` - **§64**. **ported.** The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Both apps show the PC's `confirm.text` and the minutes left, send nothing but the id and `true`, say every `400`/`409` in the PC's own words, and keep the 10-minute Undo the `200` starts. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the second yes: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
@@ -4939,8 +4939,9 @@ of 2026-09-28: **"Forget a time frame" (§64)** forgets the facts and deletes
 the chats from some days together. It is made safe by three things this
 route does not need: the apps first SHOW every fact and chat, each ticked,
 and the owner unticks any to keep; ONE approval card (action
-`memory_forget_range`, tier `ask`) lists every item in full and is decided
-by a tap, never by voice; and for 10 minutes afterwards one tap on Undo puts
+`memory_forget_range`, tier `ask`) carries the count and the days - the full
+list stays on that screen, one click away - and is decided by a tap, never by
+voice; and for 10 minutes afterwards one tap on Undo puts
 everything back. Nothing else deletes in bulk.
 
 `POST /api/history/pin {"id": "<conversation id>", "pinned": true|false}`
@@ -15199,7 +15200,9 @@ ask, by voice or typing, to forget what Jarvis learned or said in a time
 frame - "forget what you learned last week", "delete my chats from 1 to 15
 September". Nothing is removed at once: both apps show the exact facts and
 chats from that time, each ticked; the owner can untick any; ONE approval
-card listing every item is decided by tapping only - never by voice, and
+card carrying the count of facts and chats and the days (every title and
+date stays on the screen that was ticked) is decided by tapping only - never
+by voice, and
 since 2026-11-04 it is the FIRST of two yesses. After the second yes the
 facts are **forgotten** (retired, exactly as Forget does - never erased)
 and the chats **deleted**, with **10 minutes to Undo**.
@@ -15381,16 +15384,41 @@ the owner's yes. What asks first cannot loosen it (`HARD_LIMITS`,
 the 10 minutes the chats are gone for good) - so approving it is a risky
 approval: Windows Hello on the PC, the screen lock on the phone. Title:
 "Jarvis wants to forget what it learned and delete chats from the days you
-chose". Its text lists EVERY fact word for word and every chat's title,
-with their dates and the "whole chat is deleted" note, the pinned chats
-kept ("3 pinned chats are kept. Pinning a chat keeps it out of this list and
-away from this Forget."), the measured estimate, and the two yesses: "This
+chose".
+
+**The card carries the COUNT, the checked list carries every item** - the
+owner's ruling of 2026-11-13, verbatim "Show the count, allow it". Its text
+says "3 facts and 125 chats from 2 to 8 November 2026" (word for word the
+sentence `preview()` returns as `said`), then, while they fit, each fact's
+own words with its saved date, the pinned chats kept ("3 pinned chats are
+kept. Pinning a chat keeps it out of this list and away from this Forget."),
+the measured estimate, and where the full list is:
+"The full list, every title and date, is on the Forget a time frame screen,
+where you ticked them." A big selection replaces the chats' titles with that
+count line, and then the facts too if it must, so that the card always fits;
+the facts' words are kept wherever they can be. Then the two yesses: "This
 card is the first yes: nothing is removed when you approve it. You are
 asked to say yes a second time (\"Yes, forget them\"), and only then does it
 happen." Then: "For 10 minutes after the second yes, one tap on Undo puts
 everything back ... Nothing is removed unless you approve this card AND say
 yes again. Saying yes out loud does not approve it." A "no" is never turned
 into a proposed memory (`_NO_RULE_FROM_DENIAL`).
+
+**Why, and the refusal.** `jarvis_gate` keeps a card's `detail` as
+`json.dumps(detail)[:4000]`, and the HUD disables Approve for a detail that
+long that no longer parses ("This request was cut off before it reached this
+card"). A card that listed every chat broke both: measured 2026-11-13, 18
+chats = 3,176 characters, 25 = 3,918 (the largest that fitted), 30 = 4,448,
+and the owner's own 125 = 14,546 - his card sat at exactly 4,000 characters
+of invalid JSON and expired un-approvable. Before, the route raised its card
+straight through `jarvis_gate.check` and never ran the check written for
+exactly this case; now a card that would STILL be cut is refused **before**
+it is raised: `400` and "That is too much to put on one approval card, so
+nothing was asked and nothing was removed. Try again, or choose a shorter
+time frame." The rule is `jarvis_agent._card_would_be_cut`, imported from
+the module that owns it - the same check the model tool path makes - never a
+copy. The gate's 4,000 limit and the HUD's cut-off rule are unchanged: they
+stay the last line of defence.
 
 ### 64.4 The first yes, the second yes, and Undo
 

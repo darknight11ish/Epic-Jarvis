@@ -5,7 +5,10 @@
  *
  * The owner picks some days; the PC lists what Jarvis learned and the chats
  * from then, each ticked; the owner unticks any to keep and presses "Forget
- * these"; the PC raises ONE approval card listing every item, decided by a
+ * these"; the PC raises ONE approval card carrying the COUNT and the days
+ * ("3 facts and 125 chats from 2 to 8 November 2026") - this list, with every
+ * title and date, is where the detail stays, and the owner's ruling of
+ * 2026-11-13 ("Show the count, allow it") is why - decided by a
  * tap - never by voice. Approved: the facts are forgotten (as Forget does)
  * and the chats deleted, with 10 minutes to Undo.
  *

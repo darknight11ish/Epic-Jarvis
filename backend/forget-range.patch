@@ -8,14 +8,16 @@
      "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
 +    "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
  })
-@@ -725,6 +726,16 @@
+@@ -725,6 +726,18 @@
      # on the phone). It was already treated as risky before this line, as
      # an action the gate had not classified; this line gives it its words.
      "chatbot_session": ("no", "outbound", "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back"),
 +    # forget-range.patch (jarvis_forget_range.py, the owner's decision of
-+    # 2026-09-28, "Forget a time frame"). ONE card listing every fact and
-+    # every chat from the days the owner chose, each one they left ticked:
-+    # the facts are forgotten (retired, as Forget does) and the chats
++    # 2026-09-28, "Forget a time frame"). ONE card carrying the COUNT of
++    # facts and chats from the days the owner chose, each they left ticked -
++    # every title and date stays on the checked list the owner ticked from
++    # (the owner's ruling, 2026-11-13: "Show the count, allow it"): the
++    # facts are forgotten (retired, as Forget does) and the chats
 +    # deleted from this PC. Nothing is sent anywhere, so "local". Undo puts
 +    # everything back for 10 minutes; after that the chats are gone for
 +    # good, so "no": a risky approval (Windows Hello on the PC, a screen
@@ -27,7 +29,7 @@
  _UNKNOWN_RISK = ("no", "outbound",
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3308,6 +3308,21 @@
+@@ -3308,6 +3308,22 @@
      except Exception as exc:
          print(f"  live       NOT ON ({type(exc).__name__}) - Jarvis Live is off")
          print("             until jarvis_live.py is back: run apply-patches.ps1 again")
@@ -35,8 +37,9 @@
 +    # 2026-09-28; JARVIS-API section 64): GET /api/memory/forget_range and
 +    # /preview (what Jarvis learned and the chats from some days, as a list
 +    # the owner unticks), POST /api/memory/forget_range (ONE approval card,
-+    # memory_forget_range, listing every item - nothing changes before a
-+    # person approves it) and /undo (one tap, no card, for 10 minutes).
++    # memory_forget_range, carrying their count and the days - nothing
++    # changes before a person approves it) and /undo (one tap, no card, for
++    # 10 minutes).
 +    # Wrapped round Handler here, before anything listens, like live above;
 +    # every rule is in jarvis_forget_range.py.
 +    try:
