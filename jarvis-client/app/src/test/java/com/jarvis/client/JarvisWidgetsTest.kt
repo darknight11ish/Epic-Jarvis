@@ -1,5 +1,7 @@
 package com.jarvis.client
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import com.jarvis.client.data.TileAction
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.JarvisWidgets
@@ -44,6 +46,9 @@ class JarvisWidgetsTest {
         mapOf(
             "name" to v.name,
             "layout" to v.layout,
+            "accent" to v.accent,
+            "shade" to v.shade,
+            "contrast" to v.contrast,
             "blocks" to v.blocks.map { blockJson(it) },
         )
     }
@@ -136,6 +141,252 @@ class JarvisWidgetsTest {
             JarvisWidgets.PRIVATE_SOURCES.sorted(),
         )
         assertEquals(root["hidden_words"]!!.jsonPrimitive.content, JarvisWidgets.HIDDEN_WORDS)
+    }
+
+    /**
+     * The look (2026-11-14): the three closed lists exist on the PC, the
+     * desktop and here, and this holds the phone's copy to the shared fixture
+     * field for field - every accent's hex, every shade's TWO alphas, every
+     * contrast's four colours, and what "absent" means.
+     */
+    @Test
+    fun `the look lists are the PC's, id for id`() {
+        assertEquals(
+            root["accents"]!!.jsonArray.map {
+                val o = it.jsonObject
+                JarvisWidgets.Accent(
+                    id = o["id"]!!.jsonPrimitive.content,
+                    label = o["label"]!!.jsonPrimitive.content,
+                    color = o["color"]!!.jsonPrimitive.content,
+                )
+            },
+            JarvisWidgets.ACCENTS,
+        )
+        assertEquals(
+            root["shades"]!!.jsonArray.map {
+                val o = it.jsonObject
+                JarvisWidgets.Shade(
+                    id = o["id"]!!.jsonPrimitive.content,
+                    label = o["label"]!!.jsonPrimitive.content,
+                    alpha = o["alpha"]!!.jsonPrimitive.int,
+                    surfaceAlpha = o["surface_alpha"]!!.jsonPrimitive.int,
+                )
+            },
+            JarvisWidgets.SHADES,
+        )
+        assertEquals(
+            root["contrasts"]!!.jsonArray.map {
+                val o = it.jsonObject
+                val c = o["colors"]!!.jsonObject
+                JarvisWidgets.Contrast(
+                    id = o["id"]!!.jsonPrimitive.content,
+                    label = o["label"]!!.jsonPrimitive.content,
+                    bg = c["bg"]!!.jsonPrimitive.content,
+                    surface = c["surface"]!!.jsonPrimitive.content,
+                    textHi = c["text_hi"]!!.jsonPrimitive.content,
+                    textMuted = c["text_muted"]!!.jsonPrimitive.content,
+                )
+            },
+            JarvisWidgets.CONTRASTS,
+        )
+        val d = root["look_default"]!!.jsonObject
+        assertEquals(
+            JarvisWidgets.Look(
+                accent = d["accent"]!!.jsonPrimitive.content,
+                shade = d["shade"]!!.jsonPrimitive.content,
+                contrast = d["contrast"]!!.jsonPrimitive.content,
+            ),
+            JarvisWidgets.LOOK_DEFAULT,
+        )
+        assertEquals("eight accents, as the PC has", 8, JarvisWidgets.ACCENTS.size)
+        assertEquals("no two accents share an id", 8, JarvisWidgets.ACCENTS.map { it.id }.distinct().size)
+        assertEquals("three shades", 3, JarvisWidgets.SHADES.size)
+        assertEquals("two contrasts", 2, JarvisWidgets.CONTRASTS.size)
+        // The solid look is opaque by definition; anything else would make a
+        // widget see-through that the owner chose as solid.
+        assertEquals(255, JarvisWidgets.SHADES.first { it.id == "solid" }.alpha)
+        assertEquals(255, JarvisWidgets.SHADES.first { it.id == "solid" }.surfaceAlpha)
+    }
+
+    /**
+     * The read side FALLS BACK (the write side refuses): an absent key, a
+     * value off the list, or a word from a newer PC draws that list's default
+     * - and only that one key moves, so one strange word cannot lose the other
+     * two. `newer_pc_look` and `half_right_look` in the fixture are exactly
+     * this, and the one-key-at-a-time cases below prove the keys are
+     * independent rather than all-or-nothing.
+     */
+    @Test
+    fun `a look is read whole, defaults when absent, and falls back one key at a time`() {
+        // Whole: the fixture's looked widget keeps violet / clear / high.
+        val looked = JarvisWidgets.viewOf(cases["looked_widget"]!!.jsonObject["answer"]!!.jsonObject)!!
+        assertEquals(JarvisWidgets.Look("violet", "clear", "high"), looked.look)
+        // Through hide() too: hiding words is about words, never colour.
+        assertEquals(looked.look, JarvisWidgets.hide(looked).look)
+        // Absent: every widget saved before 2026-11-14.
+        val old = JarvisWidgets.viewOf(cases["morning"]!!.jsonObject["answer"]!!.jsonObject)!!
+        assertEquals(JarvisWidgets.LOOK_DEFAULT, old.look)
+        // A newer PC's words, all three off the list at once.
+        val newer = JarvisWidgets.viewOf(cases["newer_pc_look"]!!.jsonObject["answer"]!!.jsonObject)!!
+        assertEquals(JarvisWidgets.LOOK_DEFAULT, newer.look)
+        // One off the list, the other two kept.
+        val half = JarvisWidgets.viewOf(cases["half_right_look"]!!.jsonObject["answer"]!!.jsonObject)!!
+        assertEquals(JarvisWidgets.Look("amber", "solid", "high"), half.look)
+
+        fun answer(accent: String? = null, shade: String? = null, contrast: String? = null): JsonObject {
+            val keys = listOfNotNull(
+                accent?.let { "\"accent\": \"$it\"" },
+                shade?.let { "\"shade\": \"$it\"" },
+                contrast?.let { "\"contrast\": \"$it\"" },
+            ).joinToString(", ")
+            val extra = if (keys.isEmpty()) "" else "$keys,"
+            return JarvisJson.parseToJsonElement(
+                """{"ok": true, "name": "x", "layout": "stack", $extra
+                   "blocks": [{"type": "title", "text": "A"}]}""",
+            ).jsonObject
+        }
+        // ONLY the accent is a word this app does not know.
+        assertEquals(
+            JarvisWidgets.Look("cyan", "half", "high"),
+            JarvisWidgets.viewOf(answer(accent = "chartreuse", shade = "half", contrast = "high"))!!.look,
+        )
+        // ONLY the shade.
+        assertEquals(
+            JarvisWidgets.Look("amber", "solid", "high"),
+            JarvisWidgets.viewOf(answer(accent = "amber", shade = "frosted", contrast = "high"))!!.look,
+        )
+        // ONLY the contrast.
+        assertEquals(
+            JarvisWidgets.Look("amber", "half", "normal"),
+            JarvisWidgets.viewOf(answer(accent = "amber", shade = "half", contrast = "ultra"))!!.look,
+        )
+        // Nothing at all, and each one on its own.
+        assertEquals(JarvisWidgets.LOOK_DEFAULT, JarvisWidgets.viewOf(answer())!!.look)
+        assertEquals(JarvisWidgets.Look("amber", "solid", "normal"), JarvisWidgets.viewOf(answer(accent = "amber"))!!.look)
+        assertEquals(JarvisWidgets.Look("cyan", "half", "normal"), JarvisWidgets.viewOf(answer(shade = "half"))!!.look)
+        assertEquals(JarvisWidgets.Look("cyan", "solid", "high"), JarvisWidgets.viewOf(answer(contrast = "high"))!!.look)
+        // A non-string is not a value either.
+        assertEquals(
+            JarvisWidgets.LOOK_DEFAULT,
+            JarvisWidgets.lookOf(JarvisJson.parseToJsonElement("""{"accent": 7}""").jsonObject),
+        )
+    }
+
+    /**
+     * Rule 3: the shade moves the card and the panel, never the words. The
+     * shade's alphas are in the top byte of the drawn ARGB int (which is what
+     * `GlanceModifier.background` hands to `RemoteViews.setBackgroundColor`),
+     * and the text colours have no alpha but FF.
+     */
+    @Test
+    fun `the shade is the alpha in the drawn colour, and text never gets one`() {
+        val normal = JarvisWidgets.contrastOf("normal")
+        val clear = JarvisWidgets.shadeOf("clear")
+        val half = JarvisWidgets.shadeOf("half")
+        // 128 = 0x80, 102 = 0x66, 191 = 0xBF, 159 = 0x9F.
+        assertEquals(0x8004070C.toInt(), JarvisWidgets.argb(normal.bg, clear.alpha))
+        assertEquals(0x660E1822.toInt(), JarvisWidgets.argb(normal.surface, clear.surfaceAlpha))
+        assertEquals(0xBF04070C.toInt(), JarvisWidgets.argb(normal.bg, half.alpha))
+        assertEquals(0x9F0E1822.toInt(), JarvisWidgets.argb(normal.surface, half.surfaceAlpha))
+        // The solid look is exactly today's colours.
+        assertEquals(0xFF04070C.toInt(), JarvisWidgets.argb(normal.bg, JarvisWidgets.shadeOf("solid").alpha))
+        // Text has no shade passed to it anywhere.
+        assertEquals(0xFFE6EEF7.toInt(), JarvisWidgets.argb(normal.textHi))
+        assertEquals(0xFF93A6BA.toInt(), JarvisWidgets.argb(normal.textMuted))
+        for (contrast in JarvisWidgets.CONTRASTS) {
+            for (text in listOf(contrast.textHi, contrast.textMuted)) {
+                assertEquals("$text must be opaque", 0xFF, (JarvisWidgets.argb(text) ushr 24) and 0xFF)
+            }
+        }
+        // Each accent is drawn as its own hex, opaque.
+        for (accent in JarvisWidgets.ACCENTS) {
+            assertEquals(accent.id, 0xFF, (JarvisWidgets.argb(accent.color) ushr 24) and 0xFF)
+        }
+        // Compose's own Color round-trip keeps that alpha. This is the exact
+        // value Glance's background modifier converts with Color.toArgb and
+        // hands to RemoteViews.setBackgroundColor (see BoardPalette's comment),
+        // so a see-through card is not silently drawn opaque here.
+        for (shade in JarvisWidgets.SHADES) {
+            val drawn = Color(JarvisWidgets.argb(normal.bg, shade.alpha))
+            assertEquals(
+                "${shade.id}: the drawn colour keeps the shade's alpha",
+                JarvisWidgets.argb(normal.bg, shade.alpha),
+                drawn.toArgb(),
+            )
+        }
+        assertEquals(
+            "the surface keeps its own alpha",
+            0x660E1822.toInt(),
+            Color(JarvisWidgets.argb(normal.surface, clear.surfaceAlpha)).toArgb(),
+        )
+        // And text is fully opaque in the drawn colour too.
+        assertEquals(0xFFE6EEF7.toInt(), Color(JarvisWidgets.argb(normal.textHi)).toArgb())
+    }
+
+    /**
+     * The Add body (2026-11-14): the preview plus the look the pickers show.
+     * All three keys are always there - the PC refuses an off-list value with
+     * 400, so the app has to send only values on its own lists.
+     */
+    @Test
+    fun `the Add body always carries the preview's look`() {
+        val body = JarvisJson.parseToJsonElement(
+            JarvisWidgets.addBody("dabcdef0123", JarvisWidgets.Look("amber", "clear", "high")),
+        ).jsonObject
+        assertEquals("dabcdef0123", body["draft"]!!.jsonPrimitive.content)
+        assertEquals("amber", body["accent"]!!.jsonPrimitive.content)
+        assertEquals("clear", body["shade"]!!.jsonPrimitive.content)
+        assertEquals("high", body["contrast"]!!.jsonPrimitive.content)
+        assertEquals("exactly the four keys", 4, body.size)
+
+        // A look this app somehow put together off the lists can never leave.
+        val safe = JarvisJson.parseToJsonElement(
+            JarvisWidgets.addBody("dabcdef0123", JarvisWidgets.Look("chartreuse", "frosted", "ultra")),
+        ).jsonObject
+        assertEquals("cyan", safe["accent"]!!.jsonPrimitive.content)
+        assertEquals("solid", safe["shade"]!!.jsonPrimitive.content)
+        assertEquals("normal", safe["contrast"]!!.jsonPrimitive.content)
+
+        // The default look is sent in full too, not omitted as "the draft
+        // probably has it".
+        val plain = JarvisJson.parseToJsonElement(
+            JarvisWidgets.addBody("dabcdef0123", JarvisWidgets.LOOK_DEFAULT),
+        ).jsonObject
+        assertEquals(setOf("draft", "accent", "shade", "contrast"), plain.keys)
+    }
+
+    /**
+     * The live preview must draw what the home-screen widget draws. It may not
+     * grow its own arrangement: it asks [JarvisWidgets.boardOf], the ONE rule
+     * the widget and the desktop share. Pinned by source text, the way this
+     * suite already pins the manifest (everySlotHasAReceiver).
+     */
+    @Test
+    fun `the preview arranges with the widget's own rule`() {
+        val preview = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetPreview.kt",
+        ).readText()
+        assertTrue(
+            "the preview must arrange through JarvisWidgets.boardOf, not an arrangement of its own",
+            preview.contains("JarvisWidgets.boardOf(view)"),
+        )
+        assertTrue(
+            "the preview must draw the look's colours through the shared parser",
+            preview.contains("JarvisWidgets.argb("),
+        )
+        assertTrue(
+            "the preview must read the shade's two alphas",
+            preview.contains("shade.alpha") && preview.contains("shade.surfaceAlpha"),
+        )
+        val plate = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/WidgetsPlate.kt",
+        ).readText()
+        assertTrue("the draft must draw the preview", plate.contains("WidgetPreview("))
+        assertTrue("the draft must offer the look pickers", plate.contains("LookPickers("))
+        assertTrue(
+            "Add must send the look it is showing",
+            plate.contains("JarvisRuntime.widgetAdd(d.id, look)"),
+        )
     }
 
     @Test
@@ -298,6 +549,13 @@ class JarvisWidgetsTest {
         assertFalse(JarvisWidgets.validId("d0123456789"))
         assertFalse(JarvisWidgets.validId("../../x"))
         assertTrue(JarvisWidgets.validDraft("dabcdef0123"))
+        // show reads a saved widget AND, since 2026-11-14, a preview - which
+        // is how the phone's preview draws real values; nothing else may pass.
+        assertTrue(JarvisWidgets.showableId("w0123456789"))
+        assertTrue(JarvisWidgets.showableId("dabcdef0123"))
+        assertFalse(JarvisWidgets.showableId("0123456789"))
+        assertFalse(JarvisWidgets.showableId("../../x"))
+        assertFalse(JarvisWidgets.showableId(null))
         val body = JarvisJson.parseToJsonElement(JarvisWidgets.draftBody("  my   next reminders ")!!).jsonObject
         assertEquals("my next reminders", body["words"]!!.jsonPrimitive.content)
         assertEquals("typed", body["provenance"]!!.jsonPrimitive.content)

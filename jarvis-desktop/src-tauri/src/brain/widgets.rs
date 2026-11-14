@@ -17,9 +17,12 @@
 //!   says whether the words were pasted into the box; pasted words are sent
 //!   as `"pasted"`, which the PC refuses (only the owner's own typed or
 //!   spoken words make a widget). Not held on a stale link: it adds nothing.
-//! * [`brain_widgets_add`] - `POST /api/widgets/add {"draft"}`: keep a
-//!   preview exactly as shown. No approval card (the PC's `no_card` says
-//!   why). Held on a stale link, like every change.
+//! * [`brain_widgets_add`] - `POST /api/widgets/add {"draft", "accent"?,
+//!   "shade"?, "contrast"?}`: keep a preview exactly as shown, or in the look
+//!   the owner chose under the preview (2026-11-14). Only the keys the page
+//!   sends are posted, so an app from before the look is unchanged. No
+//!   approval card (the PC's `no_card` says why). Held on a stale link, like
+//!   every change.
 //! * [`brain_widgets_discard`] - drop a preview. Not held: it only drops.
 //! * [`brain_widgets_delete`] - `POST /api/widgets/delete {"id"}`: at once,
 //!   no "are you sure?", ONE widget. Held on a stale link, like Coming up's
@@ -170,6 +173,30 @@ pub(crate) fn draft_body(words: &str, pasted: bool) -> Result<serde_json::Value,
         "words": words,
         "provenance": if pasted { "pasted" } else { "typed" },
     }))
+}
+
+/// The add body: the draft, plus each look key the page chose - and only the
+/// ones it chose. A page from before the look (2026-11-14) sends none of them,
+/// and posts exactly the body it always did; the PC keeps the draft's own
+/// look. The values are NOT checked here: the PC owns the three closed lists
+/// (`jarvis_widgets.ACCENTS`, `SHADES`, `CONTRASTS`), refuses anything off them
+/// with a 400, and [`change_answer`] hands that refusal to the page in the
+/// PC's own words rather than swallowing it.
+pub(crate) fn add_body(
+    draft: &str,
+    accent: Option<&str>,
+    shade: Option<&str>,
+    contrast: Option<&str>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({ "draft": draft });
+    if let Some(obj) = body.as_object_mut() {
+        for (key, value) in [("accent", accent), ("shade", shade), ("contrast", contrast)] {
+            if let Some(value) = value {
+                obj.insert(key.to_string(), serde_json::json!(value));
+            }
+        }
+    }
+    body
 }
 
 /// The list with the owner's words taken out, for while the private lists
@@ -375,20 +402,27 @@ pub async fn brain_widgets_draft(
     change_answer(status, &text)
 }
 
-/// Keep ONE preview, exactly as shown. Held on a stale link.
+/// Keep ONE preview, exactly as shown - or in the look the owner chose under
+/// the preview, when the page sends one. Held on a stale link.
 #[tauri::command]
-pub async fn brain_widgets_add(app: AppHandle, draft: String) -> Result<serde_json::Value, String> {
+pub async fn brain_widgets_add(
+    app: AppHandle,
+    draft: String,
+    accent: Option<String>,
+    shade: Option<String>,
+    contrast: Option<String>,
+) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     if !valid_draft(&draft) {
         return Err("That preview has expired or was already used.".to_string());
     }
-    let (status, text) = post(
-        &app,
-        "/api/widgets/add",
-        serde_json::json!({ "draft": draft }),
-        WRITE_TIMEOUT,
-    )
-    .await?;
+    let body = add_body(
+        &draft,
+        accent.as_deref(),
+        shade.as_deref(),
+        contrast.as_deref(),
+    );
+    let (status, text) = post(&app, "/api/widgets/add", body, WRITE_TIMEOUT).await?;
     change_answer(status, &text)
 }
 
@@ -596,6 +630,39 @@ mod tests {
         assert_eq!(draft_body("x", true).unwrap()["provenance"], "pasted");
         assert!(draft_body("   ", false).is_err());
         assert!(draft_body(&"x".repeat(MAX_WORDS + 1), false).is_err());
+    }
+
+    #[test]
+    fn the_add_body_carries_only_the_look_the_page_chose() {
+        // An app from before the look: the body it has always posted.
+        assert_eq!(
+            add_body("dabcdef0123", None, None, None),
+            serde_json::json!({ "draft": "dabcdef0123" })
+        );
+        // The page's own three choices, each its own key.
+        assert_eq!(
+            add_body("dabcdef0123", Some("violet"), Some("half"), Some("high")),
+            serde_json::json!({
+                "draft": "dabcdef0123",
+                "accent": "violet",
+                "shade": "half",
+                "contrast": "high",
+            })
+        );
+        // One of three is still that one, and nothing is invented for the rest:
+        // the PC fills an absent key from the draft itself.
+        let one = add_body("dabcdef0123", None, Some("clear"), None);
+        assert_eq!(
+            one,
+            serde_json::json!({ "draft": "dabcdef0123", "shade": "clear" })
+        );
+        assert!(one.get("accent").is_none() && one.get("contrast").is_none());
+        // Off the list is NOT filtered here: the PC refuses it with its own
+        // sentence, and swallowing it would make a bug look like a saved look.
+        assert_eq!(
+            add_body("dabcdef0123", Some("chartreuse"), None, None)["accent"],
+            "chartreuse"
+        );
     }
 
     #[test]

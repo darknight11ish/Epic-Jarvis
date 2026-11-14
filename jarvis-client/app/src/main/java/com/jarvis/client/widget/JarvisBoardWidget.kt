@@ -131,42 +131,47 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
             WidgetStates.board(ready, paired, true, connected, read)
         }
 
+        // The look the card is drawn in (2026-11-14). A message state has no
+        // widget and so no look: it keeps the default colours, which are
+        // exactly the ones every widget had before the look existed.
+        val palette = BoardPalette(view?.look ?: JarvisWidgets.LOOK_DEFAULT)
+
         provideContent {
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
-                    .background(BoardPalette.Background)
+                    .background(palette.Background)
                     .cornerRadius(16.dp)
                     .padding(12.dp),
             ) {
                 val v = view
                 if (state == WidgetStates.Board.CONTENT && v != null) {
-                    Board(context, if (hideWords) JarvisWidgets.hide(v) else v, security?.appLock)
+                    Board(context, if (hideWords) JarvisWidgets.hide(v) else v, security?.appLock, palette)
                 } else {
                     val words = WidgetStates.boardWords(state)
-                    MessageState(words.first, words.second)
+                    MessageState(words.first, words.second, palette)
                 }
             }
         }
     }
 
     @Composable
-    private fun MessageState(headline: String, sub: String) {
+    private fun MessageState(headline: String, sub: String, palette: BoardPalette) {
         Column(
             modifier = GlanceModifier.fillMaxSize().clickable(actionStartActivity<MainActivity>()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = headline,
-                style = TextStyle(color = BoardPalette.TextHi, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                style = TextStyle(color = palette.TextHi, fontSize = 12.sp, fontWeight = FontWeight.Bold),
             )
             Spacer(GlanceModifier.height(2.dp))
-            Text(sub, style = TextStyle(color = BoardPalette.TextMuted, fontSize = 11.sp))
+            Text(sub, style = TextStyle(color = palette.TextMuted, fontSize = 11.sp))
         }
     }
 
     @Composable
-    private fun Board(context: Context, view: JarvisWidgets.View, appLock: Boolean?) {
+    private fun Board(context: Context, view: JarvisWidgets.View, appLock: Boolean?, palette: BoardPalette) {
         // One arrangement rule, shared with the desktop (JarvisWidgets.boardOf,
         // tools/gen_widget_cases.py): the block drawn large, then the rest in
         // order, then the buttons two to a row. Nothing here decides WHAT goes
@@ -177,9 +182,9 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                 modifier = GlanceModifier.defaultWeight().fillMaxWidth()
                     .clickable(actionStartActivity<MainActivity>()),
             ) {
-                board.big?.let { BigCount(it) }
+                board.big?.let { BigCount(it, palette) }
                 for (b in board.blocks) {
-                    Part(b)
+                    Part(b, palette)
                     Spacer(GlanceModifier.height(3.dp))
                 }
             }
@@ -189,7 +194,10 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                 Row(modifier = GlanceModifier.fillMaxWidth()) {
                     pair.forEachIndexed { i, b ->
                         if (i > 0) Spacer(GlanceModifier.width(6.dp))
-                        PillButton(b.label, press(context, b.action, appLock), GlanceModifier.defaultWeight())
+                        PillButton(
+                            b.label, press(context, b.action, appLock),
+                            GlanceModifier.defaultWeight(), palette,
+                        )
                     }
                 }
             }
@@ -199,64 +207,64 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
     /** "big": the number at 28sp - more than double a block's 13sp value - so
      *  a count is what the eye lands on. Its label and note stay small. */
     @Composable
-    private fun BigCount(b: JarvisWidgets.Block.Count) {
+    private fun BigCount(b: JarvisWidgets.Block.Count, palette: BoardPalette) {
         Column(modifier = GlanceModifier.fillMaxWidth()) {
-            Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+            Text(b.label, maxLines = 1, style = small(palette.TextMuted))
             if (b.value.isNotEmpty()) {
                 Text(
                     b.value, maxLines = 1,
-                    style = TextStyle(color = BoardPalette.Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold),
+                    style = TextStyle(color = palette.Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold),
                 )
             }
-            if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+            if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(palette.TextMuted))
         }
     }
 
     /** One block, drawn the one way it is always drawn - whatever the layout. */
     @Composable
-    private fun Part(b: JarvisWidgets.Block) {
+    private fun Part(b: JarvisWidgets.Block, palette: BoardPalette) {
         when (b) {
             is JarvisWidgets.Block.Title -> Text(
                 b.text, maxLines = 1,
-                style = TextStyle(color = BoardPalette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                style = TextStyle(color = palette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold),
             )
             is JarvisWidgets.Block.Count -> {
                 Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+                    Text(b.label, maxLines = 1, style = small(palette.TextMuted))
                     Spacer(GlanceModifier.defaultWeight())
                     if (b.value.isNotEmpty()) {
-                        Text(b.value, style = TextStyle(color = BoardPalette.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold))
+                        Text(b.value, style = TextStyle(color = palette.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold))
                     }
                 }
-                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(palette.TextMuted))
             }
             is JarvisWidgets.Block.Items -> {
-                Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+                Text(b.label, maxLines = 1, style = small(palette.TextMuted))
                 for ((words, whenWords) in b.items) {
                     Text(
                         if (whenWords.isEmpty()) words else "$whenWords  $words",
-                        maxLines = 1, style = small(BoardPalette.TextHi),
+                        maxLines = 1, style = small(palette.TextHi),
                     )
                 }
-                if (b.more > 0) Text("+${b.more} more", style = small(BoardPalette.Accent))
+                if (b.more > 0) Text("+${b.more} more", style = small(palette.Accent))
                 if (b.items.isEmpty() && b.note.isEmpty() && b.empty.isNotEmpty()) {
-                    Text(b.empty, maxLines = 1, style = small(BoardPalette.TextMuted))
+                    Text(b.empty, maxLines = 1, style = small(palette.TextMuted))
                 }
-                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(palette.TextMuted))
             }
             is JarvisWidgets.Block.Progress -> {
                 Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+                    Text(b.label, maxLines = 1, style = small(palette.TextMuted))
                     Spacer(GlanceModifier.defaultWeight())
-                    if (b.value.isNotEmpty()) Text(b.value, maxLines = 1, style = small(BoardPalette.TextHi))
+                    if (b.value.isNotEmpty()) Text(b.value, maxLines = 1, style = small(palette.TextHi))
                 }
                 LinearProgressIndicator(
                     progress = b.fraction.toFloat(),
                     modifier = GlanceModifier.fillMaxWidth().height(4.dp),
-                    color = BoardPalette.Accent,
-                    backgroundColor = BoardPalette.Surface1,
+                    color = palette.Accent,
+                    backgroundColor = palette.Surface1,
                 )
-                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(palette.TextMuted))
             }
             is JarvisWidgets.Block.Button -> Unit
         }
@@ -284,16 +292,16 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
         }
 
     @Composable
-    private fun PillButton(label: String, onClick: Action, modifier: GlanceModifier) {
+    private fun PillButton(label: String, onClick: Action, modifier: GlanceModifier, palette: BoardPalette) {
         Box(
             modifier = modifier
-                .background(BoardPalette.Surface1)
+                .background(palette.Surface1)
                 .cornerRadius(10.dp)
                 .clickable(onClick)
                 .padding(vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, maxLines = 1, style = TextStyle(color = BoardPalette.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+            Text(label, maxLines = 1, style = TextStyle(color = palette.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold))
         }
     }
 }
@@ -383,11 +391,55 @@ class BoardButtonCallback : ActionCallback {
     }
 }
 
-/** The widget's own fixed colours - [ApprovalWidget]'s set, for the same reason. */
-private object BoardPalette {
-    val Background = ColorProvider(Color(0xFF04070C))
-    val Surface1 = ColorProvider(Color(0xFF0E1822))
-    val TextHi = ColorProvider(Color(0xFFE6EEF7))
-    val TextMuted = ColorProvider(Color(0xFF93A6BA))
-    val Accent = ColorProvider(Color(0xFF63F7FF))
+/**
+ * A widget's colours, computed from its [JarvisWidgets.Look] (2026-11-14):
+ * the contrast gives the four base colours, the accent gives the accent, and
+ * the shade gives the ALPHA on the background and the panel - and on nothing
+ * else. Text is never transparent (WIDGET-LOOK-SPEC section 3, rule 3), so
+ * "see-through" moves the card and the buttons' ground, never the words.
+ *
+ * "normal + solid" here is exactly the fixed palette this widget shipped with
+ * (background `#04070C`, surface `#0E1822`, accents `#63F7FF`), so every
+ * widget saved before the look existed draws identically.
+ *
+ * WHY ALPHA IS EXPECTED TO REACH THE LAUNCHER, and how far that is proven.
+ * The chain was read out of the pinned libraries in the Gradle cache on
+ * 2026-11-14 (no `-sources` jar exists there; these are the AARs' bytecode):
+ *
+ *  1. `ColorProvider(Color(argb))` builds an `androidx.glance.unit.FixedColorProvider`
+ *     (`glance-1.1.1.aar`, `ColorProviderKt.ColorProvider-8_81llA`).
+ *  2. `glance-appwidget-1.1.1.aar` -> `ApplyModifiersKt.applyBackgroundModifier$applyBackgroundColorModifier`
+ *     matches that type and calls `ColorKt.toArgb(Color)` (which returns the
+ *     packed ARGB, alpha in the top byte - `ui-graphics` 1.7.0
+ *     `ColorKt.toArgb-8_81llA` is `convert(...).value ushr 32`), then
+ *     `androidx.core.widget.RemoteViewsCompat.setViewBackgroundColor(view, id, argb)`.
+ *  3. `core-remoteviews-1.1.0.aar`, `RemoteViewsCompat.setViewBackgroundColor(RemoteViews, int, int)`
+ *     calls `RemoteViews.setInt(id, "setBackgroundColor", colorInt)` with the int
+ *     untouched - so the alpha byte is in the RemoteViews command.
+ *  4. Glance's own root layout (`root_match_match.xml`, `glance_frame.xml`) sets
+ *     no background of its own, so there is nothing opaque painted under the
+ *     card that would swallow the alpha.
+ *
+ * What is NOT proven: that a LAUNCHER composites it over the wallpaper. That
+ * has never been seen on a device in this project (the field-test line is
+ * "Set a widget to See-through and put it on the home screen - does your
+ * wallpaper show through it?"). The failure is graceful by construction: the
+ * same colour at alpha 255 is the solid look, so a launcher that ignores alpha
+ * still draws a readable widget.
+ */
+private class BoardPalette(look: JarvisWidgets.Look) {
+    private val contrast = JarvisWidgets.contrastOf(look.contrast)
+    private val shade = JarvisWidgets.shadeOf(look.shade)
+    private val accent = JarvisWidgets.accentOf(look.accent)
+
+    /** The shade's background alpha - the only place it is applied. */
+    val Background = ColorProvider(Color(JarvisWidgets.argb(contrast.bg, shade.alpha)))
+
+    /** The panels: buttons and a bar's track. The shade's own second alpha. */
+    val Surface1 = ColorProvider(Color(JarvisWidgets.argb(contrast.surface, shade.surfaceAlpha)))
+
+    // No shade on any of these three: text is never transparent.
+    val TextHi = ColorProvider(Color(JarvisWidgets.argb(contrast.textHi)))
+    val TextMuted = ColorProvider(Color(JarvisWidgets.argb(contrast.textMuted)))
+    val Accent = ColorProvider(Color(JarvisWidgets.argb(accent.color)))
 }
