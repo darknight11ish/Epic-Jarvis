@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "02e16caac26a9004f5685d0101d607ba789593fe",
- "built_at": "2026-11-14T04:47:40-08:00",
+ "ref": "38c06683aadc852b58dca7ba2b23ef0f6c599503",
+ "built_at": "2026-11-14T04:49:21-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4671,6 +4671,7 @@
     "changelog.d/2026-11-12-code-protection-tool-check.md",
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
+    "changelog.d/2026-11-12-visible-name-atlas.md",
     "changelog.d/2026-11-13-any-file-transfer.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
     "changelog.d/2026-11-13-backend-shard.md",
@@ -4683,6 +4684,7 @@
     "changelog.d/2026-11-13-hud-read-aloud-flow.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-notification-body-opens-jarvis.md",
+    "changelog.d/2026-11-13-owner-check-environment-skip.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
     "changelog.d/2026-11-13-phone-backup-host-and-iteration-limit.md",
     "changelog.d/2026-11-13-phone-mic-press-interrupts.md",
@@ -4860,6 +4862,7 @@
     "decisions.d/2026-11-12-code-protection-check-not-obfuscation.md",
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
+    "decisions.d/2026-11-12-visible-name-atlas.md",
     "decisions.d/2026-11-13-any-file-transfer.md",
     "decisions.d/2026-11-13-aside-dropped-not-queued.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
@@ -4872,6 +4875,7 @@
     "decisions.d/2026-11-13-hud-read-aloud-flow.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-notification-body-opens-jarvis.md",
+    "decisions.d/2026-11-13-owner-check-environment-skip.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
     "decisions.d/2026-11-13-phone-backup-excludes-the-address.md",
     "decisions.d/2026-11-13-phone-mic-press-interrupts.md",
@@ -5392,7 +5396,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 968,
+   "file_count": 972,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6479,6 +6483,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "38c06683aadc852b58dca7ba2b23ef0f6c599503",
+   "date": "2026-11-14",
+   "subject": "Merge 8a33c2726 into integration/wave19-2026-11-14 (#1253 a machine skip is printed as a skip); generated records keep the integration side, regenerated at the end"
+  },
+  {
+   "sha": "362bcba19cd4d9d56a4789da649826e8dfd3d1d9",
+   "date": "2026-11-14",
+   "subject": "Merge c76cec444 into integration/wave19-2026-11-14 (#1232 the product says Atlas)"
+  },
+  {
+   "sha": "b0210d2567361d67b284afa7adce323c1d6c2337",
+   "date": "2026-11-14",
+   "subject": "Regenerate the whole-repo records once, after folding four branches"
+  },
+  {
    "sha": "02e16caac26a9004f5685d0101d607ba789593fe",
    "date": "2026-11-14",
    "subject": "Merge f75b34e1f into integration/wave19-2026-11-14 (#1255 widgets wear their own look); generated records keep the integration side, regenerated at the end"
@@ -6502,6 +6521,11 @@
    "sha": "ea2299d4d180adee1a68954d001250e48b6725b0",
    "date": "2026-11-14",
    "subject": "Merge pull request #1252 from darknight11ish/feat/any-file-transfer-2026-11-13"
+  },
+  {
+   "sha": "c76cec4449219d74bd8d6a5a57d86c61afb85042",
+   "date": "2026-11-14",
+   "subject": "Repair the HUD file the earlier resolution had rolled back, and pin Atlas's note"
   },
   {
    "sha": "da1f764f8c5a9d388086436827d1e060b046fd0a",
@@ -6529,6 +6553,11 @@
    "subject": "chore(records): regenerate the self-code map after merging main into the widget look"
   },
   {
+   "sha": "8a33c2726a462eccadc10cbaafc8462b629860f7",
+   "date": "2026-11-14",
+   "subject": "chore(records): regenerate the self-code map after merging main into the claims-checker work"
+  },
+  {
    "sha": "60a1b034e374b133072002dc8be787bae8ad8c59",
    "date": "2026-11-14",
    "subject": "Merge origin/main (PR #1231, android local engine) into feat/any-file-transfer-2026-11-13"
@@ -6552,31 +6581,6 @@
    "sha": "e8412edd7791e8b438c8a27b8e465b21e563c9eb",
    "date": "2026-11-14",
    "subject": "Regenerate the two generated records over the archive, and count it honestly"
-  },
-  {
-   "sha": "e728b18f0c2be50112e83101447c00ad17f30492",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main into the chat-history answer"
-  },
-  {
-   "sha": "05ae3d399404fcac0aa8cdc0f24b0cf9c4e01b7a",
-   "date": "2026-11-14",
-   "subject": "The self-code map's table learns about the archived field-test records"
-  },
-  {
-   "sha": "153e4ca76dfe5c94e390df591feb618f7eb397f5",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main into feat/any-file-transfer-2026-11-13"
-  },
-  {
-   "sha": "1ac7e3d540350b5b491c3371911ca4d70507a795",
-   "date": "2026-11-14",
-   "subject": "Merge remote-tracking branch 'origin/main' into pr-1254-fix"
-  },
-  {
-   "sha": "1ef8a5540932aba4a8f5285195b6efba5780f617",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main into the native-screens kind, keeping both sides' records"
   }
  ],
  "top_level": [
@@ -6608,7 +6612,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 272
+   "files": 274
   },
   {
    "path": "tools/",
@@ -6623,7 +6627,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 189
+   "files": 191
   },
   {
    "path": "plugins/",
@@ -6702,8 +6706,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5825,
-  "covered": 5342,
+  "tracked_files": 5829,
+  "covered": 5346,
   "excluded": 483,
   "subsystems": 27
  },
