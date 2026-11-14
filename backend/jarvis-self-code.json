@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "15625d0dbc9057712958c526a70f0549519fa1cf",
- "built_at": "2026-11-13T18:49:49-08:00",
+ "ref": "e1308a7a2aa7f106c4fde353b1c12d9c79d81739",
+ "built_at": "2026-11-13T21:31:25-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4224,6 +4224,7 @@
     "backend/test_suite_report.py",
     "backend/test_suite_state.py",
     "backend/test_suites_env.py",
+    "backend/test_suites_shard.py",
     "backend/test_suites_staging.py",
     "backend/test_supply_chain.py",
     "backend/test_support_chat.py",
@@ -4323,7 +4324,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 690,
+   "file_count": 691,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4612,6 +4613,7 @@
     "changelog.d/2026-11-12-desktop-companion-honest.md",
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
+    "changelog.d/2026-11-13-backend-shard.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
@@ -4777,6 +4779,7 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
+    "decisions.d/2026-11-13-backend-shard.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
@@ -5230,7 +5233,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 866,
+   "file_count": 868,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6317,6 +6320,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "e1308a7a2aa7f106c4fde353b1c12d9c79d81739",
+   "date": "2026-11-13",
+   "subject": "ci: shard the required backend job, keeping the check name"
+  },
+  {
+   "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
+   "date": "2026-11-13",
+   "subject": "Merge pull request #1237 from darknight11ish/fix/undo-notice-timeout-2026-11-13"
+  },
+  {
+   "sha": "8e4c8b27210f7dda4fb8b8d3be92eb95ac37d32a",
+   "date": "2026-11-13",
+   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+  },
+  {
    "sha": "15625d0dbc9057712958c526a70f0549519fa1cf",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
@@ -6400,28 +6418,13 @@
    "sha": "379e106a094818492c11987146dea40e4b45863e",
    "date": "2026-11-13",
    "subject": "Merge pull request #1236 from darknight11ish/fix/reconcile-github-tools-deltas-2026-11-13"
-  },
-  {
-   "sha": "7c0a379865ee9e77e2b13fff6998f337e4bf46de",
-   "date": "2026-11-13",
-   "subject": "fix: the awareness audit's fixes, and VoiceStudio's typed switch, in one PR"
-  },
-  {
-   "sha": "65c10195c7ee8e1d44881cb54a3d7b0dd7b88da9",
-   "date": "2026-11-13",
-   "subject": "fix(phone): the undo notice after an approved card times out after 15 seconds"
-  },
-  {
-   "sha": "3fd016a1ee108f20f5e1069c51abb17e02af1eae",
-   "date": "2026-11-13",
-   "subject": "Merge pull request #1235 from darknight11ish/fix/github-git-auth-basic-2026-11-13"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1445
+   "files": 1446
   },
   {
    "path": "jarvis-desktop/",
@@ -6451,7 +6454,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 248
+   "files": 249
   },
   {
    "path": "videos/",
@@ -6461,7 +6464,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 165
+   "files": 166
   },
   {
    "path": "plugins/",
@@ -6535,8 +6538,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5662,
-  "covered": 5180,
+  "tracked_files": 5665,
+  "covered": 5183,
   "excluded": 482,
   "subsystems": 27
  },
