@@ -101,28 +101,36 @@ object AttachFile {
         Kind("bmp", "image/bmp", "photo"),
     )
 
+    /** The wire type for a file whose extension is not one this app knows. */
+    const val ANY_FILE_MIME = "application/octet-stream"
+
     /**
-     * The picker's filter for the Settings "Send a document or a photo" row
-     * ONLY: the eight document types plus the eight photo types, as plain file
-     * copies. It is deliberately NOT [MIME_TYPES] and NOT [mimeTypes] - the
-     * chat "Attach a file" row keeps its own list, and its picture wildcard
-     * stays gated on the PC's Pictures feature (a photo there needs vision).
-     * This door needs no Pictures switch: a photo is only being stored.
+     * The system picker's filter for the Settings "Send a file from your phone"
+     * row ONLY: every file type, the wildcard MIME filter (2026-11-13, the
+     * owner's "any file type").
+     *
+     * The PC stores the bytes as a plain file under the name the pick has and
+     * never opens, runs, parses, indexes or shows it to a model, so the phone
+     * must be allowed to pick a `.zip`, an `.exe`, a `.dat` or a file with no
+     * extension at all.
+     *
+     * It is deliberately NOT [MIME_TYPES] and NOT [mimeTypes]: the chat "Attach
+     * a file" row keeps its own list, because those bytes ARE read on the PC and
+     * a picture there takes the vision path.
      */
-    val SEND_FILE_MIME_TYPES: Array<String> =
-        (KINDS.map { it.mime } + PHOTO_KINDS.map { it.mime }).distinct().toTypedArray()
+    val SEND_FILE_MIME_TYPES: Array<String> = arrayOf("*/*")
 
     /**
      * The system picker's own filter for DOCUMENTS. Narrow on purpose: a
-     * picker offering every type would let the owner choose a 400 MB video
-     * and learn the cap from a refusal instead of from the list.
+     * document attached to a chat question is READ on the PC, so a type the PC
+     * cannot read is not offered there.
      *
      * Since 2026-11-01 the one "Attach a file" row opens this list (or
      * [mimeTypes], which adds images) - there is no separate Photo control.
      *
-     * Since 2026-11-13 the Settings "Send a document or a photo" row opens
-     * [SEND_FILE_MIME_TYPES] instead: this list plus [PHOTO_KINDS], because
-     * that door copies a photo as a plain file and never shows it to a model.
+     * Since 2026-11-13 the Settings "Send a file from your phone" row opens
+     * [SEND_FILE_MIME_TYPES] (the ANY-file wildcard) instead: that door copies
+     * any file as a plain file, so its picker is not this list.
      */
     val MIME_TYPES: Array<String> = KINDS.map { it.mime }.distinct().toTypedArray()
 
@@ -277,18 +285,26 @@ object AttachFile {
         kindOf(name) ?: (if (hasNoExtension(name)) kindForMime(mime) else null)
 
     /**
-     * The kind the Settings "Send a document or a photo" row accepts: a
-     * document exactly as [kindFor] decides it, or a photo by its extension.
+     * The kind the Settings "Send a file from your phone" row accepts: a
+     * document exactly as [kindFor] decides it, a photo by its extension
+     * ([photoKindOf]), or - since 2026-11-13 - ANY other file as a plain copy,
+     * with [ANY_FILE_MIME] when the provider gave no usable type.
      *
-     * A photo is decided by its NAME alone - never by the provider's type and
-     * never when the name has no extension - because the PC writes the file
-     * under that name and decides what it is from the extension, so a photo
-     * with no extension would be refused there. This is the ONLY place a photo
-     * and the document list meet: the chat row still asks [kindFor], so a photo
-     * picked there still goes to [goesToPicture].
+     * It therefore never returns null. That is the difference from [kindFor]:
+     * the chat row still refuses what the PC cannot READ, while this door only
+     * STORES the bytes, and the PC decides what a file is from its name.
+     *
+     * A photo is decided by its NAME alone - never when the name has no
+     * extension - because the PC writes the file under that name. A file with
+     * no extension is a plain file there, not a photo.
      */
-    fun transferKindFor(name: String?, mime: String?): Kind? =
-        kindFor(name, mime) ?: photoKindOf(name)
+    fun transferKindFor(name: String?, mime: String?): Kind {
+        kindFor(name, mime)?.let { return it }
+        photoKindOf(name)?.let { return it }
+        val provider = mime?.trim()?.lowercase(Locale.ROOT)?.substringBefore(';')
+            ?.takeIf { it.isNotEmpty() }
+        return Kind(extensionOf(name).orEmpty(), provider ?: ANY_FILE_MIME, "file")
+    }
 
     /** The raw bytes as the wire's `data` field: base64, no `data:` prefix. */
     fun base64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
@@ -382,10 +398,16 @@ object AttachFile {
 
     /**
      * A size in the words the owner reads: decimal units, so 2,500,000 bytes
-     * is "2.5 MB" - the same number the cap says.
+     * is "2.5 MB" - the same number the cap says. A large file is said in GB
+     * (a 3 GiB one is "3.2 GB"), because "3221.2 MB" is a true number that
+     * nobody can read.
      */
     fun sizeWords(bytes: Long): String {
         val n = bytes.coerceAtLeast(0)
+        if (n >= 1_000_000_000L) {
+            val tenths = (n + 50_000_000L) / 100_000_000L
+            return if (tenths % 10L == 0L) "${tenths / 10} GB" else "${tenths / 10}.${tenths % 10} GB"
+        }
         if (n >= 1_000_000) {
             val tenths = (n + 50_000L) / 100_000L
             return if (tenths % 10L == 0L) "${tenths / 10} MB" else "${tenths / 10}.${tenths % 10} MB"
