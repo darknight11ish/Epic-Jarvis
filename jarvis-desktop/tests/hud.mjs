@@ -940,6 +940,8 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.doesNotMatch(modelLine, /isn't connected/i);
   const banner = (await page.locator("#banner").textContent()) || "";
   assert.doesNotMatch(banner, /not connected/i, "the demo banner is up over a live PC");
+  assert.equal(await page.locator("#banner").isVisible(), false,
+    "the same fact was drawn twice: the demo banner is up over the standing line (2026-11-13)");
   const log = await send(page, "hi");
   const spoken = await page.evaluate(() => window.__spoken);
   await page.close();
@@ -955,6 +957,65 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.match(sample.who, /not from jarvis/i);
   assert.match(sample.body, /^This is a sample reply, not an answer\./);
   assert.doesNotMatch(sample.body, /\bsir\b|\bI am\b|\bI will\b/, "a sample written as Jarvis speaking");
+});
+
+/* The owner's live HUD, 2026-11-13: it booted while Ollama was down, the model
+ * came back, /api/status said `ollama: true` and the status row went green -
+ * and every reply stayed a sample, because boot() was the only thing that ever
+ * wrote `S.online` and the 30 s beat never wrote it again. These two checks
+ * drive the page's own beat at both answers (`window.apprPoll`, which
+ * hud_bootstrap.js wraps and which carries paintHost's /api/status read), so
+ * the latch cannot come back: up must send for real, down must still sample. */
+await check("a live read that says the model is UP unfreezes Send", async () => {
+  const backend = { jarvis: false, ollama: false, proxy: false };
+  const { page, problems, chats } = await openHud(browser, backend);
+  // It really booted down first: a sample is what this page starts on.
+  assert.equal(await page.evaluate(() => S.online), false,
+    "the window did not boot on the model-down state, so this check proves nothing");
+  const first = await send(page, "is it up?");
+  assert.ok(first.some((m) => /sample reply/.test(m.who || "")),
+    `a model-down window did not answer with a sample: ${JSON.stringify(first)}`);
+  assert.equal(chats.length, 0, "a model-down window posted a turn");
+  // The model comes back between two beats, as it did on the owner's PC, and
+  // the page's own beat is what must notice.
+  backend.ollama = true;
+  await page.evaluate(() => window.apprPoll());
+  await K.until(page, "the page's own beat to read the model as up", async () =>
+    (await page.evaluate(() => S.online)) === true, { ms: 8000 });
+  // And the repaint that goes with the new answer: the chip stops saying
+  // "offline" and the face's not-connected ring goes, without waiting for the
+  // owner's next turn.
+  const frame = await faceFrame(page);
+  await K.until(page, "the chip and the face to leave the offline state", async () =>
+    (await page.locator("#chip-state").textContent()) === "standing by"
+      && (await frame.evaluate(() => LIVE_OFFLINE)) === false, { ms: 8000 });
+  const log = await send(page, "and now?");
+  await page.close();
+  assert.equal(chats.length, 1,
+    `the landed "model up" read did not unfreeze Send: /api/chat saw ${chats.length} POST(s)`);
+  const at = log.map((m) => m.who === "you").lastIndexOf(true);
+  const after = log.slice(at);
+  assert.ok(!after.some((m) => /sample reply/.test(m.who || "")),
+    `still a sample reply after the model came up: ${JSON.stringify(after)}`);
+  assert.ok(after.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."),
+    `the real answer was not shown: ${JSON.stringify(after)}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("a beat that keeps reading the model DOWN still answers with a sample", async () => {
+  const backend = { jarvis: false, ollama: false, proxy: false };
+  const { page, problems, chats } = await openHud(browser, backend);
+  // Park the field so the BEAT's own read is visibly the thing that puts it
+  // back: a landed DOWN read is not a permission to POST a turn.
+  await page.evaluate(() => { S.ollama = null; window.apprPoll(); });
+  await K.until(page, "the page's own beat to read the model down again", async () =>
+    (await page.evaluate(() => S.ollama)) === false, { ms: 8000 });
+  const log = await send(page, "still down?");
+  await page.close();
+  assert.equal(chats.length, 0, "a window that only ever read the model DOWN posted a turn");
+  assert.ok(log.some((m) => /sample reply/.test(m.who || "")),
+    `no sample reply after a second model-down read: ${JSON.stringify(log)}`);
+  assert.deepEqual(problems, []);
 });
 
 /* ── The reactor is the kit face ─────────────────────────────────────────── */
@@ -4580,6 +4641,58 @@ await check("a History door is one click away in every shell, and the drawer she
   assert.equal(opened.moduleSaysOpen, true);
   assert.equal(byRail.panels, 1, "the rail icon opens a second panel");
   assert.equal(byRail.open, 1, "the rail icon no longer opens the same panel");
+});
+
+// The owner's screenshot, 2026-11-13: opening History greyed out the right
+// ~quarter of the window. `setOpen` puts `hh-open` on <html> for the scroll
+// lock, and the panel's ROW rule used to be a bare `.hh-open` - so the root
+// itself matched that flex row (html display block -> flex, padding-left
+// 0 -> 7px), the shell stopped at 801.83px of a 1280px window, and the bare
+// html showed through as a band on the right. The drawer's own backdrop was
+// measured full-viewport and was not the cause. The row rule is now qualified
+// `.hh-item .hh-open`; this pin opens the real panel at the two sizes the H4
+// geometry checks use, so a future unqualified row selector fails here.
+await check("the History drawer never turns the root into a flex row: the shell still spans 1280 and 1024 (DPR 1)", async () => {
+  for (const [width, height] of [[1280, 820], [1024, 768]]) {
+    const { page, problems } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false },
+      { viewport: { width, height } });
+    await page.waitForTimeout(300);
+    // The strip's door in the drawer shells, the rail's clock icon in the
+    // others, and `window.hudHistory.open()` all call the ONE open routine.
+    const did = await page.evaluate(() => window.hudHistory && window.hudHistory.open());
+    assert.equal(did, true, `${width}x${height}: the History panel is not mounted, so it could not be opened`);
+    await page.waitForTimeout(350); // the drawer slides: let it settle
+    const facts = await page.evaluate(() => {
+      const shell = document.getElementById("shell").getBoundingClientRect();
+      const body = document.body.getBoundingClientRect();
+      return {
+        open: document.getElementById("history-sidebar").classList.contains("hh-on")
+          && window.hudHistory.isOpen(),
+        rootClass: document.documentElement.classList.contains("hh-open"),
+        htmlDisplay: getComputedStyle(document.documentElement).display,
+        htmlPaddingLeft: getComputedStyle(document.documentElement).paddingLeft,
+        shellWidth: shell.width, shellRight: shell.right,
+        bodyWidth: body.width, viewport: innerWidth,
+      };
+    });
+    assert.equal(facts.open, true, `${width}x${height}: the History panel did not open`);
+    assert.equal(facts.rootClass, true, `${width}x${height}: the open drawer no longer marks the root open`);
+    assert.notEqual(facts.htmlDisplay, "flex",
+      `${width}x${height}: <html> became a flex container while History is open (display ${facts.htmlDisplay}) `
+      + "- an unqualified .hh-open row rule is matching the root again");
+    assert.equal(facts.htmlPaddingLeft, "0px",
+      `${width}x${height}: the row rule's 7px padding leaked onto <html> (${facts.htmlPaddingLeft})`);
+    // The bare-html band: the shell must still reach the right edge of the
+    // window. Before the fix it stopped at 801.83px of 1280.
+    assert.ok(facts.shellWidth >= facts.viewport - 1 && facts.shellRight >= facts.viewport - 1,
+      `${width}x${height}: the shell is ${facts.shellWidth}px wide (right edge ${facts.shellRight}) `
+      + `of a ${facts.viewport}px window - the bare html shows as a band on the right`);
+    assert.ok(facts.bodyWidth >= facts.viewport - 1,
+      `${width}x${height}: the body is ${facts.bodyWidth}px of a ${facts.viewport}px window`);
+    await page.close();
+    assert.deepEqual(problems, []);
+  }
 });
 
 await check("one open-the-bar control is drawn; the duplicate pill and dock icon stay dormant", async () => {
