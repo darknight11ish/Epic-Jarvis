@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
- "built_at": "2026-11-13T22:14:57-08:00",
+ "ref": "69428294081ee150aefe347399e36531787b5f01",
+ "built_at": "2026-11-13T22:15:18-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6352,6 +6352,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "69428294081ee150aefe347399e36531787b5f01",
+   "date": "2026-11-13",
+   "subject": "Regenerate the whole-repo records against the merged tree"
+  },
+  {
    "sha": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
    "date": "2026-11-13",
    "subject": "Merge origin/main into integration/wave18-2026-11-13 (current main after #1246 landed)"
@@ -6445,11 +6450,6 @@
    "sha": "8510516a793ca984a87bb9ed9a2ee18010b36bba",
    "date": "2026-11-13",
    "subject": "Merge origin/fix/quiz-finish-dead-end-2026-11-13 into integration/wave18-2026-11-13 (#1240 quiz finish)"
-  },
-  {
-   "sha": "87b56c8b744c91dd5ab343d5b61cb69f5732c015",
-   "date": "2026-11-13",
-   "subject": "Merge origin/fix/notification-body-opens-jarvis-2026-11-13 into integration/wave18-2026-11-13 (#1242 notification Open)"
   }
  ],
  "top_level": [
