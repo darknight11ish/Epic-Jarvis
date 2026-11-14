@@ -29773,7 +29773,16 @@ def _run_self_inventory() -> Result:
     try:
         import jarvis_settings_registry as R
         counts.append(f"{len(R.BOOL_SETTINGS) + len(R.CHOICE_SETTINGS) + len(R.NUMBER_SETTINGS)} settings")
-        counts.append(f"{len(R.tool_targets())} tools I can offer the AI model")
+    except Exception:
+        pass
+    # THE TOOL COUNT COMES FROM THE TOOL LIST, NOT FROM THE SWITCH ROWS.
+    # `tool_targets()` is the switchable subset, not the tools the model can be
+    # offered, so reading it here understated the inventory and disagreed with
+    # the answer the tool questions themselves give (2026-11-13 audit, finding
+    # 4). `jarvis_agent.TOOLS` is the registry that owns this count.
+    try:
+        import jarvis_agent as A
+        counts.append(f"{len(A.TOOLS)} tools I can offer the AI model")
     except Exception:
         pass
     try:

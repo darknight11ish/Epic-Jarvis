@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "4b9fcb081e1e8e3186282d2075d850740e2d47e8117d73b8f7ace6388a1ad624",
+  "source_sha256": "8d78fa21e26f3a34fd3c6f0c8132d6123eb91d39413187771d280a9e160d1cbb",
   "feature_count": 182,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -292,7 +292,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: idle-new; phone: that app's own Settings",
       "where_desktop": "idle-new",
       "where_phone": "that app's own Settings",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -372,7 +372,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -532,7 +532,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: learning; phone: All features and abilities",
       "where_desktop": "learning",
       "where_phone": "All features and abilities",
-      "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
+      "note": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact.",
       "not_a_control": true
     },
     {
@@ -1156,7 +1156,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -1492,7 +1492,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: Jarvis Calendar; phone: Jarvis Calendar",
       "where_desktop": "Jarvis Calendar",
       "where_phone": "Jarvis Calendar",
-      "note": "Still being wired (owner: setup-ui): typed switch and four routes built; desktop and phone Settings rows are the calendar UI slice's",
+      "note": "The switch is in Settings on both apps now. The events themselves are added, changed and deleted in the HUD's Calendar card and on the phone's Calendar screen.",
       "not_a_control": true
     },
     {
@@ -2244,7 +2244,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: backup; phone: All features and abilities",
       "where_desktop": "backup",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -2628,7 +2628,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: approval-cards; phone: All features and abilities",
       "where_desktop": "approval-cards",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {

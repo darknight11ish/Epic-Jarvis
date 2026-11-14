@@ -12,12 +12,12 @@ This suite is the ACCEPTANCE PROOF for that audit. It reads the program's own
 registries (never a hand-written list) and checks, with no model, no card, no
 network and no real benchmark:
 
-  - every BOOLEAN setting (38): a change sentence reaches `settings_bool`, and
+  - every BOOLEAN setting: a change sentence reaches `settings_bool`, and
     a named read sentence reaches a deterministic read intent;
-  - every CHOICE setting (10): same, through `control_set` / `setting_explain`;
-  - the NUMBER setting (1): change through `live_idle_set`, read through
+  - every CHOICE setting: same, through `control_set` / `setting_explain`;
+  - the NUMBER setting: change through `live_idle_set`, read through
     `live_idle_ask`;
-  - every TOOL switch (61, `tool_targets()`): change through `settings_tool`,
+  - every TOOL switch (`tool_targets()`): change through `settings_tool`,
     detail through `tool_profile`, and a state sentence through the new
     `tool_switch_state`; the on/off lists answer too;
   - every PRESET row: change through `preset_switch`, read through
@@ -27,7 +27,7 @@ network and no real benchmark:
     inventories ("what do you have?" / "what can you change?"), the same-area
     groups (8 sections with more than one part), and a desktop Settings-page row
     by its page words;
-  - the 181 feature-catalogue rows all resolve from their own cues - the same
+  - the feature-catalogue rows all resolve from their own cues - the same
     contract the Wave-8 audit measured;
   - "run a benchmark" no longer matches the open-app doorway (the live bug that
     said "I have asked this PC to open benchmark"), and a PRIVATE chat still
@@ -61,6 +61,7 @@ _HOME.mkdir(parents=True, exist_ok=True)
 os.environ["OPENJARVIS_HOME"] = str(_HOME)
 os.environ["JARVIS_HOME"] = str(_HOME)
 
+import jarvis_agent as A  # noqa: E402
 import jarvis_bench as B  # noqa: E402
 import jarvis_feature_catalogue as C  # noqa: E402
 import jarvis_presets as P  # noqa: E402
@@ -182,7 +183,8 @@ def t_every_tool_can_be_changed_discussed_and_read():
                  if _intent(n) in READ_SET]
         if not state:
             problems.append(("state", tool, first))
-    check("every one of the 61 tool switches can be changed, explained and read",
+    check(f"every one of the {len(R.tool_targets())} tool switches can be "
+          "changed, explained and read",
           not problems, problems[:12])
     for sentence, want in (("which tools are on?", "on"),
                            ("which tools are off?", "off")):
@@ -239,10 +241,15 @@ def t_awareness_answers_read_locally():
                or "newest benchmark runs" in bench.reply.lower()),
           None if bench is None else bench.reply[:180])
     inv = _ran("what do you have?", sched)
+    # The inventory's tool number is the TOOL LIST's, not the switch rows'
+    # (2026-11-13 audit, finding 4): `tool_targets()` is the switchable subset
+    # and the answer used to read that, so it named a smaller number than the
+    # tools the model can be offered. Derived here from `jarvis_agent.TOOLS`,
+    # never typed, so a tool added later moves both sides together.
     check("the inventory counts the program's own registries",
           inv is not None and inv.intent == "self_inventory"
           and str(len(C.FEATURES)) in inv.reply
-          and str(len(R.tool_targets())) in inv.reply,
+          and str(len(A.TOOLS)) in inv.reply,
           None if inv is None else inv.reply[:200])
     chg = _ran("what can you change?", sched)
     # Wave-8.2 deploy finding 1 (2026-11-07): the live answer said "switch
@@ -462,7 +469,7 @@ def t_every_feature_row_resolves_from_its_own_cues():
                 break
         if not covered:
             problems.append(rid)
-    check("all 181 feature rows answer from their own words", not problems,
+    check(f"all {len(C.FEATURES)} feature rows answer from their own words", not problems,
           problems[:12])
 
 
