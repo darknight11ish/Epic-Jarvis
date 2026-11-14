@@ -107,7 +107,7 @@ pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 74] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 75] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -131,7 +131,10 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 74] = [
     "home_control",
     "my_spending",
     "retirement_whatif",
-    // Tier C, the raw and powerful ones (7; run_data_script is below)
+    // Tier C, the raw and powerful ones (8; run_data_script is below). The
+    // eighth is android_app, the Android builder's entry point (DEF-068,
+    // 2026-11-14): a Gradle build runs another program, so it is Tier C and off
+    // by default, which is why it arrives here rather than in the everyday list.
     "shell_exec",
     "control_computer",
     "control_phone",
@@ -139,6 +142,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 74] = [
     "read_web_page",
     "connect_account",
     "rea_investigate",
+    "android_app",
     // The everyday helpers that used to be "not this slice" (9: wave 14 added
     // the cardless project_read, decided under file_read's own action)
     "calculator",

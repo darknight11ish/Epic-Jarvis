@@ -75,7 +75,7 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 74 at 2026-11-11 (67 at 2026-11-10; 60 at 2026-11-05: 48 at 2026-11-04, plus
+ * 75 at 2026-11-14 (74 at 2026-11-11, 67 at 2026-11-10; 60 at 2026-11-05: 48 at 2026-11-04, plus
  * the six on-demand GitHub tools that landed with the GitHub tools branch, the
  * four pack-manager tools, hands-free's send_text_message and the
  * approval-policy tool's own row; wave 13's carded github_create_repo made it
@@ -106,9 +106,11 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // Tier B (8)
   "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
   "home_control", "my_spending", "retirement_whatif",
-  // Tier C, the raw and powerful ones (7; run_data_script has its own switch)
+  // Tier C, the raw and powerful ones (8; run_data_script has its own switch).
+  // android_app is the Android builder's entry point (DEF-068, 2026-11-14): a
+  // Gradle build runs another program, so it is Tier C and off by default.
   "shell_exec", "control_computer", "control_phone", "browser_control",
-  "read_web_page", "connect_account", "rea_investigate",
+  "read_web_page", "connect_account", "rea_investigate", "android_app",
   // The everyday helpers that used to be "not this slice" (9)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
