@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "a5ed14c04a1cb1faf9c2317474c4a7a4df83f00eecdb442b54bbf27b6914d236",
+  "source_sha256": "4b9fcb081e1e8e3186282d2075d850740e2d47e8117d73b8f7ace6388a1ad624",
   "feature_count": 182,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -16,7 +16,7 @@ export const FEATURE_DIRECTORY = {
     "Always On (Core Safety Rule — Cannot Be Turned Off)"
   ],
   "labels": {
-    "Switchable / Adjustable (Typed & Settings)": "A real switch or choice: type it or change it in Settings. Today 10 enforced, 30 planned, 0 PC-only; a planned row says 'Still being wired'.",
+    "Switchable / Adjustable (Typed & Settings)": "A real switch or choice: type it or change it in Settings. Today what the rows below say (15 enforced); a planned row says 'Still being wired'.",
     "Settings-Only (By Design — Security Boundary)": "Changed only on the PC Settings page, never by typing (credentials, restore backup) — a security boundary by design.",
     "PC-Only Setting (Honest Refusal on Phone)": "A setting/ability that exists on one app only today; the other app honestly refuses rather than faking a control.",
     "Command-Only (Runs When You Ask — No Switch Needed)": "No switch exists: you ask and Jarvis runs it (or it is a read-only info page).",
@@ -2892,15 +2892,15 @@ export const FEATURE_DIRECTORY = {
       "title": "A second voice program (VoiceStudio)",
       "group": "The PC itself",
       "surface": "desktop",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "status": "not-a-setting",
-      "label_note": "",
-      "example": "turn on A second voice program (VoiceStudio)",
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "status": "pc-only",
+      "label_note": "The switch is typed and carded on the PC (one change_own_config card to turn it on, instant to turn it off) and the desktop Settings card named here draws it. The PHONE has no switch for it at all, by nature, so it shows the honest refusal instead.",
+      "example": "turn on voicestudio",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
-      "where_desktop": "All features and abilities",
+      "where": "desktop Settings: voicestudio; phone: All features and abilities",
+      "where_desktop": "voicestudio",
       "where_phone": "All features and abilities",
-      "note": "",
+      "note": "The switch is typed and carded on the PC (one change_own_config card to turn it on, instant to turn it off) and the desktop Settings card named here draws it. The PHONE has no switch for it at all, by nature, so it shows the honest refusal instead.",
       "not_a_control": true
     },
     {

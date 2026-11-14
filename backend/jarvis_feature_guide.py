@@ -2766,6 +2766,11 @@ ADJUST_SECTIONS = {
     # adjustable by typing ("stop using my work topic"), and the catalogue names
     # the Brain page rather than a Settings card, so EXTRA_ADJUST links it here.
     "topics": (("stop using my work topic", "tier"),),
+    # The VoiceStudio switch (2026-11-13, the awareness audit's GAP-9): its
+    # section id is the Settings card, and the phrase is the typed switch that
+    # really writes `[voicestudio] enabled`. It is a plain on/off, so the kind
+    # is "switch".
+    "voicestudio": (("turn on voicestudio", "switch"),),
 }
 
 #: Stable reason codes for a feature that cannot be changed by typing.
@@ -2795,11 +2800,14 @@ NO_COMMAND_REASON = {
     "docker-containers": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "card-summary": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "receipts": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
-    # The VoiceStudio client ships before its surface: no typed command and
-    # no Settings control yet, because the speaking-voice wiring and its
-    # one-card switch are the named next slice (docs/VOICESTUDIO.md). Its
-    # switch today is the settings-file line [voicestudio] enabled.
-    "voicestudio": ("not-a-setting", "The VoiceStudio client has no typed command and no Settings control yet: the speaking-voice wiring and its one-card switch are the named next slice.", "none-needed"),
+    # The VoiceStudio row LEFT this table on 2026-11-13 (the awareness audit's
+    # GAP-9): it now has its own typed switch ("turn on voicestudio" is ONE
+    # change_own_config card plus Windows Hello, "turn off voicestudio" is
+    # instant, "is voicestudio on" reads it back) and its own row in Settings,
+    # The PC itself. The suite fails if a row named here IS controllable, so the
+    # stale excuse is deleted rather than reworded - what is still not built (the
+    # speaking-voice wiring) is said by the feature row's own `limit` and by
+    # jarvis_voicestudio.STATE_ON.
     "search-audio-video": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "notion-import": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     # Joined 2026-11-06 with the row that catches the catalogue up to the two
@@ -3087,6 +3095,10 @@ EXTRA_ADJUST = {
     # ("faces"), not a Settings section, so the place the typed control sits
     # in has to be named here (2026-10-26).
     "faces": ("appearance-card",),
+    # The VoiceStudio row's `covers` is empty: the Settings card it lives on is
+    # named by SECTIONS ("voicestudio"), not by a covers token, so the place the
+    # typed switch sits in has to be named here (2026-11-13).
+    "voicestudio": ("voicestudio",),
 }
 
 
@@ -3160,6 +3172,11 @@ OWN_CONTROLS = {
     # linked by EXTRA_CONTROLS because no Settings card draws it yet.
     "jarvis-calendar": (("jarvis_calendar",), ("settings_bool",), {}),
     "look-at-this": (("screen_picture",), ("feature_switch",), {}),
+    # The VoiceStudio switch (2026-11-13): its own setting key and its own two
+    # intents, so a phrase that changes a DIFFERENT switch cannot be counted as
+    # this row's control.
+    "voicestudio": (("voicestudio.enabled",),
+                    ("voicestudio_set", "voicestudio_state"), {}),
 }
 OWN_ACTIONS = {
     "email-read": {"settings_asks_first": {"email_read"}},
