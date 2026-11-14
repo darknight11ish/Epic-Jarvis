@@ -260,6 +260,13 @@ def t_every_real_settings_card_is_listed():
     # display preference saved on this phone only - no route, no approval card,
     # nothing sent to the PC - so the desktop registry has no card for it and
     # the row is always drawn.
+    # "phone-backup" (2026-11-13, the copy-over wave) is NOT one of these: the
+    # phone's settings backup is a real Jarvis Settings card, so it has its own
+    # phone-only Section ("phone-backup") and is deliberately left out of this
+    # allow-list - take that Section away and the check above fails rather than
+    # quietly passing. Its desktop half really does not exist (no route, no
+    # approval card, nothing sent to the PC), which the Section's app="phone"
+    # says.
     phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify",
                 "app-control", "model-lane", "on-device-model", "edit-hud"}
     check("every desktop settings card is a SECTION",

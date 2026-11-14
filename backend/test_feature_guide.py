@@ -1532,11 +1532,15 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
     check("no phone-only row is ever said to change 'on this PC'", not bad, bad[:8])
     settings_rows = [row for row in phone if FG.label_for(row) in
                      (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
-    check("...the five phone controls are the PC-Only-labelled ones",
-          len(settings_rows) == 5, [r["id"] for r in settings_rows])
+    # SIX on 2026-11-13: the phone's own settings backup
+    # (`phone-settings-backup`, PR #1233) is the phone-only card that seals THIS
+    # phone's settings into a password-locked file, with no backend route and no
+    # PC counterpart, so it carries the PC-Only label too.
+    check("...the six phone controls are the PC-Only-labelled ones",
+          len(settings_rows) == 6, [r["id"] for r in settings_rows])
     # Each names its OWN path and says what is true of the PC, in both the change
     # sentence and the whole answer. The PC's side is read from the row's own
-    # `surface_reason`: four of the five really have no PC control, and
+    # `surface_reason`: five of the six really have no PC control, and
     # `phone-screen-rate` names the PC's own, different control - so denying a PC
     # control would contradict the surface line printed in the same answer
     # (2026-10-26, part B).
@@ -1785,7 +1789,7 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
 def t_a_phone_only_status_line_agrees_with_its_surface():
     """Part B (2026-10-26): the Status line of a phone-only row said "PC-Only".
 
-    The five phone controls carry the PC-Only label because the phone is the only
+    The phone controls carry the PC-Only label because the phone is the only
     app with the control; `label_for()` reads that from the row's reason and
     never looks at `surface`, so the Status line contradicted the "It is on the
     phone only" line in the same answer. `status_label()` derives the Status line
@@ -1826,8 +1830,8 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
           list(FG.ALWAYS_ON_DISPLAY) == ["app-lock"], list(FG.ALWAYS_ON_DISPLAY))
     five = [row for row in phone
             if FG.label_for(row) in (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
-    check("...the five phone controls are the ones this rewording covers",
-          len(five) == 5, [r["id"] for r in five])
+    check("...the six phone controls are the ones this rewording covers",
+          len(five) == 6, [r["id"] for r in five])
     check("...and each says Phone-Only, with the phone's Settings named",
           all(FG.status_label(r) == FG.PHONE_ONLY_DISPLAY_LABEL for r in five),
           [FG.status_label(r) for r in five])
