@@ -155,7 +155,7 @@ also asks for, are not covered - the row stays open. | fix/settings-receipts-202
 
 ## Closed by this pull request
 
-DEF-065 - the Settings plate that said the on-device model was not available
+DEF-066 - the Settings plate that said the on-device model was not available
 while the Local AI screen worked - is closed by PR #1231 on 2026-11-13. Its row
 is in `docs/defect-register.tsv`; it is not in the Open defects table above
 because, as the rule at the top says, a fixed defect's row leaves this table and
