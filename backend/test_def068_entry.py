@@ -388,19 +388,38 @@ def t_both_acts_resolve_to_the_builders_real_gate_actions():
 
 
 def _base_gate_table(name: str) -> dict:
-    """One dict literal from the published gate, read with `ast`, never text."""
+    """One dict from the published gate, read with `ast`, never text.
+
+    The table as the GATE builds it, not as its literal reads: a later row is
+    added by `<name>.update({...})` at module level (the shape handsfree,
+    product-check, github-tools and android-builder-gate all use, because every
+    line inside the literal is some earlier patch's hunk context), and that call
+    runs at import exactly as if the rows sat inside the literal. Reading only
+    the literal is what made this suite report "the published gate maps
+    app_build_android to itself" FAIL on a tree where the gate answered
+    correctly - measured on this branch, 2026-11-14."""
     path = REPO / "jarvis-backend" / "jarvis_gate.py"
     if not path.is_file():
         return {}
-    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+    body = ast.parse(path.read_text(encoding="utf-8")).body
+    table = {}
+    for node in body:
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
                 and node.target.id == name and isinstance(node.value, ast.Dict):
-            return ast.literal_eval(node.value)
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict) \
+            table = ast.literal_eval(node.value)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict) \
                 and any(isinstance(t, ast.Name) and t.id == name
                         for t in node.targets):
-            return ast.literal_eval(node.value)
-    return {}
+            table = ast.literal_eval(node.value)
+        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) \
+                and isinstance(node.value.func, ast.Attribute) \
+                and node.value.func.attr == "update" \
+                and isinstance(node.value.func.value, ast.Name) \
+                and node.value.func.value.id == name \
+                and len(node.value.args) == 1 \
+                and isinstance(node.value.args[0], ast.Dict):
+            table.update(ast.literal_eval(node.value.args[0]))
+    return table
 
 
 def _base_gate_names(name: str) -> set:

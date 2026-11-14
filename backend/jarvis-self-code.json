@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "c26fa729e855121c4afbd371bfdfcf8a99f6036a",
- "built_at": "2026-11-14T10:25:25-08:00",
+ "ref": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
+ "built_at": "2026-11-14T10:49:38-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6490,6 +6490,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
+   "date": "2026-11-14",
+   "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
+  },
+  {
    "sha": "c26fa729e855121c4afbd371bfdfcf8a99f6036a",
    "date": "2026-11-14",
    "subject": "Record the Atlas copy pass and the builder entry point, and re-hash the map"
@@ -6583,11 +6588,6 @@
    "sha": "02e16caac26a9004f5685d0101d607ba789593fe",
    "date": "2026-11-14",
    "subject": "Merge f75b34e1f into integration/wave19-2026-11-14 (#1255 widgets wear their own look); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "f91415dacce46ca92beece1a81772a6e296cb185",
-   "date": "2026-11-14",
-   "subject": "Merge da1f764f8 into integration/wave19-2026-11-14 (#1256 native Android screens); generated records keep the integration side, regenerated at the end"
   }
  ],
  "top_level": [

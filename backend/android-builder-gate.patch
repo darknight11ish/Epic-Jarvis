@@ -1,0 +1,41 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -3294,6 +3294,38 @@
+     "handsfree_enable": ("no", "local", "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant"),
+ })
+ 
++# --------------------------------------------------------------------------
++#   The Android app builder's two actions in the tool->action table
++#   (jarvis_agent.py's `android_app` tool, DEF-068, 2026-11-14)
++# --------------------------------------------------------------------------
++# THEY ARE HERE, AT THE END OF THE FILE, for the reason the two `_RISK.update`
++# blocks above give: every line inside `_TOOL_ACTIONS` is some earlier patch's
++# hunk context, and the two entries this adds would land between
++# web-search-grant.patch's own added lines and the closing brace - which broke
++# that patch's reversal the moment they were typed in there (measured on this
++# branch: "error: patch failed: jarvis_gate.py:1052"). The end of the file
++# belongs to no hunk in either tree. `_TOOL_ACTIONS.update` runs at import,
++# before any `check()` call, so `action_for_tool()` answers these two exactly as
++# if they were in the literal.
++#
++# Why they are needed at all: `android_app` puts its build and install halves to
++# the gate under the builder module's OWN action names
++# (jarvis_android_builder.BUILD_ACTION / INSTALL_ACTION), so each name maps to
++# itself - the shape "send_file_to_phone" above uses. Without them
++# `action_for_tool()` answers "unclassified_tool": the Reach page calls both
++# unclassified and the card shown is not the one the tool raises. Both actions
++# already carry their risky `_RISK` rows, their `_NO_RULE_FROM_DENIAL` membership
++# and their "ask" lines in both shipped settings copies; these two lines are only
++# what makes the question answerable. The Android builder itself shipped in the
++# base with NO patch (2026-10-30), so on a live install these arrive the same way
++# its `_RISK` rows did - see tools/repair_live_backend_gaps.py - and
++# jarvis_agent._one_call passes the action name through as a belt until they do.
++_TOOL_ACTIONS.update({
++    "app_build_android": "app_build_android",
++    "app_install_android": "app_install_android",
++})
++
++
+ # --------------------------------------------------------------------------
+ #   The product check's gate rows (jarvis_product_check.py, 2026-11-04)
+ # --------------------------------------------------------------------------

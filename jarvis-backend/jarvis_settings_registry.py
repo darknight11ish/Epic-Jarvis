@@ -1580,6 +1580,7 @@ _TOOL_TARGETS = {
     'read_web_page': ('the read web page tool', 'read web page tool', 'the read web page', 'read web page', 'one web page', 'web page'),
     'connect_account': ('the connect account tool', 'connect account tool', 'the connect account', 'connect account'),
     'rea_investigate': ('the rea investigate tool', 'rea investigate tool', 'the rea investigate', 'rea investigate'),
+    'android_app': ('the android app tool', 'android app tool', 'the android app', 'android app'),
     'calculator': ('the calculator tool', 'calculator tool', 'the calculator', 'calculator'),
     'memory_search': ('the memory search tool', 'memory search tool', 'the memory search', 'memory search'),
     'file_read': ('the file read tool', 'file read tool', 'the file read', 'file read'),

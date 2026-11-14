@@ -23,7 +23,7 @@ BULLETS = (
     'The button beside the big window\'s chat box is called "Open the Atlas bar"',
     'The wave-19 deploy is on the field-test record, and three checks still need your hands',
     'Fifty-three field-test records are in the repository instead of only on one PC',
-    'Jarvis builds apps with real screens, not just a page in a phone window',
+    "The desktop's own copy says Atlas, and the Android builder finally has a way in",
 )
 
 

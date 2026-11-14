@@ -1929,6 +1929,32 @@ $PATCHES = @(
     # jarvis_agent.py offers still resolves to no real gate action in CI,
     # where jarvis_gate.py itself cannot be imported.
     'gate-tool-actions-gap.patch'
+    # The Android app builder's two actions (android-builder-gate.patch,
+    # 2026-11-14; DEF-068's way in for the model tool `android_app`). TWO
+    # `_TOOL_ACTIONS` lines, in ONE `_TOOL_ACTIONS.update` block, and nothing
+    # else: `app_build_android` and `app_install_android` map to THEMSELVES, the
+    # shape send_file_to_phone uses, because jarvis_agent.py already puts both
+    # halves to the gate under the builder module's own action names
+    # (jarvis_android_builder.BUILD_ACTION / INSTALL_ACTION). Without them
+    # action_for_tool() answers "unclassified_tool" - the Reach page calls both
+    # unclassified and the card shown is not the one the tool raises.
+    #
+    # WHY IT IS HERE, BEFORE product-check.patch: the same rule as the patch
+    # above - unknown-risk-approvable.patch must stay the LAST patch that
+    # writes jarvis_gate.py (backend/test_gate_unknown_risk.py, no whitelist),
+    # handsfree.patch must stay immediately before web-search-grant.patch
+    # (backend/test_phone_app_allowlist.py) and web-search-grant.patch
+    # immediately before unknown-risk-approvable.patch
+    # (backend/test_web_search_grant.py), so a new writer can only go earlier.
+    # Like handsfree and product-check it appends an `_TOOL_ACTIONS.update`
+    # block rather than typing lines inside the literal: every line in there is
+    # some earlier patch's hunk context, and the two lines typed into the
+    # literal broke web-search-grant.patch's reversal the first time they were
+    # tried there (measured on this branch: "error: patch failed:
+    # jarvis_gate.py:1052"). This block sits ABOVE product-check's in the
+    # published base, which is where its own hunk puts it - product-check and
+    # web-search-grant both append below it afterwards.
+    'android-builder-gate.patch'
     # The product check's gate rows (product-check.patch, 2026-11-04; the
     # owner's choice "wire the existing product check"). ONE `_TOOL_ACTIONS`
     # entry and, at the end of the file, the action's `_RISK` row and its "a

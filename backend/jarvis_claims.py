@@ -318,6 +318,15 @@ ACTING_TOOLS = frozenset({
     # card was raised or the write failed. It was left in NEITHER set at first,
     # which backend/test_smarter_answers.py catches on purpose.
     "cloud_escalation",
+    # "android_app" (2026-11-14, DEF-068): ONE act that writes a whole project
+    # into the owner's work folder and then installs the built app on the phone
+    # - two cards, two real writes, and nothing about either can be undone by
+    # the model. An answer that says "I built it and put it on your phone" in a
+    # turn where only the card was raised, or the build failed, is exactly the
+    # false claim this set exists to catch, so it is an ACTION tool. It was left
+    # in NEITHER set at first, which this suite caught ("every tool jarvis_agent
+    # offers is read-only or an action") on the first CI run of the branch.
+    "android_app",
     # Clearing a conversation is NOT a model tool: Gemini ruling 1 (2026-11-03)
     # keeps it route/app/fast-path only, behind its one card, so it is in
     # neither table here - the action still exists, the TOOL does not.
