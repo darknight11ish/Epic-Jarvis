@@ -39147,3 +39147,150 @@ answer says switching it on changes nothing you would hear. `backend/test_voices
 nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `jarvis_quick.py`
 (`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
 `docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.
+
+## 222. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
+
+*Numbering note, 2026-11-13: written as 220, renumbered to 222 when main's code-protection (220), VoiceStudio (221) and the on-device model engine (223) sections took the numbers around it. `docs/ARCHITECTURE.md` section 8 cites this as section 222.*
+
+This section is the record of the owner-approved copy-over wave
+(`COPY-OVER-SPEC-2026-11-13.md`, sections A1-A2). Neither feature is an API
+route: one writes a file the owner chooses, the other reads GitHub's own
+release. That is why there is a section about them here at all - the two apps'
+surface grew without a route, and a reader of this file should be able to see
+what was added and what it may not do. `tools/check_parity.py` classifies
+nothing new.
+
+**A1. Encrypted settings backup (phone only).** Settings -> "Phone settings
+backup" saves THIS PHONE'S settings into one file and restores them on a new or
+wiped phone. The file is a versioned container - a plaintext header (format
+version, encrypted flag, salt, PBKDF2 iteration count) and then the settings
+snapshot cut into AES-256-GCM segments, each bound by AAD to its index and to a
+final marker
+(`jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt`;
+adapted from Mobile-Harness's `BackupCrypto.kt`, MIT,
+Copyright (c) 2026 Mobile Harness Contributors, credited in
+THIRD-PARTY-NOTICES.txt and in the phone's own `assets/licenses/NOTICES.txt`).
+The snapshot itself is typed JSON (`data/SettingsBackup.kt`): strings,
+booleans, ints, longs, floats and string sets survive a restore as the types
+they were.
+
+- **Scope: settings only.** The list is `SettingsBackup.FILES` - this phone's
+  settings, appearance, menus, history-view preferences, app-control list and
+  notification allow-list. `EXCLUDED_FILES` names every other preferences
+  file with its reason: `jarvis_secure` (the pairing token, behind the
+  Android Keystore), the models cache, captured notification content, pinned
+  chats and the crash log. `EXCLUDED_KEYS` also keeps the desktop's ADDRESS
+  out of the one listed file that could carry it: the token stays in
+  `jarvis_secure`, so restoring an address over the stored one would send a
+  credential the phone already holds to whatever host the backup names. The
+  address is typed again when the phone pairs. A restored phone therefore
+  PAIRS AGAIN, exactly as after a reinstall - that is the property that makes
+  the file safe to keep anywhere.
+- **The token is not an input field.** The Android half asks for the listed
+  files by name and never opens the token's file; the pure snapshot writer
+  walks the allow-list even if a caller hands it every preference file, and the
+  reader REFUSES a snapshot naming any file the app does not back up. The test
+  (`EncryptedBackupTest`) builds a realistic map that DOES contain a token
+  blob and asserts the blob, its key name and its file name never appear in the
+  plaintext or the ciphertext.
+- **Fail closed, with plain words.** A wrong password or a tampered first
+  segment is one answer (GCM cannot tell them apart): "Either the password is
+  wrong or this file has been damaged. It was not opened, and nothing on this
+  phone was changed." A truncated file, a foreign file and an unencrypted file
+  share the one "damaged" sentence; a newer format has its own "update the app
+  first" sentence. The whole file authenticates BEFORE any preference is
+  written, so a file that fails to authenticate changes nothing. The write
+  itself is one preferences file at a time, so a write that fails partway is
+  reported as such, and settings restored before it may already be in place.
+  A password shorter than 8 characters is refused when SAVING; restoring
+  accepts whatever password the file was made with.
+- **No route and no PC.** The PC's own backup is a different feature on the
+  "Backups" card (section 45), with its own recovery code; the phone cannot
+  read or write it, and nothing from this file is sent anywhere. The file goes
+  wherever Android's document picker puts it.
+
+**A2. Checksum-pinned update manifest (phone only).** The existing phone
+updater (sections above cover the 2026-10-11 download and pinned-certificate
+gate) now also reads `client-latest.json` from the rolling `client-latest`
+release, published by `.github/workflows/jarvis-client.yml` beside the APK.
+The manifest carries `versionName`, `versionCode`, `apkUrl`, `sha256`,
+`sizeBytes`, `builtAt` and `commit`; CI checks it names the exact file it
+just hashed before uploading it, uploads it with the APK, and keeps it when the
+previous build's assets are deleted. The phone's half
+(`jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt`;
+adapted from Mobile-Harness's `AppUpdater.kt` and its update JSON, MIT,
+credited as above) is deliberately only the integrity half:
+
+- **Two gates, ANDed.** A download is offered for install only when (1) its
+  size and SHA-256 match the manifest, and (2) its signing certificate matches
+  the digest pinned in the app (`UpdateCheck.SIGNER_SHA256`, unchanged). A
+  mismatch of either deletes the file and shows the reason.
+- **Nothing downloads without a checksum.** The manifest is fetched BEFORE the
+  APK on the owner's tap; an unreadable or missing manifest downloads nothing,
+  and is reported as "could not check", never as "up to date". A network
+  failure keeps the old answer and says so on Platform checks.
+- **Nothing installs itself.** `ApkUpdater` contains no installer code at
+  all; the Install button appears only in the `Ready` state both gates
+  produce, and the install step is Android's own installer prompt, opened by
+  that tap.
+- **CI's versionCode is the APK's.** The workflow computes
+  `1000000000 + GITHUB_RUN_NUMBER`, the same value `build.gradle.kts` gives
+  the build; `ApkUpdaterTest` reads both files and fails if they ever
+  disagree.
+
+**What was deliberately not copied.** Mobile-Harness's unencrypted-backup
+option, its multi-GB project/file/chats backup and its Keystore API-key vault
+(no consumer on this phone yet), its branding and file names. No AGPL or
+unlicensed code was used anywhere in this wave.
+
+## 223. The phone's own on-device model engine adds no backend route (2026-11-13)
+
+*Numbering note, 2026-11-13: this section was written as 221; main's VoiceStudio section already held 221 when this branch merged main, so this one is 223. The words below are unchanged.*
+
+This section exists to say what is **not** here. The Android app's Local AI screen
+(`jarvis-client/app/src/main/java/com/jarvis/client/localai/`, opened from Home's
+More menu) runs a small GGUF model on the phone itself, with llama.cpp under it:
+the model file is read from this phone's storage, the answer is generated on this
+phone, and **nothing about the question or the answer is sent to the PC or to
+anywhere else**. There is therefore no route to classify, no field to add and no
+permission to ask for - `tools/check_parity.py` sees an empty diff on both sides,
+which is the correct answer rather than an omission.
+
+What that means, route by route:
+
+* **No new `GET` or `POST`.** The screen calls no backend at all. It does not
+  read `/api/models`, `/api/status` or anything else, and the engine has no
+  network code in it (`LocalAiShipsOffTest` reads the package and fails if an
+  HTTP client, a URL or a token ever appears there).
+* **The existing chat is unchanged.** The question box on Home still sends to the
+  PC exactly as before; the Local AI screen is a separate local session, never a
+  fallback or a replacement.
+* **No model catalogue and no download.** E1 takes a `.gguf` file the owner
+  already put on the phone (over USB, or copied across from another device),
+  picked through Android's own document picker. In-app download is E2, and it
+  must arrive with its own route and its own decision record.
+* **No approval card, no token, no pairing change.** A file on this phone and a
+  model answering it are the owner's own act on the owner's own device. The
+  screen never reads the pairing token and never writes one.
+* **No speech.** The phone still does no speech-to-text, here or elsewhere; this
+  screen is typed text only.
+
+The switch that turns it on ships **OFF**, no model is loaded until the owner
+taps Load, and the screen's permanent label is the honest one: *"On-device model:
+runs on this phone, not your PC."* The desktop has no counterpart on purpose -
+`docs/ARCHITECTURE.md` section 8 records why (it already has Ollama on the same
+PC, and a second on-device engine there would duplicate it) - and
+`features/features.json` is not regenerated in this pull request. That is no
+longer a claim that the screen is unmeasured, because the screen itself **has**
+been driven on a phone, so the words here are measured rather than designed. The
+native library itself was proven on the owner's phone by the native lane's
+standalone probe (a small Qwen2.5-0.5B Q4_K_M model, about 19.92 tokens/s, with
+cancellation, unload and destroy passing); that is a PASS for the library, and
+the app now has its own PASS too. The screen was driven on the OnePlus
+`f0a5b32b` on 2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B
+Q4_K_M each answered `Hello, who are you?` at **27.1, 13.8 and 7.7 tokens per
+second on screen**, matched by the engine's own `generated N token(s) in M ms`
+line. With the keyboard up, two further sends measured **34.5 and 34.3** tokens
+per second. The in-app **Import** (system file picker) row stays **NOT-TESTED**:
+the test models were `adb push`ed rather than imported, and a NOT-TESTED row is
+never a pass.

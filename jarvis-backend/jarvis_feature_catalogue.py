@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 182 rows from features/features.json.
+The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 59f9687b0fbceba6f55019cbdb23c2d3c4fe7864debcc6876fffa3971d41b6bf); the apps' Features pages read their own
+`features/features.json` (sha256 b8829534a9e207e8aee793dae39a286d495b713bfe408554c625090ee756a826); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "59f9687b0fbceba6f55019cbdb23c2d3c4fe7864debcc6876fffa3971d41b6bf"
+SOURCE_SHA256 = "b8829534a9e207e8aee793dae39a286d495b713bfe408554c625090ee756a826"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1229,6 +1229,19 @@ FEATURES = (
         "covers": ["settings.watch-notify", "phone-extras"],
     },
     {
+        "id": "phone-settings-backup",
+        "group": "Phone",
+        "title": "Set up a new phone from a settings backup",
+        "what": "One password-locked file that holds this phone's own settings, so a new or wiped phone can be set up without going through every switch again.",
+        "where": "Settings, Phone settings backup. Save a backup asks for a password and then opens Android's own file picker; Restore from a backup asks for that password and opens the backup file.",
+        "asks": "No card, and nothing reaches the PC: you choose where the file goes, and a restore changes only this phone's settings.",
+        "limit": "The password is the only thing that opens the file - lose it and Jarvis cannot recover the backup. Your pairing token is never in it, and neither are chats, saved memories, pictures or logs, so a restored phone pairs with your PC again. The PC's own backups are a different card, with a different recovery code.",
+        "surface": "phone",
+        "surface_reason": "The desktop has no counterpart and none is wanted: the PC's own backup is the Backups card, a different file with a different recovery code, and the phone cannot read or write it (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["back up my phone settings", "restore my phone settings on a new phone", "move my settings to a new phone"],
+        "covers": [],
+    },
+    {
         "id": "phone-floating",
         "group": "Phone",
         "title": "Floating Jarvis",
@@ -1587,7 +1600,7 @@ FEATURES = (
         "what": "Whether a newer build of this app exists, and installing it.",
         "where": "Settings, Updates. On the phone it is \"Check for new versions\" on Platform checks, under This app. Each app checks its own release page.",
         "asks": "Nothing installs by itself - you press to install, then to restart.",
-        "limit": "Each app checks its own release page; installing never starts by itself, and a version it cannot read is said plainly.",
+        "limit": "Each app checks its own release page; installing never starts by itself, and a version it cannot read is said plainly. On the phone a download is offered for install only when its SHA-256 and size match the checksum published beside the build AND it is signed with Jarvis's own key.",
         "surface": "both",
         "aliases": ["tells me when a newer build of this app exists and installs it"],
         "covers": ["settings.updates", "limits-and-notes"],

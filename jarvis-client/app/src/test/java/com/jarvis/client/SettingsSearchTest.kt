@@ -167,6 +167,48 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun `the on-device model row says the feature exists, where it lives, and what it needs`() {
+        val plate = wordsOf(
+            repoFile(
+                "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/OnDeviceModelPlate.kt"
+            ).readText()
+        )
+        assertFalse(
+            "the Settings plate must not deny a feature this build opens from Home",
+            plate.contains("Not available in this build"),
+        )
+        assertTrue(
+            "the plate must name where the feature lives: Home -> More -> Local AI",
+            plate.contains("Home → More → Local AI"),
+        )
+        assertTrue(
+            "the plate must say the model file is the owner's own and nothing leaves the phone",
+            plate.contains("a model file you supply yourself on this phone") &&
+                plate.contains("never sends anything anywhere"),
+        )
+        assertTrue(
+            "the plate must say a model file has to be imported, with nothing downloaded",
+            plate.contains("It needs a model file you import first"),
+        )
+
+        val row = requireNotNull(SettingsSearch.row("on-device-model")) {
+            "the Settings search index lost its on-device-model row"
+        }
+        assertTrue(
+            "the row must quote the plate's own words, not the old denial",
+            row.quotes.isNotEmpty() && row.quotes.all { plate.contains(it) },
+        )
+        assertFalse(
+            "the search row must not advertise the old denial",
+            row.label.contains("not available"),
+        )
+        assertTrue(
+            "typing where the screen lives must find the row",
+            SettingsSearch.wordsFor("on-device-model").contains("Local AI"),
+        )
+    }
+
+    @Test
     fun `a sentence the app folds across two literals still counts`() {
         // The mismatch that made this file red on main on 2026-10-10: the
         // Limits screen says one sentence, and writes it as two literals. The
@@ -439,8 +481,12 @@ class SettingsSearchTest {
             SettingsSearch.matching("packup").contains("backup"),
         )
         // ...and a real word keeps matching exactly, once more, so this test
-        // cannot pass by the matcher simply refusing everything.
-        assertEquals(listOf("backup"), SettingsSearch.matching("backup"))
+        // cannot pass by the matcher simply refusing everything. TWO rows now
+        // answer "backup": the PC's Backups card and - since the copy-over
+        // wave of 2026-11-13 - this phone's own settings backup. Both are real
+        // answers, drawn in screen order with the PC's first, which is the
+        // same order "backup" puts them in on the screen.
+        assertEquals(listOf("backup", "phone-backup"), SettingsSearch.matching("backup"))
     }
 
     @Test

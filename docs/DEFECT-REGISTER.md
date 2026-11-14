@@ -100,6 +100,16 @@ by agents that had no shared view of what the others were doing:
 Every one of those was paid for twice. That is the whole reason this register
 exists: one line in one file, before the work starts.
 
+## Closed in this change (history, not an open defect)
+
+**DEF-067** - the phone's settings backup carried the desktop's address
+(`host`), so a restore wrote that address into `jarvis_client` while the
+existing pairing token stayed in `jarvis_secure`: the token the phone already
+held would then be used against whatever host the backup named. Found and fixed
+on 2026-11-13; the closed row and its proof are in `docs/defect-register.tsv`,
+and the id is deliberately not in the table below because nothing about it is
+open.
+
 ## Open defects
 
 | id | owner | claimed_at | status | files | evidence | checkout |
@@ -153,3 +163,11 @@ also asks for, are not covered - the row stays open. | fix/settings-receipts-202
 | DEF-055 | unclaimed |  | open | `jarvis-backend/jarvis_memory.py`; `backend/rebuilt/jarvis_memory.py` | KNOWN PRIVACY GAP, MEASURED 2026-11-09 (origin/main 31cab5fd): the memory database is NOT encrypted at rest - `backend/rebuilt/jarvis_memory.py:2206` says plainly "memory.db has no cipher" (the same boundary this project accepts for reminders and the calendar: the Windows account plus BitLocker) - while chat history and encrypted backups use AES-256-GCM, so memory facts are the odd one out. The owner was told plainly on 2026-11-09. FIX: research the shape first (same key material/unlock path as chat history, migration for existing rows), then a design + migration plan before any live-data migration; queued as its own task (team board task-10). Nothing on the README claims memory is encrypted. | origin/main 31cab5fd5 (read-only; owner told 2026-11-09) |
 | DEF-049 | offpeak-session | 2026-11-09 | open | `backend/jarvis_skill_hub.py`; `jarvis-backend/jarvis_skill_hub.py`; `jarvis-backend/jarvis_skills.py`; `backend/test_skill_extra_checks.py`; `docs/JARVIS-API.md` | REOPENED 2026-11-09 by the wave-13 integration, before the wave-13 deploy: the wave-12 close was premature - the fix is in the published base but no `.patch` carried it to the live file, so the live `jarvis_skills.py` was still 42,416 B with zero `_extra_findings` hits at 12:25 PT. `backend/skill-scan-wiring.patch` (PR #1218, F5) is the delivery route; the row closes only after the post-deploy live check. Full original evidence in the TSV. | wave-13 integration worktree, PR #1218 |
 | DEF-065 | lead | 2026-11-13 | open | `backend/jarvis_github.py`; `jarvis-backend/jarvis_github.py` | FOUND 2026-11-13 by the live GitHub field test on the installed 0.2.448: on a private repository whose owner is on GitHub's Free plan the branch-rules endpoint GET /repos/{owner}/{repo}/rules/branches/{base} answers 403 with body {"message": "Upgrade to GitHub Pro or make this repository public to enable this feature.", "status": "403"} - branch rules are a paid feature - but _check_plan treated every 401/403 as a token refusal, so the owner-approved merge card 92d7445a479a for darknight11ish/jarvis-coding-field-test PR #1 (head 75044fb8bce6993b79bd98d3a54cc4e498de4600, green ci, mergeable clean) was answered ok:false "This GitHub token cannot read branch protection rules for this repository, so Jarvis will not merge it. Nothing was merged." instead of applying the file's own generic rule (not draft, mergeable, at least one check-run on the head sha, all completed success/neutral/skipped). FIX IN THIS PR: _plan_limited_rules reads GitHub's own JSON message from the kept 403 body (case-insensitive Upgrade to GitHub Pro / make this repository public) and _check_plan treats that 403 as NO rules - the same shape as a 200 naming none - so the generic rule decides; the merge answer names the free-plan reason. A 401, and a 403 with any other message, still refuse with the existing words. PROVEN by t_merge_plan_limited_rules_are_no_rules in backend/test_github_tools.py (15 checks): the plan-limited 403 merges a green commit, a failing check refuses with the generic rule's words, lowercase and single-phrase variants still match, and 401 bad token / unrelated 403 / empty bodies still refuse. BITES on origin/main: 5 of the 15 checks fail against the pre-fix module (10 passed, 5 failed), all 15 pass with the fix. Row stays OPEN until the fix reaches a live install and the same foreign-repo merge is re-run. | fix/merge-plan-limited-rules-2026-11-13 @ 3fd016a1e (worktree D:/jarvis-scratch/pr-plan-limit-rules-2026-11-13) |
+
+## Closed by this pull request
+
+DEF-066 - the Settings plate that said the on-device model was not available
+while the Local AI screen worked - is closed by PR #1231 on 2026-11-13. Its row
+is in `docs/defect-register.tsv`; it is not in the Open defects table above
+because, as the rule at the top says, a fixed defect's row leaves this table and
+the `.tsv` keeps it as the history.

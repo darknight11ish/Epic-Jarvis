@@ -5135,10 +5135,17 @@ what is missing is only the Settings screen agreeing about who turned it off.
   own recent-changes record - the same bullets the chat's "what changed in your
   last update?" answer reads - and its one control opens Settings at the Updates
   card (`open_fix_place` with `place: "updates"`, a navigation only). **The
-  phone shows no such pane because it has nowhere for the door to go:** the
-  phone does not install or update Jarvis (the desktop's updater runs on this
-  PC), so a "What's new" pane there could describe a change and then offer
-  nothing to act on. The phone's Tutorials tab keeps the shared catalogue
+  phone shows no such pane because it has nowhere for the door to go:** that
+  pane's one control opens the PC's own Updates card, which is the desktop's
+  updater, while the phone's own updates live on Platform checks -> "This app"
+  (`net/UpdateCheck.kt`), where the published release's changes are already
+  drawn beside its own Download button. A second "What's new" pane on the phone
+  would duplicate that rather than lead anywhere the phone cannot already go.
+  (This paragraph used to say "the phone does not install or update Jarvis",
+  which stopped being true on 2026-10-11 when the phone gained its own
+  download-and-install door, and is plainly false since the 2026-11-13
+  checksum manifest - corrected here rather than left as a reason that is not
+  one.) The phone's Tutorials tab keeps the shared catalogue
   (`JARVIS-API` section 114). `tools/check_parity.py` classifies
   `/api/recent-changes` `deliberate` with this reason. The pane invents nothing:
   a module that is missing, empty or unreadable answers with a sentence saying
@@ -5202,6 +5209,85 @@ what is missing is only the Settings screen agreeing about who turned it off.
   gains no row while there is nothing for the owner to use;
   `backend/test_companion.py` is the proof.
 
+- **The phone's own settings backup and the checksum-pinned update manifest
+  are the phone's, and that is one-sided on purpose** (2026-11-13, the
+  owner-approved copy-over wave; `docs/JARVIS-API.md` section 222;
+  `COPY-OVER-SPEC-2026-11-13.md` sections A1-A2). **Backup:** Settings ->
+  "Phone settings backup" seals THIS PHONE'S OWN settings - the face and
+  colours, the menus shown, the voice and display switches, which apps Jarvis
+  may open, and which apps may tell Jarvis about a notification - into one
+  PBKDF2 -> AES-256-GCM file (`data/EncryptedBackup.kt`,
+  `data/SettingsBackup.kt`, adapted from Mobile-Harness under MIT, credited in
+  THIRD-PARTY-NOTICES.txt), and restores them on a new or wiped phone. The
+  desktop has no counterpart and none is wanted: the PC's own backup is the
+  "Backups" card one row above, a different file with a different recovery
+  code, and the phone cannot read or write it. The pairing token is
+  deliberately NOT in the file - it stays in the Android Keystore and a
+  restored phone pairs again - and neither are chats, saved memories, pictures
+  or logs, so the file is safe to keep on a USB stick. **Update manifest:** the
+  rolling `client-latest` release now also carries `client-latest.json`,
+  holding the APK's SHA-256 and size, and the phone checks a download against
+  it before its existing pinned-certificate gate (`update/ApkUpdater.kt`,
+  adapted from Mobile-Harness under MIT; the download and certificate check
+  were already there, added 2026-10-11). The desktop's updater is a different
+  program with a different installer, so nothing is ported to it. Neither
+  feature adds a route - the backup is a file the owner chooses, the update
+  comes from GitHub - so `tools/check_parity.py` classifies nothing new.
+
+- **A model that runs on the phone itself is the phone's alone, and that is
+  one-sided on purpose** (2026-11-13; the owner's order *"build the full
+  android local ai model engine into the jarvis app once off peak hits"* and
+  his card answers that night: a separate Local AI screen, model source
+  "Both" with USB/file import first). The Android app gains a small GGUF
+  model engine of its own (`com.jarvis.client.localai`, llama.cpp under the
+  hood, MIT): it reads the model file on this phone's storage, answers in a
+  screen reached from Home's More menu, and has **no backend route, no
+  cloud fallback and no network path at all**. The desktop gets nothing, and
+  not because it was forgotten: it already runs models on the same PC through
+  Ollama, with the graphics-card lanes and the model catalogue that this
+  slice is explicitly not allowed to build on the phone, so a second
+  on-device engine there would be a duplicate rather than parity. **Nothing
+  about the ordinary Jarvis chat changes:** the on-device screen is a
+  separate local session, never a silent replacement for the chat that uses
+  the PC, and the switch that turns it on ships OFF - nothing downloads,
+  nothing loads and no native library is opened until the owner taps, and
+  the model is brought by the owner as a file (E1 has no in-app download;
+  that is E2). It adds no permission, raises no approval card and logs
+  nothing; the phone does no speech-to-text on this path or any other. The
+  time rules are the engine's own: **five minutes** with nothing asked (or
+  typed) unloads the model, one reply is hard-capped at 180 seconds, and
+  leaving the Local AI screen frees the model immediately, so a slow model
+  cannot hold the phone's memory or the screen forever. **The idle window was
+  5 seconds, and the field test changed it (2026-11-13):** on the owner's
+  phone the first build unloaded the model 16 seconds after Load, before a
+  person could start typing (logcat `model loaded` at 06:15:04.976, `model
+  unloaded` at 06:15:20.870), so the measured correction is five minutes; the
+  180-second reply cap is unchanged. **Honest limits, on the record:** the
+  native `libjarvis_llama.so` is the native lane's prebuilt
+  artefact (CPU-only llama.cpp, both 64-bit ABIs, 16 KB page aligned, with
+  provenance and MIT licences in `jarvis-client/native/`) and is integrated
+  into the same pull request; it was proven on the owner's own phone by that
+  lane's standalone probe - a small Qwen2.5-0.5B Q4_K_M model loaded in
+  262 ms and generated 24 tokens in 1.2 s, about 19.92 tokens/s, with
+  cancellation, unload and destroy passing. **That is a PASS for the LIBRARY,
+  not for the app.** The app itself was then driven on the same phone on
+  2026-11-13, from the CI-signed release APK: Qwen2.5-0.5B/1.5B/3B Q4_K_M
+  each produced a real reply to `Hello, who are you?`, at 27.1, 13.8 and
+  7.7 tokens/s as shown on the screen and matched by the engine's own
+  `generated N token(s) in M ms` line; with the keyboard up, two further sends
+  measured 34.5 and 34.3 tokens/s on the same screen. The 3B model was accepted
+  by the RAM tier (about 2.9 GB of a 3.2 GB budget) rather than forced. The
+  in-app **Import** (SAF picker) was not exercised - the models were `adb
+  push`ed - so that row is NOT-TESTED, not PASS. Screenshots are black because
+  the activity sets `FLAG_SECURE`, which is correct, so the evidence is
+  uiautomator XML and logcat, and a screenshot row stays BLOCKED rather than
+  PASS. Two usability defects the test found are fixed in the same pull
+  request: the composer (draft, Send, Clear) is pinned above the keyboard inset
+  instead of being a list item the keyboard clipped out of the accessibility
+  tree, and the draft gained a Clear action. `features/features.json` is
+  unchanged in this pull request - the screen has now been measured, but the
+  measurement lives in this paragraph, not in that list; `tools/check_parity.py`
+  has nothing to classify because no route is added.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
