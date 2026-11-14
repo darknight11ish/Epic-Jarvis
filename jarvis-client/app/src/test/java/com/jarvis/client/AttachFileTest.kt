@@ -151,40 +151,36 @@ class AttachFileTest {
         assertFalse(AttachFile.MIME_TYPES.contains("audio/*"))
     }
 
-    // --------------------------- the Settings folder door: photos as files ---
+    // --------------------- the Settings folder door: any file as a plain copy ---
     //
     // 2026-11-13, the owner's report: "send this file which was a photo to the
     // computer" was answered with "I can't receive or send files between
-    // devices". The Settings "Send a document" row now carries a photo as a
-    // PLAIN FILE COPY into `From my phone` - not the chat picture path, and no
-    // model sees it. These tests pin that it is the folder door only.
+    // devices", and then his ask for "any file type ... up to a reasonably
+    // large size". The Settings row is "Send a file from your phone" and its
+    // picker is `*/*`: the PC stores the bytes as a plain file in `From my
+    // phone` and nothing here reads, runs or models them. These tests pin the
+    // folder door only; the chat row and the picture path are unchanged.
 
     @Test
-    fun `the folder door's filter adds exactly the eight photo kinds`() {
-        assertEquals(
-            listOf(
-                "image/jpeg", "image/png", "image/webp",
-                "image/heic", "image/heif", "image/gif", "image/bmp",
-            ),
-            AttachFile.PHOTO_KINDS.map { it.mime }.distinct(),
-        )
-        assertEquals(
-            AttachFile.MIME_TYPES.toList() + AttachFile.PHOTO_KINDS.map { it.mime }.distinct(),
-            AttachFile.SEND_FILE_MIME_TYPES.toList(),
-        )
-        // The chat row's own list is untouched, and no wildcard crept in.
+    fun `the folder door offers every file type, and the chat row keeps its own list`() {
+        assertEquals(listOf("*/*"), AttachFile.SEND_FILE_MIME_TYPES.toList())
+        // The chat row's own list is untouched, and no wildcard crept in there.
         assertFalse(AttachFile.MIME_TYPES.contains("image/jpeg"))
-        assertFalse(AttachFile.SEND_FILE_MIME_TYPES.contains("image/*"))
-        assertFalse(AttachFile.SEND_FILE_MIME_TYPES.contains("*/*"))
-        assertEquals(AttachFile.SEND_FILE_MIME_TYPES.distinct(), AttachFile.SEND_FILE_MIME_TYPES.toList())
+        assertFalse(AttachFile.MIME_TYPES.contains("image/*"))
+        assertFalse(AttachFile.MIME_TYPES.contains("*/*"))
+        assertFalse(AttachFile.mimeTypes(withPictures = false).contains("image/*"))
     }
 
     @Test
-    fun `the folder door accepts a photo by its extension, and KINDS stays document-only`() {
+    fun `the folder door accepts any name, and KINDS stays document-only`() {
         for (ext in listOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp")) {
             assertNotNull("$ext", AttachFile.photoKindOf("holiday.$ext"))
             assertNotNull("$ext upper", AttachFile.photoKindOf("HOLIDAY.${ext.uppercase()}"))
-            assertNotNull("$ext through the folder door", AttachFile.transferKindFor("holiday.$ext", null))
+            assertEquals(
+                "$ext keeps its own photo type through the folder door",
+                AttachFile.photoKindOf("holiday.$ext")!!.mime,
+                AttachFile.transferKindFor("holiday.$ext", null).mime,
+            )
             // ...and the chat document list still does not claim it.
             assertNull("$ext must stay out of KINDS", AttachFile.kindOf("holiday.$ext"))
         }
@@ -193,14 +189,35 @@ class AttachFileTest {
         assertNull(AttachFile.photoKindOf("holiday.tif"))
         assertNull(AttachFile.photoKindOf("notes.zip"))
         assertNull(AttachFile.photoKindOf("scan"))
-        // A document is still a document through the same door.
+        // EVERY other type is a plain file on this door (2026-11-13) - the PC
+        // stores it unchanged and no reader opens it.
+        for (name in listOf(
+            "notes.zip", "tool.exe", "data.dat", "clip.mp4", "archive.tar.gz", "README",
+        )) {
+            val kind = AttachFile.transferKindFor(name, null)
+            assertEquals("$name must be accepted as a plain file", "file", kind.label)
+        }
+        assertEquals(
+            "a type the provider did not give is octet-stream",
+            "application/octet-stream",
+            AttachFile.transferKindFor("data.dat", null).mime,
+        )
+        assertEquals(
+            "a provider's usable type is kept on the wire",
+            "application/zip",
+            AttachFile.transferKindFor("notes.zip", "application/zip").mime,
+        )
+        // A document is still a document through the same door, with OUR type.
         assertEquals(
             "application/pdf",
-            AttachFile.transferKindFor("taxes.pdf", "image/jpeg")!!.mime,
+            AttachFile.transferKindFor("taxes.pdf", "image/jpeg").mime,
         )
-        // A photo with no extension has no kind: the PC decides by the name,
-        // so trying to send one would only be refused there.
-        assertNull(AttachFile.transferKindFor("scan", "image/jpeg"))
+        // A name with no extension is a plain file, not a photo: the PC decides
+        // by the name.
+        assertEquals("file", AttachFile.transferKindFor("scan", "image/png").label)
+        // The chat row still refuses these: only the folder door stores them.
+        assertNull(AttachFile.kindOf("notes.zip"))
+        assertNull(AttachFile.kindOf("scan"))
     }
 
     @Test
@@ -486,6 +503,10 @@ class AttachFileTest {
         assertEquals("4.2 MB", AttachFile.sizeWords(4_200_000))
         assertEquals("1 MB", AttachFile.sizeWords(1_000_000))
         assertEquals("12 KB", AttachFile.sizeWords(12_345))
+        // A file big enough for the 2 GiB upload door is said in GB, never
+        // "3221.2 MB".
+        assertEquals("3.2 GB", AttachFile.sizeWords(3_221_225_472))
+        assertEquals("2 GB", AttachFile.sizeWords(2_000_000_000))
     }
 
     @Test

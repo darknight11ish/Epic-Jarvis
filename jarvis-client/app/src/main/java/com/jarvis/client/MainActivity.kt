@@ -743,36 +743,37 @@ class MainActivity : FragmentActivity() {
     }
 
     // ------------------------------------- phone upload (2026-11-05) ---------
-    // Two doors on Settings' Folders row: "Send a document or a photo" and
+    // Two doors on Settings' Folders row: "Send a file from your phone" and
     // "Bring in a Notion export". Both use the same `OpenDocument()` picker as
     // the attach row (no storage permission: the owner chooses one file, and
     // the app may read that one, twice - once to measure it, once to send it).
     // Neither reads the file into memory: `JarvisRuntime` streams it in 1 MiB
-    // chunks. A photo takes this door as a plain file copy (2026-11-13) and
+    // chunks. Since 2026-11-13 the first door takes ANY file type and the PC
+    // stores it as a plain file; a photo takes this door as a plain copy and
     // never the chat picture path.
 
-    /** The listed folder the next picked document goes into, or null. */
+    /** The listed folder the next picked file goes into, or null. */
     private val sendDocumentInto = mutableStateOf<String?>(null)
 
     /** The vault id the next picked Notion `.zip` goes into, or null. */
     private val notionVaultId = mutableStateOf<String?>(null)
 
     /**
-     * "Send a document or a photo": the eight kinds `my_files` already reads
-     * plus the eight photo kinds, as PLAIN FILE COPIES
-     * ([AttachFile.SEND_FILE_MIME_TYPES] - never the chat picture path). The
-     * folder was chosen one tap earlier, from the PC's own list.
+     * "Send a file from your phone": ANY file, offered with the wildcard MIME
+     * filter ([AttachFile.SEND_FILE_MIME_TYPES] - never the chat picture path).
+     * The folder was chosen one tap earlier, from the PC's own list.
      *
-     * A photo picked here is NOT routed to [AttachFile.goesToPicture] or
-     * [ChatPicture]: the PC saves its bytes as a file and no model sees them
-     * on this path (2026-11-13, the owner's report that Jarvis denied being
-     * able to send a photo to the PC at all). Nothing needs the Pictures
-     * feature for this door, because nothing reads the image.
+     * The PC stores the bytes as a plain file under the name the pick has and
+     * never opens, runs, parses, indexes or shows them to a model on this path,
+     * so there is no client-side type list and no Pictures feature needed. A
+     * photo picked here is NOT routed to [AttachFile.goesToPicture] or
+     * [ChatPicture]: it is a file copy on this door (2026-11-13).
      *
      * The provider's name, size and type are read first, and the pick is
      * refused in plain words BEFORE a byte leaves the phone ([Upload.refusal]);
-     * a file past the 50 MB cap is then refused by the measure pass without
-     * being read in full.
+     * a file past the 2 GiB cap is then refused by the measure pass without
+     * being read in full. The server's own sentence is shown verbatim when the
+     * PC refuses at `begin` or `finish`.
      */
     private val pickSendDocument = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -3992,15 +3993,15 @@ class MainActivity : FragmentActivity() {
                         // class as the theme. A phone with no desktop still has
                         // a Home screen to arrange.
                         onOpenEditHud = { nav.go(Screen.EDIT_HUD) },
-                        // "Send a document or a photo" and "Bring in a Notion
+                        // "Send a file from your phone" and "Bring in a Notion
                         // export", on the Folders row (the owner's ask of
-                        // 2026-11-05; photos joined the first door on
-                        // 2026-11-13 as plain file copies). The folder, or the
-                        // vault, was chosen on that row one tap earlier from
-                        // the PC's own lists; these only open the system picker
-                        // and hand the URI's stream to the runtime. Nothing is
-                        // copied, and a pick that is the wrong kind or too big
-                        // is refused before a byte is read.
+                        // 2026-11-05; any file type joined the first door on
+                        // 2026-11-13, and photos joined it as plain file
+                        // copies). The folder, or the vault, was chosen on that
+                        // row one tap earlier from the PC's own lists; these
+                        // only open the system picker and hand the URI's stream
+                        // to the runtime. Nothing is copied, and a pick that is
+                        // too big is refused before a byte is read.
                         onSendDocument = { path ->
                             sendDocumentInto.value = path
                             pickSendDocument.launch(AttachFile.SEND_FILE_MIME_TYPES)

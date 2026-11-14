@@ -4047,7 +4047,7 @@
       "name": "Send a document from your phone",
       "group": "Notes and files",
       "surface": "both",
-      "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document or a photo. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, HEIF, GIF or BMP), then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. A photo is copied exactly as it is, and Jarvis never reads it or shows it to a model on this path. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+      "where": "On the phone: Settings, Folders Jarvis may look in, then Send a file from your phone. Pick any file - a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, a photo, an archive, a program or anything else - then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it, unchanged byte for byte. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4058,7 +4058,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "On the phone: Settings, Folders Jarvis may look in, then Send a document or a photo. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, HEIF, GIF or BMP), then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. A photo is copied exactly as it is, and Jarvis never reads it or shows it to a model on this path. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+        "location": "On the phone: Settings, Folders Jarvis may look in, then Send a file from your phone. Pick any file - a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, a photo, an archive, a program or anything else - then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it, unchanged byte for byte. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
         "search": [
           "Send a document from your phone"
         ],
@@ -4066,7 +4066,7 @@
       },
       "phone": {
         "section": null,
-        "location": "On the phone: Settings, Folders Jarvis may look in, then Send a document or a photo. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, or a photo (JPG, PNG, WebP, HEIC, HEIF, GIF or BMP), then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. A photo is copied exactly as it is, and Jarvis never reads it or shows it to a model on this path. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+        "location": "On the phone: Settings, Folders Jarvis may look in, then Send a file from your phone. Pick any file - a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, a photo, an archive, a program or anything else - then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it, unchanged byte for byte. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
         "search": [
           "send a document from your phone",
           "send a document from my phone"
@@ -4079,7 +4079,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Send a document from your phone",
-        "screen_path": "desktop Settings: All features and abilities; phone: Settings, Folders Jarvis may look in, then Send a document or a photo"
+        "screen_path": "desktop Settings: All features and abilities; phone: Settings, Folders Jarvis may look in, then Send a file from your phone"
       },
       "command": {
         "status": "not-a-setting",

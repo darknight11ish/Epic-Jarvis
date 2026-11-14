@@ -788,14 +788,12 @@ def t_the_phone_document_door_is_in_the_list_and_answers_from_it():
           row["group"] == "Notes and files" and row["surface"] == "both",
           (row.get("group"), row.get("surface")))
     check("... its `where` names the phone's own button and Settings row",
-          "Send a document" in row["where"]
+          "Send a file" in row["where"]
           and "Folders Jarvis may look in" in row["where"], row["where"])
     check("... and says where the file lands",
           "From my phone" in row["where"], row["where"])
-    check("... its `limit` names the 50 MB cap and every readable kind",
-          "50 MB" in row["limit"] and all(k in row["limit"] for k in
-          ("PDF", "Word", "Excel", "PowerPoint", "Markdown", "CSV")),
-          row["limit"])
+    check("... its `limit` names the 2 GB cap and the any-type rule",
+          "2 GB" in row["limit"] and "any type" in row["limit"], row["limit"])
     check("... says no folder grant is added, and nothing is run",
           "folder grant" in row["limit"]
           and "nothing is run or opened" in row["limit"], row["limit"])

@@ -24,7 +24,6 @@ BULLETS = (
     'A photo can be sent from your phone into "From my phone", exactly as a document is',
     "The patch history is rebuilt after the union's patch edits, so the required `backend` and `backend-windows` jobs pass again",
     'A free-plan 403 on branch rules means "no rules", not "blind token" - so the owner-approved merge in the field-test repository can land',
-    "GitHub's git endpoint needs Basic auth, not Bearer - so the prepare clone and the fix push can authenticate again",
 )
 
 

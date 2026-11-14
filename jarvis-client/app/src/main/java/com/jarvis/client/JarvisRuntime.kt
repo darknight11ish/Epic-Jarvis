@@ -3520,6 +3520,8 @@ object JarvisRuntime {
         val total: Int,
         /** True while the PC's approval card is holding the transfer. */
         val waiting: Boolean,
+        /** Bytes read by the one measuring pass so far - keeps a big file's chip moving. */
+        val read: Long = 0L,
     )
 
     private val _uploadNow = MutableStateFlow<UploadNow?>(null)
@@ -3595,36 +3597,36 @@ object JarvisRuntime {
                 }
         }
 
-    /** The type the PC is told: OUR type for the extension, the provider's only as a fallback. */
+    /** The type the PC is told: OUR type for a known extension, the provider's, else octet-stream. */
     private fun wireMime(name: String?, provider: String?, purpose: Upload.Purpose): String =
         if (purpose == Upload.Purpose.NOTION) {
             "application/zip"
         } else {
-            // A photo has no `AttachFile.KINDS` entry on purpose (the chat row
-            // must keep routing pictures to ChatPicture), so the folder door's
-            // own list is asked second: the PC saves a photo under its
-            // extension, and this is the type the card and the file claim.
-            AttachFile.transferKindFor(name, provider)?.mime
-                ?: provider?.trim()?.lowercase(java.util.Locale.ROOT)?.substringBefore(';')
-                    ?.takeIf { it.isNotBlank() }
-                ?: "application/octet-stream"
+            // Any extension is accepted on this door (2026-11-13), so
+            // `transferKindFor` always answers a kind: a known document or photo
+            // keeps its own type, and an unfamiliar file takes the provider's
+            // usable type or `application/octet-stream`. The PC decides what a
+            // file is from its NAME, never from this field.
+            AttachFile.transferKindFor(name, provider).mime
         }
 
     /**
      * One pass over the chosen file: its real size and SHA-256, or the refusal
      * said through [onRefused]. The stream is opened, read and closed here;
-     * only the numbers are kept.
+     * only the numbers are kept. [onRead] hears how far the one read has got,
+     * so a 2 GiB file shows movement instead of one unchanging sentence.
      */
     private suspend fun measured(
         name: String,
         mime: String?,
         purpose: Upload.Purpose,
         open: () -> InputStream?,
+        onRead: (Long) -> Unit = {},
         onRefused: (String) -> Unit,
     ): Upload.Meta? {
         val read = withContext(Dispatchers.IO) {
             try {
-                open()?.use { Upload.measure(it, Upload.cap(purpose)) }
+                open()?.use { Upload.measure(it, Upload.cap(purpose), onRead) }
                     ?: Upload.Measured.Unreadable
             } catch (e: Exception) {
                 Upload.Measured.Unreadable
@@ -3646,10 +3648,11 @@ object JarvisRuntime {
     }
 
     /**
-     * Send ONE document into [into] - a folder from the PC's own list, exactly
-     * as `GET /api/folders` returned it. The PC puts it in `From my phone`
-     * inside that folder and raises its ONE card; nothing lands before the
-     * owner says yes. The outcome is [uploadSaid] when it is over.
+     * Send ONE file (any type, since 2026-11-13) into [into] - a folder from the
+     * PC's own list, exactly as `GET /api/folders` returned it. The PC puts it
+     * in `From my phone` inside that folder and raises its ONE card; nothing
+     * lands before the owner says yes. The outcome is [uploadSaid] when it is
+     * over.
      */
     fun startSendDocument(into: String, name: String, mime: String?, open: () -> InputStream?) {
         if (_uploadNow.value != null) {
@@ -3664,7 +3667,13 @@ object JarvisRuntime {
         _uploadNow.value = UploadNow(name, 0, 0, false)
         scope.launch {
             try {
-                val meta = measured(name, mime, Upload.Purpose.DOCUMENT, open) { why ->
+                val meta = measured(
+                    name, mime, Upload.Purpose.DOCUMENT, open,
+                    onRead = { bytes ->
+                        // The chip keeps moving while a 2 GiB file is measured.
+                        _uploadNow.value = UploadNow(name, 0, 0, false, bytes)
+                    },
+                ) { why ->
                     _uploadSaid.value = why
                 } ?: return@launch
                 val outcome = Upload.send(
@@ -3754,7 +3763,10 @@ object JarvisRuntime {
         _uploadNow.value = UploadNow(name, 0, 0, false)
         scope.launch {
             try {
-                val meta = measured(name, mime, Upload.Purpose.NOTION, open) { why ->
+                val meta = measured(
+                    name, mime, Upload.Purpose.NOTION, open,
+                    onRead = { bytes -> _uploadNow.value = UploadNow(name, 0, 0, false, bytes) },
+                ) { why ->
                     _notionNow.value = NotionNow.Said(why)
                 } ?: return@launch
                 val outcome = Upload.send(
