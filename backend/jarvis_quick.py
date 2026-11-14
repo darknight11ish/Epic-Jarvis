@@ -2192,6 +2192,23 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     m = re.fullmatch(r"(?:add|put)\s+(?:to|on)\s+(?:my|the)\s+todo(?:\s+list)?\s*[:,-]?\s*(.+)", s)
     if m:
         return Intent("todo_add", {"text": m.group(1).strip()})
+    # Items AFTER the list name (2026-11-13, the owner's report): "add these
+    # things to my to-do list. buy Elizabeth a mint mobile plan." and "add
+    # these to my to-do list: milk and eggs". Both matchers above need the
+    # sentence to END at the list name (or to begin "add to ..."), so a colon
+    # or a second sentence after it fell through to the model, which answered
+    # that it had no to-do list at all. Here the sentences AFTER the list name
+    # are the items, and the placeholder before it ("these things", or nothing
+    # at all) never decides the text. LAST, after the two matchers above, so a
+    # one-sentence "add milk to my to-do list" keeps its own, already-tested
+    # path. Downstream is unchanged: this is still the one `todo_add` intent.
+    m = re.fullmatch(r"(?:add|put|write|stick)\s+(?:(.+?)\s+)?(?:to|on|onto|in)\s+(?:my|the)\s+todo"
+                     r"(?:\s+list)?\s*[:.,;!?-]\s*(.+)", s)
+    if m:
+        text = re.sub(r"^(?:and|also|plus)\b[\s,;:.-]*|^-+\s*", "", m.group(2).strip(),
+                      flags=re.I).strip(" \t.,;:!?-")
+        if text and not re.fullmatch(_VAGUE, text):
+            return Intent("todo_add", {"text": text})
     if re.fullmatch(r"(?:what's|what\s+is|whats|what\s+are|what's\s+left|what\s+is\s+left)\s+on\s+"
                     r"(?:my|the)\s+todo(?:\s+list)?|(?:read|show|list|tell|give)\s+(?:me\s+)?"
                     r"(?:my|the)\s+todo(?:\s+list)?|(?:my|the)\s+todo\s+list"
