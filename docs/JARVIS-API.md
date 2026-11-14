@@ -30926,7 +30926,65 @@ gate rows, tier lines and drop-in folder are all in place, and that the module's
 real Gradle build or a real adb install** - a CI runner has no Android SDK and
 no phone. The build in section 166.1 was a manual measurement on the owner's
 PC, reported as such.
+
+### 166.7 The second kind: native screens (added 2026-11-14)
+
+Everything above describes ONE shape: a WebView showing the owner's page. The
+owner asked on 2026-11-14 for *"a real app with its own screens, written by
+Jarvis"*, so there is a second kind - and the task's own files pick it.
+
+**What decides the kind.** A task whose copy carries `app.json` is a
+native-screens task; a task without one is the WebView app it has always been.
+There is no flag that could drift out of step with the files. A request that
+passes `assets` or a `title` beside a native spec is REFUSED (400), because
+the spec is the only source of the app's name, its two colours and its words.
+`GET …/android` answers `kind` (`"webview"` or `"native"`) and, for a native
+app, `screens`.
+
+**What the model may write: data, never code.** `app.json` is one JSON object
+with exactly these keys - `name`, `package_tail`, `bg`, `accent`, `screens`,
+`start` - and at most **8 screens**, each of kind `text`, `list` or `form`,
+with exactly the keys its kind allows (`id`, `title`, `kind`, `body` and
+`buttons`; `items` instead of `body` for a list; `fields` and `save_label` for
+a form). An item is `{title, detail}`, a field `{key, label}`, a button
+`{label, action}` where an action is `{do: "open", screen}` or
+`{do: "show", text}`. Nothing else is accepted: an unknown key, a screen id
+outside the closed pattern, a button that opens a screen that does not exist,
+or a ninth screen is refused with a sentence BEFORE a byte of the project is
+written and before any card is raised.
+
+**What draws it.** A second FIXED Kotlin activity in the same module, compiled
+into the same APK, reads `assets/app.json` at run time and draws it with
+ordinary Android views - `ScrollView`, `LinearLayout`, `TextView`, `EditText`,
+`Button`. No Compose, no WebView, no dependency, and still **no permission**:
+the generated app cannot reach the internet, the phone's files, or Jarvis. A
+form's Save writes its values to `SharedPreferences` on the phone and nothing
+else; a `show` button displays one short line. There is no navigation stack,
+no data source and no script - the app is the data in that one file, drawn.
+
+**Measured, 2026-11-14.** A native spec was written into a task's copy and the
+module's own `plan_build`/`run_build` ran a real `gradlew.bat assembleDebug`
+through this PC's toolchain: **BUILD SUCCESSFUL in 23s**, the debug APK
+**2,479,127 bytes**, SHA-256
+`4BA8FD8718067FE117E391F28E121738D2A3DB98675FD91B99C3727319D9159F`. That was a
+WARM build (Gradle and the Android Gradle plugin already cached) - the same
+caveat as 166.1. **No install was run**: `adb install -r` still needs the phone
+on its cable, and the native kind has never been seen on a screen.
+
+**Tests.** `backend/test_android_builder_native.py` (247 checks): every closed
+key set, every refusal, the task's-files-choose-the-kind rule, the status
+answer, and the activity's own source pinned so a later edit cannot quietly
+turn the fixed activity into a general one. `backend/test_android_builder.py`
+(252 checks) still passes unchanged, so the WebView kind is untouched.
+
+**Still true, and worth saying twice: nothing calls this.** No chat sentence,
+no model tool and no button in either app starts any of the four routes, so
+these apps are made only by the module's own tests. That is now a defect row
+(DEF-066) rather than only a sentence in this section, because "built but
+unreachable" is the kind of thing a reader skims past.
+
 ## 167. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
+
 
 The owner asked, 2026-10-30: *"does jarvis android have custom animated notifications? if not can you
 build this feature into it? i want them customizable and buildable by just chatting to jarvis"*.

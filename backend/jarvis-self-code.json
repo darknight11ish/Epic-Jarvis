@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "98b82d643adc589f6004541f4a520398ccb08481",
- "built_at": "2026-11-14T00:21:39-08:00",
+ "ref": "f4c356ab4782692c19bf5402fbc7639e2277c904",
+ "built_at": "2026-11-14T01:41:52-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6353,6 +6353,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "f4c356ab4782692c19bf5402fbc7639e2277c904",
+   "date": "2026-11-14",
+   "subject": "Add the native-screens kind to the Android builder"
+  },
+  {
    "sha": "98b82d643adc589f6004541f4a520398ccb08481",
    "date": "2026-11-14",
    "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
@@ -6446,11 +6451,6 @@
    "sha": "30169150753b4d9403843280a3218d2b4dacf1e7",
    "date": "2026-11-13",
    "subject": "Records: re-take the self-code map after the routing changes"
-  },
-  {
-   "sha": "51fb8e231ec34124edb40334d5229199f3b91877",
-   "date": "2026-11-13",
-   "subject": "Feature routing: activate, turned-on and why-not-working reach every title"
   }
  ],
  "top_level": [
