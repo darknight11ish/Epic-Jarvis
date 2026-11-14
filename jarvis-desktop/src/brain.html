@@ -175,7 +175,7 @@
                a rename. brain.js's VIEWS.galaxy carries the same two lines
                for every switch after the first paint. -->
           <h1 class="topbar-title" id="view-title">The memory map</h1>
-          <p class="topbar-sub" id="view-sub">what Jarvis remembers</p>
+          <p class="topbar-sub" id="view-sub">what Atlas remembers</p>
 
           <div class="topbar-right">
             <!-- Live link state. The same struct the tray and the quickbar
@@ -250,7 +250,7 @@
           </div>
 
           <div class="galaxy-stage" tabindex="0"
-               aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Press 1 to 8 for a layout; press the same key again for the constellation. Every name is a button: Tab moves between them, Enter opens one, and the search field finds one by name.">
+               aria-label="The people and things Atlas knows about. Arrow keys pan, plus and minus zoom, 0 fits. Press 1 to 8 for a layout; press the same key again for the constellation. Every name is a button: Tab moves between them, Enter opens one, and the search field finds one by name.">
             <!-- The constellation: an SVG picture with ONE REAL BUTTON per name
                  laid over it (galaxy-constellation.js). It replaced the canvas
                  below on 2026-10-09, because the project's rule is "nothing
@@ -272,7 +272,7 @@
                  help is written against, and `tests/a11y.mjs` reads its label
                  for the way in that really exists. -->
             <canvas id="graph-canvas" class="galaxy-canvas" tabindex="0" hidden
-                    aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, and typing in the search field finds one by name; the panel reports it and lists the names it shares facts with."></canvas>
+                    aria-label="The people and things Atlas knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, and typing in the search field finds one by name; the panel reports it and lists the names it shares facts with."></canvas>
 
             <div class="galaxy-empty" id="graph-empty" hidden>
               <p id="graph-empty-text">Reading the names…</p>
@@ -365,7 +365,7 @@
               -->
               <ol class="trace" id="trace" aria-live="polite" aria-relevant="additions"></ol>
               <p class="note trace-note" id="trace-note">
-                What Jarvis is doing, newest last: asking the model, each tool
+                What Atlas is doing, newest last: asking the model, each tool
                 it uses and whether it worked, then writing the answer. Tools
                 show here only when they are switched on (<code>[tools]
                 enabled</code> in the config). The model's own step-by-step
@@ -438,7 +438,7 @@
             <div class="card card-wide" id="learning-card" data-menu-id="brain.memory.learning">
               <h2>Learning</h2>
               <p class="note">
-                After a conversation goes quiet, Jarvis reads back what
+                After a conversation goes quiet, Atlas reads back what
                 <em>you</em> typed or said — never its own replies, never
                 anything a tool returned — and picks out facts worth keeping.
                 With “Learn automatically” on, facts in your own words are
@@ -459,7 +459,7 @@
                    Settings, Learning is where it is changed. -->
               <p class="note">
                 Background learning, remembering sensitive topics automatically
-                and saving Jarvis's own words are changed in one place:
+                and saving Atlas's own words are changed in one place:
                 Settings, Learning. This page shows their state and the facts
                 saved automatically; Forget stays beside each fact.
               </p>
@@ -520,7 +520,7 @@
                  fact. Hidden until one is opened. No summary. -->
             <div class="card card-wide" id="memory-about-card" hidden>
               <h2 id="memory-about-title">About</h2>
-              <p class="note" id="memory-about-note">The facts Jarvis has linked to this name, word for word. Nothing here is written by the model.</p>
+              <p class="note" id="memory-about-note">The facts Atlas has linked to this name, word for word. Nothing here is written by the model.</p>
               <div id="memory-about"></div>
             </div>
             <!-- "Person dossier" (LM-4; JARVIS-API section 143): one person's
@@ -529,7 +529,7 @@
                  on - Rust answers one sentence and asks the PC for nothing. -->
             <div class="card card-wide" id="person-dossier-card" hidden>
               <h2 id="person-dossier-title">Person dossier</h2>
-              <p class="note" id="person-dossier-note">What Jarvis already keeps about one person, from this PC's own records. Nothing here is written by the model, and nothing is changed by reading it.</p>
+              <p class="note" id="person-dossier-note">What Atlas already keeps about one person, from this PC's own records. Nothing here is written by the model, and nothing is changed by reading it.</p>
               <div id="person-dossier"></div>
             </div>
             <div class="card card-wide" id="memory-known-card" data-menu-id="brain.memory.known">
@@ -546,7 +546,7 @@
                    the PC nothing. Outside #memory-facts so a repaint keeps it. -->
               <input class="field search memory-facts-filter" id="memory-facts-filter" type="search"
                      placeholder="Filter this list…" spellcheck="false" autocomplete="off"
-                     aria-label="Filter what Jarvis knows about you" />
+                     aria-label="Filter what Atlas knows about you" />
               <div id="memory-facts"></div>
             </div>
             <!-- The wiki builder (backend/wiki.patch; wiki.js). -->
@@ -571,7 +571,7 @@
                 answers it in the background on this PC, with no tools, no
                 internet and no memory of your other conversations. It is
                 slow: expect minutes, not seconds. Nothing leaves this PC. The
-                answer stays here for you to read until Jarvis stops or
+                answer stays here for you to read until Atlas stops or
                 restarts; it is never written to disk.
               </p>
               <p class="deep-state" id="deep-state" role="status">Reading…</p>
@@ -990,7 +990,7 @@
           <div class="panes">
             <div class="card card-wide" id="goals-card" data-menu-id="brain.work.goals" data-menu-group="goals-projects">
               <h2>Goals</h2>
-              <p class="note">Say what you want, add a few steps with rough dates, then Accept. Jarvis checks in once a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need no approval card.</p>
+              <p class="note">Say what you want, add a few steps with rough dates, then Accept. Atlas checks in once a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need no approval card.</p>
               <div id="goals-list"></div>
               <h3 class="subhead">New goal</h3>
               <form id="goals-new-form" class="todo-form" autocomplete="off">

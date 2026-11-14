@@ -148,7 +148,7 @@ export function emptyWords(payload) {
       + "model starts.",
     scorecards: String(empty.scorecards || "").trim()
       || "No five-suite scorecard has been recorded on this PC yet, so there is "
-      + "nothing measured to show. Asking Jarvis to \"start the benchmark "
+      + "nothing measured to show. Asking Atlas to \"start the benchmark "
       + "suites\" measures all five.",
   };
 }

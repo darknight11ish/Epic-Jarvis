@@ -34,12 +34,12 @@ export const MERGE_YES = "Yes, the same";
 export const MERGE_NO = "No, keep them apart";
 export const MERGE_YES_TITLE =
   "Join these two. A question about one also finds the other's facts. No fact is changed.";
-export const MERGE_NO_TITLE = "Keep them apart. Jarvis will not ask about these two again.";
+export const MERGE_NO_TITLE = "Keep them apart. Atlas will not ask about these two again.";
 export const MERGE_NOTE =
   "Saying yes joins them. No fact is changed, added or forgotten either way.";
 /** Said after each answer went through. */
 export const MERGE_JOINED = "Joined. A question about one now finds the other's facts too.";
-export const MERGE_KEPT = "Kept apart. Jarvis will not ask about these two again.";
+export const MERGE_KEPT = "Kept apart. Atlas will not ask about these two again.";
 
 /** The line under a fact, before its names. */
 export const LINKED_LABEL = "About:";
@@ -51,7 +51,7 @@ export function aboutTitle(name) {
 
 /** The section's one line - what it is, and what it is not. */
 export const ABOUT_DETAIL =
-  "The facts Jarvis has linked to this name, word for word. Nothing here is written by the model.";
+  "The facts Atlas has linked to this name, word for word. Nothing here is written by the model.";
 
 /** "You call them: sister" - the words the owner used, from their own facts. */
 export function calledLine(aliases) {
