@@ -522,15 +522,19 @@ def main(argv=None):
     # by `jarvis_feature_guide.control_matrix()` through the real matcher - so
     # 43 -> 44 Switchable, 108 -> 107 Command-Only; 182 features. Measured from
     # the contract, not chosen.
+    # 2026-11-13 (the copy-over wave): the phone's own settings backup joined as
+    # PC-Only Setting - a phone-only card with no backend route, saved and
+    # opened entirely on the phone - so 17 + 1 -> 18 PC-Only, 182 + 1 -> 183
+    # features. Measured from the contract, not chosen.
     expected_label_counts = {
-        LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
+        LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 18,
         LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/17/108/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 44/2/18/107/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/17/108/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 44/2/18/107/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.
