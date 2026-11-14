@@ -785,8 +785,9 @@ learning_sensitive_enable = "ask"
 learning_paraphrase_enable = "ask"
 # "Forget a time frame" (docs/JARVIS-API.md section 64, the owner's decision
 # of 2026-09-28): forgetting what Jarvis learned, and deleting your chats,
-# from the days you chose - ONE card listing every fact and chat, with 10
-# minutes to Undo afterwards. Must stay "ask": jarvis_forget_range.py
+# from the days you chose - ONE card carrying their count and the days, with
+# every title and date on the checked list, and 10 minutes to Undo
+# afterwards. Must stay "ask": jarvis_forget_range.py
 # refuses any other tier rather than let this line become your yes. A file
 # without this line asks too (unknown_action_tier).
 memory_forget_range       = "ask"

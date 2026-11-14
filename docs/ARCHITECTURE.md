@@ -487,9 +487,24 @@ frame", the owner's decision of 2026-09-28; `jarvis_forget_range.py`,
 docs/JARVIS-API.md §64). The one place a single card forgets and deletes
 many things at once - and it keeps the four steps: `preview()` lists every
 fact and chat from the chosen days (touching nothing), the apps show each
-one ticked and the owner unticks any to keep; `card_text()` lists EVERY
-item still ticked in full - each fact word for word, each chat's title and
-dates; the gate asks once (action `memory_forget_range`, tier `ask` only,
+one ticked and the owner unticks any to keep; `card_text()` carries the
+COUNT of facts and chats and the date range ("3 facts and 125 chats from 2
+to 8 November 2026"), the facts' own words while they fit, the pinned chats
+kept and the estimate - every chat's title and date stays on that checked
+list, one click away. **That is the owner's ruling of 2026-11-13, "Show the
+count, allow it", and it overrules the older rule that the CARD had to list
+every item in full** (which this section said until then): the reason is
+measured, not stylistic - `jarvis_gate` keeps a card's detail as
+`json.dumps(detail)[:4000]`, so a card listing every chat reached the HUD
+cut off mid-JSON with Approve disabled, and the owner's own 125-chat range
+was 4,000 characters of invalid JSON that expired un-approvable (125 chats
+measured 14,546 characters; 25 fitted at 3,918). The full list was never
+the thing that made the decision - the checked list is, and it is
+unchanged. A card that would STILL be cut is refused before it is raised,
+with a plain sentence, by the same rule the model tool path uses
+(`jarvis_agent._card_would_be_cut`, imported from its owner - never a
+copy); the gate's 4,000 cap and the HUD's cut-off rule are untouched. The
+gate asks once (action `memory_forget_range`, tier `ask` only,
 never loosened; risky, so Windows Hello or the phone's lock); `apply()`
 runs only on a person's "approved", and only on ids re-checked against the
 days. A spoken "yes" approves nothing. Undo (10 minutes, no card) only

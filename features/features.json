@@ -943,7 +943,7 @@
     "title": "Forget a time frame",
     "what": "Forget what Jarvis learned or said over a stretch of days. It lists every fact and chat from then and says how long it should take, leaves pinned chats out (and keeps them), and asks a second yes before anything is removed.",
     "where": "Brain, History, Forget a time frame.",
-    "asks": "ONE card listing every item - never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
+    "asks": "ONE card giving the count and the days - every title and date stays on the screen you ticked, never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
     "limit": "No item cap: any number of facts and chats is listed in full and offered in one action. Above 200 - the old cap, now only the size at which both apps say a large wipe - it says so in words, and the card and the second yes are unchanged. Facts are RETIRED, not erased - their words stay in the history, and no backup is ever touched. After the 10 minutes the chats are gone for good.",
     "surface": "both",
     "covers": [
