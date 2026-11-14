@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
- "built_at": "2026-11-13T23:15:42-08:00",
+ "ref": "98b82d643adc589f6004541f4a520398ccb08481",
+ "built_at": "2026-11-14T00:21:39-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3705,6 +3705,7 @@
     "backend/test_agent_retirement_wiring.py",
     "backend/test_android_builder.py",
     "backend/test_android_builder_honesty.py",
+    "backend/test_android_builder_native.py",
     "backend/test_android_control.py",
     "backend/test_animal.py",
     "backend/test_antislop.py",
@@ -4328,7 +4329,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 691,
+   "file_count": 692,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6352,6 +6353,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "98b82d643adc589f6004541f4a520398ccb08481",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
+  },
+  {
+   "sha": "e962f55f90edf8afca182ae8119dc4b7a2859f92",
+   "date": "2026-11-13",
+   "subject": "The invariant block's length pin follows the block: 5,234 -> 5,357 characters"
+  },
+  {
    "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
    "date": "2026-11-13",
    "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
@@ -6440,23 +6451,13 @@
    "sha": "51fb8e231ec34124edb40334d5229199f3b91877",
    "date": "2026-11-13",
    "subject": "Feature routing: activate, turned-on and why-not-working reach every title"
-  },
-  {
-   "sha": "851582b30590dc7a8ec22adec6c3a47b1f4f2e2d",
-   "date": "2026-11-13",
-   "subject": "Merge fix/todo-list-sentence-shapes into integration/wave18-2026-11-13 (to-do list sentence shapes); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "0ed6e78520d03fb14804db96fa5c8ffd3f371755",
-   "date": "2026-11-13",
-   "subject": "Merge feat/photo-from-phone into integration/wave18-2026-11-13 (#1249 photo from phone); generated records keep the integration side, regenerated at the end"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1447
+   "files": 1448
   },
   {
    "path": "jarvis-desktop/",
@@ -6570,8 +6571,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5698,
-  "covered": 5215,
+  "tracked_files": 5699,
+  "covered": 5216,
   "excluded": 483,
   "subsystems": 27
  },
