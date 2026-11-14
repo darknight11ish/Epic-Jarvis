@@ -1198,6 +1198,11 @@ class MainActivity : FragmentActivity() {
         val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
+        // "Stop speaking when I press the mic" - this phone's own switch, ON by
+        // default (the owner's ask of 2026-11-13). Its row is drawn just below
+        // "Interrupting Jarvis", which is the other way a reply gets cut short
+        // (voice.MicBargeIn says which is which).
+        val micBargeInOn by JarvisRuntime.settings.micBargeIn.collectAsState()
         // The owner's own setting of 2026-11-05, this phone's and off by
         // default: may a mic-press question on an unlocked phone read out an
         // answer that uses what Jarvis remembers? (voice.MemoryAloud.)
@@ -1295,6 +1300,12 @@ class MainActivity : FragmentActivity() {
             // And whether the "I heard you" sound plays.
             heardSound = heardSoundOn,
             onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
+            // The owner's 2026-11-13 switch: while Jarvis is speaking, a press
+            // of the microphone stops the reply and starts listening. ON by
+            // default, and this phone's alone - the words still go to the PC's
+            // own voice route exactly as before.
+            micBargeIn = micBargeInOn,
+            onMicBargeIn = { on -> JarvisRuntime.settings.setMicBargeIn(on) },
             // The owner's 2026-11-05 setting: read out an answer that uses
             // what Jarvis remembers, on this phone's own mic press, while it
             // was unlocked. Off by default and this phone's alone - nothing
@@ -1884,6 +1895,12 @@ class MainActivity : FragmentActivity() {
         val voiceStrict by voice.strict.collectAsState()
         val transcript by voice.transcript.collectAsState()
         val voiceNotice by voice.notice.collectAsState()
+        // "Stop speaking when I press the mic" (voice/MicBargeIn): this phone's
+        // own switch, ON by default (the owner's ask of 2026-11-13). With it on
+        // and a reply being spoken, the microphone stays usable while the
+        // answer streams, because the press stops the speech instead of waiting
+        // for it (HomeState.micPressStopsSpeech).
+        val micBargeInOn by JarvisRuntime.settings.micBargeIn.collectAsState()
         // Held as State and read only inside drawBehind — a microphone
         // delivers ~50 levels a second and this must not recompose anything.
         val micLevelState = voice.micLevel.collectAsState()
@@ -4216,6 +4233,7 @@ class MainActivity : FragmentActivity() {
                             face = face,
                             bindings = bindings,
                             voicePhase = voicePhase,
+                            micBargeIn = micBargeInOn,
                             voiceOffered = voiceStatus.canPushToTalk,
                             // Read here rather than in HomeScreen so the one
                             // reader of the permission is the recorder itself.

@@ -526,11 +526,19 @@ def main(argv=None):
         LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
         LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
+    # THE MESSAGE IS BUILT FROM THE PIN, NEVER RETYPED (2026-11-13 audit,
+    # finding 4). The two literals that used to sit in the messages below said
+    # 43/2/17/108/12 while the dict beside them said 44/2/17/107/12 - so a real
+    # failure printed a mix that no longer described anything. One source now:
+    # if the owner-approved mix moves, the dict moves and the message follows.
+    expected_mix = "/".join(str(expected_label_counts[name]) for name in approved)
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/17/108/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be %s; got %r"
+           % (expected_mix, dict(actual_label_counts)))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/17/108/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be %s; got %r"
+           % (expected_mix, contract.get("label_counts")))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.
@@ -591,7 +599,8 @@ def main(argv=None):
     joined = fg is not None and hasattr(fg, "control_matrix")
     if joined:
         c.need({x.get("feature") for x in contract.get("always_on", [])} == canonical_always,
-               "always_on must be the canonical 12 features on the joined tree")
+               "always_on must be the canonical %d features on the joined tree"
+               % len(canonical_always))
     for x in contract.get("always_on", []):
         fid = x.get("feature")
         c.need(fid in real, "always_on names a feature the catalogue does not have: %r" % fid)

@@ -21,6 +21,7 @@ import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.HeardSound
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.MicBargeIn
 import com.jarvis.client.voice.OneMoment
 
 /**
@@ -65,6 +66,14 @@ internal fun WakeWordSwitchesCard(
     onOneMoment: ((Boolean) -> Unit)? = null,
     heardSound: Boolean? = null,
     onHeardSound: ((Boolean) -> Unit)? = null,
+    /**
+     * "Stop speaking when I press the mic" - the owner's ask of 2026-11-13,
+     * on THIS phone only and **ON by default** ([MicBargeIn.DEFAULT]). Null
+     * only in a preview/test that does not own the setting; the real screen
+     * always passes it.
+     */
+    micBargeIn: Boolean? = null,
+    onMicBargeIn: ((Boolean) -> Unit)? = null,
     /**
      * "Read out answers that use what Jarvis remembers" - the owner's setting
      * of 2026-11-05, on THIS phone only and ON by default since his decision
@@ -205,6 +214,48 @@ internal fun WakeWordSwitchesCard(
                     color = chrome.warnInk,
                 )
             }
+        }
+
+        // THE OWNER'S 2026-11-13 ASK: "when I use the top mic button ... and
+        // jarvis is still speaking out from a previous response, I want it to
+        // interrupt its response and process the new thing I said. also add
+        // this to the settings as a changeable Default" - so ON is the default.
+        // It sits beside "Interrupting Jarvis" because both are about cutting a
+        // reply short, but they are different controls: that one is the phone
+        // LISTENING by itself while Jarvis talks, this one is the microphone
+        // BUTTON the owner presses. The note under it says so.
+        if (micBargeIn != null && onMicBargeIn != null) {
+            Gap(12)
+            Text(
+                MicBargeIn.NAME,
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(2)
+            Text(
+                MicBargeIn.SUBTITLE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            Gap(4)
+            Text(
+                MicBargeIn.describe(micBargeIn),
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(6)
+            Secondary(
+                text = if (micBargeIn) MicBargeIn.TURN_OFF else MicBargeIn.TURN_ON,
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onMicBargeIn(!micBargeIn) },
+            )
+            Gap(4)
+            Text(
+                MicBargeIn.NOTE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
         }
 
         // Not tied to "hey Jarvis": it is about any spoken question, the

@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "a764c1569a7bb93cfdb38d6a1a7db6672256b3d1043cf30f05be4ee39cf99edc",
+  "source_sha256": "a28b049ebeff742276454043d3232b3e491ed34cc717782f3b7bd9e622ece46f",
   "feature_count": 182,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -77,14 +77,14 @@ export const FEATURE_DIRECTORY = {
       "group": "Talking",
       "surface": "both",
       "label": "Switchable / Adjustable (Typed & Settings)",
-      "status": "planned",
-      "label_note": "no own switch or typed control is wired today; a planned row, not a fake phrase",
-      "example": "turn on Say \"Hey Jarvis\"",
+      "status": "enforced",
+      "label_note": "Two switches: the PC's wake-word switch in Settings, Voice (one approval card to turn on, instant to turn off, and it decides whether Jarvis takes wake-word clips at all), then Listen on the phone (the handset's microphone, never on by default or after a restart). Saying \"Hey Jarvis\" out loud does not switch either on.",
+      "example": "turn on the wake word",
       "example_ok": true,
       "where": "desktop Settings: voice; phone: All features and abilities",
       "where_desktop": "voice",
       "where_phone": "All features and abilities",
-      "note": "Still being wired (owner: voiceprint-wiring): no own switch or typed control is wired today; a planned row, not a fake phrase",
+      "note": "Two switches: the PC's wake-word switch in Settings, Voice (one approval card to turn on, instant to turn off, and it decides whether Jarvis takes wake-word clips at all), then Listen on the phone (the handset's microphone, never on by default or after a restart). Saying \"Hey Jarvis\" out loud does not switch either on.",
       "not_a_control": true
     },
     {
@@ -292,7 +292,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: idle-new; phone: that app's own Settings",
       "where_desktop": "idle-new",
       "where_phone": "that app's own Settings",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -372,7 +372,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -532,7 +532,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: learning; phone: All features and abilities",
       "where_desktop": "learning",
       "where_phone": "All features and abilities",
-      "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
+      "note": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact.",
       "not_a_control": true
     },
     {
@@ -1156,7 +1156,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -1492,7 +1492,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: Jarvis Calendar; phone: Jarvis Calendar",
       "where_desktop": "Jarvis Calendar",
       "where_phone": "Jarvis Calendar",
-      "note": "Still being wired (owner: setup-ui): typed switch and four routes built; desktop and phone Settings rows are the calendar UI slice's",
+      "note": "The switch is in Settings on both apps now. The events themselves are added, changed and deleted in the HUD's Calendar card and on the phone's Calendar screen.",
       "not_a_control": true
     },
     {
@@ -2244,7 +2244,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: backup; phone: All features and abilities",
       "where_desktop": "backup",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {
@@ -2628,7 +2628,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: approval-cards; phone: All features and abilities",
       "where_desktop": "approval-cards",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "",
       "not_a_control": true
     },
     {

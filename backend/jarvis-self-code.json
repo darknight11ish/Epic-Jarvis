@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e3e3a9126ac22c696b0fdad4966eb41bf8f13753",
- "built_at": "2026-11-13T23:20:39-08:00",
+ "ref": "5a4f6b2a60a72f1801d51f99d4ed8baf1999419e",
+ "built_at": "2026-11-13T23:42:59-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1431,6 +1431,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveMicGate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveRules.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/MemoryAloud.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/voice/MicBargeIn.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/MicNow.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/MicOwner.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/OrtTurnModel.kt",
@@ -1633,6 +1634,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/MemoryWordsContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MenuVisibilityTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MeshFacesTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/MicBargeInTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicHandsfreeRulesTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicOwnerTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/MicWordsTest.kt",
@@ -1885,7 +1887,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 971,
+   "file_count": 973,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -3024,6 +3026,7 @@
     "jarvis-desktop/tests/hud-presets.mjs",
     "jarvis-desktop/tests/hud-prompt-window.mjs",
     "jarvis-desktop/tests/hud-rail-tools.mjs",
+    "jarvis-desktop/tests/hud-read-aloud-flow.mjs",
     "jarvis-desktop/tests/hud-read-aloud-voice.mjs",
     "jarvis-desktop/tests/hud-replace-confirm.mjs",
     "jarvis-desktop/tests/hud-safety.mjs",
@@ -3165,6 +3168,7 @@
     "jarvis-desktop/tests/voice-settings.mjs",
     "jarvis-desktop/tests/voice-speech.mjs",
     "jarvis-desktop/tests/voice-speed.mjs",
+    "jarvis-desktop/tests/voice-stop-aside-failure.mjs",
     "jarvis-desktop/tests/voice-training-plan.mjs",
     "jarvis-desktop/tests/voice-training.mjs",
     "jarvis-desktop/tests/voicecheck.mjs",
@@ -3178,7 +3182,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1250,
+   "file_count": 1252,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -4224,6 +4228,7 @@
     "backend/test_suite_report.py",
     "backend/test_suite_state.py",
     "backend/test_suites_env.py",
+    "backend/test_suites_shard.py",
     "backend/test_suites_staging.py",
     "backend/test_supply_chain.py",
     "backend/test_support_chat.py",
@@ -4323,7 +4328,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 690,
+   "file_count": 691,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4613,13 +4618,26 @@
     "changelog.d/2026-11-12-on-device-ai-design-not-mock.md",
     "changelog.d/2026-11-13-any-file-transfer.md",
     "changelog.d/2026-11-13-awareness-of-new-features.md",
+    "changelog.d/2026-11-13-backend-shard.md",
+    "changelog.d/2026-11-13-bar-stop-silences-speech.md",
+    "changelog.d/2026-11-13-ci-backend-timeout-120.md",
     "changelog.d/2026-11-13-forget-range-card-shows-the-count.md",
     "changelog.d/2026-11-13-github-git-auth-basic.md",
+    "changelog.d/2026-11-13-hud-model-up-unfreezes-replies.md",
+    "changelog.d/2026-11-13-hud-read-aloud-flow.md",
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
+    "changelog.d/2026-11-13-notification-body-opens-jarvis.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-phone-mic-press-interrupts.md",
     "changelog.d/2026-11-13-photo-from-phone.md",
+    "changelog.d/2026-11-13-quiz-finish-dead-end.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
+    "changelog.d/2026-11-13-self-knowledge-places-and-counts.md",
+    "changelog.d/2026-11-13-soupsieve-4-0-1.md",
+    "changelog.d/2026-11-13-todo-list-sentence-shapes.md",
+    "changelog.d/2026-11-13-tray-and-readme-truth.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
+    "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4780,14 +4798,27 @@
     "decisions.d/2026-11-12-companion-not-built.md",
     "decisions.d/2026-11-12-on-device-ai-and-offline-sync-design-only.md",
     "decisions.d/2026-11-13-any-file-transfer.md",
+    "decisions.d/2026-11-13-aside-dropped-not-queued.md",
     "decisions.d/2026-11-13-awareness-of-new-features.md",
+    "decisions.d/2026-11-13-backend-shard.md",
+    "decisions.d/2026-11-13-ci-backend-timeout-120.md",
     "decisions.d/2026-11-13-forget-range-card-shows-the-count.md",
     "decisions.d/2026-11-13-github-git-auth-basic.md",
+    "decisions.d/2026-11-13-hud-online-refreshed-by-every-read.md",
+    "decisions.d/2026-11-13-hud-read-aloud-flow.md",
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
+    "decisions.d/2026-11-13-notification-body-opens-jarvis.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-phone-mic-press-interrupts.md",
     "decisions.d/2026-11-13-photo-from-phone.md",
+    "decisions.d/2026-11-13-quiz-finish-records-not-applies.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
+    "decisions.d/2026-11-13-self-knowledge-places-and-counts.md",
+    "decisions.d/2026-11-13-soupsieve-4-0-1.md",
+    "decisions.d/2026-11-13-todo-list-sentence-shapes.md",
+    "decisions.d/2026-11-13-tray-and-readme-truth.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
+    "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5236,7 +5267,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 872,
+   "file_count": 898,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6323,6 +6354,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "5a4f6b2a60a72f1801d51f99d4ed8baf1999419e",
+   "date": "2026-11-13",
+   "subject": "feat(upload): any file type from the phone, up to 2 GiB, behind one constant"
+  },
+  {
    "sha": "e3e3a9126ac22c696b0fdad4966eb41bf8f13753",
    "date": "2026-11-13",
    "subject": "Merge remote-tracking branch 'origin/feat/photo-from-phone' into feat/any-file-transfer-2026-11-13"
@@ -6416,28 +6452,23 @@
    "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
    "date": "2026-11-13",
    "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
-  },
-  {
-   "sha": "5b13bff7f5e541e6c974ff580654bf0b7a432893",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1446
+   "files": 1447
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1258
+   "files": 1260
   },
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 931
+   "files": 933
   },
   {
    "path": "docs/",
@@ -6457,7 +6488,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 251
+   "files": 264
   },
   {
    "path": "videos/",
@@ -6467,7 +6498,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 168
+   "files": 181
   },
   {
    "path": "plugins/",
@@ -6541,8 +6572,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5669,
-  "covered": 5186,
+  "tracked_files": 5700,
+  "covered": 5217,
   "excluded": 483,
   "subsystems": 27
  },

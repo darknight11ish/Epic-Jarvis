@@ -27451,6 +27451,26 @@ the draft. "Take it again" clears the draft and starts at the first question,
 and a partial retake now keeps every earlier answer, because the PC merges the
 submitted answers into the saved ones instead of replacing them.
 
+**Next always does something, and the last question finishes the pass**
+(2026-11-13). One pure rule, `nextStep` in `setup-questionnaire.js`, decides
+every press, and the button's label, its enabled state and the line under the
+row all come from it: it steps to the next question on screen; when the filter
+has hidden the question on screen it steps ONE question forward in the PC's own
+order and never jumps a section; at the end of a section it opens the next one
+that still has a question to show; and at the end of the whole walk it either
+offers **Finish** or turns the button off with a sentence saying what is left -
+never a press that does nothing. **Finish is offered in one state only**: every
+question has an answer (counted from the draft, like "N of M answered") and the
+PC has not recorded this pass yet, so an incomplete pass never offers it.
+Pressing Finish records the pass as complete through the same cardless
+`{"keep_current": true}` note "Keep current settings" sends: no answer is
+written, no setting changes, no card is raised, and the answers still change
+only through the two-press Apply. Before this the page worked the step out
+itself: at the end of the list Next painted the row and returned, Finish was
+painted only while a single question happened to be on screen and nothing was
+wired to it, and the pass could never be recorded - so the offer, the HUD
+banner and the chat line kept telling the owner the quiz was unfinished.
+
 Changing an answer asks `POST /api/setup/plan` and draws every change
 in the PC's own sentence with its effect - **Instant**, **Asks you on a card**
 or **Blocked** - plus everything the PC says would not change and why, and the
@@ -27534,7 +27554,10 @@ from `backend/jarvis_setup.py`'s own `QUESTIONS`; the desktop suite runs
 `--check` and compares it to the live module), so a reworded question fails a
 test until the fixture is regenerated. The desktop suite is
 `jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real 25 questions, the
-seven sections, the stepper's next-question rule, the "new / unanswered" filter,
+seven sections, the stepper's next-question rule and its Finish rule - the last
+question finishes the pass, a question the filter hid is stepped over one at a
+time and never by a section, and an incomplete pass offers no Finish - the
+"new / unanswered" filter,
 the draft and "All"/"None", the read-only plan body, the one apply body, the
 three progress bodies, the stale-link gate, honest outcomes, the bridge's four
 calls, and source pins that no route or gate action is in the page, nothing

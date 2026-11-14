@@ -6,16 +6,16 @@
  *
  * WHAT THIS PROVES, and why each check is here:
  *
- *   1. THE BUTTON IS BESIDE EACH OFFLINE LINE. The HUD says "a model is
- *      missing" in two places - the standing #model-warn row (`lane-warning.js`
- *      fills it: "The local model isn't running on your PC." + "Open Ollama on
- *      the PC, or run ollama serve there.") and #banner ("Model not running.
- *      The HUD server is answering; the local model is not."). Each carries its
- *      own button, inside its own line, after the words.
- *   2. IT IS REACHABLE BY KEYBOARD. Both are real `<button type="button">`
- *      elements - Enter and Space press them - and neither is taken out of the
- *      tab order. A div with an onclick would pass a source grep and fail the
- *      owner.
+ *   1. THE BUTTON IS BESIDE THE OFFLINE LINE. The HUD says "a model is missing"
+ *      on the standing #model-warn row (`lane-warning.js` fills it: "The local
+ *      model isn't running on your PC." + "Open Ollama on the PC, or run ollama
+ *      serve there."), with its button inside that row, after the words. There
+ *      is ONE line: until 2026-11-13 #banner carried a second copy of the same
+ *      sentence and its own button, and the owner saw both at once. The demo
+ *      banner is now the no-PC banner only, and it carries no button.
+ *   2. IT IS REACHABLE BY KEYBOARD. It is a real `<button type="button">` -
+ *      Enter and Space press it - and it is not taken out of the tab order. A
+ *      div with an onclick would pass a source grep and fail the owner.
  *   3. IT CALLS THE REAL ACTION, AND ONLY WHEN THE PC SAYS SO. The block is
  *      lifted out of the page and driven with a fake document and a fake
  *      bridge: hidden when the PC has not said, hidden when the lane answers,
@@ -99,7 +99,6 @@ function fakeDoc(ids) {
   return { ids: [...nodes.keys()], at: (id) => nodes.get(id), getElementById: (id) => nodes.get(id) || null };
 }
 const ROW_IDS = ["model-warn-start", "model-warn-start-note"];
-const BANNER_IDS = ["banner-connect", "banner-connect-note"];
 
 /* ── 1. beside each offline line, in that line's own markup ──────────────── */
 
@@ -115,20 +114,19 @@ await check("the standing row carries its button and its note, inside itself", a
     "the button must come after the words it sits beside");
 });
 
-await check("the banner carries its own button, inside itself", async () => {
+await check("the demo banner carries NO second copy of the button (2026-11-13)", async () => {
+  // The owner's report: "the notification that the local model isnt loaded is
+  // showing up twice". With the PC's answer in hand the banner stays shut and
+  // the row is the one line; a button in the banner would now be a dead control.
   const start = HUD.indexOf('<div id="banner"');
   const end = HUD.indexOf("</div>", start);
   const markup = HUD.slice(start, end);
-  assert.match(markup, /<button id="banner-connect" class="lane-start" type="button"/,
-    "the offline banner has no connect button");
-  assert.match(markup, /<span id="banner-connect-note"[^>]*role="status"/,
-    "the banner has no note for a refusal");
-  assert.ok(markup.indexOf('id="banner-text"') < markup.indexOf('id="banner-connect"'),
-    "the button must come after the words it sits beside");
+  assert.doesNotMatch(markup, /lane-start/, "the demo banner still wires a start control");
+  assert.doesNotMatch(HUD, /id="banner-connect"/);
 });
 
-await check("both are real buttons, in the tab order (not divs, not tabindex=-1)", async () => {
-  for (const id of ["model-warn-start", "banner-connect"]) {
+await check("it is a real button, in the tab order (not a div, not tabindex=-1)", async () => {
+  for (const id of ["model-warn-start"]) {
     const at = HUD.indexOf(`id="${id}"`);
     const open = HUD.lastIndexOf("<button", at);
     assert.ok(open > 0 && at - open < 40,
@@ -144,7 +142,6 @@ await check("the page says a button is there before it is painted", async () => 
   // `hidden` in the markup, so a page whose script never runs draws no control
   // that would do nothing.
   assert.match(HUD, /id="model-warn-start"[^>]*hidden/);
-  assert.match(HUD, /id="banner-connect"[^>]*hidden/);
 });
 
 /* ── 2. the words are the bar's words ────────────────────────────────────── */
@@ -192,13 +189,13 @@ await check("a PC that cannot start it gives its reason instead of a button", as
   assert.equal(v.note, "This PC has no Jarvis Ollama task for that lane.");
 });
 
-/* ── 4. painting both surfaces ───────────────────────────────────────────── */
+/* ── 4. painting the one surface ─────────────────────────────────────────── */
 
 await check("the standing row's button is painted, pressed and cleared", async () => {
-  const doc = fakeDoc([...ROW_IDS, ...BANNER_IDS]);
+  const doc = fakeDoc([...ROW_IDS]);
   const pressed = [];
   assert.equal(L.paintLaneConnect(doc, { state: "down", can_start: true },
-    () => pressed.push(1), { banner: false }), true);
+    () => pressed.push(1)), true);
   assert.equal(doc.at("model-warn-start").hidden, false);
   assert.equal(doc.at("model-warn-start").textContent, START_WORDS);
   assert.equal(doc.at("model-warn-start").disabled, false);
@@ -206,26 +203,22 @@ await check("the standing row's button is painted, pressed and cleared", async (
   doc.at("model-warn-start").onclick();
   assert.deepEqual(pressed, [1]);
   // … and cleared, with the handler taken away.
-  assert.equal(L.paintLaneConnect(doc, { state: "up" }, () => pressed.push(2),
-    { banner: false }), false);
+  assert.equal(L.paintLaneConnect(doc, { state: "up" }, () => pressed.push(2)), false);
   assert.equal(doc.at("model-warn-start").hidden, true);
   assert.equal(doc.at("model-warn-start").onclick, null, "a cleared button kept its handler");
 });
 
-await check("the banner's button is only drawn while that banner is up", async () => {
-  const doc = fakeDoc([...ROW_IDS, ...BANNER_IDS]);
-  L.paintLaneConnect(doc, { state: "down", can_start: true }, () => {}, { banner: false });
-  assert.equal(doc.at("banner-connect").hidden, true,
-    "a page with no server to ask still offered to start a lane");
-  L.paintLaneConnect(doc, { state: "down", can_start: true }, () => {}, { banner: true });
-  assert.equal(doc.at("banner-connect").hidden, false);
-  assert.equal(doc.at("banner-connect").textContent, START_WORDS);
-  assert.equal(typeof doc.at("banner-connect").onclick, "function");
+await check("with the PC's answer in hand, the demo banner stays shut (2026-11-13)", async () => {
+  // One fact, one line. The banner is the NO-PC banner: its switch-on sits
+  // inside the guard that the PC did not say the model is down, so the standing
+  // row cannot be drawn underneath a second copy of the same sentence.
+  assert.match(HUD, /if\(S\.ollama !== false\)\{\s*\n\s*\$\("banner"\)\.classList\.add\("on"\)/,
+    "the demo banner still switches on while the PC says the model is down");
 });
 
 await check("a page without the elements (an older copy) is not a crash", async () => {
   assert.equal(L.paintLaneConnect({ getElementById: () => null },
-    { state: "down", can_start: true }, () => {}, { banner: true }), false);
+    { state: "down", can_start: true }, () => {}), false);
 });
 
 /* ── 5. the press: ask, then watch until it settles ──────────────────────── */
@@ -389,10 +382,10 @@ await check("the shell's fetch shim still refuses the page's own POST", async ()
   assert.match(boot, /the HUD window cannot send that/);
 });
 
-await check("the banner's words are written into their own span (the button survives)",
+await check("the banner's words are written into their own span, never over its contents",
   async () => {
     assert.match(HUD, /\$\("banner-text"\)\.innerHTML = status/,
-      "the boot read overwrites #banner's whole contents, which would delete the button");
+      "the boot read overwrites #banner's whole contents instead of its text span");
     assert.doesNotMatch(HUD, /\$\("banner"\)\.innerHTML/);
   });
 
