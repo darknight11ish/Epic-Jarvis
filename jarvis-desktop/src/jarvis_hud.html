@@ -1041,29 +1041,25 @@ html[data-galaxy-hidden] .galaxy-back{display:inline-flex;}
 
 /* The Connect button (2026-10-28, the owner's ask: "there should be a connect
    button next to these notifications saying its offline"). One small control
-   at the end of either offline line, in the page's own mono/gold language, and
+   at the end of the offline line, in the page's own mono/gold language, and
    a real <button> - keyboard reachable, focusable, Enter and Space work, and
    its words are the PC's own reading. It is never drawn from a guess: the
-   page paints it only while the PC says a press would really start a lane. */
-#model-warn .lane-start,
-#banner .lane-start{
+   page paints it only while the PC says a press would really start a lane.
+   The demo banner's own copy of this button went on 2026-11-13 with its
+   duplicate sentence: with the PC's answer in hand, the banner stays shut and
+   this row is the one line. */
+#model-warn .lane-start{
   align-self:center; padding:3px 10px; min-height:24px;
   font-family:var(--f-mono); font-size:10.5px; letter-spacing:.04em;
   color:var(--gold); background:transparent; cursor:pointer;
   border:1px solid var(--line-hot); border-radius:3px;
 }
-#model-warn .lane-start:hover,
-#banner .lane-start:hover{border-color:var(--gold);}
-#model-warn .lane-start:focus-visible,
-#banner .lane-start:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
-#model-warn .lane-start:disabled,
-#banner .lane-start:disabled{color:var(--dim); border-color:var(--line); cursor:default;}
-#model-warn .lane-start[hidden],
-#banner .lane-start[hidden]{display:none;}
-#model-warn .lane-start-note,
-#banner .lane-start-note{color:var(--dim); font-size:10.5px; opacity:.9;}
-#model-warn .lane-start-note[hidden],
-#banner .lane-start-note[hidden]{display:none;}
+#model-warn .lane-start:hover{border-color:var(--gold);}
+#model-warn .lane-start:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+#model-warn .lane-start:disabled{color:var(--dim); border-color:var(--line); cursor:default;}
+#model-warn .lane-start[hidden]{display:none;}
+#model-warn .lane-start-note{color:var(--dim); font-size:10.5px; opacity:.9;}
+#model-warn .lane-start-note[hidden]{display:none;}
 
 /* ---------- Jarvis Live's refusal popup ------------------------------ *
  * The owner's field bug of 2026-10-27: clicking Live with no microphone
@@ -3837,12 +3833,6 @@ html[data-hud-shell="split-stage"] .dock-label{
     <div id="banner">
       <span id="banner-text"><b>Demo data.</b>
       Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.</span>
-      <!-- The PC is answering and only its model is missing: the one action
-           that starts the lane Jarvis talks to. Painted from the PC's own
-           reading (lane-connect below), never from a guess, and it is the
-           same words and the same command the Jarvis bar's button sends. -->
-      <button id="banner-connect" class="lane-start" type="button" hidden></button>
-      <span id="banner-connect-note" class="lane-start-note" role="status" hidden></span>
     </div>
 
     <!-- The PC is answering and its own model is not. Standing, before any
@@ -4904,7 +4894,15 @@ function jfetch(path, opts){
  * ================================================================== */
 const S = {
   view: "talk",
-  online: false,
+  // The page's own answer to "can I talk to Jarvis", and the one boolean the
+  // face and Send read. null until a read lands: "the PC has not said" is not
+  // "offline", and the page must not say the second before it knows. boot()
+  // sets it from its own read; `paintHost` moves it on every landed
+  // /api/status read after that, and that copy is what had gone stale - the
+  // owner's HUD booted with the model down on 2026-11-13, the model came back,
+  // the status row went green, and every reply stayed a sample because nothing
+  // ever wrote this field again.
+  online: null,
   // /api/status's own `ollama` field, as the PC reported it: true, false, or
   // null for "the PC has not said" (a read that did not land, or an older
   // backend with no such field). Re-read on the page's beat; see `paintHost`.
@@ -5276,7 +5274,9 @@ const reactor = (() => {
   // shows it (jarvis-link.js surfaceState). `S.power` comes from the status
   // read at boot and the `power` event (see subscribe()).
   const faceState = () => {
-    if (!S.online) return "standby";
+    // Only a page that has been told can say "offline": S.online is null until
+    // the first read lands, and the face rests at its real state until then.
+    if (S.online === false) return "standby";
     const st = FACE_STATE[S.state] || "idle";
     const focusQuiet = S.power === "quiet" && S.powerBy === "focus";
     return st === "idle" && !focusQuiet && (S.power === "standby" || S.power === "quiet") ? "standby" : st;
@@ -5310,8 +5310,8 @@ const reactor = (() => {
     // `serious`: see above.
     // `focus`: the resting face is a focus session's Quiet - only the words differ.
     const st = faceState();
-    if (w) w.postMessage({ type:"jarvis-hud-face", state:st, offline:!S.online,
-                           focus: S.online && st === "idle" && S.power === "quiet" && S.powerBy === "focus",
+    if (w) w.postMessage({ type:"jarvis-hud-face", state:st, offline:S.online === false,
+                           focus: S.online === true && st === "idle" && S.power === "quiet" && S.powerBy === "focus",
                            serious:serious(), appearance }, "/");
   }
 
@@ -5418,7 +5418,7 @@ const reactor = (() => {
   return {
     set(state){
       S.state = state;
-      const label = S.online ? (words[state] || state) : "offline";
+      const label = S.online === false ? "offline" : (words[state] || state);
       $("reactor-state").textContent = label;
       $("chip-state").textContent = label;
       $("chip-state").className = "chip" + (state === "thinking" ? " hot" : state === "listening" ? " live" : "");
@@ -7730,7 +7730,13 @@ async function send(){
   reactor.set("thinking");
   const started = performance.now();
 
-  if(!S.online){
+  // false is the page KNOWING it cannot talk: boot's own read failed, or a
+  // landed read said the PC's model is down. null is "no read has landed
+  // yet", and that is not offline - Send tries the PC for real rather than
+  // putting a "Jarvis is not connected" sample in the box on a guess. This
+  // used to be `!S.online`, true for both, and the frozen copy meant a model
+  // that came back still answered with samples.
+  if(S.online === false){
     await new Promise(r => setTimeout(r, 700));
     addMessage("sample", sampleReply());
     reactor.set("idle");
@@ -8910,6 +8916,11 @@ async function boot(){
     publishSafetyFacts(status);
     $("brand-sub").textContent = S.online ? "online · local first" : "online · model not running";
   } else {
+    // The read itself threw: the page cannot reach the PC at all, which is the
+    // one thing it knows without a second opinion. Keep that false rather than
+    // null ("still waiting for the first answer"), so Send keeps answering
+    // from a sample and the face keeps its not-connected ring.
+    S.online = false;
     led("led-ollama", false, "—");
     led("led-proxy",  false, "—");
     // No invented lane names (2026-10-27): with the PC unreachable this page
@@ -8939,14 +8950,22 @@ async function boot(){
   paintHost();
 
   if(!S.online){
-    $("banner").classList.add("on");
-    // Written into its own span, never over #banner's whole contents: the
-    // Connect button beside it must survive every status read (2026-10-28).
-    $("banner-text").innerHTML = status
-      ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
-        + 'Replies below are sample data.'
-      : '<b>Demo data.</b> Jarvis is not answering yet — start '
-        + '<span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.';
+    // ONE line for "the PC is up and its model is not": the standing #model-warn
+    // row, drawn from the PC's own reading (lane-warning.js). This banner used
+    // to say the same fact a second time, one strip above it, and the owner saw
+    // both at once (2026-11-13) - so with the PC's answer in hand the banner
+    // stays shut and the row speaks. The banner is left for the case with no PC
+    // at all, which the row deliberately never draws, and the consequence the
+    // banner used to carry ("sample data") is the conversation's own note below.
+    if(S.ollama !== false){
+      $("banner").classList.add("on");
+      // Written into its own span, never over #banner's whole contents.
+      $("banner-text").innerHTML = status
+        ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
+          + 'Replies below are sample data.'
+        : '<b>Demo data.</b> Jarvis is not answering yet — start '
+          + '<span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.';
+    }
     addMessage("system", status
       ? "The PC is up, but its local model is not running yet. Everything below is sample data until it is."
       : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
@@ -9122,8 +9141,10 @@ boot();
  *
  *  `S.ollama` is the field as the PC reported it - true, false, or null for
  *  "the PC has not said" - and `S.linkUp` is the shell's live stream verdict,
- *  null until it says. Kept apart from `S.online`, this page's older, coarser
- *  boolean that decides sample replies.
+ *  null until it says. `S.online` is this page's own, coarser answer to "can I
+ *  talk to Jarvis", read by the face and by Send: null until a read lands,
+ *  then moved here on every landed read, so the two can no longer drift apart
+ *  the way they did until 2026-11-13.
  * ---------------------------------------------------------------------- */
 async function paintHost(){
   try{
@@ -9133,6 +9154,18 @@ async function paintHost(){
       // Only a read that landed changes anything. A failed read says nothing
       // about the model, so what was last known stands.
       if(st) S.ollama = st.ollama;
+      // And a landed read now unfreezes the page. Until 2026-11-13 only boot()
+      // ever wrote `S.online`, so a window that booted while the model was down
+      // stayed on sample replies for the rest of the session however healthy
+      // the PC became - the owner's HUD that night: status row green, no
+      // banner, and every answer still "sample reply · not from jarvis".
+      // Only a real boolean is taken (a landed read that does not mention the
+      // model is not a verdict), and only when it CHANGED, so boot's own read
+      // and this beat's read cannot paint the chip twice for one truth.
+      if(st && typeof st.ollama === "boolean" && st.ollama !== S.online){
+        S.online = st.ollama;
+        paintOnline();
+      }
       // A4: the same read carries the two persistent latches; a restart while
       // this window is open is noticed on this beat (the latch can expire).
       if(st) publishSafetyFacts(st);
@@ -9143,6 +9176,16 @@ async function paintHost(){
   // a press would do anything, and a lane started somewhere else (the Jarvis
   // bar, the phone, the logon task) has to take this page's button away too.
   await refreshLane();
+}
+
+/** Repaints what `S.online` decides - the chip's words and the face - once.
+ *  `reactor.set` is this page's only painter of both: it owns the label, the
+ *  chip's class and the face's post, so a beat that learns the model is back
+ *  goes through the same door boot does rather than writing the label here.
+ *  It never writes the brand or the banner: `hostWarn` owns those, and it must
+ *  stay free to leave the shell's "demo · not connected" marker standing. */
+function paintOnline(){
+  reactor.set(S.state);
 }
 
 /** The last lane reading this page has, or null for "the PC has not said". */
@@ -9312,39 +9355,31 @@ function laneRefusalWords(reply){
 }
 
 /**
- * Draw the button into both offline surfaces of this page and return whether
- * it is showing. `opts.banner` decides the banner half: that line only appears
- * when the PC answers and its MODEL does not, and a page with no server to ask
- * has nothing to start.
+ * Draw the button into the standing offline row and return whether it is
+ * showing. There is ONE surface: the row says why the model is missing and
+ * carries the action, and the demo banner - the page with no server to ask at
+ * all - has nothing to start.
  */
-function paintLaneConnect(doc, lane, onPress, opts){
-  opts = opts || {};
+function paintLaneConnect(doc, lane, onPress){
   const view = laneButtonView(lane);
-  const bannerHalf = opts.banner === true;
-  let shown = false;
-  const put = (buttonId, noteId, allowed) => {
+  const put = (buttonId, noteId) => {
     const button = doc && doc.getElementById ? doc.getElementById(buttonId) : null;
     if(!button) return false;
-    const show = allowed && view.show;
-    button.textContent = show || allowed ? view.words : "";
+    const show = view.show;
+    button.textContent = show ? view.words : "";
     button.hidden = !show;
     button.disabled = !show || view.disabled;
     button.setAttribute("aria-busy", show && view.disabled ? "true" : "false");
     const note = doc.getElementById(noteId);
     if(note){
-      // The line under the button is the PC's own sentence (or the countdown),
-      // and only while this surface is the one telling the owner about it.
-      note.textContent = allowed && view.note ? view.note : "";
-      note.hidden = !(allowed && view.note);
+      // The line under the button is the PC's own sentence (or the countdown).
+      note.textContent = view.note ? view.note : "";
+      note.hidden = !view.note;
     }
     if(onPress) button.onclick = show && !view.disabled ? onPress : null;
     return show;
   };
-  // The standing row: the PC is answering and its own model is not.
-  shown = put("model-warn-start", "model-warn-start-note", true) || shown;
-  // The banner: only in its "model not running" state.
-  put("banner-connect", "banner-connect-note", bannerHalf);
-  return shown;
+  return put("model-warn-start", "model-warn-start-note");
 }
 
 /* The two ways this page can ask. `core.invoke` for the shell (the token and
@@ -9434,10 +9469,8 @@ async function hudLanePress(io){
 /* == hud-lane-connect end == */
 
 
-/** Redraws the button on both offline surfaces from the last reading. */
+/** Redraws the button on the standing offline row from the last reading. */
 function paintLaneConnectNow(){
-  const banner = document.getElementById("banner");
-  const bannerHalf = !!banner && banner.classList.contains("on") && S.ollama === false;
   // The LANE's own reading decides, not the live stream's: `linkStatus.up`
   // false means the shell's event stream dropped, which says nothing about
   // whether the PC can be asked (the bridge read goes over its own road, and
@@ -9449,22 +9482,16 @@ function paintLaneConnectNow(){
   const lane = lanePressing
     ? Object.assign({}, laneRead || {}, { state: "starting" })
     : laneRead;
-  paintLaneConnect(document, lane, startTheLane, { banner: bannerHalf });
+  paintLaneConnect(document, lane, startTheLane);
   if(!laneNote) return;
-  // The PC's refusal, or this page's plain sentence, under whichever line is
-  // the one on screen. Never invented, and never cleared by a repaint that has
-  // nothing new to say.
+  // The PC's refusal, or this page's plain sentence, under the line on screen.
+  // Never invented, and never cleared by a repaint that has nothing new to say.
   const standing = document.getElementById("model-warn");
-  const standingWanted = !!standing && !standing.hidden;
-  for(const [noteId, surface, wanted] of [
-    ["model-warn-start-note", standing, standingWanted],
-    ["banner-connect-note", banner, bannerHalf],
-  ]){
-    const note = document.getElementById(noteId);
-    if(!note || !surface) continue;
-    note.textContent = wanted ? laneNote : "";
-    note.hidden = !wanted;
-  }
+  const note = document.getElementById("model-warn-start-note");
+  if(!note || !standing) return;
+  const wanted = !standing.hidden;
+  note.textContent = wanted ? laneNote : "";
+  note.hidden = !wanted;
 }
 
 /** Reads the lane and draws from it. Never throws; one read at a time. */

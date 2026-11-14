@@ -940,6 +940,8 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.doesNotMatch(modelLine, /isn't connected/i);
   const banner = (await page.locator("#banner").textContent()) || "";
   assert.doesNotMatch(banner, /not connected/i, "the demo banner is up over a live PC");
+  assert.equal(await page.locator("#banner").isVisible(), false,
+    "the same fact was drawn twice: the demo banner is up over the standing line (2026-11-13)");
   const log = await send(page, "hi");
   const spoken = await page.evaluate(() => window.__spoken);
   await page.close();
@@ -955,6 +957,65 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.match(sample.who, /not from jarvis/i);
   assert.match(sample.body, /^This is a sample reply, not an answer\./);
   assert.doesNotMatch(sample.body, /\bsir\b|\bI am\b|\bI will\b/, "a sample written as Jarvis speaking");
+});
+
+/* The owner's live HUD, 2026-11-13: it booted while Ollama was down, the model
+ * came back, /api/status said `ollama: true` and the status row went green -
+ * and every reply stayed a sample, because boot() was the only thing that ever
+ * wrote `S.online` and the 30 s beat never wrote it again. These two checks
+ * drive the page's own beat at both answers (`window.apprPoll`, which
+ * hud_bootstrap.js wraps and which carries paintHost's /api/status read), so
+ * the latch cannot come back: up must send for real, down must still sample. */
+await check("a live read that says the model is UP unfreezes Send", async () => {
+  const backend = { jarvis: false, ollama: false, proxy: false };
+  const { page, problems, chats } = await openHud(browser, backend);
+  // It really booted down first: a sample is what this page starts on.
+  assert.equal(await page.evaluate(() => S.online), false,
+    "the window did not boot on the model-down state, so this check proves nothing");
+  const first = await send(page, "is it up?");
+  assert.ok(first.some((m) => /sample reply/.test(m.who || "")),
+    `a model-down window did not answer with a sample: ${JSON.stringify(first)}`);
+  assert.equal(chats.length, 0, "a model-down window posted a turn");
+  // The model comes back between two beats, as it did on the owner's PC, and
+  // the page's own beat is what must notice.
+  backend.ollama = true;
+  await page.evaluate(() => window.apprPoll());
+  await K.until(page, "the page's own beat to read the model as up", async () =>
+    (await page.evaluate(() => S.online)) === true, { ms: 8000 });
+  // And the repaint that goes with the new answer: the chip stops saying
+  // "offline" and the face's not-connected ring goes, without waiting for the
+  // owner's next turn.
+  const frame = await faceFrame(page);
+  await K.until(page, "the chip and the face to leave the offline state", async () =>
+    (await page.locator("#chip-state").textContent()) === "standing by"
+      && (await frame.evaluate(() => LIVE_OFFLINE)) === false, { ms: 8000 });
+  const log = await send(page, "and now?");
+  await page.close();
+  assert.equal(chats.length, 1,
+    `the landed "model up" read did not unfreeze Send: /api/chat saw ${chats.length} POST(s)`);
+  const at = log.map((m) => m.who === "you").lastIndexOf(true);
+  const after = log.slice(at);
+  assert.ok(!after.some((m) => /sample reply/.test(m.who || "")),
+    `still a sample reply after the model came up: ${JSON.stringify(after)}`);
+  assert.ok(after.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."),
+    `the real answer was not shown: ${JSON.stringify(after)}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("a beat that keeps reading the model DOWN still answers with a sample", async () => {
+  const backend = { jarvis: false, ollama: false, proxy: false };
+  const { page, problems, chats } = await openHud(browser, backend);
+  // Park the field so the BEAT's own read is visibly the thing that puts it
+  // back: a landed DOWN read is not a permission to POST a turn.
+  await page.evaluate(() => { S.ollama = null; window.apprPoll(); });
+  await K.until(page, "the page's own beat to read the model down again", async () =>
+    (await page.evaluate(() => S.ollama)) === false, { ms: 8000 });
+  const log = await send(page, "still down?");
+  await page.close();
+  assert.equal(chats.length, 0, "a window that only ever read the model DOWN posted a turn");
+  assert.ok(log.some((m) => /sample reply/.test(m.who || "")),
+    `no sample reply after a second model-down read: ${JSON.stringify(log)}`);
+  assert.deepEqual(problems, []);
 });
 
 /* ── The reactor is the kit face ─────────────────────────────────────────── */
