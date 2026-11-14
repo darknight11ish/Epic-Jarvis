@@ -508,10 +508,10 @@ def t_outside_the_catalogue_falls_through():
 
 
 # --------------------------------------------------------------------------
-#   6. every one of the 182 rows answers from itself
+#   6. every one of the 183 rows answers from itself
 # --------------------------------------------------------------------------
 def t_every_catalogue_row_answers_from_its_own_words():
-    check("the catalogue has its 182 rows", len(C.FEATURES) == 182,
+    check("the catalogue has its 183 rows", len(C.FEATURES) == 183,
           len(C.FEATURES))
     missing = []
     for row in C.FEATURES:

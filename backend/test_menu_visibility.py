@@ -203,8 +203,12 @@ def t_markup_matches():
     # the third kind on purpose: it is a real top-level card, but it is the
     # page a new owner meets first, so it is deliberately NOT given a
     # menu-visibility entry and can never be hidden - the same choice already
-    # made for "notifications".
-    inside = {"start-jarvis", "crash-notes", "notifications", "first-run"}
+    # made for "notifications". "phone-backup" (2026-11-13) is the fourth kind
+    # for the same safety reason: it is the one place that saves and restores
+    # THIS phone's settings, so hiding it could strand the owner, and the row
+    # has been drawn always since PR #1233 added it.
+    inside = {"start-jarvis", "crash-notes", "notifications", "first-run",
+              "phone-backup"}
     for s in R.SECTIONS:
         check(f"registry section {s.id} has a menu", M.menu("settings." + s.id) is not None or s.id in inside)
 

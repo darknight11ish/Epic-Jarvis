@@ -2913,6 +2913,12 @@ NO_COMMAND_REASON = {
     # Jarvis's, with no backend route - the PC neither knows nor needs to know
     # what this phone's window shows.
     "phone-pip": ('app-local', "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.", 'Session B'),
+    # "Set up a new phone from a settings backup" (2026-11-13, the copy-over
+    # wave): ONE phone Settings card that seals THIS phone's settings into a
+    # password-locked file the owner picks, and restores them from the same
+    # card. No backend route and nothing sent to the PC - the phone writes and
+    # reads the file itself - so the Settings card is its one true home.
+    "phone-settings-backup": ('app-local', "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.", 'Session B'),
     "also-on-phone": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "find-phone": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "phone-limits": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
