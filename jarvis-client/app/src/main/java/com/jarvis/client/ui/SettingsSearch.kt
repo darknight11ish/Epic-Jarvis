@@ -151,7 +151,13 @@ object SettingsSearch {
     val ROWS: List<Row> = listOf(
         Row(
             key = "voice", title = "Voice",
-            label = "Train my voice; Voice check; Jarvis's voice; Listen on this phone",
+            // "Stop speaking when I press the mic" is a switch drawn inside the
+            // Voice card (the same UI, `VoiceSwitchesPlate.kt`): the owner's ask
+            // of 2026-11-13, on by default. Its exact printed words are here so
+            // typing them finds Voice - the 2026-10-13 rule that a switch is
+            // findable by the words on it.
+            label = "Train my voice; Voice check; Jarvis's voice; Listen on this phone; " +
+                "Stop speaking when I press the mic; interrupt Jarvis; barge in",
             quotes = listOf(
                 "Whether Jarvis knows your voice, how strict that check is, and ",
                 "Pair with your desktop first - these settings live on it.",

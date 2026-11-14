@@ -1158,6 +1158,13 @@ object JarvisRuntime {
             // "Play a short sound when I finish speaking" (Checks), read
             // each time the "I heard you" sound would play.
             heardSoundOn = { clientSettings.heardSound.value },
+            // "Stop speaking when I press the mic" ([MicBargeIn]) - this
+            // phone's own switch, ON by default (the owner's ask of
+            // 2026-11-13): a press while Jarvis talks stops the reply at once
+            // and starts listening for the next thing, as the desktop's own
+            // talk button always has. Read at the press, so a change applies to
+            // the very next one.
+            micBargeInOn = { clientSettings.micBargeIn.value },
             // "Read out answers that use what Jarvis remembers" (Settings,
             // Voice) - the owner's setting of 2026-11-05, this phone's own
             // and OFF by default. Read per sentence, so a switch changed
