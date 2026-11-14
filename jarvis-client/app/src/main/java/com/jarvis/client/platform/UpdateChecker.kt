@@ -8,6 +8,7 @@ import androidx.core.content.FileProvider
 import com.jarvis.client.BuildConfig
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.net.UpdateCheck
+import com.jarvis.client.update.ApkUpdater
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -187,9 +188,16 @@ class UpdateChecker(private val settings: ClientSettings) {
     // digest pinned in the app (`UpdateCheck.SIGNER_SHA256`).
 
     /**
-     * Fetches the published APK, checks its certificate, and - only if that
-     * matches - puts it in [download] as `Ready`. Never throws: every ending is
-     * a value the screen can show.
+     * Fetches the published APK, checks it against the sha256/size manifest CI
+     * publishes beside it, then checks its signing certificate - and only if
+     * BOTH match puts it in [download] as `Ready`. Never throws: every ending
+     * is a value the screen can show.
+     *
+     * The manifest half is `update/ApkUpdater.kt`, adapted from Mobile-Harness
+     * (MIT). It runs BEFORE the APK is fetched, so a build whose checksum file
+     * is missing or unreadable is not downloaded at all - "could not check" is
+     * never reported as "up to date". A file that fails either gate is deleted
+     * here, where the bytes are, and never reaches Android's installer.
      *
      * [context] is only used for the app's own private cache directory, which
      * is the file's ONLY home: no shared storage, no external path, so nothing
@@ -208,10 +216,45 @@ class UpdateChecker(private val settings: ClientSettings) {
         if (!downloading.compareAndSet(false, true)) return
         try {
             _download.value = UpdateCheck.Download.Fetching(0, p.downloadBytes)
+            // 1. The published checksum. Nothing is downloaded without it.
+            val manifest = when (val read = withContext(Dispatchers.IO) { fetchManifest() }) {
+                is ApkUpdater.Read.Unreadable -> {
+                    _download.value = UpdateCheck.Download.Refused(read.why)
+                    return
+                }
+                is ApkUpdater.Read.Found -> read.manifest
+            }
+            if (!ApkUpdater.isNewer(manifest, BuildConfig.VERSION_CODE.toLong())) {
+                // The release moved between the check and the tap, or this
+                // phone is already on the published build. Either way there is
+                // nothing to download, and saying "up to date" here would be a
+                // different claim from the one that was checked.
+                _download.value = UpdateCheck.Download.Refused(ApkUpdater.NOT_NEWER)
+                return
+            }
+            // 2. The APK itself.
             val saved = withContext(Dispatchers.IO) { fetchApk(context, url, p.downloadBytes) }
             when (saved) {
                 is Saved.No -> _download.value = UpdateCheck.Download.Refused(saved.why)
                 is Saved.Yes -> {
+                    // 3. Size and SHA-256 against the manifest. A mismatch is
+                    // deleted here and refused with the reason; a file the
+                    // verifier cannot read at all (a vanished file, an I/O
+                    // fault) is also a refusal, never a stuck download.
+                    val verdict = withContext(Dispatchers.IO) {
+                        runCatching { ApkUpdater.verify(saved.file, manifest, url) }
+                            .getOrElse { ApkUpdater.Verdict.Refused(ApkUpdater.UNREADABLE) }
+                    }
+                    when (verdict) {
+                        is ApkUpdater.Verdict.Refused -> {
+                            saved.file.delete()
+                            _download.value = UpdateCheck.Download.Refused(verdict.why)
+                            return
+                        }
+                        is ApkUpdater.Verdict.Matches -> Unit
+                    }
+                    // 4. The signing certificate, as before. Both gates must
+                    // pass before Ready exists.
                     val cert = withContext(Dispatchers.IO) { certificateSha256(context, saved.file) }
                     _download.value = UpdateCheck.afterFetch(saved.bytes, cert) { _ ->
                         UpdateCheck.Download.Ready(saved.file)
@@ -221,6 +264,40 @@ class UpdateChecker(private val settings: ClientSettings) {
             }
         } finally {
             downloading.set(false)
+        }
+    }
+
+    /**
+     * Fetches `client-latest.json` from the same release. Follows GitHub's
+     * asset redirect (the same client the APK download uses), refuses a hop
+     * off GitHub's own hosts, and caps the body.
+     */
+    private fun fetchManifest(): ApkUpdater.Read {
+        if (!ApkUpdater.isManifestUrl(ApkUpdater.MANIFEST_URL)) return ApkUpdater.Read.Unreadable(ApkUpdater.NO_MANIFEST)
+        val request = Request.Builder().url(ApkUpdater.MANIFEST_URL).get()
+            .header("Accept", "application/json")
+            .build()
+        return try {
+            files.newCall(request).execute().use { response ->
+                if (!UpdateCheck.isGithubHost(response.request.url.host)) {
+                    return ApkUpdater.Read.Unreadable(ApkUpdater.NO_MANIFEST)
+                }
+                if (response.code != 200) {
+                    return ApkUpdater.httpProblem(response.code)
+                }
+                val body = response.body ?: return ApkUpdater.Read.Unreadable(ApkUpdater.NO_MANIFEST)
+                // request(n) is true when at least n bytes arrived: one past
+                // the cap means this is not a manifest.
+                val source = body.source()
+                if (source.request(ApkUpdater.MAX_MANIFEST_BYTES + 1L)) {
+                    return ApkUpdater.Read.Unreadable(ApkUpdater.NO_MANIFEST)
+                }
+                ApkUpdater.read(source.buffer.readUtf8())
+            }
+        } catch (_: java.io.IOException) {
+            ApkUpdater.Read.Unreadable(ApkUpdater.NO_MANIFEST)
+        } catch (_: IllegalStateException) {
+            ApkUpdater.Read.Unreadable(ApkUpdater.NO_MANIFEST)
         }
     }
 

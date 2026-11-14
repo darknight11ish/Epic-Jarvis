@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "5a4f6b2a60a72f1801d51f99d4ed8baf1999419e",
- "built_at": "2026-11-13T23:42:59-08:00",
+ "ref": "1b52af68286d8d529b588e3bb7403e549b06444e",
+ "built_at": "2026-11-14T00:38:56-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1039,6 +1039,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ChatPins.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ContactsLookup.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/EncryptedBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FaceTuning.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/FloatingAvatar.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/HistoryViewPrefs.kt",
@@ -1058,6 +1059,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenNever.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenRate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/SettingsBackup.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/TokenStore.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/data/WakeResume.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/face/AnimalNow.kt",
@@ -1370,6 +1372,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcHelpPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PcNotifyPlate.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneBackupPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhoneNotificationsPlate.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PhotoReminderDialog.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PicturesPlate.kt",
@@ -1424,6 +1427,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Chrome.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/JarvisTheme.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Themes.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/update/ApkUpdater.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/CardVoice.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/HoldEndRule.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveAudioRoute.kt",
@@ -1800,6 +1804,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/YoutubeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/BaseUrlTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/ChatPinsTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/data/EncryptedBackupTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceSizeTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/FaceTuningTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/data/LookTest.kt",
@@ -1810,6 +1815,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/VoicePressTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ui/theme/ThemeContrastTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/update/ApkUpdaterTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/voice/HoldEndRuleTest.kt",
     "jarvis-client/app/src/test/resources/chat-stream-cases.json",
     "jarvis-client/app/src/test/resources/contract/animal-cases.json",
@@ -1887,7 +1893,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 973,
+   "file_count": 979,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4628,7 +4634,9 @@
     "changelog.d/2026-11-13-merge-plan-limited-rules.md",
     "changelog.d/2026-11-13-notification-body-opens-jarvis.md",
     "changelog.d/2026-11-13-patch-history-rebuild.md",
+    "changelog.d/2026-11-13-phone-backup-host-and-iteration-limit.md",
     "changelog.d/2026-11-13-phone-mic-press-interrupts.md",
+    "changelog.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "changelog.d/2026-11-13-photo-from-phone.md",
     "changelog.d/2026-11-13-quiz-finish-dead-end.md",
     "changelog.d/2026-11-13-reconcile-github-tools-deltas.md",
@@ -4809,7 +4817,9 @@
     "decisions.d/2026-11-13-merge-plan-limited-rules.md",
     "decisions.d/2026-11-13-notification-body-opens-jarvis.md",
     "decisions.d/2026-11-13-patch-history-rebuild.md",
+    "decisions.d/2026-11-13-phone-backup-excludes-the-address.md",
     "decisions.d/2026-11-13-phone-mic-press-interrupts.md",
+    "decisions.d/2026-11-13-phone-settings-backup-and-checksum-update.md",
     "decisions.d/2026-11-13-photo-from-phone.md",
     "decisions.d/2026-11-13-quiz-finish-records-not-applies.md",
     "decisions.d/2026-11-13-reconcile-extended-patch-probes.md",
@@ -5267,7 +5277,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 898,
+   "file_count": 902,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6354,6 +6364,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "1b52af68286d8d529b588e3bb7403e549b06444e",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main into the any-file-transfer work"
+  },
+  {
+   "sha": "98b82d643adc589f6004541f4a520398ccb08481",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1250 from darknight11ish/integration/wave18-2026-11-13"
+  },
+  {
    "sha": "5a4f6b2a60a72f1801d51f99d4ed8baf1999419e",
    "date": "2026-11-13",
    "subject": "feat(upload): any file type from the phone, up to 2 GiB, behind one constant"
@@ -6364,94 +6384,84 @@
    "subject": "Merge remote-tracking branch 'origin/feat/photo-from-phone' into feat/any-file-transfer-2026-11-13"
   },
   {
+   "sha": "e962f55f90edf8afca182ae8119dc4b7a2859f92",
+   "date": "2026-11-13",
+   "subject": "The invariant block's length pin follows the block: 5,234 -> 5,357 characters"
+  },
+  {
+   "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
+   "date": "2026-11-13",
+   "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
+  },
+  {
+   "sha": "69428294081ee150aefe347399e36531787b5f01",
+   "date": "2026-11-13",
+   "subject": "Regenerate the whole-repo records against the merged tree"
+  },
+  {
+   "sha": "0a3b6d1f26b49c3542c32b3a34d04b8bd819866b",
+   "date": "2026-11-13",
+   "subject": "Merge origin/main into integration/wave18-2026-11-13 (current main after #1246 landed)"
+  },
+  {
+   "sha": "f2366ba75440aaabe2666aaadab3643dcadf3dc0",
+   "date": "2026-11-13",
+   "subject": "Merge fix/self-knowledge-places-and-counts-2026-11-13 into integration/wave18-2026-11-13 (self-knowledge places and counts); generated records keep the integration side, regenerated at the end"
+  },
+  {
    "sha": "abb8d19f5e1a38f6fe1864b0bd750fc16b7b1f06",
    "date": "2026-11-13",
    "subject": "Merge pull request #1246 from darknight11ish/fix/forget-card-fits-2026-11-13"
   },
   {
-   "sha": "daf74a7cf5ce1293912223a9eb4bdebdf5e68995",
+   "sha": "a9bd71f9a273be6c5d462c9cd90f7bc379336ace",
    "date": "2026-11-13",
-   "subject": "feat: a photo can be sent from the phone into \"From my phone\" as a plain file"
+   "subject": "Merge fix/tray-and-readme-truth-2026-11-13 into integration/wave18-2026-11-13 (tray wording + README truth); generated records keep the integration side, regenerated at the end"
   },
   {
-   "sha": "2933d248754cd5131821ba87b93d67af35ddfac3",
+   "sha": "7f9339bf9ef24e247a450cb8e88b11fdb315cd3a",
    "date": "2026-11-13",
-   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+   "subject": "Merge ci/backend-shard-2026-11-13 into integration/wave18-2026-11-13 (backend job sharded four ways, 60-minute shard ceiling; backend-windows keeps 120)"
   },
   {
-   "sha": "a6aced2cee0e9e40ada0fd6d65582a0b3571cb79",
+   "sha": "db4309bbdf2f3c7468afc59c684a66ad66c05bf3",
    "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
+   "subject": "chore(records): regenerate the recent-changes bullets and the self-code map for the new fragments"
   },
   {
-   "sha": "e30cb46a4f9ab179d844dcf9e583ca5d12d77ad8",
+   "sha": "5710dbd5842247547edf69692145702272a00c94",
    "date": "2026-11-13",
-   "subject": "Merge pull request #1237 from darknight11ish/fix/undo-notice-timeout-2026-11-13"
+   "subject": "fix(desktop): the tray says only what it measured, and the README stops naming a live version"
   },
   {
-   "sha": "7465c066731de583df9f8c63447f930c135cf904",
+   "sha": "6ca912016c3cc692870d6db14dba108ddd547354",
    "date": "2026-11-13",
-   "subject": "Merge origin/main (0b6e5a9) into fix/forget-card-fits-2026-11-13"
+   "subject": "chore(records): regenerate the self-code map for the new shard suite"
   },
   {
-   "sha": "6f1c3f3eb0935ae33923ea51c2f79070d252290a",
+   "sha": "34aa2ff8ac366efbe8b32eaf16161b91c6e15012",
    "date": "2026-11-13",
-   "subject": "chore(records): regenerate the self-code map and the recent-changes bullets"
+   "subject": "soupsieve 4.0.1 in both lock copies, and the whole-repo records regenerated for this tree"
   },
   {
-   "sha": "365690decf27cce398a99aacdffb12c74cbd5916",
+   "sha": "80e96d85ea280d1b1aa85d062c92f9b61b367216",
    "date": "2026-11-13",
-   "subject": "fix(memory): a big Forget-a-time-frame card carries the count, so it can be approved"
+   "subject": "Merge origin/fix/wake-word-self-answer-2026-11-13 into integration/wave18-2026-11-13 (#1248 wake word + Layer 1 routing); generated records keep the integration side, regenerated at the end"
   },
   {
-   "sha": "8e4c8b27210f7dda4fb8b8d3be92eb95ac37d32a",
+   "sha": "d543b0122c09cab712686b62efd952ec3225cc64",
    "date": "2026-11-13",
-   "subject": "chore-records-regenerate-the-generated-files-after-merging-main"
+   "subject": "fix: self-knowledge places, planned labels and derived counts"
   },
   {
-   "sha": "15625d0dbc9057712958c526a70f0549519fa1cf",
+   "sha": "e1308a7a2aa7f106c4fde353b1c12d9c79d81739",
    "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into HEAD"
+   "subject": "ci: shard the required backend job, keeping the check name"
   },
   {
-   "sha": "0b6e5a96798ef34a8fe047f7f66ae7f93799f009",
+   "sha": "8d807ec394e835510cdb8325245d0a0559d049b1",
    "date": "2026-11-13",
-   "subject": "Merge pull request #1238 from darknight11ish/fix/awareness-of-new-features-2026-11-13"
-  },
-  {
-   "sha": "0a195e9493b2ec66ad573a747278ea13ba4352d3",
-   "date": "2026-11-13",
-   "subject": "fix: restore the Tauri 'features' capability, which my last commit overwrote"
-  },
-  {
-   "sha": "1c1a516da21eed1afd0210d4798b6ea9bec5068b",
-   "date": "2026-11-13",
-   "subject": "fix: VoiceStudio's phone absence and its feature-list cover - #1238's backend was red on both"
-  },
-  {
-   "sha": "d85796a23a2857f8d36ec2710d19c05277352006",
-   "date": "2026-11-13",
-   "subject": "test: the catalogue pin follows the VoiceStudio menu (135 -> 136)"
-  },
-  {
-   "sha": "b24634c77138e0eeaa20ddad866ffdb60dd1efca",
-   "date": "2026-11-13",
-   "subject": "docs: the About page's claim totals follow the four rows this PR adds"
-  },
-  {
-   "sha": "15ade7650d3fb46fb1cb1aaaa40793c9b90ed19e",
-   "date": "2026-11-13",
-   "subject": "fix: give VoiceStudio its menu, and regenerate the shared menu fixture"
-  },
-  {
-   "sha": "e46ff2d65262080868f08091056af77852183383",
-   "date": "2026-11-13",
-   "subject": "chore-records-regenerate-after-the-phone-fix"
-  },
-  {
-   "sha": "206eb0e09be58d6701d5095230abc6919cf0acd7",
-   "date": "2026-11-13",
-   "subject": "fix-phone-give-the-new-voicestudio-section-its-PC-only-decision"
+   "subject": "Regenerate the whole-repo records for the integration branch"
   }
  ],
  "top_level": [
@@ -6468,7 +6478,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 933
+   "files": 939
   },
   {
    "path": "docs/",
@@ -6481,14 +6491,14 @@
    "files": 354
   },
   {
-   "path": "tools/",
-   "line": "the generators and checkers that keep the records true",
+   "path": "changelog.d/",
+   "line": "one bullet per pull request, rolled into CHANGELOG.md",
    "files": 266
   },
   {
-   "path": "changelog.d/",
-   "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 264
+   "path": "tools/",
+   "line": "the generators and checkers that keep the records true",
+   "files": 266
   },
   {
    "path": "videos/",
@@ -6498,7 +6508,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 181
+   "files": 183
   },
   {
    "path": "plugins/",
@@ -6572,8 +6582,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5700,
-  "covered": 5217,
+  "tracked_files": 5710,
+  "covered": 5227,
   "excluded": 483,
   "subsystems": 27
  },
