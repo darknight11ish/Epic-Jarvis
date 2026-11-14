@@ -72,6 +72,15 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
         '    "web_research": ("yes", "outbound", "a public query leaves the machine"),\n'
         "}\n"
         "\n"
+        "# A live jarvis_gate.py always carries this table; the tool-actions\n"
+        "# repair (2026-11-14) anchors on it, so the fabricated file must have it\n"
+        "# or every repair in the loop below would be refused for the wrong\n"
+        "# reason. Two rows are enough to prove an insertion at its top.\n"
+        "_TOOL_ACTIONS: dict[str, str] = {\n"
+        '    "calculator": "auto",\n'
+        '    "send_file_to_phone": "send_file_to_phone",\n'
+        "}\n"
+        "\n"
         'def _tiers(framework: Optional[dict] = None) -> dict:\n'
         '    """The tier table, validated. An unrecognised tier string - "Never" with a\n'
         '    capital, "aks", anything not in _VALID_TIERS - is treated as "never",\n'
@@ -166,6 +175,13 @@ def t_check_names_both_missing_then_apply_fixes_them():
     gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
     check("the two risk rows landed", '"app_build_android": ("no"' in gate
           and '"app_install_android": ("no"' in gate)
+    check("the two tool->action rows landed, so action_for_tool() answers the "
+          "specific action instead of unclassified_tool",
+          '"app_build_android": "app_build_android"' in gate
+          and '"app_install_android": "app_install_android"' in gate)
+    check("... inside the _TOOL_ACTIONS table, not floating after it",
+          gate.index('"app_build_android": "app_build_android"')
+          < gate.index("}\n", gate.index("_TOOL_ACTIONS: dict[str, str] = {")))
     hud = (live / "jarvis_hud.py").read_text(encoding="utf-8")
     check("both history routes landed", '"/api/history/pin"' in hud
           and '"/api/history/archive"' in hud)

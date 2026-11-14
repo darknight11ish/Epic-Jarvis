@@ -157,19 +157,37 @@ def skip(name, why):
 
 
 def _table_of(source: str, name: str):
-    """The dict literal assigned to `name` in `source`, or None.
+    """The dict `name` builds in `source`, or None.
 
     Parsed, never regexed: these tables carry comments and one-line pairs, and
     a regex over them is how a suite ends up measuring its own draft.
+
+    The table AS THE GATE BUILDS IT, not as its literal reads. A row added after
+    the literal is an `<name>.update({...})` call at module level - the shape
+    handsfree, product-check, github-tools and the Android builder's own rows
+    use, because every line inside the literal is some earlier patch's hunk
+    context - and that call runs at import exactly as if the row sat inside the
+    dict. Reading only the literal reported `android_app` "missing" on a tree
+    where the gate answers it, which is how this fold came to exist
+    (2026-11-14; the same fix applies to backend/test_def068_entry.py).
     """
+    table = {}
     for node in ast.parse(source).body:
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
                 and node.target.id == name and isinstance(node.value, ast.Dict):
-            return ast.literal_eval(node.value)
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict) \
+            table = ast.literal_eval(node.value)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict) \
                 and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
-            return ast.literal_eval(node.value)
-    return None
+            table = ast.literal_eval(node.value)
+        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) \
+                and isinstance(node.value.func, ast.Attribute) \
+                and node.value.func.attr == "update" \
+                and isinstance(node.value.func.value, ast.Name) \
+                and node.value.func.value.id == name \
+                and len(node.value.args) == 1 \
+                and isinstance(node.value.args[0], ast.Dict):
+            table.update(ast.literal_eval(node.value.args[0]))
+    return table or None
 
 
 def _order():

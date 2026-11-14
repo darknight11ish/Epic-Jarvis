@@ -143,18 +143,6 @@ def t_the_patch_is_registered_last():
              # end of jarvis_gate.py (after the rows this patch removes), and a
              # _NO_RULE_FROM_DENIAL union - it rewrites none of the stale rows.
              "product-check.patch",
-             # android-builder-gate.patch (2026-11-14, DEF-068's way in for the
-             # model tool `android_app`) is appended after this patch, and before
-             # product-check.patch. ONE hunk in jarvis_gate.py: an
-             # `_TOOL_ACTIONS.update` block at the end of the file, ABOVE the
-             # block product-check adds - two lines mapping `app_build_android`
-             # and `app_install_android` to themselves. Every one of them is
-             # ADDED after the rows this patch wrote and it rewrites none of its
-             # lines; the two `_RISK` rows and the `_NO_RULE_FROM_DENIAL`
-             # membership for those actions were already in the published base
-             # with the builder itself (2026-10-30), so this patch adds no row
-             # and removes none.
-             "android-builder-gate.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.

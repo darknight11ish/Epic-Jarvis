@@ -469,13 +469,18 @@ def t_prepare_makes_the_build_plan_and_writes_nothing():
     with FakeToolchain(_TMP / "tc-a"), NoProcess() as np:
         state, text = tool.prepare({"project": app["name"], "task": app["tasks"][0]})
         own = A.plan_build(app["app"], app["tasks"][0]).says
+        # Read the command HERE: the fake toolchain also fakes A.WINDOWS = True
+        # (the module builds on Windows only), and `__exit__` restores the REAL
+        # flag. Read outside this block on a Linux runner, build_command answers
+        # `gradlew` while the plan was made for the Windows `gradlew.bat`.
+        expected = A.build_command(tdir)
     check("a build plans as the module's own CommandPlan",
           isinstance(state, A.CommandPlan) and state.kind == "build", type(state))
     check("... for the project and task that were named",
           (state.project, state.task) == (app["app"], app["tasks"][0]),
           (state.project, state.task))
     check("... with the module's ONE build command",
-          state.argv == A.build_command(tdir), state.argv)
+          state.argv == expected, state.argv)
     check("the card's words are the module's own plan words",
           text.startswith('Build the Android app "'), text[:120])
     check("... naming the exact command, folder and toolchain",
@@ -569,6 +574,9 @@ def t_one_card_per_build_and_the_command_runs_once():
     with FakeToolchain(_TMP / "tc-e"), Ran() as ran:
         call = OneCall({"project": app["name"], "task": app["tasks"][0],
                         "index_html": "<h1>hi</h1>"}).run()
+        # As above: the command the module names while its Windows flag is
+        # faked, not this PC's once `__exit__` has restored the real one.
+        expected = A.build_command(tdir)
     check("one build asked the owner EXACTLY once", len(call.gate_calls) == 1,
           call.gate_calls)
     if call.gate_calls:
@@ -581,7 +589,7 @@ def t_one_card_per_build_and_the_command_runs_once():
         check("... and the detail the gate records names the command",
               card["detail"].get("text", "") == card["prompt"], card["detail"])
     check("the ONE documented command ran once, in the task's copy",
-          len(ran.calls) == 1 and ran.calls[0]["argv"] == A.build_command(tdir)
+          len(ran.calls) == 1 and ran.calls[0]["argv"] == expected
           and ran.calls[0]["cwd"] == tdir, ran.calls)
     check("the answer says it BUILT and where the APK is",
           call.told.get("ok") is True and call.told.get("built") is True

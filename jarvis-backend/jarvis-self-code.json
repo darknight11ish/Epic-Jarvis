@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
- "built_at": "2026-11-14T11:56:59-08:00",
+ "ref": "665afdb44cdeb879121d0ae00ced71db179d04cc",
+ "built_at": "2026-11-14T12:02:13-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -5457,7 +5457,6 @@
     "backend/README.md",
     "backend/accounts.patch",
     "backend/activity-turn-guard.patch",
-    "backend/android-builder-gate.patch",
     "backend/animal.patch",
     "backend/answer-sources.patch",
     "backend/app-control.patch",
@@ -5937,7 +5936,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 510,
+   "file_count": 509,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6491,9 +6490,19 @@
  ],
  "recent_commits": [
   {
+   "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
+  },
+  {
    "sha": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
    "date": "2026-11-14",
    "subject": "Fix the six suites the DEF-068 lane turned red, and carry its gate rows in a patch"
+  },
+  {
+   "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
   },
   {
    "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
@@ -6531,6 +6540,11 @@
    "subject": "Merge fix/atlas-tray-copy-2026-11-14 into integration/wave20-2026-11-14 (tray offline sentence says Atlas)"
   },
   {
+   "sha": "9a2bec78de5b8f77c735662100c711c432d3c03e",
+   "date": "2026-11-14",
+   "subject": "chore(records): regenerate the self-code map after main gained the bar-label rename"
+  },
+  {
    "sha": "ecad10f1af5371d5ca7e5014239447dcf157595d",
    "date": "2026-11-14",
    "subject": "Merge origin/main into integration/wave20-2026-11-14 (current main)"
@@ -6551,6 +6565,11 @@
    "subject": "desktop: the offline sentence a person reads says Atlas, not Jarvis"
   },
   {
+   "sha": "165e9afbf47f7795c97a635b0193f61da1cf34dd",
+   "date": "2026-11-14",
+   "subject": "rules: on this PC a green backend run from a checkout is not a green CI run"
+  },
+  {
    "sha": "76c7c83793253406f8a7260148b8e110d584fe9d",
    "date": "2026-11-14",
    "subject": "Regenerate the records the label rename moved, and drop the scratch script"
@@ -6569,33 +6588,13 @@
    "sha": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
    "date": "2026-11-14",
    "subject": "Merge pull request #1257 from darknight11ish/integration/wave19-2026-11-14"
-  },
-  {
-   "sha": "56019060c8c36132f7f57b0701f957444b2d9159",
-   "date": "2026-11-14",
-   "subject": "Regenerate the records after folding Atlas and the skip reporting"
-  },
-  {
-   "sha": "38c06683aadc852b58dca7ba2b23ef0f6c599503",
-   "date": "2026-11-14",
-   "subject": "Merge 8a33c2726 into integration/wave19-2026-11-14 (#1253 a machine skip is printed as a skip); generated records keep the integration side, regenerated at the end"
-  },
-  {
-   "sha": "362bcba19cd4d9d56a4789da649826e8dfd3d1d9",
-   "date": "2026-11-14",
-   "subject": "Merge c76cec444 into integration/wave19-2026-11-14 (#1232 the product says Atlas)"
-  },
-  {
-   "sha": "b0210d2567361d67b284afa7adce323c1d6c2337",
-   "date": "2026-11-14",
-   "subject": "Regenerate the whole-repo records once, after folding four branches"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1450
+   "files": 1449
   },
   {
    "path": "jarvis-desktop/",
@@ -6714,8 +6713,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5837,
-  "covered": 5354,
+  "tracked_files": 5836,
+  "covered": 5353,
   "excluded": 483,
   "subsystems": 27
  },
