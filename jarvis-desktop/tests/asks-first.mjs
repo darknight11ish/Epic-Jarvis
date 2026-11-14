@@ -301,8 +301,9 @@ await check("the tool surface: groups, the vault row and the not-a-switch note",
   const raw = groups.flatMap((g) => g.items).filter((i) => i.group === "Raw and powerful");
   assert.deepEqual(raw.map((i) => i.id),
     ["shell_exec", "control_computer", "control_phone", "browser_control",
-      "read_web_page", "connect_account", "rea_investigate"],
-    "the seven raw tools that were refused until 2026-11-04 are switches now");
+      "read_web_page", "connect_account", "rea_investigate", "android_app"],
+    "the seven raw tools that were refused until 2026-11-04 are switches now, " +
+    "and wave 20's android_app joins them: a Gradle build runs another program");
   const vault = pc.tools.vault;
   assert.equal(vault.id, "vault_organizer");
   assert.equal(vault.kind, "switch", "the organizer is a separate switch, not a tool item");
