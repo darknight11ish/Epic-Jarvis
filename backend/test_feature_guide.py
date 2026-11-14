@@ -2681,6 +2681,56 @@ def t_no_planned_row_says_it_has_no_switch_or_a_fixed_phrase():
               and "could not read" in state_words, state_words)
 
 
+def t_the_layer_one_shapes_reach_every_catalogue_title():
+    """Every title answers the four Layer 1 routing shapes (2026-11-13).
+
+    THE RULING'S GAPS, measured on origin/main `0b6e5a967` through the real
+    matcher: "how do I activate <title>" never reached `feature_howto` for any
+    of the 182 rows (127 went to the generic capability answer and 55 matched
+    nothing), "<title> turned on?" reached the feature state for 9 (with the
+    wrong intent), and "why isn't <title> working" for 3. Those are the
+    questions a person actually asks about a feature and they now answer from
+    the row. This walks ALL 182 titles for each shape, so a new row or a
+    reordered grammar fails here rather than at a live conversation.
+    """
+    shapes = (
+        ("how do I activate {}", "feature_howto"),
+        ("{} turned on?", "feature_state"),
+        ("why isn't {} working", "feature_detail"),
+    )
+    misses, thin = [], []
+    for row in SOURCE:
+        title = _flat(row["title"])
+        for template, want in shapes:
+            ask = template.format(title)
+            got = match(ask)
+            if (got is None or got.name != want
+                    or str(got.f.get("id") or "") != row["id"]):
+                misses.append((row["id"], template,
+                               got.name if got is not None else None,
+                               got.f.get("id") if got is not None else None))
+                continue
+            out = say(got)
+            text = out.reply if out is not None else ""
+            low = text.lower()
+            if want == "feature_detail":
+                facts = row["title"] in text and "the honest limit:" in low
+            elif want == "feature_state":
+                facts = row["title"] in text and any(
+                    marker in low for marker in
+                    ("right now", "no on/off switch", "could not read",
+                     "not wired yet"))
+            else:
+                facts = row["title"] in text and row["where"] in text
+            if not facts:
+                thin.append((row["id"], template, text[:160]))
+    check("activate / turned-on / why-not-working reach all 182 titles",
+          not misses, misses[:8])
+    check("...and each answer carries the row's own facts", not thin, thin[:8])
+    check("_FEATURE_HOWTO is in the shapes the honesty families step aside for",
+          Q._FEATURE_HOWTO in Q._FEATURE_QUESTION_SHAPES)
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -2731,7 +2781,8 @@ if __name__ == "__main__":
                t_a_named_choice_answers_state_and_how_to,
                t_a_tool_switch_row_never_says_it_has_no_switch,
                t_the_wake_word_row_is_wired_and_not_planned,
-               t_no_planned_row_says_it_has_no_switch_or_a_fixed_phrase):
+               t_no_planned_row_says_it_has_no_switch_or_a_fixed_phrase,
+               t_the_layer_one_shapes_reach_every_catalogue_title):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

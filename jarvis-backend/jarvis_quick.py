@@ -1402,6 +1402,27 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # "<feature> turned on?" with no leading "is" (2026-11-13, Layer 1
+    # routing). Claimed HERE, before the action matchers, because
+    # "write a note turned on?" was otherwise taken as a request to write a
+    # note: the state question must reach the feature it names. Only a
+    # QUESTION (the raw sentence ends in "?") that names a real catalogue row
+    # is claimed; a statement ("the oven turned on") keeps its own path.
+    if str(text or "").strip().endswith("?"):
+        # Try the RAW words first, minus only a spoken address ("hey Jarvis,",
+        # "Jarvis:"): the normaliser strips a leading bare "Jarvis" too, so a
+        # row whose OWN title starts with it ("Jarvis Calendar") would become
+        # "calendar" and answer a different row (found by the all-182 test).
+        raw_q = " ".join(str(text).strip().lower().rstrip("?.!").split())
+        raw_q = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,:]\s*", "", raw_q)
+        for form in (raw_q, s):
+            m = _FEAT_TURNED_ON_Q.fullmatch(form)
+            if not m:
+                continue
+            got = _feature_state_intent(text, _feature_target(m.group("area")))
+            if got is not None:
+                return got
+
     # --- a question about Jarvis's OWN features, from the raw sentence -------
     # The notes capability and location answers (2026-10-31 follow-up) are
     # exact, read-only shapes and must win over the generic capability lane.
@@ -7204,11 +7225,13 @@ _FEATURES_GROUP = re.compile(
 _FEATURE_HOWTO = re.compile(
     r"how\s+(?:do|can|should|would)\s+i\s+(?:turn|switch)\s+(on|off)\s+"
     r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
-    r"|how\s+(?:do|can)\s+i\s+(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|how\s+(?:do|can)\s+i\s+(enable|disable|activate|deactivate)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|how\s+to\s+(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|where\s+(?:do|can)\s+i\s+(?:turn|switch)\s+(on|off)\s+"
     r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
-    r"|where\s+do\s+i\s+(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+    r"|where\s+do\s+i\s+(enable|disable|activate|deactivate)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
 #: "how do I train/teach you to <x>" - a how-to about USING a feature, not
 #: switching it (added 2026-10-20 with the "Write like me" row: "how do I train
 #: you to write like me?" must answer with that feature's OWN facts). The
@@ -7420,6 +7443,21 @@ _FEAT_NEEDS = re.compile(
 _FEAT_WHY_STATE = re.compile(
     r"why\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+"
     r"(?:on|off|enabled|disabled|switched\s+(?:on|off))")
+#: "why isn't <feature> working" (2026-11-13, the Layer 1 routing ruling): the
+#: complaint shape a person actually says. It answers from the row's own
+#: what-can-go-wrong / limit words, never the model.
+_FEAT_WHY_WORKING = re.compile(
+    r"why\s+(?:isn'?t|doesn'?t|won'?t|is\s+not|does\s+not|will\s+not)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(?P<area>.+?)\s+"
+    r"(?:working|work|functioning|function|be\s+working)"
+    r"|why\s+(?:is|does|will)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?P<area2>.+?)\s+"
+    r"not\s+(?:working|work|functioning|function|be\s+working)")
+#: "<feature> turned on?" with no leading "is" (2026-11-13, the same ruling).
+#: Only a QUESTION is claimed - the handler in `_match` requires the raw
+#: sentence to end in "?" - so a statement ("the oven turned on") is untouched.
+_FEAT_TURNED_ON_Q = re.compile(
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(?P<area>.+?)\s+"
+    r"(?:turned|switched)\s+(?P<on>on|off)")
 _FEAT_WRONG = re.compile(
     r"what\s+can\s+go\s+wrong\s+with\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
 _FEAT_CAN_DO = re.compile(
@@ -7439,6 +7477,10 @@ _FEATURE_QUESTION_SHAPES = (
     _FEATURE_CHANGE, _FEATURE_DIFFERENCE, _FEATURE_ON_OFF, _FEAT_DETAIL,
     _FEAT_HOW_USE, _FEAT_EXAMPLE, _FEAT_PRIVATE, _FEAT_NEEDS, _FEAT_WHY_STATE,
     _FEAT_WRONG, _FEAT_CAN_DO, _FEAT_LIKE,
+    # 2026-11-13 (Layer 1 routing): a how-to, a "why isn't it working" and a
+    # bare "<feature> turned on?" name a catalogue row too, so the honesty
+    # families that run before the guide step aside for them the same way.
+    _FEATURE_HOWTO, _FEAT_WHY_WORKING, _FEAT_TURNED_ON_Q,
 )
 
 
@@ -12853,6 +12895,14 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         got = _feature_detail_intent(raw, m.group(1), "why_state")
         if got is not None:
             return got
+    # "why isn't <feature> working?" (2026-11-13, Layer 1 routing) - the
+    # complaint shape, answered from the row's own what-can-go-wrong words.
+    m = _FEAT_WHY_WORKING.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group("area") or m.group("area2"),
+                                     "goes_wrong")
+        if got is not None:
+            return got
     m = _FEAT_WRONG.fullmatch(s)
     if m:
         got = _feature_detail_intent(raw, m.group(1), "goes_wrong")
@@ -12878,14 +12928,14 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         g = m.groups()
         if g[0] is not None:            # how do i turn on/off <x>
             on, target = g[0] == "on", g[1]
-        elif g[2] is not None:          # how do i enable/disable <x>
-            on, target = g[2] == "enable", g[3]
+        elif g[2] is not None:          # how do i enable/disable/activate <x>
+            on, target = g[2] in ("enable", "activate"), g[3]
         elif g[4] is not None:          # how to turn on/off <x>
             on, target = g[4] == "on", g[5]
         elif g[6] is not None:          # where do i turn on/off <x>
             on, target = g[6] == "on", g[7]
-        else:                           # where do i enable/disable <x>
-            on, target = g[8] == "enable", g[9]
+        else:                           # where do i enable/disable/activate <x>
+            on, target = g[8] in ("enable", "activate"), g[9]
         return _feature_howto_intent(raw, _feature_target(target), on, said_guide)
     m = _FEATURE_USE.fullmatch(s)
     if m:
