@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "665afdb44cdeb879121d0ae00ced71db179d04cc",
- "built_at": "2026-11-14T12:02:13-08:00",
+ "ref": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
+ "built_at": "2026-11-14T12:45:25-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4705,6 +4705,7 @@
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
+    "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-widget-look.md",
     "changelog.d/README.md",
@@ -4899,6 +4900,7 @@
     "decisions.d/2026-11-14-atlas-copy-scope.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
+    "decisions.d/2026-11-14-gate-rows-not-patches.md",
     "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5403,7 +5405,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 978,
+   "file_count": 980,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6490,6 +6492,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
+   "date": "2026-11-14",
+   "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
+  },
+  {
    "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
    "date": "2026-11-14",
    "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
@@ -6583,11 +6590,6 @@
    "sha": "3a9a57f87345aba93cf18ca7159e28c5654df2d3",
    "date": "2026-11-14",
    "subject": "Say \"Open the Atlas bar\": the last label the visible rename missed"
-  },
-  {
-   "sha": "d9f8cbba92cc4c0370a1e3c93781b36f7e9f0b2c",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1257 from darknight11ish/integration/wave19-2026-11-14"
   }
  ],
  "top_level": [
@@ -6619,7 +6621,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 277
+   "files": 278
   },
   {
    "path": "tools/",
@@ -6634,7 +6636,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 193
+   "files": 194
   },
   {
    "path": "plugins/",
@@ -6713,8 +6715,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5836,
-  "covered": 5353,
+  "tracked_files": 5838,
+  "covered": 5355,
   "excluded": 483,
   "subsystems": 27
  },
