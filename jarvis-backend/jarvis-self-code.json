@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6373b00ef752a703b70910dc645cd32946a88923",
- "built_at": "2026-11-14T02:06:28-08:00",
+ "ref": "32f1d25086361bafae22a5a1c93d9a434c43262e",
+ "built_at": "2026-11-14T03:31:54-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4693,6 +4693,7 @@
     "changelog.d/2026-11-13-tray-and-readme-truth.md",
     "changelog.d/2026-11-13-undo-notice-times-out.md",
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
+    "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4877,6 +4878,7 @@
     "decisions.d/2026-11-13-tray-and-readme-truth.md",
     "decisions.d/2026-11-13-undo-notice-times-out.md",
     "decisions.d/2026-11-13-wake-word-not-planned.md",
+    "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5323,9 +5325,63 @@
     "docs/ui-audit-2026-09-26/phone-today.md",
     "docs/ui-audit-2026-09-26/research.md",
     "docs/ui-audit-2026-09-26/restraint.md",
-    "docs/ui-audit-2026-09-26/ui-mockups.html"
+    "docs/ui-audit-2026-09-26/ui-mockups.html",
+    "field-test-archive/2026-11/FIELD-TEST-2026-10-30/FINAL-DRIVE-PLAN.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-10-30/MATRIX-UPDATE-DRAFT.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-10-30/REPORT.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-01-GAPS/REMINDER-HARNESS-EVIDENCE.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-02/PLAN-WAVE2.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-02/RESULTS-WAVE2-PRE.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-02/RESULTS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/AGENT-DRIVEN-RESULTS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/GROUP-A-RESULTS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/MATRIX-F5.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/MATRIX.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/OWNER-CLICKTHROUGH.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/PHONE-DRIVE.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/POST-F4-PROBE-RESULT-2026-11-03.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/README-F5.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/README.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-03/RUNBOOK-READY-FEATURES.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-04/OWNER-TEST-STEPS.md",
+    "field-test-archive/2026-11/FIELD-TEST-2026-11-04/README-DRIVER.md",
+    "field-test-archive/2026-11/FIELD-TEST-PRESETS-2026-11-03/PLAN.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE6-2026-11-06/ADDENDUM-2026-11-06-repomap.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE6-2026-11-06/FIELDTEST-PLAN.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE6-2026-11-06/README.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE7-2026-11-06/FIELDTEST-PLAN-WAVE6-BASE.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE7-2026-11-06/README-WAVE6-BASE.md",
+    "field-test-archive/2026-11/FIELD-TEST-WAVE7-2026-11-06/README.md",
+    "field-test-archive/2026-11/PIXEL-FIELD-TEST-2026-11-04/REPORT.md",
+    "field-test-archive/2026-11/README.md",
+    "field-test-archive/2026-11/WAVE12-INTEGRATION-2026-11-09/FIELD-TEST-AUTOMATED-ROWS.md",
+    "field-test-archive/2026-11/WAVE12-INTEGRATION-2026-11-09/WAVE12-EXTRA-PROBES.md",
+    "field-test-archive/2026-11/WAVE12-INTEGRATION-2026-11-09/WAVE12-RESULT-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/DEPLOY-PACKET-REBASE.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/DEPLOY-PLAN-WAVE13.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/GATE-REHEARSAL-NOTES-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/REAL-RUN-RUNBOOK-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/ROLLBACK.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/WAVE13-RESULT-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE13-DEPLOY-2026-11-09/WAVE14-BACKLOG-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/EXPECTATIONS-0H.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/GATE-DIFF-NOTES.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/PACKET-INTEGRATION-2026-11-09.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/POSTDEPLOY-EXPECT-WAVE14.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/ROLLBACK-WAVE14.md",
+    "field-test-archive/2026-11/WAVE14-DEPLOY-2026-11-09/WAVE14-RUNBOOK-2026-11-10.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/EXPECTATIONS-0H.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/FACT-SOURCES-WAVE15.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/GATE-DIFF-NOTES.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/PACKET-INTEGRATION-2026-11-10.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/POSTDEPLOY-EXPECT-WAVE15.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/ROLLBACK-WAVE15.md",
+    "field-test-archive/2026-11/WAVE15-DEPLOY-2026-11-10/WAVE15-RUNBOOK-2026-11-10.md",
+    "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/EXPECTATIONS-0H.md",
+    "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
+    "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 904,
+   "file_count": 960,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6412,6 +6468,36 @@
  ],
  "recent_commits": [
   {
+   "sha": "32f1d25086361bafae22a5a1c93d9a434c43262e",
+   "date": "2026-11-14",
+   "subject": "Merge origin/main again, and regenerate the map rather than merge it"
+  },
+  {
+   "sha": "65629fe48ff6f9beebd72b10cf2a2960ddc5f673",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1231 from darknight11ish/feat/android-local-engine-2026-11-13"
+  },
+  {
+   "sha": "e8412edd7791e8b438c8a27b8e465b21e563c9eb",
+   "date": "2026-11-14",
+   "subject": "Regenerate the two generated records over the archive, and count it honestly"
+  },
+  {
+   "sha": "05ae3d399404fcac0aa8cdc0f24b0cf9c4e01b7a",
+   "date": "2026-11-14",
+   "subject": "The self-code map's table learns about the archived field-test records"
+  },
+  {
+   "sha": "1ac7e3d540350b5b491c3371911ca4d70507a795",
+   "date": "2026-11-14",
+   "subject": "Merge remote-tracking branch 'origin/main' into pr-1254-fix"
+  },
+  {
+   "sha": "f3a89f62b4f608c4706435f47c56bde9db5f9a8f",
+   "date": "2026-11-14",
+   "subject": "chore(records): regenerate after merging main with #1233 in it"
+  },
+  {
    "sha": "6373b00ef752a703b70910dc645cd32946a88923",
    "date": "2026-11-14",
    "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
@@ -6420,6 +6506,11 @@
    "sha": "cf4a2797f2c4b388f95c66813435081650bb9fa3",
    "date": "2026-11-14",
    "subject": "Merge pull request #1233 from darknight11ish/feat/phone-backup-updater-2026-11-13"
+  },
+  {
+   "sha": "e4d20af01a9366305a61a2df54eafc7ab56380b1",
+   "date": "2026-11-14",
+   "subject": "Archive the 66 field-test records that only existed in .dsh-scratch"
   },
   {
    "sha": "8dfbf1047906bf3eee23afb22ca1723b02efbb85",
@@ -6475,41 +6566,6 @@
    "sha": "91e9b89b61d026d11db531a20ab3f4656cbb1d7d",
    "date": "2026-11-13",
    "subject": "The tryout profile carries the LANE_SYSTEM bullet too, so its SYSTEM block stays byte-identical to jarvis-primary's"
-  },
-  {
-   "sha": "939d06efe673c4ed01a6d59ab90041a7a1c65937",
-   "date": "2026-11-13",
-   "subject": "fix(claims): C167 says the phone's on-device AI is built, which this branch makes true"
-  },
-  {
-   "sha": "972ca5350431f44c72e1cc271277d61d0ce2702f",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
-  },
-  {
-   "sha": "45ed79defbf624ae86e12ff39030da9692d30c94",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1231-merge"
-  },
-  {
-   "sha": "41e0c19b26b5bba90de98c7961da3b31acd4a98b",
-   "date": "2026-11-13",
-   "subject": "records(feature-controls): the phone settings backup row, so the catalogue's records agree (183)"
-  },
-  {
-   "sha": "45b83822827ef51f5aad4b0e3dd2c86d63f47691",
-   "date": "2026-11-13",
-   "subject": "chore(records): regenerate the catalogue, self-code map and recent changes after merging main"
-  },
-  {
-   "sha": "8b0402929b2f3d8c9aceb9a4ac69f629357631af",
-   "date": "2026-11-13",
-   "subject": "Merge remote-tracking branch 'origin/main' into resolve-1233"
-  },
-  {
-   "sha": "69428294081ee150aefe347399e36531787b5f01",
-   "date": "2026-11-13",
-   "subject": "Regenerate the whole-repo records against the merged tree"
   }
  ],
  "top_level": [
@@ -6541,7 +6597,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 267
+   "files": 268
   },
   {
    "path": "tools/",
@@ -6556,7 +6612,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 184
+   "files": 185
   },
   {
    "path": "plugins/",
@@ -6567,6 +6623,11 @@
    "path": "jarvis-android/",
    "line": "the older Android app, kept for reference; it cannot reach the backend",
    "files": 63
+  },
+  {
+   "path": "field-test-archive/",
+   "line": "the field-test records behind the matrix's verdicts, copied verbatim from the gitignored scratch folders",
+   "files": 54
   },
   {
    "path": "obsidian-plugin/",
@@ -6630,8 +6691,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5758,
-  "covered": 5275,
+  "tracked_files": 5814,
+  "covered": 5331,
   "excluded": 483,
   "subsystems": 27
  },
