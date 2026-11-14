@@ -9471,16 +9471,19 @@ def _run_tool_profile(f: dict) -> Optional["Result"]:
 # --------------------------------------------------------------------------
 # Android app building (2026-10-31 honesty fix)
 #
-# Measured: backend/jarvis_android_builder.py builds a FIXED minimal WebView
-# Android project from the task's own index.html/app.js/app.css in one project
-# task - `gradlew.bat assembleDebug` behind the app_build_android card, then
-# `adb install -r <apk>` behind app_install_android. Needs the Android SDK,
-# a Java 17 JDK, the Gradle wrapper files beside jarvis_hud.py, and a cable
-# with USB debugging for the install; the first build downloads Gradle and the
-# Android Gradle plugin. It never writes Kotlin/manifest itself, adds no
-# permissions, no release signing and no Play Store. The live model said "I
-# can't build Android apps... I don't have the tools to write code, compile
-# projects", which is false.
+# Measured: backend/jarvis_android_builder.py builds a FIXED minimal Android
+# project in one project task, of two kinds chosen by the files the task
+# carries - a WebView around the task's own index.html/app.js/app.css, or,
+# when the task carries app.json, a real app with its own screens (at most 8
+# of text, list and form, drawn by a second fixed activity from that JSON).
+# In both cases `gradlew.bat assembleDebug` sits behind the app_build_android
+# card, then `adb install -r <apk>` behind app_install_android. Needs the
+# Android SDK, a Java 17 JDK, the Gradle wrapper files beside jarvis_hud.py,
+# and a cable with USB debugging for the install; the first build downloads
+# Gradle and the Android Gradle plugin. The model never writes Kotlin, the
+# manifest or a Gradle file, and adds no permissions, no release signing and
+# no Play Store. The live model said "I can't build Android apps... I don't
+# have the tools to write code, compile projects", which is false.
 # --------------------------------------------------------------------------
 
 ANDROID_BUILD_ACTION = "app_build_android"
@@ -9513,18 +9516,23 @@ def _run_android(name: str, state) -> "Result":
              "toolchain. Installing raises ONE more card (" + ANDROID_INSTALL_ACTION + ") that "
              "names the exact adb command, APK and size. Never a Play Store upload.")
     if name == "android_capability":
-        return Result("Yes - I can build a small Android app for you. In a project task, ask "
-                      "\"build the Android app\" or \"build my app and put it on my phone\". I write "
-                      "a fixed minimal Android project around your own index.html, app.js and "
-                      "app.css (I do not hand-write Kotlin or the manifest), then Gradle builds it "
-                      "and adb installs it over the cable. " + where + " " +
-                      _android_missing_words(state), "android_capability")
+        return Result("Yes - the Android builder is real: it writes a fixed minimal Android "
+                      "project in one project task, of two kinds. One puts your own index.html, "
+                      "app.js and app.css inside a WebView project. The other is a real app with its "
+                      "own screens: a task that carries an app.json gets up to eight screens of "
+                      "text, list and form, drawn by a fixed Android activity from that file - I "
+                      "write data, never code, and in neither kind do I hand-write Kotlin or the "
+                      "manifest. Then Gradle builds it and adb installs it over the cable. What is "
+                      "still missing is the way in: no chat sentence, model tool or app button "
+                      "starts those routes yet, so only the builder's own tests have run them. " +
+                      where + " " + _android_missing_words(state), "android_capability")
     if name == "android_howto":
-        return Result("Say it in a project task, for example: \"build the Android app\" to build "
-                      "it, or \"build my app and put it on my phone\" to build and install. I write "
-                      "the template project first (no card), then the build card appears with the "
-                      "exact Gradle command, then the install card appears with the exact adb "
-                      "command and the APK. " + _android_missing_words(state), "android_howto")
+        return Result("You cannot yet - and that is the one thing missing. The builder itself "
+                      "is written and tested: it writes the fixed template (no card), then the "
+                      "build card carries the exact Gradle command and the install card the exact "
+                      "adb command and the APK. But no chat sentence, model tool or app button "
+                      "starts those routes, so there is nothing you can say that begins a build "
+                      "today. " + _android_missing_words(state), "android_howto")
     if name == "android_needs":
         return Result("The Android builder needs the Android SDK on this PC, a Java 17 JDK, its "
                       "Gradle wrapper files beside jarvis_hud.py, and - only for the install - adb "
