@@ -9522,17 +9522,18 @@ def _run_android(name: str, state) -> "Result":
                       "own screens: a task that carries an app.json gets up to eight screens of "
                       "text, list and form, drawn by a fixed Android activity from that file - I "
                       "write data, never code, and in neither kind do I hand-write Kotlin or the "
-                      "manifest. Then Gradle builds it and adb installs it over the cable. What is "
-                      "still missing is the way in: no chat sentence, model tool or app button "
-                      "starts those routes yet, so only the builder's own tests have run them. " +
+                      "manifest. Then Gradle builds it and adb installs it over the cable. The way "
+                      "in is a model tool: ask in a chat and it plans the build, then the install, "
+                      "one card each. It starts switched off - turn it on under Raw and powerful "
+                      "in Settings. " +
                       where + " " + _android_missing_words(state), "android_capability")
     if name == "android_howto":
-        return Result("You cannot yet - and that is the one thing missing. The builder itself "
-                      "is written and tested: it writes the fixed template (no card), then the "
-                      "build card carries the exact Gradle command and the install card the exact "
-                      "adb command and the APK. But no chat sentence, model tool or app button "
-                      "starts those routes, so there is nothing you can say that begins a build "
-                      "today. " + _android_missing_words(state), "android_howto")
+        return Result("Ask in a chat, in a project task: \"build the Android app\". The builder "
+                      "writes the fixed template (no card), then the " +
+                      "build card carries the exact Gradle command and the install card the exact " +
+                      "adb command and the APK. The way in is a model tool, and it starts switched " +
+                      "off - turn it on under Raw and powerful in Settings. " +
+                      _android_missing_words(state), "android_howto")
     if name == "android_needs":
         return Result("The Android builder needs the Android SDK on this PC, a Java 17 JDK, its "
                       "Gradle wrapper files beside jarvis_hud.py, and - only for the install - adb "

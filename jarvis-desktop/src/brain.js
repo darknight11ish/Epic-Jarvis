@@ -673,7 +673,7 @@ const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
  * equal, and `tests/a11y.mjs` holds the roving tabindex they feed.
  */
 const VIEWS = {
-  memory: { title: "Memory", sub: "what Jarvis has learned about you" },
+  memory: { title: "Memory", sub: "what Atlas has learned about you" },
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
@@ -684,15 +684,15 @@ const VIEWS = {
   // FAQ it also answers since 2026-10-08, when the Settings card "Help and FAQ"
   // was folded in here - the same words the phone's own menu carries
   // (`brain.tab.tutorials`, PR #108's retitle).
-  tutorials: { title: "Tutorials and the FAQ", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
+  tutorials: { title: "Tutorials and the FAQ", sub: "how Atlas works, step by step - and the answers to the usual questions" },
   // Named in plain words (2026-11-09, the IA recommendations): "Galaxy" on
   // its own never said what the picture is. The view's key, its id and its
   // tab's id all stay `galaxy`, and the button that opens it from the HUD
   // still says "Galaxy - everything at a glance" (the owner's own wording).
-  galaxy: { title: "The memory map", sub: "what Jarvis remembers" },
+  galaxy: { title: "The memory map", sub: "what Atlas remembers" },
   // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
   // not confused with Jarvis Live (the voice conversation).
-  now: { title: "Now", sub: "what Jarvis is doing" },
+  now: { title: "Now", sub: "what Atlas is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
 };
@@ -1583,7 +1583,7 @@ function renderCounts() {
  *  this": that would read as a fault on a machine that has simply never
  *  once been connected to Jarvis while it was running. */
 const MODELS_NEVER_CONNECTED =
-  "There's nothing to show yet — open this once while Jarvis is running on your PC.";
+  "There's nothing to show yet — open this once while Atlas is running on your PC.";
 
 /** The offline banner's "as of" time, in the same short form the rest of
  *  the window uses for a moment in the past (not a duration - the owner
@@ -1693,9 +1693,9 @@ function renderModels() {
       el(
         "p",
         "banner models-offline",
-        `Jarvis isn't running right now, so this list is from the last time it was: ` +
+        `Atlas isn't running right now, so this list is from the last time it was: ` +
           `${asOfWords(state.readAt.models)}. Sizes and names are probably still right. ` +
-          `What's actually loaded right now isn't shown, since only a running Jarvis knows that.`
+          `What's actually loaded right now isn't shown, since only a running Atlas knows that.`
       )
     );
     if (current) {
@@ -2397,7 +2397,7 @@ function advisorPanel() {
     el(
       "p",
       "model-advisor-lede",
-      "Ask Jarvis to look through the public model libraries (Hugging Face and " +
+      "Ask Atlas to look through the public model libraries (Hugging Face and " +
         "Ollama's library) for newer local models that fit this computer's " +
         "graphics cards. It is a suggestion, not an upgrade: a model is only " +
         "better here once it has been measured here."
@@ -2582,7 +2582,7 @@ function advisorPresetPanel(payload, everChecked) {
 
   // The opinion box. Its draft lives in `advisor` so a re-render (a benchmark,
   // a refusal, the answer itself) cannot silently eat what the owner typed.
-  const label = el("label", "advisor-opinion-label", "Tell Jarvis what you think");
+  const label = el("label", "advisor-opinion-label", "Tell Atlas what you think");
   label.setAttribute("for", "model-opinion-text");
   wrap.append(label);
   const box = el("textarea", "field advisor-opinion");
@@ -2590,14 +2590,14 @@ function advisorPresetPanel(payload, everChecked) {
   box.rows = 3;
   box.value = advisor.opinionDraft;
   box.placeholder = "For example: keep voice on the fast card, and let chat use the bigger one";
-  box.setAttribute("aria-label", "Tell Jarvis what you think about the preset recommendation");
+  box.setAttribute("aria-label", "Tell Atlas what you think about the preset recommendation");
   box.addEventListener("input", () => {
     advisor.opinionDraft = box.value;
   });
   wrap.append(box);
   const opinionActions = el("div", "row-actions");
   const tell = button(
-    "Tell Jarvis what you think",
+    "Tell Atlas what you think",
     sendOpinion,
     {
       title:
@@ -2609,7 +2609,7 @@ function advisorPresetPanel(payload, everChecked) {
   opinionActions.append(tell);
   wrap.append(opinionActions);
   wrap.append(
-    el("p", "note", "Jarvis reads your note and revises its suggestion. You still approve it afterwards.")
+    el("p", "note", "Atlas reads your note and revises its suggestion. You still approve it afterwards.")
   );
   return wrap;
 }
@@ -3109,7 +3109,7 @@ function renderSkills() {
       const notes = (Array.isArray(s.notes) ? s.notes : [])
         .map((n) => (typeof n === "string" ? n : n && (n.note || n.text)))
         .filter((n) => typeof n === "string" && n.trim())
-        .map((n) => `Jarvis's note: “${n.trim()}”`);
+        .map((n) => `Atlas's note: “${n.trim()}”`);
       return row({
         tag: verdict,
         state: /clean|ok|pass/i.test(verdict) ? "ok" : "warn",
@@ -3367,7 +3367,7 @@ async function memoryWrite(command, args, okText) {
   // its keep, because the write would have landed on TODAY'S store while the
   // owner was looking at last June.
   if (memoryAsOf !== null) {
-    toast("This is what Jarvis believed then. Return to now to change anything.", "bad");
+    toast("This is what Atlas believed then. Return to now to change anything.", "bad");
     return null;
   }
   try {
@@ -3504,7 +3504,7 @@ function renderLearning() {
               sleepOfferDismissed = false;
               render("memory");
             }
-          }, { title: "Once a day, Jarvis may ask you about facts that look out of date, "
+          }, { title: "Once a day, Atlas may ask you about facts that look out of date, "
                      + "with review cards - at most five a night. No fact changes without "
                      + "your yes on that one fact.", live: true }),
           button("Not now", async () => {
@@ -3520,7 +3520,7 @@ function renderLearning() {
             } catch {
               /* dismissed here either way */
             }
-          }, { title: "Not now. Jarvis waits a day before offering this again, then a week, "
+          }, { title: "Not now. Atlas waits a day before offering this again, then a week, "
                      + "then a month. Turning it on stays one tap away." }),
           button("Stop asking", async () => {
             const answered = cachedSleepOffer;
@@ -3584,7 +3584,7 @@ function renderLearning() {
         if (!out || out.cancelled) return;
         const n = Number(out.facts) || 0;
         toast(`Saved ${n} fact${n === 1 ? "" : "s"} to ${out.saved}. `
-          + "Keep that file private: it holds everything Jarvis knows about you.", "ok");
+          + "Keep that file private: it holds everything Atlas knows about you.", "ok");
       } catch (error) {
         toast(String((error && error.message) || error), "bad");
       }
@@ -3603,7 +3603,7 @@ function renderLearning() {
       // assistant something, and asking for one would make the feature feel
       // like a database console.
       const typed = window.prompt(
-        "What did Jarvis know on this date?\n\nYYYY-MM-DD",
+        "What did Atlas know on this date?\n\nYYYY-MM-DD",
         new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)
       );
       if (typed === null) return;
@@ -3634,7 +3634,7 @@ function renderLearning() {
         toast(String((error && error.message) || error), "bad");
       }
     }, { title: memoryAsOf === null
-        ? "Show what Jarvis believed on a past date, including things it has since stopped believing. Read-only."
+        ? "Show what Atlas believed on a past date, including things it has since stopped believing. Read-only."
         : "Go back to what is true now." })
   );
   dom.memoryLearning.append(box);
@@ -3659,7 +3659,7 @@ const faultL = { view: null, live: false, said: "", busy: false };
 
 /** What "Waiting for you" says with nothing in it - unless a fault is up,
  *  which explains its own emptiness. */
-const NOTHING_WAITING = "Nothing is waiting. Either Jarvis has not heard anything " +
+const NOTHING_WAITING = "Nothing is waiting. Either Atlas has not heard anything " +
   "worth keeping, or background learning is off.";
 
 /** The banner: the PC's sentence and one button while a fault is active; the
@@ -3794,7 +3794,7 @@ function proposalRow(p) {
   const meta = retire
     ? [
         p.replaces_text || p.replaces ? `The fact: “${p.replaces_text || p.replaces}”` : "",
-        "Forgetting it does not delete it: the fact stays in Jarvis's history, marked as no longer used.",
+        "Forgetting it does not delete it: the fact stays in Atlas's history, marked as no longer used.",
         // The phone shows why this stayed a card on a retire card too
         // (MemoryCards.from); so does this window now (the memory review's
         // fit audit, 2026-09-27).
@@ -3836,20 +3836,20 @@ function proposalRow(p) {
     ? [
         button(feedback.accept, async () => {
           await memoryWrite("brain_memory_decide", { id, accept: true },
-            retire ? "Forgotten. Jarvis stops using that fact; it stays in the history."
+            retire ? "Forgotten. Atlas stops using that fact; it stays in the history."
                    : "Updated. The fact now says what you typed; the old words stay in the history.");
-        }, { title: retire ? "Jarvis stops using this fact. It stays in the history, not deleted."
+        }, { title: retire ? "Atlas stops using this fact. It stays in the history, not deleted."
                            : "Replace the remembered fact with the words you typed.", live: true }),
         button(feedback.discard, async () => {
           await memoryWrite("brain_memory_decide", { id, accept: false },
-            retire ? "Kept. Jarvis will go on using that fact."
+            retire ? "Kept. Atlas will go on using that fact."
                    : "Kept. The fact is unchanged.");
         }, { title: "Leave the fact exactly as it is.", live: true }),
       ]
     : [
         button(ask ? ask.accept : "Keep", async () => {
           await memoryWrite("brain_memory_decide", { id, accept: true },
-            ask ? "Saved under Unsorted. Jarvis can recall it now." : "Kept. Jarvis can recall it now.");
+            ask ? "Saved under Unsorted. Atlas can recall it now." : "Kept. Atlas can recall it now.");
         }, { title: ask ? "Save it under Unsorted. It can be reworded or forgotten later."
           : "Add it to memory. It can be reworded or forgotten later.", live: true }),
         ...(p.keep_both_ok === true
@@ -3888,9 +3888,9 @@ function proposalRow(p) {
   // decides it; nothing is saved by the marking either way.
   if (p.guessed === true) {
     const guess = el("div", "row-warning");
-    guess.append(el("strong", "", "Jarvis's guess, not something you said. "));
+    guess.append(el("strong", "", "Atlas's guess, not something you said. "));
     guess.append(el("span", "", "A Reject click carries none of your words, so this rule was worked out from the action's name, and no reason was given. "));
-    guess.append(el("span", "", "Keep it to have Jarvis ask first before it does this again; Discard it and nothing is saved."));
+    guess.append(el("span", "", "Keep it to have Atlas ask first before it does this again; Discard it and nothing is saved."));
     const main = item.querySelector(".row-main");
     (main || item).append(guess);
   }
@@ -4175,7 +4175,7 @@ function renderFacts() {
               "When did this actually stop being true?\n\n" +
               "Leave blank for \"just now\" — the usual case. Only answer this " +
               "if it stopped being true a while ago and you are only telling " +
-              "Jarvis about it now."
+              "Atlas about it now."
             );
             if (validTo === undefined) {
               // Cancel on the date box after "yes, forget it": say so, so
@@ -4259,7 +4259,7 @@ function renderFacts() {
     needle && loaded.length
       ? "No fact on this list has those words."
       : past
-        ? "Jarvis knew nothing on that date."
+        ? "Atlas knew nothing on that date."
         : "Nothing yet. Facts arrive from the queue above, once you keep one."
   );
   if (past) {
@@ -4269,7 +4269,7 @@ function renderFacts() {
     const when = new Date(memoryAsOf * 1000);
     dom.memoryFacts.replaceChildren(
       el("p", "banner",
-         `What Jarvis believed on ${when.toLocaleDateString()} \u2014 right or ` +
+         `What Atlas believed on ${when.toLocaleDateString()} \u2014 right or ` +
          "wrong. Nothing here can be changed; use \u201cBack to now\u201d first."),
       list
     );
@@ -6570,7 +6570,7 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     }
     if (c.hasVoice) {
       const mic = el("span", "history-mark history-mark-voice", "voice");
-      mic.title = "Some of it was said aloud to Jarvis.";
+      mic.title = "Some of it was said aloud to Atlas.";
       marks.append(mic);
     }
     if (c.tainted) {
@@ -9776,7 +9776,7 @@ function supportOfferBox(c) {
   const box = el("div", "chatbot-question chatbot-outside support-offer");
   box.append(el("p", "subhead", SUPPORT.offer_title));
   box.append(el("p", "chatbot-text", o.words));
-  box.append(el("p", "note", `If you approve the card, Jarvis sends: "${o.reply}"`));
+  box.append(el("p", "note", `If you approve the card, Atlas sends: "${o.reply}"`));
   box.append(el("p", "note", SUPPORT.offer_note));
   if (o.card === "no") box.append(el("p", "note support-card-no", SUPPORT.offer_card_no));
   const hold = supportHoldingLine(c);
@@ -9879,7 +9879,7 @@ function paintSupport() {
     } else {
       if (c.goal) now.append(el("p", "note", `Your goal: ${c.goal}`));
       if (c.details.length) {
-        now.append(el("p", "note support-details-line", "Jarvis may give: "
+        now.append(el("p", "note support-details-line", "Atlas may give: "
           + c.details.map((d) => `${d.name}: ${d.value}`).join("; ")));
       }
       if (c.question) {
@@ -10870,7 +10870,7 @@ async function acceptGoal(goal) {
     if (out && out.ok === false) {
       toast(String(out.error || "Refused."), "bad");
     } else {
-      toast("Accepted - Jarvis will check in once a week.", "ok");
+      toast("Accepted - Atlas will check in once a week.", "ok");
       draftPlans.delete(goal.id);
       if (out && out.goal && out.goal.checkin && out.goal.checkin.id) {
         checkinJobIds.set(goal.id, out.goal.checkin.id);
@@ -14540,14 +14540,14 @@ function liveTraceLine(s) {
   const d = s && typeof s === "object" ? s : {};
   if (d.on === true) {
     const where = d.device === "desktop" ? "this PC" : d.device === "phone" ? "the phone" : "a device";
-    const parts = [`Jarvis Live on ${where}`];
+    const parts = [`Atlas Live on ${where}`];
     if (Number.isInteger(d.minutes_left)) parts.push(`${d.minutes_left} min left`);
     const why = d.muted ? d.muted_words : d.paused ? d.pause_words : d.hint_words;
     if (why) parts.push(String(why));
     return parts.join(" · ");
   }
-  if (d.state === "ended") return `Jarvis Live ended${d.ended_words ? `: ${d.ended_words}` : ""}`;
-  return "Jarvis Live off";
+  if (d.state === "ended") return `Atlas Live ended${d.ended_words ? `: ${d.ended_words}` : ""}`;
+  return "Atlas Live off";
 }
 
 // stepText now lives in step-words.js, shared with the Jarvis bar
@@ -14741,7 +14741,7 @@ function renderGraph() {
   }
   const { nodes, links } = buildEntityGraph(view);
   if (!nodes.length) {
-    graphEmptyWith("No people or things yet. They appear here as Jarvis saves facts that name them.");
+    graphEmptyWith("No people or things yet. They appear here as Atlas saves facts that name them.");
     return;
   }
   // The cap again, here. buildEntityGraph already ordered and cut the list
@@ -15556,7 +15556,7 @@ function select(node) {
     // LM-4: the one-click dossier. Read-only; Rust withholds it whole while
     // App lock or the hidden lists are on.
     nodeButtons.push(button("Person dossier", () => openPersonDossier(node.label),
-      { title: "What Jarvis already keeps about this person, from this PC's own records." }));
+      { title: "What Atlas already keeps about this person, from this PC's own records." }));
   }
   dom.nodeActions?.replaceChildren(...nodeButtons);
 

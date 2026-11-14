@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5a8fdadddb49c8daf2c63b42411ae695f06e6f4ac17f9eedd8774525d516ecd3); the apps' Features pages read their own
+`features/features.json` (sha256 10cb5fad578340cdcd1e29ad88e9adab7b32b0dab60ff03fcc3d7a8a5e4165c2); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5a8fdadddb49c8daf2c63b42411ae695f06e6f4ac17f9eedd8774525d516ecd3"
+SOURCE_SHA256 = "10cb5fad578340cdcd1e29ad88e9adab7b32b0dab60ff03fcc3d7a8a5e4165c2"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1922,7 +1922,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Build the Android app in a project task",
         "what": "Build a small Android app in a project task - from your own index.html/app.js/app.css, or from an app.json that draws up to eight screens of your own (text, list, form) natively, with the Gradle build and the adb install behind their own two approval cards.",
-        "where": "In a project task's copy on the PC - but there is no way in yet: no chat sentence, model tool or app button starts it, so only its own tests have called it. When that entry point is written it is a project task. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+        "where": "In a project task's copy on the PC. Ask in a chat and the android_app tool plans it: one card for the build and one for the install, each carrying its exact command. It starts switched off - turn it on under Raw and powerful in Settings. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
         "asks": "Two risky cards, each with the exact command: app_build_android for the build and app_install_android for the install.",
         "limit": "The template is fixed - the model writes no Kotlin, manifest or Gradle file, and cannot add a permission. The native-screens kind is data only: at most eight screens of three kinds (text, list, form), a closed set of keys, a button that only opens another screen or shows one short line, and a form whose values stay on the phone. In a project task only. Needs the Android SDK, a Java 17 JDK and the Gradle wrapper files; the install needs adb and a USB cable with debugging. A first build downloads Gradle and the Android Gradle plugin. No release signing, no Play Store, no adb shell and no uninstall.",
         "surface": "both",

@@ -77,7 +77,7 @@ export const OPINION_MAX_CHARS = 2_000;
 
 /** What the panel says before the owner has asked for anything. */
 export const NOT_CHECKED_YET =
-  "Not checked yet. Check for new models asks Jarvis to look through the public " +
+  "Not checked yet. Check for new models asks Atlas to look through the public " +
   "model libraries (Hugging Face and Ollama's library) for models that fit your " +
   "graphics cards. Nothing downloads from the check.";
 
@@ -128,7 +128,7 @@ export function notJudgedNote(payload) {
  * here yet.
  */
 export const NO_HASH =
-  "No SHA-256 is shown: the catalogue Jarvis reads reports no file hash, so none " +
+  "No SHA-256 is shown: the catalogue Atlas reads reports no file hash, so none " +
   "is invented here.";
 
 /** Every download is the existing carded install: say so where the button is. */

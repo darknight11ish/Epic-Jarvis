@@ -202,11 +202,11 @@ await check("the view says what it is in plain words, and its id stays `galaxy`"
   const js = read("src/brain.js");
   assert.match(html, /id="view-title">The memory map<\/h1>/,
     "the view's own title does not say what the picture is");
-  assert.match(html, /id="view-sub">what Jarvis remembers<\/p>/,
+  assert.match(html, /id="view-sub">what Atlas remembers<\/p>/,
     "the line under it does not say what it holds");
   assert.match(html, /<span class="rail-label">The memory map<\/span>/,
     "the rail's own word for the tab does not say what it is");
-  assert.match(js, /galaxy: \{ title: "The memory map", sub: "what Jarvis remembers" \}/,
+  assert.match(js, /galaxy: \{ title: "The memory map", sub: "what Atlas remembers" \}/,
     "the title the page switches to no longer says what the picture is");
   assert.match(html, /id="tab-galaxy"[^>]*data-goto="galaxy"[^>]*aria-controls="view-galaxy"/,
     "the tab's id or its controls link changed");
@@ -248,7 +248,7 @@ await check("the HUD's own place key opens the map, Advanced included, and is ta
   assert.equal(state.advanced, "true",
     "the Advanced disclosure stayed shut, so the selected tab cannot be seen");
   assert.equal(state.title, "The memory map");
-  assert.equal(state.sub, "what Jarvis remembers");
+  assert.equal(state.sub, "what Atlas remembers");
   assert.equal(state.key, null, "the place was not taken; a second press would repeat it");
 });
 

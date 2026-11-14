@@ -47,7 +47,7 @@ import { readList, readProject } from "./projects.js";
 
 export const GOALS_TITLE = "Goals";
 export const GOALS_DETAIL =
-  "Say what you want, add a few steps with rough dates, then Accept. Jarvis checks in once " +
+  "Say what you want, add a few steps with rough dates, then Accept. Atlas checks in once " +
   "a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need " +
   "no approval card.";
 

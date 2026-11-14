@@ -266,7 +266,7 @@ check("the Brain accepts 'galaxy' as a place, opens Advanced, and shows its map"
     "showPlace no longer opens one of the rail's own views by its key");
   assert.match(BRAIN_JS, /if \(ADVANCED_VIEWS\.includes\(place\) && !advancedOpen\) dom\.advancedToggle\?\.click\(\);/,
     "Galaxy is behind Advanced: the place must open the disclosure, or the selected tab is hidden");
-  assert.match(BRAIN_JS, /galaxy: \{ title: "The memory map", sub: "what Jarvis remembers" \}/,
+  assert.match(BRAIN_JS, /galaxy: \{ title: "The memory map", sub: "what Atlas remembers" \}/,
     "the view's plain-words title is gone");
 });
 

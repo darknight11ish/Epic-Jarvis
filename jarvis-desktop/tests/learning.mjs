@@ -134,7 +134,7 @@ await check("review cards say what their buttons do", async () => {
   const retire = cards.filter({ hasText: "Stop using this fact?" });
   const labels = await retire.locator("button").allTextContents();
   assert.deepEqual(labels, ["Forget that fact", "Keep using it"], `retire card offered ${labels}`);
-  assert.match(await retire.textContent(), /stays in Jarvis's history/);
+  assert.match(await retire.textContent(), /stays in Atlas's history/);
   assert.match(await retire.textContent(), /marked as no longer used/,
     "a Forget card does not say the fact stays in the history");
 

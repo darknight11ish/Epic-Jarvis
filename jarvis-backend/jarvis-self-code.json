@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "ed884fbc423f1072fc953f3998e27980c4596b6f",
- "built_at": "2026-11-14T10:05:45-08:00",
+ "ref": "e03b61684492c31338635626c0244ccdb157ff42",
+ "built_at": "2026-11-14T10:06:06-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6488,6 +6488,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "e03b61684492c31338635626c0244ccdb157ff42",
+   "date": "2026-11-14",
+   "subject": "Regenerate the records after folding the wave-20 workstreams"
+  },
+  {
    "sha": "ed884fbc423f1072fc953f3998e27980c4596b6f",
    "date": "2026-11-14",
    "subject": "Merge feat/def068-builder-entry-2026-11-14 into integration/wave20-2026-11-14 (DEF-068 builder entry point)"
@@ -6581,11 +6586,6 @@
    "sha": "ea2299d4d180adee1a68954d001250e48b6725b0",
    "date": "2026-11-14",
    "subject": "Merge pull request #1252 from darknight11ish/feat/any-file-transfer-2026-11-13"
-  },
-  {
-   "sha": "c76cec4449219d74bd8d6a5a57d86c61afb85042",
-   "date": "2026-11-14",
-   "subject": "Repair the HUD file the earlier resolution had rolled back, and pin Atlas's note"
   }
  ],
  "top_level": [

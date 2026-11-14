@@ -182,7 +182,7 @@ await check("a failed read with no prior cache at all: a plain \"nothing to show
   const raw = await cacheRaw(page);
   await page.close();
   assert.match(text, /nothing to show yet/i);
-  assert.match(text, /open this once while Jarvis is running/i);
+  assert.match(text, /open this once while Atlas is running/i);
   assert.doesNotMatch(text, /isn't running right now, so this list/i, "claimed to have stale data that does not exist");
   assert.doesNotMatch(text, /could not read this/i, "a first-ever failure read as a fault");
   assert.equal(raw, null, "a failed read must never write a cache");
