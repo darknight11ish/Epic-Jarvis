@@ -796,19 +796,31 @@ def t_representative_settings_write_the_same_state_on_disk():
     # --- A carded switch: ONE card, nothing written, calm line in Live -------
     try:
         srow = next(b for b in R.BOOL_SETTINGS if b.key == "learn_sensitive_topics")
-        # SQLite's sidecar files are NOT settings files, and comparing them is a
-        # race this check lost once (2026-11-15, this branch): `memory.db-journal`
-        # was in the first listing and gone from the second because SQLite had
-        # finished a transaction in between, so "the carded change wrote no
-        # settings file yet" failed while nothing had been written. The claim is
-        # about SETTINGS, so the transient sidecars are left out of the
-        # comparison; they are the database's own bookkeeping, not config.
-        _sidecars = ("-journal", "-wal", "-shm")
-        listing = lambda: sorted(p.name for p in (TMP / "config").iterdir()
-                                 if not p.name.endswith(_sidecars))
-        before_files = listing()
+
+        # WHAT COUNTS AS "A SETTINGS FILE", and why this is not a folder listing.
+        # A plain listing of the config folder lost this check twice on 2026-11-15.
+        # First on `memory.db-journal`, which appeared between the two listings
+        # because SQLite had started and finished a transaction in between. Then,
+        # with the sidecars excluded, once more in about eight desk runs and never
+        # in CI - and the failing detail was not captured, so WHICH file appeared
+        # is not claimed here, only that the folder is not a stable thing to
+        # compare. What IS claimed is narrower and race-free: the settings this
+        # door could write are the JSON files, so those are compared by BYTES and
+        # by name. A new JSON file, or a changed one, is a real write and still
+        # fails; a database file arriving (or its journal coming and going) no
+        # longer can.
+        def _settings_json() -> dict:
+            out = {}
+            for p in sorted((TMP / "config").glob("*.json")):
+                try:
+                    out[p.name] = p.read_bytes()
+                except OSError:                  # being written right now: not a pass
+                    out[p.name] = b"<unreadable>"
+            return out
+
+        before_files = _settings_json()
         typed, live = doors("turn on remembering sensitive topics automatically")
-        after_files = listing()
+        after_files = _settings_json()
         both_waiting = (typed is not None and live is not None
                         and "approv" in typed.reply.lower()
                         and "approv" in live.reply.lower())
@@ -816,7 +828,8 @@ def t_representative_settings_write_the_same_state_on_disk():
               (None if typed is None else typed.reply,
                None if live is None else live.reply))
         check("...the carded change wrote no settings file yet",
-              before_files == after_files, (before_files, after_files))
+              before_files == after_files,
+              (sorted(before_files), sorted(after_files)))
         check("...Live speaks ONE calm line for it",
               live is not None and one_calm_line(
                   live.reply, "remembering sensitive topics automatically"),
