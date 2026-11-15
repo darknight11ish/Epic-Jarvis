@@ -104,6 +104,13 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    #       40-hex head commit, and github_merge_pr's `head_sha` must
                    #       say that number comes from github_pr_scan - without which
                    #       the merge tool's one required argument is unreachable.
+                   #       SUPERSEDED 2026-11-15: head_sha/title/base_ref are no
+                   #       longer required - a merge call with only repo + number
+                   #       makes the planner read the pull request and pin its real
+                   #       head, because a card built from a stale echo was approved
+                   #       and could never merge. The descriptions now say "may be
+                   #       left out" instead, measured 1,528 by this module's own
+                   #       rule; 1,580 leaves 52 tokens of headroom.
                    #   (c) 2026-11-10 desk fix: the merge card must name the pull
                    #       request's title and its target branch, so the tool takes
                    #       them as two more required arguments (`title`, `base_ref`)
@@ -115,7 +122,7 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # opened, never on every turn (they are group members, not core
                    # tools), and it buys one inventory with one home instead of a
                    # second copy that drifts.
-                   "github_pr_scan": 1340, "github_merge_pr": 1480,
+                   "github_pr_scan": 1340, "github_merge_pr": 1580,
                    "github_fix_and_push": 480,
                    # The 2026-11-10 22:30 ruling's actions carry no whole-surface
                    # sentence, but three are a little over the 300 default legitimately:
