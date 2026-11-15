@@ -860,6 +860,94 @@ def t_a_directory_listing_is_a_directory_even_when_cut():
           "longer than Jarvis reads" in str(out.get("text", "")), out)
 
 
+def t_the_scan_names_the_checks_that_are_not_green():
+    """The pinned replay of 2026-11-15: pull request #1262 at 6b24a964.
+
+    The recognition harness replayed that commit through `github_pr_scan` and the
+    row read `blocked - backend finished as failure`: the AGGREGATE required
+    check, never `audit` or `backend-shard (3/4)`, which were red on that same
+    commit. The newest WORKFLOW run on the commit was a success, which is exactly
+    the trap - a row must not be green because one workflow was.
+    """
+    def check_run(name, conclusion="success", status="completed"):
+        return {"name": name, "status": status, "conclusion": conclusion}
+
+    green = ("rust", "frontend", "backend-windows", "credential-manager",
+             "powershell-5", "phone-unit-tests", "frontend-shard (1/4)",
+             "frontend-shard (2/4)", "frontend-shard (3/4)",
+             "frontend-shard (4/4)", "backend-shard (1/4)",
+             "backend-shard (2/4)", "backend-shard (4/4)", "backend-owner-env",
+             "python-advisories", "smoke", "face-shots")
+
+    def scan_of(checks, *, mergeable=False, state="blocked", number=1262):
+        pr = {"number": number, "title": "pinned snapshot of 6b24a9646",
+              "state": "open", "mergeable": mergeable, "mergeable_state": state,
+              "head": {"sha": SHA, "ref": "feat/x"}, "base": {"ref": "main"}}
+        return Routed([
+            ("/check-runs", (200, json.dumps({"total_count": len(checks),
+                                              "check_runs": checks}))),
+            ("/actions/runs", (200, json.dumps({"workflow_runs": [
+                {"name": "CI", "status": "completed", "conclusion": "success",
+                 "head_branch": "feat/x"}]}))),
+            (f"/pulls/{number}", (200, json.dumps(pr))),
+            ("/pulls?", (200, json.dumps([pr])))])
+
+    red = [check_run(n) for n in green] + [
+        check_run("backend", "failure"),
+        check_run("backend-shard (3/4)", "failure"),
+        check_run("audit", "failure")]
+    fake = scan_of(red)
+    out = _run_request(GH.plan_scan_prs({"repo": REPO}), fake)
+    text = str(out.get("text", ""))
+    check("the scan answers about the replayed pull request",
+          out.get("ok") is True and "#1262" in text, out)
+    check("a commit with a red check is never merge-ready",
+          ": merge-ready" not in text and ": running" not in text, text)
+    check("... it is blocked", ": blocked" in text, text)
+    check("... the aggregate required check is still named",
+          "backend finished as failure" in text, text)
+    check("... and the OTHER failed checks are named too: audit",
+          "audit" in text, text)
+    check("... and backend-shard (3/4)", "backend-shard (3/4)" in text, text)
+    check("... the newest workflow run being a success is not used as a green "
+          "signal", not [c for c in fake.calls if "/actions/runs" in c["url"]],
+          fake.urls())
+    # Bounded: at most three names, then "and N more". `backend` is named by the
+    # aggregate sentence already, so four names are left in the clause: three
+    # shown, one counted.
+    many = [check_run(n) for n in green] + [
+        check_run("backend", "failure"), check_run("audit", "failure"),
+        check_run("backend-shard (3/4)", "failure"),
+        check_run("python-advisories", "failure"),
+        check_run("smoke", "failure")]
+    out = _run_request(GH.plan_scan_prs({"repo": REPO}), scan_of(many))
+    text = str(out.get("text", ""))
+    check("the row is bounded to three named checks plus a count",
+          ", and 1 more" in text
+          and len(re.findall(r"\((?:failure|cancelled|timed_out)\)", text)) == 3,
+          text)
+    check("... and the fourth failed check is NOT named",
+          "smoke (failure)" not in text, text)
+    # A check still running beside a FAILED one must not be called "running":
+    # something already failed, so the row is blocked and says both.
+    mixed = [check_run(n) for n in green] + [
+        check_run("audit", "failure"),
+        check_run("backend-shard (3/4)", status="in_progress", conclusion=None)]
+    out = _run_request(GH.plan_scan_prs({"repo": REPO}), scan_of(mixed))
+    text = str(out.get("text", ""))
+    check("a still-running check beside a failed one is not 'running'",
+          ": running" not in text and ": blocked" in text, text)
+    check("... both kinds are named, the running one as still running",
+          "audit" in text and "backend-shard (3/4) still running" in text, text)
+    # And when everything on that commit succeeded, the sentence is unchanged.
+    all_green = [check_run(n) for n in green + ("backend",)]
+    out = _run_request(GH.plan_scan_prs({"repo": REPO}),
+                       scan_of(all_green, mergeable=True, state="clean"))
+    check("an all-green pull request keeps the sentence it had",
+          "merge-ready - every required check passed and GitHub says it is clean"
+          in str(out.get("text", "")), out.get("text"))
+
+
 def t_a_binary_file_is_not_shown_as_text():
     import base64
     png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + bytes(range(256)) * 6
@@ -1097,6 +1185,7 @@ if __name__ == "__main__":
                    t_a_malformed_detail_list_is_never_an_empty_section,
                    t_a_cut_pull_request_answer_is_an_explicit_error,
                    t_a_pull_request_ci_answer_cannot_say_passed_while_a_check_is_red,
+                   t_the_scan_names_the_checks_that_are_not_green,
                    t_the_runs_list_answers_even_when_the_answer_is_cut,
                    t_a_directory_listing_is_a_directory_even_when_cut,
                    t_a_binary_file_is_not_shown_as_text,

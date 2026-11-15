@@ -367,6 +367,14 @@ BANNED_GIT_FLAGS = frozenset({"--force", "--force-with-lease", "-f", "--delete",
 #: 2026-11-10): more than ten is not a cockpit, it is a wall.
 MAX_PRS = 10
 
+#: How many check NAMES one cockpit row prints for a pull request that is not
+#: green, before "and N more". A row is one line of a ten-row answer, and the
+#: recognition harness of 2026-11-15 measured what the other extreme costs: a row
+#: that named only the aggregate `backend` while `audit` and `backend-shard (3/4)`
+#: were red on the same commit. Three names say what failed without turning the
+#: answer into a wall of its own.
+MAX_SCAN_NAMES = 3
+
 #: How much of one failing check's annotation / job-log tail is shown. Bounded
 #: so a card or a tool result can always be shown, and so one noisy log cannot
 #: hide the other failing checks.
@@ -3824,6 +3832,28 @@ def _check_name(run_doc: dict) -> str:
     return _clean_github_text(name, wrap=False) or "a check"
 
 
+def _check_verdict(one) -> tuple:
+    """("ok" | "failed" | "running", its conclusion) for ONE check run.
+
+    THE one judgement of whether a check on a commit is green: `success`,
+    `neutral` and `skipped` are the pass set, a completed check with any other
+    conclusion has FAILED, and anything not completed is still running. It is
+    shared by the pull request CI answer (`_pr_ci_words`) and by the pull request
+    scan (`_classify`) so the two can never disagree about the same commit -
+    which is exactly what went wrong on 2026-11-15, when the CI answer said
+    "passed" and the scan said "blocked - backend finished as failure" about a
+    commit whose `audit` and `backend-shard (3/4)` were both red.
+    """
+    if not isinstance(one, dict):
+        return "ok", ""
+    conclusion = str(one.get("conclusion") or "")
+    if str(one.get("status") or "") != "completed":
+        return "running", conclusion
+    if conclusion in ("success", "neutral", "skipped"):
+        return "ok", conclusion
+    return "failed", conclusion
+
+
 def _running(runs: list) -> list:
     """The names of checks that have not finished yet."""
     return [_check_name(r) for r in runs
@@ -3872,6 +3902,76 @@ def _generic_problems(runs: list) -> list:
             ("success", "neutral", "skipped")]
 
 
+def _names_in(name: str, text: str) -> bool:
+    """True when `text` already names the check `name`, as a whole name.
+
+    A whole-name match, not a substring one: `backend` must not count as named
+    because the sentence says `backend-shard (3/4)`, and the other way round.
+    """
+    if not text or not name:
+        return False
+    pattern = r"(?<![\w-])" + re.escape(str(name)) + r"(?![\w-])"
+    return re.search(pattern, str(text), re.I) is not None
+
+
+def _scan_checks(runs: list) -> tuple:
+    """(failed, running) for the cockpit, as `[(name, conclusion)]` and `[name]`.
+
+    Judged by `_check_verdict`, the same judgement the pull request CI answer
+    uses, so a still-running check and a failed one are told apart the same way
+    in both places.
+    """
+    failed, running = [], []
+    for one in runs or ():
+        verdict, conclusion = _check_verdict(one)
+        if verdict == "failed":
+            failed.append((_check_name(one), conclusion))
+        elif verdict == "running":
+            running.append(_check_name(one))
+    return failed, running
+
+
+def _scan_names(failed: list, running: list, already: str = "") -> str:
+    """The bounded "audit (failure), backend-shard (1/4) still running" clause.
+
+    At most `MAX_SCAN_NAMES` names, then "and N more". A check the sentence the
+    caller already printed names is not repeated, so a row that says "backend
+    finished as failure" does not say "backend (failure)" again.
+    """
+    parts = [f"{name} ({conclusion or 'no result'})"
+             for name, conclusion in failed if not _names_in(name, already)]
+    parts += [f"{name} still running"
+              for name in running if not _names_in(name, already)]
+    if not parts:
+        return ""
+    shown = parts[:MAX_SCAN_NAMES]
+    more = len(parts) - len(shown)
+    return ", ".join(shown) + (f", and {more} more" if more else "")
+
+
+def _scan_running(running: list) -> str:
+    """The bounded plain list of still-running names, for "still running: ...".
+
+    A plain list, because the sentence already says "still running" - the suffixed
+    form `_scan_names` uses is for a clause that mixes failures and runners.
+    """
+    shown = list(running)[:MAX_SCAN_NAMES]
+    more = len(list(running)) - len(shown)
+    return ", ".join(shown) + (f", and {more} more" if more else "")
+
+
+def _not_green(failed: list, running: list, already: str = "") -> str:
+    """`; also not a success on that commit: ...`, or "" when nothing is left.
+
+    The clause that carries the check names the row's own sentence has not
+    already said, so a row keeps the sentence it had (`backend finished as
+    failure`) and adds what that sentence never named (`audit (failure),
+    backend-shard (3/4) (failure)`).
+    """
+    clause = _scan_names(failed, running, already)
+    return ("; also not a success on that commit: " + clause) if clause else ""
+
+
 def _state_words(state: str) -> str:
     """What GitHub's `mergeable_state` means, in the owner's words."""
     words = {
@@ -3900,9 +4000,28 @@ def _classify(pr_doc: dict, runs: list, plan=None, problem: str = "") -> tuple:
 
     The five words are the cockpit's whole vocabulary, and they are decided in
     this order: a draft is a draft whatever else is true; a conflict is a
-    conflict; anything still running is running; anything else that is not clean
-    is blocked; only a clean, unpinned pull request whose every check passed is
-    merge-ready.
+    conflict; a commit with a check that is NOT a success is blocked, and the
+    row NAMES the checks that are not successes; anything else still running is
+    running; anything else that is not clean is blocked; only a clean pull
+    request whose every check passed is merge-ready.
+
+    WHY A FAILED CHECK OUTRANKS A RUNNING ONE (2026-11-15). The order used to be
+    the other way round, so a commit whose `audit` had failed and whose
+    `backend-shard (1/4)` was still going printed "running" and nothing else: a
+    row that read as "wait a bit" about a commit that was already red. And what
+    it did print when it said blocked was the AGGREGATE required check only -
+    the recognition harness's pinned replay of `6b24a964` scored PR #1262's row
+    `blocked - backend finished as failure`, never naming `audit` or
+    `backend-shard (3/4)`, both red on that very commit. So every check on the
+    commit is now judged by `_check_verdict` (the same judgement the pull
+    request CI answer uses), and every row adds what is not a success: a failure
+    is named with its own conclusion, a check still running is named as still
+    running, and the names are bounded by `MAX_SCAN_NAMES` with "and N more".
+    The WORD is still GitHub's own merge state for a commit whose REQUIRED
+    checks are green - that is the repository's rule (Q-C) and the merge gate
+    follows it - so a red check the ruleset does not require is NAMED beside the
+    word rather than silently turning a mergeable pull request into a blocked
+    one. Marking it blocked would be a stricter claim than the gate makes.
 
     The checks are judged with the SAME per-repository plan the merge gate uses
     (Q-C, 2026-11-11): `plan` is `_check_plan`'s result for THIS repository and
@@ -3917,24 +4036,30 @@ def _classify(pr_doc: dict, runs: list, plan=None, problem: str = "") -> tuple:
     if state == "dirty":
         return "conflicted", _state_words("dirty")
     plan_runs = list((plan or {}).get("runs") or runs)
-    still = _running(plan_runs)
-    if still:
-        return "running", "still running: " + ", ".join(still)
+    failed, running = _scan_checks(plan_runs)
+    if not failed and running:
+        # Nothing has failed, so "running" is the honest word - and every
+        # unfinished check is named, bounded. A failure would have taken one of
+        # the branches below instead, so "running" can never hide one.
+        return "running", "still running: " + _scan_running(running)
     if problem:
-        return "blocked", problem
+        return "blocked", problem + _not_green(failed, running, problem)
     if plan and plan.get("mode") == "generic":
         problems = _generic_problems(plan_runs)
     else:
         required = tuple((plan or {}).get("names") or REQUIRED_CHECKS)
         problems = _required_problems(plan_runs, required)
     if problems:
-        return "blocked", "; ".join(problems)
+        said = "; ".join(problems)
+        return "blocked", said + _not_green(failed, running, said)
+    extra = _not_green(failed, running)
     if pr_doc.get("mergeable") is not True or state != "clean":
-        return "blocked", _state_words(state or "unknown")
+        return "blocked", _state_words(state or "unknown") + extra
     if plan and plan.get("mode") == "generic":
         return "merge-ready", ("every check on that commit finished cleanly and "
-                               "GitHub says it is clean")
-    return "merge-ready", "every required check passed and GitHub says it is clean"
+                               "GitHub says it is clean" + extra)
+    return "merge-ready", ("every required check passed and GitHub says it is "
+                           "clean" + extra)
 
 
 def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
@@ -5667,18 +5792,13 @@ def _pr_ci_words(r: Request, pr_doc, runs_doc, checks_doc) -> str:
     checks = checks_doc.get("check_runs") if isinstance(checks_doc, dict) else None
     checks = [c for c in (checks or ()) if isinstance(c, dict)]
     who = f"pull request #{r.number} in {r.repo}"
-    failed, running = [], []
-    for one in checks:
-        name = _check_name(one)
-        if str(one.get("status") or "") != "completed":
-            running.append(name)
-            continue
-        conclusion = str(one.get("conclusion") or "")
-        if conclusion not in ("success", "neutral", "skipped"):
-            failed.append(name + (f" ({conclusion})" if conclusion else ""))
+    # ONE judgement, shared with the pull request scan (`_scan_checks`), so the
+    # two answers can never disagree about whether this commit is green.
+    failed, running = _scan_checks(checks)
     if failed:
         return (f"The checks on {who} are NOT all green: "
-                + ", ".join(failed[:MAX_DETAIL_ITEMS])
+                + ", ".join(f"{name} ({conclusion or 'no result'})"
+                            for name, conclusion in failed[:MAX_DETAIL_ITEMS])
                 + (f", and {len(failed) - MAX_DETAIL_ITEMS} more"
                    if len(failed) > MAX_DETAIL_ITEMS else "")
                 + ". Jarvis names every check on the head commit that is not a "
