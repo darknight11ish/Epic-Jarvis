@@ -2710,7 +2710,7 @@ SCORE_MAX_BYTES = 2 * 1024 * 1024
 _SCORE_NUMBER = {
     "v", "at", "ctx", "size", "size_vram", "spill_bytes", "on_card_percent",
     "decode_tps", "prompt_tps", "cold_load_ms", "score_pct", "items",
-    "items_passed", "repeats", "seconds",
+    "items_passed", "repeats", "seconds", "answer_tokens",
 }
 _SCORE_BOOL = {"ok", "passed", "skipped", "promotion_grade", "spilled"}
 _SCORE_NAME = {
@@ -2918,6 +2918,7 @@ def scorecard_row(*, run_id: str, identity: dict, lane: str, suite: dict,
         "cold_load_ms": result.get("cold_load_ms"),
         "score_pct": result.get("score_pct"),
         "items": result.get("items"), "items_passed": result.get("items_passed"),
+        "answer_tokens": result.get("answer_tokens"),
         "repeats": result.get("repeats"),
         "seconds": result.get("seconds"),
         "ok": bool(result.get("ok")), "passed": bool(result.get("passed")),
@@ -3250,6 +3251,27 @@ def warm_back(paused: list, *, get: Optional[Callable[[str], dict]] = None,
 # ==========================================================================
 #   One request, and the five suite runners
 # ==========================================================================
+#
+# HOW MUCH ROOM ONE ANSWER GETS, AND WHY IT IS NOT SMALL (2026-11-14).
+# The general, tool-calling and vision suites asked for 64, 64 and 48 tokens.
+# A thinking model spends that budget on its hidden reasoning FIRST: measured
+# on this PC, `qwen3.5:9b` asked "How many days are in a leap year? Reply with
+# only the number." ended `done_reason: "length"` with `response: ""` and 266
+# characters of thinking in the separate `thinking` field, so EVERY model
+# scored 0/6 on general and 0/5 on tool-calling and the scorecards read
+# `answered ''`. That was this harness failing to get an answer, not a ranking
+# of the models; the coding suite asked for 400 and was the only suite with
+# real scores. With the same question and 512 tokens, the same model answered
+# "366" in 201 tokens.
+#
+# These are caps, not costs: a model that finishes early stops early and pays
+# nothing for the headroom, so a generous cap cannot flatter a model - it only
+# stops the harness cutting an answer off before it starts. `answer_tokens`
+# travels with every scorecard so a reader can see the terms it was measured
+# under.
+ANSWER_TOKENS = 1024
+CODE_TOKENS = 1200
+
 
 def _generate(base: str, model: str, prompt: str, *, ctx: Optional[int],
               num_predict: int = 128, post: Optional[Callable] = None,
@@ -3289,6 +3311,36 @@ def _answer_text(reply: dict) -> str:
         msg = reply.get("message")
         text = (msg or {}).get("content") if isinstance(msg, dict) else ""
     return text if isinstance(text, str) else ""
+
+
+def _done_reason(reply: dict) -> str:
+    """Why Ollama stopped: "stop" when it finished, "length" when the token
+    budget ran out first. "" when the reply does not say."""
+    if not isinstance(reply, dict):
+        return ""
+    return str(reply.get("done_reason") or "").strip().lower()
+
+
+def _why_no_answer(reply: dict, text: str, budget: int) -> str:
+    """One honest sentence for an answer that is empty, or was cut off.
+
+    This is the 2026-11-14 fix's voice. Before it, a thinking model that spent
+    the whole budget reasoning produced `answered ''` in every scorecard, which
+    reads as "the model answered nothing" - the harness's fault, blamed on the
+    model. A budget that ran out while the model was still thinking is now
+    named as exactly that, and is still a failure: a model that cannot answer
+    a one-line question within `budget` tokens has not answered it.
+    """
+    cut = _done_reason(reply) == "length"
+    if not str(text or "").strip():
+        if cut:
+            return (f"the {int(budget)}-token budget ran out while the model "
+                    f"was still thinking, so it answered nothing")
+        return "the model answered nothing"
+    if cut:
+        return (f"the answer was cut off after {int(budget)} tokens; it began "
+                f"{_normalised_answer(text)[:60]!r}")
+    return f"answered {_normalised_answer(text)[:60]!r}"
 
 
 def _rate(count, duration_ns) -> Optional[float]:
@@ -3468,10 +3520,14 @@ def run_coding_suite(base: str, model: str, ctx: Optional[int], *,
     for task in CODING_TASKS:
         try:
             reply = _generate(base, model, task["prompt"], ctx=ctx,
-                              num_predict=400, post=post)
+                              num_predict=CODE_TOKENS, post=post)
             answered += 1
-            ok, why = run_coding_answer(_answer_text(reply), task,
-                                        code_runner=code_runner)
+            text = _answer_text(reply)
+            ok, why = run_coding_answer(text, task, code_runner=code_runner)
+            if (not extract_python(text).strip()
+                    and _done_reason(reply) == "length"):
+                why = (f"the {CODE_TOKENS}-token budget ran out while the "
+                       f"model was still thinking, so the answer held no code")
         except Exception as exc:
             ok, why = False, f"the model did not answer ({type(exc).__name__})"
         per_item.append({"id": task["id"], "pass": bool(ok), "why": why})
@@ -3491,7 +3547,8 @@ def run_coding_suite(base: str, model: str, ctx: Optional[int], *,
             "words": (f"{passed} of {len(CODING_TASKS)} coding tasks passed "
                       f"({score:.0f}%)."),
             "items": len(CODING_TASKS), "items_passed": passed,
-            "score_pct": score, "per_item": per_item}
+            "score_pct": score, "answer_tokens": CODE_TOKENS,
+            "per_item": per_item}
 
 
 def _normalised_answer(text: str) -> str:
@@ -3526,11 +3583,11 @@ def run_general_suite(base: str, model: str, ctx: Optional[int], *,
     for task in GENERAL_TASKS:
         try:
             reply = _generate(base, model, task["prompt"], ctx=ctx,
-                              num_predict=64, post=post)
+                              num_predict=ANSWER_TOKENS, post=post)
             answered += 1
             text = _answer_text(reply)
             ok = general_answer_passes(text, task["expected"])
-            why = "" if ok else f"answered {_normalised_answer(text)[:60]!r}"
+            why = "" if ok else _why_no_answer(reply, text, ANSWER_TOKENS)
         except Exception as exc:
             ok, why = False, f"the model did not answer ({type(exc).__name__})"
         per_item.append({"id": task["id"], "pass": bool(ok), "why": why})
@@ -3550,7 +3607,8 @@ def run_general_suite(base: str, model: str, ctx: Optional[int], *,
             "words": f"{passed} of {len(GENERAL_TASKS)} exact-answer questions "
                      f"passed ({score:.0f}%).",
             "items": len(GENERAL_TASKS), "items_passed": passed,
-            "score_pct": score, "per_item": per_item}
+            "score_pct": score, "answer_tokens": ANSWER_TOKENS,
+            "per_item": per_item}
 
 
 def _tool_calls(reply: dict) -> list:
@@ -3597,8 +3655,13 @@ def tool_call_passes(reply: dict, task: dict) -> tuple:
             return True, ""
         return False, f"called {name_wanted} with " + ", ".join(bad)
     names = [((c.get("function") or {}).get("name")) for c in _tool_calls(reply)]
-    return False, (f"called {names!r}, not {name_wanted}" if names
-                   else f"did not call {name_wanted}")
+    if names:
+        return False, f"called {names!r}, not {name_wanted}"
+    if _done_reason(reply) == "length":
+        return False, (f"the {ANSWER_TOKENS}-token budget ran out while the "
+                       f"model was still thinking, so it did not call "
+                       f"{name_wanted}")
+    return False, f"did not call {name_wanted}"
 
 
 def run_tool_calling_suite(base: str, model: str, ctx: Optional[int], *,
@@ -3609,7 +3672,8 @@ def run_tool_calling_suite(base: str, model: str, ctx: Optional[int], *,
     for task in TOOL_TASKS:
         try:
             reply = _generate(base, model, task["prompt"], ctx=ctx,
-                              num_predict=64, post=post, tools=list(TOOL_SCHEMAS))
+                              num_predict=ANSWER_TOKENS, post=post,
+                              tools=list(TOOL_SCHEMAS))
             answered += 1
             ok, why = tool_call_passes(reply, task)
         except Exception as exc:
@@ -3632,7 +3696,8 @@ def run_tool_calling_suite(base: str, model: str, ctx: Optional[int], *,
             "words": (f"{passed} of {len(TOOL_TASKS)} tool-calling tasks passed "
                       f"({score:.0f}%)."),
             "items": len(TOOL_TASKS), "items_passed": passed,
-            "score_pct": score, "per_item": per_item}
+            "score_pct": score, "answer_tokens": ANSWER_TOKENS,
+            "per_item": per_item}
 
 
 def vision_answer_passes(answer: str, expected=VISION_EXPECTED) -> bool:
@@ -3650,8 +3715,9 @@ def run_vision_suite(base: str, model: str, ctx: Optional[int], *,
     prompt = ("Read the text in this image. Reply with only the text you can "
               "see, nothing else.")
     try:
-        reply = _generate(base, model, prompt, ctx=ctx, num_predict=48,
-                          post=post, image_b64=VISION_IMAGE_PNG_B64)
+        reply = _generate(base, model, prompt, ctx=ctx,
+                          num_predict=ANSWER_TOKENS, post=post,
+                          image_b64=VISION_IMAGE_PNG_B64)
     except Exception as exc:
         return {"ok": False, "passed": False, "skipped": False,
                 "why": f"the model did not answer ({type(exc).__name__})",
@@ -3660,11 +3726,12 @@ def run_vision_suite(base: str, model: str, ctx: Optional[int], *,
     text = _answer_text(reply)
     ok = vision_answer_passes(text)
     return {"ok": True, "passed": ok, "skipped": False,
-            "why": "" if ok else f"read {_normalised_answer(text)[:80]!r}",
+            "why": "" if ok else _why_no_answer(reply, text, ANSWER_TOKENS),
             "words": ("The image text was read correctly."
                       if ok else "The image text was NOT read correctly."),
             "items": 1, "items_passed": 1 if ok else 0,
             "score_pct": 100.0 if ok else 0.0,
+            "answer_tokens": ANSWER_TOKENS,
             "per_item": [{"id": "ocr", "pass": bool(ok),
                           "why": "" if ok else "wrong text"}]}
 
