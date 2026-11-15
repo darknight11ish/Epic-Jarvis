@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e0860835f4ff3a7dd5eb80bba55ed5f7f646176d",
- "built_at": "2026-11-15T04:59:27-08:00",
+ "ref": "65480b1469cb2cd84a2a155eb5aa4aabf16bb00b",
+ "built_at": "2026-11-15T03:47:29-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4715,6 +4715,7 @@
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
+    "changelog.d/2026-11-15-preset-window-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4914,6 +4915,7 @@
     "decisions.d/2026-11-14-github-parity-stage1.md",
     "decisions.d/2026-11-14-send-to-phone-two-gigabytes.md",
     "decisions.d/2026-11-14-widget-look.md",
+    "decisions.d/2026-11-15-a-measured-window-is-a-claim-about-the-runner.md",
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5418,7 +5420,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 991,
+   "file_count": 993,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6505,24 +6507,9 @@
  ],
  "recent_commits": [
   {
-   "sha": "e0860835f4ff3a7dd5eb80bba55ed5f7f646176d",
+   "sha": "65480b1469cb2cd84a2a155eb5aa4aabf16bb00b",
    "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "ab9801a1c25e8162af452e0685e116b4e4e5325d",
-   "date": "2026-11-15",
-   "subject": "Merge pull request #1263 from darknight11ish/fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "d8d0717deb4d83a71e9bd811a72ce9dc641fe933",
-   "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "f0213f0466c5de9804ce10f73e1d8f0e45293c59",
-   "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/catalogue-sees-all-cards-2026-11-14"
+   "subject": "Merge origin/main (275fbb571) into fix/ctx-window-truth-2026-11-15"
   },
   {
    "sha": "275fbb5719b708c300d5994504d76c0a5262f43c",
@@ -6530,19 +6517,9 @@
    "subject": "Merge pull request #1262 from darknight11ish/fix/bench-answer-budget-2026-11-14"
   },
   {
-   "sha": "5c70fce2450cd129a3b86b51299d12b53a83efec",
+   "sha": "695e85687af2b682f3eb76f400e2c4d598f78417",
    "date": "2026-11-15",
-   "subject": "Merge commit '2f8ab342f' into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "2f8ab342f51af44841d0352b98210eab39fa6ee9",
-   "date": "2026-11-15",
-   "subject": "Merge commit '5ca2fb86e69dd19bc69168064fee6fab7a637d93' into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
+   "subject": "Merge origin/main (7a8fe7d29) into fix/ctx-window-truth-2026-11-15"
   },
   {
    "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
@@ -6550,39 +6527,24 @@
    "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
   },
   {
-   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
    "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
    "date": "2026-11-15",
    "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
   },
   {
-   "sha": "2c7ed1baaaa1c572da7149d2b8c9f5a24aa33195",
+   "sha": "5422283a791631d7f0211590d9096f8837e70b41",
    "date": "2026-11-15",
-   "subject": "chore(records): re-take the self-code map over all three changes"
+   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
   },
   {
-   "sha": "f1f508f0f1a1893d138a9851f702dc24aa0dd558",
+   "sha": "11622bb67d5596f082db2b7efb3fdbee6f4254a0",
    "date": "2026-11-15",
-   "subject": "Merge commit '08126eb74' into feat/github-parity-stage1-2026-11-14"
+   "subject": "chore(records): regenerate the self-code map for the files this change touched"
   },
   {
-   "sha": "e12fcc3f8f3e488fd9dfa111aedb9383020a4d71",
+   "sha": "e7d1b65be94bb6b4131b331a216a0c249f5644c0",
    "date": "2026-11-15",
-   "subject": "Keep the fix-flow sentence in plain words, and re-take the recent-changes record"
-  },
-  {
-   "sha": "08126eb741c6da9f488ac43bdedf590a7ea7aa3d",
-   "date": "2026-11-15",
-   "subject": "chore(records): re-take the self-code map over the preset and catalogue changes"
-  },
-  {
-   "sha": "46ae82881269d295f3fabd9a086af1c3174e1421",
-   "date": "2026-11-15",
-   "subject": "Merge commit 'f4d672e9d' into fix/catalogue-sees-all-cards-2026-11-14"
+   "subject": "docs(defects): record DEF-073, DEF-074 and DEF-075 from the live GitHub read run"
   },
   {
    "sha": "f4d672e9d072e17650c49bb7178ede4d7401a5a2",
@@ -6600,9 +6562,49 @@
    "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
   },
   {
+   "sha": "c729740e51319f1757a23ee0aa458291931dd200",
+   "date": "2026-11-15",
+   "subject": "fix(presets): drop the false \"thinking off or it answered nothing\" claim; record DEF-071 and DEF-072"
+  },
+  {
    "sha": "55637c18b18fa967bb1ae8ffaeb8515815260ea1",
    "date": "2026-11-15",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/bench-answer-budget-2026-11-14"
+  },
+  {
+   "sha": "04d4748cfea08924a8facf798b01ae490769f989",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
+  },
+  {
+   "sha": "be536881b40c7317f6880ff6d14c39397a321fcc",
+   "date": "2026-11-14",
+   "subject": "Bench suites ask for room to think, and name the budget when it runs out"
+  },
+  {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
+  },
+  {
+   "sha": "e496e93c373679d108b7924d370f031517298c6a",
+   "date": "2026-11-14",
+   "subject": "chore(desktop): regenerate the feature-directory fixture after the contract changed"
+  },
+  {
+   "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
+   "date": "2026-11-14",
+   "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
+  },
+  {
+   "sha": "0168dca083b4e4c1668423e845381704273709a3",
+   "date": "2026-11-14",
+   "subject": "chore(generated): regenerate the feature catalogue and recent changes; keep the new suite off source text"
+  },
+  {
+   "sha": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
+   "date": "2026-11-14",
+   "subject": "fix(gate): the file-to-phone denial row, and an audit that reads the published base"
   }
  ],
  "top_level": [
@@ -6634,7 +6636,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 283
+   "files": 284
   },
   {
    "path": "tools/",
@@ -6649,7 +6651,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 200
+   "files": 201
   },
   {
    "path": "plugins/",
@@ -6728,8 +6730,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5851,
-  "covered": 5368,
+  "tracked_files": 5853,
+  "covered": 5370,
   "excluded": 483,
   "subsystems": 27
  },
