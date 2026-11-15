@@ -397,11 +397,19 @@ class JarvisApi(
      * exactly as it is, because the server's origin and cloud-escalation rules
      * read that one. It is not a secret and grants nothing — it only chooses
      * words — and the PC sends its own `desktop` value the same way.
+     *
+     * `X-Jarvis-Device` is the other half of the same idea (2026-11-15, "be
+     * more phone specific in the answers"): [DeviceFacts] says WHICH phone, so
+     * the answer can be sized to it. Sent only once the Application has read
+     * the facts, and never when they are empty — a request without it is
+     * word-for-word the request this app sent before it existed.
      */
     fun Request.Builder.authed(): Request.Builder = apply {
         header(TOKEN_HEADER, headerSafe(tokens.token()))
         header(CLIENT_HEADER, CLIENT_VALUE)
         header(SURFACE_HEADER, SURFACE_VALUE)
+        val device = DeviceFacts.headerValue()
+        if (device.isNotEmpty()) header(DEVICE_HEADER, device)
         header("Accept", "application/json")
     }
 
@@ -4756,6 +4764,16 @@ class JarvisApi(
 
         /** The Android app's value for [SURFACE_HEADER]. */
         const val SURFACE_VALUE = "phone"
+
+        /**
+         * `X-Jarvis-Device` (2026-11-15, the owner's "be more phone specific in
+         * the answers"): this phone's own facts as `key=value` pairs, built once
+         * by [DeviceFacts]. [SURFACE_HEADER] says *a phone* is asking; this says
+         * *which* phone, so the PC can name it and size the answer to it. Not a
+         * secret and not authentication - the token is still the only credential
+         * - and absent entirely until [DeviceFacts.initialise] has run.
+         */
+        const val DEVICE_HEADER = "X-Jarvis-Device"
 
         /** JSON-quotes and escapes, so a message body cannot break out of its field. */
         fun quote(s: String): String = JarvisJson.encodeToString(String.serializer(), s)
