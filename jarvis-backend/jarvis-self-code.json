@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9f8dde1c8b99edac44de0806b2dee0ef596e4366",
- "built_at": "2026-11-15T08:06:04-08:00",
+ "ref": "ad8b7ce717cfbc5466f56bb221eddcda1df72df5",
+ "built_at": "2026-11-15T09:06:52-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3835,6 +3835,7 @@
     "backend/test_chat_stream.py",
     "backend/test_chat_stream_contract.py",
     "backend/test_chat_tags.py",
+    "backend/test_chat_window.py",
     "backend/test_chatbot.py",
     "backend/test_chatbot_api.py",
     "backend/test_chatbot_compare.py",
@@ -3944,6 +3945,7 @@
     "backend/test_github_parity.py",
     "backend/test_github_record.py",
     "backend/test_github_review.py",
+    "backend/test_github_robustness.py",
     "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
@@ -4386,7 +4388,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 694,
+   "file_count": 696,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4715,6 +4717,8 @@
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
+    "changelog.d/2026-11-15-chat-window-honoured.md",
+    "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/2026-11-15-preset-window-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4917,6 +4921,8 @@
     "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/2026-11-15-a-measured-window-is-a-claim-about-the-runner.md",
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
+    "decisions.d/2026-11-15-github-answers-are-refusals.md",
+    "decisions.d/2026-11-15-name-the-window-on-the-native-endpoint.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5420,7 +5426,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 993,
+   "file_count": 997,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6507,6 +6513,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "ad8b7ce717cfbc5466f56bb221eddcda1df72df5",
+   "date": "2026-11-15",
+   "subject": "fix(chat): the window the preset names is the window the turn gets"
+  },
+  {
    "sha": "9f8dde1c8b99edac44de0806b2dee0ef596e4366",
    "date": "2026-11-15",
    "subject": "Merge pull request #1266 from darknight11ish/fix/ctx-window-truth-2026-11-15"
@@ -6600,18 +6611,13 @@
    "sha": "11622bb67d5596f082db2b7efb3fdbee6f4254a0",
    "date": "2026-11-15",
    "subject": "chore(records): regenerate the self-code map for the files this change touched"
-  },
-  {
-   "sha": "e7d1b65be94bb6b4131b331a216a0c249f5644c0",
-   "date": "2026-11-15",
-   "subject": "docs(defects): record DEF-073, DEF-074 and DEF-075 from the live GitHub read run"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1450
+   "files": 1452
   },
   {
    "path": "jarvis-desktop/",
@@ -6636,7 +6642,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 284
+   "files": 286
   },
   {
    "path": "tools/",
@@ -6651,7 +6657,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 201
+   "files": 203
   },
   {
    "path": "plugins/",
@@ -6730,8 +6736,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5853,
-  "covered": 5370,
+  "tracked_files": 5859,
+  "covered": 5376,
   "excluded": 483,
   "subsystems": 27
  },
