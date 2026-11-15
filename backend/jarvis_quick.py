@@ -14060,7 +14060,21 @@ _GITHUB_TOOLS_QUESTION = re.compile(
     # inventory uses; still requires GITHUB, so "what features do you have"
     # (the catalogue's own groups answer) is never taken by this.
     r"|what\s+(?:tools|features|abilities)\s+(?:do\s+you|have\s+you)\s+"
-    r"(?:have|got)\s+(?:for|on|about|to\s+use\s+(?:for|on))\s+github\b.*")
+    r"(?:have|got)\s+(?:for|on|about|to\s+use\s+(?:for|on))\s+github\b.*"
+    # THE STATE QUESTIONS (2026-11-15, the owner's "what is enabled"). Measured
+    # live on the installed build: "what github tools are switched on" reached
+    # the MODEL, which answered "I don't have access to a list of which GitHub
+    # tools are currently switched on for you" - a denial of a fact this
+    # backend holds. These shapes are READ-ONLY and their answer is the live
+    # group state (see `_github_tools_group_state_words`), plus the exact
+    # sentence that changes it. They run before every settings lane, so no
+    # switch grammar can read "what github tools are on" as a change.
+    r"|what\s+github\s+tools\s+(?:are|r)\s+"
+    r"(?:enabled|switched\s+on|turned\s+on|on|there|available)\b.*"
+    r"|which\s+github\s+tools\s+(?:are|r)\s+"
+    r"(?:enabled|switched\s+on|turned\s+on|on|there|available)\b.*"
+    r"|\bare\s+(?:the\s+|my\s+|your\s+)?github\s+tools\s+"
+    r"(?:on|enabled|switched\s+on|turned\s+on|available)\b.*")
 
 _GITHUB_OWN_CI = re.compile(
     r"what(?:'s|\s+is|\s+are)\s+(?:your|jarvis'?s?)\s+ci"
@@ -22690,6 +22704,54 @@ def _run_github_connect_receipt(f: dict) -> Result:
                   "github_connect_receipt")
 
 
+#: Exactly how the master GitHub group switch is changed - the sentence the
+#: owner asked to be told when he asks what is enabled (2026-11-15). ON is ONE
+#: card plus Windows Hello; OFF is instant and cardless. Fixed words, not a
+#: model's: `jarvis_asks_first` owns both the card and the instant write.
+GITHUB_TOOLS_HOW = (
+    'Say "turn on the GitHub tools" and one card appears; approving it asks Windows '
+    'Hello, and all twenty are offered to the AI model at once. Say "turn off the '
+    'GitHub tools" to stop at once, with no card.')
+
+
+def _github_tools_group_state_words() -> str:
+    """The master GitHub group switch's LIVE state, in one sentence.
+
+    Read at answer time from `jarvis_asks_first.tools_status(here=True)`
+    `["github_group"]` - the same object the Settings row draws - so this can
+    never be a typed number. The owner's 2026-11-15 ask was "what is enabled",
+    and the answer has to say it: 0 of the twenty, some of them, or all of them,
+    plus whether a card is waiting right now.
+
+    A module too old to have the group says so instead of guessing, exactly like
+    every other GitHub answer here."""
+    try:
+        import jarvis_asks_first as AF
+        group = dict(AF.tools_status(here=True).get("github_group") or {})
+    except Exception:                       # noqa: BLE001 - unreadable is said
+        return ("I could not read which GitHub tools are switched on right now, so I "
+                "will not guess.")
+    on = int(group.get("on_count") or 0)
+    total = int(group.get("total") or 0)
+    if total <= 0:
+        try:
+            import jarvis_asks_first as AF
+            total = len(tuple(getattr(AF, "GITHUB_TOOLS", ()) or ()))
+        except Exception:                   # noqa: BLE001 - older PC
+            total = 0
+    total = total or 20
+    if on >= total:
+        said = f"All {total} are switched on right now."
+    elif on <= 0:
+        said = f"Right now 0 of the {total} are switched on."
+    else:
+        said = f"Right now {on} of the {total} are switched on."
+    if group.get("waiting"):
+        said += (" One card offering all twenty to the AI model is waiting for your "
+                 "approval right now, and nothing has been switched on yet.")
+    return said
+
+
 def _run_github_self(f: dict) -> Result:
     """The GitHub questions the model used to invent answers to (2026-11-07).
 
@@ -22728,7 +22790,14 @@ def _run_github_self(f: dict) -> Result:
             "and never a force-push. " + never + " " + state,
             "github_self")
     if shape == "tools":
-        return Result(_github_capability_inventory() + " " + state, "github_self")
+        # THE INVENTORY, THEN THE LIVE STATE, THEN HOW TO CHANGE IT (2026-11-15).
+        # The owner asked to be able to talk about what GitHub tools Jarvis has,
+        # what is enabled, and how to activate them. The inventory's own words
+        # are untouched; the two sentences after them are read at answer time
+        # (the group's on_count and waiting flag) and are the switch's own rules.
+        return Result(_github_capability_inventory() + " " + state + " "
+                      + _github_tools_group_state_words() + " " + GITHUB_TOOLS_HOW,
+                      "github_self")
     if shape == "create_repo":
         return Result((_github_create_repo_words() + " " + state).strip(),
                       "github_self")
