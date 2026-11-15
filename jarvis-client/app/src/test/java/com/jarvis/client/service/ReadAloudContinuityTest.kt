@@ -48,17 +48,15 @@ class ReadAloudContinuityTest {
     @Test
     fun `a lock landing mid-read does not stop it`() {
         val text = source(runtime)
-        // Both read loops begin with this line; neither loop may ask the lock
-        // question again inside itself.
-        val loops = text.split("for (sentence in sentences) {").drop(1)
-        assertTrue("both read loops must still exist", loops.size == 2)
-        loops.forEachIndexed { index, body ->
-            val head = body.take(900)
-            assertTrue(
-                "read loop $index must not stop for a lock mid-read",
-                !head.contains("readAloudLockedNow("),
-            )
-        }
+        // One helper speaks for both read-aloud paths now; it must not ask the
+        // lock question anywhere inside itself.
+        val at = text.indexOf("private suspend fun speakAloud")
+        assertTrue("the one speak helper must exist", at >= 0)
+        val body = text.substring(at, minOf(text.length, at + 4000))
+        assertTrue(
+            "the read must not stop for a lock landing mid-read",
+            !body.contains("readAloudLockedNow("),
+        )
         assertTrue(
             "the old mid-read comment must be gone",
             !text.contains("The lock is asked again before every sentence"),
@@ -76,7 +74,15 @@ class ReadAloudContinuityTest {
         assertTrue(text.contains("ReadAloudService.start(appContext)"))
         assertTrue(text.contains("ReadAloudService.stop(appContext)"))
         val stops = Regex("ReadAloudService\\.stop\\(appContext\\)").findAll(text).count()
-        assertTrue("both reads and the Stop button must stop it", stops >= 3)
+        assertTrue("the read's end and the Stop button must both stop it", stops >= 2)
+        assertTrue(
+            "the next piece must be asked for while the current one is spoken",
+            text.contains("scope.async { api.say("),
+        )
+        assertTrue(
+            "one failed piece must not end the whole answer",
+            text.contains("failures >= 3"),
+        )
     }
 
     @Test

@@ -5316,7 +5316,20 @@ what is missing is only the Settings screen agreeing about who turned it off.
   nothing - no route is added in either direction. **What does NOT change:** the
   start-time refusals (a locked phone, App lock, a stale link, a busy speaker)
   and every "kept on screen" rule - this is only about a read the owner already
-  started carrying on. The service is NOT-TESTABLE off a phone; the field test is
+  started carrying on. **A long answer is read to its end, in short pieces**
+  (the same report: a long note "will just stop", with "huge gaps between each
+  paragraph"). Three causes were found and fixed in `voice/ReadAloud.kt`: a
+  24-sentence cap ended the read part-way; a paragraph with no full stop was ONE
+  `/api/voice/say` request, so the phone waited for the whole paragraph to be
+  synthesised before its first word (the gap); and markdown/HTML marks (`**`,
+  `<u>`, `---`, a line of `???`) were read out as themselves. Pieces are now at
+  most `READ_ALOUD_PIECE_CHARS` (220) characters cut at a word boundary, the
+  next piece is asked for while the current one is spoken, the marks are removed
+  by `ReadAloud.spoken`, and the only limits are `READ_ALOUD_MAX_PIECES` (600)
+  and `READ_ALOUD_MAX_CHARS` (60,000). A single failed piece is skipped; three
+  in a row still end the read with the ordinary refusal rather than quietly
+  skipping half the answer.
+  The service is NOT-TESTABLE off a phone; the field test is
   to start a read, press HOME, lock the screen, hear it finish, and stop it from
   the shade.
 

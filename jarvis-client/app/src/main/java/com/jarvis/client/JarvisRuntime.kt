@@ -9792,28 +9792,74 @@ object JarvisRuntime {
         // answer that a locked phone keeps going too). The service is what stops
         // Android freezing the process mid-sentence; the read itself is still
         // this loop's.
+        return speakAloud(sentences)
+    }
+
+    /**
+     * Say every piece, in order: "" when it finished or was stopped, or the one
+     * refusal word when it could not.
+     *
+     * ONE PLACE FOR BOTH PATHS (2026-11-15). The last-answer read and the
+     * per-answer read had the same loop twice; the owner's report - a long note
+     * that "will just stop", with "huge gaps between each paragraph" - is fixed
+     * here once, for both.
+     *
+     * PREFETCH. Each piece is one `/api/voice/say` round trip, so the next piece
+     * is asked for while the current one is being spoken. That is what turns the
+     * gap between paragraphs into a gap between sentences: the PC synthesises
+     * ahead instead of the phone waiting.
+     *
+     * ONE FAILED PIECE IS NOT A FAILED ANSWER. A dropped request skips that
+     * piece and the read carries on; three in a row means the PC or the link is
+     * gone, and the read stops with the ordinary refusal rather than quietly
+     * skipping half the answer. NoEngine still stops at once: there is nothing to
+     * fall back to that would not send the words off this phone.
+     */
+    private suspend fun speakAloud(pieces: List<String>): String {
+        _readingAloud.value = true
+        // Keep it going once this screen is gone (2026-11-15, the owner: "it
+        // should continue the read outloud" when he leaves the app, and his
+        // answer that a locked phone keeps going too). The service is what stops
+        // Android freezing the process mid-sentence; the read itself is this
+        // loop's.
         com.jarvis.client.service.ReadAloudService.start(appContext)
+        var pending: kotlinx.coroutines.Deferred<com.jarvis.client.net.ApiResult<com.jarvis.client.net.SaidAloud>>? = null
         try {
             // `arm()` first: Speaker's `cancelled` is sticky, so a read after
             // any Stop would otherwise do nothing at all.
             voice.speaker.arm()
-            for (sentence in sentences) {
+            var failures = 0
+            for ((index, piece) in pieces.withIndex()) {
                 if (!_readingAloud.value) return ""
-                when (val said = api.say(sentence)) {
-                    is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
-                        is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
-                        // No engine on the PC: never fall back to the phone's
-                        // own network voice for a typed answer - the words stay
-                        // on screen, said plainly.
-                        is com.jarvis.client.net.SaidAloud.NoEngine ->
-                            return com.jarvis.client.voice.ReadAloud.NO_ENGINE
-                    }
-                    is com.jarvis.client.net.ApiResult.Failed ->
-                        return com.jarvis.client.voice.ReadAloud.CANNOT
+                val asked = pending ?: scope.async { api.say(piece) }
+                pending = if (index + 1 < pieces.size) {
+                    scope.async { api.say(pieces[index + 1]) }
+                } else {
+                    null
                 }
+                when (val said = asked.await()) {
+                    is com.jarvis.client.net.ApiResult.Ok -> {
+                        failures = 0
+                        when (val clip = said.value) {
+                            is com.jarvis.client.net.SaidAloud.Audio ->
+                                voice.speaker.play(clip.wav)
+                            // No engine on the PC: never fall back to the phone's
+                            // own network voice for a typed answer - the words stay
+                            // on screen, said plainly.
+                            is com.jarvis.client.net.SaidAloud.NoEngine ->
+                                return com.jarvis.client.voice.ReadAloud.NO_ENGINE
+                        }
+                    }
+                    is com.jarvis.client.net.ApiResult.Failed -> {
+                        failures += 1
+                        if (failures >= 3) return com.jarvis.client.voice.ReadAloud.CANNOT
+                    }
+                }
+                if (!_readingAloud.value) return ""
             }
             return ""
         } finally {
+            pending?.cancel()
             _readingAloud.value = false
             com.jarvis.client.service.ReadAloudService.stop(appContext)
         }
@@ -9891,26 +9937,7 @@ object JarvisRuntime {
         _readingAloud.value = true
         // The same continuity as the last-answer read: leaving the app, PiP and
         // a locked phone no longer end a read the owner started (2026-11-15).
-        com.jarvis.client.service.ReadAloudService.start(appContext)
-        try {
-            voice.speaker.arm()
-            for (sentence in sentences) {
-                if (!_readingAloud.value) return ""
-                when (val said = api.say(sentence)) {
-                    is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
-                        is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
-                        is com.jarvis.client.net.SaidAloud.NoEngine ->
-                            return com.jarvis.client.voice.ReadAloud.NO_ENGINE
-                    }
-                    is com.jarvis.client.net.ApiResult.Failed ->
-                        return com.jarvis.client.voice.ReadAloud.CANNOT
-                }
-            }
-            return ""
-        } finally {
-            _readingAloud.value = false
-            com.jarvis.client.service.ReadAloudService.stop(appContext)
-        }
+        return speakAloud(sentences)
     }
 
     /**
