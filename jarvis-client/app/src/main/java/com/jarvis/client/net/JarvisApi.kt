@@ -4769,9 +4769,9 @@ class JarvisApi(
          * `X-Jarvis-Device` (2026-11-15, the owner's "be more phone specific in
          * the answers"): this phone's own facts as `key=value` pairs, built once
          * by [DeviceFacts]. [SURFACE_HEADER] says *a phone* is asking; this says
-         * *which* phone, so the PC can name it and size the answer to it. Not a
-         * secret and not authentication - the token is still the only credential
-         * - and absent entirely until [DeviceFacts.initialise] has run.
+         * *which* phone, so the PC can name it and size the answer to it. It is
+         * a description of a handset, never a credential, and absent entirely
+         * until [DeviceFacts.initialise] has run.
          */
         const val DEVICE_HEADER = "X-Jarvis-Device"
 
