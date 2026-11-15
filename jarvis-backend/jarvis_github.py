@@ -5605,7 +5605,7 @@ def _issues_words(doc, state: str = "") -> str:
 #: the reader is pointed at the door that shows the evidence.
 FIX_EVIDENCE_WORDS = (
     "Jarvis can read the end of a failing check's log and GitHub's annotations "
-    "while it prepares a fix - ask for a fix with github_fix_and_push and that "
+    "while it prepares a fix - ask it to fix and push, and that "
     "evidence is shown.")
 
 

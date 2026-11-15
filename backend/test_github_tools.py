@@ -812,7 +812,7 @@ def t_the_ci_answer_tells_the_truth_about_logs():
           "GitHub's annotations",
           "end of a failing check's log" in text and "annotations" in text, text)
     check("... and points at the fix flow that shows them",
-          "github_fix_and_push" in text, text)
+          "fix and push" in text, text)
 
 
 # --------------------------------------------------------------------------
@@ -3543,7 +3543,7 @@ def t_ci_status_names_the_failing_checks_and_one_log_excerpt():
     check("a jobs read that fails is said in plain words, not guessed at",
           "could not name the failing checks" in text, text[:400])
     check("... and it points at the fix flow that can show the evidence",
-          "github_fix_and_push" in text, text[-300:])
+          "fix and push" in text, text[-300:])
 
 
 def t_the_six_github_reads_are_card_free_and_every_write_asks():
