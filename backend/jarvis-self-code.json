@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
- "built_at": "2026-11-14T21:43:22-08:00",
+ "ref": "f6fa8e95417ed70309e51217606103f4192834c5",
+ "built_at": "2026-11-15T01:07:06-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3944,6 +3944,7 @@
     "backend/test_github_parity.py",
     "backend/test_github_record.py",
     "backend/test_github_review.py",
+    "backend/test_github_robustness.py",
     "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
@@ -4386,7 +4387,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 694,
+   "file_count": 695,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4711,6 +4712,7 @@
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
+    "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4906,6 +4908,7 @@
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
     "decisions.d/2026-11-14-send-to-phone-two-gigabytes.md",
     "decisions.d/2026-11-14-widget-look.md",
+    "decisions.d/2026-11-15-github-answers-are-refusals.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5409,7 +5412,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 982,
+   "file_count": 984,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6496,6 +6499,36 @@
  ],
  "recent_commits": [
   {
+   "sha": "f6fa8e95417ed70309e51217606103f4192834c5",
+   "date": "2026-11-15",
+   "subject": "fix(github): the PR scan names the checks that are not green"
+  },
+  {
+   "sha": "f187503ef40be4c7cb3edfd340af21b8d80ac0c8",
+   "date": "2026-11-15",
+   "subject": "test(github): name the fixture for what it is"
+  },
+  {
+   "sha": "fe643e489565143f09ef16b397f053739c9cecde",
+   "date": "2026-11-15",
+   "subject": "chore(records): the suite runs 499 checks, not 498"
+  },
+  {
+   "sha": "2c2b15533b675ffd743e39275f06a26f9068698f",
+   "date": "2026-11-15",
+   "subject": "fix(github): an adversarial suite, and every defect it proved"
+  },
+  {
+   "sha": "04d4748cfea08924a8facf798b01ae490769f989",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
+  },
+  {
+   "sha": "e496e93c373679d108b7924d370f031517298c6a",
+   "date": "2026-11-14",
+   "subject": "chore(desktop): regenerate the feature-directory fixture after the contract changed"
+  },
+  {
    "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
    "date": "2026-11-14",
    "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
@@ -6564,43 +6597,13 @@
    "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
    "date": "2026-11-14",
    "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
-  },
-  {
-   "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
-   "date": "2026-11-14",
-   "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
-  },
-  {
-   "sha": "c26fa729e855121c4afbd371bfdfcf8a99f6036a",
-   "date": "2026-11-14",
-   "subject": "Record the Atlas copy pass and the builder entry point, and re-hash the map"
-  },
-  {
-   "sha": "8e8872bf31cd72044cd1c98f37b2800093bc6698",
-   "date": "2026-11-14",
-   "subject": "The Brain window's copy says Atlas, and the builder's six 'no way in yet' sentences become true"
-  },
-  {
-   "sha": "fee00d72f810a70eb13685433eabb72b4531e658",
-   "date": "2026-11-14",
-   "subject": "desktop: the Brain window's own explanatory copy says Atlas"
-  },
-  {
-   "sha": "e03b61684492c31338635626c0244ccdb157ff42",
-   "date": "2026-11-14",
-   "subject": "Regenerate the records after folding the wave-20 workstreams"
-  },
-  {
-   "sha": "ed884fbc423f1072fc953f3998e27980c4596b6f",
-   "date": "2026-11-14",
-   "subject": "Merge feat/def068-builder-entry-2026-11-14 into integration/wave20-2026-11-14 (DEF-068 builder entry point)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1450
+   "files": 1451
   },
   {
    "path": "jarvis-desktop/",
@@ -6625,7 +6628,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 279
+   "files": 280
   },
   {
    "path": "tools/",
@@ -6640,7 +6643,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 195
+   "files": 196
   },
   {
    "path": "plugins/",
@@ -6719,8 +6722,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5842,
-  "covered": 5359,
+  "tracked_files": 5845,
+  "covered": 5362,
   "excluded": 483,
   "subsystems": 27
  },
