@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
- "built_at": "2026-11-14T20:38:00-08:00",
+ "ref": "05207213363f553ce526f05a1512ba45d774f822",
+ "built_at": "2026-11-14T22:47:45-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4705,6 +4705,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
@@ -4901,6 +4902,7 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
@@ -5409,7 +5411,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 982,
+   "file_count": 984,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6496,6 +6498,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
+  },
+  {
    "sha": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
    "date": "2026-11-14",
    "subject": "fix(gate): the file-to-phone denial row, and an audit that reads the published base"
@@ -6589,11 +6596,6 @@
    "sha": "7a7eedf096731e884fa916b262453d0e62c09b66",
    "date": "2026-11-14",
    "subject": "Merge fix/atlas-tray-copy-2026-11-14 into integration/wave20-2026-11-14 (tray offline sentence says Atlas)"
-  },
-  {
-   "sha": "9a2bec78de5b8f77c735662100c711c432d3c03e",
-   "date": "2026-11-14",
-   "subject": "chore(records): regenerate the self-code map after main gained the bar-label rename"
   }
  ],
  "top_level": [
@@ -6625,7 +6627,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 279
+   "files": 280
   },
   {
    "path": "tools/",
@@ -6640,7 +6642,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 195
+   "files": 196
   },
   {
    "path": "plugins/",
@@ -6719,8 +6721,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5842,
-  "covered": 5359,
+  "tracked_files": 5844,
+  "covered": 5361,
   "excluded": 483,
   "subsystems": 27
  },

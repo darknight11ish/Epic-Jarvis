@@ -636,14 +636,19 @@ def t_the_card_and_every_sentence_say_one_completed_transfer():
 
 
 def t_the_grace_and_the_ttl_are_one_constant_each():
-    source = (HERE / "jarvis_send_file.py").read_text(encoding="utf-8")
-    check("the grace is written once", source.count("GRACE_SECONDS = ") == 1,
-          source.count("GRACE_SECONDS = "))
-    check("the window is written once", source.count("TTL_SECONDS = ") == 1,
-          source.count("TTL_SECONDS = "))
-    check("the cap and the piece are written once each",
-          source.count("CAP_BYTES = ") == 1 and source.count("CHUNK_BYTES = ") == 1,
-          (source.count("CAP_BYTES = "), source.count("CHUNK_BYTES = ")))
+    # Counted from the syntax tree, not from the text: "written once" is a
+    # property of the module's own assignments, and a source-text pin is what
+    # tools/check_no_source_pins.py exists to keep OUT of a new suite.
+    import ast
+    tree = ast.parse((HERE / "jarvis_send_file.py").read_text(encoding="utf-8"))
+    assigned: dict = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    assigned[target.id] = assigned.get(target.id, 0) + 1
+    for name in ("GRACE_SECONDS", "TTL_SECONDS", "CAP_BYTES", "CHUNK_BYTES"):
+        check(f"{name} is written once", assigned.get(name) == 1, assigned.get(name))
     check("the grace words are derived from the constant",
           SF.grace_words() == "a minute"
           and SF.transfer_words().count("a minute") == 1,
@@ -951,11 +956,37 @@ def t_the_records_stay_equal():
           json.loads((repo / "plugins" / "ready" / "send-file" /
                       "plugin.json").read_text(encoding="utf-8")).get("module")
           == "jarvis_send_file")
-    parity = (repo / "tools" / "check_parity.py").read_text(encoding="utf-8")
-    check("parity classifies the button's route as desktop-only",
-          '"/api/files/prepare": ("deliberate"' in parity
-          and '"/api/files/send": ("phone-only"' in parity
-          and '"/api/files/download": ("phone-only"' in parity, "check_parity.py")
+    # Read the classifier's own dictionaries from the syntax tree, never as
+    # source text: the classification is what matters, and a text pin is what
+    # tools/check_no_source_pins.py keeps out of a new suite.
+    import ast
+    parity_tree = ast.parse((repo / "tools" / "check_parity.py").read_text(encoding="utf-8"))
+    dicts = {}
+    for node in parity_tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    dicts[target.id] = node.value
+
+    def _keys(node, kind=None):
+        if not isinstance(node, ast.Dict):
+            return set()
+        got = set()
+        for key, value in zip(node.keys, node.values):
+            if not (isinstance(key, ast.Constant) and isinstance(key.value, str)):
+                continue
+            if kind is not None:
+                first = value.elts[0] if isinstance(value, ast.Tuple) and value.elts else None
+                if not (isinstance(first, ast.Constant) and first.value == kind):
+                    continue
+            got.add(key.value)
+        return got
+
+    phone_only = _keys(dicts.get("PHONE_ONLY"))
+    deliberate = _keys(dicts.get("CLASSIFICATION"), "deliberate")
+    check("parity classifies the three sending routes",
+          {"/api/files/send", "/api/files/download", "/api/files/ack"} <= phone_only
+          and "/api/files/prepare" in deliberate, (sorted(phone_only), sorted(deliberate)))
 
 
 # ---------------------------------------------------------------------------
