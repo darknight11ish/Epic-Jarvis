@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 10cb5fad578340cdcd1e29ad88e9adab7b32b0dab60ff03fcc3d7a8a5e4165c2); the apps' Features pages read their own
+`features/features.json` (sha256 beb297038a7d9b1933d5165d107436cbb1899587536bf2f3eb22b7faf24d1d99); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "10cb5fad578340cdcd1e29ad88e9adab7b32b0dab60ff03fcc3d7a8a5e4165c2"
+SOURCE_SHA256 = "220dae158f7708c0f0703166b46a20b81ca337af59e911a245d8e6646ef2907f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -889,8 +889,8 @@ FEATURES = (
         "title": "File from your PC",
         "what": "Ask Jarvis to send ONE file from the folders it may look in to your phone, then view it or save it to Downloads.",
         "where": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
-        "asks": "One approval card per file, naming the exact filename, folder and size. The phone can fetch it once, within ten minutes.",
-        "limit": "One file per card, at most 10 MiB, ten minutes and one download, and only inside Folders Jarvis may look in. Nothing about the file is kept on the phone.",
+        "asks": "One approval card per file, naming the exact filename, folder and size. Nothing is fetchable until you approve it; the phone then fetches it in 1 MiB pieces and confirms the whole file, and one completed transfer uses the link up.",
+        "limit": "One file per card, up to 2 GB. From chat it is limited to Folders Jarvis may look in; the Settings button sends a file you pick yourself. View opens files up to 200 MB; bigger ones use Save, which needs about twice the file's size free on the phone.",
         "surface": "both",
         "aliases": ["send a file to my phone", "send file to phone", "file to phone", "send a file to the phone", "sends one file from my pc to my phone"],
         "covers": ["file-from-pc", "files", "settings.files"],

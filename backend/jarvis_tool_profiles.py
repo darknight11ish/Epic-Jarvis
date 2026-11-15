@@ -1712,10 +1712,11 @@ PROFILES: dict = {
         ],
         "touches": "files, phone",
         "limits": [
-            "One file, at most 10 MiB, from a listed folder only",
+            "One file per card, up to 2 GB, from a listed folder only",
             "One approval card shows the exact filename, folder and size, and "
             "nothing is fetchable until the owner approves it",
-            "The id it hands the phone is random, single-use and lasts ten minutes",
+            "The phone fetches it in 1 MiB pieces while the link stays alive, "
+            "and one completed transfer uses it up",
             "It never takes a path from the phone's side of the route",
         ],
         "combines": {

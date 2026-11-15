@@ -181,7 +181,8 @@ TOOL_NAMES = {
     "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
     # Send one file to the phone (2026-10-31, the owner's ask; Gemini Q7): the
     # reach page lists every tool the model can offer, so this one has plain
-    # words too. It SENDS (outbound) - one file, one card, ten minutes.
+    # words too. It SENDS (outbound) - one file, one card, up to 2 GB, fetched
+    # in pieces that keep the link alive; one completed transfer uses it up.
     "send_file_to_phone": "Sending one file from your PC to your phone (one card each)",
     # Text one contact (2026-11-04, hands-free mode). It SENDS a real message
     # in the owner's name from the owner's own number - one card each, and a

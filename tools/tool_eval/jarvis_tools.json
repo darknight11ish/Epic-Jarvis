@@ -1366,7 +1366,7 @@
   "type": "function",
   "function": {
    "name": "send_file_to_phone",
-   "description": "Send ONE file from the owner's own listed folders to their phone app. Use when they ask to search for a file and send, view or download it on the phone. Give query (a few words of the file's name) or path (the full path, if known). ONE card, ONE file, at most 10 MiB; nothing is fetchable until the owner approves.",
+   "description": "Send ONE file from the owner's own listed folders to their phone app. Use when they ask to search for a file and send, view or download it on the phone. Give query (a few words of the file's name) or path (the full path, if known). ONE card, ONE file, at most 2 GB; the phone fetches it in pieces and the link is used up when the whole file has arrived. Nothing is fetchable until the owner approves.",
    "parameters": {
     "type": "object",
     "properties": {

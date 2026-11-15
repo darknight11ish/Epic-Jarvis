@@ -1836,22 +1836,43 @@ class JarvisApi(
     // ------------------------------------------- send a file to the phone ----
     // The owner's ask of 2026-10-31 and Gemini's Q7 slice (docs/JARVIS-API.md
     // section 172; the shapes and the PC's sentences live in [SendFile]). Both
-    // are READS: this phone never approves a file and never names a path - the
-    // card was raised and answered on the PC, and the routes take an id.
+    // are READS of the PC: this phone never approves a file and never names a
+    // path - the card was raised and answered on the PC, and the routes take
+    // an id. Since 2026-11-14 a download is ONE SLICE PER REQUEST (`offset`,
+    // `length`), so the 2 GiB cap is a loop of 1 MiB answers rather than one
+    // impossible answer.
 
     /**
-     * ONE GET whose status AND body come back whole, so a route that answers a
+     * ONE call whose status AND body come back whole, so a route that answers a
      * refusal with its own sentence keeps it: a 404 for a file whose ten minutes
-     * passed, a 409 for a file that changed, a 413 over the cap - each is the
-     * PC's words, not a bare code. 401/403 is the one failure named precisely.
-     * The same reading as [picturesCall], for the two file routes.
+     * passed, a 409 for a file that changed, a 416 for an offset past the end -
+     * each is the PC's words, not a bare code. 401/403 is the one failure named
+     * precisely. The same reading as [picturesCall], for the file routes.
+     *
+     * [call] is the client: the list and the receipt use [shortCall], while one
+     * download slice (1 MiB over Tailscale or Meshnet) uses [client]'s looser
+     * read timeout - [shortCall]'s 20 s whole-call bound would cut a slow but
+     * healthy slice. [json] turns the same call into a POST with that body
+     * (the receipt); null is a GET.
      */
-    private suspend fun filesCall(path: String): ApiResult<Pair<Int, JsonObject?>> =
+    private suspend fun filesCall(
+        path: String,
+        call: OkHttpClient = shortCall,
+        json: String? = null,
+    ): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
-            val req = Request.Builder().url(target).get().authed().build()
+            val req = Request.Builder().url(target)
+                .apply {
+                    if (json == null) {
+                        get()
+                    } else {
+                        post(json.toRequestBody("application/json".toMediaType()))
+                    }
+                }
+                .authed().build()
             runCatching {
-                shortCall.newCall(req).execute().use { resp ->
+                call.newCall(req).execute().use { resp ->
                     val text = resp.body?.string().orEmpty()
                     val obj = runCatching {
                         JarvisJson.parseToJsonElement(text) as? JsonObject
@@ -1875,15 +1896,41 @@ class JarvisApi(
         }
 
     /**
-     * `GET /api/files/download?id=` - ONE approved file's bytes. The id is
-     * checked against the PC's own shape first ([SendFile.downloadPath]), so
-     * this can never ask for a path. The bytes are decoded here and handed to
-     * the plate; this layer writes nothing to disk.
+     * `GET /api/files/download?id=&offset=&length=` - ONE slice of ONE approved
+     * file. The id, the offset and the length are checked against the PC's own
+     * shape first ([SendFile.downloadPath]), so this can never ask for a path
+     * and can never ask for more than one slice. The slice is decoded and its
+     * own sha256 checked here ([SendFile.readChunk]); the bytes are handed up,
+     * this layer writes nothing to disk.
      */
-    suspend fun downloadFile(id: String): ApiResult<SendFile.Fetched> {
-        val path = SendFile.downloadPath(id) ?: return ApiResult.Failed(ApiError.NotFound)
-        return when (val r = filesCall(path)) {
-            is ApiResult.Ok -> ApiResult.Ok(SendFile.readDownload(r.value.first, r.value.second))
+    suspend fun downloadChunk(id: String, offset: Long, length: Int): ApiResult<SendFile.Chunk> {
+        val path = SendFile.downloadPath(id, offset, length)
+            ?: return ApiResult.Failed(ApiError.NotFound)
+        return when (val r = filesCall(path, client)) {
+            is ApiResult.Ok -> ApiResult.Ok(SendFile.readChunk(r.value.first, r.value.second))
+            is ApiResult.Failed -> r
+        }
+    }
+
+    /**
+     * `POST /api/files/ack {"id": …}` - the phone's receipt for ONE file whose
+     * whole-file SHA-256 has already matched (Gemini's Q1, 2026-11-14). It
+     * consumes the PC's id at once instead of leaving it to the PC's 60-second
+     * grace.
+     *
+     * The id is checked against the PC's own shape first ([SendFile.ackBody]),
+     * so a filename or a path is never put on the wire, and the receipt rides
+     * the same [filesCall] as the list: token + origin, 401/403 named as a bad
+     * pairing token, and the PC's status and body kept. A 404 (a PC older than
+     * the route), a 409 (sent before the last piece) and a 5xx all read as
+     * [SendFile.Ack.Ignored] rather than an error: the caller is not told, the
+     * grace expires the id anyway, and the verified file is already on the
+     * phone.
+     */
+    suspend fun ackFile(id: String): ApiResult<SendFile.Ack> {
+        val body = SendFile.ackBody(id) ?: return ApiResult.Failed(ApiError.NotFound)
+        return when (val r = filesCall(SendFile.ACK_PATH, json = body)) {
+            is ApiResult.Ok -> ApiResult.Ok(SendFile.readAck(r.value.first, r.value.second))
             is ApiResult.Failed -> r
         }
     }
