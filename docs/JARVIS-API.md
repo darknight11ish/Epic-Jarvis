@@ -32284,6 +32284,13 @@ nothing. Section number: main ends at 169, the notes-editor PR (#1017) takes
 170 and the protection PR (#1019) takes 171, so 172 was chosen to sit after
 both (the next REAL free number once their two sections land).
 
+**Superseded in part, 2026-11-14.** The cap, the life of the link and the shape
+of the download changed - a file may now be up to **2 GiB**, it arrives in 1 MiB
+slices, and a desktop **"Send to my phone…"** button can start one. See **§225**
+for what replaced them. The ONE `send_file_to_phone` card, the allow-list search,
+the chat fast path and the "no path on a phone route" rule below are unchanged
+and remain the record of those.
+
 ### 172.1 The two phone-facing routes (no path is ever a parameter)
 
     GET /api/files/send                approved files waiting for the phone
@@ -39538,3 +39545,157 @@ never a pass.
 **The phone's own half.** `AttachFile.SEND_FILE_MIME_TYPES` is `arrayOf("*/*")` for this row only; the chat "Attach a file" row keeps `MIME_TYPES`/`mimeTypes`, and a picture picked there still goes to `ChatPicture`/`goesToPicture`. `Upload.refusal` now refuses only on size (and the Notion `.zip` rule). A refusal from any of the three calls is shown verbatim through `Outcome.Refused`/`outcomeText` - the server's sentence, not a generic failure. `Upload.send` and the three wire bodies are unchanged.
 
 **Tests.** `backend/test_upload.py` - **212 passed, 0 skipped, 0 failed** on this PC, including the Notion temp-folder dry run and import: the any-type landings (`.zip`, `.exe`, `.dat`, `.mp4`, `.tar.gz`, no extension) byte-identical, a 26 MB-declared zip bomb named `.zip` stored without being unpacked, a real 4,000-byte file accepted through a test-only 4 KiB cap, the exact over-limit sentence and the card's patched cap line, the known-kind byte refusals still firing, the 2,048-piece arithmetic, a landed `.dat` refused by `jarvis_documents.read`, `jarvis_attached_file.read` and the index while `find` still reaches it by name, and the one-constant source pin. `jarvis-client`'s `UploadTest` and `AttachFileTest` hold the phone half: `*/*`, every name accepted, the cap parsed from the Python source, the server's sentence shown verbatim, measure progress and the new words. `tools/check_feature_controls.py` is clean (182/182) and `tools/check_feature_list.py` is 13/0.
+
+## 225. Up to 2 GiB from the PC to the phone, in 1 MiB slices, started by a button (added 2026-11-14)
+
+**Why.** The owner asked to *"transfer video and mp3 and mp4 and other files
+using the Jarvis Android app to the desktop and vice versa"*, then chose a
+**2 GB** ceiling and a **"Send to my phone"** button from a two-option card.
+The phone → PC direction had accepted any file up to 2 GiB since 2026-11-13
+(§224); this is the other half.
+
+**What this supersedes.** §172.1's `download` answer and parameters, §172.3's
+cap, TTL and single-use bullets, and §172.4's closing "ten minutes and works
+once". Nothing else: the ONE `send_file_to_phone` card, the allow-list search
+inside `prepare()`, the chat fast path and the unclassified-action note stand
+exactly as written there.
+
+**The four numbers, each in ONE place.** `CAP_BYTES = 2 * 1024 * 1024 * 1024`
+(2,147,483,648), `CHUNK_BYTES = 1024 * 1024` (1,048,576), `TTL_SECONDS = 600` and
+`GRACE_SECONDS = 60` in `backend/jarvis_send_file.py`. The card's own sentence,
+the over-cap refusal, the list's `cap_bytes` / `chunk_bytes` / `ttl_seconds` and
+every owner-facing phrase is built from them; a test asserts the module source
+contains none of `"10 MiB"`, `"2 GB"`, `"10,485,760"`, `"2,147,483,648"`,
+`"ten minutes"`, `"10 minutes"` or `"works once"`, and a second test raises those
+constants and checks the card, the list and the sentences follow.
+
+**The routes.**
+
+    GET  /api/files/send                         approved files waiting for the phone
+    GET  /api/files/download?id=&offset=&length=  ONE slice of ONE approved file
+    POST /api/files/prepare                      {"path": "…"} - the button's route
+    POST /api/files/ack                          {"id": "…"} - the phone's receipt
+
+`send` answers `{ok, count, files:[{id, name, folder, size_bytes, mime,
+expires_in}], cap_bytes, chunk_bytes, ttl_seconds, single_use, said}`.
+
+`download` returns one slice:
+
+| code | when |
+|---|---|
+| `200` | `{ok, id, name, size_bytes, mime, offset, length, data, sha256, chunk_sha256}` - `data` is base64 of exactly that slice, `sha256` is the whole file's lowercase hex, `chunk_sha256` is that slice's. `length` is never over `CHUNK_BYTES` and is clamped to the bytes left. |
+| `400` | no `id`; a number that is not an integer, a negative `offset`, a `length` of 0 or less; or **no `offset` and no `length` for a file bigger than `CHUNK_BYTES`** - deliberately not a truncated `200`, because an older phone would save a broken file. |
+| `404` | unknown, expired, already completed, or a file that has vanished. |
+| `409` | the file's size or mtime changed since the card. The id is NOT consumed; the cached whole-file hash is dropped and the next slice recomputes it. |
+| `416` | `offset` at or past the file's size. |
+| `503` | the file could not be read just now (a transient read failure, retryable). |
+
+**The link's life: a 60-second grace, then the phone's receipt.** Every served
+slice pushes the expiry out by `TTL_SECONDS`. The **last** slice does not consume
+the id: it stamps `final_served_at` and holds the id for `GRACE_SECONDS` (60 s),
+and serving that last slice again re-arms the same 60 s - which is what makes a
+lost `200` on Wi-Fi or Meshnet retryable instead of costing a second 2 GiB
+transfer. The id is then consumed by whichever comes first:
+
+- **the phone's receipt** - `POST /api/files/ack {"id": …}` after the phone has
+  verified the whole file's SHA-256 - which answers `200 {"ok": true, said}` and
+  consumes it at once; or
+- **the grace running out**, 60 s after the last piece was served, after which
+  the id is gone (`404` with the same plain sentence).
+
+`ack` before the whole file has arrived is `409` with a plain sentence (there is
+nothing to confirm), an unknown/expired/already-received id is `404`, and a
+second ack of an id already received is `200` with "already finished" words -
+never an error, because a phone that retries its receipt must not be told it did
+something wrong. A size or mtime change is still `409`, does not consume the id,
+and drops the cached whole-file hash.
+
+**The button, and the only path that may leave the allow-list.**
+`POST /api/files/prepare {"path": "<absolute path>"}` is the desktop's route:
+token + origin, one real file, never a directory, refused before any card for a
+missing file, an empty file, a protected path or one over `CAP_BYTES`. It
+answers `202 {ok, waiting, id, name, folder, size, mime, said}` after raising
+the **same** `send_file_to_phone` card on a worker thread (so a card answered
+before the reply reports `waiting: false`), and a denial, a timeout, a gate error
+or a tier other than `ask` releases the candidate at once and serves nothing. A
+request that says `X-Jarvis-Surface: phone` is `403`. **This is the one place a
+path outside "Folders Jarvis may look in" is accepted, because the owner picked
+it in a dialog himself**; the model tool `prepare()` keeps its allow-list search
+and has no way to name a path here.
+
+**Why slices rather than one answer.** 2 GiB cannot arrive as one base64 JSON
+body - that is a 2.7 GB string - and the phone must not hold it in memory. 2 GiB
+is 2,048 requests of about 1.4 MB (a third of the server's 4 MiB `MAX_BODY`),
+the same loop that already carries a 4 GiB Notion export. Nothing new is
+introduced for transport.
+
+**Approval unchanged.** Same action `send_file_to_phone`, tier `ask`, still in
+`HARD_LIMITS` and `MUST_ASK` (no settings line can make it a standing yes), one
+card per file, and nothing is listed or fetchable before the card's yes. The
+card names the exact file, folder, size and the new cap, says the link is good
+for **one completed transfer** - confirmed by the phone, or a minute after the
+last piece - and can be decided on the phone with its fingerprint as before.
+
+**The phone's half.** `jarvis-client`'s `SendFile.kt` holds the contract and a
+pure slice loop (`receive`). Before the first request, `JarvisRuntime` measures
+the free space on the volume holding the app cache and **refuses before fetching
+anything** unless it is at least **2.1×** the file's size, with a plain sentence
+naming the space the save needs - the safe two-step save (verifying copy, then
+`MediaStore`) needs that room, and a 2 GiB file therefore wants about 4.2 GiB
+free. It then writes each slice into an app-private `.part` file, retries the
+**same** offset up to four times one second apart (the budget is per slice, so a
+long transfer is not killed by cumulative hiccups), stops at once on a final
+client error, and checks the whole file's SHA-256 before the file is renamed into
+the app's received cache. After the hash passes it sends the **receipt**
+(`POST /api/files/ack`); a failed receipt changes nothing the owner sees, because
+the PC's 60 s grace expires the id anyway. The plate shows bytes received and a
+percentage, then **View** (`FileProvider` + `ACTION_VIEW`) only at or under
+**200 MiB** - above that it shows *"Use Save for files over 200 MiB"* - or Save,
+which streams the verified cache file into `Downloads/Jarvis` through
+`MediaStore.Downloads` and then deletes the cache copy. Any received copy still
+in the cache when the plate is left is deleted too, unless a viewer is opening it.
+
+**The desktop's half.** Settings → the "Folders Jarvis may look in" card gains
+**"Send a file to your phone…"**: a native open-file dialog, then
+`POST /api/files/prepare`, then the normal approval card. The chosen path never
+reaches the page - the desktop drops `folder` before returning anything to the
+window - and the phone finds the approved file in Settings → "File from your
+PC", as today.
+
+**Honest limits, measured rather than designed away.**
+
+- **No real 2 GiB transfer has been driven end to end.** The suites move a real
+  small file through the sliced route with `CHUNK_BYTES` patched down, and the
+  real constant is asserted separately at 2 GiB; the field test is still owed.
+- **The grace is 60 seconds, not a resume.** If the phone dies, or its last
+  request and the re-serve both fall outside the grace, the id is gone and the
+  file must be sent again. What the grace removes is the common case: one lost
+  final `200` on the last piece no longer costs a full 2 GiB re-send, because the
+  retry lands inside the window and the phone's receipt then ends the transfer.
+- **Saving needs about twice the file size free on the phone** - the verified
+  copy in app cache, then the `MediaStore` pending row - both on the same
+  `/data` volume. A 2 GiB save therefore wants about **4.2 GiB**, and the phone
+  checks that *before* the first piece and refuses in plain words rather than
+  failing halfway.
+- **View stops at 200 MiB.** Above that the plate offers Save instead, so a 2 GiB
+  video cannot sit in app cache; the cache copy is deleted after a Save and when
+  the plate is left.
+- **The screen must stay awake for the duration.** There is no background
+  download and no resume after the app is killed; starting again is a new send.
+- **Percent moves in 0.05 % steps at 2 GiB.** The line always shows the exact
+  bytes received and the total beside it.
+
+**Proof.** `backend/test_file_to_phone.py` **61 passed, 0 failed**;
+`backend/test_send_file_chat.py` **83 passed, 0 failed**; the new
+`backend/test_send_file_chunked.py` **151 passed, 0 failed** (offset arithmetic,
+the `400` for a big file with no offset, `409`, `416`, retry before completion,
+the last slice leaving the id alive inside the grace, a retry re-arming it, the
+grace running out, the phone's receipt consuming it, a repeat receipt saying
+"already finished", a receipt before the last slice, the button's route raising a
+card and a denial serving nothing, and the install surface).
+`tools/check_stale_twins.py` exit 0 (all 342); `tools/check_parity.py` exit 0 with
+`/api/files/prepare` classified `deliberate` (desktop-only) and
+`/api/files/send`, `/download` and `/ack` `phone-only`;
+`backend/test_base_matches_repo.py` 140/0 and `test_base_regeneration.py` 39/0.
+`jarvis-client`'s whole JVM suite is **3,862 tests, 0 failures, 0 skipped**,
+with `SendFileTest` at 25 tests.

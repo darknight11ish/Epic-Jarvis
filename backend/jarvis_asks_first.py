@@ -925,7 +925,8 @@ GROUPS = (
                             # jarvis_gate.check and does not refuse a looser tier
                             # itself). The plan route raises NO card at all.
                             # "Send a file to the phone" (2026-10-31, Gemini Q7):
-                            # ONE file a card, ten minutes, one download.
+                            # ONE file a card, up to 2 GB, fetched in 1 MiB
+                            # pieces; one completed transfer uses the link up.
                             # "Protected from Jarvis" (jarvis_protection.py,
                             # 2026-10-31): adding changes what Jarvis may touch
                             # and removing is loosening, so both are ONE card

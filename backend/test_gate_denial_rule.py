@@ -69,6 +69,30 @@ def skip(why):
     print(f"skip  {why}")
 
 
+def _base_denial_rows():
+    """The rows the PUBLISHED base carries, read the way Python builds the set.
+
+    The stand-in above is a frozen rehearsal of the patch stack: it cannot see
+    a row added to `jarvis-backend/jarvis_gate.py` after it was recorded, and
+    the owner's ruling of 2026-11-14 puts a NEW row at the end of that base.
+    A reader that asked only the stand-in would call such a row "missing" on a
+    gate that answers correctly - the false finding CLAUDE.md names for
+    test_gate_tool_actions and test_def068_entry, which both fold this way.
+    """
+    base = HERE.parent / "jarvis-backend" / "jarvis_gate.py"
+    text = base.read_text(encoding="utf-8")
+    rows = set()
+    start = text.find("_NO_RULE_FROM_DENIAL = frozenset({")
+    if start >= 0:
+        end = text.find("\n})", start)
+        rows |= set(re.findall(r'^\s*"([A-Za-z0-9_]+)"', text[start:end], re.M))
+    for block in re.finditer(
+            r"^_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL \| \{(.*?)^\}",
+            text, re.M | re.S):
+        rows |= set(re.findall(r'^\s*"([A-Za-z0-9_]+)"', block.group(1), re.M))
+    return rows
+
+
 def _gate():
     text, log = _stack.stand_in("jarvis_gate.py")
     if text is None:
@@ -85,6 +109,16 @@ def _lifted(text):
     if a:
         b = next(i for i in range(a[0], len(lines)) if lines[i] == "})")
         src = "\n".join(lines[a[0]:b + 1]) + "\n\n" + src
+    # Fold in the end-of-file `_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {...}`
+    # blocks as well. The owner's ruling of 2026-11-14 puts a NEW row there,
+    # because the end of the file is the one region no patch's hunk claims; a
+    # reader that saw only the literal would call a row "missing" on a gate that
+    # answers correctly - the false finding CLAUDE.md names for
+    # test_gate_tool_actions and test_def068_entry, which both fold the same way.
+    for i, line in enumerate(lines):
+        if line.startswith("_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {"):
+            end = next(j for j in range(i, len(lines)) if lines[j] == "}")
+            src += "\n" + "\n".join(lines[i:end + 1])
     ns = {"_NO_RULE_FROM_DENIAL": frozenset()}   # a gate from before the list
     exec(compile(src, "<gate-outcome, lifted>", "exec"), ns)
     return ns
@@ -318,7 +352,7 @@ def t_every_module_that_forces_ask_is_on_the_list():
     """Read from the modules, not typed here: a module that refuses to act on
     any tier but "ask" makes its action always-ask, whatever the toml says."""
     ns = _lifted(_gate())
-    listed = ns["_NO_RULE_FROM_DENIAL"]
+    listed = set(ns["_NO_RULE_FROM_DENIAL"]) | _base_denial_rows()
     found = {}
     for f in sorted(HERE.glob("jarvis_*.py")):
         src = f.read_text(encoding="utf-8")

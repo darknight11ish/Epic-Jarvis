@@ -4898,20 +4898,24 @@ half, so `tools/check_parity.py` classifies nothing new.
 **Setting a folder-level restriction by plain chat works on BOTH apps, and nothing new is one-sided** (2026-11-04, the owner's own list of phrasings: *"restrict the folder D:\Photos from Jarvis"*, *"stop Jarvis reading C:\X"*, *"don't let Jarvis touch the folder with my medical scans"*, *"unrestrict D:\Photos"*, *"let Jarvis read that folder again"*, *"what folders are restricted?"*, *"is Jarvis blocked from C:\X?"*). Both apps chat through the same `/api/chat`, which runs the same fast path and the same server-side tool loop, so all seven phrasings reach the same routes from either device with no client change: add and remove raise the list's own `protect_item` / `unprotect_item` card, and the two questions are answered from the real store with no card. What stays the desktop's alone is still only `POST /api/protection/add` (the immediate Settings add), for the reason above. This is deliberately NOT a new entry in §8: there is no new one-sided surface to explain.
 
 
-**Sending ONE file from the PC to the phone: the request and the card are shared, the
-download is the phone's, and that is one-sided on purpose** (2026-10-31, the owner's
-own ask *"am i able to ask jarvis to search for a file for me and send it to the
-jarvis android app to view and or download directly?"*; Gemini ruling Q7;
-JARVIS-API section 172; `backend/jarvis_send_file.py`). Either app reaches the feature
-the same way - by chatting, which runs on the PC's own local model - and both apps can
-decide the ONE `send_file_to_phone` card (the phone decides it with its fingerprint).
-What is deliberately phone-only is the receiving half: View (`FileProvider` +
-`ACTION_VIEW`) and Save to Downloads (`MediaStore.Downloads`) exist on the phone
-because that is where the file is wanted, while a Windows PC has no reason to fetch a
-file it already holds. The phone lane calls both routes, so
-`tools/check_parity.py` classifies `/api/files/send` and `/api/files/download` as
-**`phone-only`** with that reason written beside each row - the desktop is not
-missing a half to be "fixed" later; it was never meant to have one.
+**Sending ONE file between the apps: the card is shared, the receiving half is the
+phone's, and the desktop's own half is starting a send** (2026-10-31, the owner's own
+ask *"am i able to ask jarvis to search for a file for me and send it to the jarvis
+android app to view and or download directly?"*; Gemini ruling Q7; extended 2026-11-14
+with the **2 GiB** ceiling and the **"Send to my phone…"** button - JARVIS-API sections
+172 and 225; `backend/jarvis_send_file.py`). Both apps can start a send: the phone by
+chatting, and the desktop either by chatting or from its button, which calls the
+**desktop-only** `POST /api/files/prepare` and raises the SAME one
+`send_file_to_phone` card. Both apps can decide that card (the phone decides it with
+its fingerprint). What is deliberately phone-only is the receiving half: View
+(`FileProvider` + `ACTION_VIEW`) and Save to Downloads (`MediaStore.Downloads`) exist
+on the phone because that is where the file is wanted, while a Windows PC has no
+reason to fetch a file it already holds. `tools/check_parity.py` classifies
+`/api/files/send` and `/api/files/download` as **`phone-only`** and
+`/api/files/prepare` as **`deliberate`** (desktop-only), each with that reason
+written beside its row - the desktop is not missing a half to be "fixed" later; it
+was never meant to have the receiving side, and the phone has no file dialog to give
+the desktop's starting side a phone half.
 
 **"Say 'One moment'" has two switches by design, and only one of them is
 visible on a Settings page** (2026-11-01, the owner's ask: *"id like the ability

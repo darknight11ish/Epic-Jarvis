@@ -808,12 +808,18 @@ permissions = [
   # list (a read); adding ONE folder through the Windows folder picker - the
   # PC raises one approval card, held on a stale link in Rust; removing one
   # at once; bringing in a Notion export through the Windows file picker,
-  # held on a stale link. The pickers run in Rust: this window gets no file
-  # system of its own, only the path the owner chose.
+  # held on a stale link; and "Send a file to your phone…" (2026-11-14, the
+  # SEND-TO-PHONE-2GB-DESIGN sections 6 and 8), which opens the Windows
+  # OPEN-FILE dialog in Rust and posts that one path to /api/files/prepare -
+  # the command takes NO argument, so this window can never name a path on
+  # that route, and the PC raises the same `send_file_to_phone` card the chat
+  # route uses. The pickers run in Rust: this window gets no file system of
+  # its own, only the path the owner chose.
   "allow-get-folders",
   "allow-add-folder",
   "allow-remove-folder",
   "allow-import-notion",
+  "allow-prepare-file-for-phone",
   # "Protected from Jarvis" (the owner's request of 2026-10-31; contract
   # `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`): the list (a read);
   # a folder or file chosen through the Windows pickers - the pickers run in

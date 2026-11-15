@@ -11,6 +11,13 @@
  * unzips the owner's export into a new folder inside a listed one (the PC
  * only, no card: the owner picked the file and the folder here).
  *
+ * "Send a file to your phone…" (2026-11-14, the SEND-TO-PHONE-2GB-DESIGN
+ * sections 6 and 8) is the other direction and the one path outside the list:
+ * the owner picks ONE file in the Windows open-file dialog, the PC registers
+ * it and raises the same `send_file_to_phone` card the chat route uses, and
+ * nothing is fetchable before that yes. The button sends no path - the page
+ * has none to send.
+ *
  * The PC writes the words (title, detail, the empty line, the phone's line);
  * the page shows them as they are. The phone shows the same list, with
  * Remove only (FoldersPlate.kt, net/Folders.kt). Used by Settings
@@ -28,6 +35,10 @@ export const STALE =
 export const ADD_LABEL = "Add a folder…";
 export const REMOVE_LABEL = "Remove";
 export const NOTION_LABEL = "Choose the .zip…";
+/** The button the send-to-phone card draws, and the one line under it. */
+export const SEND_LABEL = "Send a file to your phone…";
+export const SEND_NOTE =
+  'Your phone finds it in Settings → "File from your PC". An approval card comes first.';
 export const NOT_HERE = "Not found on this PC any more.";
 
 function text(v) {
@@ -74,6 +85,25 @@ export function importLine(importing) {
     : `${sizeWords(bytes)}`);
   if (!parts.length) return "Unzipping the export…";
   return `Unzipping the export: ${parts.join(", ")} so far.`;
+}
+
+/**
+ * What the page says after "Send a file to your phone…", read from the
+ * command's own answer (folders.rs `send_file_answer`): the PC's `said`
+ * sentence when it wrote one - the waiting line after the card is raised, or
+ * its refusal - otherwise the file's name and size. Empty when there is
+ * nothing to say, so a caller can leave its line alone.
+ */
+export function sendWords(result) {
+  if (!result || typeof result !== "object") return "";
+  const said = text(result.said).trim();
+  if (said) return said;
+  const name = text(result.name).trim();
+  if (!name) return "";
+  const bytes = num(result.size);
+  // Below a megabyte the shared size words would read "0 MB", so a small file
+  // is named with no size rather than with a wrong one.
+  return bytes >= 1024 * 1024 ? `${name} (${sizeWords(bytes)})` : name;
 }
 
 /** One listed folder, from the PC's answer. */
@@ -129,6 +159,9 @@ export function readFolders(answer) {
 /**
  * What the page can offer now. Adding (a card) and importing wait for a
  * live link and for the PC to say this request may; removing never waits.
+ * "Send a file to your phone…" raises a card too, so it waits for a live
+ * link as well - and for nothing else: it is the owner's own pick, and the
+ * PC has the last word on the file itself.
  */
 export function actions(view, live) {
   const full = view.folders.length >= view.max;
@@ -141,6 +174,7 @@ export function actions(view, live) {
             : full ? `The list already has ${view.max} folders - remove one first.` : "",
     remove: view.available,
     notion: view.available && view.canImport && live && view.folders.some((f) => f.exists),
+    send: view.available && live,
   };
 }
 
