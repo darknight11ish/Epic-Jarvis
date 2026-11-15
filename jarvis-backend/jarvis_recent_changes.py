@@ -21,10 +21,9 @@ from pathlib import Path
 BULLETS = (
     'The preflight now says which commit each piece came from, and warns MIXED COMMITS when they disagree',
     'A feature pull request no longer commits the self-code map',
+    'A read-aloud now carries on when you leave the app, PiP and the lock screen included, and long answers are read to the end',
     'The General preset stops claiming the model "answered nothing" without thinking',
     'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
-    "The Coding preset's chat turn gets the window its preset names",
-    "An approved GitHub card now merges, or says in code's words why it did not",
 )
 
 
