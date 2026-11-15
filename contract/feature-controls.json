@@ -11791,7 +11791,7 @@
       ],
       "app": "phone",
       "where": "settings",
-      "in_desktop_settings": false,
+      "in_desktop_settings": true,
       "in_phone_settings": true
     },
     {
