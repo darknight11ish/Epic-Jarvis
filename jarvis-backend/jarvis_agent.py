@@ -5657,20 +5657,19 @@ TOOLS: dict = {
     # ask, which is the same fail-safe.
     "github_list": Tool(
         "github_list",
-        "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the "
-        "open pull requests on one repository (\"pulls\"), its open issues "
-        "(\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing "
-        "on GitHub changes. It does not ask by default; the switchable "
-        "\"Read your GitHub\" row on the What asks first page can put the "
-        "card back, and take it off again instantly. It "
-        "cannot merge, push, "
-        "commit, delete or close anything.",
+        "List ONE fixed thing on GitHub: your repositories (\"repos\"), a "
+        "repository's pull requests (\"pulls\") or issues (\"issues\") in open "
+        "(default), closed or all state, or its recent workflow runs (\"runs\"). "
+        "Read-only: nothing changes; it cannot merge, push, commit, delete or "
+        "close. Card-free by default; the \"Read your GitHub\" switch can put the "
+        "card back.",
         {"type": "object", "properties": {
             "scope": {"type": "string", "enum": ["repos", "pulls", "issues", "runs"],
                       "description": "which list to read"},
             "repo": {"type": "string",
-                     "description": 'owner/name, e.g. "darknight11ish/Epic-Jarvis"; '
-                                    "not needed for \"repos\""}},
+                     "description": 'e.g. "owner/repo"; not for "repos"'},
+            "state": {"type": "string", "enum": ["open", "closed", "all"],
+                      "description": "open, closed or all; pulls/issues only"}},
          "required": ["scope"]},
         _prepare_github_list, _run_github,
         instead={"github_ci_status": "For how CI went, use github_ci_status."}),
@@ -5692,7 +5691,9 @@ TOOLS: dict = {
     "github_ci_status": Tool(
         "github_ci_status",
         "How CI went: the newest workflow run for a repository and branch, or for "
-        "a pull request. Read-only: nothing changes. It does not ask by "
+        "a pull request. When that run failed, it names the checks that failed and "
+        "shows ONE bounded excerpt of the first failing check's log - the end of "
+        "the log is what says why. Read-only: nothing changes. It does not ask by "
         "default; the switchable \"Read your GitHub\" row on the What "
         "asks first page can put that card back.",
         {"type": "object", "properties": {
@@ -5901,8 +5902,10 @@ TOOLS: dict = {
         "github_pr_detail",
         "Read ONE pull request in full: its title, body, state, draft and "
         "mergeable flags, its head commit and base branch, and then its changed "
-        "files, its commits, its comments and its reviews. Read-only: five fixed "
-        "GETs, nothing on GitHub changes. It does not ask - a read is a GET.",
+        "files WITH THEIR UNIFIED DIFF (bounded: at most 20 files and 60,000 "
+        "characters, with one line naming what was left out), its commits, its "
+        "comments and its reviews. Read-only: five fixed reads, nothing on GitHub "
+        "changes. It does not ask - a read is a GET.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "number": {"type": "string", "description": "the pull request number"}},
@@ -15421,14 +15424,30 @@ def _runtime_vault() -> str:
         return "unknown"
 
 
-def _runtime_phone() -> str:
+def _runtime_devices() -> str:
+    """The paired devices as one short field: count and kinds (2026-11-14).
+
+    Was `_runtime_phone`, answering only "connected" or "off" - phone-shaped,
+    and it said nothing about a laptop or a tablet being paired. Now the field
+    is `N (kind, kind)` - e.g. "2 (phone, tablet)" - read from the same
+    `jarvis_devices.paired_status()` call as before. A store that cannot be
+    read is `unknown`, never a guess; no devices is "0", not "off" (off reads
+    like a switch, and there is no switch).
+    """
     try:
         import jarvis_devices
         status = jarvis_devices.paired_status() or {}
         if not status.get("readable", False):
             return "unknown"
-        rows = status.get("devices") or []
-        return "connected" if any(r.get("reach") for r in rows if isinstance(r, dict)) else "off"
+        rows = [r for r in (status.get("devices") or []) if isinstance(r, dict)]
+        if not rows:
+            return "0"
+        kinds = []
+        for row in rows:
+            kind = str(row.get("kind") or "device").strip().lower() or "device"
+            if kind not in kinds:
+                kinds.append(kind)
+        return f"{len(rows)} ({', '.join(kinds)})"
     except Exception:                                       # noqa: BLE001
         return "unknown"
 
@@ -15453,7 +15472,7 @@ def runtime_identity_fields(*, probes: Optional[dict] = None) -> dict:
         "preset": read("preset", _runtime_preset),
         "cloud": read("cloud", _runtime_cloud),
         "vault": read("vault", _runtime_vault),
-        "phone": read("phone", _runtime_phone),
+        "devices": read("devices", _runtime_devices),
     }
 
 
@@ -15468,11 +15487,11 @@ def runtime_identity_line(*, probes: Optional[dict] = None) -> str:
         ("preset", f.get("preset") or "unknown"),
         ("cloud escalation", f.get("cloud") or "unknown"),
         ("vault", f.get("vault") or "unknown"),
-        ("phone", f.get("phone") or "unknown"),
+        ("devices", f.get("devices") or "unknown"),
     ]
     runtime = ("Runtime: Jarvis on " + values[0][1] + " (local model: " + values[1][1]
                + ", preset: " + values[2][1] + ", cloud escalation: " + values[3][1]
-               + ", vault: " + values[4][1] + ", phone: " + values[5][1] + ").")
+               + ", vault: " + values[4][1] + ", devices: " + values[5][1] + ").")
     return runtime + "\n" + RUNTIME_RULE
 
 

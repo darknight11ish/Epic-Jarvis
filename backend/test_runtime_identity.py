@@ -84,7 +84,8 @@ def check(name, cond, detail=""):
 
 def fields(**kw):
     base = {"surface": "phone", "model": "qwen3.5:9b", "preset": "general",
-            "cloud": "DeepSeek (API)", "vault": "configured", "phone": "connected"}
+            "cloud": "DeepSeek (API)", "vault": "configured",
+            "devices": "2 (phone, tablet)"}
     base.update(kw)
     return base
 
@@ -96,7 +97,7 @@ def main():
     check("line 1 is the runtime with every field",
           lines[0] == ("Runtime: Jarvis on phone (local model: qwen3.5:9b, "
                        "preset: general, cloud escalation: DeepSeek (API), "
-                       "vault: configured, phone: connected)."), lines[0])
+                       "vault: configured, devices: 2 (phone, tablet))."), lines[0])
     check("line 2 is the fixed Rule, word for word",
           lines[1] == ('Rule: Never invent features, shortcuts, or settings; if '
                        'unsure, point to "Everything Jarvis can do" in the Brain.'), lines[1])
@@ -106,18 +107,18 @@ def main():
 
     desktop = AG.runtime_identity_line(probes=fields(surface="desktop", model="qwen3.5:9b",
                                                      preset="coding", cloud="off",
-                                                     vault="off", phone="off"))
+                                                     vault="off", devices="0"))
     check("every field can change with the live state",
           "on desktop" in desktop and "preset: coding" in desktop
           and "cloud escalation: off" in desktop and "vault: off" in desktop
-          and "phone: off" in desktop, desktop)
+          and "devices: 0" in desktop, desktop)
 
     unknown = AG.runtime_identity_line(probes=fields(model=None, preset=None,
-                                                     cloud=None, vault=None, phone=None))
+                                                     cloud=None, vault=None, devices=None))
     check("a getter with nothing to say is `unknown`, not a guess",
           "local model: unknown" in unknown and "preset: unknown" in unknown
           and "cloud escalation: unknown" in unknown and "vault: unknown" in unknown
-          and "phone: unknown" in unknown, unknown)
+          and "devices: unknown" in unknown, unknown)
 
     no_surface = AG.runtime_identity_line(probes=fields(surface="unknown"))
     check("an unknown surface means NO runtime line", no_surface == "", no_surface)

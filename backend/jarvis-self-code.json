@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
- "built_at": "2026-11-14T21:43:22-08:00",
+ "ref": "4218b2e5b54d8a293ff9e9506829e8d37425098a",
+ "built_at": "2026-11-15T06:18:11-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3944,6 +3944,7 @@
     "backend/test_github_parity.py",
     "backend/test_github_record.py",
     "backend/test_github_review.py",
+    "backend/test_github_robustness.py",
     "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
@@ -4386,7 +4387,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 694,
+   "file_count": 695,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4705,12 +4706,18 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
+    "changelog.d/2026-11-14-catalogue-every-card.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
+    "changelog.d/2026-11-14-github-parity-stage1.md",
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
+    "changelog.d/2026-11-15-github-robustness.md",
+    "changelog.d/2026-11-15-preset-window-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4901,11 +4908,18 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
+    "decisions.d/2026-11-14-catalogue-counts-every-card.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
+    "decisions.d/2026-11-14-github-parity-stage1.md",
     "decisions.d/2026-11-14-send-to-phone-two-gigabytes.md",
     "decisions.d/2026-11-14-widget-look.md",
+    "decisions.d/2026-11-15-a-measured-window-is-a-claim-about-the-runner.md",
+    "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
+    "decisions.d/2026-11-15-github-answers-are-refusals.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5409,7 +5423,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 982,
+   "file_count": 995,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6496,111 +6510,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
-   "date": "2026-11-14",
-   "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
+   "sha": "4218b2e5b54d8a293ff9e9506829e8d37425098a",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (2aacc71ba, GitHub parity stage 1 / #1264) into feat/github-robustness-2026-11-15"
   },
   {
-   "sha": "0168dca083b4e4c1668423e845381704273709a3",
-   "date": "2026-11-14",
-   "subject": "chore(generated): regenerate the feature catalogue and recent changes; keep the new suite off source text"
+   "sha": "2aacc71ba28edc0170a0545aab17b351f15ffc1b",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1264 from darknight11ish/feat/github-parity-stage1-2026-11-14"
   },
   {
-   "sha": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
-   "date": "2026-11-14",
-   "subject": "fix(gate): the file-to-phone denial row, and an audit that reads the published base"
+   "sha": "583c636d34e46e72817409a1ac39b9590fbd6229",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the self-code map after merging main (ab9801a1c)"
   },
   {
-   "sha": "764531987eaf6d29dc6b131483d072b2695fe7a4",
-   "date": "2026-11-14",
-   "subject": "fix(send): name the refusal reason without a bare word the jargon ratchet counts"
+   "sha": "e0860835f4ff3a7dd5eb80bba55ed5f7f646176d",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
   },
   {
-   "sha": "f036bfb990fada12923ea6b3abfd8eead1854af0",
-   "date": "2026-11-14",
-   "subject": "feat(send): any file from the PC to the phone, up to 2 GiB, in 1 MiB pieces"
+   "sha": "ab9801a1c25e8162af452e0685e116b4e4e5325d",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1263 from darknight11ish/fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
-   "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1260 from darknight11ish/integration/wave20-2026-11-14"
+   "sha": "05a54cc74f66b32cda9afc4d3ad78ea770311237",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (275fbb571) into feat/github-robustness-2026-11-15"
   },
   {
-   "sha": "64f224e52d8e6c280b407a04f27a0d908d3e0f83",
-   "date": "2026-11-14",
-   "subject": "Give android_app its diet hints, so the tool can actually be shown"
+   "sha": "d8d0717deb4d83a71e9bd811a72ce9dc641fe933",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
   },
   {
-   "sha": "e43379848911d09db748f5c6b3612e1579575e27",
-   "date": "2026-11-14",
-   "subject": "The desktop's raw-tool list is eight now, and its test says so"
+   "sha": "f0213f0466c5de9804ce10f73e1d8f0e45293c59",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
-   "sha": "81f05a38609e0212f7812d9a26e67532987d3db1",
-   "date": "2026-11-14",
-   "subject": "Read the tool-action rows as a table, and stop ranking git walks"
+   "sha": "275fbb5719b708c300d5994504d76c0a5262f43c",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1262 from darknight11ish/fix/bench-answer-budget-2026-11-14"
   },
   {
-   "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
-   "date": "2026-11-14",
-   "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
+   "sha": "5c70fce2450cd129a3b86b51299d12b53a83efec",
+   "date": "2026-11-15",
+   "subject": "Merge commit '2f8ab342f' into feat/github-parity-stage1-2026-11-14"
   },
   {
-   "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
-   "date": "2026-11-14",
-   "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
+   "sha": "2f8ab342f51af44841d0352b98210eab39fa6ee9",
+   "date": "2026-11-15",
+   "subject": "Merge commit '5ca2fb86e69dd19bc69168064fee6fab7a637d93' into fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
-   "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
+   "sha": "8848eb16777e3cbeefc71716468a953bb90aa9b1",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into feat/github-robustness-2026-11-15"
   },
   {
-   "sha": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
-   "date": "2026-11-14",
-   "subject": "Fix the six suites the DEF-068 lane turned red, and carry its gate rows in a patch"
+   "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
   },
   {
-   "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
+   "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
   },
   {
-   "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
-   "date": "2026-11-14",
-   "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
+   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
-   "sha": "c26fa729e855121c4afbd371bfdfcf8a99f6036a",
-   "date": "2026-11-14",
-   "subject": "Record the Atlas copy pass and the builder entry point, and re-hash the map"
+   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
   },
   {
-   "sha": "8e8872bf31cd72044cd1c98f37b2800093bc6698",
-   "date": "2026-11-14",
-   "subject": "The Brain window's copy says Atlas, and the builder's six 'no way in yet' sentences become true"
+   "sha": "4db99a34f952560a371695be97b8d891373509a1",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
   },
   {
-   "sha": "fee00d72f810a70eb13685433eabb72b4531e658",
-   "date": "2026-11-14",
-   "subject": "desktop: the Brain window's own explanatory copy says Atlas"
+   "sha": "9125c19d124464eece4babc19c24042f61090224",
+   "date": "2026-11-15",
+   "subject": "chore(records): regenerate the self-code map for the file this suite is about"
   },
   {
-   "sha": "e03b61684492c31338635626c0244ccdb157ff42",
-   "date": "2026-11-14",
-   "subject": "Regenerate the records after folding the wave-20 workstreams"
+   "sha": "f6fa8e95417ed70309e51217606103f4192834c5",
+   "date": "2026-11-15",
+   "subject": "fix(github): the PR scan names the checks that are not green"
   },
   {
-   "sha": "ed884fbc423f1072fc953f3998e27980c4596b6f",
-   "date": "2026-11-14",
-   "subject": "Merge feat/def068-builder-entry-2026-11-14 into integration/wave20-2026-11-14 (DEF-068 builder entry point)"
+   "sha": "f187503ef40be4c7cb3edfd340af21b8d80ac0c8",
+   "date": "2026-11-15",
+   "subject": "test(github): name the fixture for what it is"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1450
+   "files": 1451
   },
   {
    "path": "jarvis-desktop/",
@@ -6625,7 +6639,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 279
+   "files": 285
   },
   {
    "path": "tools/",
@@ -6640,7 +6654,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 195
+   "files": 202
   },
   {
    "path": "plugins/",
@@ -6719,8 +6733,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5842,
-  "covered": 5359,
+  "tracked_files": 5856,
+  "covered": 5373,
   "excluded": 483,
   "subsystems": 27
  },

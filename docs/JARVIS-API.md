@@ -19632,6 +19632,53 @@ phone pairing, and this is the step that gives it its own key first.
   is the owner pressing Retire (Settings, Devices) so nothing rides on the
   shared key at all.
 
+### 90.7 What chat and voice say about devices (added 2026-11-14)
+
+Two cardless, read-only answers in `jarvis_quick.py`. Neither adds, removes,
+renames or retires a device - the owner's own limit of 2026-11-14: making a
+credential stays terminal-only, and Remove stays on the Settings, Devices card.
+
+**`pair_phone` - chosen by the thing named.** "how do I pair my phone" gets the
+two screens and the QR card, exactly as before. "how do I add my laptop", "how
+do I pair my iPad", "how do I set up my tablet" and "how do I add a browser"
+get the browser route: run `py -3 jarvis_devices.py --add-device "<name>"
+--kind laptop` (or `tablet`) at this PC's own terminal, which prints a
+`jdk1...` key **once**, then open `http://<this PC's mesh address>:4719/` in
+that device's browser and paste the key into its pairing sheet - and the key
+never goes in a chat, a note or a log. "how do I pair a second PC" (and the
+pair/connect/link shapes) says plainly that it is **not supported yet**: the
+thin client is designed, not built, and a second PC's own copy would be its own
+Jarvis, with its own models and settings. "how do I add a second pc" keeps its
+2026-11-07 answer (`adding_second_pc_howto`), which already says the same
+thing. Every shape opens the cardless Settings, Devices jump and types nothing.
+
+**`devices_list` - the read-only roster.** "what devices are connected",
+"which devices are paired", "list my devices", "what devices can reach you" -
+and the phone's own state questions ("is my phone connected"), which keep the
+phone's own answer and gain one line for its approval key - read
+`jarvis_devices.paired_status()` and nothing else. Each device
+is said by its name, its kind (`phone`/`laptop`/`tablet`), whether it is
+reachable now (heard from inside five minutes; an older check-in is "not heard
+from since", never a live reach) and whether it has its own approval key - the
+same "Signed approvals: on / waiting / off" line the apps' Devices cards show.
+`paired_status()` gained `approval_key` (from `approval_key_state()`) on
+2026-11-14 for this one read, and still returns no token, key or hash. A
+missing module or an unreadable registry answers "I cannot read the device list
+on this PC just now." and changes nothing. Both intents are in
+`READ_ONLY_INTENTS`, so they never clear "cancel that", and neither has a card,
+a tool or a model behind it.
+
+**The runtime line.** `jarvis_agent._runtime_devices()` (was
+`_runtime_phone()`) now reports the count and kinds in the model's own runtime
+note - `devices: 2 (phone, tablet)` instead of `phone: connected` - and
+`unknown` when the store cannot be read. The field was renamed from `phone` to
+`devices` with every reference, including `backend/test_runtime_identity.py`.
+
+Proven by `backend/test_quick_wins.py` (each pairing shape, the second PC, the
+list from a stub `jarvis_devices`, the unreadable store, and the phrases that
+must NOT be a device add/remove path), `backend/test_chat_honesty.py`,
+`backend/test_hud_fieldtest_answers.py` and `backend/test_runtime_identity.py`.
+
 ---
 
 ## 91. Signed approvals: a fingerprint-signed yes from the phone (added 2026-09-29)
@@ -36040,9 +36087,9 @@ last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 
 | Tool | What it does | The request |
 |---|---|---|
-| `github_list` | lists ONE fixed thing: your repositories (`repos`), a repo's open pull requests (`pulls`), its open issues (`issues`), or its recent workflow runs (`runs`) | `GET /user/repos`, or `GET /repos/{owner}/{repo}/...` |
+| `github_list` | lists ONE fixed thing: your repositories (`repos`), a repo's pull requests (`pulls`) or issues (`issues`) in a state you name - `open` (the default), `closed` or `all` - or its recent workflow runs (`runs`) | `GET /user/repos`, or `GET /repos/{owner}/{repo}/...` with `state=` on the two list scopes |
 | `github_read_file` | reads ONE file's text, at an optional branch or commit | `GET /repos/{owner}/{repo}/contents/{path}` |
-| `github_ci_status` | how CI went: the newest run for a branch, or for a pull request (whose head commit is read first) | `GET .../actions/runs`, or `GET .../pulls/{n}` then the runs for that commit |
+| `github_ci_status` | how CI went: the newest run for a branch, or for a pull request (whose head commit is read first) - and, when it failed, the failing checks by name plus ONE bounded excerpt of the first failing check's log | `GET .../actions/runs`, or `GET .../pulls/{n}` then the runs for that commit; when the newest run failed, `GET .../actions/runs/{id}/jobs` and one job log |
 | `github_comment` | posts ONE comment on an issue or pull request | `POST .../issues/{n}/comments` |
 | `github_open_issue` | opens ONE issue, with a title and an optional body | `POST .../issues` |
 | `github_rerun_workflow` | asks GitHub to run an existing workflow run again | `POST .../actions/runs/{id}/rerun` |
@@ -36050,7 +36097,7 @@ last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 | `github_pr_scan` | the read-only PR cockpit: every open pull request, whether it can merge, and the required check holding it | `GET .../pulls?state=open`, then each `GET .../pulls/{n}` and its check runs |
 | `github_merge_pr` | merges ONE pull request with a merge commit, pinned to the exact head commit on the card | `GET .../pulls/{n}` and its check runs, then `PUT .../pulls/{n}/merge` |
 | `github_fix_and_push` | copies a failing pull request into a scratch folder here, **writes ONE file of the fix there on its own card** (wave 16B), then pushes the fix to that pull request's own branch | `GET .../pulls/{n}`, its check runs, annotations and job log; `git clone`/`fetch`/`checkout`; the local write and `git commit` (no socket); `git push` |
-| `github_pr_detail` | reads ONE pull request in full: its body, changed files, commits, comments and reviews (ten of each at most) | five fixed `GET`s under `.../pulls/{n}` |
+| `github_pr_detail` | reads ONE pull request in full: its body, changed files WITH THEIR UNIFIED DIFF (at most 20 files and 60,000 characters, with one line naming what was left out), commits, comments and reviews (ten of each at most) | five fixed `GET`s under `.../pulls/{n}` |
 | `github_open_pr` | prepares a NEW branch in the isolated copy, then pushes that one branch and opens ONE pull request | `git clone`/`checkout -b`/`push`; `POST .../pulls` |
 | `github_workflow` | cancels ONE running workflow run, or re-runs only its FAILED jobs - it never dispatches one | `POST .../actions/runs/{id}/cancel` or `.../rerun-failed-jobs` |
 | `github_issue_labels` | adds and/or removes labels on ONE issue or pull request, in ONE request | `PUT .../issues/{n}/labels` |
@@ -36058,7 +36105,9 @@ last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 | `github_pr_review` | posts ONE review that is COMMENT or REQUEST_CHANGES - never APPROVE | `POST .../pulls/{n}/reviews` |
 | `github_issue_state` | closes ONE issue or reopens ONE closed issue, with an optional reason shown on the card | `PATCH .../issues/{n}` |
 
-`github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
+`github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. Its `state` is a **closed set of three names** (`STATES`: `open`, the default, `closed`, or `all`), checked on every scope before an address is built and refused by name when it is not one of the three - a state on `repos` or `runs` is refused rather than silently dropped, because a dropped filter would return a list that is not the one that was asked for. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
+
+**Updated 2026-11-14 (stage-1 GitHub parity - three widenings, no new permission):** `github_list` takes the `state` filter above; `github_ci_status` names the failing checks and shows ONE bounded excerpt of the first failing check's log (one extra fixed GET for the run's jobs, made only when the newest run failed); and `github_pr_detail` shows the pull request's own unified diff, bounded to 20 files and 60,000 characters with one line naming what was left out. The last one also fixed a measured read bug: GitHub puts every changed file's `patch` in the files answer, PR #1261's 61-file answer was **481 KB**, and the read layer's 200 KB cap turned it into an unparseable answer that was silently reported as **"Changed files (0)"**. A cut answer is now an error rather than an empty document, the changed-files page is at most 20 files and is retried smaller when even that is cut, and the count always comes from the pull request's own `changed_files` field. None of it loosens a ban: no auto-merge, no gist, no admin bypass, and the token is still never printed, logged or written to a file.
 
 **The cockpit is a READ, and it prints the number the merge needs.** `github_pr_scan` sends only `GET` requests, changes nothing, and prints, for every open pull request, its number, its title, one of the five words (merge-ready / blocked / conflicted / running / draft), the reason, its base branch and its **full 40-character head commit** - `#12 <title>: merge-ready - <why>; head <40 hex>; base main`. That whole line is the point: `github_merge_pr` requires the exact 40-hex head commit, the title and the base branch, and the fix-and-push prepare reads from the same place, so the owner (and the model) copy them straight off the cockpit answer onto the card. The cockpit never merges, pushes or changes anything itself; that is always the separate carded tool.
 
@@ -38951,7 +39000,7 @@ the record of both, and of every action the Step 2 list added.
 
 | Tool | Kind | What it does | The request(s) |
 |---|---|---|---|
-| `github_pr_detail` | read (shares `github_inspect`) | reads ONE pull request in full: title, body, state/draft/mergeable, head commit and base branch, then its changed files, commits, comments and reviews. At most 10 of each shown, the real count always printed, every text bounded | five fixed GETs: the pull request, `.../files`, `.../commits`, `.../issues/{n}/comments`, `.../pulls/{n}/reviews` |
+| `github_pr_detail` | read (shares `github_inspect`) | reads ONE pull request in full: title, body, state/draft/mergeable, head commit and base branch, then its changed files WITH THEIR UNIFIED DIFF (at most 20 files and 60,000 characters, one line naming what was left out), commits, comments and reviews. At most 10 of each list shown, the real count always printed from the pull request itself, every text bounded | five fixed GETs: the pull request, `.../files`, `.../commits`, `.../issues/{n}/comments`, `.../pulls/{n}/reviews`; the files page is 20 and is retried smaller when GitHub's answer exceeds the read cap |
 | `github_open_pr` | write (own action) | two stages. "prepare" copies the repository at a base branch into the scratch root and makes a NEW branch there; "open" shows every commit, every changed file, the exact push command, the title and the WHOLE body on ONE card, then pushes that ONE new branch and opens the pull request, pinned to the HEAD commit the card showed | `GET /repos/{r}` then `git clone`/`checkout -b`; on open: local git reads, `git push origin HEAD:refs/heads/<new branch>`, then `POST /repos/{r}/pulls` with exactly `{title, body, head, base}` |
 | `github_workflow` | write (own action) | "cancel" ONE in-progress workflow run, or "rerun_failed" to run only the FAILED jobs of ONE finished run. It re-reads the run first and refuses, changing nothing, if it is not in the state the card named. It never dispatches a workflow | `GET .../actions/runs/{id}`, then `POST .../cancel` or `POST .../rerun-failed-jobs` |
 | `github_issue_labels` | write (own action) | adds and/or removes labels on ONE issue or pull request. It reads the current labels first, refuses if a label it would remove is not there, and sends the whole final set in ONE request | `GET .../issues/{n}`, then `PUT .../issues/{n}/labels` with the whole set |

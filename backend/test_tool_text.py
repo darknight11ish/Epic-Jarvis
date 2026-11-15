@@ -115,7 +115,22 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # opened, never on every turn (they are group members, not core
                    # tools), and it buys one inventory with one home instead of a
                    # second copy that drifts.
-                   "github_pr_scan": 1340, "github_merge_pr": 1480,
+                   # RAISED 1340 -> 1400 and 1480 -> 1500 on 2026-11-14, by the
+                   # same rule the note above asks for: the 2026-11-14 stage-1
+                   # parity widening made three READ rows' `words` name what those
+                   # reads now do (github_list's state filter, github_ci_status's
+                   # failing-check names and one log excerpt, github_pr_detail's
+                   # bounded unified diff), and `capabilities_line()` - which rides
+                   # on exactly these two descriptions - is the join of every
+                   # row's `words`. Measured on that tree with this module's own
+                   # rule: 1390 and 1491, so 1340/1480 had zero headroom before
+                   # this and would have failed on any truthful sentence. The cost
+                   # is paid only when the `github` group is opened (these are
+                   # group members, never core tools), and the alternative - a
+                   # shorter line that does not say the new reads exist - would
+                   # break the 2026-11-10 "fully aware of its GitHub abilities"
+                   # directive this line exists for.
+                   "github_pr_scan": 1400, "github_merge_pr": 1500,
                    "github_fix_and_push": 480,
                    # The 2026-11-10 22:30 ruling's actions carry no whole-surface
                    # sentence, but three are a little over the 300 default legitimately:

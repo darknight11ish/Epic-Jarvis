@@ -678,6 +678,89 @@ def t_vision_needs_both_tokens_and_a_vision_model():
           )["ok"] is False)
 
 
+def t_a_cut_off_thinking_reply_is_the_budget_running_out():
+    """2026-11-14, measured on this PC: `qwen3.5:9b` asked a one-line question
+    with `num_predict=64` came back `done_reason: "length"` with `response: ""`
+    and 266 characters in the separate `thinking` field - and every scorecard
+    read `answered ''`, which blames the model for the harness's own budget."""
+    cut = {"response": "", "done_reason": "length", "thinking": "x" * 266}
+
+    def post(url, payload, timeout=None):
+        return dict(cut)
+
+    result = B.run_general_suite("http://127.0.0.1:11451", "qwen3.5:9b",
+                                 16384, post=post)
+    item_why = str((result["per_item"][0] or {}).get("why") or "")
+    suite_why = str(result.get("why") or "")
+    check("an empty, cut-off answer names the token budget running out",
+          "budget" in item_why and str(B.ANSWER_TOKENS) in item_why, item_why)
+    check("it is never described as `answered ''`",
+          "answered ''" not in item_why and "answered ''" not in suite_why,
+          (suite_why, item_why))
+    check("the suite's own sentence calls it a failure for that reason",
+          "budget" in suite_why and "Failed:" in suite_why, suite_why)
+    check("it is still a failure, not a skip and not a pass",
+          result["passed"] is False and result["skipped"] is False, result)
+    check("the result records the budget it was measured under",
+          result.get("answer_tokens") == B.ANSWER_TOKENS)
+    row = B._clean_score(B.scorecard_row(
+        run_id="r1", identity={}, lane="everyday", suite={"id": "general"},
+        model="qwen3.5:9b", ctx=16384, result=result))
+    check("the scorecard row carries that budget through the allowlist",
+          row.get("answer_tokens") == B.ANSWER_TOKENS, row)
+    check("a tool-calling reply cut off the same way names the budget too",
+          "budget" in B.tool_call_passes(cut, B.TOOL_TASKS[0])[1])
+
+
+def t_every_answering_suite_asks_for_thinking_room():
+    """The 2026-11-14 fix: general, tool-calling and vision asked for 64, 64
+    and 48 tokens, which a thinking model spends on its hidden reasoning before
+    it writes anything. Each now asks for at least 512 - the budget that made
+    the same model answer "366" in 201 tokens on this PC."""
+    seen = {}
+
+    def run(name, fn):
+        payloads = []
+
+        def post(url, payload, timeout=None):
+            payloads.append(dict(payload))
+            return {"response": "", "done_reason": "length"}
+
+        result = fn(post)
+        seen[name] = ([int((p.get("options") or {}).get("num_predict") or 0)
+                       for p in payloads], result)
+
+    run("general", lambda post: B.run_general_suite(
+        "http://127.0.0.1:11451", "qwen3.5:9b", 16384, post=post))
+    run("tool_calling", lambda post: B.run_tool_calling_suite(
+        "http://127.0.0.1:11451", "qwen3.5:9b", 16384, post=post))
+    run("vision_ocr", lambda post: B.run_vision_suite(
+        "http://127.0.0.1:11451", "qwen3.5:9b", 16384, post=post))
+    run("coding", lambda post: B.run_coding_suite(
+        "http://127.0.0.1:11451", "qwen3.5:9b", 16384, post=post))
+    for suite in ("general", "tool_calling", "vision_ocr", "coding"):
+        asked = seen[suite][0]
+        check(f"the {suite} suite asks for at least 512 tokens",
+              bool(asked) and min(asked) >= 512, asked[:3])
+        check(f"the {suite} suite asks every question with one budget",
+              len(set(asked)) == 1, sorted(set(asked)))
+    check("general, tool-calling and vision all ask for ANSWER_TOKENS",
+          all(set(seen[s][0]) == {B.ANSWER_TOKENS}
+              for s in ("general", "tool_calling", "vision_ocr")),
+          {s: sorted(set(v[0])) for s, v in seen.items()})
+    check("coding asks for CODE_TOKENS",
+          set(seen["coding"][0]) == {B.CODE_TOKENS},
+          sorted(set(seen["coding"][0])))
+    check("both budgets are at least the 512 tokens that worked",
+          B.ANSWER_TOKENS >= 512 and B.CODE_TOKENS >= 512,
+          (B.ANSWER_TOKENS, B.CODE_TOKENS))
+    check("each suite result carries the budget it was measured under",
+          [seen[s][1].get("answer_tokens")
+           for s in ("general", "tool_calling", "vision_ocr")] ==
+          [B.ANSWER_TOKENS] * 3
+          and seen["coding"][1].get("answer_tokens") == B.CODE_TOKENS)
+
+
 # ==========================================================================
 #   6. The refusals (Q3's order)
 # ==========================================================================
