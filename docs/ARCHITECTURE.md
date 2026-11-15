@@ -5860,6 +5860,17 @@ they landed):
   changes nothing). One new check per real incident. `backend/README.md`,
   "The preflight"; JARVIS-API §29.
 
+  Its `commits` check (2026-11-15, Gemini's ruling Q8) reads what each piece
+  records about its own source and prints **MIXED COMMITS** when two pieces
+  that name a commit disagree: the desktop app's start-up line (the commit
+  `build.rs` read at build time), the backend's `SOURCE-COMMIT` file beside
+  its `VERSION` (written by `tools/reconcile_live_backend.py`), and the
+  phone - which records its own in `client-latest.json` and in its
+  `BuildConfig`, both of which stay on the phone, so this PC reports that
+  piece as unknown rather than fetching it. Visibility only: a mismatch, and
+  a piece that does not say, are WARNs - never a FAIL, so an urgent
+  one-piece fix is never blocked.
+
 **Still missing:**
 
 - **Looking at the screen ("Look at this", "Watch with me") - built

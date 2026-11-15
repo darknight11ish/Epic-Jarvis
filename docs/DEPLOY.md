@@ -77,6 +77,14 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
 - it rehearses every staged file with `py_compile` before anything is swapped,
   clears stale `__pycache__/*.pyc`, and adds ready plug-ins that the running HUD
   does not already wire;
+- it writes the live folder's **release markers**: `VERSION` (the installed
+  desktop exe's `FileVersion`, never this repository's 0.2.0 root marker) and,
+  since 2026-11-15, `SOURCE-COMMIT` beside it - the full commit `--ref` names,
+  which is the commit those bytes came from. **Beside, not inside `VERSION`**:
+  that file is the shared release marker the desktop HUD compares character for
+  character, and every other reader parses it as a bare version number. Neither
+  is guessed: a missing desktop is `VERSION: skipped (no installed desktop)` and
+  an unreadable commit is `SOURCE-COMMIT: skipped (...)`;
 - with `--apply` it then probes the live routes (`/api/setup`,
   `/api/media-index`, `/api/app-control/run` while app control is off, and
   `/api/voice/status`), reading the token itself from the live folder and never
