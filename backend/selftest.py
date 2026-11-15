@@ -936,7 +936,7 @@ class Live:
     def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
                  ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
                  with_chat=False, log_dir=None, token_store=None, reads=None, home=None, power=None,
-                 phone=None):
+                 phone=None, git=None):
         self.env = os.environ if env is None else env
         p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
         try:
@@ -963,6 +963,7 @@ class Live:
         self.home = home                # {"check": fn, "weather": fn} stand-ins
         self.power = power              # () -> powercfg's text or None, for the sleep check
         self.phone = phone              # {"desktop", "addresses", "owns", "connects", "firewall"}
+        self.git = git                  # (args, cwd) -> output, for the provenance check
         self.token = None
         self.token_where = None
         self.up = False
@@ -1599,6 +1600,11 @@ SOURCE_COMMIT = "SOURCE-COMMIT"
 #: rather than a guess at someone else's file.
 SOURCE_COMMIT_SCHEMA = "jarvis-source-commit/1"
 
+#: The branch "main" means here: the one every release is built from. Read with
+#: `git rev-parse`, which reads the refs ALREADY on this PC and fetches nothing -
+#: so an offline PC answers, and this check never touches the network.
+MAIN_REF = "origin/main"
+
 #: How many characters of a commit are shown. Short on purpose: the two ids
 #: are compared in full (below), and short is what fits a preflight line.
 SHOWN_COMMIT = 7
@@ -1690,6 +1696,38 @@ def _backend_build(live: Live) -> tuple:
     return version, commit, ""
 
 
+def _git_out(args: list, cwd, timeout: float = 5.0) -> "str | None":
+    """One read-only git command's output, or None when git cannot answer.
+
+    LOCAL ONLY. `rev-parse` reads refs that are already on this PC, so nothing
+    is fetched: an offline PC gives the same answer, and no server is asked.
+    """
+    try:
+        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True,
+                           text=True, timeout=timeout)
+    except Exception:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def _main_commit(live: Live) -> tuple:
+    """(commit, why-not) for `main`, read from this repository's own refs.
+
+    `live.repo` is the copy of the Jarvis files this `selftest.py` is running
+    from - the checkout, in a checkout, and the live backend's own folder when
+    the owner runs the installed copy. `git rev-parse` fetches nothing, so an
+    offline PC answers; a folder that is not a git checkout, or a PC with no
+    git, says so rather than naming a guessed sha - the same rule as the two
+    pieces above.
+    """
+    out = (live.git or _git_out)(["rev-parse", MAIN_REF], live.repo)
+    lines = str(out or "").strip().lower().splitlines()
+    commit = lines[0].strip() if lines else ""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return None, f"git did not name {MAIN_REF} in {live.repo}"
+    return commit, ""
+
+
 @preflight_check("commits", "Which commit did each piece come from?")
 def pf_commits(live: Live) -> list:
     """Say what each piece came from, and WARN plainly when they disagree.
@@ -1742,6 +1780,58 @@ def pf_commits(live: Live) -> list:
                  "mean fetching from the network, which this check never does. The "
                  "phone's own update check compares them."))
     return rows
+
+
+@preflight_check("provenance", "Do the desktop, the backend and main agree on one commit?")
+def pf_provenance(live: Live) -> list:
+    """ONE sentence: whether the three agree, or which of them differs.
+
+    The `commits` check says what each piece came from. This one puts the three
+    side by side with the branch the releases are built from, because every
+    piece on its own can be right and the three together still be a mix - the
+    measured case (Gemini's ruling Q8, 2026-11-15) was a desktop from 7a8fe7d,
+    a phone from 2aacc71ba and a backend from 04d4748cf, with nothing anywhere
+    saying so. `main` is read with `git rev-parse origin/main`, which reads the
+    ref already on this PC: no fetch, no network, no card.
+
+    READ-ONLY, and never a FAIL, for the same reason as `commits`: this is a
+    sentence to read, not a gate, so an urgent one-piece fix is never blocked. A
+    piece that does not say is said to not say, and nothing is guessed.
+    """
+    _d_version, d_commit, d_why = _desktop_build(live)
+    _b_version, b_commit, b_why = _backend_build(live)
+    m_commit, m_why = _main_commit(live)
+    pieces = [("the desktop app", d_commit, d_why),
+              ("the backend", b_commit, b_why),
+              ("the main branch", m_commit, m_why)]
+    known = [(name, commit) for name, commit, _why in pieces if commit]
+    silent = [(name, why) for name, commit, why in pieces if not commit]
+
+    def came_from(name: str, commit: str) -> str:
+        return (f"{name} is {_short_commit(commit)}" if name == "the main branch"
+                else f"{name} came from {_short_commit(commit)}")
+
+    def together(items: list) -> str:
+        words = [came_from(name, commit) for name, commit in items]
+        return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+    if not silent:
+        if all(_same_commit(known[0][1], commit) for _name, commit in known):
+            return [(PASS, "the desktop app, the backend and the main branch all came "
+                           f"from {_short_commit(known[0][1])}")]
+        return [(WARN, f"{together(known)}, so they do not agree")]
+
+    names = [name for name, _why in silent]
+    if len(names) == 1:
+        sentence = f"{names[0]} does not say which commit it came from"
+        if silent[0][1]:
+            sentence += f": {silent[0][1]}"
+    else:
+        sentence = (f"{', '.join(names[:-1])} and {names[-1]} do not say which commit "
+                    "they came from")
+    if len(known) >= 2 and not all(_same_commit(known[0][1], commit) for _name, commit in known):
+        return [(WARN, f"{sentence}, and {together(known)}, so they do not agree")]
+    return [(WARN, f"{sentence}, so the three cannot be compared")]
 
 
 def _settings_marker(backend: Path):

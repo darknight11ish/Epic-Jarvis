@@ -48,6 +48,12 @@ made from the whole patch stack (backend/_stack.py). What is proved:
     does not say is said to not say, the phone is reported as unreadable from
     this PC, and two pieces at different commits produce the MIXED COMMITS
     WARN - never a FAIL, because the ruling asks for visibility, not a gate.
+  * whether the three agree on ONE commit (`provenance`, 2026-11-15): one plain
+    sentence - PASS when the desktop, the backend and `origin/main` all came
+    from the same commit, a WARN naming both when the backend is behind, the
+    honest "does not say" line when the desktop cannot name its commit, and a
+    WARN (never a FAIL) every time, with a stand-in `git rev-parse` so no test
+    reads this checkout's own refs.
 """
 from __future__ import annotations
 
@@ -236,6 +242,7 @@ def _rows(rows, key):
 def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "commits",
+            "provenance",
             "private_files", "gate", "stop_all", "scheduler", "folders", "instant_email",
             "events", "voice", "reach", "home", "sleep", "phone", "data_health",
             "credentials", "screen", "engine_config"]
