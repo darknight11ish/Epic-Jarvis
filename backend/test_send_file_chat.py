@@ -13,9 +13,10 @@ could not send the file. This suite pins the deterministic chat path:
    Downloads/Documents/Desktop" all resolve to `send_file`, and the runner calls
    `jarvis_send_file.prepare()` - the module's own search, exactly once.
 2. ONE MATCH -> THE MODULE'S OWN CARD. The card's prompt is the module's own
-   `prepare()` sentence (exact name, folder, byte size, 10 MiB cap, ten
-   minutes, once), raised under the module's own action; nothing is approved by
-   this path - only an approved verdict reaches the module's own `approve()`.
+   `prepare()` sentence (exact name, folder, byte size, and the cap, piece size
+   and window read from its own constants), raised under the module's own
+   action; nothing is approved by this path - only an approved verdict reaches
+   the module's own `approve()`.
 3. REFUSALS ARE THE MODULE'S WORDS, WITH NO CARD. No match, several matches,
    over the cap and a file outside the listed folders return the module's own
    `ValueError` sentence unchanged, and no card and no approve happen.
@@ -170,10 +171,13 @@ def t_every_shape_calls_the_modules_own_prepare():
         check(f"{phrase!r}: the module's own card sentence is the prompt",
               len(gate_calls) == 1 and gate_calls[0]["prompt"] == cards[0],
               gate_calls[:1])
-        check(f"{phrase!r}: the card shows the exact name, cap and window",
+        check(f"{phrase!r}: the card shows the exact name, cap and one completed transfer",
               cards and cards[0].startswith('Send "send-me.txt" from ')
-              and "10 MiB" in cards[0] and "10 minutes" in cards[0]
-              and "works once" in cards[0], cards[:1])
+              and SEND.cap_sentence() in cards[0]
+              and SEND.chunk_words() in cards[0]
+              and SEND.ttl_words() in cards[0]
+              and SEND.grace_words() in cards[0]
+              and "one completed transfer" in cards[0], cards[:1])
         check(f"{phrase!r}: raised under the module's own action",
               len(gate_calls) == 1 and gate_calls[0]["action"] == SEND.ACTION
               and gate_calls[0]["detail"] == {"text": cards[0]}, gate_calls[:1])

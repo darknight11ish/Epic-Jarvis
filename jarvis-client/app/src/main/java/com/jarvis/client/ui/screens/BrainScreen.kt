@@ -1780,9 +1780,11 @@ private fun ModelsPlate(
         }
         Gap(8)
         Text(
-            "Use asks the desktop and raises a card on Home to approve, like any " +
-                "other change. A switch takes six to ten seconds while one model " +
-                "unloads and the next loads - fine once, not per question.",
+            "Use switches at once - there is no card and nothing to approve. A " +
+                "switch takes six to ten seconds while one model unloads and the " +
+                "next loads, which is fine once and wrong for every question. The " +
+                "model you were on is one line above as \"Roll back to…\", so " +
+                "coming back is one tap.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textLo,
         )
@@ -1790,11 +1792,11 @@ private fun ModelsPlate(
         Rule()
         Gap(10)
         Text(
-            "Install a model the desktop does not have yet. Same rule as Use: this " +
-                "only asks - approving it is a separate step, and a download runs for " +
-                "minutes rather than seconds, so it is worth approving from the desktop " +
-                "where you can watch it. Type the name the way you would give it to " +
-                "Ollama, e.g. llama3.1:8b.",
+            "Install a model the desktop does not have yet. It asks: approving it " +
+                "is a separate step on Home, and a download runs for minutes rather " +
+                "than seconds, so it is worth approving from the desktop where you " +
+                "can watch it. Type the name the way you would give it to Ollama, " +
+                "e.g. llama3.1:8b.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textLo,
         )

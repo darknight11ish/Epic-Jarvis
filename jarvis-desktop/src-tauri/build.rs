@@ -645,12 +645,19 @@ fn main() {
             // the list (a read); add ONE folder through the Windows folder
             // picker (one approval card on the PC, held on a stale link);
             // remove one (at once); bring in a Notion export through the
-            // Windows file picker (held on a stale link). The pickers run in
-            // Rust - the window gets only the chosen path. Settings window only.
+            // Windows file picker (held on a stale link); and "Send a file to
+            // your phone…" (2026-11-14, the design's sections 6 and 8): the
+            // Windows OPEN-FILE dialog, then POST /api/files/prepare with the
+            // one path the owner picked - the command takes NO argument, so no
+            // page can name a path - which raises the SAME send_file_to_phone
+            // card the chat route uses, held on a stale link. The pickers run
+            // in Rust - the window gets only the chosen path. Settings window
+            // only.
             "get_folders",
             "add_folder",
             "remove_folder",
             "import_notion",
+            "prepare_file_for_phone",
             // Settings' "Protected from Jarvis" (protected.rs; the owner's
             // request of 2026-10-31, contract
             // `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`). The list

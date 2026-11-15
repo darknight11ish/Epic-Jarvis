@@ -11,12 +11,16 @@ look in" folder (never the owner's):
    ONE `path_refusal` is asked and a blocked file is neither searched nor sent;
    this module never duplicates that check.
 3. THE ONE CARD's words name the EXACT filename, the folder, the byte size and
-   the 10 MiB cap; `prepare()` raises (no card) for over-cap and several-match
-   and no-match cases.
+   the cap, all read from `jarvis_send_file.CAP_BYTES`; `prepare()` raises (no
+   card) for over-cap and several-match and no-match cases.
 4. THE FETCH: nothing is available before approval; after `approve()` the phone
-   list carries the id and the download is byte-for-byte the file. Ids are
-   single-use, expire after ten minutes, and unknown/expired ids are 404 with a
-   plain sentence.
+   list carries the id and the download is byte-for-byte the file, with the
+   whole file's sha256. A file small enough for one piece is NOT consumed by
+   that piece: it starts the 60-second grace and the phone's receipt
+   (`POST /api/files/ack`) consumes it, so a lost 200 can be retried; ids
+   expire after the module's own window, and unknown or expired ids are 404
+   with a plain sentence. (The chunked and receipt cases live in
+   `backend/test_send_file_chunked.py`.)
 5. THE ROUTE takes only `id` - a `path=` parameter is refused - and its answer
    carries no path; origin/token refusals are install()'s own.
 6. THE RECORDS agree: TWIN, SHIPPED, plugin folder, catalogue, the tier row in
@@ -68,18 +72,23 @@ INVOICE = ALLOW / "invoice.pdf"
 INVOICE.write_bytes(b"%PDF-1.4\n% the invoice, one page\n" + bytes(range(256)))
 NOTES = ALLOW / "meeting notes.txt"
 NOTES.write_text("the notes\n", encoding="utf-8")
-BIG = ALLOW / "big-video.bin"
-with open(BIG, "wb") as _fh:
-    _fh.truncate(11 * 1024 * 1024)          # sparse: 11 MiB, never read whole
 SECRET = OUTSIDE / "secret-plans.txt"
 SECRET.write_text("outside the allow-list\n", encoding="utf-8")
 R1 = ALLOW / "receipt-one.txt"
 R1.write_text("one\n", encoding="utf-8")
 R2 = ALLOW / "receipt-two.txt"
 R2.write_text("two\n", encoding="utf-8")
+EMPTY = ALLOW / "empty-file.txt"
+EMPTY.write_bytes(b"")
 
 import jarvis_send_file as SF  # noqa: E402
 import jarvis_documents as DOCS  # noqa: E402
+
+#: Sparse, so a file over the REAL ceiling costs no disk and is never read:
+#: only `getsize` sees it, and the over-cap refusal happens before any card.
+BIG = ALLOW / "big-video.bin"
+with open(BIG, "wb") as _fh:
+    _fh.truncate(SF.CAP_BYTES + 1)
 
 FAILED, PASSED, SKIPPED = [], [], []
 
@@ -171,14 +180,20 @@ def t_the_card_names_exactly_and_refuses_before_it():
     check("the card names the folder it came from", str(ALLOW) in words, words)
     check("the card names the exact byte size",
           f"{INVOICE.stat().st_size:,} bytes" in words, words)
-    check("the card states the 10 MiB cap", "10,485,760 bytes" in words, words)
-    check("the card states the one-file and one-download life",
-          "ONE file at a time" in words and "10 minutes" in words
-          and "works once" in words, words)
+    check("the card states the cap, read from the module's own constant",
+          SF.cap_sentence() in words, words)
+    check("the card states the one-file rule, the piece size and one completed transfer",
+          "ONE file at a time" in words and SF.chunk_words() in words
+          and SF.ttl_words() in words and SF.grace_words() in words
+          and "one completed transfer" in words, words)
     fresh()
     why = raises(prepare, {"query": "big-video"})
     check("a file over the cap is refused in words, before any card",
-          "over the 10 MiB" in why and "10,485,760" in why, why)
+          "over the" in why and SF.cap_sentence() in why, why)
+    fresh()
+    why = raises(prepare, {"query": "empty-file"})
+    check("an empty file is refused in words, before any card",
+          "is empty" in why and "nothing to send" in why, why)
     fresh()
     why = raises(prepare, {"query": "receipt"})
     check("several matches are refused and the sentence asks to narrow",
@@ -220,8 +235,9 @@ def t_approval_then_one_byte_for_byte_fetch():
     check("nothing is listed for the phone before the card's yes",
           SF.pending() == [], SF.pending())
     got = SF.approve(state)
-    check("the approved tool result says the file is waiting and for how long",
-          got.get("ok") is True and "ten minutes" in got.get("said", "")
+    check("the approved tool result says the file is waiting and how one transfer ends",
+          got.get("ok") is True and SF.grace_words() in got.get("said", "")
+          and "completed transfer" in got.get("said", "")
           and got["file"]["name"] == "invoice.pdf", got)
     listed = SF.pending()
     check("after approval the phone list carries an opaque id and no path",
@@ -236,15 +252,27 @@ def t_approval_then_one_byte_for_byte_fetch():
     data = base64.b64decode(out.get("data") or "")
     check("the download is the file, byte for byte",
           code == 200 and data == INVOICE.read_bytes(), (code, len(data)))
+    check("the one-piece answer carries the whole file and its own hash",
+          out.get("offset") == 0 and out.get("length") == len(data)
+          and out.get("size_bytes") == len(data) and out.get("id") == ident
+          and out.get("sha256") == out.get("chunk_sha256"), (out.get("offset"),
+                                                            out.get("length")))
     check("the download answer carries name/size/mime/sha, never a path",
           out.get("name") == "invoice.pdf" and out.get("size_bytes") == len(data)
           and out.get("mime") == "application/pdf" and len(out.get("sha256", "")) == 64
           and "path" not in out and "folder" not in out
           and str(ALLOW) not in json.dumps(out), {k: v for k, v in out.items() if k != "data"})
+    code, again = SF.download(ident)
+    check("the one-piece file is not consumed by that piece: the grace keeps it",
+          code == 200 and data == base64.b64decode(again.get("data") or "")
+          and [f["id"] for f in SF.pending()] == [ident], (code, again))
+    code, out = SF.acknowledge({"id": ident})
+    check("the phone's receipt consumes the id",
+          code == 200 and "finished" in out.get("said", ""), (code, out))
     code, out = SF.download(ident)
-    check("the id is single use: a second fetch is a plain 404",
-          code == 404 and "already been downloaded" in out.get("error", ""), (code, out))
-    check("the used id left the pending list", SF.pending() == [])
+    check("after the receipt a fetch is the plain 404",
+          code == 404 and "already finished" in out.get("error", ""), (code, out))
+    check("the finished id left the pending list", SF.pending() == [])
 
 
 def t_unknown_expired_and_gone_files_answer_plainly():
@@ -272,9 +300,10 @@ def t_unknown_expired_and_gone_files_answer_plainly():
 
 
 class Handler:
-    def __init__(self, path="", body=b""):
+    def __init__(self, path="", body=b"", headers=None):
         self.path = path
         self._body = body
+        self.headers = dict(headers or {})
         self.sent = []
 
     def _send(self, code, out):
@@ -283,10 +312,16 @@ class Handler:
     def do_GET(self):
         self._send(999, {"error": "core route not expected"})
 
+    def do_POST(self):
+        self._send(999, {"error": "core route not expected"})
+
 
 def _req(handler_cls, path, query="", origin=True, token=True):
     class H(handler_cls):
         def do_GET(self):
+            self._send(999, {"error": "core route not expected"})
+
+        def do_POST(self):
             self._send(999, {"error": "core route not expected"})
 
     SF.install(H, origin_ok=lambda h: origin, token_ok=lambda h: token,
@@ -301,9 +336,14 @@ def t_the_two_routes_never_take_a_path():
     code, out = _req(Handler, "/api/files/send")
     check("GET /api/files/send answers 200 with an empty list and the limits",
           code == 200 and out.get("ok") is True and out.get("count") == 0
-          and out.get("cap_bytes") == 10 * 1024 * 1024
-          and out.get("ttl_seconds") == 10 * 60 and out.get("single_use") is True,
+          and out.get("cap_bytes") == SF.CAP_BYTES
+          and out.get("chunk_bytes") == SF.CHUNK_BYTES
+          and out.get("ttl_seconds") == SF.TTL_SECONDS and out.get("single_use") is True,
           (code, out))
+    check("the list's own words read the module's constants",
+          SF.chunk_words() in out.get("said", "")
+          and SF.grace_words() in out.get("said", "")
+          and "one completed transfer" in out.get("said", ""), out.get("said"))
     code, out = _req(Handler, "/api/files/send", origin=False)
     check("a cross-origin request is refused by install()", code == 403, (code, out))
     code, out = _req(Handler, "/api/files/send", token=False)
@@ -366,10 +406,15 @@ def t_the_records_agree():
     asks = (repo / "backend" / "jarvis_asks_first.py").read_text(encoding="utf-8")
     check("'What asks first' lists the action", '"send_file_to_phone"' in asks)
     docs = (repo / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("docs section 172 documents both routes and the limits",
+    # The page is the records lane's: it may still carry the old, smaller slice
+    # when this suite runs (the code landed first), so the cap and the life are
+    # accepted in either wording and only the route itself is pinned here.
+    check("docs sections 172/225 document the download and receipt routes and a cap",
           "## 172. Send one file from the PC to the phone" in docs
           and "GET /api/files/download?id=" in docs
-          and "10,485,760" in docs and "single use" in docs and "10 minutes" in docs)
+          and "POST /api/files/ack" in docs
+          and ("2,147,483,648" in docs or "10,485,760" in docs)
+          and ("single use" in docs or "one completed transfer" in docs))
     parity = (repo / "tools" / "check_parity.py").read_text(encoding="utf-8")
     check("parity classifies both routes phone-only (the phone calls them)",
           '"/api/files/send"' in parity and '"/api/files/download"' in parity
@@ -459,7 +504,9 @@ def main() -> int:
     tail = f"; {len(SKIPPED)} SKIPPED (not passed)" if SKIPPED else ""
     print(f"{len(PASSED)} passed, 0 failed - one fine result file can be searched in "
           f"the allowed folders, shown on ONE card, and fetched byte-for-byte by an "
-          f"opaque id for ten minutes, once, under 10 MiB{tail}")
+          f"opaque id while the pieces keep coming, one completed transfer (the "
+          f"receipt, or {SF.grace_words()} after the last piece), under "
+          f"{SF.cap_sentence()}{tail}")
     shutil.rmtree(_TMP, ignore_errors=True)
     return 0
 

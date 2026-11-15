@@ -1526,6 +1526,17 @@ pub fn run() {
             folders::add_folder,
             folders::remove_folder,
             folders::import_notion,
+            // "Send a file to your phone…" (2026-11-14, the design's sections
+            // 6 and 8; SEND-TO-PHONE-2GB-DESIGN-2026-11-14.md): the Windows
+            // OPEN-FILE dialog, then POST /api/files/prepare - the one route
+            // that may name a file OUTSIDE "Folders Jarvis may look in",
+            // because the owner picked it himself. The command takes NO
+            // argument, so no page can name a path here; the PC registers the
+            // one file and raises the SAME `send_file_to_phone` approval card
+            // the chat route uses, and nothing is fetchable before that yes.
+            // Held on a stale link, because it raises a card. Settings window
+            // only.
+            folders::prepare_file_for_phone,
             // Settings' "Protected from Jarvis" (protected.rs; the owner's
             // request of 2026-10-31, contract
             // `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`): the list
