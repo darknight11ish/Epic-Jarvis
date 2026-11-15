@@ -122,7 +122,7 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        `plugin-loader.patch`; four of those hunks read lines only the owner's own
        `jarvis_hud.py` holds, so a single anchor insert cannot express it.
 
-    2b. RELEASE MARKERS (VERSION and the backend's beside-files). The live backend
+    2b. RELEASE MARKERS (VERSION, SOURCE-COMMIT and the backend's beside-files). The live backend
         reads two files beside itself without importing them - `requirements.lock`
         and `quiz_grader_cases.json` (the BESIDE table in
         `tools/gen_base_from_backend.py`) - and neither is in `$SHIPPED`, so step 1
@@ -143,6 +143,16 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
         `RELEASE MARKERS (N in the formula: ...)` header states N. A second run
         on an already-current folder plans none of them. A dry run prints
         `VERSION: would write ...` / `BESIDE: would write ...` and writes nothing.
+
+        `SOURCE-COMMIT` is written here too (Gemini's ruling Q8, 2026-11-15): the
+        full commit `--ref` names, beside `VERSION`, so the backend can say which
+        commit its bytes came from without a network fetch. It is NOT inside
+        `VERSION`, because that file is the shared release marker the desktop HUD
+        compares character for character and every other reader parses as a bare
+        version number. It has its own `SOURCE-COMMIT:` line, is counted in the
+        same formula, and is planned "unchanged" when the record already names
+        the same commit, ref and version - the bytes carry no timestamp, so a
+        second run really does plan nothing.
 
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
        file is touched. If compilation fails, nothing is written.
@@ -257,6 +267,25 @@ DESKTOP_EXE_ENV = "JARVIS_DESKTOP_EXE"
 #: `_where.py`, the live-only `jarvis-visual-spec.json`, and the desktop's
 #: `Cargo.lock`.
 BESIDE_DEPLOY_FILES = ("requirements.lock", "quiz_grader_cases.json")
+
+#: The commit record written BESIDE `VERSION` (Gemini's ruling Q8, 2026-11-15).
+#: It says which commit the bytes this run deployed came from, so the owner's
+#: PC can answer "which commit is each piece on?" without a network fetch: the
+#: desktop's own log line and the APK's `client-latest.json` answer for their
+#: pieces, and this answers for the backend. BESIDE, never inside `VERSION`:
+#: that file is the shared release marker the desktop HUD compares character
+#: for character, and every other reader of it parses a bare version number.
+SOURCE_COMMIT = "SOURCE-COMMIT"
+
+#: The one format this tool writes and the preflight (`backend/selftest.py`)
+#: reads. An unknown schema is "does not say", never a guess at a file another
+#: writer produced.
+SOURCE_COMMIT_SCHEMA = "jarvis-source-commit/1"
+
+#: A commit as this record may name it. Lower-case hex only: this is an
+#: identity a program compares, not a place to echo whatever an environment
+#: variable happens to hold.
+_SOURCE_SHA = re.compile(r"^[0-9a-f]{7,40}$")
 
 #: Where the stack puts the setup block: before the plugin-loader block, which is LAST.
 PLUGIN_LOADER_MARKER = "    # plugin-loader.patch (this branch)."
@@ -1843,12 +1872,13 @@ class DeltaAction:
 
 @dataclass
 class ReleaseAction:
-    """One file beside the backend: the shared VERSION, or a BESIDE file."""
-    name: str               # "VERSION" | "requirements.lock" | ...
+    """One file beside the backend: the shared VERSION, SOURCE-COMMIT, or a BESIDE file."""
+    name: str               # "VERSION" | "SOURCE-COMMIT" | "requirements.lock" | ...
     status: str             # "write" | "unchanged" | "skip"
     blob: Optional[bytes] = None
-    old: str = ""           # VERSION only: what the live file held
+    old: str = ""           # VERSION / SOURCE-COMMIT: what the live file held
     detail: str = ""        # skip reason ("no installed desktop")
+    commit: str = ""        # SOURCE-COMMIT only: the commit this record names
 
 
 @dataclass
@@ -2028,6 +2058,27 @@ def check_worktree_at_ref(repo: Path, ref: str,
         f'git worktree add --detach "<repo>\\.dsh-scratch\\reconcile-wt" {ref} ; then run '
         f"this tool from that folder (py -3 tools/reconcile_live_backend.py "
         f'--backend-path "<live backend>").')
+
+
+def source_commit_of(repo: Path, ref: str,
+                     resolve: Optional[Callable] = None) -> tuple:
+    """(the full commit `ref` names, "") - or ("", why it could not be read).
+
+    The ref guard resolves this same pair, so a normal run costs nothing extra.
+    It NEVER raises: a deploy that would otherwise work must not be refused
+    because the record it wants to write cannot be written. It says so on its
+    own `SOURCE-COMMIT: skipped (...)` line and carries on, and the preflight
+    then reports the backend as not saying which commit it came from - the
+    honest answer, never a guess.
+    """
+    try:
+        _head, ref_sha = (resolve or worktree_and_ref_shas)(Path(repo), ref)
+    except Refused as exc:
+        return "", f"the commit could not be read ({exc})"
+    sha = str(ref_sha or "").strip().lower()
+    if not _SOURCE_SHA.match(sha):
+        return "", f"{ref!r} did not resolve to a commit"
+    return sha, ""
 
 
 def plan_shipped(repo: Path, ref: str, live: Path, shipped: list,
@@ -3170,15 +3221,40 @@ def read_desktop_version(path) -> Optional[str]:
     return value or None
 
 
+def source_commit_blob(commit: str, ref: str, *, version: str = "") -> bytes:
+    """The `SOURCE-COMMIT` bytes for one deploy: the commit, its ref, and VERSION.
+
+    Deterministic, because the tool's second run must plan nothing: the same
+    commit, ref and version always produce the same bytes, so a repeated apply
+    sees the file "unchanged". No timestamp - the commit is the fact, and a
+    clock would only make every run write again.
+
+    `version` is the `VERSION` value this same run wrote, so the reader can
+    tell a record left behind by an older deploy from the current one.
+    """
+    commit = str(commit or "").strip().lower()
+    if not _SOURCE_SHA.match(commit):
+        raise Refused(f"the source commit {commit!r} is not a commit this record may name")
+    doc = {"schema": SOURCE_COMMIT_SCHEMA, "commit": commit,
+           "ref": str(ref or "").strip(), "version": str(version or "").strip()}
+    return (json.dumps(doc, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
+
 def plan_release_files(repo: Path, ref: str, live: Path, *, desktop_exe=None,
                        version_reader: Optional[Callable] = None,
-                       show: Optional[Callable] = None) -> list:
-    """Plan the VERSION marker and the non-`$SHIPPED` beside-files. Never guesses.
+                       show: Optional[Callable] = None,
+                       source_sha: str = "", source_why: str = "") -> list:
+    """Plan the VERSION marker, the source commit, and the non-`$SHIPPED` beside-files.
 
     The VERSION value comes ONLY from the installed desktop's FileVersion. The
     repository's own root `VERSION` (0.2.0) is a different marker and is never
     read. The beside bytes come from `--ref:backend/<name>`, the same ref every
     shipped module comes from, so a deploy cannot mix two trees.
+
+    `source_sha` is the commit `--ref` names, resolved by the caller (it already
+    resolves it for the ref guard). It is written beside `VERSION` so the
+    backend can say which commit it came from; an empty one is reported as
+    "skipped" with `source_why` and nothing is written - never a guessed sha.
 
     WHY THE OTHER BESIDE ENTRIES ARE NOT HERE, one line each:
       * `jarvis-framework.toml` - the OWNER'S settings; the base carries a
@@ -3208,6 +3284,28 @@ def plan_release_files(repo: Path, ref: str, live: Path, *, desktop_exe=None,
             # bare version, and the owner's live file is 7 bytes for "0.2.433".
             actions.append(ReleaseAction("VERSION", "write",
                                          version.encode("utf-8"), old=old))
+    # The commit the bytes came from, beside the version, for the same reason
+    # the version is written at all: a deploy that leaves the pieces unable to
+    # say which commit they are is how three pieces came to sit at three
+    # commits with nothing saying so (Q8, 2026-11-15).
+    target = Path(live) / SOURCE_COMMIT
+    sha = str(source_sha or "").strip().lower()
+    if not _SOURCE_SHA.match(sha):
+        actions.append(ReleaseAction(SOURCE_COMMIT, "skip",
+                                     detail=source_why or "the commit could not be read"))
+    else:
+        blob = source_commit_blob(sha, ref, version=version)
+        if target.is_file() and target.read_bytes() == blob:
+            actions.append(ReleaseAction(SOURCE_COMMIT, "unchanged", old=sha, commit=sha))
+        else:
+            old = ""
+            if target.is_file():
+                try:
+                    # For the report only: what the old record named, if it did.
+                    old = str(json.loads(target.read_text(encoding="utf-8")).get("commit") or "")
+                except (OSError, ValueError, AttributeError):
+                    old = ""
+            actions.append(ReleaseAction(SOURCE_COMMIT, "write", blob, old=old, commit=sha))
     for name in BESIDE_DEPLOY_FILES:
         blob = show(repo, ref, name)
         target = Path(live) / name
@@ -3233,6 +3331,18 @@ def release_lines(actions: Iterable[ReleaseAction], *, done: bool = False) -> li
             else:
                 lines.append(f"VERSION: would write {action.blob.decode('utf-8')} "
                              f"(now {action.old or 'nothing'})")
+        elif action.name == SOURCE_COMMIT:
+            short = action.commit[:12]
+            if action.status == "skip":
+                lines.append(f"SOURCE-COMMIT: skipped ({action.detail})")
+            elif action.status == "unchanged":
+                lines.append(f"SOURCE-COMMIT: unchanged {short}")
+            elif done:
+                lines.append(f"SOURCE-COMMIT: wrote {short} (the commit these bytes came "
+                             f"from, beside VERSION)")
+            else:
+                lines.append(f"SOURCE-COMMIT: would write {short} (the commit these bytes "
+                             f"come from)")
         elif action.status == "unchanged":
             lines.append(f"BESIDE: unchanged {action.name}")
         elif done:
@@ -3245,11 +3355,13 @@ def release_lines(actions: Iterable[ReleaseAction], *, done: bool = False) -> li
 def release_write_count(actions: Iterable[ReleaseAction]) -> int:
     """How many release-marker files this run would write, for the formula.
 
-    One per beside file whose bytes differ from the ref's, plus the VERSION when
-    it differs from the installed desktop's FileVersion - and 0 when they are all
-    unchanged. These are the `beside + version` terms of the runbook's
-    `add + update + insert + beside + version` count: a skipped VERSION (no
-    installed desktop) writes nothing and counts 0, never 1."""
+    One per beside file whose bytes differ from the ref's, plus `SOURCE-COMMIT`
+    when it is not already the commit/ref/version record this run would write,
+    plus the VERSION when it differs from the installed desktop's FileVersion -
+    and 0 when they are all unchanged. These are the `beside + version` terms of
+    the runbook's `add + update + insert + beside + version` count: a skipped
+    VERSION (no installed desktop) or a skipped SOURCE-COMMIT (no readable
+    commit) writes nothing and counts 0, never 1."""
     return sum(1 for action in actions if action.status == "write")
 
 
@@ -3394,16 +3506,19 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     #     that also fixed the version banner is not 2 changes. The dry run says
     #     "would write" and writes nothing; an apply reports after the writes.
     try:
+        release_sha, release_why = source_commit_of(repo, ref, resolve=resolve_shas)
         plan.release = plan_release_files(repo, ref, live, desktop_exe=desktop_exe,
-                                          version_reader=version_reader, show=show)
+                                          version_reader=version_reader, show=show,
+                                          source_sha=release_sha,
+                                          source_why=release_why)
     except Refused as exc:
         out(f"REFUSED: {exc}")
         return 2
     release_count = release_write_count(plan.release)
     if not apply:
         out("")
-        out(f"RELEASE MARKERS ({release_count} in the formula: VERSION and "
-            f"beside-files):")
+        out(f"RELEASE MARKERS ({release_count} in the formula: VERSION, "
+            f"SOURCE-COMMIT and the beside-files):")
         for line in release_lines(plan.release):
             out(line)
 
@@ -3474,8 +3589,8 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
 
     # 6. Purge stale bytecode (backed up first when this is a real apply).
     out("")
-    out(f"RELEASE MARKERS ({release_count} in the formula: VERSION and "
-        f"beside-files):")
+    out(f"RELEASE MARKERS ({release_count} in the formula: VERSION, "
+        f"SOURCE-COMMIT and the beside-files):")
     for line in release_lines(plan.release, done=True):
         out(line)
     purged = purge_pycache(live, backup if has_writes else None)
