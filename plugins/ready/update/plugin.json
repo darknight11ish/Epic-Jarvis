@@ -1,0 +1,7 @@
+{
+  "name": "update",
+  "summary": "update Jarvis on the PC, asked for and approved from the phone: GET /api/update/status (installed version, published version, and the phase of any update in flight, all read-only) and POST /api/update/request (ONE ask card, action update_jarvis, then scripts/update-jarvis.ps1 run by a detached helper that survives the restart the update itself causes - one update at a time, nothing downloads or changes before the card is approved).",
+  "module": "jarvis_update",
+  "install": "handler",
+  "stack_order": 191
+}

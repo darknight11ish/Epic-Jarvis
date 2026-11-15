@@ -534,6 +534,12 @@ SHIPPED = (
     # space, do the settings files parse - read-only, WARN never fix
     # (feasibility I97, data-health.patch)
     "jarvis_data_health.py",
+    # "Update Jarvis" from the phone: ONE ask card at tier "ask" (action
+    # update_jarvis), then scripts/update-jarvis.ps1 run by a DETACHED helper
+    # that outlives the backend restart, writing progress to a small state file
+    # - one update at a time, locked in the backend, in the helper and on the PC
+    # (phone-update.patch adds the two routes)
+    "jarvis_update.py",
     # "Check for tool updates": outdated Python packages, Rust crates and
     # pinned GitHub tools, report only, one card ever (tool-updates.patch)
     "jarvis_tool_updates.py",

@@ -488,7 +488,7 @@ SUBSYSTEMS = (
         "modules": (
             "jarvis_self_portrait", "jarvis_self_improve", "jarvis_creator",
             "jarvis_identity", "jarvis_feedback", "selftest", "jarvis_self_code",
-            "jarvis_recent_changes",
+            "jarvis_recent_changes", "jarvis_update",
         ),
         "paths": ("VERSION",),
         "key_modules": ("jarvis_self_portrait", "jarvis_self_code",

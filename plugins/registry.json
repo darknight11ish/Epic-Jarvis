@@ -7,8 +7,8 @@
     "core": 149,
     "missing": 0
   },
-  "folder_count": 29,
-  "ready_count": 58,
+  "folder_count": 30,
+  "ready_count": 59,
   "folders": [
     {
       "name": "skill-hub",
@@ -240,6 +240,14 @@
       "install": "handler",
       "stack_order": 190,
       "summary": "Creator mode: ONE waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card is opened, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in the pack manager's own words in this slice.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "update",
+      "module": "jarvis_update",
+      "install": "handler",
+      "stack_order": 191,
+      "summary": "update Jarvis on the PC, asked for and approved from the phone: GET /api/update/status (installed version, published version, and the phase of any update in flight, all read-only) and POST /api/update/request (ONE ask card, action update_jarvis, then scripts/update-jarvis.ps1 run by a detached helper that survives the restart the update itself causes - one update at a time, nothing downloads or changes before the card is approved).",
       "why": "born as a folder: it replaces no patch"
     }
   ],

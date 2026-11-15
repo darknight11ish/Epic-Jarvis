@@ -144,6 +144,13 @@ NO_PATCH = {
     # drop-in loader, so the folder is the whole of its wiring and no patch is
     # added to `jarvis_hud.py`.
     "creator-mode",
+    # "Update Jarvis from the phone" (2026-11-15, the backend half): its two
+    # routes (GET /api/update/status and POST /api/update/request) come from
+    # jarvis_update.install(), called by the drop-in loader, so the folder is
+    # the whole of its wiring and no patch is added to `jarvis_hud.py` - which
+    # also keeps the route out of that file's dispatch tuple and away from the
+    # patch stack's ordering bookkeeping.
+    "update",
 }
 
 
