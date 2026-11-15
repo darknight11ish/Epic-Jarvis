@@ -241,6 +241,13 @@ MAX_TEXT = 2_000
 #: How many repos / pull requests / issues / runs one read asks for.
 PER_PAGE = 20
 
+#: The runs LIST asks for fewer, because one workflow run carries its whole head
+#: commit and its actor: twenty of them is a 273,833-character answer against a
+#: `MAX_BYTES` of 200,000, so the scope could never answer at all. Measured on
+#: the owner's own repository, 2026-11-15. Five is the same page `CI_PER_PAGE`
+#: already reads, and the answer says how many of how many it is showing.
+RUNS_PER_PAGE = 5
+
 #: The GitHub REST API version this module speaks. Sent on every request so a
 #: future change to GitHub's defaults cannot silently change what is read.
 API_VERSION = "2022-11-28"
@@ -819,6 +826,12 @@ _REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_./-]{0,199}$")
 _PATH = re.compile(r"^[A-Za-z0-9_.\-/ ]{1,400}$")
 _NUMBER = re.compile(r"^[0-9]{1,12}$")
 
+#: git's own revision KEYWORDS. They are not branches: a request that says
+#: `?branch=HEAD` (or a card that names `HEAD` as the target branch) names
+#: something that does not exist on GitHub, so `_check_ref` refuses them.
+_REF_KEYWORDS = frozenset({"@", "HEAD", "FETCH_HEAD", "ORIG_HEAD",
+                           "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"})
+
 
 class GitHubError(Exception):
     """A refusal or a failure, already in words a person can read."""
@@ -902,10 +915,20 @@ def _scrub(text: str, token: str) -> str:
 #: U+200B-U+200F and U+FEFF, and the bidirectional controls U+202A-U+202E and
 #: U+2066-U+2069 (a bidi override can make one line draw as another). Every
 #: fetched string passes through `_clean_github_text`, which removes all of them.
+_HIDDEN_CHARS = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 _HIDDEN_GITHUB_TEXT = re.compile(
     r"<!--.*?(?:-->|\Z)"                     # an HTML comment, closed or not
-    r"|[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]",
+    r"|" + _HIDDEN_CHARS.pattern,            # ... or a zero-width / bidi control
     re.S)
+
+#: The characters a text the MODEL supplied may not carry at all. It is the same
+#: class minus the zero-width joiners: U+200C (ZWNJ) and U+200D (ZWJ) are part of
+#: real scripts and of every joined emoji, so refusing them would refuse ordinary
+#: words. What is left is the set that draws text as something other than what
+#: it is - the bidi embeddings, overrides and isolates, the two bidi marks, the
+#: zero-width space and the byte-order mark.
+_REFUSED_CHARS = re.compile(
+    r"[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 
 #: The delimiters a BLOCK of fetched GitHub text is wrapped in, so the model and
 #: the owner read it as data and not as something this PC said. Single-line
@@ -949,9 +972,46 @@ def _clean_github_text(text, *, limit: int = 0, wrap: bool = True) -> str:
     return f"{GITHUB_TEXT_BEGINS}\n{cleaned}\n{GITHUB_TEXT_ENDS}"
 
 
+def _refuse_hidden(text: str, what: str) -> str:
+    """Refuse a text the MODEL supplied that carries a drawing-override character.
+
+    Fetched text is CLEANED by `_clean_github_text` above, because somebody
+    else's words must survive. Text the model wrote is different: it is shown
+    whole on the approval card, and that card is what a person consents to. A
+    bidi override there would make the card draw as something other than what
+    will be posted, so it is refused in words that say what to remove - never
+    silently rewritten, which would post something the person never saw.
+    """
+    if _REFUSED_CHARS.search(str(text or "")):
+        raise GitHubError(
+            f"That {what} contains a character that can make one line draw as "
+            f"another (a bidirectional override or isolate, a bidi mark, a "
+            f"zero-width space or a byte-order mark), so Jarvis did not use it "
+            f"and sent nothing. Remove those characters and ask again.")
+    return text
+
+
 # --------------------------------------------------------------------------
 #   One request, worked out before anything is sent
 # --------------------------------------------------------------------------
+
+
+#: The one shape of address this module may send to. A path has to start with
+#: ONE "/" - that single character is what ends the URL's authority, so
+#: `https://api.github.com` + `/repos/o/r` can only ever be api.github.com,
+#: while a path of `@evil.example/x` would make the whole thing
+#: `https://api.github.com@evil.example/x`, whose host is evil.example. A `#`
+#: is refused because it cuts everything the module wrote after it, and a `..`
+#: segment is refused because it is how one path becomes another.
+def _address(path: str) -> str:
+    """`GITHUB_API` + a path this module wrote, or "" when it did not write it."""
+    text = str(path or "")
+    if not text.startswith("/") or text.startswith("//"):
+        return ""
+    head = text.split("?", 1)[0]
+    if "#" in text or ".." in head.split("/"):
+        return ""
+    return GITHUB_API + text
 
 
 @dataclass(frozen=True)
@@ -967,7 +1027,12 @@ class Step:
     path: str
 
     def url(self) -> str:
-        return GITHUB_API + self.path
+        address = _address(self.path)
+        if not address:
+            raise GitHubError(
+                "Jarvis will not send a request to an address it did not write "
+                "itself, so nothing was sent.")
+        return address
 
     def shown_url(self) -> str:
         """The address as the CARD shows it: a placeholder stays a word."""
@@ -1037,6 +1102,7 @@ class Request:
     issue_reason: str = ""        # github_issue_state: the optional why on the card
     old_title: str = ""           # github_edit_pr: the title the card showed as "before"
     old_body: str = ""            # github_edit_pr: the body the card showed as "before"
+    runs_list: bool = False       # github_list: the runs LIST, not one CI answer
 
     def urls(self) -> tuple:
         return tuple(s.url() for s in self.steps)
@@ -1345,17 +1411,39 @@ def capabilities_line() -> str:
 
 def _check_repo(repo: str) -> str:
     repo = str(repo or "").strip()
-    if not _REPO.match(repo):
+    owner, _, name = repo.partition("/")
+    if not _REPO.match(repo) or name in (".", "..") or owner in (".", ".."):
+        # A `.` or `..` "name" passes the character class but is a path step in
+        # the URL, not a repository: `owner/..` + `/pulls` is how one endpoint
+        # becomes another. Refused here, before any path is built (2026-11-15).
         raise GitHubError('Jarvis needs a repository named like "owner/name" '
                           '(letters, numbers, dot, dash and underscore only).')
     return repo
 
 
 def _check_ref(ref: str) -> str:
+    """A plain branch (or tag) name, in the shape git itself accepts.
+
+    `_REF` is the character class; this is the shape. A full `refs/heads/main`
+    is not the branch a card can name, and `HEAD` is a revision keyword rather
+    than a branch at all - a runs filter of either matches nothing, which reads
+    as "no CI run" when there are plenty. A trailing "/" or ".", a hidden
+    component (".secret"), a component ending ".lock" and a ".." are all things
+    git refuses, so this module refuses them before a URL or a git command is
+    built from them (2026-11-15).
+    """
     ref = str(ref or "").strip()
-    if not _REF.match(ref) or ".." in ref:
-        raise GitHubError("That branch name does not look like a branch name, so "
-                          "Jarvis did not ask GitHub about it.")
+    parts = ref.split("/")
+    if (not _REF.match(ref) or ".." in ref
+            or ref in _REF_KEYWORDS or ref.startswith("refs/")
+            or ref.endswith(("/", "."))
+            or any(part in ("", ".", "..") or part.startswith(".")
+                   or part.endswith(".lock") for part in parts)):
+        raise GitHubError(
+            'That is not a plain branch name, so Jarvis did not ask GitHub about '
+            'it. Give the branch or tag itself - for example "main" or '
+            '"feature/tray-icon" - with no "refs/heads/" in front, no "..", no '
+            'trailing slash or dot, and not the word HEAD.')
     return ref
 
 
@@ -1370,9 +1458,20 @@ def _check_path(path: str) -> str:
 
 
 def _check_number(value, what: str) -> str:
-    text = str(value or "").strip().lstrip("#")
-    if not _NUMBER.match(text):
-        raise GitHubError(f"Jarvis needs a {what} number, and that was not one.")
+    """A GitHub number: a real, positive one. GitHub numbers from 1.
+
+    `0`, `"0"`, `-1` and `"abc"` are all refused here. Before 2026-11-15 a `"0"`
+    that arrived as a STRING was accepted and `/issues/0/comments` was planned -
+    an endpoint GitHub does not have - while an integer 0 was refused, so the
+    same nonsense got two different answers.
+    """
+    text = "" if isinstance(value, bool) or value is None else str(value)
+    text = text.strip().lstrip("#").strip()
+    if not _NUMBER.match(text) or int(text) < 1:
+        raise GitHubError(
+            f"Jarvis needs a real {what} number, and that was not one: GitHub "
+            f"numbers its issues, pull requests and workflow runs from 1 "
+            f"upwards. Nothing was sent.")
     return text
 
 
@@ -1381,6 +1480,7 @@ def _check_text(text: str, what: str) -> str:
     text = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         raise GitHubError(f"Jarvis needs the {what} itself - there was no text to post.")
+    text = _refuse_hidden(text, what)
     if len(text) > MAX_TEXT:
         raise GitHubError(f"That {what} is longer than Jarvis will post in one go "
                           f"({MAX_TEXT} characters). Shorten it, or split it into "
@@ -1427,6 +1527,7 @@ def _check_description(text: str) -> str:
     text = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return ""
+    text = _refuse_hidden(text, "description")
     if len(text) > MAX_DESCRIPTION:
         raise GitHubError(f"That description is longer than GitHub accepts "
                           f"({MAX_DESCRIPTION} characters). Shorten it.")
@@ -1891,6 +1992,7 @@ def _check_commit_message(value) -> str:
     if not text:
         raise GitHubError("Jarvis needs a one-line message for the fix's commit "
                           '(for example "Fix the tray icon test").')
+    text = _refuse_hidden(text, "commit message")
     if len(text) > MAX_COMMIT_MESSAGE:
         raise GitHubError(f"That commit message is longer than Jarvis writes in "
                           f"one line ({MAX_COMMIT_MESSAGE} characters). Shorten it.")
@@ -1902,6 +2004,7 @@ def _check_pr_title(value, what: str = "pull request") -> str:
     text = " ".join(str(value or "").split())
     if not text:
         raise GitHubError(f"Jarvis needs the {what}'s title - there was none.")
+    text = _refuse_hidden(text, "title")
     if len(text) > MAX_PR_TITLE:
         raise GitHubError(
             f"That title is longer than one card can show in full "
@@ -1916,6 +2019,7 @@ def _check_pr_body(value, *, required: bool = True) -> str:
     if not text and required:
         raise GitHubError("Jarvis needs the body's text - there was none. Write "
                           "it and ask again; nothing was sent.")
+    text = _refuse_hidden(text, "text")
     if len(text) > MAX_PR_BODY:
         raise GitHubError(
             f"That text is longer than one card can show in full "
@@ -1939,6 +2043,7 @@ def _check_label_list(value, what: str) -> tuple:
         if not name:
             raise GitHubError(f"One of the labels to {what} was empty, so nothing "
                               f"was changed.")
+        name = _refuse_hidden(name, "label name")
         if len(name) > MAX_LABEL_CHARS or not _LABEL.match(name):
             raise GitHubError(
                 f'"{name[:60]}" is not a label name GitHub accepts (up to '
@@ -2179,12 +2284,13 @@ def plan_list(args: Optional[dict] = None) -> Request:
     elif scope == "issues":
         path = f"{_repo_path(repo)}/issues?state=open&per_page={PER_PAGE}"
     else:
-        path = f"{_repo_path(repo)}/actions/runs?per_page={PER_PAGE}"
+        path = f"{_repo_path(repo)}/actions/runs?per_page={RUNS_PER_PAGE}"
     return Request(
         ACTION_INSPECT,
         f"Jarvis will read {SCOPE_WORDS[scope]} ({repo}).",
         (Step("GET", path),),
         touches="Nothing on GitHub changes; this only reads.",
+        runs_list=(scope == "runs"),
     )
 
 
@@ -2219,11 +2325,18 @@ def plan_ci(args: Optional[dict] = None) -> Request:
         return Request(
             ACTION_INSPECT,
             f"Jarvis will look at pull request {number} in {repo}, then at the CI "
-            f"runs for the commit at its head.",
+            f"runs for the commit at its head, and then at every CHECK GitHub "
+            f"reports for that same commit - so one workflow passing cannot hide "
+            f"another one failing.",
             (Step("GET", f"{_repo_path(repo)}/pulls/{number}"),
              Step("GET", f"{_repo_path(repo)}/actions/runs?head_sha={{commit}}"
-                         f"&per_page={CI_PER_PAGE}")),
-            touches="Nothing on GitHub changes; this only reads which run is newest and how it ended.",
+                         f"&per_page={CI_PER_PAGE}"),
+             Step("GET", f"{_repo_path(repo)}/commits/{{commit}}/check-runs"
+                         f"?per_page=100")),
+            touches=("Nothing on GitHub changes; this only reads which runs exist "
+                     "on that commit, which checks exist, and how they ended."),
+            repo=repo,
+            number=number,
         )
     if branch:
         ref = _check_ref(branch)
@@ -2270,6 +2383,7 @@ def plan_open_issue(args: Optional[dict] = None) -> Request:
     title = " ".join(title.split())
     if not title:
         raise GitHubError("Jarvis needs the issue's title - there was none to post.")
+    title = _refuse_hidden(title, "issue title")
     if len(title) > 200:
         raise GitHubError("That issue title is longer than GitHub will take (200 "
                           "characters). Shorten it.")
@@ -2400,11 +2514,16 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
             "Jarvis needs the pull request's title, exactly as github_pr_scan "
             "printed it, so the card can name what is being merged.")
     base_ref = str(args.get("base_ref") or "").strip()
-    if not base_ref or not _REF.match(base_ref) or ".." in base_ref:
+    if not base_ref:
         raise GitHubError(
             'Jarvis needs the branch this pull request is merged INTO, exactly as '
             'github_pr_scan printed it after "base", so the card can name the '
             "target branch.")
+    # The SHAPE of that name is `_check_ref`'s job, in one place: a card that
+    # named `refs/heads/main` or `HEAD` would name something that is not the
+    # branch the pull request merges into, and the run stage would then refuse
+    # the merge against a base that never matches (2026-11-15).
+    base_ref = _check_ref(base_ref)
     payload = {"merge_method": MERGE_METHOD, "sha": sha}
     checks = ", ".join(REQUIRED_CHECKS)
     shows = "\n".join([
@@ -3163,6 +3282,8 @@ def plan_issue_state(args: Optional[dict] = None) -> Request:
                           "the issues list or details, so the card can name "
                           "which issue it will change. Nothing was changed.")
     reason = " ".join(str(args.get("reason") or "").split())
+    if reason:
+        reason = _refuse_hidden(reason, "reason")
     if len(reason) > MAX_ISSUE_REASON:
         raise GitHubError(f"That reason is longer than one card shows "
                           f"({len(reason)} characters; Jarvis shows at most "
@@ -3294,11 +3415,49 @@ def _headers(token: str) -> dict:
     }
 
 
-def _plain_failure(status: int, *, token: Optional[str] = None) -> str:
+def _fetched(answer) -> tuple:
+    """(status, text, headers) from whatever the fetch seam answered.
+
+    `_default_fetch_full` answers three values (its third is the answer's own
+    headers, which is how a rate limit's `Retry-After` is read); a test's fake
+    has always answered two, and every fake written before this still does. Both
+    are accepted here, in ONE place, so no caller has to know which one it is
+    talking to - and the default transport really is the three-value one.
+    """
+    if isinstance(answer, (tuple, list)) and len(answer) >= 3:
+        return answer[0], answer[1], dict(answer[2] or {})
+    status, text = answer
+    return status, text, {}
+
+
+def _retry_after(headers) -> str:
+    """`Retry-After` as a plain wait ("about 30 seconds"), or "" - never raw.
+
+    GitHub sends this header on a secondary rate limit, and it is the one fact
+    that turns "GitHub said no for now" into something the owner can act on.
+    Only a number of seconds is turned into words: an HTTP-date is not
+    interpreted here, and the sentence falls back to its own plain form rather
+    than printing an unreadable value.
+    """
+    value = str((headers or {}).get("retry-after") or "").strip()
+    if not value.isdigit():
+        return ""
+    seconds = int(value)
+    if seconds <= 0:
+        return ""
+    if seconds <= 120:
+        return f"about {seconds} seconds"
+    return f"about {max(2, round(seconds / 60))} minutes"
+
+
+def _plain_failure(status: int, *, token: Optional[str] = None,
+                   retry_after: str = "") -> str:
     """A failure sentence with NO HTTP code in it, and what to do about it.
 
     The owner reads this, so "HTTP 403" tells them nothing they can act on. Each
     line names the cause in their own terms and says what fixes it.
+    `retry_after` is GitHub's own `Retry-After`, already turned into words by
+    `_retry_after`, and it is used only where waiting really is the answer.
     """
     if status == 0:
         return ("api.github.com could not be reached from this PC. Check the "
@@ -3306,6 +3465,17 @@ def _plain_failure(status: int, *, token: Optional[str] = None) -> str:
     if status == 401:
         return ('GitHub refused the token saved on this PC - it may have expired '
                 'or been cancelled. Say "connect GitHub" to save a new one.')
+    if 300 <= status < 400:
+        # A redirect is how a request to one host becomes a request to ANOTHER
+        # host - and this request carries the owner's token, so the one thing
+        # the owner must be told is that Jarvis did not follow it.
+        return ("GitHub tried to send this request to a different address, and "
+                "Jarvis never follows a redirect: that is exactly how the token "
+                "would be handed to somebody else. Nothing was changed.")
+    if status in (403, 429) and retry_after:
+        return (f"GitHub asked Jarvis to wait {retry_after} before asking again, "
+                f"because too many requests came from this address in the last "
+                f"hour. Nothing was changed - ask again after that.")
     if status == 403:
         return ("GitHub said no for now. Either the token is not allowed to do "
                 "this, or too many requests were made from this address in the "
@@ -3382,7 +3552,8 @@ def _github_refusal(status: int, text: str, token: str) -> str:
 _MERGE_QUEUE = re.compile(r"merge[ _-]?queue", re.I)
 
 
-def _merge_failure(status: int, text: str, token: str) -> str:
+def _merge_failure(status: int, text: str, token: str,
+                   retry_after: str = "") -> str:
     """The sentence for a refused merge PUT, chosen by WHAT GitHub refused.
 
     The owner's ruling Q1 item 3 and Q6 (2026-11-10): a 409 means the head moved
@@ -3408,7 +3579,8 @@ def _merge_failure(status: int, text: str, token: str) -> str:
         return ("GitHub refused to merge because this pull request is not "
                 "mergeable right now (required checks, review gate, or merge "
                 "queue). Nothing was merged.")
-    return _plain_failure(status, token=token) + " Nothing was merged."
+    return _plain_failure(status, token=token,
+                          retry_after=retry_after) + " Nothing was merged."
 
 
 def _push_refusal(why: str) -> str:
@@ -3447,7 +3619,7 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
     if not approved:
         return {"ok": False, "error": "not approved; nothing was sent"}
     if r is None:
-        return {"ok": False, "error": "there was nothing to ask GitHub about"}
+        return {"ok": False, "error": "there was nothing to ask GitHub about."}
     if r.action not in (ACTION_INSPECT,) + ACTIONS:
         return {"ok": False, "error": "Jarvis has no way to do that on GitHub."}
     if r.action == ACTION_FIX_WRITE:
@@ -3461,7 +3633,10 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
         token = _need_token()
     except GitHubError as exc:
         return {"ok": False, "error": str(exc)}
-    fetch = fetch or _default_fetch
+    # `_default_fetch_full` is the three-value transport, so a rate limit's own
+    # `Retry-After` reaches the sentence the owner reads. A test's fake that
+    # answers two values is still understood (`_fetched`).
+    fetch = fetch or _default_fetch_full
     headers = _headers(token)
 
     # The three 2026-11-10 flows re-read GitHub (and, for a push, the folder)
@@ -3501,10 +3676,20 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
                         "error": "GitHub did not name the commit to look at, so "
                                  "Jarvis could not read its CI."}
             path = path.replace("{commit}", urllib.parse.quote(commit, safe=""))
-        url = GITHUB_API + path
+        url = _address(path)
+        if not url:
+            # The transport boundary checks the address ITSELF, not just the
+            # planner that built it: a request that is not `GITHUB_API` plus a
+            # path this module wrote is never sent, so a model cannot choose the
+            # host the token travels to. This is the same sentence `Step.url()`
+            # raises, kept here as a value because `run()` never raises.
+            return {"ok": False,
+                    "error": "Jarvis will not send a request to an address it "
+                             "did not write itself, so nothing was sent."}
         try:
-            status, text = fetch(step.method, url, headers=headers, body=payload,
-                                 timeout=TIMEOUT)
+            status, text, answer_headers = _fetched(
+                fetch(step.method, url, headers=headers, body=payload,
+                      timeout=TIMEOUT))
         except Exception as exc:             # noqa: BLE001 - the NAME only
             return {"ok": False,
                     "error": f"api.github.com did not answer ({type(exc).__name__}), "
@@ -3515,7 +3700,8 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
                 # own message, because "the name is taken" is the answer he acts
                 # on and a generic sentence would hide it.
                 return {"ok": False, "error": _github_refusal(status, text, token)}
-            return {"ok": False, "error": _plain_failure(status, token=token)}
+            return {"ok": False, "error": _plain_failure(
+                status, token=token, retry_after=_retry_after(answer_headers))}
         answers.append((status, _scrub(text, token)))
         if "{commit}" not in "".join(s.path for s in r.steps):
             continue
@@ -3533,21 +3719,75 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
 # --------------------------------------------------------------------------
 
 
+#: The one sentence for an answer that was longer than this module reads. A
+#: truncated answer cannot be parsed, so showing half of it would be a guess;
+#: naming the cap is the honest answer, and it is the same words everywhere.
+TOO_LONG_WORDS = ("GitHub's answer was longer than Jarvis reads in one go, and "
+                  "part of it was left out. Jarvis will not guess at the rest - "
+                  "nothing was changed. Ask again about one thing at a time.")
+
+
+def _too_long() -> str:
+    """The sentence for an answer the read cap cut. Never a half-shown answer."""
+    return TOO_LONG_WORDS
+
+
+def _unreadable() -> str:
+    """The sentence for an answer that is not a GitHub API answer at all."""
+    return ("GitHub sent back something that is not a GitHub API answer (a "
+            "web page from a wifi sign-in, or a proxy, does this), so Jarvis "
+            "could not read it and will not guess at it. Nothing was changed.")
+
+
+def _nothing_sent() -> str:
+    """The sentence for a 200 with no body at all where one was expected."""
+    return ("GitHub sent back nothing at all for that question, so there is "
+            "nothing to show and nothing was changed. Try again in a moment.")
+
+
+def _read_part(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
+    """(doc, status, error, cut) for one GET, keeping WHICH failure it was.
+
+    `cut` is True when the answer came back over the read cap: its JSON cannot
+    be parsed, and that is not the same fact as "GitHub sent no body" or
+    "GitHub sent a list of none". Before this, every one of those three reached
+    a caller that could only see `None` - and a 481 KB `pulls/{n}/files` answer
+    read as a pull request with ZERO changed files, because `None` was turned
+    into `[]` (measured 2026-11-15). `_read_full` is the same read for the
+    callers that only need to know it failed.
+    """
+    url = _address(path)
+    if not url:
+        return (None, 0, "Jarvis will not send a request to an address it did "
+                         "not write itself, so nothing was sent.", False)
+    try:
+        status, text, _answer_headers = _fetched(
+            fetch("GET", url, headers=headers, body=None, timeout=TIMEOUT))
+    except Exception as exc:                 # noqa: BLE001 - the NAME only
+        return (None, 0, (f"api.github.com did not answer ({type(exc).__name__}), "
+                          f"so nothing was changed."), False)
+    if status < 200 or status >= 300:
+        return None, int(status), _plain_failure(status, token=token), False
+    text = _scrub(text, token)
+    if CUT_MARKER in str(text or ""):
+        return None, int(status), "", True
+    return _payload(text), int(status), "", False
+
+
 def _read_full(fetch: Callable, path: str, headers: dict,
                token: str) -> tuple:
     """(doc, status, error) for one GET - the status kept for the callers that
     need to tell a moved pull request (409) from one that cannot be changed right
     now (405). `_read` is the two-value form every other reader uses.
+
+    An answer CUT at the read cap is an explicit error here, never `(None, 200,
+    "")`: `None` reads as "GitHub sent nothing", and a caller that then said
+    "there is nothing there" would be describing the module's own cap.
     """
-    url = GITHUB_API + path
-    try:
-        status, text = fetch("GET", url, headers=headers, body=None, timeout=TIMEOUT)
-    except Exception as exc:                 # noqa: BLE001 - the NAME only
-        return None, 0, (f"api.github.com did not answer ({type(exc).__name__}), so "
-                         f"nothing was changed.")
-    if status < 200 or status >= 300:
-        return None, int(status), _plain_failure(status, token=token)
-    return _payload(_scrub(text, token)), int(status), ""
+    doc, status, err, cut = _read_part(fetch, path, headers, token)
+    if cut:
+        return None, status, _too_long()
+    return doc, status, err
 
 
 def _read(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
@@ -3715,8 +3955,13 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
     doc, err = _read(fetch, r.steps[0].path if r.steps else "", headers, token)
     if err:
         return {"ok": False, "error": err}
-    prs = doc if isinstance(doc, list) else []
-    prs = [p for p in prs if isinstance(p, dict)][:MAX_PRS]
+    if not isinstance(doc, list):
+        # A 200 that is not a list is NOT "there are no pull requests": it is an
+        # answer Jarvis could not read (a wifi sign-in page, a proxy, an empty
+        # body), and saying there are none would be a false statement about
+        # GitHub made by this PC (2026-11-15).
+        return {"ok": False, "error": _unreadable()}
+    prs = [p for p in doc if isinstance(p, dict)][:MAX_PRS]
     if not prs:
         return {"ok": True, "text": f"There are no open pull requests on {r.repo}."}
     lines = [f"{len(prs)} open pull request(s) on {r.repo}:"]
@@ -3787,9 +4032,13 @@ def _raw_read(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
     body, read by `_plan_limited_rules` only and never printed. Nothing here
     follows a redirect or builds a path the module did not write.
     """
+    url = _address(path)
+    if not url:
+        return None, 0, ("Jarvis will not send a request to an address it did "
+                         "not write itself, so nothing was merged."), ""
     try:
-        status, text = fetch("GET", GITHUB_API + path, headers=headers,
-                             body=None, timeout=TIMEOUT)
+        status, text, answer_headers = _fetched(
+            fetch("GET", url, headers=headers, body=None, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return None, 0, (f"api.github.com did not answer "
                          f"({type(exc).__name__}), so nothing was merged."), ""
@@ -3797,7 +4046,9 @@ def _raw_read(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
     if status == 404:
         return None, 404, "", said
     if status < 200 or status >= 300:
-        return None, int(status), _plain_failure(status, token=token), said
+        return None, int(status), _plain_failure(
+            status, token=token,
+            retry_after=_retry_after(answer_headers)), said
     return _payload(said), int(status), "", said
 
 
@@ -3984,6 +4235,13 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
 
     if not r.repo or not r.number:
         return no("Jarvis does not know which pull request to merge.")
+    if not _SHA.match(str(r.expected_sha or "")):
+        # The pin is the whole point of this action, and it is checked BEFORE the
+        # first request: a request whose pin is not a full 40-hex commit could
+        # only ever be compared against something else and refused later, so it
+        # is refused here with nothing sent (2026-11-15).
+        return no("Jarvis does not have the pull request's exact head commit, "
+                  "so it will not merge anything.")
     doc, err = _read(fetch, f"{_repo_path(r.repo)}/pulls/{r.number}",
                      headers, token)
     if err:
@@ -4050,15 +4308,18 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
     payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
     write_headers = dict(headers, **{"Content-Type": "application/json"})
     try:
-        status, text = fetch("PUT", GITHUB_API + f"{_repo_path(r.repo)}/pulls/"
-                             f"{r.number}/merge", headers=write_headers,
-                             body=payload, timeout=TIMEOUT)
+        status, text, answer_headers = _fetched(
+            fetch("PUT", GITHUB_API + f"{_repo_path(r.repo)}/pulls/"
+                  f"{r.number}/merge", headers=write_headers,
+                  body=payload, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return {"ok": False,
                 "error": f"api.github.com did not answer ({type(exc).__name__}), "
                          f"so nothing was merged."}
     if status < 200 or status >= 300:
-        return {"ok": False, "error": _merge_failure(status, text, token)}
+        return {"ok": False, "error": _merge_failure(
+            status, text, token,
+            retry_after=_retry_after(answer_headers))}
     answer = _payload(_scrub(text, token))
     if not isinstance(answer, dict):
         return {"ok": False, "error": ("GitHub answered without saying whether the "
@@ -4647,8 +4908,18 @@ def _pr_author(doc: dict) -> str:
                               wrap=False) or "someone"
 
 
-def _detail_section(title: str, rows: list, total: int, render) -> list:
-    """One bounded section of the pr_detail answer: the real count, then rows."""
+def _detail_section(title: str, rows: list, total: int, render,
+                    problem: str = "") -> list:
+    """One bounded section of the pr_detail answer: the real count, then rows.
+
+    `problem` is what made THIS one list unreadable - cut at the read cap, or not
+    a list at all. It then says so in ONE line about that list, and never prints
+    "(none)": no rows from an answer Jarvis could not read is not "there are
+    none", and `Changed files (0): (none)` about a 481-file pull request was a
+    false statement about GitHub (measured 2026-11-15).
+    """
+    if problem:
+        return [f"{title}:", f"  {problem}"]
     lines = [f"{title} ({total}):"]
     if not rows:
         lines.append("  (none)")
@@ -4660,21 +4931,48 @@ def _detail_section(title: str, rows: list, total: int, render) -> list:
     return lines
 
 
+def _section_problem(how: str, hint: str = "") -> str:
+    """The one line for a list that could not be read, and never a guess."""
+    if how == "cut":
+        said = ("GitHub's list was longer than Jarvis reads in one go, so it is "
+                "not shown here")
+    elif how:
+        said = ("GitHub's answer for this list could not be read, so it is not "
+                "shown here")
+    else:
+        return ""
+    return said + (" - " + hint if hint else "")
+
+
 def _run_pr_detail(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
     """Read the five fixed lists and compose ONE bounded answer. GETs only.
 
     Every text is fetched GitHub text, so every text goes through the one
     sanitizer; every list keeps its REAL count and shows at most
-    `MAX_DETAIL_ITEMS` rows, each text at most `MAX_DETAIL_TEXT` characters.
+    `MAX_DETAIL_ITEMS` rows, each text at most `MAX_DETAIL_TEXT` characters. A
+    list that could not be read (cut at the read cap, or not a JSON list) says
+    so in one line OF ITS OWN and keeps the rest of the answer - it is never
+    turned into an empty list, which read as "this pull request changes no
+    files" for a 481-file pull request (2026-11-15).
     """
-    docs = []
-    for step in r.steps:
-        doc, err = _read(fetch, step.path, headers, token)
+    docs, problems = [], []
+    for index, step in enumerate(r.steps):
+        doc, _status, err, cut = _read_part(fetch, step.path, headers, token)
         if err:
             return {"ok": False, "error": err}
         docs.append(doc)
+        if cut:
+            problems.append("cut")
+        elif index and not isinstance(doc, list):
+            problems.append("unreadable")
+        elif not index and not isinstance(doc, dict):
+            problems.append("unreadable")
+        else:
+            problems.append("")
+    if problems[0] == "cut":
+        return {"ok": False, "error": _too_long()}
     pr = docs[0] if isinstance(docs[0], dict) else {}
-    if not pr:
+    if problems[0] or not pr:
         return {"ok": False, "error": "GitHub answered without the pull request, "
                                       "so there is nothing to show."}
     title = _clean_github_text(pr.get("title"), limit=MAX_PR_TITLE, wrap=False)
@@ -4712,24 +5010,30 @@ def _run_pr_detail(r: Request, fetch: Callable, token: str, headers: dict) -> di
     commits = docs[2] if isinstance(docs[2], list) else []
     comments = docs[3] if isinstance(docs[3], list) else []
     reviews = docs[4] if isinstance(docs[4], list) else []
+    changed = pr.get("changed_files")
+    files_hint = (f"GitHub says this pull request changes {changed} files."
+                  if isinstance(changed, int) else "")
     lines.append("")
     lines += _detail_section(
         "Changed files", files, len(files),
         lambda f: ("  " + str(f.get("status") or "modified") + " "
                    + _clean_github_text(f.get("filename"), wrap=False)
-                   + f" (+{f.get('additions', 0)} -{f.get('deletions', 0)})"))
+                   + f" (+{f.get('additions', 0)} -{f.get('deletions', 0)})"),
+        _section_problem(problems[1], files_hint))
     lines.append("")
     lines += _detail_section(
         "Commits", commits, len(commits),
         lambda c: ("  " + str(c.get("sha") or "")[:7] + " "
                    + _clean_github_text((c.get("commit") or {}).get("message"),
-                                        limit=MAX_DETAIL_TEXT, wrap=False)))
+                                        limit=MAX_DETAIL_TEXT, wrap=False)),
+        _section_problem(problems[2]))
     lines.append("")
     lines += _detail_section(
         "Comments", comments, len(comments),
         lambda c: ("  by " + _pr_author(c) + ":\n"
                    + "\n".join("    " + ln for ln in _clean_github_text(
-                       c.get("body"), limit=MAX_DETAIL_TEXT).splitlines())))
+                       c.get("body"), limit=MAX_DETAIL_TEXT).splitlines())),
+        _section_problem(problems[3]))
     lines.append("")
     lines += _detail_section(
         "Reviews", reviews, len(reviews),
@@ -4739,7 +5043,8 @@ def _run_pr_detail(r: Request, fetch: Callable, token: str, headers: dict) -> di
                         "    " + ln for ln in _clean_github_text(
                             rv.get("body"), limit=MAX_DETAIL_TEXT).splitlines())
                        if _clean_github_text(rv.get("body"), limit=8,
-                                             wrap=False) else "")))
+                                             wrap=False) else "")),
+        _section_problem(problems[4]))
     lines.append("")
     lines.append("Nothing on GitHub changed; this only read.")
     return {"ok": True, "text": _cut("\n".join(lines), MAX_BYTES)}
@@ -4781,17 +5086,23 @@ def _run_workflow(r: Request, fetch: Callable, token: str, headers: dict) -> dic
     else:
         return {"ok": False, "error": "Jarvis does not know which workflow "
                                       "action to take, so nothing was sent."}
-    url = GITHUB_API + f"{path}/{tail}"
+    url = _address(f"{path}/{tail}")
+    if not url:
+        return {"ok": False, "error": "Jarvis will not send a request to an "
+                                      "address it did not write itself, so "
+                                      "nothing was changed."}
     try:
-        status_code, text = fetch("POST", url, headers=headers, body=None,
-                                  timeout=TIMEOUT)
+        status_code, text, answer_headers = _fetched(
+            fetch("POST", url, headers=headers, body=None, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return {"ok": False,
                 "error": f"api.github.com did not answer "
                          f"({type(exc).__name__}), so nothing was changed."}
     if status_code < 200 or status_code >= 300:
         said_err = _scrub(_github_message(text), token)
-        return {"ok": False, "error": _plain_failure(status_code, token=token)
+        return {"ok": False, "error": _plain_failure(
+            status_code, token=token,
+            retry_after=_retry_after(answer_headers))
                 + (" GitHub said: " + said_err + "." if said_err else "")
                 + " Nothing was changed."}
     return {"ok": True, "text": said}
@@ -4907,10 +5218,9 @@ def _run_open_final(r: Request, fetch: Callable, token: str, headers: dict,
     payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
     write_headers = dict(headers, **{"Content-Type": "application/json"})
     try:
-        status, text = fetch("POST", GITHUB_API
-                             + f"{_repo_path(r.repo)}/pulls",
-                             headers=write_headers, body=payload,
-                             timeout=TIMEOUT)
+        status, text, answer_headers = _fetched(
+            fetch("POST", GITHUB_API + f"{_repo_path(r.repo)}/pulls",
+                  headers=write_headers, body=payload, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return {"ok": False,
                 "error": f"The branch was pushed, but api.github.com did not "
@@ -4980,16 +5290,18 @@ def _run_issue_labels(r: Request, fetch: Callable, token: str,
                          ensure_ascii=False).encode("utf-8")
     write_headers = dict(headers, **{"Content-Type": "application/json"})
     try:
-        status, text = fetch(
-            "PUT", GITHUB_API + f"{_repo_path(r.repo)}/issues/{r.number}/labels",
-            headers=write_headers, body=payload, timeout=TIMEOUT)
+        status, text, answer_headers = _fetched(
+            fetch("PUT", GITHUB_API
+                  + f"{_repo_path(r.repo)}/issues/{r.number}/labels",
+                  headers=write_headers, body=payload, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return {"ok": False,
                 "error": f"api.github.com did not answer "
                          f"({type(exc).__name__}), so nothing was changed."}
     if status < 200 or status >= 300:
         said = _scrub(_github_message(text), token)
-        return {"ok": False, "error": _plain_failure(status, token=token)
+        return {"ok": False, "error": _plain_failure(
+            status, token=token, retry_after=_retry_after(answer_headers))
                 + (" GitHub said: " + said + "." if said else "")
                 + " Nothing was changed."}
     answer = _payload(_scrub(text, token))
@@ -5031,17 +5343,18 @@ def _run_edit_pr(r: Request, fetch: Callable, token: str,
     payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
     write_headers = dict(headers, **{"Content-Type": "application/json"})
     try:
-        status, text = fetch("PATCH", GITHUB_API
-                             + f"{_repo_path(r.repo)}/pulls/{r.number}",
-                             headers=write_headers, body=payload,
-                             timeout=TIMEOUT)
+        status, text, answer_headers = _fetched(
+            fetch("PATCH", GITHUB_API
+                  + f"{_repo_path(r.repo)}/pulls/{r.number}",
+                  headers=write_headers, body=payload, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return {"ok": False,
                 "error": f"api.github.com did not answer "
                          f"({type(exc).__name__}), so nothing was changed."}
     if status < 200 or status >= 300:
         said = _scrub(_github_message(text), token)
-        return {"ok": False, "error": _plain_failure(status, token=token)
+        return {"ok": False, "error": _plain_failure(
+            status, token=token, retry_after=_retry_after(answer_headers))
                 + (" GitHub said: " + said + "." if said else "")
                 + " Nothing was changed."}
     parts = []
@@ -5082,15 +5395,16 @@ def _run_issue_state(r: Request, fetch: Callable, token: str,
     payload = json.dumps(r.body, ensure_ascii=False).encode("utf-8")
     write_headers = dict(headers, **{"Content-Type": "application/json"})
     try:
-        status, text = fetch("PATCH", GITHUB_API
-                             + f"{_repo_path(r.repo)}/issues/{r.number}",
-                             headers=write_headers, body=payload,
-                             timeout=TIMEOUT)
+        status, text, answer_headers = _fetched(
+            fetch("PATCH", GITHUB_API
+                  + f"{_repo_path(r.repo)}/issues/{r.number}",
+                  headers=write_headers, body=payload, timeout=TIMEOUT))
     except Exception as exc:                 # noqa: BLE001 - the NAME only
         return no(f"api.github.com did not answer ({type(exc).__name__}).")
     if status < 200 or status >= 300:
         said = _scrub(_github_message(text), token)
-        return no(_plain_failure(status, token=token)
+        return no(_plain_failure(status, token=token,
+                                 retry_after=_retry_after(answer_headers))
                   + (" GitHub said: " + said + "." if said else ""))
     answer = _payload(_scrub(text, token))
     number = r.number
@@ -5133,9 +5447,47 @@ def _cut(text: str, limit: int = MAX_BYTES) -> str:
     return text[:limit].rstrip() + CUT_MARKER
 
 
+def _readable_json(text) -> bool:
+    """True only when the answer really was JSON - `[]` and `null` both count.
+
+    This is the question "did GitHub send an API answer at all", which is NOT
+    the same as "did it parse into a list of rows". An empty body, a wifi
+    sign-in page and a proxy's HTML all answer no.
+    """
+    body = str(text or "").strip()
+    if not body:
+        return False
+    try:
+        json.loads(body)
+    except Exception:                        # noqa: BLE001 - not JSON is the answer
+        return False
+    return True
+
+
 def _said(r: Request, answers: list) -> str:
     """The answer, in plain words, from the last body the requests returned."""
     text = answers[-1][1] if answers else ""
+    steps = tuple(r.steps)
+    path = steps[0].path if steps else ""
+    # THE SHAPE COMES FIRST, THE CAP SECOND (2026-11-15). A directory listing or
+    # a list of workflow runs that ran over the cap is still a directory, or
+    # still those runs - answering only "the answer was longer than Jarvis
+    # reads" hid the one thing the reader needed. Measured on the owner's own
+    # repository: `github_read_file` on `docs` (a 320,215-character listing) came
+    # out as the cut sentence, and `github_list` scope `runs` (273,833
+    # characters against a 200,000 cap) could never answer at all.
+    if "/contents/" in path:
+        return _file_words(text)
+    if r.runs_list:
+        return _runs_list_words(text)
+    if len(steps) == 3 and "/check-runs" in steps[2].path:
+        # github_ci_status asked about a PULL REQUEST: the runs and the checks on
+        # the same head commit, judged together (2026-11-15).
+        return _pr_ci_words(
+            r,
+            _payload(answers[0][1]) if len(answers) > 0 else None,
+            _payload(answers[1][1]) if len(answers) > 1 else None,
+            _payload(answers[2][1]) if len(answers) > 2 else None)
     if CUT_MARKER in str(text or ""):
         # Q-G (2026-11-11): an answer over MAX_BYTES cannot be parsed at all.
         # Say that in words rather than showing half of it as if it were whole.
@@ -5164,20 +5516,24 @@ def _said(r: Request, answers: list) -> str:
     if r.action != ACTION_INSPECT:
         return "Done."
     # A read: shape it by which planner built it, so the words match the question.
-    steps = tuple(r.steps)
     if len(steps) == 2:
         return _ci_words(_payload(answers[-1][1]) if answers else None)
-    first = steps[0].path if steps else ""
-    if first.startswith("/user/repos"):
-        return _repos_words(doc)
-    if "/pulls?" in first:
-        return _pulls_words(doc)
-    if "/issues?" in first:
-        return _issues_words(doc)
-    if "/actions/runs" in first:
+    if not _readable_json(text):
+        # A 200 that is not JSON is not an empty list. Before 2026-11-15 a wifi
+        # sign-in page or a proxy's HTML read as "There are no open pull
+        # requests on that repository" - a false statement about GitHub, made
+        # out of an answer this PC never understood.
+        return _nothing_sent() if not str(text or "").strip() else _unreadable()
+    doc = _payload(text)
+    for needle, words in (("/user/repos", _repos_words),
+                          ("/pulls?", _pulls_words),
+                          ("/issues?", _issues_words)):
+        if needle in path:
+            if not isinstance(doc, list):
+                return _unreadable()
+            return words(doc)
+    if "/actions/runs" in path:
         return _ci_words(doc)
-    if "/contents/" in first:
-        return _file_words(text)
     # The fallback is a raw GitHub answer too: clean it, and wrap it as data.
     return (_clean_github_text(_cut(text), wrap=True)
             or "GitHub answered, and there was nothing to show.")
@@ -5291,6 +5647,172 @@ def _ci_words(doc) -> str:
     return f"The newest CI run ({name}{where}) has not finished yet."
 
 
+def _pr_ci_words(r: Request, pr_doc, runs_doc, checks_doc) -> str:
+    """`github_ci_status` asked about a PULL REQUEST: every check on its head.
+
+    The old answer read `/actions/runs?head_sha=<the head>` and looked at
+    `workflow_runs[0]` only. Two workflows run on the same commit, GitHub lists
+    them in its own order, so that "newest run" was not the pull request's CI
+    status at all: the answer said "The newest CI run (...) passed" while `audit`
+    was failing on that very commit. MEASURED against real GitHub on 2026-11-15:
+    PR #1263 had `audit` and `backend-shard (3/4)` red and this tool said passed.
+    A false "passed" is the worst answer this tool can give.
+
+    So the pull request form reads the head commit's CHECK RUNS - the same list
+    the merge gate judges - and only uses the word "passed" when every check on
+    that commit really did finish successfully. A failing check is NAMED, a check
+    still running is NAMED, and when GitHub reports no check runs at all, EVERY
+    visible workflow run is judged instead of just the first.
+    """
+    checks = checks_doc.get("check_runs") if isinstance(checks_doc, dict) else None
+    checks = [c for c in (checks or ()) if isinstance(c, dict)]
+    who = f"pull request #{r.number} in {r.repo}"
+    failed, running = [], []
+    for one in checks:
+        name = _check_name(one)
+        if str(one.get("status") or "") != "completed":
+            running.append(name)
+            continue
+        conclusion = str(one.get("conclusion") or "")
+        if conclusion not in ("success", "neutral", "skipped"):
+            failed.append(name + (f" ({conclusion})" if conclusion else ""))
+    if failed:
+        return (f"The checks on {who} are NOT all green: "
+                + ", ".join(failed[:MAX_DETAIL_ITEMS])
+                + (f", and {len(failed) - MAX_DETAIL_ITEMS} more"
+                   if len(failed) > MAX_DETAIL_ITEMS else "")
+                + ". Jarvis names every check on the head commit that is not a "
+                  "success, because one workflow finishing well does not make the "
+                  "pull request green. Ask for a fix with github_fix_and_push and "
+                  "Jarvis shows the end of a failing check's log and GitHub's "
+                  "annotations.")
+    if running:
+        return (f"The checks on {who} have not all finished: "
+                + ", ".join(running[:MAX_DETAIL_ITEMS])
+                + (f", and {len(running) - MAX_DETAIL_ITEMS} more"
+                   if len(running) > MAX_DETAIL_ITEMS else "")
+                + ". Nothing is known about them yet - ask again when they finish.")
+    runs = runs_doc.get("workflow_runs") if isinstance(runs_doc, dict) else None
+    runs = [x for x in (runs or ()) if isinstance(x, dict)]
+    red_runs = [x for x in runs
+                if str(x.get("conclusion") or "")
+                not in ("success", "neutral", "skipped")]
+
+    def _run_words(one):
+        name = _clean_github_text(one.get("name"), wrap=False) or "a workflow"
+        return name + " (" + (str(one.get("conclusion") or "")
+                              or str(one.get("status") or "not finished")) + ")"
+
+    if checks:
+        if red_runs:
+            # Green checks and a red run on the SAME commit: both are true, and
+            # the honest answer says both rather than picking the cheerful half.
+            return (f"Every check on {who} finished successfully, but "
+                    f"{len(red_runs)} CI run(s) on that same commit did not: "
+                    + ", ".join(_run_words(x)
+                                for x in red_runs[:MAX_DETAIL_ITEMS])
+                    + ". Jarvis will not call that green.")
+        return (f"Every check on {who} finished successfully "
+                f"({len(checks)} checks on the head commit).")
+    # No check runs at all (a repository that only uses workflows): judge EVERY
+    # visible run, never just the first.
+    if not runs:
+        return "There is no recent CI run there to report."
+    if red_runs:
+        return (f"More than one CI run is on the head commit of {who} and at least "
+                f"one did not finish successfully: "
+                + ", ".join(_run_words(x)
+                            for x in red_runs[:MAX_DETAIL_ITEMS])
+                + ". Jarvis will not call that a passing run.")
+    return _ci_words(runs_doc)
+
+
+def _salvaged_runs(text: str) -> tuple:
+    """(complete runs, total) read out of a workflow-runs answer the cap CUT.
+
+    A truncated JSON document cannot be parsed, but the complete run objects at
+    the FRONT of its `workflow_runs` array can be read one at a time, and GitHub
+    sends `total_count` before the array. That is the difference between "the
+    answer was too long, so here is nothing" and "here are the newest N of M".
+    """
+    body = str(text or "")
+    total = 0
+    found = re.search(r'"total_count"\s*:\s*(\d+)', body)
+    if found:
+        total = int(found.group(1))
+    at = body.find('"workflow_runs"')
+    if at < 0:
+        return [], total
+    start = body.find("[", at)
+    if start < 0:
+        return [], total
+    decoder = json.JSONDecoder()
+    runs, pos = [], start + 1
+    while pos < len(body):
+        while pos < len(body) and body[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(body) or body[pos] == "]":
+            break
+        try:
+            item, end = decoder.raw_decode(body, pos)
+        except ValueError:
+            break
+        if isinstance(item, dict):
+            runs.append(item)
+        pos = end
+    return runs, total
+
+
+def _runs_list_words(text: str) -> str:
+    """The words for `github_list` scope "runs": the runs, bounded, never a guess.
+
+    This is the one list whose answer can be cut even at `RUNS_PER_PAGE` (one
+    workflow run carries its whole head commit), and before 2026-11-15 a cut
+    answer was ONLY the cut sentence - so the scope could never answer at all
+    (a 273,833-character answer against a 200,000 cap, measured on the owner's
+    own repository). Now the complete runs at the front of a cut answer are
+    salvaged and the answer says how many of how many it shows.
+    """
+    cut = CUT_MARKER in str(text or "")
+    total = 0
+    if cut:
+        runs, total = _salvaged_runs(text)
+    else:
+        doc = _payload(text)
+        if not isinstance(doc, dict):
+            return (_nothing_sent() if not str(text or "").strip()
+                    else _unreadable())
+        runs = [x for x in (doc.get("workflow_runs") or ())
+                if isinstance(x, dict)]
+        total = int(doc.get("total_count") or 0)
+    if not runs:
+        return (_too_long() if cut
+                else "There is no recent workflow run there to report.")
+    shown = runs[:MAX_DETAIL_ITEMS]
+    if total > len(shown):
+        head = f"Showing {len(shown)} of {total} recent workflow runs:"
+    else:
+        head = f"{len(shown)} recent workflow run(s):"
+    lines = [head]
+    for one in shown:
+        name = _clean_github_text(one.get("name"), wrap=False) or "a workflow"
+        branch = _clean_github_text(one.get("head_branch"), wrap=False)
+        ended = (str(one.get("conclusion") or "")
+                 or str(one.get("status") or "") or "not finished")
+        lines.append(f"  {name}"
+                     + (f" on {branch}" if branch else "")
+                     + f": {_clean_github_text(ended, wrap=False)}")
+    if cut and total > len(shown):
+        lines.append(f"  ... and {total - len(shown)} more, not shown: GitHub's "
+                     f"answer was longer than Jarvis reads")
+    elif cut:
+        lines.append("  ... GitHub's answer was longer than Jarvis reads, so the "
+                     "rest was left out")
+    elif total > len(shown):
+        lines.append(f"  ... and {total - len(shown)} more, not shown")
+    return "\n".join(lines)
+
+
 def _file_words(text: str) -> str:
     """The words for ONE file - the file's own text, never GitHub's envelope.
 
@@ -5304,7 +5826,17 @@ def _file_words(text: str) -> str:
     ONE file's text (DEF-042, fixed with #1128). Each of the other three shapes
     now gets one plain sentence instead of JSON the model would have to guess
     at; the cap applies to the DECODED text, which is what the model reads.
+
+    THE SHAPE IS DECIDED BEFORE THE CAP (2026-11-15). A directory listing over
+    the read cap is still a directory: it used to come out as "the answer was
+    longer than Jarvis reads", which hid the one fact the model needed (a
+    320,215-character `docs/` listing, measured on the owner's own repository).
     """
+    body = str(text or "")
+    if CUT_MARKER in body:
+        if body.lstrip().startswith("[") or '"type":"dir"' in body.replace(" ", ""):
+            return ("That path is a directory, not a file - ask for a file inside it.")
+        return _too_long()
     doc = _payload(text)
     if isinstance(doc, list):
         return ("That path is a directory, not a file - ask for a file inside it.")
@@ -5317,13 +5849,26 @@ def _file_words(text: str) -> str:
             except (ValueError, TypeError):
                 return ("GitHub answered with a file this PC could not decode, so "
                         "there is nothing to show.")
+            # A BINARY file is not text, and showing its bytes as characters
+            # gives a wall of replacement marks that reads like a garbled file
+            # (measured 2026-11-15: a PNG came out as 40,000 characters of noise
+            # inside the data delimiters). It gets one plain sentence instead.
+            try:
+                decoded = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return ("That file is not text - it is a binary file (an image, a "
+                        "program, or something like it), so Jarvis did not show "
+                        "its contents.")
+            if "\x00" in decoded:
+                return ("That file is not text - it is a binary file (an image, a "
+                        "program, or something like it), so Jarvis did not show "
+                        "its contents.")
             # A file's own text is FETCHED GitHub text: the one sanitizer strips
             # anything that could hide an instruction, then wraps the text in its
             # data delimiters, then the cap applies (so the closing delimiter is
             # never cut off). The model reads a labelled block of data, and a
             # string inside it cannot become an instruction.
-            cleaned = _clean_github_text(raw.decode("utf-8", "replace"),
-                                         limit=MAX_FILE_CHARS)
+            cleaned = _clean_github_text(decoded, limit=MAX_FILE_CHARS)
             return cleaned or "That file is empty."
         if encoding == "none" or str(doc.get("type") or "") == "dir":
             return ("GitHub did not send that file's text: it is too large for "
