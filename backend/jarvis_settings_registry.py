@@ -4806,6 +4806,15 @@ def reading_tool_now(tool: str) -> Optional[bool]:
         return None
     try:
         import jarvis_asks_first as AF
+        # THE MASTER GROUP IS TWENTY NAMES, NOT ONE (2026-11-15). It is not in
+        # `[tools].enabled` itself, so the plain answer below was False even with
+        # all twenty on - which made an OFF-from-on receipt record "before:
+        # False, after: False", a receipt that undoes nothing. The group reads as
+        # on only when every one of its names is on, exactly like its Settings
+        # row's own `on` flag.
+        if AF.real_tool(wanted) == getattr(AF, "GITHUB_TOOLS_GROUP", ""):
+            have = AF.tools_enabled_set()
+            return all(t in have for t in AF.GITHUB_TOOLS)
         return AF.real_tool(wanted) in AF.tools_enabled_set()
     except Exception:                       # noqa: BLE001 - None is the answer
         return None

@@ -796,9 +796,19 @@ def t_representative_settings_write_the_same_state_on_disk():
     # --- A carded switch: ONE card, nothing written, calm line in Live -------
     try:
         srow = next(b for b in R.BOOL_SETTINGS if b.key == "learn_sensitive_topics")
-        before_files = sorted(p.name for p in (TMP / "config").iterdir())
+        # SQLite's sidecar files are NOT settings files, and comparing them is a
+        # race this check lost once (2026-11-15, this branch): `memory.db-journal`
+        # was in the first listing and gone from the second because SQLite had
+        # finished a transaction in between, so "the carded change wrote no
+        # settings file yet" failed while nothing had been written. The claim is
+        # about SETTINGS, so the transient sidecars are left out of the
+        # comparison; they are the database's own bookkeeping, not config.
+        _sidecars = ("-journal", "-wal", "-shm")
+        listing = lambda: sorted(p.name for p in (TMP / "config").iterdir()
+                                 if not p.name.endswith(_sidecars))
+        before_files = listing()
         typed, live = doors("turn on remembering sensitive topics automatically")
-        after_files = sorted(p.name for p in (TMP / "config").iterdir())
+        after_files = listing()
         both_waiting = (typed is not None and live is not None
                         and "approv" in typed.reply.lower()
                         and "approv" in live.reply.lower())
