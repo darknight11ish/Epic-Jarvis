@@ -22,9 +22,8 @@ BULLETS = (
     'The preflight now says which commit each piece came from, and warns MIXED COMMITS when they disagree',
     'A feature pull request no longer commits the self-code map',
     'The General preset stops claiming the model "answered nothing" without thinking',
+    'The phone tells Jarvis which phone it is, so answers can be phone specific',
     'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
-    "The Coding preset's chat turn gets the window its preset names",
-    "An approved GitHub card now merges, or says in code's words why it did not",
 )
 
 
