@@ -884,6 +884,49 @@ GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
 #: (`github_search_run` / `github_search_run_authenticated`), both "auto".
 GITHUB_CARD_FREE_READS = GITHUB_READ_TOOLS + ("github_search",)
 
+#: How each carded GitHub WRITE is named back to the owner when its approved run
+#: did not happen (2026-11-15). A card is a promise; when the run refuses, the
+#: only account the owner used to get was the model's own paraphrase of the tool
+#: result - and on the owner's PC that paraphrase was measurably invented ("the
+#: system is preventing the same tool call twice"). Code says it now, in these
+#: words, beside the model's answer.
+GITHUB_WRITE_WORDS = {
+    "github_comment": "comment",
+    "github_open_issue": "issue",
+    "github_rerun_workflow": "re-run",
+    "github_create_repo": "new repository",
+    "github_merge_pr": "merge",
+    "github_fix_and_push": "fix and push",
+    "github_open_pr": "new pull request",
+    "github_workflow": "workflow change",
+    "github_issue_labels": "label change",
+    "github_edit_pr": "pull request edit",
+    "github_pr_review": "review",
+    "github_issue_state": "issue change",
+}
+
+
+def _github_write_failed_line(name: str, result) -> str:
+    """What the OWNER reads when an approved GitHub write did not happen.
+
+    The tool's own sentence is repeated word for word (it is plain words by
+    construction, and it never carries the token - `jarvis_github.run()` scrubs
+    it), so the reason the owner reads is the reason the module gave, not the
+    model's account of it. `Nothing else was tried` is said because it is true:
+    one card is one action, and nothing here retries.
+    """
+    what = GITHUB_WRITE_WORDS.get(name) or "GitHub change"
+    why = ""
+    if isinstance(result, dict):
+        why = str(result.get("error") or "").strip()
+    if why.startswith("refused:"):
+        why = why[len("refused:"):].strip()
+    if why and why[-1] not in ".!?":
+        why += "."
+    return (f"The {what} you approved did not go through. "
+            + (why or "GitHub did not answer, so Jarvis cannot say why.")
+            + " Nothing else was tried.")
+
 
 def _github_capabilities_words() -> str:
     """The GitHub inventory from its ONE home, `jarvis_github.CAPABILITIES`.
@@ -947,9 +990,13 @@ class _GitHubAnswered:
 def _github_plan(planner, args: dict):
     """(request, card text) for one GitHub tool, or the no-token answer.
 
-    `planner` is one of `jarvis_github.plan_*`: it validates its own arguments and
-    opens no socket. A bad argument raises out of here and reaches the model as an
-    ordinary tool result; no token is a plain answer with no card.
+    `planner` is one of `jarvis_github.plan_*`: it validates its own arguments
+    and sends nothing. One planner reads (2026-11-15): `plan_merge_pr` GETs the
+    pull request itself when the model gave no usable head commit, title and
+    target branch, because a merge card whose pin was a bad echo could never
+    merge and the owner was never told why. That read changes nothing and its
+    answer becomes the pin. A bad argument raises out of here and reaches the
+    model as an ordinary tool result; no token is a plain answer with no card.
     """
     import jarvis_github as GH
     if not GH.connected():
@@ -999,6 +1046,13 @@ def _prepare_github_pr_scan(args: dict):
 
 
 def _prepare_github_merge_pr(args: dict):
+    """Plan ONE merge: the card names the exact head commit it will merge.
+
+    The model may pass `head_sha`, `title` and `base_ref` from a scan, or leave
+    them out: `plan_merge_pr` then reads the pull request itself and pins the
+    head GitHub reports (2026-11-15 - a card built from a bad echo was approved
+    and could never merge, and the only account of why was the model's words).
+    """
     import jarvis_github as GH
     return _github_plan(GH.plan_merge_pr, args)
 
@@ -5791,7 +5845,10 @@ TOOLS: dict = {
         "Merge ONE pull request with a MERGE COMMIT, pinned to the exact "
         "40-character head commit you pass. Pass the commit, title and base "
         "branch exactly as github_pr_scan printed them: a different or short "
-        "commit is refused. It refuses, sending nothing, if the pull request is "
+        "commit is refused. If you do not have all three, call it with just the "
+        "repository and the number: Jarvis reads the pull request itself, pins "
+        "the head commit it finds, and the card shows that exact commit. "
+        "It refuses, sending nothing, if the pull request is "
         "a draft, cannot merge cleanly, has a check running, a required check "
         "failed, moved, or was retargeted to another base branch. It can never "
         "squash, rebase, use an admin bypass, turn on auto-merge or bypass a "
@@ -5801,13 +5858,16 @@ TOOLS: dict = {
             "number": {"type": "string", "description": "the pull request number"},
             "head_sha": {"type": "string",
                          "description": "its full 40-character head commit, exactly as "
-                                        "github_pr_scan printed it"},
+                                        "github_pr_scan printed it; may be left out - "
+                                        "Jarvis then reads it from the pull request"},
             "title": {"type": "string",
-                      "description": "its title, exactly as github_pr_scan printed it"},
+                      "description": "its title, exactly as github_pr_scan printed it; "
+                                     "may be left out the same way"},
             "base_ref": {"type": "string",
                          "description": "the branch it merges into, exactly as "
-                                        "github_pr_scan printed it after \"base\""}},
-         "required": ["repo", "number", "head_sha", "title", "base_ref"]},
+                                        "github_pr_scan printed it after \"base\"; may "
+                                        "be left out the same way"}},
+         "required": ["repo", "number"]},
         _prepare_github_merge_pr, _run_github,
         instead={"github_pr_scan": "To see which pull requests are ready first, use "
                                    "github_pr_scan.",
@@ -19730,6 +19790,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         if task_id is not None and isinstance(result, dict):
             result = _after_task(tc, task_id, name, action_name, state, result)
         step["ok"] = isinstance(result, dict) and result.get("ok") is True
+        if (not step["ok"] and name in GITHUB_ACTION_TOOLS
+                and pre_approved is None and tell_owner is not None
+                and _a_person_said_yes(verdict)):
+            # An APPROVED GitHub write that did not happen (2026-11-15): the
+            # owner hears the module's own reason in the answer itself, not only
+            # the model's account of it. Measured on this PC: a merge card was
+            # approved, the run refused it, and the answer the owner got
+            # described a duplicate-call rule that does not exist. One line,
+            # inside the answer, and nothing is retried.
+            tell_owner(_github_write_failed_line(name, result))
         say_step("tool_finished", name, ok=step["ok"])
     if card_note and isinstance(result, dict):
         result = dict(result)

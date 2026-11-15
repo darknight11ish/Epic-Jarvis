@@ -310,7 +310,10 @@ def t_the_merge_is_merge_commit_only_by_construction():
           {"squash_merge", "rebase_merge", "admin_bypass", "auto_merge",
            "bypass_required_checks"} <= GH.NEVER, sorted(GH.NEVER))
     # A full 40-hex sha is required: a short sha or a branch name could move.
-    for bad in ("", None, "abc123", HEAD_SHA[:12], "main", HEAD_SHA + "0",
+    # An EMPTY one is not on this list any more: since 2026-11-15 a merge call
+    # with no head commit at all asks Jarvis to read the pull request itself and
+    # pin the head it finds (see backend/test_github_tools.py).
+    for bad in ("abc123", HEAD_SHA[:12], "main", HEAD_SHA + "0",
                 "HEAD"):
         try:
             GH.plan_merge_pr({"repo": REPO_NAME, "number": PR_NUMBER,
@@ -353,8 +356,11 @@ def t_the_merge_card_names_what_is_being_merged_and_the_boundary():
           and '{"merge_method"' not in text, text)
     check("the body is STILL exactly the two pinned fields",
           r.body == {"merge_method": "merge", "sha": HEAD_SHA}, r.body)
-    check("... and says a moved head commit means nothing is merged",
-          "moved" in text.lower() and "nothing is merged" in text.lower(), text)
+    check("... and says a head commit that is not this one means nothing is "
+          "merged - and never claims it MOVED",
+          "if its head commit is a different one" in text.lower()
+          and "nothing is merged" in text.lower()
+          and "moved since you looked" not in text.lower(), text)
     check("... and that every required check is re-checked",
           "required check" in text.lower(), text)
     check("... and it is the merge action, not a read",
@@ -395,10 +401,10 @@ def t_the_merge_refuses_before_sending_anything():
          ("already merged",)),
         ("a closed pull request", [("/pulls/", _pr(state="closed"))],
          ("closed",)),
-        ("a head commit that moved", [("/pulls/", _pr(head={
+        ("a head commit that is not the card's", [("/pulls/", _pr(head={
             "sha": OTHER_SHA, "ref": BRANCH,
             "repo": {"full_name": REPO_NAME}}))],
-         ("moved",)),
+         ("not the one there is to merge",)),
     )
     for label, routes, words in cases:
         fake = Routed(routes)
