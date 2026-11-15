@@ -1551,6 +1551,8 @@ def set_asks_first(action: str, ask: bool, *, peer=None, local=None) -> Outcome:
 # (backend/test_settings_registry.py and backend/test_live_settings_parity.py
 # pin that).
 # BEGIN GENERATED: tool target names (tools/gen_tool_targets.py)
+# The master GitHub group switch is the LAST row: find_tool_target
+# walks this table in order, so any sentence naming one tool keeps it.
 _TOOL_TARGETS = {
     'calendar_read': ('the calendar tool', 'calendar', 'my calendar', 'the calendar read tool', 'calendar read tool', 'the calendar read', 'calendar read'),
     'notes_search': ('the notes tool', 'notes', 'my notes', 'the notes search tool', 'notes search tool', 'the notes search', 'notes search'),
@@ -1628,6 +1630,7 @@ _TOOL_TARGETS = {
     'github_issue_state': ('the github issue state tool', 'github issue state tool', 'the github issue state', 'github issue state'),
     'approval_policy': ('the approval policy tool', 'approval policy tool', 'the approval policy', 'approval policy'),
     'email_read': ('the email tool', 'email', 'my email'),
+    'github_tools_group': ('the github tools', 'github tools', 'all the github tools', 'the github and review tools', 'the github group', 'github'),
 }
 # END GENERATED: tool target names (tools/gen_tool_targets.py)
 
@@ -4803,6 +4806,15 @@ def reading_tool_now(tool: str) -> Optional[bool]:
         return None
     try:
         import jarvis_asks_first as AF
+        # THE MASTER GROUP IS TWENTY NAMES, NOT ONE (2026-11-15). It is not in
+        # `[tools].enabled` itself, so the plain answer below was False even with
+        # all twenty on - which made an OFF-from-on receipt record "before:
+        # False, after: False", a receipt that undoes nothing. The group reads as
+        # on only when every one of its names is on, exactly like its Settings
+        # row's own `on` flag.
+        if AF.real_tool(wanted) == getattr(AF, "GITHUB_TOOLS_GROUP", ""):
+            have = AF.tools_enabled_set()
+            return all(t in have for t in AF.GITHUB_TOOLS)
         return AF.real_tool(wanted) in AF.tools_enabled_set()
     except Exception:                       # noqa: BLE001 - None is the answer
         return None

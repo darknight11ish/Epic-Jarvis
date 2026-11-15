@@ -6731,9 +6731,22 @@ _GITHUB_READS_SWITCH = re.compile(
 #: TOOLS_SWITCHABLE - every tool the model can be offered since 2026-11-04) -
 #: a DIFFERENT thing from the above (see that module's own header): "let the
 #: AI model read my calendar" / "don't let the AI model read my email".
+#:
+#: THE MASTER GITHUB GROUP SWITCH RIDES THESE TWO SHAPES TOO (2026-11-15). It
+#: is not in TOOLS_SWITCHABLE - it is not a model tool, it is one switch that
+#: speaks for twenty - but `find_tool_target` now knows its words, so "let the
+#: ai model use the github tools" resolves to the group and raises its ONE card,
+#: and "don't let the ai model use the github tools" turns all twenty off at
+#: once, cardless. Nothing here decides the card: `set_reading_tool` does, and
+#: the group's own ON/OFF rules are its own.
+#:
+#: "do not let ..." was added in the same change: it is the OFF a person says
+#: when they are not contracting the words ("do not" rather than "don't"), and
+#: the tail is still a WHOLE alias, so the closed-world rule is unchanged.
 _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 _TOOL_OFF = re.compile(
-    r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+    r"(?:don'?t\s+let|do\s+not\s+let|stop\s+letting)\s+the\s+ai\s+model\s+"
+    r"(?:read|access|use|check)\s+(.+)")
 
 #: "Turn on the browser control tool", "switch the calculator tool off",
 #: "disable the browser control tool" (2026-11-07, live-parity LP-2). The
@@ -6748,10 +6761,20 @@ _TOOL_OFF = re.compile(
 #: weather" - still falls through exactly as before, and a half-heard name is
 #: never guessed into a switch. The card rule is the switch's own: ON is the PC
 #: only, one card plus Windows Hello; OFF is instant.
+#:
+#: PLURAL "TOOLS", added 2026-11-15. The master GitHub group switch is ONE
+#: switch that speaks for twenty tools and is named in the plural - "turn on
+#: the github tools", "switch on the github tools", "disable the github tools"
+#: - and this pattern only ever matched the singular, so every one of those
+#: sentences fell to the model (which then offered a card it had no door to
+#: raise). Plural is not a loosening: the tail must STILL be a whole alias
+#: (`find_tool_target("github")` is the group, `find_tool_target("kitchen
+#: light")` is None) and the sentence must STILL say tool/tools, so the
+#: device sentences above keep their own paths exactly as before.
 _TOOL_SWITCH = re.compile(
-    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool"
-    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool\s+(on|off)"
-    r"|(enable|disable)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool")
+    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tools?"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tools?\s+(on|off)"
+    r"|(enable|disable)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tools?")
 
 #: "How much Jarvis may interrupt you" (jarvis_arbiter.py, 2026-10-08) - the
 #: number of times a day it may speak up UNASKED, and the hour the brief
@@ -14037,7 +14060,35 @@ _GITHUB_TOOLS_QUESTION = re.compile(
     # inventory uses; still requires GITHUB, so "what features do you have"
     # (the catalogue's own groups answer) is never taken by this.
     r"|what\s+(?:tools|features|abilities)\s+(?:do\s+you|have\s+you)\s+"
-    r"(?:have|got)\s+(?:for|on|about|to\s+use\s+(?:for|on))\s+github\b.*")
+    r"(?:have|got)\s+(?:for|on|about|to\s+use\s+(?:for|on))\s+github\b.*"
+    # "what github tools are there" lists them; it is NOT the state question,
+    # so it stays here with the inventory and never reaches the short answer.
+    r"|what\s+github\s+tools\s+(?:are|r)\s+there\b.*")
+
+#: THE STATE QUESTIONS (2026-11-15, the owner's "what is enabled"), in their OWN
+#: regex and their own shape. Measured live on the installed build before this
+#: existed: "what github tools are switched on" reached the MODEL, which said
+#: "I don't have access to a list of which GitHub tools are currently switched
+#: on for you" - a denial of a fact this backend holds.
+#:
+#: SEPARATE FROM THE INVENTORY ON PURPOSE, and the reason is the owner's own
+#: answer: he asked what is ENABLED, so the answer is the live count and the two
+#: sentences that change it - not the twenty-tool inventory with the count
+#: buried at the end of it (which is what one shared shape produced, measured on
+#: this branch: a screenful of prose and "Right now 0 of the 20" on the last
+#: line). "what github tools do you have" still gets the inventory.
+#:
+#: READ-ONLY, and it runs before every settings and tool-switch lane, so no
+#: change grammar can read "what github tools are on" as a request to switch.
+_GITHUB_TOOLS_STATE_QUESTION = re.compile(
+    r"what\s+github\s+tools\s+(?:are|r)\s+"
+    r"(?:enabled|switched\s+on|turned\s+on|on|available|active)\b.*"
+    r"|which\s+github\s+tools\s+(?:are|r)\s+"
+    r"(?:enabled|switched\s+on|turned\s+on|on|available|active)\b.*"
+    r"|\bare\s+(?:the\s+|my\s+|your\s+)?github\s+tools\s+"
+    r"(?:on|enabled|switched\s+on|turned\s+on|available|active)\b.*"
+    r"|how\s+many\s+(?:of\s+the\s+)?github\s+tools\s+(?:are|r)\s+"
+    r"(?:on|enabled|switched\s+on)\b.*")
 
 _GITHUB_OWN_CI = re.compile(
     r"what(?:'s|\s+is|\s+are)\s+(?:your|jarvis'?s?)\s+ci"
@@ -14328,6 +14379,11 @@ def _self_github(s: str) -> Optional[Intent]:
         return Intent("github_self", {"shape": "needs"})
     if _GITHUB_CANT.fullmatch(s):
         return Intent("github_self", {"shape": "never"})
+    # BEFORE the inventory question, and that order is the answer's shape: the
+    # owner asking what is ENABLED gets the live count and how to change it,
+    # not the twenty-tool inventory (see _GITHUB_TOOLS_STATE_QUESTION).
+    if _GITHUB_TOOLS_STATE_QUESTION.fullmatch(s):
+        return Intent("github_self", {"shape": "tools_state"})
     if _GITHUB_TOOLS_QUESTION.fullmatch(s):
         return Intent("github_self", {"shape": "tools"})
     # "Are you able to create a repository?" (2026-11-09): the real carded action,
@@ -16444,6 +16500,38 @@ _CONNECT_STATUS = re.compile(
     r"(?:connected|linked|set\s*up|working|hooked\s+up|signed\s+in|logged\s+in)\b"
     r"|\bis\s+(?:my|the)\s+.{0,40}\b(?:connected|linked|set\s*up|working)\b")
 
+#: A SENTENCE THAT NAMES A TOOL SWITCH IS THE TOOL GRAMMAR'S, NEVER THE TOKEN
+#: CARD (2026-11-15). The owner's own sentence "enable the github tools" named
+#: the master group switch and was answered with `connect_account`'s GitHub
+#: token card - a real card for a real thing, but not the thing he asked for.
+#: The tool grammar in `_settings_adjust` runs BEFORE this lane and claims every
+#: shape it knows; this guard is for the shapes it does not ("set up the github
+#: tools"), which must reach the model - where `change_setting` can raise the
+#: same group card since 2026-11-15 - rather than offer a token.
+#:
+#: CLOSED WORLD, the same rule as `_TOOL_SWITCH`: the noun before "tool/tools"
+#: must be a WHOLE alias in jarvis_settings_registry.find_tool_target, so
+#: "connect my calendar" (no tool word) and "connect my github" are untouched.
+_CONNECT_NAMES_TOOL = re.compile(
+    r"\b(?:the|my|your|a|an)\s+(?P<name>[a-z0-9][a-z0-9 '\-]*?)\s+tools?\b")
+
+
+def _connect_names_a_tool(s: str) -> bool:
+    """True when `s` names a switchable tool beside the word tool/tools."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - no registry, no claim
+        return False
+    for m in _CONNECT_NAMES_TOOL.finditer(s):
+        name = m.group("name").strip()
+        if not name:
+            continue
+        for words in (name, f"{name} tools", f"{name} tool"):
+            if R.find_tool_target(words) is not None:
+                return True
+    return False
+
+
 #: Nouns that name an account this file CANNOT connect yet (Phase 1 is the
 #: calendar and GitHub). A sentence that names one is answered honestly rather
 #: than handed to the model, which would invent a way. Kept to the inventory in
@@ -16485,6 +16573,12 @@ def _connect(s: str) -> Optional[Intent]:
     for something there is no test for."""
     words = s.split()
     if len(words) > 16:
+        return None
+    # NOT the token card when the sentence names a TOOL switch (2026-11-15).
+    # "enable the github tools" is the master group switch - it must reach the
+    # tool grammar (which does claim it, earlier) or the model, never the
+    # GitHub token card. See `_connect_names_a_tool`.
+    if _connect_names_a_tool(s):
         return None
     # NOT a sentence about a reminder, an alarm or a watch: "set a reminder for
     # my calendar" names a calendar and must never raise a connect card. The
@@ -22629,6 +22723,72 @@ def _run_github_connect_receipt(f: dict) -> Result:
                   "github_connect_receipt")
 
 
+#: The master GitHub group switch's live state, as numbers, from the ONE module
+#: that owns it. None when it cannot be read - never a guessed 0.
+#:
+#: `jarvis_asks_first.tools_status(here=True)["github_group"]` is the same object
+#: the "What asks first" row draws, so this can never be a typed number.
+def _github_tools_group_state() -> Optional[dict]:
+    try:
+        import jarvis_asks_first as AF
+        group = dict(AF.tools_status(here=True).get("github_group") or {})
+    except Exception:                       # noqa: BLE001 - unreadable is said
+        return None
+    on = int(group.get("on_count") or 0)
+    total = int(group.get("total") or 0)
+    if total <= 0:
+        try:
+            import jarvis_asks_first as AF
+            total = len(tuple(getattr(AF, "GITHUB_TOOLS", ()) or ()))
+        except Exception:                   # noqa: BLE001 - older PC
+            total = 0
+    return {"on": on, "total": total or 20, "waiting": bool(group.get("waiting"))}
+
+
+def _github_tools_group_state_words() -> str:
+    """The master group switch's LIVE state, in one sentence.
+
+    The owner's 2026-11-15 ask was "what is enabled", and the answer has to say
+    it: 0 of the twenty, some of them, or all of them, plus whether a card is
+    waiting right now. A module too old to have the group says so instead of
+    guessing, exactly like every other GitHub answer here."""
+    got = _github_tools_group_state()
+    if got is None:
+        return ("I could not read which GitHub tools are switched on right now, so I "
+                "will not guess.")
+    on, total = got["on"], got["total"]
+    if on >= total:
+        said = f"All {total} are switched on right now."
+    elif on <= 0:
+        said = f"Right now 0 of the {total} are switched on."
+    else:
+        said = f"Right now {on} of the {total} are switched on."
+    if got["waiting"]:
+        said += (" One card offering all twenty to the AI model is waiting for your "
+                 "approval right now, and nothing has been switched on yet.")
+    return said
+
+
+def _github_tools_how_words() -> str:
+    """Exactly how to change the group switch, worded for its REAL state.
+
+    ON is ONE card plus Windows Hello; OFF is instant and cardless. Fixed words,
+    not a model's: `jarvis_asks_first` owns both the card and the instant write.
+
+    IT NEVER OFFERS TO SWITCH ON WHAT IS ALREADY ON - the owner's decision of
+    2026-11-15 was that Jarvis names the count and offers the card, and an offer
+    to switch on something already on is the looks-like-success failure this
+    project treats as a bug."""
+    got = _github_tools_group_state()
+    stop = 'Say "turn off the GitHub tools" to stop at once, with no card.'
+    if got is not None and got["on"] >= got["total"]:
+        return ("All twenty are already on, so there is nothing here to switch on. "
+                + stop)
+    start = ('Say "turn on the GitHub tools" and one card appears; approving it asks '
+             'Windows Hello, and all twenty are offered to the AI model at once.')
+    return start + " " + stop
+
+
 def _run_github_self(f: dict) -> Result:
     """The GitHub questions the model used to invent answers to (2026-11-07).
 
@@ -22666,8 +22826,27 @@ def _run_github_self(f: dict) -> Result:
             "request's own branch - never main, master, release/* or hotfix/*, "
             "and never a force-push. " + never + " " + state,
             "github_self")
+    if shape == "tools_state":
+        # THE SHORT ANSWER TO "what is enabled" (2026-11-15). The owner's own
+        # words, and the answer he needs is the count plus the one sentence that
+        # changes it - not the inventory, whose twenty entries buried the count
+        # on its last line when this shape and `tools` were one. READ-ONLY: no
+        # model, no card, no write, and `_github_tools_how_words` never offers to
+        # switch on what is already on.
+        return Result((_github_tools_group_state_words() + " "
+                       + _github_tools_how_words() + " "
+                       + 'Say "what GitHub tools do you have" for the full list of '
+                         'all twenty, one by one.').strip(), "github_self")
     if shape == "tools":
-        return Result(_github_capability_inventory() + " " + state, "github_self")
+        # THE INVENTORY, THEN THE LIVE STATE, THEN HOW TO CHANGE IT (2026-11-15).
+        # The owner asked to be able to talk about what GitHub tools Jarvis has,
+        # what is enabled, and how to activate them. The inventory's own words
+        # are untouched; the two sentences after them are read at answer time
+        # (the group's on_count and waiting flag) and are the switch's own rules.
+        return Result(_github_capability_inventory() + " " + state + " "
+                      + _github_tools_group_state_words() + " "
+                      + _github_tools_how_words(),
+                      "github_self")
     if shape == "create_repo":
         return Result((_github_create_repo_words() + " " + state).strip(),
                       "github_self")
