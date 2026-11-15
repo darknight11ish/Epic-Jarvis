@@ -397,7 +397,7 @@ def _spawn(fn) -> None:
 
 def _bad(words: str) -> dict:
     """A route refusal: one plain sentence under the keys both callers read."""
-    return {"ok": False, "said": words, "error": words, "reason": "refused"}
+    return {"ok": False, "said": words, "error": words, "reason": "not_sent"}
 
 
 def _prune_locked(now: float) -> None:
