@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f6fa8e95417ed70309e51217606103f4192834c5",
- "built_at": "2026-11-15T01:07:06-08:00",
+ "ref": "4db99a34f952560a371695be97b8d891373509a1",
+ "built_at": "2026-11-15T01:55:49-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4706,6 +4706,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
@@ -4903,6 +4904,7 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
@@ -5412,7 +5414,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 984,
+   "file_count": 986,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6499,6 +6501,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "4db99a34f952560a371695be97b8d891373509a1",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
+  },
+  {
+   "sha": "9125c19d124464eece4babc19c24042f61090224",
+   "date": "2026-11-15",
+   "subject": "chore(records): regenerate the self-code map for the file this suite is about"
+  },
+  {
    "sha": "f6fa8e95417ed70309e51217606103f4192834c5",
    "date": "2026-11-15",
    "subject": "fix(github): the PR scan names the checks that are not green"
@@ -6587,16 +6599,6 @@
    "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
    "date": "2026-11-14",
    "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
-  },
-  {
-   "sha": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
-   "date": "2026-11-14",
-   "subject": "Fix the six suites the DEF-068 lane turned red, and carry its gate rows in a patch"
-  },
-  {
-   "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
   }
  ],
  "top_level": [
@@ -6628,7 +6630,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 280
+   "files": 281
   },
   {
    "path": "tools/",
@@ -6643,7 +6645,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 196
+   "files": 197
   },
   {
    "path": "plugins/",
@@ -6722,8 +6724,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5845,
-  "covered": 5362,
+  "tracked_files": 5847,
+  "covered": 5364,
   "excluded": 483,
   "subsystems": 27
  },
