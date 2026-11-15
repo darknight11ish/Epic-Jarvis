@@ -204,6 +204,24 @@ class FakeStore:
         return None
 
 
+#: The commit every test's stand-in `git rev-parse origin/main` names, so no test
+#: reads this checkout's real refs (a clone's `origin/main` is not a fixture).
+STANDIN_MAIN = "6fcfcd4b4a1b2c3d4e5f60718293a4b5c6d7e8f9"
+
+
+def _git_naming(commit: str):
+    """A stand-in for `git rev-parse origin/main`: one commit, or none at all.
+
+    Inert: the real command only reads refs already on this PC, and a test that
+    used it would depend on which refs the clone happens to have.
+    """
+    def run(args, cwd):
+        assert args == ["rev-parse", S.MAIN_REF], args
+        assert isinstance(cwd, Path), cwd
+        return f"{commit}\n" if commit else ""
+    return run
+
+
 def _live(fake=None, ollama=None, **kw):
     fake = fake or FakeJarvis()
     ollama = ollama or FakeOllama()
@@ -212,7 +230,7 @@ def _live(fake=None, ollama=None, **kw):
                 tokens=[("Windows Credential Manager (the backend's own)", TOKEN)],
                 backend=backend_folder(), env={"OLLAMA_KV_CACHE_TYPE": "q8_0"},
                 log_dir=Path(tempfile.mkdtemp(prefix="jarvis-preflight-logs-")),
-                token_store=FakeStore)
+                token_store=FakeStore, git=_git_naming(STANDIN_MAIN))
     args.update(kw)
     return S.Live(**args), fake, ollama
 
@@ -717,6 +735,103 @@ def t_commits():
           not S._same_commit("7a8fe7d", "7a8fe7e") and
           not S._same_commit("", "7a8fe7d") and
           not S._same_commit("not-a-sha", "not-a-sha"))
+
+
+def t_provenance():
+    """The three-way sentence (2026-11-15): desktop, backend and `main`.
+
+    `commits` says what each piece came from. This check says in ONE plain
+    sentence whether the three are the same tree, or what differs - and it is
+    never a gate: every case below is PASS or WARN, and a piece that cannot
+    name its commit is said to not say rather than guessed at.
+    """
+    same = "7a8fe7d0123456789abcdef0123456789abcde"
+    older = "04d4748cf0123456789abcdef0123456789abcde"
+
+    # 1. All three at one commit: one PASS sentence, and nothing else.
+    live, _f, _o = _live(backend=_backend_with_commit("0.2.458", same),
+                         log_dir=_desktop_log_dir("0.2.458", same),
+                         git=_git_naming(same))
+    _p, fails, _w, _s, rows, text = _run(live, only={"provenance"})
+    got = _rows(rows, "provenance")
+    check("all three at one commit: ONE PASS sentence saying they agree",
+          len(got) == 1 and got[0][0] == S.PASS
+          and got[0][1] == "the desktop app, the backend and the main branch all came "
+                          "from 7a8fe7d", got)
+    check("... with no second line under it", len(got) == 1 and got[0][2] == "", got)
+    check("... and it is one printed line", len([line for line in text.splitlines()
+                                                if line.startswith("  PASS")]) == 1, text)
+    check("... never a FAIL", fails == 0, got)
+
+    # 2. The desktop and main agree; the backend is behind. A WARN that names
+    #    BOTH commits, so the owner can see which piece is the old one.
+    live, _f, _o = _live(backend=_backend_with_commit("0.2.456", older),
+                         log_dir=_desktop_log_dir("0.2.458", same),
+                         git=_git_naming(same))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"provenance"})
+    got = _rows(rows, "provenance")
+    check("a backend behind the other two: a WARN",
+          len(got) == 1 and got[0][0] == S.WARN, got)
+    check("... naming the backend's commit AND main's",
+          "04d4748" in got[0][1] and "7a8fe7d" in got[0][1], got)
+    check("... and saying plainly that they do not agree", "do not agree" in got[0][1], got)
+    check("... never a FAIL, so an urgent one-piece fix is not blocked", fails == 0, got)
+
+    # 3. A desktop build from before 2026-11-15 cannot name its commit: the
+    #    honest "does not say" line, never an invented sha.
+    live, _f, _o = _live(backend=_backend_with_commit("0.2.456", older),
+                         log_dir=_desktop_log_dir("0.2.456"),
+                         git=_git_naming(same))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"provenance"})
+    got = _rows(rows, "provenance")
+    check("a desktop that does not say its commit: the truthful does-not-say line",
+          len(got) == 1 and got[0][1].startswith(
+              "the desktop app does not say which commit it came from"), got)
+    check("... never claiming the three agree", "all came from" not in got[0][1], got)
+    check("... never a FAIL", fails == 0, got)
+
+    # 3b. Only the desktop is silent, the other two agree: the pure sentence,
+    #     with nothing claimed about a comparison that could not be made.
+    live, _f, _o = _live(backend=_backend_with_commit("0.2.458", same),
+                         log_dir=_desktop_log_dir("0.2.458"),
+                         git=_git_naming(same))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"provenance"})
+    got = _rows(rows, "provenance")
+    check("... the pure line, in one sentence",
+          len(got) == 1 and got[0][0] == S.WARN and got[0][1] ==
+          "the desktop app does not say which commit it came from, so the three "
+          "cannot be compared", got)
+    check("... never a FAIL", fails == 0, got)
+
+    # 4. The owner's installed copy, run outside a git checkout: `main` cannot
+    #    be read. That is said, with where it looked, and no sha is guessed.
+    live, _f, _o = _live(backend=_backend_with_commit("0.2.458", same),
+                         log_dir=_desktop_log_dir("0.2.458", same),
+                         git=_git_naming(""))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"provenance"})
+    got = _rows(rows, "provenance")
+    check("main cannot be read: said in words, naming the ref it asked git for",
+          len(got) == 1 and got[0][1].startswith("the main branch does not say which commit")
+          and "origin/main" in got[0][1], got)
+    check("... never a FAIL", fails == 0, got)
+
+    # 5. Nothing can name a commit at all: still ONE WARN sentence, never a FAIL
+    #    and never a crash - the shape the installed copy really runs in.
+    live, _f, _o = _live(backend=_backend_with_commit("0.2.456"),
+                         log_dir=Path(tempfile.mkdtemp(prefix="jarvis-preflight-nolog-")),
+                         git=_git_naming(""))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"provenance"})
+    got = _rows(rows, "provenance")
+    check("nothing can name a commit: one WARN sentence, no FAIL",
+          len(got) == 1 and got[0][0] == S.WARN and fails == 0
+          and "do not say which commit they came from" in got[0][1], got)
+
+    # 6. The reader itself, on a folder that is not there: None, never a raise.
+    nowhere = Path(tempfile.mkdtemp(prefix="jarvis-preflight-nowhere-")) / "gone"
+    check("git in a folder that does not exist: None, not an exception",
+          S._git_out(["rev-parse", S.MAIN_REF], nowhere) is None)
+    check("the ref it asks for is the one the deploy record names",
+          S.MAIN_REF == "origin/main")
 
 
 def t_owner_check_and_stop_all():
