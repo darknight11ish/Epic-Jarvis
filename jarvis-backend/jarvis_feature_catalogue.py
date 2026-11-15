@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 beb297038a7d9b1933d5165d107436cbb1899587536bf2f3eb22b7faf24d1d99); the apps' Features pages read their own
+`features/features.json` (sha256 e895638c9daecde748b981ae5c06504793744131dbc9a60c8c8ef7b6afb14599); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "220dae158f7708c0f0703166b46a20b81ca337af59e911a245d8e6646ef2907f"
+SOURCE_SHA256 = "e895638c9daecde748b981ae5c06504793744131dbc9a60c8c8ef7b6afb14599"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1194,10 +1194,10 @@ FEATURES = (
         "id": "devices",
         "group": "Phone",
         "title": "Devices",
-        "what": "Every paired device, each with its own key.",
-        "where": "Settings, Devices.",
-        "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card.",
-        "limit": "This one can never be hidden, so a lost phone can always be removed.",
+        "what": "Every device paired with Jarvis - a phone, a laptop, a tablet or a browser - each with its own key, and a read-only list you can ask for in chat.",
+        "where": "Settings, Devices. A phone pairs from both screens: on this PC, Settings, Devices, then \"Pair a phone\" shows a QR code; on the phone, Settings, Devices, then \"Pair with your PC\". A laptop, tablet, iPad or browser gets its key at this PC's own terminal: run py -3 jarvis_devices.py --add-device \"<name>\" --kind laptop (or tablet) in the backend folder, and paste the jdk1... key it prints once into the pairing sheet of this PC's own page in that browser, at http://<this PC's mesh address>:4719/.",
+        "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card. Pairing a phone raises its own card on the PC that approves it. Making a laptop's, tablet's or browser's key at this PC's own terminal raises no card, because it can only be done there.",
+        "limit": "This one can never be hidden, so a lost phone can always be removed. Chat and voice only read the list: they never add, remove, rename or retire a device - a key is made at this PC's own terminal, and Remove is on this Settings, Devices card. A second PC running the Jarvis desktop app is not supported yet.",
         "surface": "both",
         "aliases": ["lists the devices connected to it"],
         "covers": ["settings.devices", "phone-pairing", "home-overview"],
