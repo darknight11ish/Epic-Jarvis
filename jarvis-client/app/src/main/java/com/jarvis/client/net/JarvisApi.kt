@@ -2364,17 +2364,21 @@ class JarvisApi(
     suspend fun conversationFacts(path: String): ApiResult<JsonObject> = probe(path)
 
     /**
-     * `POST /api/history/delete`: ONE conversation - its exact id in the body,
-     * never a list and never "all". No route deletes them all, on purpose.
+     * `POST /api/conversations/clear`: ONE conversation - its exact id in the
+     * body, never a list and never "all". The carded route
+     * (docs/JARVIS-API.md 184.6): phase one raises ONE `conversation_clear`
+     * approval card and answers 202 `{"waiting": true}`, which is NOT a delete
+     * and must not be read as one ([ChatLog.deleteReply]).
      *
-     * The answer comes back whole (status and body) because since F6
-     * (2026-11-03) the PC may ask first: a 202 / `{"waiting": true}` is ONE
-     * approval card naming that conversation and NOT a delete, and it must not
-     * be read as one ([ChatLog.deleteReply]). A 404 - already gone - comes back
-     * as [ApiError.NotFound] whatever its body says.
+     * The answer comes back whole (status and body) because the status is the
+     * half that says `waiting`, and because the two 404s are different
+     * answers: a 404 with no `ok` in the body is a PC without this route (an
+     * older backend, [ApiError.NotFound] - NOT "already gone"), while a 404
+     * that explains itself in `ok: false` is the route saying the conversation
+     * is already gone.
      */
     suspend fun deleteHistory(id: String): ApiResult<Pair<Int, JsonObject?>> =
-        historyWrite(ChatLog.DELETE_PATH, ChatLog.deleteBody(id))
+        historyWrite(ChatLog.CLEAR_PATH, ChatLog.deleteBody(id))
 
     /** The switch. ON answers 202 waiting while its approval card is up; OFF is immediate. */
     suspend fun setHistory(on: Boolean): ApiResult<DesktopWrite.Outcome> =

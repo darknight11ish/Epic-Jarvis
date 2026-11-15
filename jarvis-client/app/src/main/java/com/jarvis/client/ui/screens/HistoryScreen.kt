@@ -272,6 +272,18 @@ fun HistoryScreen(
     // answer is assumed here. Watching ids rather than "the queue changed" is
     // what keeps an unrelated card from delaying this read.
     var clearWatch by remember { mutableStateOf(setOf<String>()) }
+    // Which conversation that card is about, and whether it has been answered
+    // yet. When the card leaves the queue the list is read again and SAYS what
+    // the PC's own list says: still there means the answer was no, and it
+    // never claims a delete the PC has not confirmed (DEF-047).
+    var clearAskedFor by remember { mutableStateOf<String?>(null) }
+    var clearAnswered by remember { mutableStateOf(false) }
+    // Which chat the last answered clear card was about: an OPEN conversation
+    // reads itself again only when the answer was about THAT chat.
+    var clearAnsweredFor by remember { mutableStateOf<String?>(null) }
+    // A beat that changes when that card is answered, so an OPEN conversation
+    // reads itself again and says the same thing (gone = the owner said yes).
+    var clearEpoch by remember { mutableIntStateOf(0) }
     var filing by remember(fileUnder) { mutableStateOf(fileUnder) }
     // The "file it under" request does not outlive this visit: it goes when
     // the screen is left (a rotation is not leaving) and after ten quiet
@@ -462,6 +474,9 @@ fun HistoryScreen(
         if (clearWatch.isEmpty()) return@LaunchedEffect
         if (clearWatch.none { it in pendingIds }) {
             clearWatch = emptySet()
+            clearAnswered = true
+            clearAnsweredFor = clearAskedFor
+            clearEpoch += 1
             reads += 1
             tagReads += 1
         }
@@ -478,11 +493,32 @@ fun HistoryScreen(
                 // The PC already sends only the view asked for; inView is the
                 // client half, so an older PC that ignores `archived=1` can
                 // never put a live chat in the archived view.
-                rows = ChatLog.inView(page.conversations, archivedView)
+                val fresh = ChatLog.inView(page.conversations, archivedView)
+                rows = fresh
                 mayHaveOlder = page.mayHaveOlder
                 readError = null
+                // The clear card was answered and this is the PC's own list
+                // after it: the row still there means the answer was no, and
+                // its absence is the only thing allowed to be called deleted.
+                if (clearAnswered) {
+                    clearAnswered = false
+                    val asked = clearAskedFor
+                    clearAskedFor = null
+                    listSaid = if (asked != null && fresh.any { it.id == asked }) {
+                        ChatLog.CARD_ANSWERED_KEPT
+                    } else {
+                        ChatLog.CARD_ANSWERED_GONE
+                    }
+                }
             }
-            is ApiResult.Failed -> readError = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+            is ApiResult.Failed -> {
+                // Could not read the list again: say nothing about the answer
+                // rather than guess; the failure line below is the one shown.
+                if (clearAnswered) listSaid = null
+                clearAnswered = false
+                clearAskedFor = null
+                readError = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+            }
         }
     }
 
@@ -594,10 +630,12 @@ fun HistoryScreen(
     }
 
     // Delete ONE chat from a row's overflow menu, after the confirm shown at
-    // the top of the list - and, since F6 (2026-11-03), after the PC's own
-    // approval card: the request names only this chat's id, the PC asks first,
-    // and the row goes only when the PC says it is really gone. A waiting
-    // answer keeps the row and says so.
+    // the top of the list - and after the PC's own approval card (DEF-047: the
+    // request goes to the carded `POST /api/conversations/clear`): the request
+    // names only this chat's id, the PC asks first, and the row goes only when
+    // the PC's own list says it is really gone. A waiting answer keeps the row
+    // and says so; when that card leaves the queue the list is read again and
+    // says which answer it was (approved or no) - see the watch above.
     fun deleteChat(row: ChatLog.Summary) {
         if (deleteBusy) return
         deleteBusy = true
@@ -623,9 +661,11 @@ fun HistoryScreen(
                     listSaid = reply.said
                     if (reply.waiting) {
                         // The card is up; when it leaves the queue the list is
-                        // read again by the effect above. The row stays until
-                        // then - a waiting answer is not a delete.
+                        // read again by the effect above and says which answer
+                        // it was. The row stays until then - a waiting answer
+                        // is not a delete.
                         clearWatch = JarvisRuntime.pending.value.map { it.id }.toSet() - beforeCards
+                        clearAskedFor = row.id
                     }
                 }
             } finally {
@@ -698,8 +738,15 @@ fun HistoryScreen(
                         openId = null
                     },
                     // The PC asked first about this ONE conversation: the list
-                    // reads itself again when that card is answered.
-                    onClearAsked = { newCards -> clearWatch = newCards },
+                    // reads itself again when that card is answered, and says
+                    // which answer it was (DEF-047).
+                    onClearAsked = { newCards ->
+                        clearWatch = newCards
+                        clearAskedFor = open
+                    },
+                    // ...and this open conversation reads itself again too, so
+                    // it stops saying "waiting" and says what the PC now has.
+                    cardEpoch = if (clearAnsweredFor == open) clearEpoch else 0,
                 )
             }
             return@Column
@@ -1849,6 +1896,13 @@ private fun Conversation(
      * waiting answer.
      */
     onClearAsked: (newCards: Set<String>) -> Unit = {},
+    /**
+     * F6 (2026-11-03), DEF-047: bumped when the clear card about this
+     * conversation has been answered. This screen reads the chat again and
+     * says what the PC has: gone is the owner's yes, still here is their no.
+     * Nothing is assumed from the card leaving the queue alone.
+     */
+    cardEpoch: Int = 0,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -1926,6 +1980,35 @@ private fun Conversation(
                 }
             }
             is ApiResult.Failed -> err = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+        }
+    }
+    // The clear card about this chat has been answered: read the chat again and
+    // say what the PC says now. A 404 is the owner's yes ([onDeleted] takes the
+    // screen back to the list with that sentence); a chat still there is their
+    // no, and nothing is removed on the phone either way.
+    LaunchedEffect(cardEpoch) {
+        if (cardEpoch == 0) return@LaunchedEffect
+        when (val r = JarvisRuntime.historyConversation(id)) {
+            is ApiResult.Ok -> {
+                ChatLog.transcript(r.value)?.let { t ->
+                    loaded = t
+                    chatTagId = t.tagId
+                    marks = t.marks
+                }
+                said = ChatLog.CARD_ANSWERED_KEPT
+            }
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                // Gone: the owner approved. Facts they ticked were NOT
+                // forgotten - the PC's card keeps them - so say so.
+                onDeleted(
+                    id,
+                    if (ticked.isEmpty()) ChatLog.CARD_ANSWERED_GONE
+                    else ChatLog.CARD_ANSWERED_GONE_TICKED,
+                )
+            } else {
+                // Could not read it again: say nothing rather than guess.
+                said = null
+            }
         }
     }
 

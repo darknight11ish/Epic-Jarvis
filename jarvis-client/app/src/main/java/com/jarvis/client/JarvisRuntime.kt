@@ -11889,18 +11889,23 @@ object JarvisRuntime {
      * Asks the PC to delete ONE conversation, after the History screen's
      * confirm. Held on a stale link (rule 4), the same as the desktop's
      * History and its Forget: it cannot be undone, and it acts on a list read
-     * over a link that cannot be confirmed live. One already gone counts as
-     * deleted.
+     * over a link that cannot be confirmed live.
      *
-     * **Two-phase since F6 (2026-11-03).** The request names exactly one
-     * conversation id; the PC raises ONE approval card naming that
-     * conversation, saying it cannot be undone and that the facts it taught are
-     * KEPT. A waiting answer is NOT a delete: this returns `gone = false` and
-     * says a card is waiting, the row stays, and the queue is read again so the
-     * owner can answer the card on this phone as well as on the PC. Nothing
-     * here ever deletes in bulk or without that card, and `chatsGone` (which
-     * starts a new conversation when Home was in the deleted one) runs only
-     * once the PC says the conversation is really gone.
+     * **Two-phase, always (F6, 2026-11-03; DEF-047).** The request goes to the
+     * CARDED route `POST /api/conversations/clear`, naming exactly one
+     * conversation id. The PC raises ONE `conversation_clear` approval card
+     * naming that conversation, saying it cannot be undone and that the facts
+     * it taught are KEPT. A waiting answer is NOT a delete: this returns
+     * `gone = false` and says a card is waiting, the row stays, and the queue
+     * is read again so the owner can answer the card on this phone as well as
+     * on the PC. Nothing here ever deletes in bulk or without that card, and
+     * `chatsGone` (which starts a new conversation when Home was in the
+     * deleted one) runs only once the PC says the conversation is really gone.
+     *
+     * A 404 with no `ok` body means this PC has no carded route yet - an older
+     * backend. Nothing was deleted, and this phone will NOT fall back to the
+     * uncarded delete route: that would delete with no card, which is exactly
+     * the defect DEF-047 closed ([com.jarvis.client.net.ChatLog.CLEAR_OLD_PC]).
      *
      * @return whether it is gone now, whether the PC is asking first, and the
      *   sentence to show.
@@ -11919,7 +11924,9 @@ object JarvisRuntime {
                 if (reply.waiting) runCatching { refreshPending() }
             }
             is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
-                com.jarvis.client.net.ChatLog.Delete(gone = true, waiting = false, said = words.ALREADY_GONE)
+                // No carded route on this PC. That is NOT "already gone":
+                // nothing was deleted, and the uncarded route is never used.
+                com.jarvis.client.net.ChatLog.Delete(gone = false, waiting = false, said = words.CLEAR_OLD_PC)
             } else {
                 com.jarvis.client.net.ChatLog.Delete(
                     gone = false,
