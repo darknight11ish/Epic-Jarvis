@@ -10,7 +10,7 @@
       "focus": "everyday questions, writing, life admin",
       "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset.",
       "cost": "qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking 9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 tokens a second, not the fastest.",
-      "worse": "Not the quickest and not the picture specialist; a thinking turn spends the answer's own budget on its reasoning first, so a very small budget can come back empty.",
+      "worse": "Not the quickest and not the picture specialist; it thinks before it answers, so a short answer allowance can cut it off before it speaks - at the 1,024 tokens every window gets it answered all of the general, tool-calling and vision checks (6/6, 5/5, 1/1).",
       "model": "qwen3.5:9b",
       "lane": {
         "key": "main",
