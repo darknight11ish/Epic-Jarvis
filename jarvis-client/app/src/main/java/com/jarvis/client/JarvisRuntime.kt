@@ -84,7 +84,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import java.io.File
 import java.io.InputStream
+import java.io.RandomAccessFile
 
 /**
  * The raw JSON behind the brain screen.
@@ -2584,10 +2586,11 @@ object JarvisRuntime {
     /**
      * Asks the desktop to make [ref] the active model.
      *
-     * Asks, not does: `switch_model` is tier `ask` on the server, so a 2xx
-     * here means a decision card was raised, not that the model changed. The
-     * card arrives on the stream like any other and is answered like any
-     * other - which is exactly rule 4 holding for a config change.
+     * Since the owner's manual-click rule (2026-11-09) a model picked in this
+     * app's own list switches AT ONCE and raises no card; only an older PC, or
+     * the chat road, still raises `switch_model`. So this records a waiting
+     * request only when a card actually appeared - a 2xx alone is not a promise
+     * of one, and a line claiming one would be a promise that is not kept.
      */
     suspend fun switchModel(ref: String): ApiResult<Unit> {
         actionBlocker()?.let {
@@ -2600,11 +2603,12 @@ object JarvisRuntime {
             is ApiResult.Ok -> {
                 refreshPending()
                 refreshModels()
-                // Said on the Mind screen, where the tap was. It used to say
-                // nothing at all: the button showed "…" for a moment and then
-                // looked exactly as before, which reads as broken and invites
-                // a second tap.
-                noteModelRequest(install = false, ref = ref, waitingBefore = waitingBefore)
+                // Only say "waiting for your approval" when a card really
+                // appeared: the uncarded switch (claim C139, 2026-11-09)
+                // raises none, and a line claiming one would be false.
+                if (_pending.value.any { it.id !in waitingBefore }) {
+                    noteModelRequest(install = false, ref = ref, waitingBefore = waitingBefore)
+                }
             }
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
@@ -11032,9 +11036,19 @@ object JarvisRuntime {
     // The owner's ask of 2026-10-31 and Gemini's bounded ruling Q7
     // (docs/JARVIS-API.md section 172; the shapes are
     // [com.jarvis.client.net.SendFile]). ONE file, ONE approval card on the PC,
-    // an opaque id that works once for ten minutes. The phone only LISTS and
+    // an opaque id that lasts ten minutes. Since 2026-11-14 it is fetched in
+    // 1 MiB pieces up to 2 GiB, and a piece may be retried after a dropped
+    // link; the id is consumed only when the LAST piece is served, so
+    // `single_use` means one COMPLETED transfer. The phone only LISTS and
     // FETCHES: it never raises or answers that card, and no route here takes or
     // returns a filesystem path.
+    //
+    // Two local rules from that day's Q2/Q3: the safe two-step save needs room
+    // for the cache copy AND the Downloads copy (2.1x the file), measured
+    // before the first slice is fetched, and the cache copies are cleaned up
+    // promptly once a save has landed or the plate has gone. Q1's receipt
+    // (`POST /api/files/ack`) is fired after the whole-file hash and ignored if
+    // it fails - the PC's own 60-second grace covers that.
 
     /**
      * The files the owner already approved for this phone. A READ: never held
@@ -11052,20 +11066,229 @@ object JarvisRuntime {
     }
 
     /**
-     * ONE approved file's bytes - the single use the PC's route allows. A read;
-     * never held. Refused while the private lists are hidden, for the same
-     * reason as [sendFiles], and the id is checked against the PC's own shape
-     * before anything is sent.
+     * ONE approved file, fetched a slice at a time and checked before it is
+     * kept.
+     *
+     * Before a single slice is asked for, the free space on the volume that
+     * holds the app cache is measured: the safe two-step save keeps the whole
+     * file in the cache and then copies it into Downloads, so it needs about
+     * 2.1x the file's size ([com.jarvis.client.net.SendFile.bytesNeeded]). A
+     * phone without the room is refused here, in the app's own plain words
+     * ([com.jarvis.client.net.SendFile.spaceWords]) as a
+     * [com.jarvis.client.net.SendFile.Fetched.Refused], so nothing is fetched
+     * and nothing is left half-written.
+     *
+     * The pieces are written at their own offsets into an app-private `.part`
+     * file under `cacheDir/received` ([com.jarvis.client.net.SendFile.receive]
+     * retries the same offset when the link drops). When the last slice has
+     * arrived the whole file's sha256 is read back from disk and compared with
+     * the PC's own; only then is the part renamed to the file's name, and only
+     * then is the PC's receipt fired (`POST /api/files/ack`, Q1). A receipt
+     * that fails is ignored: the PC's 60-second grace expires the id anyway,
+     * and the verified file is already kept - a lost receipt must never lose
+     * the file. Anything short of a verified file - a refusal, a bad hash, a
+     * cancellation, a failed write - deletes the part in `finally`, so
+     * **nothing partial is ever offered**. The plate then either opens that
+     * verified cache file or moves it into Downloads through MediaStore;
+     * Downloads is only touched after this returns
+     * [com.jarvis.client.net.SendFile.Fetched.Got].
+     *
+     * THE SAME HOLDS AS BEFORE, plus one: refused while the private lists are
+     * hidden (a file's name is the owner's words), and now also held on a stale
+     * link BEFORE the first slice is asked for - the fetch ends in a file the
+     * owner keeps, so rule 4 treats it as an action ([actionBlocker]). The id
+     * is checked against the PC's own shape first, so a path can never be asked
+     * for.
+     *
+     * [sizeBytes] is the list's own `size_bytes`, used only for that space
+     * pre-check; 0 means the list did not say, and the check is skipped rather
+     * than guessed. [chunkBytes] is the PC's `chunk_bytes` from its list answer
+     * (clamped to [com.jarvis.client.net.SendFile.CHUNK_BYTES]); [onProgress]
+     * hears bytes written and the PC's whole size after every slice, for the
+     * progress line.
      */
-    suspend fun downloadFile(id: String): ApiResult<com.jarvis.client.net.SendFile.Fetched> {
+    suspend fun downloadFile(
+        id: String,
+        sizeBytes: Long = 0L,
+        chunkBytes: Int = com.jarvis.client.net.SendFile.CHUNK_BYTES,
+        onProgress: (com.jarvis.client.net.SendFile.Progress) -> Unit = {},
+    ): ApiResult<com.jarvis.client.net.SendFile.Fetched> {
         if (privateListsHidden) {
             return ApiResult.Failed(
                 ApiError.Malformed(com.jarvis.client.net.SendFile.HIDDEN_NAMES),
             )
         }
-        com.jarvis.client.net.SendFile.downloadPath(id)
-            ?: return ApiResult.Failed(ApiError.Malformed(com.jarvis.client.net.SendFile.UNREADABLE))
-        return api.downloadFile(id)
+        // Only an id of the PC's own shape, and only a legal slice, may be put
+        // on the wire. A filename or a path can never get past this.
+        val step = chunkBytes.coerceIn(1, com.jarvis.client.net.SendFile.CHUNK_BYTES)
+        com.jarvis.client.net.SendFile.downloadPath(id, 0L, step)
+            ?: return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.SendFile.UNREADABLE),
+            )
+        // Rule 4: this writes a file the owner keeps, so a stale link refuses
+        // before anything is fetched, not after a 2 GiB transfer.
+        actionBlocker()?.let { return ApiResult.Failed(ApiError.Malformed(it)) }
+        val app = appContext
+            ?: return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.SendFile.SAVE_FAILED),
+            )
+        // Q2: the safe two-step save keeps the whole file in this cache and
+        // then copies it into Downloads, so it needs about 2.1x the file's
+        // size. Measured on the volume that holds the cache BEFORE a single
+        // slice is asked for: a phone without the room fails cleanly here, in
+        // the app's own plain words, instead of filling /data halfway through a
+        // 2 GiB file and leaving a broken transfer behind.
+        if (sizeBytes > 0L) {
+            val free = withContext(Dispatchers.IO) { app.cacheDir.usableSpace }
+            if (!com.jarvis.client.net.SendFile.hasRoomFor(sizeBytes, free)) {
+                return ApiResult.Ok(
+                    com.jarvis.client.net.SendFile.Fetched.Refused(
+                        com.jarvis.client.net.SendFile.spaceWords(sizeBytes, free),
+                    ),
+                )
+            }
+        }
+        val dir = File(app.cacheDir, com.jarvis.client.net.SendFile.RECEIVED_DIR)
+        if (!dir.exists() && !dir.mkdirs()) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.SendFile.SAVE_FAILED),
+            )
+        }
+        val part = try {
+            File.createTempFile("send-", ".part", dir)
+        } catch (e: Exception) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.SendFile.SAVE_FAILED),
+            )
+        }
+        var kept = false
+        try {
+            val outcome = withContext(Dispatchers.IO) {
+                RandomAccessFile(part, "rw").use { out ->
+                    com.jarvis.client.net.SendFile.receive(
+                        fetch = { offset, length -> api.downloadChunk(id, offset, length) },
+                        write = { offset, bytes ->
+                            // Seek, not append: a retried slice lands exactly
+                            // where the failed one was going, never after it.
+                            out.seek(offset)
+                            out.write(bytes)
+                        },
+                        chunkBytes = step,
+                        onProgress = onProgress,
+                    )
+                }
+            }
+            val answer: ApiResult<com.jarvis.client.net.SendFile.Fetched> = when (outcome) {
+                is com.jarvis.client.net.SendFile.Outcome.Refused -> ApiResult.Ok(
+                    com.jarvis.client.net.SendFile.Fetched.Refused(outcome.said),
+                )
+
+                is com.jarvis.client.net.SendFile.Outcome.Failed -> ApiResult.Failed(outcome.error)
+
+                is com.jarvis.client.net.SendFile.Outcome.Done -> {
+                    // The one check that proves the assembled file is the file
+                    // the PC named: read it back and hash it, never trust the
+                    // reported size alone.
+                    val actual = withContext(Dispatchers.IO) {
+                        if (part.length() != outcome.sizeBytes) {
+                            null
+                        } else {
+                            com.jarvis.client.net.SendFile.sha256(part)
+                        }
+                    }
+                    if (actual == null || !actual.equals(outcome.sha256, ignoreCase = true)) {
+                        ApiResult.Ok(
+                            com.jarvis.client.net.SendFile.Fetched.Refused(
+                                com.jarvis.client.net.SendFile.NOT_WHAT_WAS_SENT,
+                            ),
+                        )
+                    } else {
+                        val dest = withContext(Dispatchers.IO) {
+                            moveIntoReceived(part, dir, outcome.name)
+                        }
+                        if (dest == null) {
+                            ApiResult.Failed(
+                                ApiError.Malformed(com.jarvis.client.net.SendFile.SAVE_FAILED),
+                            )
+                        } else {
+                            kept = true
+                            // Q1: the receipt, now that the whole file has
+                            // verified AND is in place under its own name. It
+                            // is fired and ignored - a 404 from a PC older
+                            // than the route, a 409, a 5xx or a dropped link
+                            // changes nothing the owner sees, the PC's own
+                            // 60-second grace expires the id anyway, and the
+                            // verified file is already kept. runCatching, not
+                            // a bare call, so an error here can never throw
+                            // away a file that arrived whole.
+                            runCatching { api.ackFile(id) }
+                            ApiResult.Ok(
+                                com.jarvis.client.net.SendFile.Fetched.Got(
+                                    name = outcome.name,
+                                    sizeBytes = outcome.sizeBytes,
+                                    mime = outcome.mime,
+                                    sha256 = actual,
+                                    file = dest,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            return answer
+        } finally {
+            if (!kept) part.delete()
+        }
+    }
+
+    /**
+     * Puts a verified `.part` file in place under the name the PC sent (already
+     * made safe by [com.jarvis.client.net.SendFile.nameForDisk]). A rename in
+     * the same folder is the normal path; a streaming copy is the fallback for
+     * the rare file system that refuses it. Returns the file to open/save, or
+     * null when neither worked.
+     */
+    private fun moveIntoReceived(part: File, dir: File, name: String): File? {
+        val dest = File(dir, com.jarvis.client.net.SendFile.nameForDisk(name))
+        if (dest.exists()) dest.delete()
+        if (part.renameTo(dest)) return dest
+        return try {
+            part.inputStream().use { input ->
+                dest.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
+            }
+            part.delete()
+            dest
+        } catch (e: Exception) {
+            dest.delete()
+            null
+        }
+    }
+
+    /**
+     * The received copies already handed to another app's viewer, by absolute
+     * path. A sweep must never delete one: Android's viewer re-opens the URI
+     * every time the owner returns to it, and the URI is only valid while the
+     * file exists. Kept for the life of this process - it is the file the owner
+     * is actually watching, not an orphan.
+     */
+    private val viewerFiles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Remembers the verified copy a viewer was just handed, so no sweep deletes it. */
+    fun noteOpenedForViewer(file: File) {
+        viewerFiles += file.absolutePath
+    }
+
+    /**
+     * Deletes the received copies the viewer is not using - the plate calls
+     * this when it leaves the screen (Q3: "clean up cache copies promptly"). A
+     * file handed to a viewer is kept ([viewerFiles]); everything else in
+     * `cacheDir/received`, including a `.part` left by a cancelled download, is
+     * removed. Returns how many files went.
+     */
+    fun sweepReceivedCopies(): Int {
+        val app = appContext ?: return 0
+        val dir = File(app.cacheDir, com.jarvis.client.net.SendFile.RECEIVED_DIR)
+        return com.jarvis.client.net.SendFile.sweepReceived(dir, viewerFiles)
     }
 
     /**

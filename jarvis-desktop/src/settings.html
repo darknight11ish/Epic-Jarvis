@@ -2747,11 +2747,18 @@
       <!-- ── Folders Jarvis may look in ────────────────────────────────────
            The owner's decisions of 2026-09-26: asking about PDFs and Word
            files, and bringing in a Notion export (folders-settings.js;
-           folders.rs get_folders, add_folder, remove_folder, import_notion;
-           backend jarvis_documents.py). ONE list, empty by default. Adding
-           is the Windows folder picker, then one approval card on the PC,
-           held on a stale link; removing is at once. The phone shows the
-           same list with Remove only - adding is the PC's. -->
+           folders.rs get_folders, add_folder, remove_folder, import_notion,
+           prepare_file_for_phone; backend jarvis_documents.py). ONE list,
+           empty by default. Adding is the Windows folder picker, then one
+           approval card on the PC, held on a stale link; removing is at once.
+           The phone shows the same list with Remove only - adding is the PC's.
+           "Send a file to your phone…" (2026-11-14, the
+           SEND-TO-PHONE-2GB-DESIGN sections 6 and 8) is the one path OUTSIDE
+           the list: the owner picks ONE file in the Windows open-file dialog
+           (in Rust - this page gets no file system and sends no path), the PC
+           registers it and raises the same send_file_to_phone card the chat
+           route uses. Nothing is fetchable before that yes, and the phone
+           finds it under "File from your PC". -->
       <section class="card" id="folders">
         <h2>Folders Jarvis may look in</h2>
         <p class="note" id="fo-detail"></p>
@@ -2771,6 +2778,13 @@
             <select id="fo-notion-into"></select>
             <button class="btn small" id="fo-notion-pick" type="button">Choose the .zip…</button>
           </div>
+          <div class="row">
+            <button class="btn small" id="fo-send" type="button">Send a file to your phone…</button>
+          </div>
+          <p class="note" id="fo-send-note">
+            Your phone finds it in Settings → "File from your PC". An approval
+            card comes first.
+          </p>
           <span class="status" id="fo-status" role="status"></span>
         </div>
       </section>

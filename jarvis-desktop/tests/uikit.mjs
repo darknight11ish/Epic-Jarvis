@@ -678,7 +678,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__recentChanges = recentChanges || null;
   window.__recentChangesError = (recentChanges && recentChanges.throws) || null;
   window.__emailSending = emailSending || null;
-  // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
+  // folders.rs: { view, addAnswer, removeAnswer, importAnswer, sendAnswer,
+  // sendDelayMs } (folders.mjs).
   window.__folders = folders || null;
   // The model advisor (2026-10-28, model-advisor.js): the POST answers a
   // scenario seeds, and every call the window really made, in order. Empty, the
@@ -3588,6 +3589,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               if (window.__folders.view) delete window.__folders.view.importing;
             }
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
+          case "prepare_file_for_phone":
+            // "Send a file to your phone…" (folders.rs, 2026-11-14). The
+            // command takes NO argument - the page cannot name a path - so the
+            // recorded call is the assertion: `[cmd, args]` must carry nothing
+            // but `{}`. `sendDelayMs` holds the answer open so a test can see
+            // the button greyed while the request is in flight, the way the
+            // real one is while the dialog and the PC answer.
+            if (window.__folders && window.__folders.sendDelayMs) {
+              await new Promise((r) => setTimeout(r, window.__folders.sendDelayMs));
+            }
+            return window.__folders && window.__folders.sendAnswer || { cancelled: true };
           // look.rs: the Watch with me session and the Never look at list.
           case "screen_status": {
             const sc = window.__screen;

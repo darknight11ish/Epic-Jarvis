@@ -125,7 +125,7 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # _one_call with only the gate replaced: the prompt the checker receives IS
     # the plan text it is also given, and is not `_gate_prompt`'s line. Two pins
     # (a `src` read and its two comparisons on lines 402/404) became behaviour.
-    "backend/test_file_to_phone.py": 9,
+    "backend/test_file_to_phone.py": 8,
     # 2026-11-05 (folder restrictions by plain chat, #1166): its new suite keeps
     # two source-text pins on the dead "protection_change" branch it replaced -
     # the branch must stay gone, and its broken offered-test (a gate action name

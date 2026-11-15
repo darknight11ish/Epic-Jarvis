@@ -3,7 +3,7 @@
  * 2026-09-26; JARVIS-API.md section 35; backend jarvis_documents.py,
  * documents.patch).
  *
- * Four Rust commands (src-tauri/src/folders.rs), Settings only:
+ * Five Rust commands (src-tauri/src/folders.rs), Settings only:
  *  - get_folders: the list, in the PC's words. A read.
  *  - add_folder: the Windows folder picker, then ONE approval card on the PC.
  *    Held on a stale link here (greyed) and in Rust.
@@ -11,9 +11,15 @@
  *  - import_notion {into}: the Windows file picker for the .zip Notion made,
  *    then the PC unzips it into a new folder inside `into`. Held on a stale
  *    link. No card: the owner chose the file and the folder here.
+ *  - prepare_file_for_phone: "Send a file to your phone…" (2026-11-14, the
+ *    SEND-TO-PHONE-2GB-DESIGN sections 6 and 8). The Windows OPEN-FILE
+ *    dialog in Rust, then POST /api/files/prepare with the one path the owner
+ *    picked, and the SAME `send_file_to_phone` approval card the chat route
+ *    raises. NO argument: this page cannot name a path, and the line under
+ *    the button is the only thing it says about the file.
  *
  * The page never gets a file system of its own: the pickers are in Rust, and
- * only a chosen path comes back.
+ * only a chosen path comes back - and for the send button not even that.
  *
  * @module folders-settings
  */
@@ -26,6 +32,9 @@ import {
   importLine,
   NOTION_LABEL,
   readFolders,
+  SEND_LABEL,
+  SEND_NOTE,
+  sendWords,
   STALE,
 } from "./folders.js";
 
@@ -47,6 +56,8 @@ const el = {
   notionDetail: $("fo-notion-detail"),
   notionInto: $("fo-notion-into"),
   notionPick: $("fo-notion-pick"),
+  send: $("fo-send"),
+  sendNote: $("fo-send-note"),
   status: $("fo-status"),
 };
 
@@ -124,6 +135,11 @@ function paint() {
   el.notionInto.disabled = busy || !can.notion;
   el.notionPick.textContent = NOTION_LABEL;
   el.notionPick.disabled = busy || !can.notion;
+  // "Send a file to your phone…": greyed while a request is in flight (the
+  // dialog included) and while the link is stale, because it raises a card.
+  el.send.textContent = SEND_LABEL;
+  el.send.disabled = busy || !can.send;
+  el.sendNote.textContent = SEND_NOTE;
   // WHILE AN EXPORT IS BEING UNZIPPED, the PC's own counts are shown as a
   // progress line instead of one unchanging sentence - a 4 GB import is
   // minutes, and a page that looks frozen for minutes is its own bug. The
@@ -148,7 +164,7 @@ async function load() {
   paint();
 }
 
-async function run(command, args, working) {
+async function run(command, args, working, wordsOf) {
   if (busy) return;
   busy = true;
   say(working);
@@ -165,7 +181,8 @@ async function run(command, args, working) {
     if (out && out.cancelled) {
       say("");
     } else {
-      const words = String((out && (out.message || out.said || out.error)) || "Done.");
+      const said = wordsOf ? wordsOf(out) : (out && (out.message || out.said || out.error));
+      const words = String(said || "Done.");
       say(words, out && out.ok === false ? "bad" : "ok");
       announce(words);
     }
@@ -200,9 +217,19 @@ function notion() {
   run("import_notion", { into }, "Choose the .zip Notion made…");
 }
 
+/** "Send a file to your phone…": no arguments - the page has no path to give. */
+function send() {
+  if (!live()) {
+    say(STALE, "bad");
+    return;
+  }
+  run("prepare_file_for_phone", {}, "Choose a file…", sendWords);
+}
+
 if (el.section) {
   el.add.addEventListener("click", add);
   el.notionPick.addEventListener("click", notion);
+  el.send.addEventListener("click", send);
 }
 onLink(() => paint());
 // A card answered (or expired): the list may have changed. onQueue also

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-prepare-file-for-phone"
+description = "Enables the prepare_file_for_phone command without any pre-configured scope."
+commands.allow = ["prepare_file_for_phone"]
+
+[[permission]]
+identifier = "deny-prepare-file-for-phone"
+description = "Denies the prepare_file_for_phone command without any pre-configured scope."
+commands.deny = ["prepare_file_for_phone"]
