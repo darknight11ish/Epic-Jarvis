@@ -86,6 +86,10 @@ class ReadAloudService : Service() {
             .addAction(0, LiveRules.STOP_TALKING, stop)
             .setOngoing(true)
             .setSilent(true)
+            // Nothing about this line leaves the phone: it is the shade's own
+            // notice, and the test that watches every builder demands this be
+            // said in so many words.
+            .setLocalOnly(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

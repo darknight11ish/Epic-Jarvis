@@ -9804,10 +9804,10 @@ object JarvisRuntime {
      * that "will just stop", with "huge gaps between each paragraph" - is fixed
      * here once, for both.
      *
-     * PREFETCH. Each piece is one `/api/voice/say` round trip, so the next piece
-     * is asked for while the current one is being spoken. That is what turns the
-     * gap between paragraphs into a gap between sentences: the PC synthesises
-     * ahead instead of the phone waiting.
+     * PREFETCH. Each piece is one round trip to the PC's say route, so the next
+     * piece is asked for while the current one is being spoken. That is what
+     * turns the gap between paragraphs into a gap between sentences: the PC
+     * synthesises ahead instead of the phone waiting.
      *
      * ONE FAILED PIECE IS NOT A FAILED ANSWER. A dropped request skips that
      * piece and the read carries on; three in a row means the PC or the link is
