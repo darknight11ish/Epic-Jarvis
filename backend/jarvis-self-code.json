@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9d70ec02bf85746c368490d6177b9fbaa2546a87",
- "built_at": "2026-11-15T00:53:50-08:00",
+ "ref": "1d0da6046fe68cc60deac9759a0434be0081eb70",
+ "built_at": "2026-11-15T02:12:41-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4705,6 +4705,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
     "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
@@ -4903,6 +4904,7 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
     "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
@@ -4910,6 +4912,7 @@
     "decisions.d/2026-11-14-pooling-the-phone-into-this-pc-is-rejected.md",
     "decisions.d/2026-11-14-send-to-phone-two-gigabytes.md",
     "decisions.d/2026-11-14-widget-look.md",
+    "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5413,7 +5416,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 986,
+   "file_count": 989,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6500,9 +6503,24 @@
  ],
  "recent_commits": [
   {
+   "sha": "1d0da6046fe68cc60deac9759a0434be0081eb70",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/phone-ai-truth-2026-11-14"
+  },
+  {
+   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
+  },
+  {
    "sha": "9d70ec02bf85746c368490d6177b9fbaa2546a87",
    "date": "2026-11-15",
    "subject": "The About page's six quoted register totals follow the row this branch added"
+  },
+  {
+   "sha": "87e40c6a5165eb5efdd49968a982d1d176a41841",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
   },
   {
    "sha": "c78898cd5d8dee498606feca12dc6910e1a0ea0e",
@@ -6513,6 +6531,11 @@
    "sha": "04d4748cfea08924a8facf798b01ae490769f989",
    "date": "2026-11-15",
    "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
+  },
+  {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
   },
   {
    "sha": "e496e93c373679d108b7924d370f031517298c6a",
@@ -6578,26 +6601,6 @@
    "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
    "date": "2026-11-14",
    "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
-  },
-  {
-   "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
-  },
-  {
-   "sha": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
-   "date": "2026-11-14",
-   "subject": "Fix the six suites the DEF-068 lane turned red, and carry its gate rows in a patch"
-  },
-  {
-   "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
-  },
-  {
-   "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
-   "date": "2026-11-14",
-   "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
   }
  ],
  "top_level": [
@@ -6629,7 +6632,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 281
+   "files": 282
   },
   {
    "path": "tools/",
@@ -6644,7 +6647,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 197
+   "files": 199
   },
   {
    "path": "plugins/",
@@ -6723,8 +6726,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5846,
-  "covered": 5363,
+  "tracked_files": 5849,
+  "covered": 5366,
   "excluded": 483,
   "subsystems": 27
  },
