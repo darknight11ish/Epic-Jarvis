@@ -4,15 +4,26 @@
 
 WHAT THIS PROVES, in the order it checks it:
 
-  - the GENERATOR is deterministic: `--check` passes on the committed map, two
-    renders of one tree are identical, and the commit it records is this tree's
-    own HEAD - so "what changed" is an answer about a real commit, not a wall
-    clock;
-  - the map is COMPLETE BY CONSTRUCTION: every file a commit would carry
-    belongs to exactly one subsystem or is named in the exclude list, and the
-    generator refuses a tree with a file nobody owns (proved on a synthetic tree
-    through its own `build_map`, and with a second claimant added to its own
-    table);
+  - the GENERATOR is deterministic: two renders of one tree are identical, the
+    map is a product of the tree and its commit, not of the wall clock, and a
+    map is never WRITTEN on a dirty tree (which would record HEAD as its commit
+    while describing a different tree);
+  - the TREE IS COHERENT, which is the property a feature pull request must
+    keep: every tracked file belongs to exactly one subsystem or is excluded by
+    name, and every key module, suite and document the generator's table names
+    exists. This is the check the required backend job runs on every PR since
+    the owner's ruling Q1 of 2026-11-15: a pull request no longer regenerates
+    the map, and this suite no longer asks it to. `--coherence` is the command;
+  - the committed map is COMPLETE BY CONSTRUCTION: every file a commit would
+    carry belongs to exactly one subsystem or is named in the exclude list, and
+    the generator refuses a tree with a file nobody owns (proved on a synthetic
+    tree through its own `build_map`, and with a second claimant added to its
+    own table);
+  - the committed map is a TRUE SNAPSHOT of the commit it names: every file it
+    lists was in that commit's tree, its file count is that commit's own count,
+    and every file that commit carried is listed or excluded by name. It is
+    allowed to describe an earlier commit than HEAD - that is the ruling - but
+    never a tree that never existed;
   - the map SHAPE holds: every subsystem has a purpose, files, key modules with
     their docstring's first sentence, tests, docs and at least one area; the
     architecture list is the five runtime parts in order; the newest twenty
@@ -29,6 +40,13 @@ WHAT THIS PROVES, in the order it checks it:
   - the two-file rule: `jarvis_self_code.py` and `jarvis-self-code.json` are
     byte-identical in `backend/` and `jarvis-backend/`, are in the SHIPPED list
     and the base's BESIDE table, and `jarvis_quick.py`'s twin matches too.
+
+WHERE THE OTHER HALF RUNS. "The committed map is what `main`'s tree produces,
+byte for byte" is `tools/gen_self_code_map.py --check`, run by
+`.github/workflows/self-code-map.yml` on `main` after every merge. It is
+deliberately NOT in this suite: a feature PR adds changelog and decisions
+fragments, so that comparison would fail every PR and send every PR back to the
+same 330 KB file - the measured cost the 2026-11-15 ruling removed.
 
 Nothing here opens a socket, calls a model or touches the owner's live folder:
 `JARVIS_BACKEND` is never required, and the map is read from this checkout.
@@ -91,6 +109,14 @@ def _git_run(*args):
     return done.returncode, done.stdout.decode("utf-8", "replace").strip()
 
 
+def files_at(ref):
+    """Every path in the tree of `ref`, or None when git cannot answer."""
+    code, out = _git_run("ls-tree", "-r", "--name-only", "-z", ref)
+    if code != 0:
+        return None
+    return {p.replace("\\", "/") for p in out.split("\0") if p}
+
+
 def generator():
     """The generator module, loaded by path - it is a tool, not an importable one."""
     spec = importlib.util.spec_from_file_location(
@@ -102,6 +128,9 @@ def generator():
 
 GEN = generator()
 MAP = json.loads(MAP_PATH.read_text(encoding="utf-8"))
+#: The tree of the commit the map records. The map is a snapshot, so this - not
+#: HEAD - is the tree its file lists must be true about.
+REF_TREE = files_at(MAP["ref"])
 
 
 # --------------------------------------------------------------------------
@@ -112,28 +141,22 @@ def t_the_generator_is_deterministic():
     first = GEN.generate(REPO)
     second = GEN.generate(REPO)
     check("two runs on one tree produce the same bytes", first == second)
-    # THE STRICT HALF: rebuild the document from this tree, with the provenance
-    # the committed map records, and compare it with the committed file. That is
-    # exactly what `--check` compares, with the dirty-tree judgement taken out.
-    fresh = GEN.render(GEN.build_map(
-        REPO, GEN.tree_files(REPO), ref=MAP["ref"], built_at=MAP["built_at"],
-        commits=list(MAP["recent_commits"])))
-    check("the committed map is byte-for-byte what this tree produces",
-          fresh == MAP_PATH.read_text(encoding="utf-8"),
-          "the generator would write different bytes")
+    # THE TREE HALF: what a feature pull request must keep. It reads no map
+    # file and regenerates nothing, which is the point of the 2026-11-15 ruling.
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured):
-        rc = GEN.check(REPO)
-    said = captured.getvalue()
-    check("--check agrees, or refuses a dirty tree in its documented words",
-          rc == 0 or ("uncommitted changes" in said and "map itself is not" in said),
-          said.strip().splitlines()[0] if said.strip() else f"exit {rc}")
-    info = GEN.provenance(REPO)
-    check("the recorded commit is this tree's HEAD", info["ref"] == git("rev-parse", "HEAD"),
-          f"{info['ref']} != {git('rev-parse', 'HEAD')}")
-    check("the recorded build date is that commit's own date, not now",
-          info["built_at"] == git("show", "-s", "--format=%cI", "HEAD"),
-          info["built_at"])
+        rc = GEN.coherence(REPO)
+    said = captured.getvalue().strip()
+    check("the generator's coherence check passes on this tree (the PR gate)",
+          rc == 0, said)
+    check("... and it names what it covered, on a run that read no map",
+          "belong to exactly one subsystem" in said and "tracked in total" in said,
+          said)
+    # THE MAP HALF IS NOT HERE, ON PURPOSE. "The committed map is byte-for-byte
+    # what this tree produces" and `GEN.check(REPO)` are the main-only snapshot
+    # gate now (`tools/gen_self_code_map.py --check`, run by
+    # `.github/workflows/self-code-map.yml` after every merge). Asking a feature
+    # PR for them is what made every PR rewrite the same 330 KB file.
     rebuilt = GEN.build_map(REPO, GEN.tree_files(REPO), ref="0" * 40,
                             built_at="2000-01-01T00:00:00+00:00", commits=[])
     check("the map is a product of the tree, not of the clock",
@@ -186,6 +209,104 @@ def t_the_generator_refuses_a_tree_it_cannot_cover():
               "quick" in shared and "second-claimant" in shared, shared)
 
 
+def t_a_dirty_tree_is_refused_before_a_map_is_written():
+    """The map records the commit it was built from, so it must be built clean.
+
+    Its file lists come from the INDEX while `ref` comes from HEAD; on a dirty
+    tree those describe two different trees. That is how `main`'s map came to
+    record a commit that never had the files it listed (measured 2026-11-15: a
+    map generated during an in-progress merge). `main()` now refuses to write on
+    a dirty tree, and the map files themselves are not a reason to refuse,
+    because re-running the generator leaves them modified by design.
+    """
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "backend").mkdir()
+        (root / "backend" / "jarvis_quick.py").write_text('"""A module."""\n',
+                                                           encoding="utf-8")
+        (root / "VERSION").write_text("0.0.1", encoding="utf-8")
+
+        def g(*args):
+            return subprocess.run(
+                ["git", "-C", str(root), "-c", "user.name=test",
+                 "-c", "user.email=test@example.invalid", *args],
+                capture_output=True, check=False).returncode
+
+        g("init", "-q")
+        g("add", "-A")
+        g("commit", "-q", "-m", "clean")
+        (root / "backend" / "jarvis_quick.py").write_text(
+            '"""A module."""\n\n\ndef later():\n    return 1\n', encoding="utf-8")
+        dirty = GEN._uncommitted_inputs(root,
+                                        root / "backend" / "jarvis-self-code.json")
+        check("a tracked change is found before a map is written",
+              dirty == ["backend/jarvis_quick.py"], str(dirty))
+        out = root / "scratch-map.json"
+        captured = io.StringIO()
+        with contextlib.redirect_stdout(captured):
+            rc = GEN.main(["--map-out", str(out)], root=root)
+        check("the generator refuses to write a map on a dirty tree", rc == 1,
+              f"exit {rc}")
+        check("... says why, and names the uncommitted file",
+              "uncommitted changes" in captured.getvalue()
+              and "jarvis_quick.py" in captured.getvalue(), captured.getvalue())
+        check("... and writes no map", not out.exists(), str(out))
+        g("commit", "-qam", "change")
+        map_file = root / "backend" / "jarvis-self-code.json"
+        map_file.write_text("{}\n", encoding="utf-8")
+        g("add", "backend/jarvis-self-code.json")
+        g("commit", "-qm", "map")
+        map_file.write_text("{}\n\n", encoding="utf-8")
+        check("a modified map file is not a dirty input",
+              GEN._uncommitted_inputs(root, map_file) == [],
+              str(GEN._uncommitted_inputs(root, map_file)))
+
+
+def t_a_pull_request_needs_no_map_regeneration():
+    """THE RULING'S PROPERTY (owner's Q1, 2026-11-15): a feature PR leaves the map alone.
+
+    Measured before this changed: a PR that added a harmless function to one
+    module, carried its twin and wrote one changelog fragment failed this suite
+    with "the committed map is byte-for-byte what this tree produces" - the map
+    records every tracked file, so the fragment every PR owes changed it, and
+    two such PRs always wrote the same 330 KB file.
+
+    What must stay true instead, and is proved here:
+      - the tree a PR carries is COHERENT - every tracked file belongs to
+        exactly one subsystem - and the two files a normal PR adds (a changelog
+        fragment, a test suite under backend/) need no generator-table edit;
+      - a file nobody owns is STILL refused on the same call, so completeness
+        was not weakened to get here;
+      - the committed map does not have to name the PR's new files: it is a
+        snapshot of an earlier commit, and it is true about that commit (the
+        next test proves that half).
+    """
+    files = GEN.tree_files(REPO)
+    fragment = "changelog.d/2099-12-31-a-fragment-no-commit-holds.md"
+    suite = "backend/test_a_suite_no_commit_holds.py"
+    by_id, _dropped = GEN.assign(files + [fragment, suite])
+    owners = {path: [sid for sid, paths in by_id.items() if path in paths]
+              for path in (fragment, suite)}
+    check("a new changelog fragment is owned by exactly one subsystem",
+          owners[fragment] == ["docs"], str(owners[fragment]))
+    check("a new backend test suite is owned by exactly one subsystem",
+          owners[suite] == ["tests"], str(owners[suite]))
+    check("so neither needs the generator's table edited, let alone the map",
+          all(len(names) == 1 for names in owners.values()), str(owners))
+    check("the committed map is a snapshot, so it does not name the PR's new files",
+          all(fragment not in row["files"] and suite not in row["files"]
+              for row in MAP["subsystems"]))
+    try:
+        GEN.assign(files + ["stray/nobody-owns-me.py"])
+        raised = ""
+    except GEN.CoverageError as exc:
+        raised = str(exc)
+    check("a file no subsystem owns is still refused on the same call",
+          "nobody-owns-me.py" in raised and "belong to no subsystem" in raised,
+          raised or "no error was raised")
+
+
 def t_the_exclude_list_is_named_and_counted():
     check("the exclude list carries a reason for every pattern",
           all(reason.strip() for _pattern, reason in GEN.EXCLUDED),
@@ -197,14 +318,11 @@ def t_the_exclude_list_is_named_and_counted():
     check("the coverage arithmetic adds up (covered + excluded = tracked)",
           cov["covered"] + cov["excluded"] == cov["tracked_files"],
           str(cov))
-    check("every file the map lists is really tracked by git",
+    check("every subsystem in the map owns at least one file",
           all(row["file_count"] for row in MAP["subsystems"]), "an empty subsystem")
     owned = [f for row in MAP["subsystems"] for f in row["files"]]
     check("no file is listed by two subsystems", len(owned) == len(set(owned)),
           f"{len(owned)} listings, {len(set(owned))} distinct")
-    tracked = set(GEN.tree_files(REPO))
-    check("every listed file exists in this tree", set(owned) <= tracked,
-          str(sorted(set(owned) - tracked)[:3]))
 
 
 # --------------------------------------------------------------------------
@@ -241,8 +359,8 @@ def t_the_map_shape_holds():
         if not row["areas"] or not set(row["areas"]) <= ALLOWED_AREAS:
             problems.append(f"{row['id']}: areas {row['areas']}")
         for path in row["tests"] + row["docs"] + [k["path"] for k in row["key_modules"]]:
-            if not (REPO / path).is_file():
-                problems.append(f"{row['id']}: {path} is not here")
+            if not REF_TREE or path not in REF_TREE:
+                problems.append(f"{row['id']}: {path} was not in the map's commit")
     check("every subsystem has a purpose, files, modules, tests, docs and areas",
           not problems, "; ".join(problems[:6]))
     check("the map has the parts a person would ask about by name",
@@ -265,7 +383,17 @@ def t_the_map_shape_holds():
           str(len(MAP["top_level"])))
 
 
-def t_the_map_was_built_from_a_commit_in_this_history():
+def t_the_committed_map_is_true_to_the_commit_it_names():
+    """The map is a SNAPSHOT, so it must be true about its own commit.
+
+    It no longer has to match THIS tree - a feature PR may add files the map has
+    never seen, and that is the 2026-11-15 ruling. What it still must not do is
+    name a tree that never existed: every file it lists was in the tree of the
+    commit it records, its file count is that commit's own count, and every file
+    that commit carried is either listed by a subsystem or excluded by a named
+    pattern. So a map left stale by a merge is honest about the commit it names;
+    `--check` on `main` is what decides whether it is still current.
+    """
     ref = MAP["ref"]
     code, _out = _git_run("cat-file", "-e", ref + "^{commit}")
     check("the map's commit exists in this repository", code == 0, ref)
@@ -275,6 +403,23 @@ def t_the_map_was_built_from_a_commit_in_this_history():
     ancestor, _out = _git_run("merge-base", "--is-ancestor", ref, "HEAD")
     check("the map's commit is this tree's HEAD or one of its ancestors",
           at_head or ancestor == 0, f"{ref} is not in HEAD's history")
+    check("the map's build date is that commit's own date, not now",
+          MAP["built_at"] == git("show", "-s", "--format=%cI", ref),
+          f"{MAP['built_at']} != {git('show', '-s', '--format=%cI', ref)}")
+    check("the commit the map names can be read here", REF_TREE is not None, ref)
+    if REF_TREE is None:
+        return
+    listed = {f for row in MAP["subsystems"] for f in row["files"]}
+    missing = sorted(listed - REF_TREE)
+    check("every file the map lists existed at the commit it names",
+          not missing, str(missing[:5]))
+    check("the map's file count is that commit's own count",
+          MAP["coverage"]["tracked_files"] == len(REF_TREE),
+          f"{MAP['coverage']['tracked_files']} != {len(REF_TREE)}")
+    unaccounted = sorted(p for p in REF_TREE
+                         if p not in listed and not GEN.excluded_reason(p))
+    check("every file that commit carried is listed or excluded by name",
+          not unaccounted, str(unaccounted[:5]))
 
 
 # --------------------------------------------------------------------------
