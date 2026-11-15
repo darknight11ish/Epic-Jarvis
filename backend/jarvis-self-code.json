@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d87d9c91f430daa85b3f75e59c5bf49440bb377b",
- "built_at": "2026-11-15T06:10:01-08:00",
+ "ref": "7330b25b764ad7f8db3cb386c0fea90e8601c757",
+ "built_at": "2026-11-15T08:09:27-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3944,6 +3944,7 @@
     "backend/test_github_parity.py",
     "backend/test_github_record.py",
     "backend/test_github_review.py",
+    "backend/test_github_robustness.py",
     "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
@@ -4386,7 +4387,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 694,
+   "file_count": 695,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4716,6 +4717,7 @@
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
     "changelog.d/2026-11-15-approved-merge-card-runs-or-says-why.md",
+    "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/2026-11-15-preset-window-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4918,6 +4920,7 @@
     "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/2026-11-15-a-measured-window-is-a-claim-about-the-runner.md",
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
+    "decisions.d/2026-11-15-github-answers-are-refusals.md",
     "decisions.d/2026-11-15-merge-card-reads-its-own-pin.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5422,7 +5425,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 995,
+   "file_count": 997,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6509,9 +6512,24 @@
  ],
  "recent_commits": [
   {
+   "sha": "7330b25b764ad7f8db3cb386c0fea90e8601c757",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (9f8dde1c8) into fix/github-approved-card-runs-2026-11-15"
+  },
+  {
+   "sha": "9f8dde1c8b99edac44de0806b2dee0ef596e4366",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1266 from darknight11ish/fix/ctx-window-truth-2026-11-15"
+  },
+  {
    "sha": "d87d9c91f430daa85b3f75e59c5bf49440bb377b",
    "date": "2026-11-15",
    "subject": "Merge origin/main (2aacc71ba) into fix/github-approved-card-runs-2026-11-15"
+  },
+  {
+   "sha": "2b7cefdd2bc662578c3a23478d4ca21440001251",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (2aacc71ba) into fix/ctx-window-truth-2026-11-15"
   },
   {
    "sha": "2aacc71ba28edc0170a0545aab17b351f15ffc1b",
@@ -6537,6 +6555,11 @@
    "sha": "f24266749acd57d4fb94d6171797ba9262a59f8c",
    "date": "2026-11-15",
    "subject": "Merge origin/main (275fbb571) into fix/github-approved-card-runs-2026-11-15"
+  },
+  {
+   "sha": "65480b1469cb2cd84a2a155eb5aa4aabf16bb00b",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (275fbb571) into fix/ctx-window-truth-2026-11-15"
   },
   {
    "sha": "d8d0717deb4d83a71e9bd811a72ce9dc641fe933",
@@ -6569,6 +6592,11 @@
    "subject": "Merge origin/main (7a8fe7d29) into fix/github-approved-card-runs-2026-11-15"
   },
   {
+   "sha": "695e85687af2b682f3eb76f400e2c4d598f78417",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/ctx-window-truth-2026-11-15"
+  },
+  {
    "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
@@ -6582,38 +6610,13 @@
    "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
-   "date": "2026-11-15",
-   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
-  },
-  {
-   "sha": "55ab7a0f021d4d8082e1129351e098d22742627d",
-   "date": "2026-11-15",
-   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
-  },
-  {
-   "sha": "f9f53dc0b56f9a21fa3900350f185e8ebcb3bd0a",
-   "date": "2026-11-15",
-   "subject": "chore(records): regenerate the self-code map for the files this change touched"
-  },
-  {
-   "sha": "be6aa8c303cde888f59317674065114cd9a80d33",
-   "date": "2026-11-15",
-   "subject": "fix(github): an approved merge card merges, or code says why it did not"
-  },
-  {
-   "sha": "2c7ed1baaaa1c572da7149d2b8c9f5a24aa33195",
-   "date": "2026-11-15",
-   "subject": "chore(records): re-take the self-code map over all three changes"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1450
+   "files": 1451
   },
   {
    "path": "jarvis-desktop/",
@@ -6638,7 +6641,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 285
+   "files": 286
   },
   {
    "path": "tools/",
@@ -6653,7 +6656,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 202
+   "files": 203
   },
   {
    "path": "plugins/",
@@ -6732,8 +6735,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5855,
-  "covered": 5372,
+  "tracked_files": 5858,
+  "covered": 5375,
   "excluded": 483,
   "subsystems": 27
  },
