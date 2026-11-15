@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "0168dca083b4e4c1668423e845381704273709a3",
- "built_at": "2026-11-14T21:24:19-08:00",
+ "ref": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
+ "built_at": "2026-11-14T21:43:22-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6496,6 +6496,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
+   "date": "2026-11-14",
+   "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
+  },
+  {
    "sha": "0168dca083b4e4c1668423e845381704273709a3",
    "date": "2026-11-14",
    "subject": "chore(generated): regenerate the feature catalogue and recent changes; keep the new suite off source text"
@@ -6589,11 +6594,6 @@
    "sha": "ed884fbc423f1072fc953f3998e27980c4596b6f",
    "date": "2026-11-14",
    "subject": "Merge feat/def068-builder-entry-2026-11-14 into integration/wave20-2026-11-14 (DEF-068 builder entry point)"
-  },
-  {
-   "sha": "7a7eedf096731e884fa916b262453d0e62c09b66",
-   "date": "2026-11-14",
-   "subject": "Merge fix/atlas-tray-copy-2026-11-14 into integration/wave20-2026-11-14 (tray offline sentence says Atlas)"
   }
  ],
  "top_level": [
