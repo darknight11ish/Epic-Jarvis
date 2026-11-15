@@ -14,9 +14,13 @@
  *   on a live link, with no card waiting; the Notion import likewise, and
  *   only into a folder that is on the list and on this PC;
  * - folder names are the owner's: shown as text, never as markup;
- * - CONTROL: the four commands sit with the Settings window only, the
- *   pickers are Rust's (the page gets no file system), and adding and
- *   importing are held on a stale link in Rust too.
+ * - "Send a file to your phone…" (2026-11-14, the SEND-TO-PHONE-2GB-DESIGN
+ *   sections 6 and 8) sends ONE request with NO path - the owner's pick in the
+ *   Windows dialog is the only one - is greyed while it waits and on a stale
+ *   link, and shows the PC's sentence or its refusal;
+ * - CONTROL: the five commands sit with the Settings window only, the
+ *   pickers are Rust's (the page gets no file system), and adding, importing
+ *   and sending are held on a stale link in Rust too.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -29,6 +33,8 @@ import {
   MISSING,
   NOT_HERE,
   readFolders,
+  SEND_LABEL,
+  sendWords,
   STALE,
   TITLE,
 } from "../src/folders.js";
@@ -84,6 +90,27 @@ await check("a folder gone from the PC says so; a PC without it says what to do"
   assert.ok(readFolders(C.damaged).why.includes("damaged"));
 });
 
+await check("Send a file: the PC's sentence, the PC's refusal, or the file it named", async () => {
+  // folders.rs `send_file_answer`: `said` is the PC's own words, and the page
+  // shows them as they are. It waits for a live link (it raises a card) and
+  // for nothing else.
+  const pc = readFolders(C.two_folders_pc);
+  assert.equal(actions(pc, true).send, true);
+  assert.equal(actions(pc, false).send, false, "held on a stale link");
+  assert.equal(actions(readFolders(C.two_folders_phone), true).send, true,
+    "the phone's view is not this button's business");
+  assert.equal(sendWords({ ok: true, said: "Waiting for your yes on this PC." }),
+    "Waiting for your yes on this PC.");
+  assert.equal(sendWords({ ok: false, said: "That file is bigger than 2 GB." }),
+    "That file is bigger than 2 GB.", "a refusal is the PC's sentence too");
+  // No sentence at all: the name and size the command sent back, so the page
+  // never says "Done." about a file it cannot name.
+  assert.equal(sendWords({ ok: true, name: "report.pdf", size: 2411724 }),
+    "report.pdf (2 MB)");
+  assert.equal(sendWords({ ok: true, name: "notes.txt", size: 812 }), "notes.txt");
+  assert.equal(sendWords(null), "");
+});
+
 /* ── Settings ─────────────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
@@ -103,7 +130,8 @@ async function settings(folders, data = {}) {
 }
 
 const calls = (page) => page.evaluate(() => window.__calls
-  .filter(([c]) => ["add_folder", "remove_folder", "import_notion"].includes(c)));
+  .filter(([c]) => ["add_folder", "remove_folder", "import_notion",
+                    "prepare_file_for_phone"].includes(c)));
 
 await check("Settings: every folder, in the PC's words, with Remove", async () => {
   const page = await settings({ view: exists(C.two_folders_pc) });
@@ -193,6 +221,66 @@ await check("Settings: the import shows the PC's REAL counts while it runs", asy
   assert.equal(importLine(null), "");
 });
 
+await check("Settings: Send a file to your phone… sends ONE request and NO path", async () => {
+  // 2026-11-14 (SEND-TO-PHONE-2GB-DESIGN sections 6 and 8). The command takes
+  // no argument at all: the owner's pick in the Windows dialog is the only
+  // path, so the page must not (and cannot) send one. The recorded call is
+  // the assertion.
+  const page = await settings({ view: exists(C.two_folders_pc),
+    sendAnswer: { ok: true, name: "report.pdf", size: 2411724,
+                  said: "Waiting for your yes on this PC." } });
+  const label = await page.locator("#fo-send").innerText();
+  const note = await page.locator("#fo-send-note").innerText();
+  await page.locator("#fo-send").click();
+  await page.waitForTimeout(300);
+  const got = await calls(page);
+  const status = await page.locator("#fo-status").innerText();
+  const tone = await page.locator("#fo-status").getAttribute("data-tone");
+  await page.close();
+  assert.equal(label, SEND_LABEL);
+  assert.ok(note.includes("File from your PC"), note);
+  assert.ok(note.includes("approval card"), note);
+  assert.deepEqual(got, [["prepare_file_for_phone", {}]]);
+  assert.equal(status, "Waiting for your yes on this PC.");
+  assert.equal(tone, "ok");
+});
+
+await check("Settings: Send a file is greyed while it waits, and on a stale link", async () => {
+  let page = await settings({ view: exists(C.two_folders_pc), sendDelayMs: 900,
+                              sendAnswer: { ok: true, said: "Waiting for your yes on this PC." } });
+  await page.locator("#fo-send").click();
+  await page.waitForTimeout(250);
+  const during = await page.locator("#fo-send").isDisabled();
+  await page.waitForTimeout(1000);
+  const after = await page.locator("#fo-send").isDisabled();
+  await page.close();
+  assert.equal(during, true, "the button stayed live while the request was in flight");
+  assert.equal(after, false, "the button never came back after the answer");
+  page = await settings({ view: exists(C.two_folders_pc) }, { link: { stale: true } });
+  const held = await page.locator("#fo-send").isDisabled();
+  await page.close();
+  assert.equal(held, true, "a stale link left Send a file live");
+});
+
+await check("Settings: a refused file is the PC's own sentence; a closed dialog says nothing", async () => {
+  let page = await settings({ view: exists(C.two_folders_pc),
+    sendAnswer: { ok: false, said: "That file is bigger than 2 GB - pick a smaller one." } });
+  await page.locator("#fo-send").click();
+  await page.waitForTimeout(300);
+  const status = await page.locator("#fo-status").innerText();
+  const tone = await page.locator("#fo-status").getAttribute("data-tone");
+  await page.close();
+  assert.equal(status, "That file is bigger than 2 GB - pick a smaller one.");
+  assert.equal(tone, "bad");
+  // The owner closed the Windows dialog: nothing was sent, so the line clears.
+  page = await settings({ view: exists(C.two_folders_pc), sendAnswer: { cancelled: true } });
+  await page.locator("#fo-send").click();
+  await page.waitForTimeout(300);
+  const cleared = await page.locator("#fo-status").innerText();
+  await page.close();
+  assert.equal(cleared, "");
+});
+
 await check("Settings: a folder name is text, never markup", async () => {
   const v = exists(C.two_folders_pc);
   v.folders[0].name = "<img src=x onerror=alert(1)>";
@@ -218,30 +306,44 @@ close();
 
 /* ── CONTROL ───────────────────────────────────────────────────────────── */
 
-await check("CONTROL: the four commands sit with the Settings window only", async () => {
+await check("CONTROL: the five commands sit with the Settings window only", async () => {
   const surfaces = read("src-tauri/permissions/surfaces.toml");
   const start = surfaces.indexOf('identifier = "settings-surface"');
   const settingsSet = surfaces.slice(start, surfaces.indexOf("[[set]]", start + 10));
   const others = surfaces.slice(0, start) + surfaces.slice(start + settingsSet.length);
   for (const c of ["allow-get-folders", "allow-add-folder", "allow-remove-folder",
-                   "allow-import-notion"]) {
+                   "allow-import-notion", "allow-prepare-file-for-phone"]) {
     assert.ok(settingsSet.includes(`"${c}"`), c);
     assert.ok(!others.includes(`"${c}"`), `${c} is elsewhere too`);
   }
 });
 
-await check("CONTROL: the pickers are Rust's, and adding and importing are held on a stale link", async () => {
+await check("CONTROL: the pickers are Rust's, and adding, importing and sending are held on a stale link", async () => {
   const rs = read("src-tauri/src/folders.rs");
   assert.match(rs, /FOS_PICKFOLDERS/);
   assert.match(rs, /pub async fn add_folder[\s\S]{0,200}if stale\(&app\)/);
   assert.match(rs, /pub async fn import_notion[\s\S]{0,260}if stale\(&app\)/);
+  assert.match(rs, /pub async fn prepare_file_for_phone[\s\S]{0,220}if stale\(&app\)/);
   assert.match(rs, /fn held_on_stale\(path: &str\) -> bool \{\s*path != REMOVE_PATH/);
+  // The send button is the ONE path outside the list, so it must be an
+  // OPEN-FILE dialog (FOS_FILEMUSTEXIST), never a folder picker, and the
+  // command must take no argument the page could put a path in.
+  const armAt = rs.indexOf("What::SendFile => {");
+  assert.ok(armAt > 0, "folders.rs has no SendFile dialog arm");
+  const arm = rs.slice(armAt, armAt + 1200);
+  assert.match(arm, /FOS_FILEMUSTEXIST/);
+  assert.ok(!/SetOptions\([^)]*FOS_PICKFOLDERS/.test(arm),
+    "the send button opens a folder picker");
+  assert.match(rs, /pub async fn prepare_file_for_phone\(app: AppHandle\)/);
   const js = read("src/folders-settings.js");
   assert.ok(!/fs\.|readDir|plugin-fs|dialog\.open/.test(js), "the page opens no files itself");
+  // No path is ever handed to the command: one literal call, an empty object.
+  assert.match(js, /run\("prepare_file_for_phone", \{\}, /);
+  assert.ok(!/prepare_file_for_phone", \{ *path/.test(js), "the page named a path");
 });
 
 if (fails.length) {
   console.log(`\n${fails.length} failed: ${fails.join(", ")}`);
   process.exit(1);
 }
-console.log("\nFolders Jarvis may look in: the PC's words, Remove at once, Add held on a stale link");
+console.log("\nFolders Jarvis may look in: the PC's words, Remove at once, Add and Send held on a stale link");

@@ -3364,3 +3364,17 @@ _RISK.update({
     # and the sign-in are here) and always asks a person.
     "product_check": ("yes", "outbound", "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored"),
 })
+
+# --------------------------------------------------------------------------
+#   The file-to-phone card's denial row (jarvis_send_file.py, 2026-11-14)
+# --------------------------------------------------------------------------
+# A denial of "send this file to my phone" is about THAT file, never a
+# standing rule. jarvis_send_file.py's prepare_route refuses any tier but
+# "ask", so the card always asks a person and a proposed memory would be
+# meaningless. The block is HERE, AFTER every patch's own block, for the
+# reason the blocks above give: the very end of the file is the one region
+# no earlier patch's hunk claims, so a new row can arrive here without
+# moving a line any patch already wrote.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "send_file_to_phone",  # jarvis_send_file.py acts only on tier "ask": ONE card per file, and its own prepare_route refuses any other tier; a denial is about that one file, not a standing rule (2026-11-14)
+}

@@ -6267,18 +6267,20 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"my_files": "For a PDF, Word, Excel or PowerPoint file, use my_files.",
                  "file_read": "For a file outside the folders you listed, use file_read."}),
-    # Send ONE file to the phone (jarvis_send_file.py, 2026-10-31, Gemini Q7).
-    # The owner's own words: ask Jarvis to search for a file and send it to the
-    # Jarvis Android app to view or download. ONE card, exact filename/folder/
-    # size, 10 MiB cap, ten-minute single-use opaque id - the route never takes
-    # a path. See SEND_FILE_TOOL and docs/JARVIS-API.md section 172.
+    # Send ONE file to the phone (jarvis_send_file.py, 2026-10-31, Gemini Q7;
+    # 2 GB in 1 MiB pieces since 2026-11-14). The owner's own words: ask Jarvis
+    # to search for a file and send it to the Jarvis Android app to view or
+    # download. ONE card, exact filename/folder/size, a 2 GB cap, 1 MiB pieces,
+    # the link renewed by every piece and used up by the last one - the route
+    # never takes a path. See SEND_FILE_TOOL and docs/JARVIS-API.md section 172.
     SEND_FILE_TOOL: Tool(
         SEND_FILE_TOOL,
         "Send ONE file from the owner's own listed folders to their phone app. "
         "Use when they ask to search for a file and send, view or download it on "
         "the phone. Give query (a few words of the file's name) or path (the full "
-        "path, if known). ONE card, ONE file, at most 10 MiB; nothing is fetchable "
-        "until the owner approves.",
+        "path, if known). ONE card, ONE file, at most 2 GB; the phone fetches it "
+        "in pieces and the link is used up when the whole file has arrived. "
+        "Nothing is fetchable until the owner approves.",
         {"type": "object", "properties": {
             "query": {"type": "string", "description": "a few words of the file's name"},
             "path": {"type": "string", "description": "one file's full path, if known"}},

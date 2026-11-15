@@ -1659,7 +1659,7 @@ function renderModels() {
       if (ref && !isCurrent && chats) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
-            title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
+            title: `Switches at once, with no card. Roll back to the model you were on is one click.`,
             live: true,
           })
         );
