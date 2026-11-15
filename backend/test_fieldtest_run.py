@@ -674,8 +674,10 @@ def t_the_help_text_runs():
     check("--help: prints the usage line",
           "usage: fieldtest_run.py" in proc.stdout, proc.stdout[:200])
     flat = " ".join(proc.stdout.split())
+    # str(Path(...)) uses the host's separator, so accept either spelling.
     check("--help: names the Downloads default without a format crash",
-          "C:\\Users\\pcadmin\\Downloads" in flat, flat[-300:])
+          "C:/Users/pcadmin/Downloads" in flat
+          or "C:\\Users\\pcadmin\\Downloads" in flat, flat[-300:])
 
 
 def main():
