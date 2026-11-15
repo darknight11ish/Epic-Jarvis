@@ -252,7 +252,8 @@ class HistoryArchiveTest {
         // two buttons - archiving must not have softened the one that cannot
         // be undone.
         assertEquals(
-            "Delete this conversation from your PC? This cannot be undone. " + ChatLog.DELETE_KEEPS_FACTS,
+            "Delete this conversation from your PC? Nothing is deleted until you approve the card " +
+                "that asks first. This cannot be undone. " + ChatLog.DELETE_KEEPS_FACTS,
             ChatLog.DELETE_CONFIRM,
         )
         assertTrue(history.contains("ChatLog.DELETE_CONFIRM"))
