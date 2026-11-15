@@ -4565,15 +4565,17 @@ function openDialog(title, build, { outside = false, onClose = null } = {}) {
  *  and repainting the topics list when it closes. */
 function openTopicDialog(title, build) {
   closeTopicDialog();
-  let api = null;
-  api = openDialog(title, build, {
+  // Read BEFORE the dialog exists: it is appended to <body>, so the first
+  // focusin inside it is outside the Topics root and clears `tp.lastFocus`
+  // (trackFkeys above) - after that there is no place to go back to.
+  tp.dlgReturn = tp.lastFocus || "";
+  const api = openDialog(title, build, {
     onClose: () => {
       if (tp.dlg === api.dlg) tp.dlg = null;
       tp.focusNext = tp.focusNext || tp.dlgReturn;
       paintTopics();
     },
   });
-  tp.dlgReturn = tp.lastFocus || "";
   tp.dlg = api.dlg;
   return api;
 }
