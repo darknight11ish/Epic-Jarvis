@@ -44,6 +44,7 @@ from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import jarvis_bench as B  # noqa: E402
 import jarvis_model_recommendations as M  # noqa: E402
 import jarvis_presets as P  # noqa: E402
 
@@ -106,6 +107,69 @@ def t_the_cards_are_mapped_to_the_preset_lanes_and_intake_is_honest():
           all(g["name"] != "Mystery card" for g in got), got)
     check("the measured size is the card's own total_gib",
           got[0]["vram_gb"] == 12.0 and got[1]["vram_gb"] == 8.0, got)
+
+
+#: A three-card PC in the shape `nvidia-smi --query-gpu=...` prints - the same
+#: SMI_THREE shape `backend/test_bench_suites.py` proved: a 12 GB 2060 and two
+#: 8 GB 2080 SUPERs, driver 617.42. It is parsed by `jarvis_bench.cards_from_smi`,
+#: the repository's one nvidia-smi parser, so this fixture has the driver's real
+#: shape rather than a hand-typed row.
+SMI_THREE = (
+    "0, GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee, NVIDIA GeForce RTX 2060, "
+    "12288, 11000, 1288, 3, Disabled, 617.42\n"
+    "1, GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313, NVIDIA GeForce RTX 2080 "
+    "SUPER, 8192, 0, 8192, 0, Disabled, 617.42\n"
+    "2, GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6, NVIDIA GeForce RTX 2080 "
+    "SUPER, 8192, 1400, 6792, 1, Enabled, 617.42\n"
+)
+
+
+def _detect_rows_from_smi(text: str) -> list:
+    """`jarvis_hardware.detect()`'s rows for this nvidia-smi text, when the
+    running Ollama's log names only the card with the monitor.
+
+    The row shape is detect()'s own - `name`, `total_gib`, `used`, `sources` -
+    as measured on 2026-11-14: the log named the one 2080 SUPER, so detect()
+    marked it `used: True` and the other two `used: False` with
+    `sources: ["nvidia-smi"]`.
+    """
+    rows = []
+    for card in B.cards_from_smi(text)["cards"]:
+        used = card["index"] == 1
+        rows.append({
+            "name": card["name"],
+            "total_gib": card["total_mb"] / 1024.0,
+            "used": used,
+            "sources": (["Ollama's log", "nvidia-smi"] if used else ["nvidia-smi"]),
+        })
+    return rows
+
+
+def t_every_card_nvidia_smi_reports_is_in_the_measured_list():
+    """THE 2026-11-14 DEFECT, reproduced: nvidia-smi reported three cards (a
+    12 GB 2060 and two 8 GB 2080 SUPERs, 28 GB together) while Ollama's log
+    named only the card with the monitor. The measured list came out as that
+    one 8 GB card, so every candidate was sized for 8 GB - a 10 GB model was
+    called too big for a PC that can hold it on the 2060 - and the pooled
+    figure was 8 GB instead of 28."""
+    got = M.measured_gpus(detect=lambda: _detect_rows_from_smi(SMI_THREE))
+    check("every card nvidia-smi reports is measured, not only the one Ollama's "
+          "log names", len(got) == 3, got)
+    check("... each with its own real VRAM (12 + 8 + 8, not one 8)",
+          [g["vram_gb"] for g in got] == [12.0, 8.0, 8.0], got)
+    check("... and its real lane: the 2060 is main, both 2080 SUPERs coding",
+          [g["role"] for g in got] == ["main", "coding", "coding"], got)
+    check("... so a 10 GB model fits the 2060 where one 8 GB card said no",
+          M._fit_label(10 * 1024, got)[0] == "fits", M._fit_label(10 * 1024, got))
+    check("... and the pooled figure is the PC's 28 GB, not 8",
+          M._pooled_fit(20.0, got) == ("fits", 28.0), M._pooled_fit(20.0, got))
+    check("a PC whose cards cannot be read reports none, never an invented card",
+          M.measured_gpus(detect=lambda: []) == [],
+          M.measured_gpus(detect=lambda: []))
+    code, out = M.check_models(path=fresh("catalogue-unreadable"), gpus=[],
+                               discover=boom)
+    check("... and the check route says so in words instead of guessing",
+          code == 503 and "graphics card" in out["error"], out.get("error"))
 
 
 # --------------------------------------------------------------------------
@@ -1102,6 +1166,7 @@ def t_a_damaged_store_reads_as_empty():
 def main() -> int:
     for fn in (
         t_the_cards_are_mapped_to_the_preset_lanes_and_intake_is_honest,
+        t_every_card_nvidia_smi_reports_is_in_the_measured_list,
         t_the_read_answer_is_the_contract_shape_and_touches_no_network,
         t_the_check_caches_candidates_and_never_downloads,
         t_the_filter_fields_are_the_catalogue_s_own_and_never_guessed,
