@@ -16454,6 +16454,38 @@ _CONNECT_STATUS = re.compile(
     r"(?:connected|linked|set\s*up|working|hooked\s+up|signed\s+in|logged\s+in)\b"
     r"|\bis\s+(?:my|the)\s+.{0,40}\b(?:connected|linked|set\s*up|working)\b")
 
+#: A SENTENCE THAT NAMES A TOOL SWITCH IS THE TOOL GRAMMAR'S, NEVER THE TOKEN
+#: CARD (2026-11-15). The owner's own sentence "enable the github tools" named
+#: the master group switch and was answered with `connect_account`'s GitHub
+#: token card - a real card for a real thing, but not the thing he asked for.
+#: The tool grammar in `_settings_adjust` runs BEFORE this lane and claims every
+#: shape it knows; this guard is for the shapes it does not ("set up the github
+#: tools"), which must reach the model - where `change_setting` can raise the
+#: same group card since 2026-11-15 - rather than offer a token.
+#:
+#: CLOSED WORLD, the same rule as `_TOOL_SWITCH`: the noun before "tool/tools"
+#: must be a WHOLE alias in jarvis_settings_registry.find_tool_target, so
+#: "connect my calendar" (no tool word) and "connect my github" are untouched.
+_CONNECT_NAMES_TOOL = re.compile(
+    r"\b(?:the|my|your|a|an)\s+(?P<name>[a-z0-9][a-z0-9 '\-]*?)\s+tools?\b")
+
+
+def _connect_names_a_tool(s: str) -> bool:
+    """True when `s` names a switchable tool beside the word tool/tools."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - no registry, no claim
+        return False
+    for m in _CONNECT_NAMES_TOOL.finditer(s):
+        name = m.group("name").strip()
+        if not name:
+            continue
+        for words in (name, f"{name} tools", f"{name} tool"):
+            if R.find_tool_target(words) is not None:
+                return True
+    return False
+
+
 #: Nouns that name an account this file CANNOT connect yet (Phase 1 is the
 #: calendar and GitHub). A sentence that names one is answered honestly rather
 #: than handed to the model, which would invent a way. Kept to the inventory in
@@ -16495,6 +16527,12 @@ def _connect(s: str) -> Optional[Intent]:
     for something there is no test for."""
     words = s.split()
     if len(words) > 16:
+        return None
+    # NOT the token card when the sentence names a TOOL switch (2026-11-15).
+    # "enable the github tools" is the master group switch - it must reach the
+    # tool grammar (which does claim it, earlier) or the model, never the
+    # GitHub token card. See `_connect_names_a_tool`.
+    if _connect_names_a_tool(s):
         return None
     # NOT a sentence about a reminder, an alarm or a watch: "set a reminder for
     # my calendar" names a calendar and must never raise a connect card. The
