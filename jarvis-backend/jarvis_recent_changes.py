@@ -23,7 +23,7 @@ BULLETS = (
     'Widgets wear their own colours',
     'Send a video from your PC to your phone',
     'The button beside the big window\'s chat box is called "Open the Atlas bar"',
-    "Wave 20 stops carrying the Android builder's gate rows in a patch, and the whole branch goes green",
+    'Three GitHub reads now hand the model real data instead of a guess: a state filter on `github_list`, the actual unified diff in `github_pr_detail`, and the failing checks by name in `github_ci_status` - plus a measured...',
 )
 
 

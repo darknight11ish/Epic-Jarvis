@@ -738,20 +738,22 @@ PROFILES: dict = {
         "id": "github_list",
         "title": "List your own GitHub: repositories, pull requests, issues or runs",
         "what": "Lists ONE fixed thing on GitHub: your repositories, a "
-                "repository's open pull requests, its open issues, or its "
-                "recent workflow runs. Read-only and carded: every read asks "
-                "you first, and nothing on GitHub can change.",
+                "repository's pull requests or issues in the state you pick "
+                "(open is the default; closed or all can be asked for), or its "
+                "recent workflow runs. Read-only: nothing on GitHub can change. "
+                "It is card-free by default; the switchable read row on the "
+                "What asks first page can put its card back.",
         "gives": [
             "See your repositories, newest updated first",
-            "See the open pull requests on one repository you name",
-            "See its open issues, or its recent workflow runs",
+            "See a repository's pull requests or issues - open, closed or both",
+            "See its recent workflow runs",
         ],
         "touches": "network service",
         "limits": [
             "Reads only - it cannot write, merge, push, close or delete "
             "anything",
-            "A read sends your GitHub token to api.github.com, so it asks "
-            "every time",
+            "A read sends your GitHub token to api.github.com; the card is off "
+            "by default and the read row can put it back",
             "Not in the shipped [tools].enabled list: turn it on in Settings",
         ],
         "combines": {
@@ -798,17 +800,19 @@ PROFILES: dict = {
         "title": "How CI went, from your own GitHub",
         "what": "Reports the newest workflow run for a repository and branch, "
                 "or for a pull request whose head commit is read first: still "
-                "going, passed, failed or cancelled. It asks before every read "
-                "and starts nothing.",
+                "going, passed, failed or cancelled. When it failed, it names the "
+                "checks that failed and shows ONE bounded excerpt of the first "
+                "failing check's log. It is card-free by default, and it starts "
+                "nothing.",
         "gives": [
             "See the newest run's status and conclusion",
             "Check the checks on one pull request",
-            "Know that GitHub keeps the failing log, not Jarvis",
+            "Read which checks failed, and the end of one failing log",
         ],
         "touches": "network service",
         "limits": [
-            "It never reads the failing log itself - GitHub keeps it",
-            "One read per call, and it asks every single time",
+            "It reads only the end of ONE failing check's log, bounded",
+            "One read per call; the read row can put its card back",
             "Reads only - a re-run is the separate github_rerun_workflow "
             "action",
         ],
@@ -1122,21 +1126,24 @@ PROFILES: dict = {
         "title": "Read one pull request in full",
         "what": "Reads ONE pull request: its title, body, state, draft and "
                 "mergeable flags, its head commit and base branch, and then its "
-                "changed files, its commits, its comments and its reviews - five "
+                "changed files with their unified diff, its commits, its comments "
+                "and its reviews - five "
                 "fixed GETs, nothing else. Every list keeps its real count and "
-                "shows at most ten items, each text bounded.",
+                "shows at most ten items, the diff is bounded to 20 files and "
+                "60,000 characters with one line naming what was left out, and "
+                "every text is bounded.",
         "gives": [
             "See a pull request's whole description and review state in chat",
-            "See its changed files, commits, comments and reviews without a browser",
+            "Review the REAL diff, its commits, comments and reviews in chat",
             "Get the current title and body to pass to github_edit_pr",
         ],
         "touches": "network service",
         "limits": [
             "Reads only - no body, no method but GET",
-            "At most ten files/commits/comments/reviews shown per list, with the "
-            "real count printed",
-            "A read sends the owner's GitHub token to api.github.com, so it asks "
-            "every time",
+            "At most ten files/commits/comments/reviews listed, and the diff is "
+            "bounded to 20 files and 60,000 characters, with what is missing named",
+            "A read sends the owner's GitHub token to api.github.com; the card is "
+            "off by default and the read row can put it back",
         ],
         "combines": {
             "github_edit_pr": "github_pr_detail reads the current title and body; "
@@ -1229,8 +1236,8 @@ PROFILES: dict = {
             "Labels only - it never closes or reopens an issue, and never edits "
             "the title or the body",
             "At most ten labels per set, each checked before a card exists",
-            "Closing an issue stays permanently banned: it awaits the owner's "
-            "decision, and there is no code path for it",
+            "Closing ONE issue is not banned - github_issue_state does that, one "
+            "issue at a time, on its own card; this tool never does it",
         ],
         "combines": {
             "github_pr_detail": "github_pr_detail shows an item; "
