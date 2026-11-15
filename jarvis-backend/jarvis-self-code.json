@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "46ae82881269d295f3fabd9a086af1c3174e1421",
- "built_at": "2026-11-15T00:22:02-08:00",
+ "ref": "08126eb741c6da9f488ac43bdedf590a7ea7aa3d",
+ "built_at": "2026-11-15T00:22:08-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4707,6 +4707,7 @@
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
     "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
     "changelog.d/2026-11-14-catalogue-every-card.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
@@ -4905,6 +4906,7 @@
     "decisions.d/2026-11-14-atlas-copy-scope.md",
     "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
     "decisions.d/2026-11-14-catalogue-counts-every-card.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
@@ -5414,7 +5416,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 987,
+   "file_count": 989,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6501,6 +6503,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "08126eb741c6da9f488ac43bdedf590a7ea7aa3d",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the self-code map over the preset and catalogue changes"
+  },
+  {
    "sha": "46ae82881269d295f3fabd9a086af1c3174e1421",
    "date": "2026-11-15",
    "subject": "Merge commit 'f4d672e9d' into fix/catalogue-sees-all-cards-2026-11-14"
@@ -6594,11 +6601,6 @@
    "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
    "date": "2026-11-14",
    "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
-  },
-  {
-   "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
-   "date": "2026-11-14",
-   "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
   }
  ],
  "top_level": [
@@ -6630,7 +6632,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 281
+   "files": 282
   },
   {
    "path": "tools/",
@@ -6645,7 +6647,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 198
+   "files": 199
   },
   {
    "path": "plugins/",
@@ -6724,8 +6726,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5847,
-  "covered": 5364,
+  "tracked_files": 5849,
+  "covered": 5366,
   "excluded": 483,
   "subsystems": 27
  },
