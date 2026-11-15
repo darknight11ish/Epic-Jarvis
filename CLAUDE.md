@@ -505,10 +505,28 @@ tripped Syncthing's "< 1% free" database halt.
 - **Check before a verification wave.** `(Get-PSDrive C).Free / 1GB` below 15 GB:
   purge `.dsh-scratch\*\*\src-tauri\target` and
   `.dsh-scratch\*\*\jarvis-client\app\build` first.
-- **The self-code map is written with its twin.** `tools/gen_self_code_map.py`
-  writes `backend/jarvis-self-code.json` AND `jarvis-backend/jarvis-self-code.json`
-  in the same run, and its `--check` refuses when the two differ, so the twin can
-  no longer fall one byte behind (the #1214 slip, 2026-11-09).
+- **The self-code map is a snapshot of `main`, and a feature pull request does
+  not carry it.** The owner's ruling Q1 (2026-11-15) ended the old instruction to
+  regenerate the map last: six pull requests landed in one night, and because
+  the map records every tracked file - so the changelog and decisions fragments
+  every PR owes change it - each one forced a full conflict plus a fresh CI
+  round, turning eight merges into about nine hours. What replaced it: a pull
+  request keeps the TREE COHERENT - every tracked file owned by exactly one
+  subsystem, and every key module, suite and document the generator's table
+  names present - which `backend/test_self_code.py` proves in the required
+  `backend` job and which needs no map at all. A PR that adds a module edits the
+  `SUBSYSTEMS` table in `tools/gen_self_code_map.py` (that edit is the whole
+  cost) and never regenerates the JSON. `main` carries the snapshot:
+  `.github/workflows/self-code-map.yml` runs
+  `py -3 tools/gen_self_code_map.py --check` after every merge and goes red,
+  naming the one command, when the map no longer describes main's tree; whoever
+  sees it runs `py -3 tools/gen_self_code_map.py` on a branch off `main` and
+  opens ONE small pull request with only the two map files. The generator still
+  writes BOTH copies in that one run - `backend/jarvis-self-code.json` and
+  `jarvis-backend/jarvis-self-code.json` - and refuses to write at all on a
+  dirty tree, because the map records the commit it was built from and a map
+  written during a merge was measured describing a tree that commit never had
+  (2026-11-15).
 
 ## Do not regenerate the size on `docs/README.md` - just bump the count
 

@@ -1,0 +1,70 @@
+# THE OTHER HALF OF THE 2026-11-15 RULING (owner's ruling Q1). A feature pull
+# request no longer commits `backend/jarvis-self-code.json`. The map records
+# every tracked file, so every PR - and every PR owes a changelog fragment and a
+# decisions fragment - rewrote the same 330 KB file, and two PRs always wrote it
+# in the same place: six pull requests landed one night and the map forced a
+# full conflict plus a fresh CI round on every one, turning eight merges into
+# about nine hours.
+#
+# What a PR keeps instead is TREE COHERENCE: every tracked file belongs to
+# exactly one subsystem. `backend/test_self_code.py` proves that in the required
+# `backend` job, with no map involved.
+#
+# This workflow is the half that keeps the map true ON MAIN. It runs after every
+# merge (and by hand) and fails when the committed map is not exactly what
+# main's tree produces. It does not commit anything itself: main is protected by
+# required status checks and there is no bot token, so the snapshot is a
+# deliberate one-command pull request - the same shape as the changelog roll
+# (`tools/roll_changelog.py`) and the docs size refresh (`tools/gen_docs_map.py`).
+# It is deliberately NOT a job in ci.yml: it must never run on a pull request,
+# where the map is allowed to be one merge behind.
+name: Self-code map
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only by design: the fix is a pull request a person opens, never a push.
+permissions:
+  contents: read
+
+concurrency:
+  group: self-code-map-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  map-is-true-on-main:
+    # The push trigger is main only; the guard keeps a hand-dispatched run from
+    # a branch from pretending its tree is main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # A shallow checkout is enough: `--check` re-derives the document from the
+      # index and the map's own recorded commit fields, never from history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The committed map is exactly what main's tree produces
+        run: python3 tools/gen_self_code_map.py --check
+      - name: What to do about it
+        if: failure()
+        run: |
+          {
+            echo "## The self-code map no longer describes \`main\`"
+            echo
+            echo "This is expected after a merge that changed the tree. The map is"
+            echo "a snapshot taken on main, not a file a pull request carries."
+            echo
+            echo "Run this on a branch off \`main\`, then open ONE small pull request"
+            echo "with only the two map files:"
+            echo
+            echo '```'
+            echo 'py -3 tools/gen_self_code_map.py'
+            echo 'py -3 tools/gen_self_code_map.py --check'
+            echo 'git add backend/jarvis-self-code.json jarvis-backend/jarvis-self-code.json'
+            echo '```'
+            echo
+            echo "The generator refuses a dirty tree on purpose: the map records the"
+            echo "commit it was built from, so commit everything else first."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::main's self-code map is stale. Run 'py -3 tools/gen_self_code_map.py' on a branch off main and open one small PR with the two map files - this job's summary has the exact commands."
