@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    "An approved GitHub card now merges, or says in code's words why it did not",
     'Widgets wear their own colours',
     'Send a video from your PC to your phone',
     'The button beside the big window\'s chat box is called "Open the Atlas bar"',
     "Wave 20 stops carrying the Android builder's gate rows in a patch, and the whole branch goes green",
-    'The wave-19 deploy is on the field-test record, and three checks still need your hands',
 )
 
 
