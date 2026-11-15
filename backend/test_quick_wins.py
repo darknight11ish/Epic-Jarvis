@@ -1242,14 +1242,14 @@ def t_phone_state_sentences_keep_their_own_owners():
               got is not None and got.name == "phone_ring", got)
     got = Q.match("is my phone connected?")
     check("'is my phone connected?' is the state read, not an account path",
-          got is not None and got.name == "honest_state"
-          and (got.f or {}).get("shape") == "phone_state", got)
+          got is not None and got.name == "devices_list"
+          and (got.f or {}).get("topic") == "phone", got)
     check("... and it is not the account-connection path (S6 rule)",
           got is not None and got.name != "connect_account", got)
     got = Q.match("connect my phone to the wifi")
     check("a different 'connect my phone' sentence is not the state read",
           got is None or (got.name, (got.f or {}).get("topic")) !=
-          ("honest_state", "state"), got)
+          ("devices_list", "phone"), got)
 
 
 def t_a_list_answer_in_live_carries_the_list_not_a_pointer():
@@ -1382,6 +1382,139 @@ def t_advice_about_one_preset_wins_over_the_one_preset_model_ask():
           older is not None and older.name == "preset_model"
           and str((older.f or {}).get("name") or "").lower() == "coding",
           None if older is None else (older.name, older.f))
+
+
+def t_pairing_answers_cover_more_than_a_phone():
+    """2026-11-14 (the device-awareness wave): the pairing answer is chosen by
+    the THING the owner named.
+
+    It was phone-shaped: "how do I add my laptop" matched the reminder family's
+    how-to and "how do I pair my iPad" fell to the model. A phone keeps the two
+    screens and its card; a laptop/tablet/iPad/browser gets the terminal key and
+    the browser pairing sheet; a second PC is told plainly it is not supported
+    yet. Every shape is read-only and keeps the cardless Devices jump.
+    """
+    for said in ("how do I pair my phone", "how do I pair my phone with Jarvis",
+                 "pair my phone", "how do I connect my phone to jarvis",
+                 "how do I pair a second phone"):
+        got = Q.match(said)
+        check(f"{said!r} is still the phone pairing how-to",
+              got is not None and got.name == "pair_phone"
+              and (got.f or {}).get("thing") == "phone", got)
+    r = Q.answer("how do I pair my phone", sched=S.get(), now=time.time())
+    check("the phone answer still names both screens, the card and the two networks",
+          r is not None and "Pair a phone" in r.reply and "Pair with your PC" in r.reply
+          and "Tailscale" in r.reply and "NordVPN Meshnet" in r.reply,
+          None if r is None else r.reply)
+
+    for said in ("how do I add my laptop", "how do I pair my iPad",
+                 "how do I pair my tablet", "how do I add a browser",
+                 "how do I add another laptop", "how do I connect my laptop to jarvis"):
+        got = Q.match(said)
+        check(f"{said!r} is the laptop/tablet/browser pairing answer",
+              got is not None and got.name == "pair_phone"
+              and (got.f or {}).get("thing") == "browser", got)
+        r = Q.answer(said, sched=S.get(), now=time.time())
+        reply = r.reply if r is not None else ""
+        for want in ("jarvis_devices.py --add-device", "--kind laptop", "jdk1",
+                     ":4719", "pairing sheet"):
+            check(f"... {said!r} says {want!r}", want in reply, reply)
+        check(f"... {said!r} says the key never goes in a chat, a note or a log",
+              "never goes in a chat, a note or a log" in reply, reply)
+        check(f"... {said!r} jumps to the Devices card and changes nothing",
+              r is not None and r.open_settings == "devices" and not r.made, r)
+
+    second = Q.match("how do I pair a second PC")
+    check("'how do I pair a second PC' is the unsupported second-PC shape",
+          second is not None and second.name == "pair_phone"
+          and (second.f or {}).get("thing") == "second_pc", second)
+    r = Q.answer("how do I pair a second PC", sched=S.get(), now=time.time())
+    reply = r.reply if r is not None else ""
+    check("... it says not supported yet, never a promise",
+          "not supported yet" in reply and "will not promise" in reply, reply)
+    check("... and it says the thin client is designed, not built",
+          "designed, not built" in reply, reply)
+    check("... with the same cardless Devices jump and no change",
+          r is not None and r.open_settings == "devices" and not r.made, r)
+
+    generic = Q.match("how do I add another device")
+    check("'how do I add another device' names both real doors, not one guess",
+          generic is not None and generic.name == "pair_phone"
+          and (generic.f or {}).get("thing") == "device", generic)
+    r = Q.answer("how do I add another device", sched=S.get(), now=time.time())
+    greply = r.reply if r is not None else ""
+    check("... it says the phone's two screens and the terminal key",
+          "Pair a phone" in greply and "jarvis_devices.py --add-device" in greply,
+          greply)
+
+
+def t_the_device_list_is_read_only_and_real():
+    """2026-11-14: "what devices are connected?" is answered from the paired
+    device store - name, kind, reachable now and own approval key - and adds,
+    removes, renames and retires nothing (the owner's one kept limit)."""
+    for said in ("what devices are connected", "which devices are paired",
+                 "list my devices", "what devices can reach you",
+                 "how many devices do I have", "show me the devices"):
+        got = Q.match(said)
+        check(f"{said!r} is the read-only device list",
+              got is not None and got.name == "devices_list"
+              and not (got.f or {}).get("topic"), got)
+    check("the device list is a read-only intent (no card, no 'cancel that' loss)",
+          "devices_list" in Q.READ_ONLY_INTENTS)
+    got = Q.match("is my phone connected?")
+    check("the phone's own state question is the same answer, phone-shaped",
+          got is not None and got.name == "devices_list"
+          and (got.f or {}).get("topic") == "phone", got)
+
+    try:
+        import jarvis_devices as D
+    except Exception:                                    # pragma: no cover
+        check("the devices module is importable", False, "jarvis_devices absent")
+        return
+    old = D.paired_status
+    try:
+        D.paired_status = lambda: {"devices": [
+            {"id": "d1", "name": "Pixel 9", "kind": "phone",
+             "last_seen": time.time() - 30, "reach": True, "approval_key": True},
+            {"id": "d2", "name": "Kitchen laptop", "kind": "laptop",
+             "last_seen": time.time() - 3 * 86400, "reach": True,
+             "approval_key": False},
+            {"id": "d3", "name": "Study tablet", "kind": "tablet",
+             "last_seen": None, "reach": True, "approval_key": "waiting"}],
+            "readable": True, "why": ""}
+        r = Q.answer("what devices are connected", sched=S.get(), now=time.time())
+        reply = r.reply if r is not None else ""
+        for want in ("Pixel 9 (phone)", "Kitchen laptop (laptop)",
+                     "Study tablet (tablet)", "reachable now",
+                     "has its own approval key", "no approval key of its own",
+                     "waiting for your yes"):
+            check(f"the list says {want!r}", want in reply, reply)
+        check("a device not heard from is not called reachable now",
+              "not heard from since" in reply, reply)
+        check("the list says it only read the list",
+              "nothing was added, removed, renamed or retired" in reply, reply)
+        check("... and it raised no card, read no facts and wrote nothing",
+              r is not None and r.intent == "devices_list" and not r.made
+              and not r.facts and r.open_settings is None, r)
+
+        D.paired_status = lambda: {
+            "devices": [], "readable": False,
+            "why": "the devices registry could not be read"}
+        r = Q.answer("which devices are paired", sched=S.get(), now=time.time())
+        reply = r.reply if r is not None else ""
+        check("an unreadable store says so plainly, never an invented list",
+              "I cannot read the device list on this PC just now" in reply, reply)
+        check("... and it still changes nothing", r is not None and not r.made, r)
+    finally:
+        D.paired_status = old
+
+    # The owner's limit: there is no chat or voice path that adds or removes a
+    # device. Every one of these is the model's (or nothing), never the read.
+    for said in ("remove my phone", "add my phone", "rename my laptop",
+                 "retire the shared key", "unpair my phone", "delete my tablet"):
+        got = Q.match(said)
+        check(f"{said!r} is not a device add/remove path",
+              got is None or got.name not in ("devices_list", "pair_phone"), got)
 
 
 def main():
