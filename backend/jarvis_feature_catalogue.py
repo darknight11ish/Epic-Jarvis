@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 beb297038a7d9b1933d5165d107436cbb1899587536bf2f3eb22b7faf24d1d99); the apps' Features pages read their own
+`features/features.json` (sha256 220dae158f7708c0f0703166b46a20b81ca337af59e911a245d8e6646ef2907f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
