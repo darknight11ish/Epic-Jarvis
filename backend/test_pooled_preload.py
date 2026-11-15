@@ -22,14 +22,23 @@ WHAT IT PROVES, against a fake Ollama lane on 127.0.0.1 (real sockets, real
 JSON, nothing from the owner's PC, no model, no card, no live lane):
 
   (a) a COLD pooled turn sends the native preload with `num_ctx` 49,152 BEFORE
-      the `/v1/chat/completions` turn, and the turn itself still names the
-      window and streams (no streaming regression);
+      the turn, and the turn itself still names the window and streams (no
+      streaming regression);
   (b) when `/api/ps` already reports the model at 49,152, no duplicate preload
       is sent - and at 8,192 (the measured defect) it IS sent;
   (c) a preload that fails is recorded in `POOLED_PRELOAD_LAST`, said in one
       plain line, and the real turn still dispatches and answers;
   (d) a non-pooled (everyday/coding) lane is untouched: no preload call, state
       "off", and its `/v1` request gains no `options` field.
+
+THE TURN MOVED TO `/api/chat` ON 2026-11-15, and the checks below follow it.
+`/v1/chat/completions` does not use a top-level `options` field when it picks a
+runner: measured again live that morning, a resident 49,152 runner was replaced
+by an 8,192 one by the turn that named 49,152, and its 9,794-token prompt was
+refused with HTTP 400. So the pooled lane's round is now Ollama's NATIVE
+`/api/chat`, which honours `options.num_ctx`; the preload this suite exists for
+still runs first, and every other lane still sends `/v1` byte for byte
+(case d). test_chat_window.py is the suite that pins the window itself.
 
 The lane the seam acts on is the REAL predicate (`jarvis_presets.lane_num_ctx`,
 port 11450), checked first; because the fake lane must not bind the owner's
@@ -71,6 +80,7 @@ EVERYDAY_MODEL = "qwen3.5:9b"
 POOLED = "http://127.0.0.1:11450"
 EVERYDAY = "http://127.0.0.1:11436"
 CTX = 49152
+NOW = "2026-11-15T08:30:00.000000-08:00"
 FAILED, PASSED = [], []
 
 AG._publish_step = lambda step: None      # no event bus write in a test run
@@ -145,6 +155,36 @@ class FakeLane:
                                     model=str(body.get("model") or MODEL))
                     self.send_response(200)
                     self.send_header("Content-Type", W.CONTENT_TYPE_STREAM)
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+                if self.path == "/api/chat":
+                    # THE TURN ITSELF since 2026-11-15: the pooled lane's round
+                    # goes to Ollama's NATIVE endpoint, which honours
+                    # `options.num_ctx` when it loads or reuses a runner. A
+                    # native answer, in Ollama's own stream shape: a content
+                    # object, then the final object with the usage counts. The
+                    # runner it leaves behind is the window the request named,
+                    # exactly as the real lane does.
+                    with fake.lock:
+                        fake.loaded = [{
+                            "name": f"{body.get('model')}:latest",
+                            "context_length": int((body.get("options") or {})
+                                                  .get("num_ctx") or 0)}]
+                    lines = [
+                        {"model": body.get("model"), "created_at": NOW,
+                         "message": {"role": "assistant", "content": "ok"},
+                         "done": False},
+                        {"model": body.get("model"), "created_at": NOW,
+                         "message": {"role": "assistant", "content": ""},
+                         "done": True, "done_reason": "stop",
+                         "prompt_eval_count": 64, "eval_count": 1},
+                    ]
+                    data = b"".join((json.dumps(o) + "\n").encode("utf-8")
+                                    for o in lines)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-ndjson")
                     self.send_header("Content-Length", str(len(data)))
                     self.end_headers()
                     self.wfile.write(data)
@@ -238,18 +278,19 @@ def a_cold_pooled_turn_preloads_before_it_asks() -> None:
         posts = lane.paths("POST")
         check("F2a: a cold pooled turn sends the native preload",
               first_index(posts, "/api/generate") >= 0, posts)
-        check("F2a: ... BEFORE the /v1/chat/completions turn",
+        check("F2a: ... BEFORE the native /api/chat turn",
               -1 < first_index(posts, "/api/generate")
-              < first_index(posts, "/v1/chat/completions"), posts)
+              < first_index(posts, "/api/chat"), posts)
         bodies = lane.bodies("/api/generate")
         check("F2a: ... with the same model and options.num_ctx = 49,152",
               bodies == [{"model": MODEL, "options": {"num_ctx": CTX}}], bodies)
         check("F2a: the preload is the only one this turn sends",
               len(bodies) == 1, bodies)
-        v1 = lane.bodies("/v1/chat/completions")
+        native = lane.bodies("/api/chat")
         check("F2a: the real turn still names its window and still streams",
-              len(v1) == 1 and v1[0].get("options") == {"num_ctx": CTX}
-              and v1[0].get("stream") is True, v1)
+              len(native) == 1
+              and (native[0].get("options") or {}).get("num_ctx") == CTX
+              and native[0].get("stream") is True, native)
         check("F2a: ... and it is the answer that was asked for",
               out.get("finish_reason") == "stop" and out.get("answer") == "ok",
               out)
@@ -275,9 +316,9 @@ def a_warm_pooled_turn_sends_no_duplicate_preload() -> None:
         check("F2b: a lane already loaded at 49,152 sends NO preload",
               first_index(posts, "/api/generate") < 0, posts)
         check("F2b: ... and the real turn still goes, once, naming its window",
-              len(lane.bodies("/v1/chat/completions")) == 1
-              and lane.bodies("/v1/chat/completions")[0].get("options")
-              == {"num_ctx": CTX}, lane.paths("POST"))
+              len(lane.bodies("/api/chat")) == 1
+              and (lane.bodies("/api/chat")[0].get("options") or {}).get("num_ctx")
+              == CTX, lane.paths("POST"))
         check("F2b: the record says it was already there (no call was made)",
               last_preload().get("state") == "already",
               last_preload())
@@ -296,9 +337,9 @@ def a_lane_loaded_below_the_window_is_reloaded_at_it() -> None:
         with pooled_port(lane.port):
             a_turn(lane)
         posts = lane.paths("POST")
-        check("F2b2: a lane loaded at 8,192 IS preloaded, before the /v1 turn",
+        check("F2b2: a lane loaded at 8,192 IS preloaded, before the /api/chat turn",
               -1 < first_index(posts, "/api/generate")
-              < first_index(posts, "/v1/chat/completions"), posts)
+              < first_index(posts, "/api/chat"), posts)
         check("F2b2: ... at 49,152, so the reload carries the measured window",
               lane.bodies("/api/generate")
               == [{"model": MODEL, "options": {"num_ctx": CTX}}],
@@ -327,7 +368,11 @@ def a_failed_preload_still_runs_the_real_turn() -> None:
               first_index(posts, "/api/generate") >= 0, posts)
         check("F2c: the real turn still dispatched AFTER the failed preload",
               -1 < first_index(posts, "/api/generate")
-              < first_index(posts, "/v1/chat/completions"), posts)
+              < first_index(posts, "/api/chat"), posts)
+        native = lane.bodies("/api/chat")
+        check("F2c: ... naming its window itself, which is the new guard",
+              len(native) == 1
+              and (native[0].get("options") or {}).get("num_ctx") == CTX, native)
         check("F2c: ... and the owner still got the answer",
               out.get("finish_reason") == "stop" and out.get("answer") == "ok",
               out)
