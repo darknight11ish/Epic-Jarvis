@@ -167,9 +167,9 @@ PRESETS = (
         cost="qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking "
              "9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 "
              "tokens a second, not the fastest.",
-        worse="Not the quickest and not the picture specialist; its thinking has to "
-              "stay off for ordinary turns, or it answered nothing in the measured "
-              "run.",
+        worse="Not the quickest and not the picture specialist; a thinking turn "
+              "spends the answer's own budget on its reasoning first, so a very "
+              "small budget can come back empty.",
         model="qwen3.5:9b", lane="main", context=196608,
         prompt="balanced", diet="balanced",
         measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
