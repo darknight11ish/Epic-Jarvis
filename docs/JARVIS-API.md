@@ -39360,10 +39360,11 @@ it is still started by hand with `tools\voicestudio_sidecar.ps1 -Start`, and the
 answer says switching it on changes nothing you would hear. `backend/test_voicestudio.py` and
 `backend/test_feature_control_phrases.py` are the proof.
 
-**The on-device model has no route and no section, by design.** Nothing that runs a model ships in the phone app, so there is
-nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `jarvis_quick.py`
-(`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
-`docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.
+**The on-device model adds no route and no section to this file, by design.** The engine itself is real code in the APK (section
+223), but it is a separate chat, off by default, with no network path and no link to this PC, so there is still nothing for
+`JARVIS-API.md` to describe: the answer is one fixed sentence in `jarvis_quick.py` (`ONDEVICE_MODEL_ANSWER`: *"Yes - but it is a
+separate chat, and it is off by default..."*), its plate points at Home -> More -> Local AI, and the ordinary Jarvis chat still
+uses the PC's model. Section 8 above carries the one-sided reason.
 
 ## 222. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
 

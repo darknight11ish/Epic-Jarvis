@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e43379848911d09db748f5c6b3612e1579575e27",
- "built_at": "2026-11-14T13:47:11-08:00",
+ "ref": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
+ "built_at": "2026-11-14T15:32:51-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6492,6 +6492,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
+   "date": "2026-11-14",
+   "subject": "Merge pull request #1260 from darknight11ish/integration/wave20-2026-11-14"
+  },
+  {
+   "sha": "64f224e52d8e6c280b407a04f27a0d908d3e0f83",
+   "date": "2026-11-14",
+   "subject": "Give android_app its diet hints, so the tool can actually be shown"
+  },
+  {
    "sha": "e43379848911d09db748f5c6b3612e1579575e27",
    "date": "2026-11-14",
    "subject": "The desktop's raw-tool list is eight now, and its test says so"
@@ -6580,16 +6590,6 @@
    "sha": "c4b81662b206f5a0c5470c1047522c81d722ef6b",
    "date": "2026-11-14",
    "subject": "Add the Android app builder's way in: a model tool, one card per act (DEF-068)"
-  },
-  {
-   "sha": "7ea2a873b555b01fd6bd213e72909c854b42b32b",
-   "date": "2026-11-14",
-   "subject": "desktop: the offline sentence a person reads says Atlas, not Jarvis"
-  },
-  {
-   "sha": "165e9afbf47f7795c97a635b0193f61da1cf34dd",
-   "date": "2026-11-14",
-   "subject": "rules: on this PC a green backend run from a checkout is not a green CI run"
   }
  ],
  "top_level": [
