@@ -787,9 +787,9 @@ def t_a_pull_request_ci_answer_cannot_say_passed_while_a_check_is_red():
           and "NOT all green" not in text, out)
     # The other half of the same false answer: a run that failed while the
     # checks say green must still stop the word "green" being used.
-    check_run_only = [{"name": "CI", "status": "completed",
-                       "conclusion": "failure", "head_branch": "feature/x"}]
-    out = _run_request(r, routes(green, check_run_only))
+    one_red_run = [{"name": "CI", "status": "completed",
+                    "conclusion": "failure", "head_branch": "feature/x"}]
+    out = _run_request(r, routes(green, one_red_run))
     check("a red RUN beside green checks still blocks a green answer",
           "will not call that green" in str(out.get("text", "")), out)
     # A repository that reports NO check runs at all: every visible run counts,
