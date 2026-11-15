@@ -163,7 +163,19 @@ def t_on_asks_one_card_and_writes_nothing_until_a_person_says_yes():
         approved = True
 
     real = {n: getattr(AF, n) for n in
-            ("_gate", "_tier", "_spawn", "_owner_check_armed", "_person_said_yes")}
+            ("_gate", "_tier", "_spawn", "_owner_check_armed", "_person_said_yes",
+             "tools_enabled_set")}
+    # WHAT IS ON NOW IS STUBBED, and this is not tidiness. `request_tool_enable`
+    # reads the live settings (`tools_enabled_set`, line ~2783 of
+    # jarvis_asks_first.py) to decide whether there is anything to change, and
+    # this suite only redirects the CONFIG DIR - on a PC whose settings file
+    # names GitHub tools the real file is still found through the framework
+    # loader's own search, and on CI it is not. So without these two stubs the
+    # same check passes at the desk and fails in CI (measured 2026-11-15:
+    # shard 2 red on "... and the group is written off in ONE step" because CI
+    # read nothing as on, took the "already not offered" early return, and
+    # wrote nothing - while the desk's live file said some were on).
+    AF.tools_enabled_set = lambda: set()
     AF._gate = lambda action, detail, card: (calls.__setitem__("cards",
                                                               calls["cards"] + 1) or _V())
     AF._tier = lambda action: "ask"
@@ -208,7 +220,10 @@ def t_off_is_instant_and_cardless():
     """3b. OFF: one write, no card at all, and it says Done."""
     calls = {"cards": 0, "writes": []}
     real = {n: getattr(AF, n) for n in
-            ("_gate", "_tier", "_spawn", "_owner_check_armed")}
+            ("_gate", "_tier", "_spawn", "_owner_check_armed", "tools_enabled_set")}
+    # The group is ON now, so OFF has something to narrow - see the longer note
+    # in `t_on_asks_one_card_and_writes_nothing_until_a_person_says_yes`.
+    AF.tools_enabled_set = lambda: set(AF.GITHUB_TOOLS)
     AF._gate = lambda *a, **k: calls.__setitem__("cards", calls["cards"] + 1)
     AF._tier = lambda action: "ask"
     AF._spawn = lambda fn: None
@@ -367,16 +382,42 @@ def t_the_provenance_tag_is_what_makes_the_fast_path_run():
               {"role": "user", "content": "y", "provenance": "typed"}]}) is None)
 
 
-def t_no_new_route_and_no_new_tool_name():
-    """The whole feature rides doors that already exist - no new API, no new tool."""
-    src = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
-    check("the group is reached through the existing settings_tool intent",
-          'Intent("settings_tool"' in src)
-    check("no new route is added for it",
-          "/api/asks_first/tools" not in src or True)
-    reg = (HERE / "jarvis_settings_registry.py").read_text(encoding="utf-8")
-    check("the registry adds a NAME only, no new setter",
-          "_TOOL_TARGETS" in reg and "github_tools_group" in reg)
+def t_no_new_switch_row_and_one_setter():
+    """The whole feature rides doors that already exist - no new route, no new tool.
+
+    These checks used to pin source TEXT, which the source-pin gate
+    (tools/check_no_source_pins.py) counts against a ceiling - and one of them
+    was worse than that: `"/api/asks_first/tools" not in src or True` can never
+    fail. Both are gone: what replaces them is behaviour, so the checks survive
+    a rename and mean something when they pass.
+
+    "No new route" is proved by the state test above rather than here: it stubs
+    `tools_status` and the answer follows the stub for 0, 9 and 20, so the words
+    come from this PC's own registry read and not from anything fetched. (A
+    blanket "imports no HTTP client" check would be false anyway -
+    `jarvis_quick.py` does import `urllib.request`, for the update check.)
+
+      1. the group is not a row of the per-tool switch table (it speaks for
+         twenty), which is `t_the_group_is_a_name...`'s point from the other
+         side;
+      2. the registry has ONE setter and ONE reader, the pair every other
+         switchable name uses, and the reader answers for the group too. The
+         model-door test above already pins that `set_reading_tool` receives the
+         group; this pins that nothing was added beside it. Read only, so this
+         suite still writes nothing.
+    """
+    check("the group is not a row of the per-tool switch table",
+          AF.GITHUB_TOOLS_GROUP not in AF.TOOLS_SWITCHABLE,
+          AF.GITHUB_TOOLS_GROUP)
+
+    setters = sorted(n for n in dir(REG) if n.startswith("set_") and "reading" in n)
+    check("the registry has ONE setter for a reading tool",
+          setters == ["set_reading_tool"], setters)
+    readers = sorted(n for n in dir(REG) if n.startswith("reading_") and n.endswith("_now"))
+    now = REG.reading_tool_now(AF.GITHUB_TOOLS_GROUP)
+    check("... and ONE reader, which answers for the group",
+          readers == ["reading_tool_now"] and isinstance(now, bool),
+          (readers, now))
 
 
 def main():

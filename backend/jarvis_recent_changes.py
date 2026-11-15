@@ -21,9 +21,9 @@ from pathlib import Path
 BULLETS = (
     'A feature pull request no longer commits the self-code map',
     'The General preset stops claiming the model "answered nothing" without thinking',
+    'The GitHub tools are a switch you can say, ask about, and change by talking',
     'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
     "The Coding preset's chat turn gets the window its preset names",
-    "An approved GitHub card now merges, or says in code's words why it did not",
 )
 
 
