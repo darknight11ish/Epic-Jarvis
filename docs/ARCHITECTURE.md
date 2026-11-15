@@ -6796,19 +6796,25 @@ deploy pipeline), then one row per major part of the code: its purpose, every
 file it owns, the modules to start reading, the tests that prove it and the
 documents that describe it. It also carries the commit it was built from, that
 commit's date, the version, the newest twenty commit subjects and the repo's
-major directories. `tools/gen_self_code_map.py` writes it from the tree at the
-deploy's own commit; `backend/jarvis_self_code.py` (shipped whole, twin kept)
-only reads it beside itself — no git, no socket, no write, no model, and no code
-body. The map names code; it does not hold code and it runs nothing.
+major directories. `tools/gen_self_code_map.py` writes it from the tree at a
+commit on `main`, snapshotted after merges land (owner's ruling Q1, 2026-11-15:
+a feature pull request no longer regenerates it - see `docs/SELF-CODE-MAP.md`);
+`backend/jarvis_self_code.py` (shipped whole, twin kept) only reads it beside
+itself — no git, no socket, no write, no model, and no code body. The map names
+code; it does not hold code and it runs nothing.
 
 **Completeness is checked, not claimed.** Every tracked file belongs to exactly
 one subsystem, from one table in the generator; the generator exits non-zero and
 names the paths when a file belongs to none or to two, and skips generated,
 binary and vendored files only through an explicitly named list whose counts it
-prints and stores. `--check` re-derives the document in memory and compares it
-byte for byte with the committed copy. `backend/test_self_code.py` proves both
-halves, the map's shape, the four answers, a miss, a missing map, and that the
-older self-answers keep their own sentences.
+prints and stores. On `main`, `--check` re-derives the document in memory and
+compares it byte for byte with the committed copy, and
+`.github/workflows/self-code-map.yml` runs it after every merge. On a pull
+request the gate is `--coherence`: the same ownership property, with no map
+involved. `backend/test_self_code.py` proves the tree's coherence, the map's
+shape, that the committed map is true to the commit it names, the four answers,
+a miss, a missing map, and that the older self-answers keep their own
+sentences.
 
 **Where it is answered.** Four deterministic intents in `jarvis_quick.py`, with
 no model and no card: the overview ("what are your major parts", "what is your
@@ -6819,9 +6825,10 @@ the map does not know is answered "not in the map I was built with" plus the two
 nearest parts, never a guess. All four are in `READ_ONLY_INTENTS`.
 
 **Its honest limit, stated in every answer.** The map knows nothing newer than
-the deploy that installed it, so a question about code merged after that deploy
-is answered as unknown. Refreshing it is one command and a copy, described in
-`docs/SELF-CODE-MAP.md`, and `--check` fails when the committed map and the tree
-have drifted apart. It adds **no route, no model tool, no gate action, no reach
-row and no permission of any kind**.
+the commit it was built from, so a question about code merged after that commit
+is answered as unknown. Refreshing it is one command that writes both copies, on
+a branch off `main` after a merge - `docs/SELF-CODE-MAP.md` has the steps, and
+`.github/workflows/self-code-map.yml` fails, naming that command, when the
+committed map and main's tree have drifted apart. It adds **no route, no model
+tool, no gate action, no reach row and no permission of any kind**.
 
