@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "4db99a34f952560a371695be97b8d891373509a1",
- "built_at": "2026-11-15T01:55:49-08:00",
+ "ref": "8848eb16777e3cbeefc71716468a953bb90aa9b1",
+ "built_at": "2026-11-15T02:12:46-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4706,6 +4706,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
     "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
@@ -4904,12 +4905,14 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
     "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
     "decisions.d/2026-11-14-send-to-phone-two-gigabytes.md",
     "decisions.d/2026-11-14-widget-look.md",
+    "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
     "decisions.d/2026-11-15-github-answers-are-refusals.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5414,7 +5417,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 986,
+   "file_count": 989,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6501,6 +6504,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "8848eb16777e3cbeefc71716468a953bb90aa9b1",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
+  },
+  {
    "sha": "4db99a34f952560a371695be97b8d891373509a1",
    "date": "2026-11-15",
    "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
@@ -6531,9 +6544,19 @@
    "subject": "fix(github): an adversarial suite, and every defect it proved"
   },
   {
+   "sha": "87e40c6a5165eb5efdd49968a982d1d176a41841",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
+  },
+  {
    "sha": "04d4748cfea08924a8facf798b01ae490769f989",
    "date": "2026-11-15",
    "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
+  },
+  {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
   },
   {
    "sha": "e496e93c373679d108b7924d370f031517298c6a",
@@ -6579,26 +6602,6 @@
    "sha": "e43379848911d09db748f5c6b3612e1579575e27",
    "date": "2026-11-14",
    "subject": "The desktop's raw-tool list is eight now, and its test says so"
-  },
-  {
-   "sha": "81f05a38609e0212f7812d9a26e67532987d3db1",
-   "date": "2026-11-14",
-   "subject": "Read the tool-action rows as a table, and stop ranking git walks"
-  },
-  {
-   "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
-   "date": "2026-11-14",
-   "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
-  },
-  {
-   "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
-   "date": "2026-11-14",
-   "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
-  },
-  {
-   "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
   }
  ],
  "top_level": [
@@ -6630,7 +6633,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 281
+   "files": 282
   },
   {
    "path": "tools/",
@@ -6645,7 +6648,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 197
+   "files": 199
   },
   {
    "path": "plugins/",
@@ -6724,8 +6727,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5847,
-  "covered": 5364,
+  "tracked_files": 5850,
+  "covered": 5367,
   "excluded": 483,
   "subsystems": 27
  },
