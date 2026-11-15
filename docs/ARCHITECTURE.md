@@ -5871,6 +5871,15 @@ they landed):
   a piece that does not say, are WARNs - never a FAIL, so an urgent
   one-piece fix is never blocked.
 
+  Its `provenance` check (2026-11-15) is the same fact in ONE sentence: it puts
+  the desktop app's commit, the backend's `SOURCE-COMMIT` and `main`'s own
+  commit side by side and says whether the three agree, or what differs. `main`
+  is read with `git rev-parse origin/main` - a ref already on this PC, so the
+  check fetches nothing and answers offline. Three pieces on one commit is a
+  PASS naming it; a difference is a WARN naming both commits; a piece that
+  cannot name its commit is said to not say, never guessed at. PASS or WARN
+  only, for the same reason as `commits`.
+
 **Still missing:**
 
 - **Looking at the screen ("Look at this", "Watch with me") - built
