@@ -1676,6 +1676,9 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # the PC can answer from its own state, and the model answered both with an
     # invention. They run EARLY because each is a whole short question that no
     # other grammar owns, and both read only - no card, no change.
+    # 2026-11-14: the pairing answer is not phone-shaped any more (a laptop,
+    # tablet, iPad, browser and second PC each get their own words). The
+    # read-only device roster is in `_honest_early` with the other state reads.
     got = _voice_ask(s)
     if got is not None:
         return got
@@ -8743,6 +8746,11 @@ _ADDING_SECOND_PC_RX = re.compile(
     r"\b(?:second|another|new|one\s+more|2nd|third)\s+(?:pc|computer|laptop|machine)\b"
     r"|\b(?:add|install|set\s*up|connect)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?"
     r"(?:pc|computer|laptop)\b")
+#: A device the owner PAIRS rather than a second PC (2026-11-14): "add a
+#: laptop", "set up a tablet", "add another browser" is the pairing answer's,
+#: while "add a second pc" keeps the second-PC answer below. Without this the
+#: second-PC sentence claimed every "how do I add a laptop".
+_ADDING_PAIR_DEVICE_RX = re.compile(r"\b(?:laptops?|tablets?|ipads?|browsers?|devices?)\b")
 
 
 def _adding_howto_question(raw) -> Optional[Intent]:
@@ -8764,6 +8772,10 @@ def _adding_howto_question(raw) -> Optional[Intent]:
         return Intent("adding_key_howto")
     if _ADDING_MODEL_RX.search(text):
         return Intent("adding_model_howto")
+    # A laptop, tablet, iPad, browser or device is PAIRED, not a second PC
+    # (2026-11-14): return None so `_pair_phone` answers with the right screen.
+    if _ADDING_PAIR_DEVICE_RX.search(text):
+        return None
     if _ADDING_SECOND_PC_RX.search(text):
         return Intent("adding_second_pc_howto")
     if re.search(r"\btelegram\b", text):
@@ -8804,6 +8816,13 @@ def _reminders_question(raw) -> Optional[Intent]:
     # about this PC's reminders. Same whole-sentence owners, so a reminder
     # question that merely mentions the phone still gets this family's answer.
     if _PHONE_TIMER.fullmatch(text) or _PHONE_STATE.fullmatch(text):
+        return None
+    # A PAIRING sentence ("how do I add my laptop", "how do I pair my iPad",
+    # "how do I connect my tablet to this PC") is the pairing answer's, not this
+    # family's (2026-11-14): "how do I add ..." is one of that family's own HOW
+    # shapes, so without this the new device shapes were answered with how to
+    # set a reminder.
+    if _PAIR_PHONE.fullmatch(text):
         return None
     # A question about a NAMED feature is the feature guide's, not this
     # family's: "tell me about Ring my phone" carries "ring", and "how do I set
@@ -11708,7 +11727,9 @@ _PHONE_TIMER = re.compile(
 #: same paired-device store as the phone-timer answer and writes nothing. Only
 #: WHOLE state sentences: pairing actions keep their own `pair_phone`/ring
 #: paths, so "pair my phone", "connect my phone" and "ring my phone" never
-#: reach this one.
+#: reach this one. Since 2026-11-14 it is the PHONE-shaped half of the one
+#: `devices_list` answer (see `_DEVICES_LIST` just below), so the store and the
+#: read-only rule are one owner for a phone and for every other device.
 _PHONE_STATE = re.compile(
     # "is my phone connected / paired / linked / online / set up / working?"
     r"(?:is|are|was|were|does|do|did|has|have)\s+(?:my|the|your)\s+"
@@ -11731,6 +11752,43 @@ _PHONE_STATE = re.compile(
     r"reaching|work|working|see|show|online|set\s+up)\b.*"
     # "phone connection status"
     r"|(?:phone|android)\s+(?:connection\s+)?status\b.*")
+
+# --- "what devices are connected?" (2026-11-14, the device-awareness wave) ---
+#
+# WHY THIS IS HERE. Jarvis's own awareness of devices was phone-shaped: the
+# only read answer named one phone and never said a laptop or a browser could
+# be paired at all, so "what devices are connected?" fell to the model. This is
+# the READ-ONLY roster, built from the same `jarvis_devices.paired_status()`
+# call `jarvis_agent` makes for its runtime line: each device's name, its kind
+# (phone, laptop or tablet), whether it is reachable now, and whether it has its
+# own approval key. It adds nothing, removes nothing, renames nothing and
+# retires nothing - creating a credential stays at this PC's own terminal, and
+# Remove stays on the Settings, Devices card. No card, no tool, no model, no
+# write, so it is listed in READ_ONLY_INTENTS.
+#
+# The phone's own state question (`_PHONE_STATE` above) is the same answer's
+# PHONE-shaped half: one `devices_list` intent, with `topic: "phone"`, keeps one
+# owner for a store both questions already read.
+_DEVICES_LIST = re.compile(
+    r"(?:(?:what|which|how\s+many)\s+(?:devices?|computers?)\s+"
+    r"(?:(?:are\s+)?(?:connected|paired|linked|online|reachable|set\s+up)"
+    r"|(?:can|could)\s+(?:reach|see|talk\s+to)\s+(?:you|jarvis)"
+    r"|do\s+i\s+have|have\s+i\s+(?:paired|got)|do\s+you\s+see)"
+    r"|(?:list|show)\s+(?:me\s+)?(?:my|the|all)\s+(?:(?:of\s+)?(?:my|the)\s+)?"
+    r"(?:paired\s+)?(?:devices?|computers?)"
+    r"|(?:list|show)\s+(?:me\s+)?(?:what|which)\s+(?:devices?|computers?)\s+"
+    r"(?:are\s+)?(?:connected|paired)"
+    r"|(?:can|could|do)\s+you\s+see\s+(?:any\s+|my\s+|the\s+)?"
+    r"(?:devices?|computers?|laptops?|tablets?))\b.*")
+
+
+def _devices_list(s: str) -> Optional[Intent]:
+    """"what devices are connected", "list my devices" (2026-11-14)."""
+    if _DEVICES_LIST.fullmatch(s):
+        return Intent("devices_list")
+    return None
+
+
 _MODEL_SWITCH = re.compile(
     r"(?:can\s+you|could\s+you|how\s+do\s+i|how\s+can\s+i|how\s+to|where\s+do\s+i)?\s*"
     r"switch\s+(?:the\s+|my\s+)?models?\b.*"
@@ -11801,6 +11859,25 @@ def _phone_when_words(age: int, seen: float) -> str:
     return datetime.datetime.fromtimestamp(float(seen)).strftime("%d %B")
 
 
+def _approval_key_words(dev) -> str:
+    """One sentence for a row's OWN approval key, or "" when the row did not say.
+
+    "Signed approvals" is the Devices card's own name for this key (the desktop's
+    devices-words.js and the phone's Devices.kt), so the chat answer uses it too:
+    `true` -> on, `"waiting"` -> the card is up, `false` -> off. A row without the
+    field is an older reader or a stub, and says nothing rather than guessing.
+    """
+    row = dev if isinstance(dev, dict) else {}
+    key = row.get("approval_key")
+    if key is True:
+        return " It has its own approval key, so it can approve risky cards."
+    if key == "waiting":
+        return " Its approval key is waiting for your yes on this PC."
+    if key is False:
+        return " It has no approval key of its own yet, so it cannot approve risky cards."
+    return ""
+
+
 def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
     """What this PC really knows about the owner's phone, from /api/devices.
 
@@ -11811,6 +11888,11 @@ def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
     unreadable. Read-only: nothing is paired, connected, changed or promised,
     and no answer sends the owner to Settings, Bluetooth or Device Manager to
     check a state this PC already holds.
+
+    2026-11-14: the STATE half also says whether that phone has its own approval
+    key (its "signed approvals" line on the Devices card), so the phone answer
+    carries the same three facts the device list does - name, reachable now, own
+    approval key - with the kind fixed by the question.
     """
     timer = str(topic or "timer") == "timer"
     devices = list((devices_state or {}).get("devices") or [])
@@ -11865,14 +11947,88 @@ def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
     if not seen:
         return (f"Your phone is paired with Jarvis ({name}), but it has not been "
                 f"heard from since it was paired. Open the Jarvis app on the "
-                f"phone and check it can reach this PC.")
+                f"phone and check it can reach this PC." + _approval_key_words(primary))
     age = max(0, int(time.time() - seen))
     if age <= _PHONE_CONNECTED_S:
         return (f"Your phone is connected to Jarvis right now ({name}, last "
-                f"heard from {when}).")
+                f"heard from {when})." + _approval_key_words(primary))
     return (f"Your phone is paired with Jarvis ({name}), but I have not heard "
             f"from it since {when}. Open the Jarvis app on the phone and check "
-            f"it can reach this PC.")
+            f"it can reach this PC." + _approval_key_words(primary))
+
+
+#: What every `devices_list` answer says when the store or the module cannot be
+#: read: the same plain sentence the brief asks for, never an invented list.
+DEVICES_UNREADABLE = "I cannot read the device list on this PC just now."
+
+
+def _device_row_words(dev: dict, now: float) -> str:
+    """One device, in the list answer's words: name, kind, reach, approval key.
+
+    "reachable now" is the same five-minute rule the phone answer uses: a
+    check-in older than that is reported as "not heard from since", never as a
+    live reach, and a row the store marks as having no reach says that. The
+    approval key sentence appears only when the row carries the field.
+    """
+    row = dev if isinstance(dev, dict) else {}
+    name = str(row.get("name") or "").strip() or "a device with no name"
+    kind = str(row.get("kind") or "").strip().lower()
+    kind_word = {"phone": "phone", "laptop": "laptop", "tablet": "tablet"}.get(kind, "device")
+    bits = [f"{name} ({kind_word})"]
+    seen = row.get("last_seen")
+    seen = float(seen) if isinstance(seen, (int, float)) and seen > 0 else 0.0
+    if row.get("reach") is not True:
+        bits.append("cannot reach this PC")
+    elif not seen:
+        bits.append("not heard from since it was paired")
+    else:
+        age = max(0, int(now - seen))
+        when = _phone_when_words(age, seen)
+        if age <= _PHONE_CONNECTED_S:
+            bits.append(f"reachable now, last heard from {when}")
+        else:
+            bits.append(f"not heard from since {when}, so it may not be reachable now")
+    key = row.get("approval_key")
+    if key is True:
+        bits.append("has its own approval key")
+    elif key == "waiting":
+        bits.append("its approval key is waiting for your yes")
+    elif key is False:
+        bits.append("no approval key of its own")
+    return ", ".join(bits)
+
+
+def _devices_list_words(devices_state: dict, now: Optional[float] = None) -> str:
+    """The read-only device roster, in plain words (2026-11-14).
+
+    Reads the shape `jarvis_devices.paired_status()` returns and says one clause
+    per device. Nothing is added, removed, renamed or retired, and the answer
+    says so; the only door it ever names is the real one (the terminal for a
+    key, Settings, Devices for Remove), never this chat box.
+    """
+    now = time.time() if now is None else float(now)
+    state = devices_state if isinstance(devices_state, dict) else {}
+    if not state or not state.get("readable", True):
+        why = str(state.get("why") or "").strip()
+        if why:
+            if why[0].islower():
+                why = why[0].upper() + why[1:]
+            if not why.endswith((".", "!", "?")):
+                why += "."
+            return f"{DEVICES_UNREADABLE} {why} Nothing was changed."
+        return f"{DEVICES_UNREADABLE} Nothing was changed."
+    rows = [r for r in (state.get("devices") or []) if isinstance(r, dict)]
+    if not rows:
+        return ("No devices are paired with Jarvis on this PC yet. Say \"how do I "
+                "pair my phone\" for a phone, or \"how do I pair my laptop\" for a "
+                "laptop, tablet or browser, and I will give the steps. Nothing was "
+                "changed.")
+    noun = "device is" if len(rows) == 1 else "devices are"
+    parts = [_device_row_words(row, now) for row in rows]
+    return (f"Besides this PC, {len(rows)} {noun} paired with Jarvis: "
+            + "; ".join(parts)
+            + ". I have only read the list - nothing was added, removed, renamed "
+              "or retired.")
 
 
 def _quiet_hours_words() -> str:
@@ -11940,12 +12096,20 @@ def _honest_early(_text: str, s: str) -> Optional[Intent]:
         if "home_control" not in _enabled_tools_turn():
             return Intent("honest_chat", {"shape": "lights_off"})
         return None
+    # What devices are paired, and can they reach this PC (2026-11-14): the
+    # read-only roster, from the same store the phone answer reads. It runs
+    # BEFORE the phone-state pattern so "what devices are connected" is never
+    # taken for a phone sentence, and it adds nothing of its own.
+    got = _devices_list(s)
+    if got is not None:
+        return got
     # The phone's own STATE ("is my phone connected/paired?"): the same real
     # paired-device store the timer answer reads, and never a promise to go and
     # look at Settings, Bluetooth or Device Manager (2026-10-31, post-deploy
-    # audit: the model invented exactly that search).
+    # audit: the model invented exactly that search). Since 2026-11-14 it is
+    # the `devices_list` intent's phone-shaped half - one owner for the store.
     if _PHONE_STATE.fullmatch(s):
-        return Intent("honest_state", {"shape": "phone_state", "topic": "state"})
+        return Intent("devices_list", {"topic": "phone"})
     # The phone's own timers: real paired-device state, never "not connected".
     if _PHONE_TIMER.fullmatch(s):
         return Intent("honest_state", {"shape": "phone_state", "topic": "timer"})
@@ -16673,6 +16837,18 @@ def _run_voice_ask() -> Result:
 # approves the device. Both sentences below are those buttons' own words
 # (`jarvis-desktop/src/settings.html`, `jarvis-client`'s DevicesSection), and
 # the Tailscale / NordVPN Meshnet rule is the card's own.
+#
+# 2026-11-14: THE ANSWER IS NO LONGER PHONE-SHAPED. Jarvis also takes a
+# laptop, a tablet, an iPad or a browser, and that is a DIFFERENT procedure: a
+# browser cannot run the phone's QR exchange, so its key is minted at this PC's
+# own terminal (`jarvis_devices.py --add-device`, the module's own CLI) and
+# pasted into the web app's pairing sheet. A second PC running the desktop app
+# is NOT supported yet - the thin client is designed, not built - so its answer
+# says so and promises nothing. NOTHING here pairs, adds, removes or types
+# anything from chat or voice: every answer is words plus the same cardless
+# Settings jump the Devices card already has. The one limit the owner kept is
+# exactly this: creating a credential stays terminal-only, and Remove stays on
+# the Settings, Devices card.
 
 PAIR_PHONE_WORDS = (
     "Two screens, one on each device. On this PC: Settings, Devices, then press "
@@ -16682,27 +16858,103 @@ PAIR_PHONE_WORDS = (
     "reach each other over Tailscale or NordVPN Meshnet - there is no public tunnel."
 )
 
-#: What the owner calls the thing being paired, in one place for both shapes.
-_PAIR_THING = r"(?:phone|android(?:\s+phone)?|mobile(?:\s+phone)?|device)"
+PAIR_BROWSER_WORDS = (
+    "A laptop, tablet, iPad or a browser is paired with a key made at this PC's "
+    "own terminal. In the backend folder on this PC, run: py -3 jarvis_devices.py "
+    "--add-device \"<name>\" --kind laptop (use --kind tablet for a tablet). It "
+    "prints a jdk1... key ONCE, and this PC keeps only a scrambled copy, so it "
+    "cannot be shown again. Then open this PC's mesh address with :4719 on the "
+    "end - http://<this PC's mesh address>:4719/ - in that device's browser, and "
+    "paste the key into its pairing sheet. That key is a credential: it never "
+    "goes in a chat, a note or a log."
+)
+
+PAIR_SECOND_PC_WORDS = (
+    "A second PC running the Jarvis desktop app is not supported yet. Jarvis's "
+    "engine is this PC - the model, the memory, the notes, the files and the "
+    "approval cards all live here - and the thin client that would join a second "
+    "PC's Jarvis window to this one has been designed, not built. A second PC's "
+    "own copy of the desktop app would be its own Jarvis, with its own models and "
+    "its own settings, so pairing cannot join it to this one. I will not promise "
+    "it before it exists."
+)
+
+#: The old regex already knew the bare word "device"; it now names both real
+#: doors rather than guessing which one was meant.
+PAIR_DEVICE_WORDS = (
+    "It depends on the device. A phone is paired from both screens: on this PC, "
+    "Settings, Devices, then \"Pair a phone\"; on the phone, Settings, Devices, "
+    "then \"Pair with your PC\". A laptop, tablet, iPad or a browser is paired "
+    "with a key made at this PC's own terminal - py -3 jarvis_devices.py "
+    "--add-device \"<name>\" --kind laptop (or tablet) - pasted into that "
+    "device's browser at http://<this PC's mesh address>:4719/. A second PC "
+    "running the Jarvis desktop app is not supported yet. The key is a "
+    "credential: it never goes in a chat, a note or a log."
+)
+
+#: The answer each matched thing gets. Keys are `_pair_thing_kind`'s words.
+PAIR_WORDS_BY_THING = {
+    "phone": PAIR_PHONE_WORDS,
+    "browser": PAIR_BROWSER_WORDS,
+    "second_pc": PAIR_SECOND_PC_WORDS,
+    "device": PAIR_DEVICE_WORDS,
+}
+
+#: What the owner calls the thing being paired, in one place for every shape.
+#: 2026-11-14: no longer a phone only - a laptop, a tablet, an iPad, a browser
+#: and a second PC joined it, so the answer can differ by the thing named. The
+#: leading "second/another/other" is optional for every noun ("add another
+#: laptop"), and the PC wording carries it too ("pair a second PC").
+_PAIR_THING = (
+    r"(?:(?:second|another|other)\s+)?(?:phone|"
+    r"android(?:\s+(?:phone|tablet|device))?|mobile(?:\s+phone)?|"
+    r"laptops?|tablets?|ipads?|browsers?|"
+    r"(?:second|another|other)\s+(?:pc|computer)(?:\s+running\s+(?:the\s+)?"
+    r"(?:jarvis\s+)?desktop(?:\s+app)?)?|desktop\s+app|device)")
+#: The polite tail, "with" on its own included: `normalise` strips a trailing
+#: "jarvis", so "how do I pair my phone with Jarvis" arrives as "... with".
+#: "with my other PC" and "to this PC" are here so a laptop sentence that names
+#: the PC it joins is still one whole match.
+_PAIR_TAIL = (
+    r"(?:\s+(?:to|with)(?:\s+(?:my\s+|the\s+|this\s+)?"
+    r"(?:second\s+|another\s+|other\s+)?(?:pc|computer|jarvis|desktop))?)?")
 _PAIR_PHONE = re.compile(
     r"(?:how|where)\s+(?:do|can|could|should)\s+(?:i|you)\s+(?:please\s+)?"
-    r"(?:pair|connect|link|set\s*up|setup|add)\s+(?:my\s+|a\s+|the\s+|this\s+)?(?:new\s+)?"
-    + _PAIR_THING +
-    # The polite tail, "with" on its own included: `normalise` strips a trailing
-    # "jarvis", so "how do I pair my phone with Jarvis" arrives as "... with".
-    r"(?:\s+(?:to|with)(?:\s+(?:my\s+|the\s+|this\s+)?(?:pc|computer|jarvis|desktop))?)?"
+    r"(?:pair|connect|link|set\s*up|setup|add)\s+(?:my\s+|a\s+|the\s+|this\s+)?"
+    r"(?:new\s+)?(?P<thing1>" + _PAIR_THING + r")" + _PAIR_TAIL +
     r"|(?:pair|link|connect)\s+(?:my\s+|a\s+|the\s+|this\s+)?(?:new\s+)?"
-    + _PAIR_THING +
-    r"(?:\s+(?:to|with)(?:\s+(?:my\s+|the\s+|this\s+)?(?:pc|computer|jarvis|desktop))?)?"
+    r"(?P<thing2>" + _PAIR_THING + r")" + _PAIR_TAIL +
     r"|(?:how|where)\s+(?:do|can)\s+i\s+(?:get|connect)\s+(?:my\s+|a\s+|the\s+)?"
-    r"(?:phone|android)\s+(?:set\s+up|connected|paired|working)")
+    r"(?P<thing3>" + _PAIR_THING + r")\s+(?:set\s+up|connected|paired|working)")
+
+
+def _pair_thing_kind(thing: str) -> str:
+    """Which answer the thing the owner named gets (2026-11-14).
+
+    The device noun decides first - "add another laptop" is the browser answer
+    and "pair a second phone" is the phone answer even though both carry
+    "another"/"second" - and only the PC/computer wording makes the unsupported
+    second-PC answer. The THING is what was matched as the object, not any PC
+    named after it in the polite tail.
+    """
+    text = " ".join(str(thing or "").split()).lower()
+    if any(word in text for word in ("laptop", "tablet", "ipad", "browser")):
+        return "browser"
+    if any(word in text for word in ("phone", "android", "mobile")):
+        return "phone"
+    if re.search(r"\b(?:second|another|other)\b.*\b(?:pc|computer)\b", text):
+        return "second_pc"
+    return "device"
 
 
 def _pair_phone(s: str) -> Optional[Intent]:
-    """"how do I pair my phone", "pair my phone" (2026-10-29)."""
-    if _PAIR_PHONE.fullmatch(s):
-        return Intent("pair_phone")
-    return None
+    """"how do I pair my phone", "how do I add my laptop" (2026-10-29,
+    2026-11-14)."""
+    m = _PAIR_PHONE.fullmatch(s)
+    if not m:
+        return None
+    thing = m.group("thing1") or m.group("thing2") or m.group("thing3") or "phone"
+    return Intent("pair_phone", {"thing": _pair_thing_kind(thing)})
 
 
 # --------------------------------------------------------------------------
@@ -18283,17 +18535,44 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     return None
 
 
-def _run_pair_phone() -> Result:
-    """The two real screens, in their own words; the PC's Devices card opens as
-    a cardless Settings jump (the same navigation `_run_calendar_setup` makes).
-    Nothing is paired, changed or typed by saying this."""
+def _run_pair_phone(f: Optional[dict] = None) -> Result:
+    """The real screens for the thing the owner named, in their own words; the
+    PC's Devices card opens as a cardless Settings jump (the same navigation
+    `_run_calendar_setup` makes). Nothing is paired, changed or typed by saying
+    this, for any shape - a second PC is told plainly it is not supported yet.
+    """
+    thing = str((f or {}).get("thing") or "phone").strip().lower()
+    words = PAIR_WORDS_BY_THING.get(thing, PAIR_PHONE_WORDS)
     jump = None
     try:
         import jarvis_settings_registry as R
         jump = "devices" if R.section_by_id("devices") is not None else None
     except Exception:                       # noqa: BLE001 - module absent
         jump = None
-    return Result(PAIR_PHONE_WORDS, "pair_phone", open_settings=jump)
+    return Result(words, "pair_phone", open_settings=jump)
+
+
+def _run_devices_list(f: Optional[dict] = None) -> Result:
+    """What is paired, read from `jarvis_devices.paired_status()` and nothing
+    else (2026-11-14).
+
+    Read-only: no card, no tool, no model, no write. It adds, removes, renames
+    and retires nothing - a key is made at this PC's own terminal and Remove is
+    on the Settings, Devices card - and the answer says so. The phone's own
+    state question is this answer's `topic: "phone"` half, with the same store
+    read and the same rule. A missing module or an unreadable store says so
+    plainly instead of inventing a device list.
+    """
+    try:
+        import jarvis_devices as D
+        state = D.paired_status()
+    except Exception:                       # noqa: BLE001 - module absent
+        state = {"devices": [], "readable": False, "why": ""}
+    if not isinstance(state, dict):
+        state = {"devices": [], "readable": False, "why": ""}
+    if str((f or {}).get("topic") or "") == "phone":
+        return Result(_phone_state_words(state, "state"), "devices_list")
+    return Result(_devices_list_words(state), "devices_list")
 
 
 #: One plain refusal for the three note changes the notes editor deliberately
@@ -26752,7 +27031,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "voice_ask":
         return _run_voice_ask()
     if n == "pair_phone":
-        return _run_pair_phone()
+        return _run_pair_phone(f)
+    # The read-only device roster (2026-11-14): `paired_status()` and nothing
+    # else, for a phone ("is my phone connected?") and for every other device
+    # ("what devices are connected?"). No card, no tool, no write.
+    if n == "devices_list":
+        return _run_devices_list(f)
     # Notes and the vault (2026-10-31 field test): the note WRITE goes through
     # jarvis_note_capture's existing capture path; the organizer answer and the
     # refusals only read or refuse; turning the organizer on raises its one
@@ -27908,6 +28192,11 @@ READ_ONLY_INTENTS = frozenset({
     # so none may clear "cancel that". ("change your voice to Ashby" is the
     # settings grammar's own bad-value answer, already listed below.)
     "accounts_connect", "voice_ask", "pair_phone",
+    # What devices are paired (2026-11-14): the roster and the phone's own state
+    # question only READ `jarvis_devices.paired_status()` - no card, no tool, no
+    # write, nothing added, removed, renamed or retired - so neither may clear
+    # what "cancel that" would undo.
+    "devices_list",
     # Notes and the vault, asked in chat (2026-10-31 field test). The organizer
     # answer only reads the planner's own state/plan, and the two refusals write
     # nothing - so none may clear what "cancel that" would take back. The note

@@ -437,11 +437,13 @@ def t_pairing_a_phone_names_both_screens():
               "already paired" not in r.reply.lower(), r.reply)
     # The phone's state question is not the how-to. Since 2026-10-31 (the
     # post-deploy audit) it has its own deterministic, read-only answer from
-    # the paired-device store (`honest_state`, shape "phone_state"); it must
-    # stay out of the pairing words. "ring my phone" keeps its own intent.
+    # the paired-device store; since 2026-11-14 that answer is the one
+    # `devices_list` intent's phone-shaped half (`topic: "phone"`), so a phone
+    # and a laptop ask one owner. It must stay out of the pairing words.
+    # "ring my phone" keeps its own intent.
     got = Q.match("is my phone paired?")
-    check("'is my phone paired?' is the phone-state answer now",
-          got is not None and got.name == "honest_state", got)
+    check("'is my phone paired?' is the device-list answer now",
+          got is not None and got.name == "devices_list", got)
     got = Q.match("ring my phone")
     check("'ring my phone' is not the pairing how-to",
           got is None or got.name != "pair_phone", got)

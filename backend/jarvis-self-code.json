@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f1f508f0f1a1893d138a9851f702dc24aa0dd558",
- "built_at": "2026-11-15T00:23:41-08:00",
+ "ref": "2c7ed1baaaa1c572da7149d2b8c9f5a24aa33195",
+ "built_at": "2026-11-15T00:23:47-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4707,6 +4707,7 @@
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
     "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
     "changelog.d/2026-11-14-catalogue-every-card.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
@@ -4906,6 +4907,7 @@
     "decisions.d/2026-11-14-atlas-copy-scope.md",
     "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
     "decisions.d/2026-11-14-catalogue-counts-every-card.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
@@ -5416,7 +5418,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 989,
+   "file_count": 991,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6503,6 +6505,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "2c7ed1baaaa1c572da7149d2b8c9f5a24aa33195",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the self-code map over all three changes"
+  },
+  {
    "sha": "f1f508f0f1a1893d138a9851f702dc24aa0dd558",
    "date": "2026-11-15",
    "subject": "Merge commit '08126eb74' into feat/github-parity-stage1-2026-11-14"
@@ -6596,11 +6603,6 @@
    "sha": "f036bfb990fada12923ea6b3abfd8eead1854af0",
    "date": "2026-11-14",
    "subject": "feat(send): any file from the PC to the phone, up to 2 GiB, in 1 MiB pieces"
-  },
-  {
-   "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1260 from darknight11ish/integration/wave20-2026-11-14"
   }
  ],
  "top_level": [
@@ -6632,7 +6634,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 282
+   "files": 283
   },
   {
    "path": "tools/",
@@ -6647,7 +6649,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 199
+   "files": 200
   },
   {
    "path": "plugins/",
@@ -6726,8 +6728,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5849,
-  "covered": 5366,
+  "tracked_files": 5851,
+  "covered": 5368,
   "excluded": 483,
   "subsystems": 27
  },
