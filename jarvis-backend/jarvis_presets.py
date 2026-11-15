@@ -167,9 +167,10 @@ PRESETS = (
         cost="qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking "
              "9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 "
              "tokens a second, not the fastest.",
-        worse="Not the quickest and not the picture specialist; its thinking has to "
-              "stay off for ordinary turns, or it answered nothing in the measured "
-              "run.",
+        worse="Not the quickest and not the picture specialist; it thinks before it "
+              "answers, so a short answer allowance can cut it off before it "
+              "speaks - at the 1,024 tokens every window gets it answered all of "
+              "the general, tool-calling and vision checks (6/6, 5/5, 1/1).",
         model="qwen3.5:9b", lane="main", context=196608,
         prompt="balanced", diet="balanced",
         measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
