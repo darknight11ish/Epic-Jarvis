@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "2c7ed1baaaa1c572da7149d2b8c9f5a24aa33195",
- "built_at": "2026-11-15T00:23:47-08:00",
+ "ref": "1d5682fa3c75a0609e095742389709a750f91daf",
+ "built_at": "2026-11-15T02:12:38-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6505,6 +6505,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
+  },
+  {
+   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
+  },
+  {
    "sha": "2c7ed1baaaa1c572da7149d2b8c9f5a24aa33195",
    "date": "2026-11-15",
    "subject": "chore(records): re-take the self-code map over all three changes"
@@ -6538,6 +6548,11 @@
    "sha": "101641fc731117ed8b6d74c1ebd83c601cf3160c",
    "date": "2026-11-15",
    "subject": "The General preset stops saying its thinking must stay off (Q5)"
+  },
+  {
+   "sha": "87e40c6a5165eb5efdd49968a982d1d176a41841",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
   },
   {
    "sha": "55637c18b18fa967bb1ae8ffaeb8515815260ea1",
@@ -6575,6 +6590,11 @@
    "subject": "Bench suites ask for room to think, and name the budget when it runs out"
   },
   {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
+  },
+  {
    "sha": "e496e93c373679d108b7924d370f031517298c6a",
    "date": "2026-11-14",
    "subject": "chore(desktop): regenerate the feature-directory fixture after the contract changed"
@@ -6583,26 +6603,6 @@
    "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
    "date": "2026-11-14",
    "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
-  },
-  {
-   "sha": "0168dca083b4e4c1668423e845381704273709a3",
-   "date": "2026-11-14",
-   "subject": "chore(generated): regenerate the feature catalogue and recent changes; keep the new suite off source text"
-  },
-  {
-   "sha": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
-   "date": "2026-11-14",
-   "subject": "fix(gate): the file-to-phone denial row, and an audit that reads the published base"
-  },
-  {
-   "sha": "764531987eaf6d29dc6b131483d072b2695fe7a4",
-   "date": "2026-11-14",
-   "subject": "fix(send): name the refusal reason without a bare word the jargon ratchet counts"
-  },
-  {
-   "sha": "f036bfb990fada12923ea6b3abfd8eead1854af0",
-   "date": "2026-11-14",
-   "subject": "feat(send): any file from the PC to the phone, up to 2 GiB, in 1 MiB pieces"
   }
  ],
  "top_level": [
