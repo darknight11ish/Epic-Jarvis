@@ -812,7 +812,7 @@ def t_the_ci_answer_tells_the_truth_about_logs():
           "GitHub's annotations",
           "end of a failing check's log" in text and "annotations" in text, text)
     check("... and points at the fix flow that shows them",
-          "github_fix_and_push" in text, text)
+          "fix and push" in text, text)
 
 
 # --------------------------------------------------------------------------
@@ -3456,6 +3456,305 @@ def t_ci_status_reads_five_runs_and_refuses_a_cut():
           (GH.MAX_BYTES, GH.CI_PER_PAGE))
 
 
+def t_list_takes_a_state_filter_and_reads_issues():
+    """2026-11-14: `github_list` reads issues (already a scope) and takes a state.
+
+    The state filter is a closed set of three names, checked before an address is
+    built, so the model can ask for open, closed or all but cannot append a query
+    of its own. An empty state still means "open", so every older caller reads
+    exactly what it read before, and a state on `repos`/`runs` is REFUSED rather
+    than silently ignored - a dropped filter would return a list the caller did
+    not ask for and read as though it had been honoured. The restriction set is
+    untouched: still one GET, still `PER_PAGE` rows, still the read action.
+    """
+    repo = "darknight11ish/Epic-Jarvis"
+    base = GH.GITHUB_API + "/repos/" + repo
+    check("issues is one of the closed scopes (it was already a list)",
+          "issues" in GH.SCOPES, GH.SCOPES)
+    check("the state filter is a closed set of three names",
+          GH.STATES == ("open", "closed", "all"), GH.STATES)
+    r = GH.plan_list({"scope": "pulls", "repo": repo})
+    check("no state means open, exactly as before",
+          r.urls() == (base + f"/pulls?state=open&per_page={GH.PER_PAGE}",),
+          r.urls())
+    check("... and it is still ONE GET under the read action",
+          len(r.steps) == 1 and r.steps[0].method == "GET"
+          and r.action == GH.ACTION_INSPECT and r.body is None,
+          (r.steps, r.action, r.body))
+    for state in ("open", "closed", "all"):
+        for scope in ("pulls", "issues"):
+            r = GH.plan_list({"scope": scope, "repo": repo, "state": state})
+            check(f"{scope}/{state}: the address carries exactly that state",
+                  r.urls() == (base + f"/{scope}?state={state}&per_page=20",),
+                  r.urls())
+    r = GH.plan_list({"scope": "issues", "repo": repo, "state": "CLOSED"})
+    check("the state name is matched case-insensitively",
+          "state=closed" in r.urls()[0], r.urls())
+    # A value outside the three is refused BEFORE an address exists, so a model
+    # can never turn the filter into a query of its own.
+    refused = 0
+    for bad in ("merged", "open&per_page=999", "open,closed", "0", "OPEN NOW"):
+        try:
+            GH.plan_list({"scope": "pulls", "repo": repo, "state": bad})
+        except GH.GitHubError:
+            refused += 1
+    check("every state outside the three is refused", refused == 5, refused)
+    # A state on a scope that has none is refused, not silently dropped.
+    for scope in ("repos", "runs"):
+        try:
+            GH.plan_list({"scope": scope, "repo": repo, "state": "closed"})
+        except GH.GitHubError:
+            continue
+        check(f"a state on {scope} is refused rather than ignored", False)
+        return
+    check("a state on repos/runs is refused rather than ignored", True)
+
+    # The tool the model reads offers the same closed set, and does not require it.
+    fn = AG.TOOLS["github_list"].schema()["function"]
+    props = fn["parameters"]["properties"]
+    check("the tool offers `state` as the same three names",
+          props["state"]["enum"] == ["open", "closed", "all"], props.get("state"))
+    check("... it is optional", "state" not in fn["parameters"]["required"],
+          fn["parameters"]["required"])
+    check("... and its note says it is for pulls/issues only",
+          "pulls" in props["state"]["description"]
+          and "issues" in props["state"]["description"],
+          props["state"]["description"])
+    check("the tool description names the state filter",
+          "closed" in fn["description"] and "issues" in fn["description"],
+          fn["description"][:200])
+
+    # The ANSWER says the state that was really asked for, not always "open".
+    with _Token():
+        r, card = AG.TOOLS["github_list"].prepare(
+            {"scope": "pulls", "repo": repo, "state": "closed"})
+    check("the card names the state it will read", "closed pull requests" in card,
+          card)
+    out = _run_request(r, Fake(200, "[]"))
+    check("an empty closed read says there are no CLOSED pull requests",
+          "no closed pull requests" in out.get("text", ""), out)
+    listed = json.dumps([{"number": 5, "title": "The tray icon stays"},
+                         {"number": 6, "title": "A pull request",
+                          "pull_request": {}}])
+    r = GH.plan_list({"scope": "issues", "repo": repo, "state": "all"})
+    out = _run_request(r, Fake(200, listed))
+    text = out.get("text", "")
+    check("an all-states issue read says so, and still filters pull requests out",
+          "1 open and closed issue(s)" in text and "#5" in text
+          and "#6" not in text, text)
+
+
+def _changed_file(name, patch=None, *, additions=3, deletions=1):
+    """One entry of GitHub's changed-files answer, with or without its patch."""
+    item = {"filename": name, "status": "modified",
+            "additions": additions, "deletions": deletions}
+    if patch is not None:
+        item["patch"] = patch
+    return item
+
+
+def _detail_routes(files_answer, *, pr_total=None, **extra):
+    """The five fixed pr_detail reads, with the changed-files answer chosen.
+
+    Any extra route comes FIRST, so a test can answer one page size differently
+    (the retry after a cut) without the broader files needle swallowing it -
+    `Routed` is first-match-wins.
+    """
+    doc = {"changed_files": pr_total} if pr_total is not None else {}
+    routes = list(extra.get("routes", ()))
+    routes.extend([
+        ("/pulls/1116/commits", (200, "[]")),
+        ("/issues/1116/comments", (200, "[]")),
+        ("/pulls/1116/reviews", (200, "[]")),
+        ("/pulls/1116/files", files_answer),
+        ("/pulls/1116", (200, _pr_doc(**doc))),
+    ])
+    return routes
+
+
+def t_pr_detail_shows_the_real_diff_bounded():
+    """2026-11-14 item 2: the REAL unified diff, at most 20 files and 60,000 chars.
+
+    GitHub's files answer carries each text file's `patch` - the unified diff.
+    The answer now shows those hunks instead of only counting them, wrapped in
+    the one sanitizer's data delimiters (a diff is full of text a PR author
+    chose). It is bounded: a patch too big for the room left is CUT and marked,
+    a file GitHub sends no patch for is NAMED, and every reason anything is
+    missing is in ONE line at the end.
+    """
+    check("the two bounds are the ones documented",
+          GH.MAX_DIFF_FILES == 20 and GH.MAX_DIFF_CHARS == 60_000,
+          (GH.MAX_DIFF_FILES, GH.MAX_DIFF_CHARS))
+    patch_a = "@@ -1,3 +1,4 @@\n line one\n+added line\n line two\n line three"
+    patch_b = "@@ -7 +7,2 @@\n-removed\n+replaced\n+and one more"
+    files = json.dumps([_changed_file("backend/app.py", patch_a),
+                        _changed_file("README.md", patch_b),
+                        _changed_file("logo.png")])          # no patch: binary
+    fake = Routed(_detail_routes((200, files)))
+    _r, out = _run("github_pr_detail", fake)
+    text = out.get("text", "")
+    check("the full read still answers", out.get("ok") is True, out)
+    check("every read it makes is still a GET", set(fake.methods()) == {"GET"},
+          fake.methods())
+    check("the REAL diff is in the answer, file by file",
+          "diff --git a/backend/app.py b/backend/app.py" in text
+          and "+added line" in text and "-removed" in text
+          and "+and one more" in text, text[text.find("Diff"):][:400])
+    check("... and it is fetched text, inside the data delimiters",
+          GH.GITHUB_TEXT_BEGINS in text and GH.GITHUB_TEXT_ENDS in text,
+          text[text.find("Diff"):][:200])
+    check("the changed-files count is the pull request's own 3",
+          "Changed files (3):" in text, text[text.find("Changed files"):][:120])
+    check("a file GitHub sends no patch for is named, never dropped silently",
+          "1 file(s) GitHub sends no diff text for" in text, text[-400:])
+    check("... and the left-out line says which file count is missing",
+          "Left out of this diff:" in text and "logo.png" in text, text[-400:])
+
+    # A patch bigger than the whole budget is CUT at the cap, marked, and the
+    # section really stays inside MAX_DIFF_CHARS.
+    big = "@@ -1 +1 @@\n" + ("+" + "a" * 79 + "\n") * 1250
+    files = json.dumps([_changed_file("huge.txt", big, additions=1250,
+                                      deletions=1)])
+    fake = Routed(_detail_routes((200, files)))
+    _r, out = _run("github_pr_detail", fake)
+    text = out.get("text", "")
+    start = text.find("Diff (at most")
+    end = text.find("\nCommits (", start)
+    section = text[start:end if end > 0 else len(text)]
+    check("a patch over the budget is cut and says where",
+          "(cut here)" in section, section[-120:])
+    check(f"the diff section stays inside MAX_DIFF_CHARS ({len(section)})",
+          len(section) <= GH.MAX_DIFF_CHARS + 600, (len(section),
+                                                    GH.MAX_DIFF_CHARS))
+
+
+def t_pr_detail_never_reports_zero_files_for_a_cut_page():
+    """2026-11-14 field test: PR #1261 (61 files) read as "Changed files (0)".
+
+    Measured with `gh` on that pull request: **61 files, and the files answer is
+    481 KB** - GitHub puts every file's `patch` in it. The read layer stops at
+    MAX_BYTES (200,000) and marks the answer cut; a cut answer cannot be parsed,
+    and `_read` used to return it as "no document, no error", so `files` became
+    an empty list and the count came from its length.
+
+    The fix is pinned here with a REAL cut answer (`_capped_text`, the same
+    function the socket layer uses - the marker is never typed by this test):
+    the count comes from the pull request itself, the page is retried smaller,
+    and the real list AND the real diff still reach the model.
+    """
+    cut = GH._capped_text(b"[" + b"x" * (GH.MAX_BYTES + 1))
+    check("the fixture really is a cut answer, not a typed marker",
+          cut.endswith(GH.CUT_MARKER) and "x" in cut, cut[-60:])
+    ten = [_changed_file(f"src/file{i}.py",
+                         f"@@ -1 +1 @@\n-old line {i}\n+new line {i}")
+           for i in range(10)]
+    routes = _detail_routes((200, cut), pr_total=61,
+                            routes=[("per_page=10", (200, json.dumps(ten)))])
+    fake = Routed(routes)
+    _r, out = _run("github_pr_detail", fake)
+    text = out.get("text", "")
+    check("a cut files page does not refuse the whole read", out.get("ok") is True,
+          out)
+    check("the count is the pull request's 61, never the rows that parsed",
+          "Changed files (61" in text and "Changed files (0" not in text,
+          text[text.find("Changed files"):][:200])
+    check("... and the answer says only the first 10 were read",
+          "the first 10 were read" in text,
+          text[text.find("Changed files"):][:200])
+    check("the cut page was retried with a SMALLER page, twice asked",
+          any("per_page=20" in u for u in fake.urls())
+          and any("per_page=10" in u for u in fake.urls()), fake.urls())
+    check("the REAL file list came back", "src/file0.py" in text
+          and "src/file9.py" in text, text[text.find("Changed files"):][:400])
+    check("... and so did the REAL diff of it",
+          "diff --git a/src/file0.py b/src/file0.py" in text
+          and "+new line 0" in text, text[text.find("Diff"):][:300])
+    check("the 51 files that were never read are named in one line",
+          "Left out of this diff: 51 more changed file(s) not read "
+          "(the pull request has 61)" in text, text[-300:])
+    check("every request the retry made is still a GET under api.github.com",
+          set(fake.methods()) == {"GET"}
+          and all(u.startswith(GH.GITHUB_API + "/") for u in fake.urls()),
+          fake.urls())
+
+
+def t_ci_status_names_the_failing_checks_and_one_log_excerpt():
+    """2026-11-14 item 3: name the failing checks, plus ONE bounded log excerpt.
+
+    Before this, a failed run only said "it failed". Now the run's own jobs are
+    one extra fixed GET (made only when the newest run failed), every failed
+    check is named, and ONE excerpt of the FIRST failing check's log is shown -
+    through the same `_job_log` read the fix flow uses: the 302 is read, never
+    followed, and the signed address is fetched with NO Authorization header.
+    """
+    run = {"id": 4242, "name": "CI", "status": "completed",
+           "conclusion": "failure", "head_branch": "main", "head_sha": HEAD_SHA}
+    jobs = {"jobs": [
+        {"id": 11, "name": "rust", "status": "completed",
+         "conclusion": "failure"},
+        {"id": 12, "name": "frontend", "status": "completed",
+         "conclusion": "failure"},
+        {"id": 13, "name": "backend", "status": "completed",
+         "conclusion": "success"},
+        {"id": 14, "name": "phone-unit-tests", "status": "in_progress",
+         "conclusion": None}]}
+    tail = "error[E0308]: mismatched types\n  --> src/main.rs:3:5\nFAILED"
+    log = FakeLog(text=tail)
+    fake = Routed([("/actions/runs/4242/jobs", (200, json.dumps(jobs))),
+                   ("/actions/runs", (200, json.dumps(
+                       {"workflow_runs": [run]})))])
+    with _Token():
+        r = GH.plan_ci({"repo": "darknight11ish/Epic-Jarvis", "branch": "main"})
+        out = GH.run(r, fetch=fake, approved=True, log=log)
+    text = out.get("text", "")
+    check("the failed run is still reported as failed", "failed" in text, text)
+    all_checks = text[text.find("failing check"):]
+    check("every FAILED check is named, with its conclusion",
+          "rust: failure" in all_checks and "frontend: failure" in all_checks,
+          all_checks[:300])
+    check("a passing check is not called failing",
+          "backend: success" not in all_checks
+          and "phone-unit-tests" not in all_checks, all_checks[:300])
+    check("the answer says how many failed", "2 failing check(s) on that run:"
+          in text, text[:300])
+    check("ONE bounded excerpt of the first failing check's log is shown",
+          "The end of rust's log" in text and "error[E0308]: mismatched types"
+          in text, text[-400:])
+    check("the excerpt is the TAIL and stays inside MAX_LOG_CHARS",
+          "FAILED" in text
+          and len(text) < GH.MAX_LOG_CHARS + 2_000, len(text))
+    check("the jobs read is one fixed page under the run's own id",
+          any("/actions/runs/4242/jobs?per_page=" in u for u in fake.urls()),
+          fake.urls())
+    job_log_calls = [c for c in log.calls]
+    check("the token is sent to the log address, never to the signed one",
+          TOKEN in job_log_calls[0]["headers"].get("Authorization", "")
+          and "Authorization" not in job_log_calls[1]["headers"],
+          [{k: v for k, v in c["headers"].items()
+            if k.lower() == "authorization"} for c in job_log_calls])
+
+    # A successful run costs NO extra request: there is nothing failing to name.
+    fake = Routed([("/actions/runs", (200, json.dumps(
+        {"workflow_runs": [dict(run, conclusion="success")]})))])
+    with _Token():
+        out = GH.run(GH.plan_ci({"repo": "darknight11ish/Epic-Jarvis"}),
+                     fetch=fake, approved=True, log=FakeLog())
+    check("a green run says it passed and reads no jobs at all",
+          "passed" in out.get("text", "") and len(fake.calls) == 1,
+          (out, fake.urls()))
+
+    # The jobs read failing is said plainly, and points at the fix flow.
+    fake = Routed([("/actions/runs/4242/jobs", (403, "{}")),
+                   ("/actions/runs", (200, json.dumps(
+                       {"workflow_runs": [run]})))])
+    out = _run_request(r, fake, log=FakeLog())
+    text = out.get("text", "")
+    check("a jobs read that fails is said in plain words, not guessed at",
+          "could not name the failing checks" in text, text[:400])
+    check("... and it points at the fix flow that can show the evidence",
+          "fix and push" in text, text[-300:])
+
+
 def t_the_six_github_reads_are_card_free_and_every_write_asks():
     """Q3/Q4: six reads out of NEEDS_A_PERSON; all thirteen writes stay in."""
     READS = ("github_list", "github_read_file", "github_ci_status",
@@ -3586,6 +3885,10 @@ if __name__ == "__main__":
                    t_merge_plan_limited_rules_are_no_rules,
                    t_pr_scan_classifies_a_foreign_repo_with_its_own_checks,
                    t_ci_status_reads_five_runs_and_refuses_a_cut,
+                   t_list_takes_a_state_filter_and_reads_issues,
+                   t_pr_detail_shows_the_real_diff_bounded,
+                   t_pr_detail_never_reports_zero_files_for_a_cut_page,
+                   t_ci_status_names_the_failing_checks_and_one_log_excerpt,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
                    t_review_tools_are_card_free_and_in_the_master_switch):
             print(f"\n--- {fn.__name__} ---")

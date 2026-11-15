@@ -109,8 +109,8 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    #       makes the planner read the pull request and pin its real
                    #       head, because a card built from a stale echo was approved
                    #       and could never merge. The descriptions now say "may be
-                   #       left out" instead, measured 1,528 by this module's own
-                   #       rule; 1,580 leaves 52 tokens of headroom.
+                   #       left out" instead; its pin is the MERGED MEASUREMENT
+                   #       below, because #1264 changed the sentence beside it.
                    #   (c) 2026-11-10 desk fix: the merge card must name the pull
                    #       request's title and its target branch, so the tool takes
                    #       them as two more required arguments (`title`, `base_ref`)
@@ -122,7 +122,31 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # opened, never on every turn (they are group members, not core
                    # tools), and it buys one inventory with one home instead of a
                    # second copy that drifts.
-                   "github_pr_scan": 1340, "github_merge_pr": 1580,
+                   # RAISED 1340 -> 1400 and 1480 -> 1500 on 2026-11-14, by the
+                   # same rule the note above asks for: the 2026-11-14 stage-1
+                   # parity widening made three READ rows' `words` name what those
+                   # reads now do (github_list's state filter, github_ci_status's
+                   # failing-check names and one log excerpt, github_pr_detail's
+                   # bounded unified diff), and `capabilities_line()` - which rides
+                   # on exactly these two descriptions - is the join of every
+                   # row's `words`. Measured on that tree with this module's own
+                   # rule: 1390 and 1491, so 1340/1480 had zero headroom before
+                   # this and would have failed on any truthful sentence. The cost
+                   # is paid only when the `github` group is opened (these are
+                   # group members, never core tools), and the alternative - a
+                   # shorter line that does not say the new reads exist - would
+                   # break the 2026-11-10 "fully aware of its GitHub abilities"
+                   # directive this line exists for.
+                   # MERGED MEASUREMENT 2026-11-15, after both of the above met:
+                   # the merged text measures github_pr_scan at 1,390 and
+                   # github_merge_pr at 1,582 with this module's own rule (1,582,
+                   # not 1,528: the 2026-11-15 optional-pin sentence and #1264's
+                   # widened whole-surface sentence are now on the SAME
+                   # description). So the two pins are 1,400 and 1,620 - each is
+                   # what the merged text needs, not the higher of the two sides.
+                   # This branch's pre-merge 1,580 would be UNDER the merged
+                   # 1,582 and would fail.
+                   "github_pr_scan": 1400, "github_merge_pr": 1620,
                    "github_fix_and_push": 480,
                    # The 2026-11-10 22:30 ruling's actions carry no whole-surface
                    # sentence, but three are a little over the 300 default legitimately:

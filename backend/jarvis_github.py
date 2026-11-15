@@ -8,6 +8,29 @@ ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow,
 and - since the owner's ask of 2026-11-09 about "Fitness Band" - create ONE new
 empty repository on his own account), each action behind its own approval card.
 
+THE 2026-11-14 STAGE-1 PARITY WIDENING
+
+Three widenings of reads that already existed, each inside the restrictions that
+were already there, so the model reviews real data instead of guessing:
+
+  * `github_list` covers the ISSUE list as well as the pull request list (both
+    have been scopes since the read landed) and now takes a `state` filter for
+    those two - a closed set of three names (`STATES`: "open", the default,
+    "closed", or "all"), refused by name before any address is built. Nothing
+    else about the list changed: still one GET, still `PER_PAGE` rows, still no
+    write of any kind.
+  * `github_pr_detail` shows the pull request's own UNIFIED DIFF, from the
+    `patch` GitHub sends with each changed file: at most `MAX_DIFF_FILES` files
+    and `MAX_DIFF_CHARS` characters, with ONE line naming what was left out.
+  * `github_ci_status` NAMES the failing checks and shows ONE bounded excerpt of
+    the first failing check's log, instead of only saying "it failed". The run's
+    jobs are one extra fixed GET, made only when the newest run failed.
+
+None of it loosens a ban: no auto-merge, no gist, no admin bypass, no push to
+main, and the token is still never printed, logged, put in a git argument or
+written to a file. `backend/test_github_tools.py` and
+`backend/test_tool_profiles.py` pin each of the three.
+
 The owner's decision of 2026-11-10 (Gemini ruling Q1, "Everything at once")
 reversed the read/comment-only boundary for two more actions, each behind its
 OWN one-shot card and never auto-approved:
@@ -230,6 +253,13 @@ TIMEOUT = 20.0
 MAX_BYTES = 200_000
 CUT_MARKER = "\n(GitHub's answer was longer than Jarvis reads, so it was cut here.)"
 
+#: What the owner/model reads when an answer really was cut at `MAX_BYTES`. ONE
+#: home, because `_said` and `_ci_result` both have to refuse that answer in the
+#: same words rather than guessing at half of it (Q-G, 2026-11-11).
+CUT_ANSWER = ("GitHub's answer was longer than Jarvis reads in one go, so "
+              "Jarvis will not guess at it. Nothing on GitHub changed - ask "
+              "again about one thing at a time.")
+
 #: A file read is the one answer whose whole point is its text, so it keeps a
 #: separate, smaller cap: a 40,000-character file is already too long to read
 #: out, and the model gets the top of it plus a plain note.
@@ -424,6 +454,23 @@ MAX_CARD_LISTS = 20
 MAX_DETAIL_ITEMS = 10
 MAX_DETAIL_TEXT = 800
 
+#: How much of the pull request's own unified diff `github_pr_detail` shows
+#: (2026-11-14). A reviewer needs the REAL diff, not a guess at one, but a big
+#: pull request's whole diff cannot fit any one answer: at most this many changed
+#: files, at most this many characters of patch text in total, and ONE line at
+#: the end of the section names exactly what was left out (files past the file
+#: cap, patches past the character cap, and files GitHub sends no patch text for
+#: - a binary file, or a diff too large for GitHub's API). The limits are
+#: characters, the same unit `MAX_FILE_CHARS` and `MAX_LOG_CHARS` use.
+MAX_DIFF_FILES = 20
+MAX_DIFF_CHARS = 60_000
+
+#: How many of the newest run's jobs `github_ci_status` asks for when that run
+#: failed (2026-11-14). GitHub's jobs endpoint answers a whole run in one page at
+#: this size; the ANSWER names at most `MAX_DETAIL_ITEMS` failing checks and shows
+#: ONE bounded log tail, so a big matrix cannot push the rest of the answer off.
+CI_JOBS_PER_PAGE = 100
+
 #: Labels: at most this many in one add or remove set, each at most this long,
 #: from the characters GitHub label names really use. A label outside this is
 #: refused in words before any GitHub request.
@@ -476,11 +523,27 @@ CRED_EXTS = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".jks")
 #: model picks a NAME here, and this module decides what that name means.
 SCOPES = ("repos", "pulls", "issues", "runs")
 
-#: What each scope reads, in the owner's words.
+#: The state filter `github_list` accepts for the two list scopes that HAVE a
+#: state. A closed set, exactly like `SCOPES`: the name is matched against these
+#: three before it goes anywhere near an address, so a model can choose "closed"
+#: but cannot append a query of its own. "open" is the default, because that is
+#: what this read did before the filter existed (2026-11-14).
+STATES = ("open", "closed", "all")
+
+#: What each state reads, in the owner's words.
+STATE_WORDS = {
+    "open": "open",
+    "closed": "closed",
+    "all": "open and closed",
+}
+
+#: The noun each list scope reads, so the card and the answer say the same thing.
+SCOPE_NOUNS = {"pulls": "pull requests", "issues": "issues"}
+
+#: What each scope reads, in the owner's words. The two list scopes are rendered
+#: from `STATE_WORDS` instead, because their word depends on the state filter.
 SCOPE_WORDS = {
     "repos": "your repositories, most recently updated first",
-    "pulls": "the open pull requests on this repository",
-    "issues": "the open issues on this repository",
     "runs": "the most recent workflow runs on this repository",
 }
 
@@ -557,9 +620,11 @@ NEVER_WORDS = ("Jarvis can never force-push, squash-merge or rebase, use an "
 #: the Reach page and the claims register.
 CAPABILITIES = (
     {"tool": "github_list", "kind": "read", "gate": ACTION_INSPECT,
-     "words": "read your repositories, or one repository's open pull requests, "
-              "open issues or recent workflow runs",
-     "card_fields": ("the scope", "the repository when one is needed"),
+     "words": "read your repositories, or one repository's pull requests or "
+              "issues in a state you pick (open by default), or its recent "
+              "workflow runs",
+     "card_fields": ("the scope", "the repository when one is needed",
+                     "the state when it is a pull request or issue list"),
      "limit": "one fixed list of at most 20 - never an address the model writes",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_read_file", "kind": "read", "gate": ACTION_INSPECT,
@@ -571,9 +636,11 @@ CAPABILITIES = (
      "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_ci_status", "kind": "read", "gate": ACTION_INSPECT,
      "words": "read how the newest CI run ended for a repository, a branch or a "
-              "pull request",
+              "pull request and, when it failed, name the failing checks with "
+              "one bounded excerpt of the first failing check's log",
      "card_fields": ("the repository", "the branch or pull request"),
-     "limit": "reads the newest run only; it never re-runs anything by itself",
+     "limit": "reads the newest run only, plus its jobs and one log tail when it "
+              "failed; it never re-runs anything by itself",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_pr_scan", "kind": "read", "gate": ACTION_INSPECT,
      "words": "read every open pull request and say which are merge-ready, "
@@ -586,12 +653,15 @@ CAPABILITIES = (
     {"tool": "github_pr_detail", "kind": "read", "gate": ACTION_INSPECT,
      "words": "read ONE pull request in full: its title, body, state, draft "
               "and mergeable flags, its head commit and base branch, then its "
-              "changed files, its commits, its comments and its reviews",
+              "changed files with their unified diff, its commits, its comments "
+              "and its reviews",
      "card_fields": ("the repository", "the pull request number",
                      "the five fixed reads it makes"),
      "limit": "read-only by construction: no body, no method but GET; at most "
-              "10 files, 10 commits, 10 comments and 10 reviews are shown, with "
-              "the real count always printed and every text bounded",
+              "10 files, 10 commits, 10 comments and 10 reviews are listed, the "
+              "unified diff is bounded to 20 files and 60,000 characters with one "
+              "line naming what was left out, the real count is always printed "
+              "and every text is bounded",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_comment", "kind": "write", "gate": ACTION_COMMENT,
      "words": "post ONE comment on an issue or pull request, as you",
@@ -1015,6 +1085,12 @@ class Request:
                       stage refuses if it changed), `file_after` is the exact
                       text to write, and `commit_message` is the one line the
                       commit is made with.
+      `scope`/`state` `github_list`'s closed scope, and its state filter (`open`
+                      by default) when the scope is `pulls` or `issues`. They are
+                      kept so the ANSWER can say "closed" instead of "open".
+      `ci`            True for `github_ci_status`. `run()` reads the newest run
+                      and, when it failed, that run's jobs and ONE bounded log
+                      tail, instead of one plain list.
     """
 
     action: str                   # which gate action decides it
@@ -1046,6 +1122,9 @@ class Request:
     issue_reason: str = ""        # github_issue_state: the optional why on the card
     old_title: str = ""           # github_edit_pr: the title the card showed as "before"
     old_body: str = ""            # github_edit_pr: the body the card showed as "before"
+    scope: str = ""               # github_list: the closed scope it read
+    state: str = ""               # github_list: "open" | "closed" | "all"
+    ci: bool = False              # github_ci_status: newest run, then its jobs
 
     def urls(self) -> tuple:
         return tuple(s.url() for s in self.steps)
@@ -1394,6 +1473,34 @@ def _check_number(value, what: str) -> str:
     if not _NUMBER.match(text):
         raise GitHubError(f"Jarvis needs a {what} number, and that was not one.")
     return text
+
+
+def _check_state(value, scope: str) -> str:
+    """The state filter one list read asks for, or "" for a scope that has none.
+
+    A closed set (`STATES`), checked before it is used, exactly like `SCOPES`:
+    the model can pick "closed", but a value like "open&per_page=999" is refused
+    with a sentence naming the three it may pick. An empty value means "open",
+    which is what this read meant before the filter existed (2026-11-14), so
+    every older caller keeps the same answer. A state on `repos` or `runs` is
+    refused rather than ignored, because a filter silently dropped would return
+    a list the caller did not ask for and read as though it had been honoured.
+    """
+    wanted = str(value or "").strip().lower()
+    if scope not in SCOPE_NOUNS:
+        if wanted:
+            raise GitHubError(
+                f'A state filter applies to "pulls" and "issues", not to a '
+                f'"{scope}" list. Jarvis will not silently ignore it.')
+        return ""
+    if not wanted:
+        return "open"
+    if wanted not in STATES:
+        raise GitHubError(
+            'Jarvis can list pull requests or issues in one of three states: '
+            '"open" (the default), "closed", or "all". It did not ask GitHub '
+            'for anything else.')
+    return wanted
 
 
 def _check_text(text: str, what: str) -> str:
@@ -2178,13 +2285,26 @@ def _git_words(what: str, err: str, token: str) -> str:
 
 
 def plan_list(args: Optional[dict] = None) -> Request:
-    """Read a fixed list: your repos, or one repo's PRs, issues or runs."""
+    """Read a fixed list: your repos, or one repo's PRs, issues or runs.
+
+    The 2026-11-14 widening: `pulls` and `issues` take a `state` filter from the
+    closed set `STATES`, and `issues` was already a scope (it has been one since
+    the read landed) - so this planner now covers the issue list as well as the
+    pull request list, and either of them can be asked for closed or for both.
+    Every existing restriction is untouched: the address is still built here
+    from `_repo_path`, the page is still `PER_PAGE`, it is still one GET, and it
+    still cannot merge, push, close, delete, use a gist or bypass anything.
+    """
     args = args or {}
     scope = str(args.get("scope") or "repos").strip().lower()
     if scope not in SCOPES:
         raise GitHubError('Jarvis can list one of these on GitHub: your '
                           'repositories, the open pull requests, the open issues, '
                           'or the recent workflow runs.')
+    # The state filter is validated for EVERY scope, before the `repos` branch
+    # returns: a state that was silently dropped would read as though it had
+    # been honoured.
+    state = _check_state(args.get("state"), scope)
     if scope == "repos":
         step = Step("GET", f"/user/repos?per_page={PER_PAGE}&sort=updated")
         return Request(
@@ -2192,19 +2312,24 @@ def plan_list(args: Optional[dict] = None) -> Request:
             f"Jarvis will read {SCOPE_WORDS[scope]}.",
             (step,),
             touches="Nothing on GitHub changes; this only reads.",
+            scope=scope,
         )
     repo = _check_repo(args.get("repo"))
-    if scope == "pulls":
-        path = f"{_repo_path(repo)}/pulls?state=open&per_page={PER_PAGE}"
-    elif scope == "issues":
-        path = f"{_repo_path(repo)}/issues?state=open&per_page={PER_PAGE}"
+    if scope in SCOPE_NOUNS:
+        path = (f"{_repo_path(repo)}/{scope}?state={state}"
+                f"&per_page={PER_PAGE}")
+        what = (f"Jarvis will read the {STATE_WORDS[state]} "
+                f"{SCOPE_NOUNS[scope]} on this repository ({repo}).")
     else:
         path = f"{_repo_path(repo)}/actions/runs?per_page={PER_PAGE}"
+        what = f"Jarvis will read {SCOPE_WORDS[scope]} ({repo})."
     return Request(
         ACTION_INSPECT,
-        f"Jarvis will read {SCOPE_WORDS[scope]} ({repo}).",
+        what,
         (Step("GET", path),),
         touches="Nothing on GitHub changes; this only reads.",
+        scope=scope,
+        state=state,
     )
 
 
@@ -2227,7 +2352,16 @@ def plan_read_file(args: Optional[dict] = None) -> Request:
 
 
 def plan_ci(args: Optional[dict] = None) -> Request:
-    """The latest CI run for a repository and branch, or for a pull request."""
+    """The latest CI run for a repository and branch, or for a pull request.
+
+    The card lists the fixed reads; the ONE extra read is made only when the
+    newest run FAILED (2026-11-14): that run's jobs, so the answer can name the
+    failing checks instead of only saying "failed", and the end of the first
+    failing job's log, bounded to `MAX_LOG_CHARS`. It is the same `_job_log` read
+    the fix flow already makes - a 302 that is read, never followed, and a signed
+    address fetched with no Authorization header - and the run id it uses must be
+    all digits, so no address comes from fetched text.
+    """
     args = args or {}
     repo = _check_repo(args.get("repo"))
     pr = str(args.get("pr") or "").strip()
@@ -2239,27 +2373,44 @@ def plan_ci(args: Optional[dict] = None) -> Request:
         return Request(
             ACTION_INSPECT,
             f"Jarvis will look at pull request {number} in {repo}, then at the CI "
-            f"runs for the commit at its head.",
+            f"runs for the commit at its head. If the newest run failed, it also "
+            f"reads that run's jobs and the end of the first failing job's log.",
             (Step("GET", f"{_repo_path(repo)}/pulls/{number}"),
              Step("GET", f"{_repo_path(repo)}/actions/runs?head_sha={{commit}}"
                          f"&per_page={CI_PER_PAGE}")),
-            touches="Nothing on GitHub changes; this only reads which run is newest and how it ended.",
+            touches=("Nothing on GitHub changes; this only reads which run is "
+                     "newest, how it ended, and - when it failed - which checks "
+                     "failed and the end of one log."),
+            repo=repo,
+            ci=True,
         )
     if branch:
         ref = _check_ref(branch)
         return Request(
             ACTION_INSPECT,
-            f"Jarvis will read the most recent workflow runs for {ref} in {repo}.",
+            f"Jarvis will read the most recent workflow runs for {ref} in {repo}. "
+            f"If the newest run failed, it also reads that run's jobs and the end "
+            f"of the first failing job's log.",
             (Step("GET", f"{_repo_path(repo)}/actions/runs"
                          f"?branch={urllib.parse.quote(ref, safe='')}"
                          f"&per_page={CI_PER_PAGE}"),),
-            touches="Nothing on GitHub changes; this only reads how the newest run ended.",
+            touches=("Nothing on GitHub changes; this only reads how the newest "
+                     "run ended and, when it failed, which checks failed and the "
+                     "end of one log."),
+            repo=repo,
+            ci=True,
         )
     return Request(
         ACTION_INSPECT,
-        f"Jarvis will read the most recent workflow runs for {repo}.",
+        f"Jarvis will read the most recent workflow runs for {repo}. If the "
+        f"newest run failed, it also reads that run's jobs and the end of the "
+        f"first failing job's log.",
         (Step("GET", f"{_repo_path(repo)}/actions/runs?per_page={CI_PER_PAGE}"),),
-        touches="Nothing on GitHub changes; this only reads how the newest run ended.",
+        touches=("Nothing on GitHub changes; this only reads how the newest run "
+                 "ended and, when it failed, which checks failed and the end of "
+                 "one log."),
+        repo=repo,
+        ci=True,
     )
 
 
@@ -2787,13 +2938,21 @@ def plan_pr_detail(args: Optional[dict] = None) -> Request:
     files, its commits, its comments and its reviews - so the model cannot name
     a different address. Every answer is bounded by `run()`; the card says what
     it will read and nothing on GitHub can change.
+
+    The files page is `MAX_DIFF_FILES`, not 100 (2026-11-14): GitHub puts every
+    file's `patch` in that answer, so the 100-file page for a big pull request is
+    several times the read layer's cap (measured: 61 files, 481 KB on PR #1261),
+    and a cut answer cannot be parsed at all. `_run_pr_detail` asks again with a
+    smaller page if even this one is cut; the changed-files count always comes
+    from the pull request itself, never from how many rows happened to parse.
     """
     args = args or {}
     repo = _check_repo(args.get("repo"))
     number = _check_number(args.get("number"), "pull request")
     steps = (
         Step("GET", f"{_repo_path(repo)}/pulls/{number}"),
-        Step("GET", f"{_repo_path(repo)}/pulls/{number}/files?per_page=100"),
+        Step("GET", f"{_repo_path(repo)}/pulls/{number}/files"
+                    f"?per_page={MAX_DIFF_FILES}"),
         Step("GET", f"{_repo_path(repo)}/pulls/{number}/commits?per_page=100"),
         Step("GET", f"{_repo_path(repo)}/issues/{number}/comments?per_page=100"),
         Step("GET", f"{_repo_path(repo)}/pulls/{number}/reviews?per_page=100"),
@@ -2802,7 +2961,8 @@ def plan_pr_detail(args: Optional[dict] = None) -> Request:
         ACTION_INSPECT,
         f"Jarvis will read pull request #{number} in {repo} in full: its title, "
         f"body, state and merge flags, its head commit and base branch, and then "
-        f"its changed files, its commits, its comments and its reviews.",
+        f"its changed files (with their unified diff, bounded), its commits, its "
+        f"comments and its reviews.",
         steps,
         detail=True,
         repo=repo,
@@ -3635,6 +3795,8 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
         except Exception:                    # noqa: BLE001 - no sha, said below
             commit = ""
 
+    if r.ci:
+        return _ci_result(r, answers, fetch, token, headers, log=log)
     return {"ok": True, "text": _said(r, answers)}
 
 
@@ -3648,6 +3810,14 @@ def _read_full(fetch: Callable, path: str, headers: dict,
     """(doc, status, error) for one GET - the status kept for the callers that
     need to tell a moved pull request (409) from one that cannot be changed right
     now (405). `_read` is the two-value form every other reader uses.
+
+    A CUT answer is an ERROR here, never a silent `None` (fixed 2026-11-14). The
+    read layer stops at `MAX_BYTES` and appends `CUT_MARKER`, which leaves text
+    that cannot be parsed - and returning that as "no document, no error" is how
+    `github_pr_detail` printed "Changed files (0)" for a pull request with 61
+    files (measured: that answer was 481 KB). Every caller now either retries
+    smaller (the changed-files read) or says plainly that GitHub's answer was too
+    big instead of reporting an empty list it never read.
     """
     url = GITHUB_API + path
     try:
@@ -3657,7 +3827,10 @@ def _read_full(fetch: Callable, path: str, headers: dict,
                          f"nothing was changed.")
     if status < 200 or status >= 300:
         return None, int(status), _plain_failure(status, token=token)
-    return _payload(_scrub(text, token)), int(status), ""
+    text = _scrub(text, token)
+    if CUT_MARKER in text:
+        return None, int(status), CUT_ANSWER
+    return _payload(text), int(status), ""
 
 
 def _read(fetch: Callable, path: str, headers: dict, token: str) -> tuple:
@@ -4768,9 +4941,10 @@ def _pr_author(doc: dict) -> str:
                               wrap=False) or "someone"
 
 
-def _detail_section(title: str, rows: list, total: int, render) -> list:
+def _detail_section(title: str, rows: list, total: int, render, *,
+                    note: str = "") -> list:
     """One bounded section of the pr_detail answer: the real count, then rows."""
-    lines = [f"{title} ({total}):"]
+    lines = [f"{title} ({total}{note}):"]
     if not rows:
         lines.append("  (none)")
         return lines
@@ -4781,23 +4955,166 @@ def _detail_section(title: str, rows: list, total: int, render) -> list:
     return lines
 
 
+def _diff_section(files: list, total: Optional[int] = None) -> list:
+    """The pull request's own unified diff, bounded, with ONE line saying what is missing.
+
+    GitHub's files answer carries each changed file's `patch` - that file's
+    unified diff - for every TEXT file whose diff it is willing to render; a
+    binary file, or one whose diff GitHub itself considers too large, carries no
+    `patch` at all. The real hunks are what the model reviews instead of
+    guessing, and they are bounded three ways (2026-11-14): at most
+    `MAX_DIFF_FILES` files, at most `MAX_DIFF_CHARS` characters of this section
+    (its heading, each file's header, the data delimiters and the patch text), and
+    ONE line at the end naming exactly what was left out - files the pull request
+    has that were not read at all (`total`), files past the file cap, files whose
+    patch found no room, and files GitHub sends no diff text
+    for. A patch that does not fit is CUT at the room that is left, and the
+    sanitizer marks where (`(cut here)`); nothing is ever summarised as if it
+    were the diff.
+
+    `total` is the pull request's own `changed_files` count, which is the REAL
+    number even when the list that could be read is shorter - the same number
+    `_run_pr_detail` prints in the Changed files section (fixed 2026-11-14).
+
+    The patch is FETCHED text, so it goes through the ONE sanitizer like every
+    other GitHub string: `_clean_github_text` keeps its lines (that is what
+    `wrap=True` is for), wraps it in the data delimiters, and removes HTML
+    comments, zero-width characters and bidi controls. It is data, never an
+    instruction - which matters most here, because a diff is full of text a PR
+    author chose.
+    """
+    heading = (f"Diff (at most {MAX_DIFF_FILES} changed files and "
+               f"{MAX_DIFF_CHARS:,} characters):")
+    lines = [heading]
+    shown = 0
+    used = 0
+    left_files = 0     # entries in `files` past MAX_DIFF_FILES
+    left_space = 0     # files whose patch found no room left
+    no_patch = 0       # GitHub sent no patch text (a binary file, or too large)
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        if shown >= MAX_DIFF_FILES:
+            left_files += 1
+            continue
+        name = _clean_github_text(item.get("filename"), wrap=False)
+        if not name:
+            continue
+        patch = item.get("patch")
+        if not isinstance(patch, str) or not patch.strip():
+            no_patch += 1
+            continue
+        header = f"diff --git a/{name} b/{name}"
+        # The header and the two newlines around it are this answer's own words;
+        # 16 more covers the "(cut here)" marker the sanitizer may append.
+        overhead = len(header) + 2 + 16
+        room = MAX_DIFF_CHARS - used - overhead
+        if room < 200:
+            left_space += 1
+            continue
+        block = _clean_github_text(patch, limit=room)
+        if not block:
+            no_patch += 1
+            continue
+        lines.append(header)
+        lines.extend(block.splitlines())
+        used += overhead + len(block)
+        shown += 1
+    if not shown:
+        lines.append("  (GitHub sent no diff text for any changed file.)")
+    known = len(files) if total is None else max(int(total), len(files))
+    unread = known - len(files)
+    left = []
+    if unread or left_files:
+        left.append(f"{unread + left_files} more changed file(s) not read (the "
+                    f"pull request has {known})")
+    if left_space:
+        left.append(f"{left_space} file(s) whose diff did not fit in the "
+                    f"{MAX_DIFF_CHARS:,}-character cap")
+    if no_patch:
+        left.append(f"{no_patch} file(s) GitHub sends no diff text for (a binary "
+                    f"file, or a diff too large for GitHub's API)")
+    if left:
+        lines.append("Left out of this diff: " + "; ".join(left) + ".")
+    return lines
+
+
+def _pr_files(fetch: Callable, repo: str, number: str, headers: dict,
+              token: str) -> tuple:
+    """(files, note) for the changed-files read: the real list, read in a page that fits.
+
+    `GET /repos/{owner}/{repo}/pulls/{n}/files` carries each file's `patch`, so a
+    pull request with many files answers with an enormous document - measured
+    2026-11-14 on PR #1261: **61 files, 481 KB**, well over the read layer's
+    200 KB cap. A cut answer cannot be parsed, and before this fix that came back
+    as "no document, no error", which `_run_pr_detail` read as "no files at all"
+    and printed as *Changed files (0)*.
+
+    So the page is bounded to `MAX_DIFF_FILES` - the most files the diff section
+    can show anyway - and, if GitHub still sends more than the read layer reads,
+    the SAME read is asked again with a smaller page (10, then 5, then 1), which
+    is small enough for any single file's diff GitHub will render. `note` is a
+    plain sentence when the list is not the whole story (a page was cut, or a
+    later read failed); `error` is the plain sentence when there is no list at
+    all. It never returns "no files" for a pull request whose answer was merely
+    too big.
+    """
+    tries = (MAX_DIFF_FILES, 10, 5, 1)
+    first_error = ""
+    for per_page in tries:
+        path = (f"{_repo_path(repo)}/pulls/{number}/files"
+                f"?per_page={per_page}")
+        doc, err = _read(fetch, path, headers, token)
+        if not err:
+            if isinstance(doc, list):
+                note = ""
+                if per_page < MAX_DIFF_FILES:
+                    note = (f"GitHub's answer for {MAX_DIFF_FILES} files was "
+                            f"larger than Jarvis reads in one go, so the file "
+                            f"list was read in pages of {per_page}")
+                return doc, note
+            return [], ("GitHub answered the changed-files read with something "
+                        "that was not a list")
+        if not first_error:
+            first_error = err
+        if CUT_MARKER not in (err or "") and err != CUT_ANSWER:
+            # Not a size problem (refused, not found, ...): asking again with a
+            # smaller page would fail the same way, so say what happened.
+            return [], err
+    return [], (first_error or "the changed-files read could not be read")
+
+
 def _run_pr_detail(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
     """Read the five fixed lists and compose ONE bounded answer. GETs only.
 
     Every text is fetched GitHub text, so every text goes through the one
     sanitizer; every list keeps its REAL count and shows at most
     `MAX_DETAIL_ITEMS` rows, each text at most `MAX_DETAIL_TEXT` characters.
+
+    The changed-files read is the one step that can come back TOO BIG to parse
+    (GitHub sends every file's `patch` in it): it is retried in a smaller page
+    (`_pr_files`), and the REAL count comes from the pull request's own
+    `changed_files` field, never from however many rows happened to parse
+    (fixed 2026-11-14 - see `_pr_files` for the 481 KB measurement).
     """
-    docs = []
+    docs, errors = [], []
     for step in r.steps:
         doc, err = _read(fetch, step.path, headers, token)
-        if err:
-            return {"ok": False, "error": err}
         docs.append(doc)
+        errors.append(err)
     pr = docs[0] if isinstance(docs[0], dict) else {}
-    if not pr:
-        return {"ok": False, "error": "GitHub answered without the pull request, "
+    if errors[0] or not pr:
+        return {"ok": False, "error": errors[0] or
+                                      "GitHub answered without the pull request, "
                                       "so there is nothing to show."}
+    for index in (2, 3, 4):
+        if index < len(errors) and errors[index]:
+            return {"ok": False, "error": errors[index]}
+    files = docs[1] if len(docs) > 1 and isinstance(docs[1], list) else []
+    files_read_note = ""
+    if len(errors) > 1 and errors[1]:
+        files, files_read_note = _pr_files(fetch, r.repo, r.number, headers,
+                                           token)
     title = _clean_github_text(pr.get("title"), limit=MAX_PR_TITLE, wrap=False)
     head = pr.get("head") or {}
     base = pr.get("base") or {}
@@ -4829,16 +5146,33 @@ def _run_pr_detail(r: Request, fetch: Callable, token: str, headers: dict) -> di
     lines.append("Body:" if body else "Body: (empty)")
     if body:
         lines.append(body)
-    files = docs[1] if isinstance(docs[1], list) else []
+    # `files` was read above, through `_pr_files` when the first page was cut -
+    # never re-read it from `docs[1]` here, or a retried page would be thrown
+    # away and the answer would say "(none)" again.
     commits = docs[2] if isinstance(docs[2], list) else []
     comments = docs[3] if isinstance(docs[3], list) else []
     reviews = docs[4] if isinstance(docs[4], list) else []
+    total_files = pr.get("changed_files")
+    if not isinstance(total_files, int) or isinstance(total_files, bool) \
+            or total_files < 0:
+        total_files = len(files)
+    files_note = ""
+    if len(files) < total_files:
+        # The REAL count comes from the pull request, so a page that could not
+        # hold every file can never read as "0 files changed" (2026-11-14).
+        files_note = (f"; the first {len(files)} were read" if files
+                      else "; none of them could be read")
+    if files_read_note:
+        files_note += f"; {files_read_note}"
     lines.append("")
     lines += _detail_section(
-        "Changed files", files, len(files),
+        "Changed files", files, total_files,
         lambda f: ("  " + str(f.get("status") or "modified") + " "
                    + _clean_github_text(f.get("filename"), wrap=False)
-                   + f" (+{f.get('additions', 0)} -{f.get('deletions', 0)})"))
+                   + f" (+{f.get('additions', 0)} -{f.get('deletions', 0)})"),
+        note=files_note)
+    lines.append("")
+    lines += _diff_section(files, total_files)
     lines.append("")
     lines += _detail_section(
         "Commits", commits, len(commits),
@@ -5260,9 +5594,7 @@ def _said(r: Request, answers: list) -> str:
     if CUT_MARKER in str(text or ""):
         # Q-G (2026-11-11): an answer over MAX_BYTES cannot be parsed at all.
         # Say that in words rather than showing half of it as if it were whole.
-        return ("GitHub's answer was longer than Jarvis reads in one go, so "
-                "Jarvis will not guess at it. Nothing on GitHub changed - ask "
-                "again about one thing at a time.")
+        return CUT_ANSWER
     doc = _payload(text)
     if r.action == ACTION_COMMENT:
         return "The comment was posted."
@@ -5285,16 +5617,16 @@ def _said(r: Request, answers: list) -> str:
     if r.action != ACTION_INSPECT:
         return "Done."
     # A read: shape it by which planner built it, so the words match the question.
+    # `github_ci_status` is not here: `run()` sends a `ci` request to
+    # `_ci_result`, which needs every answer rather than the last one.
     steps = tuple(r.steps)
-    if len(steps) == 2:
-        return _ci_words(_payload(answers[-1][1]) if answers else None)
     first = steps[0].path if steps else ""
     if first.startswith("/user/repos"):
         return _repos_words(doc)
     if "/pulls?" in first:
-        return _pulls_words(doc)
+        return _pulls_words(doc, r.state)
     if "/issues?" in first:
-        return _issues_words(doc)
+        return _issues_words(doc, r.state)
     if "/actions/runs" in first:
         return _ci_words(doc)
     if "/contents/" in first:
@@ -5350,11 +5682,13 @@ def _repos_words(doc) -> str:
     return "\n".join(out)
 
 
-def _pulls_words(doc) -> str:
+def _pulls_words(doc, state: str = "") -> str:
+    """The pull request list, saying the state that was really asked for."""
+    state = state if state in STATES else "open"
     items = _list(doc)
     if not items:
-        return "There are no open pull requests on that repository."
-    out = [f"{len(items)} open pull request(s):"]
+        return f"There are no {STATE_WORDS[state]} pull requests on that repository."
+    out = [f"{len(items)} {STATE_WORDS[state]} pull request(s):"]
     for pr in items:
         if not isinstance(pr, dict):
             continue
@@ -5365,51 +5699,208 @@ def _pulls_words(doc) -> str:
     return "\n".join(out)
 
 
-def _issues_words(doc) -> str:
+def _issues_words(doc, state: str = "") -> str:
+    """The issue list, saying the state that was really asked for.
+
+    GitHub's issues endpoint answers pull requests too; they are filtered out
+    here (as they always have been) so "issues" means issues, never a mixed list
+    that reads as though every row were one.
+    """
+    state = state if state in STATES else "open"
     items = [i for i in _list(doc)
              if isinstance(i, dict) and "pull_request" not in i]
     if not items:
-        return "There are no open issues on that repository."
-    out = [f"{len(items)} open issue(s):"]
+        return f"There are no {STATE_WORDS[state]} issues on that repository."
+    out = [f"{len(items)} {STATE_WORDS[state]} issue(s):"]
     for issue in items:
         title = _clean_github_text(issue.get("title"), wrap=False)
         out.append(f'  #{issue.get("number")} {title}')
     return "\n".join(out)
 
 
-def _ci_words(doc) -> str:
+#: The true sentence about where a failing check's evidence can be read. It was
+#: corrected on 2026-11-10 (ruling Q1 item 7) from the old, false "GitHub keeps
+#: the log; Jarvis does not read it": `_job_log` and `_failing_evidence` really do
+#: read the end of a log and GitHub's annotations while a fix is prepared. A
+#: failed CI answer that cannot name the failing checks itself still says it, so
+#: the reader is pointed at the door that shows the evidence.
+FIX_EVIDENCE_WORDS = (
+    "Jarvis can read the end of a failing check's log and GitHub's annotations "
+    "while it prepares a fix - ask it to fix and push, and that "
+    "evidence is shown.")
+
+
+def _newest_run(doc) -> tuple:
+    """(the newest run, its cleaned name, " on <branch>") or (None, "", "").
+
+    GitHub answers a runs list under `workflow_runs`, and a single run as the run
+    object itself; both shapes are read here, because a pull request's run list
+    and a plain branch read come back in different shapes. The name and branch
+    are fetched text, so both are cleaned before they become words.
+    """
     if not isinstance(doc, dict):
-        return "GitHub answered without saying anything about CI."
+        return None, "", ""
     runs = doc.get("workflow_runs")
     if runs is None:
         runs = [doc] if doc.get("conclusion") or doc.get("status") else []
     runs = [r for r in runs if isinstance(r, dict)]
     if not runs:
-        return "There is no recent CI run there to report."
+        return None, "", ""
     newest = runs[0]
-    status = str(newest.get("status") or "")
-    conclusion = str(newest.get("conclusion") or "")
     name = _clean_github_text(newest.get("name"), wrap=False) or "a workflow"
     branch = _clean_github_text(newest.get("head_branch"), wrap=False)
-    where = f" on {branch}" if branch else ""
+    return newest, name, (f" on {branch}" if branch else "")
+
+
+def _ci_failed_lines(headline: str, evidence: dict) -> list:
+    """The failing half of a CI answer: every failed check, ONE bounded log tail.
+
+    The checks are named (at most `MAX_DETAIL_ITEMS`, with the real count always
+    printed), and ONE excerpt of the FIRST failing check's log is shown - not one
+    per check - because the tail of one log is what a person or the model can
+    actually read, and a matrix that failed seven jobs would otherwise push the
+    rest of the answer off. When the jobs could not be read, or the run names no
+    failed job, the answer says which and points at the fix flow instead of
+    guessing at a check name.
+    """
+    lines = [headline]
+    checks = [c for c in (evidence.get("checks") or []) if isinstance(c, dict)]
+    if not checks:
+        why = _clean_github_text(evidence.get("why"), wrap=False).rstrip(".")
+        lines.append("Jarvis could not name the failing checks"
+                     + (f": {why}." if why else " from this answer."))
+        lines.append(FIX_EVIDENCE_WORDS)
+        return lines
+    lines.append(f"{len(checks)} failing check(s) on that run:")
+    for item in checks[:MAX_DETAIL_ITEMS]:
+        lines.append(f"  {item.get('name') or 'a check'}: "
+                     f"{item.get('conclusion') or 'no result'}")
+    if len(checks) > MAX_DETAIL_ITEMS:
+        lines.append(f"  ... and {len(checks) - MAX_DETAIL_ITEMS} more, not shown")
+    excerpt = _clean_github_text(evidence.get("excerpt"), limit=MAX_LOG_CHARS)
+    if excerpt:
+        which = evidence.get("excerpt_name") or "the first failing check"
+        lines.append(f"  The end of {which}'s log (one excerpt, at most "
+                     f"{MAX_LOG_CHARS} characters):")
+        lines.extend("    " + line for line in excerpt.splitlines())
+    else:
+        log_error = _clean_github_text(evidence.get("log_error"), wrap=False)
+        lines.append("  GitHub's job log could not be read"
+                     + (f" ({log_error})" if log_error else "")
+                     + ", so no excerpt is shown.")
+        lines.append(FIX_EVIDENCE_WORDS)
+    return lines
+
+
+def _ci_words(doc, evidence: Optional[dict] = None) -> str:
+    """The CI answer in plain words. `evidence` comes from `_ci_failing_checks`."""
+    if not isinstance(doc, dict):
+        return "GitHub answered without saying anything about CI."
+    newest, name, where = _newest_run(doc)
+    if newest is None:
+        return "There is no recent CI run there to report."
+    status = str(newest.get("status") or "")
+    conclusion = str(newest.get("conclusion") or "")
     if status and status != "completed":
         return f"The newest CI run ({name}{where}) is still going: {status}."
     if conclusion == "success":
         return f"The newest CI run ({name}{where}) passed."
     if conclusion in ("failure", "timed_out", "startup_failure"):
-        # The 2026-11-10 review (and the owner's ruling Q1 item 7) found this
-        # sentence was a lie: `_job_log` DOES read the end of a failing check's
-        # log, and `_failing_evidence` reads GitHub's annotations, while it
-        # prepares a fix. It says so now, and points at the door that shows them.
-        return (f"The newest CI run ({name}{where}) failed. Jarvis can read the "
-                f"end of a failing check's log and GitHub's annotations while it "
-                f"prepares a fix - ask for a fix with github_fix_and_push and that "
-                f"evidence is shown.")
+        # 2026-11-14: the names of the failing checks and ONE bounded excerpt of
+        # the first failing check's log, instead of only "it failed". Both were
+        # read by `run()` (`_ci_failing_checks`) from the run's own jobs.
+        return "\n".join(_ci_failed_lines(
+            f"The newest CI run ({name}{where}) failed.", evidence or {}))
     if conclusion == "cancelled":
         return f"The newest CI run ({name}{where}) was cancelled."
     if conclusion:
         return f"The newest CI run ({name}{where}) finished as {conclusion}."
     return f"The newest CI run ({name}{where}) has not finished yet."
+
+
+def _ci_failing_checks(repo: str, newest: dict, fetch: Callable, token: str,
+                       headers: dict, *,
+                       log: Optional[Callable] = None) -> Optional[dict]:
+    """The failing checks and ONE bounded log excerpt for a run that FAILED.
+
+    Returns None when the run did not fail (still going, or green): neither has
+    a failed job, so neither costs an extra request. For a failure:
+
+      * `GET /repos/{owner}/{repo}/actions/runs/{id}/jobs` - one page of the
+        run's own jobs (`CI_JOBS_PER_PAGE`), read through `_read` like every
+        other fixed GET;
+      * the FIRST failing job's log, through `_job_log` - the same read the fix
+        flow uses: the 302 is read and never followed, the signed address must
+        be https on a host GitHub owns, and it is fetched with NO Authorization
+        header.
+
+    `run_id` and `job_id` must be all digits, so no address is ever built from
+    fetched text. A job list that cannot be read is returned as `why`, and the
+    answer then says so in plain words rather than naming a check it did not
+    read. A check still running is not a failure and is not listed.
+    """
+    if str(newest.get("status") or "") != "completed":
+        return None
+    if str(newest.get("conclusion") or "") not in ("failure", "timed_out",
+                                                   "startup_failure"):
+        return None
+    run_id = str(newest.get("id") or "").strip()
+    if not run_id.isdigit():
+        return {"checks": [],
+                "why": "GitHub did not name that run's jobs in this answer"}
+    doc, why = _read(fetch, f"{_repo_path(repo)}/actions/runs/{run_id}/jobs"
+                            f"?per_page={CI_JOBS_PER_PAGE}", headers, token)
+    if why:
+        return {"checks": [], "why": why}
+    jobs = (doc.get("jobs") if isinstance(doc, dict) else None) or []
+    checks = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        if str(job.get("status") or "") != "completed":
+            continue
+        conclusion = str(job.get("conclusion") or "")
+        if conclusion in ("success", "neutral", "skipped", ""):
+            continue
+        checks.append({"name": _check_name(job),
+                       "conclusion": _clean_github_text(conclusion, wrap=False),
+                       "id": str(job.get("id") or "")})
+    if not checks:
+        return {"checks": [],
+                "why": ("GitHub names no failed job on that run, so there is no "
+                        "check to point at")}
+    evidence = {"checks": checks, "excerpt": "",
+                "excerpt_name": checks[0]["name"], "log_error": "", "why": ""}
+    job_id = checks[0]["id"]
+    if not job_id.isdigit():
+        evidence["log_error"] = "GitHub did not name that job's address"
+        return evidence
+    tail, log_why = _job_log(GITHUB_API + f"{_repo_path(repo)}/actions/jobs/"
+                             f"{job_id}/logs", token, open_url=log)
+    evidence["excerpt"] = tail
+    evidence["log_error"] = log_why
+    return evidence
+
+
+def _ci_result(r: Request, answers: list, fetch: Callable, token: str,
+               headers: dict, *,
+               log: Optional[Callable] = None) -> dict:
+    """The CI answer: the newest run, and - when it failed - the checks that did.
+
+    The plan's fixed GETs have already been sent by `run()`; this only reads MORE
+    when the newest run failed (`_ci_failing_checks`), and it refuses a cut answer
+    in the same words `_said` uses rather than guessing at half of it (Q-G).
+    """
+    text = answers[-1][1] if answers else ""
+    if CUT_MARKER in str(text or ""):
+        return {"ok": True, "text": CUT_ANSWER}
+    doc = _payload(text)
+    evidence = None
+    newest, _name, _where = _newest_run(doc)
+    if newest is not None:
+        evidence = _ci_failing_checks(r.repo, newest, fetch, token, headers,
+                                      log=log)
+    return {"ok": True, "text": _ci_words(doc, evidence)}
 
 
 def _file_words(text: str) -> str:

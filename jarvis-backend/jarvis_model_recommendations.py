@@ -90,7 +90,9 @@ A preset change is only ever justified by numbers this PC produced:
                         the evidence says so.
     context             the model's own metadata via /api/show
                         (jarvis_models.local_geometry -> train context)
-    card sizes          nvidia-smi through jarvis_hardware.detect()
+    card sizes          EVERY card nvidia-smi reports, through
+                        jarvis_hardware.detect() - not only the card the
+                        running Ollama's log names
 
 A candidate is never picked because it is bigger, newer or popular. If either
 the preset's current model or a candidate has no local benchmark, no model
@@ -732,19 +734,42 @@ def _default_detect() -> list:
     return rows if isinstance(rows, list) else []
 
 
+def _nvidia_smi_saw(row: dict) -> bool:
+    """Did nvidia-smi itself report this card?
+
+    `jarvis_hardware.detect()` lists a card it found through nvidia-smi even
+    when Ollama's own log does not name it, and marks it `used: False` with the
+    reason. That flag answers "does the running Ollama use it", not "is it in
+    this PC": two different questions, and only the second belongs in a model
+    fit. Measured on the owner's PC, 2026-11-14: Ollama's log named one card
+    (the 2080 SUPER with the monitor) while nvidia-smi reported three.
+    """
+    sources = row.get("sources")
+    if not isinstance(sources, (list, tuple)):
+        return False
+    return any(str(s).strip().lower() == "nvidia-smi" for s in sources)
+
+
 def measured_gpus(detect: Optional[Callable[[], list]] = None) -> list:
     """`[{name, vram_gb, role}]` from the PC's own measurement.
 
-    Only a card that is really usable is listed: `used` False means Ollama's
-    own log dropped it (an integrated card, say), and a card whose size was not
-    read is not a measured card. A test injects `detect`.
+    EVERY card nvidia-smi reports is listed, with its own measured size -
+    whether or not the running Ollama's log happens to name it. `used` False
+    alone is not a reason to hide a card: it means "this Ollama does not use
+    it", and on the owner's PC that hid two of three installed cards (measured
+    2026-11-14: a 12 GB 2060 and two 8 GB 2080 SUPERs; Ollama's log names only
+    the one with the monitor), so every candidate was sized for one 8 GB card.
+    A card Ollama dropped that nvidia-smi never saw (an integrated chip, say)
+    is still left out, and a card whose size was not read is not a measured
+    card - so a PC whose cards cannot be read reports none, and the check route
+    says so in plain words instead of inventing one. A test injects `detect`.
     """
     rows = (detect or _default_detect)()
     out = []
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict):
             continue
-        if row.get("used") is False:
+        if row.get("used") is False and not _nvidia_smi_saw(row):
             continue
         name = str(row.get("name") or row.get("model") or "").strip()
         total = _number(row.get("total_gib"))
