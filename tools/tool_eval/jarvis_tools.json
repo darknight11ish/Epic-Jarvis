@@ -1948,7 +1948,7 @@
   "type": "function",
   "function": {
    "name": "change_setting",
-   "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\". \"setting\" is their words for it; \"value\" is on or off, or a named choice such as \"faster\". Its own result says what happened: a loosening waits for one approval card, cosmetic ones at once, and you never change it yourself; never say a setting changed when it did not.",
+   "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\", \"turn on the GitHub tools\". \"setting\" is their words for it; \"value\" is on or off, or a named choice such as \"faster\". Its own result says what happened: a loosening waits for one approval card, cosmetic ones at once, and you never change it yourself; never say a setting changed when it did not.",
    "parameters": {
     "type": "object",
     "properties": {
