@@ -6731,9 +6731,22 @@ _GITHUB_READS_SWITCH = re.compile(
 #: TOOLS_SWITCHABLE - every tool the model can be offered since 2026-11-04) -
 #: a DIFFERENT thing from the above (see that module's own header): "let the
 #: AI model read my calendar" / "don't let the AI model read my email".
+#:
+#: THE MASTER GITHUB GROUP SWITCH RIDES THESE TWO SHAPES TOO (2026-11-15). It
+#: is not in TOOLS_SWITCHABLE - it is not a model tool, it is one switch that
+#: speaks for twenty - but `find_tool_target` now knows its words, so "let the
+#: ai model use the github tools" resolves to the group and raises its ONE card,
+#: and "don't let the ai model use the github tools" turns all twenty off at
+#: once, cardless. Nothing here decides the card: `set_reading_tool` does, and
+#: the group's own ON/OFF rules are its own.
+#:
+#: "do not let ..." was added in the same change: it is the OFF a person says
+#: when they are not contracting the words ("do not" rather than "don't"), and
+#: the tail is still a WHOLE alias, so the closed-world rule is unchanged.
 _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 _TOOL_OFF = re.compile(
-    r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+    r"(?:don'?t\s+let|do\s+not\s+let|stop\s+letting)\s+the\s+ai\s+model\s+"
+    r"(?:read|access|use|check)\s+(.+)")
 
 #: "Turn on the browser control tool", "switch the calculator tool off",
 #: "disable the browser control tool" (2026-11-07, live-parity LP-2). The
