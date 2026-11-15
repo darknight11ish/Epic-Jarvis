@@ -665,6 +665,60 @@ def t_context_block_carries_the_dossier():
           any(other in block for other in p["combines"]))
 
 
+def t_the_github_profiles_match_what_the_tools_now_do():
+    """The 2026-11-14 GitHub widenings and the stale strings they left behind.
+
+    Two dossiers told the owner something the code had stopped doing:
+
+      * `github_ci_status`'s said "It never reads the failing log itself - GitHub
+        keeps it". That was already false on 2026-11-10 (the fix flow reads the
+        end of a failing check's log), and the 2026-11-14 widening reads it in
+        the CI answer itself, so it is now doubly wrong.
+      * `github_tool_profiles.py` line 1232 said "Closing an issue stays
+        permanently banned: it awaits the owner's decision, and there is no code
+        path for it". The owner overturned that at 23:00 on 2026-11-10:
+        `github_issue_state` closes ONE issue on its own card - and this dossier
+        sits beside that tool's own dossier, so a reader was told both things.
+
+    The other two dossiers must also say what their tools now do: the state
+    filter on `github_list`, and the bounded unified diff on `github_pr_detail`.
+    Every number is read from the code's own constants, so the dossier cannot
+    drift from the limit it describes.
+    """
+    import jarvis_github as GH
+
+    labels = " ".join(T.PROFILES["github_issue_labels"]["limits"]).lower()
+    check("the labels dossier no longer calls closing an issue permanently banned",
+          "permanently banned" not in labels and "no code path" not in labels,
+          labels)
+    check("... and names the tool that really does close ONE issue",
+          "github_issue_state" in labels, labels)
+
+    ci = " ".join(T.PROFILES["github_ci_status"]["limits"]
+                  + T.PROFILES["github_ci_status"]["gives"]).lower()
+    check("the CI dossier no longer says Jarvis never reads the failing log",
+          "never reads the failing log" not in ci and "github keeps" not in ci, ci)
+    check("... and says it names the failing checks and one bounded log excerpt",
+          "failed" in ci and "log" in ci and "bounded" in ci, ci)
+
+    pr = " ".join(T.PROFILES["github_pr_detail"]["limits"]
+                  + [str(T.PROFILES["github_pr_detail"]["what"])]).lower()
+    check("the pr_detail dossier says the unified diff is included",
+          "unified diff" in pr, pr)
+    check(f"... and the same bounds the code enforces "
+          f"({GH.MAX_DIFF_FILES} files, {GH.MAX_DIFF_CHARS:,} characters)",
+          str(GH.MAX_DIFF_FILES) in pr
+          and f"{GH.MAX_DIFF_CHARS:,}" in pr
+          and "what is missing named" in pr, pr)
+
+    gl = " ".join([str(T.PROFILES["github_list"]["what"])]
+                  + T.PROFILES["github_list"]["gives"]).lower()
+    check("the list dossier says the state filter exists",
+          "state" in gl and "closed" in gl and "issues" in gl, gl)
+    check("... and does not claim every read raises a card (they are card-free)",
+          "carded: every read asks" not in gl, gl)
+
+
 # --------------------------------------------------------------------------
 def main():
     groups = (
@@ -681,7 +735,8 @@ def main():
                    t_rea_matches_its_own_hard_deny,
                    t_touches_match_the_modules,
                    t_the_numbers_in_the_profiles_match_the_code,
-                   t_no_profile_claims_an_ungated_way_out)),
+                   t_no_profile_claims_an_ungated_way_out,
+                   t_the_github_profiles_match_what_the_tools_now_do)),
         ("behaviour", (t_answer_about_the_expected_phrasings,
                        t_answer_about_the_document_question,
                        t_no_tool_named_means_no_answer,
