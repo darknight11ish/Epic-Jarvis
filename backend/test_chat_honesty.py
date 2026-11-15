@@ -571,6 +571,10 @@ def t_phone_state_questions_read_the_real_pairing():
     with that search?" - none of which is where this state lives. The honest
     lane now owns the state question, read-only, from the same paired-device
     store the phone-timer answer already reads.
+
+    2026-11-14: the answer is the `devices_list` intent's phone-shaped half
+    (`topic: "phone"`) - one owner for a store a phone and every other device
+    read - and the words are otherwise unchanged.
     """
     fresh_calendar()
     try:
@@ -600,10 +604,10 @@ def t_phone_state_questions_read_the_real_pairing():
         got = Q.match(said)
         name, fields = (getattr(got, "name", None), dict(getattr(got, "f", {}) or {}))
         check(f"{said!r} is the phone-state read",
-              name == "honest_state" and fields.get("shape") == "phone_state"
-              and fields.get("topic") == "state", (name, fields))
+              name == "devices_list" and fields.get("topic") == "phone",
+              (name, fields))
     check("the phone-state answer is read-only (no card, no 'cancel that' loss)",
-          "honest_state" in Q.READ_ONLY_INTENTS)
+          "devices_list" in Q.READ_ONLY_INTENTS)
 
     old = D.paired_status
     try:
@@ -683,7 +687,7 @@ def t_phone_state_phrases_leave_pairing_and_ringing_alone():
     got = Q.match("connect my phone to the wifi")
     check("a sentence about another connection is not claimed by the state read",
           got is None or (got.name, (got.f or {}).get("topic")) !=
-          ("honest_state", "state"), got)
+          ("devices_list", "phone"), got)
     got = Q.match("is my phone connected?")
     check("the phone state is not the account-connection path (S6 rule)",
           getattr(got, "name", None) != "connect_account", got)

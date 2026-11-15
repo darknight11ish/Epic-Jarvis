@@ -15421,14 +15421,30 @@ def _runtime_vault() -> str:
         return "unknown"
 
 
-def _runtime_phone() -> str:
+def _runtime_devices() -> str:
+    """The paired devices as one short field: count and kinds (2026-11-14).
+
+    Was `_runtime_phone`, answering only "connected" or "off" - phone-shaped,
+    and it said nothing about a laptop or a tablet being paired. Now the field
+    is `N (kind, kind)` - e.g. "2 (phone, tablet)" - read from the same
+    `jarvis_devices.paired_status()` call as before. A store that cannot be
+    read is `unknown`, never a guess; no devices is "0", not "off" (off reads
+    like a switch, and there is no switch).
+    """
     try:
         import jarvis_devices
         status = jarvis_devices.paired_status() or {}
         if not status.get("readable", False):
             return "unknown"
-        rows = status.get("devices") or []
-        return "connected" if any(r.get("reach") for r in rows if isinstance(r, dict)) else "off"
+        rows = [r for r in (status.get("devices") or []) if isinstance(r, dict)]
+        if not rows:
+            return "0"
+        kinds = []
+        for row in rows:
+            kind = str(row.get("kind") or "device").strip().lower() or "device"
+            if kind not in kinds:
+                kinds.append(kind)
+        return f"{len(rows)} ({', '.join(kinds)})"
     except Exception:                                       # noqa: BLE001
         return "unknown"
 
@@ -15453,7 +15469,7 @@ def runtime_identity_fields(*, probes: Optional[dict] = None) -> dict:
         "preset": read("preset", _runtime_preset),
         "cloud": read("cloud", _runtime_cloud),
         "vault": read("vault", _runtime_vault),
-        "phone": read("phone", _runtime_phone),
+        "devices": read("devices", _runtime_devices),
     }
 
 
@@ -15468,11 +15484,11 @@ def runtime_identity_line(*, probes: Optional[dict] = None) -> str:
         ("preset", f.get("preset") or "unknown"),
         ("cloud escalation", f.get("cloud") or "unknown"),
         ("vault", f.get("vault") or "unknown"),
-        ("phone", f.get("phone") or "unknown"),
+        ("devices", f.get("devices") or "unknown"),
     ]
     runtime = ("Runtime: Jarvis on " + values[0][1] + " (local model: " + values[1][1]
                + ", preset: " + values[2][1] + ", cloud escalation: " + values[3][1]
-               + ", vault: " + values[4][1] + ", phone: " + values[5][1] + ").")
+               + ", vault: " + values[4][1] + ", devices: " + values[5][1] + ").")
     return runtime + "\n" + RUNTIME_RULE
 
 
