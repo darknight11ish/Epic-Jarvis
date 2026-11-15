@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "71f15e6142464f3c66c822e7de5cc4050a9133a3",
- "built_at": "2026-11-15T10:56:24-08:00",
+ "ref": "f8fb125f50993f6f22b641422a76586d74fb54c2",
+ "built_at": "2026-11-15T11:13:03-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4716,6 +4716,7 @@
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
+    "changelog.d/2026-11-15-approved-merge-card-runs-or-says-why.md",
     "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/2026-11-15-preset-window-truth.md",
     "changelog.d/2026-11-15-which-commit-each-piece-came-from.md",
@@ -4921,6 +4922,7 @@
     "decisions.d/2026-11-15-a-measured-window-is-a-claim-about-the-runner.md",
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
     "decisions.d/2026-11-15-github-answers-are-refusals.md",
+    "decisions.d/2026-11-15-merge-card-reads-its-own-pin.md",
     "decisions.d/2026-11-15-source-commit-beside-version.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5425,7 +5427,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 997,
+   "file_count": 999,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6512,6 +6514,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "f8fb125f50993f6f22b641422a76586d74fb54c2",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-generate the recent-changes module and the self-code map"
+  },
+  {
    "sha": "71f15e6142464f3c66c822e7de5cc4050a9133a3",
    "date": "2026-11-15",
    "subject": "feat(provenance): record each artifact's source commit and warn MIXED COMMITS"
@@ -6605,11 +6612,6 @@
    "sha": "695e85687af2b682f3eb76f400e2c4d598f78417",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into fix/ctx-window-truth-2026-11-15"
-  },
-  {
-   "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
   }
  ],
  "top_level": [
@@ -6641,7 +6643,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 286
+   "files": 287
   },
   {
    "path": "tools/",
@@ -6656,7 +6658,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 203
+   "files": 204
   },
   {
    "path": "plugins/",
@@ -6735,8 +6737,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5858,
-  "covered": 5375,
+  "tracked_files": 5860,
+  "covered": 5377,
   "excluded": 483,
   "subsystems": 27
  },

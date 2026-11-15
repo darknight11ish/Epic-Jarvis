@@ -1001,7 +1001,10 @@ def t_no_squash_rebase_admin_or_force_path_exists():
     check("a model's own merge body or commit title is ignored entirely",
           r.body == {"merge_method": "merge", "sha": "a" * 40}, r.body)
     # And a sha that is not a full 40 hex characters is refused, not shortened.
-    for bad in ("", "abc", "a" * 39, "a" * 41, "HEAD", "refs/heads/main",
+    # An EMPTY one is no longer an error: since 2026-11-15 leaving all three out
+    # is how the model asks Jarvis to read the pull request and pin its head
+    # (t_an_approved_merge_card_names_the_real_head... drives that).
+    for bad in ("abc", "a" * 39, "a" * 41, "HEAD", "refs/heads/main",
                 "z" * 40):
         try:
             GH.plan_merge_pr({"repo": "o/r", "number": "1", "head_sha": bad})
@@ -1724,9 +1727,15 @@ def t_merge_refuses_everything_but_a_clean_unmoved_green_pull_request():
     out = _run_request(r, fake)
     check("a moved head commit is refused", out.get("ok") is False, out)
     moved_words = out.get("error", "").lower()
-    check("... and says the pull request moved, and to look again",
-          "moved since you looked" in moved_words
-          and "look again" in moved_words, out.get("error"))
+    check("... and says the card's commit is not the pull request's head",
+          HEAD_SHA in out.get("error", "") and "b" * 40 in out.get("error", "")
+          and "not the one there is to merge" in moved_words, out.get("error"))
+    check("... and does not claim the pull request MOVED - it cannot know that "
+          "(2026-11-15: the card's own pin can be wrong)",
+          "moved since you looked" not in moved_words, out.get("error"))
+    check("... and says to look again, or to ask with only repo + number",
+          "look again" in moved_words and "only the repository and the pull "
+          "request number" in out.get("error", ""), out.get("error"))
     check("... and sends nothing", fake.writes() == [], fake.writes())
 
     # The same head commit, but RETARGETED to another base branch: the card named
@@ -1817,6 +1826,205 @@ def t_merge_sends_exactly_the_pinned_body_once():
     check("the merge re-read the pull request first and read its checks",
           [c["method"] for c in fake.calls] == ["GET", "GET", "PUT"],
           fake.methods())
+
+
+def t_an_approved_merge_card_names_the_real_head_not_a_bad_echo():
+    """2026-11-15, measured on the owner's own PC: an APPROVED card merged NOTHING.
+
+    The night in order: the model echoed a head commit for PR #1261 that was not
+    that pull request's head; `plan_merge_pr` pinned it unverified; the owner
+    approved the card; `_run_merge` compared the live head and refused -
+    correctly - and the only account of why the owner got was the model's own
+    invention ("the system is preventing the same tool call twice"). The audit
+    log's `agent.chain` for the turn is one approved `github_merge_pr` step with
+    `ran: true, ok: false` and four retries that never reached a card.
+
+    So this pins the two halves that stop it happening again:
+      * with no usable pin from the model, the planner READS the pull request
+        once, the card names its real head, and the approved run merges;
+      * a pin that IS supplied but is not the head is refused BEFORE the card,
+        in plain words, instead of becoming an approval that cannot merge.
+    """
+    repo = "darknight11ish/Epic-Jarvis"
+    plan_fetch = Routed([("/pulls/1261", (200, _pr_doc(number=1261)))])
+    with _Token():
+        r = GH.plan_merge_pr({"repo": repo, "number": "1261"}, fetch=plan_fetch)
+    text = GH.describe(r)
+    check("a merge with no pin reads the pull request ITSELF, exactly once",
+          [c["method"] for c in plan_fetch.calls] == ["GET"]
+          and plan_fetch.calls[0]["url"] ==
+          GH.GITHUB_API + "/repos/darknight11ish/Epic-Jarvis/pulls/1261",
+          plan_fetch.calls)
+    check("... and planning sent nothing", plan_fetch.writes() == [],
+          plan_fetch.methods())
+    check("... and the request is pinned to the pull request's REAL head",
+          r.expected_sha == HEAD_SHA
+          and r.body == {"merge_method": "merge", "sha": HEAD_SHA}, r.body)
+    check("... and the card names that commit, its title and its base branch",
+          HEAD_SHA in text and "Title: Fix the tray icon" in text
+          and "Target branch: main" in text, text[:600])
+    check("... and says the values came from Jarvis reading it just now",
+          "just read this pull request itself" in text, text[:600])
+
+    # The approved run then really merges, at exactly the commit the card named.
+    run_fetch = Routed([
+        ("/pulls/1261/merge", (200, json.dumps(
+            {"merged": True, "sha": MERGED_SHA, "message": "Pull Request merged"}))),
+        ("/pulls/1261", (200, _pr_doc(number=1261))),
+        ("/check-runs", (200, _all_green_runs())),
+    ])
+    with _Token():
+        out = GH.run(r, fetch=run_fetch, approved=True)
+    puts = [c for c in run_fetch.calls if c["method"] == "PUT"]
+    check("the approved card merges at the commit it showed", out.get("ok") is True,
+          out)
+    check("... exactly ONE PUT, with exactly the pinned body",
+          len(puts) == 1
+          and _json_object(puts[0]["body"]) == {"merge_method": "merge",
+                                                "sha": HEAD_SHA},
+          [c["method"] for c in run_fetch.calls])
+
+    # A pin the MODEL supplied that is not the head: refused before any card.
+    stale = "b" * 40
+    echo_fetch = Routed([("/pulls/1261", (200, _pr_doc(number=1261)))])
+    try:
+        with _Token():
+            GH.plan_merge_pr({"repo": repo, "number": "1261",
+                              "head_sha": stale}, fetch=echo_fetch)
+    except GH.GitHubError as exc:
+        said = str(exc)
+        check("a pin that is not the pull request's head is refused BEFORE a card",
+              HEAD_SHA in said and stale in said and "asked nobody" in said, said)
+    else:
+        check("a pin that is not the pull request's head is refused BEFORE a card",
+              False, "it was planned, so a dead card could be raised")
+    check("... and the refusal is one read, with nothing written",
+          [c["method"] for c in echo_fetch.calls] == ["GET"], echo_fetch.methods())
+
+    # The interface itself: the three echoed values may now be left out.
+    params = AG.TOOLS["github_merge_pr"].parameters
+    check("the tool lets the model leave the three echoed values out",
+          params.get("required") == ["repo", "number"], params.get("required"))
+    check("... and each of the three says so in its own words",
+          all("may be left out" in params["properties"][k]["description"]
+              for k in ("head_sha", "title", "base_ref")),
+          {k: params["properties"][k]["description"]
+           for k in ("head_sha", "title", "base_ref")})
+    check("... and its description says what happens then",
+          "just the repository and the number" in
+          AG.TOOLS["github_merge_pr"].description,
+          AG.TOOLS["github_merge_pr"].description[:400])
+    _args, problem = AG.check_call(
+        "github_merge_pr", json.dumps({"repo": repo, "number": "1261"}),
+        ["github_merge_pr"], AG.TOOLS)
+    check("the agent's own schema check accepts the no-pin call", problem is None,
+          problem)
+
+
+class _OneCallOut:
+    """Just enough of `jarvis_agent._Out` for one tool call."""
+
+    gone = False
+
+    def __init__(self):
+        self.statuses = []
+
+    def set_status(self, status):
+        self.statuses.append(status)
+
+    def card_answered(self, verdict):     # the real one tells the app's stream
+        pass
+
+    def send(self, _chunk):
+        pass
+
+
+class _PersonYes:
+    """The gate verdict a person's Approve gives (gate-outcome.patch)."""
+
+    allowed = True
+    tier = "ask"
+    outcome = "approved"
+    reason = "approved"
+    action = "github_merge_pr"
+    request_id = "07b919e83013"
+
+
+class _PersonNo(_PersonYes):
+    allowed = False
+    outcome = "denied"
+    reason = "denied by the owner"
+
+
+def t_an_approved_github_write_that_fails_is_said_to_the_owner_in_codes_words():
+    """The owner hears the module's reason, not only the model's paraphrase.
+
+    Measured 2026-11-15: the card was approved, the run refused, and the answer
+    the owner read described a duplicate-call rule that does not exist. This
+    drives the REAL `_one_call` - its gate replaced by a person's yes and
+    `jarvis_github.run` stubbed at its seam - and checks the one line code adds
+    to the answer itself.
+    """
+    lines = []
+    real_run = GH.run
+    try:
+        GH.run = lambda plan, approved=False, **kw: {
+            "ok": False,
+            "error": "The card named commit aaa, but that pull request's head "
+                     "commit is bbb, so the commit you approved is not the one "
+                     "there is to merge. Nothing was merged."}
+        convo, steps = [], []
+        with _Token():
+            AG._one_call(
+                {"id": "call-1",
+                 "function": {"name": "github_merge_pr",
+                              "arguments": json.dumps(ARGS["github_merge_pr"])}},
+                ["github_merge_pr"], convo, steps,
+                lambda action, detail, prompt: _PersonYes(),
+                None, _OneCallOut(), lambda *a, **k: None,
+                watch=AG._TurnWatch(), tell_owner=lines.append)
+        check("the approved merge ran and failed", steps
+              and steps[-1].get("ran") is True and steps[-1].get("ok") is False,
+              steps)
+        check("code says the failure to the OWNER, in its own line",
+              len(lines) == 1 and lines[0].startswith(
+                  "The merge you approved did not go through."), lines)
+        check("... carrying the module's own reason, word for word",
+              "that pull request's head commit is bbb" in (lines[0] if lines else ""),
+              lines)
+        check("... and saying nothing else was tried",
+              "Nothing else was tried." in (lines[0] if lines else ""), lines)
+
+        # A merge that WORKED says nothing extra, and a DENIED card never ran.
+        lines = []
+        GH.run = lambda plan, approved=False, **kw: {"ok": True,
+                                                     "text": "merged"}
+        with _Token():
+            AG._one_call(
+                {"id": "call-2",
+                 "function": {"name": "github_merge_pr",
+                              "arguments": json.dumps(ARGS["github_merge_pr"])}},
+                ["github_merge_pr"], [], [],
+                lambda action, detail, prompt: _PersonYes(),
+                None, _OneCallOut(), lambda *a, **k: None,
+                watch=AG._TurnWatch(), tell_owner=lines.append)
+        check("a merge that went through adds no failure line", lines == [], lines)
+
+        lines = []
+        GH.run = lambda plan, approved=False, **kw: {
+            "ok": False, "error": "should not run"}
+        with _Token():
+            AG._one_call(
+                {"id": "call-3",
+                 "function": {"name": "github_merge_pr",
+                              "arguments": json.dumps(ARGS["github_merge_pr"])}},
+                ["github_merge_pr"], [], [],
+                lambda action, detail, prompt: _PersonNo(),
+                None, _OneCallOut(), lambda *a, **k: None,
+                watch=AG._TurnWatch(), tell_owner=lines.append)
+        check("a denied card runs nothing and says nothing", lines == [], lines)
+    finally:
+        GH.run = real_run
 
 
 def t_a_merge_answered_without_a_result_is_not_claimed_as_done():
@@ -3050,8 +3258,9 @@ def t_merge_checks_are_per_repository():
               "repo": {"full_name": "other-owner/other-repo"}})))
     fake = Routed(moved)
     _r, out = _run("github_merge_pr", fake, args=_other_repo_merge_args())
-    check("other repo: a moved head is refused before any rules read",
-          out.get("ok") is False and "moved since you looked"
+    check("other repo: a mismatch with the carded head is refused before any "
+          "rules read",
+          out.get("ok") is False and "not the one there is to merge"
           in out.get("error", "")
           and not any("/rules/branches/" in c["url"] for c in fake.calls), out)
 
@@ -3647,6 +3856,8 @@ if __name__ == "__main__":
                    t_the_merge_card_names_the_pinned_commit_and_the_exact_body,
                    t_merge_refuses_everything_but_a_clean_unmoved_green_pull_request,
                    t_merge_sends_exactly_the_pinned_body_once,
+                   t_an_approved_merge_card_names_the_real_head_not_a_bad_echo,
+                   t_an_approved_github_write_that_fails_is_said_to_the_owner_in_codes_words,
                    t_a_merge_answered_without_a_result_is_not_claimed_as_done,
                    t_a_refused_merge_is_refused_in_the_words_its_cause_deserves,
                    t_fix_prepare_copies_the_pr_into_its_own_scratch_folder,

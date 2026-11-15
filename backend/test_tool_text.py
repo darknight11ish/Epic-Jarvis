@@ -104,6 +104,13 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    #       40-hex head commit, and github_merge_pr's `head_sha` must
                    #       say that number comes from github_pr_scan - without which
                    #       the merge tool's one required argument is unreachable.
+                   #       SUPERSEDED 2026-11-15: head_sha/title/base_ref are no
+                   #       longer required - a merge call with only repo + number
+                   #       makes the planner read the pull request and pin its real
+                   #       head, because a card built from a stale echo was approved
+                   #       and could never merge. The descriptions now say "may be
+                   #       left out" instead; its pin is the MERGED MEASUREMENT
+                   #       below, because #1264 changed the sentence beside it.
                    #   (c) 2026-11-10 desk fix: the merge card must name the pull
                    #       request's title and its target branch, so the tool takes
                    #       them as two more required arguments (`title`, `base_ref`)
@@ -130,7 +137,16 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # shorter line that does not say the new reads exist - would
                    # break the 2026-11-10 "fully aware of its GitHub abilities"
                    # directive this line exists for.
-                   "github_pr_scan": 1400, "github_merge_pr": 1500,
+                   # MERGED MEASUREMENT 2026-11-15, after both of the above met:
+                   # the merged text measures github_pr_scan at 1,390 and
+                   # github_merge_pr at 1,582 with this module's own rule (1,582,
+                   # not 1,528: the 2026-11-15 optional-pin sentence and #1264's
+                   # widened whole-surface sentence are now on the SAME
+                   # description). So the two pins are 1,400 and 1,620 - each is
+                   # what the merged text needs, not the higher of the two sides.
+                   # This branch's pre-merge 1,580 would be UNDER the merged
+                   # 1,582 and would fail.
+                   "github_pr_scan": 1400, "github_merge_pr": 1620,
                    "github_fix_and_push": 480,
                    # The 2026-11-10 22:30 ruling's actions carry no whole-surface
                    # sentence, but three are a little over the 300 default legitimately:
