@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "614a5fe8e0c976aa85f4fc25ae863d384fdc56d7",
- "built_at": "2026-11-14T22:22:27-08:00",
+ "ref": "9d70ec02bf85746c368490d6177b9fbaa2546a87",
+ "built_at": "2026-11-15T00:53:50-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4705,6 +4705,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
@@ -4902,6 +4903,7 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
@@ -5411,7 +5413,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 984,
+   "file_count": 986,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6498,9 +6500,54 @@
  ],
  "recent_commits": [
   {
+   "sha": "9d70ec02bf85746c368490d6177b9fbaa2546a87",
+   "date": "2026-11-15",
+   "subject": "The About page's six quoted register totals follow the row this branch added"
+  },
+  {
+   "sha": "c78898cd5d8dee498606feca12dc6910e1a0ea0e",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
+  },
+  {
+   "sha": "04d4748cfea08924a8facf798b01ae490769f989",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
+  },
+  {
+   "sha": "e496e93c373679d108b7924d370f031517298c6a",
+   "date": "2026-11-14",
+   "subject": "chore(desktop): regenerate the feature-directory fixture after the contract changed"
+  },
+  {
    "sha": "614a5fe8e0c976aa85f4fc25ae863d384fdc56d7",
    "date": "2026-11-14",
    "subject": "fix(phone): the Local AI answer tells the truth about the engine"
+  },
+  {
+   "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
+   "date": "2026-11-14",
+   "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
+  },
+  {
+   "sha": "0168dca083b4e4c1668423e845381704273709a3",
+   "date": "2026-11-14",
+   "subject": "chore(generated): regenerate the feature catalogue and recent changes; keep the new suite off source text"
+  },
+  {
+   "sha": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
+   "date": "2026-11-14",
+   "subject": "fix(gate): the file-to-phone denial row, and an audit that reads the published base"
+  },
+  {
+   "sha": "764531987eaf6d29dc6b131483d072b2695fe7a4",
+   "date": "2026-11-14",
+   "subject": "fix(send): name the refusal reason without a bare word the jargon ratchet counts"
+  },
+  {
+   "sha": "f036bfb990fada12923ea6b3abfd8eead1854af0",
+   "date": "2026-11-14",
+   "subject": "feat(send): any file from the PC to the phone, up to 2 GiB, in 1 MiB pieces"
   },
   {
    "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
@@ -6551,51 +6598,6 @@
    "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
    "date": "2026-11-14",
    "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
-  },
-  {
-   "sha": "c26fa729e855121c4afbd371bfdfcf8a99f6036a",
-   "date": "2026-11-14",
-   "subject": "Record the Atlas copy pass and the builder entry point, and re-hash the map"
-  },
-  {
-   "sha": "8e8872bf31cd72044cd1c98f37b2800093bc6698",
-   "date": "2026-11-14",
-   "subject": "The Brain window's copy says Atlas, and the builder's six 'no way in yet' sentences become true"
-  },
-  {
-   "sha": "fee00d72f810a70eb13685433eabb72b4531e658",
-   "date": "2026-11-14",
-   "subject": "desktop: the Brain window's own explanatory copy says Atlas"
-  },
-  {
-   "sha": "e03b61684492c31338635626c0244ccdb157ff42",
-   "date": "2026-11-14",
-   "subject": "Regenerate the records after folding the wave-20 workstreams"
-  },
-  {
-   "sha": "ed884fbc423f1072fc953f3998e27980c4596b6f",
-   "date": "2026-11-14",
-   "subject": "Merge feat/def068-builder-entry-2026-11-14 into integration/wave20-2026-11-14 (DEF-068 builder entry point)"
-  },
-  {
-   "sha": "7a7eedf096731e884fa916b262453d0e62c09b66",
-   "date": "2026-11-14",
-   "subject": "Merge fix/atlas-tray-copy-2026-11-14 into integration/wave20-2026-11-14 (tray offline sentence says Atlas)"
-  },
-  {
-   "sha": "9a2bec78de5b8f77c735662100c711c432d3c03e",
-   "date": "2026-11-14",
-   "subject": "chore(records): regenerate the self-code map after main gained the bar-label rename"
-  },
-  {
-   "sha": "ecad10f1af5371d5ca7e5014239447dcf157595d",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main into integration/wave20-2026-11-14 (current main)"
-  },
-  {
-   "sha": "6f99ab00a8b0c701278acac45d7b6fddcc843a48",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1258 from darknight11ish/fix/atlas-hud-labels-2026-11-14"
   }
  ],
  "top_level": [
@@ -6627,7 +6629,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 280
+   "files": 281
   },
   {
    "path": "tools/",
@@ -6642,7 +6644,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 196
+   "files": 197
   },
   {
    "path": "plugins/",
@@ -6721,8 +6723,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5844,
-  "covered": 5361,
+  "tracked_files": 5846,
+  "covered": 5363,
   "excluded": 483,
   "subsystems": 27
  },

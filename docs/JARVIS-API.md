@@ -19632,6 +19632,53 @@ phone pairing, and this is the step that gives it its own key first.
   is the owner pressing Retire (Settings, Devices) so nothing rides on the
   shared key at all.
 
+### 90.7 What chat and voice say about devices (added 2026-11-14)
+
+Two cardless, read-only answers in `jarvis_quick.py`. Neither adds, removes,
+renames or retires a device - the owner's own limit of 2026-11-14: making a
+credential stays terminal-only, and Remove stays on the Settings, Devices card.
+
+**`pair_phone` - chosen by the thing named.** "how do I pair my phone" gets the
+two screens and the QR card, exactly as before. "how do I add my laptop", "how
+do I pair my iPad", "how do I set up my tablet" and "how do I add a browser"
+get the browser route: run `py -3 jarvis_devices.py --add-device "<name>"
+--kind laptop` (or `tablet`) at this PC's own terminal, which prints a
+`jdk1...` key **once**, then open `http://<this PC's mesh address>:4719/` in
+that device's browser and paste the key into its pairing sheet - and the key
+never goes in a chat, a note or a log. "how do I pair a second PC" (and the
+pair/connect/link shapes) says plainly that it is **not supported yet**: the
+thin client is designed, not built, and a second PC's own copy would be its own
+Jarvis, with its own models and settings. "how do I add a second pc" keeps its
+2026-11-07 answer (`adding_second_pc_howto`), which already says the same
+thing. Every shape opens the cardless Settings, Devices jump and types nothing.
+
+**`devices_list` - the read-only roster.** "what devices are connected",
+"which devices are paired", "list my devices", "what devices can reach you" -
+and the phone's own state questions ("is my phone connected"), which keep the
+phone's own answer and gain one line for its approval key - read
+`jarvis_devices.paired_status()` and nothing else. Each device
+is said by its name, its kind (`phone`/`laptop`/`tablet`), whether it is
+reachable now (heard from inside five minutes; an older check-in is "not heard
+from since", never a live reach) and whether it has its own approval key - the
+same "Signed approvals: on / waiting / off" line the apps' Devices cards show.
+`paired_status()` gained `approval_key` (from `approval_key_state()`) on
+2026-11-14 for this one read, and still returns no token, key or hash. A
+missing module or an unreadable registry answers "I cannot read the device list
+on this PC just now." and changes nothing. Both intents are in
+`READ_ONLY_INTENTS`, so they never clear "cancel that", and neither has a card,
+a tool or a model behind it.
+
+**The runtime line.** `jarvis_agent._runtime_devices()` (was
+`_runtime_phone()`) now reports the count and kinds in the model's own runtime
+note - `devices: 2 (phone, tablet)` instead of `phone: connected` - and
+`unknown` when the store cannot be read. The field was renamed from `phone` to
+`devices` with every reference, including `backend/test_runtime_identity.py`.
+
+Proven by `backend/test_quick_wins.py` (each pairing shape, the second PC, the
+list from a stub `jarvis_devices`, the unreadable store, and the phrases that
+must NOT be a device add/remove path), `backend/test_chat_honesty.py`,
+`backend/test_hud_fieldtest_answers.py` and `backend/test_runtime_identity.py`.
+
 ---
 
 ## 91. Signed approvals: a fingerprint-signed yes from the phone (added 2026-09-29)

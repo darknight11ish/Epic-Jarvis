@@ -5359,7 +5359,7 @@
       "name": "Devices",
       "group": "Phone",
       "surface": "both",
-      "where": "Settings, Devices.",
+      "where": "Settings, Devices. A phone pairs from both screens: on this PC, Settings, Devices, then \"Pair a phone\" shows a QR code; on the phone, Settings, Devices, then \"Pair with your PC\". A laptop, tablet, iPad or browser gets its key at this PC's own terminal: run py -3 jarvis_devices.py --add-device \"<name>\" --kind laptop (or tablet) in the backend folder, and paste the jdk1... key it prints once into the pairing sheet of this PC's own page in that browser, at http://<this PC's mesh address>:4719/.",
       "control": {
         "type": "refused",
         "setting_keys": [],

@@ -2105,10 +2105,10 @@
     "id": "devices",
     "group": "Phone",
     "title": "Devices",
-    "what": "Every paired device, each with its own key.",
-    "where": "Settings, Devices.",
-    "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card.",
-    "limit": "This one can never be hidden, so a lost phone can always be removed.",
+    "what": "Every device paired with Jarvis - a phone, a laptop, a tablet or a browser - each with its own key, and a read-only list you can ask for in chat.",
+    "where": "Settings, Devices. A phone pairs from both screens: on this PC, Settings, Devices, then \"Pair a phone\" shows a QR code; on the phone, Settings, Devices, then \"Pair with your PC\". A laptop, tablet, iPad or browser gets its key at this PC's own terminal: run py -3 jarvis_devices.py --add-device \"<name>\" --kind laptop (or tablet) in the backend folder, and paste the jdk1... key it prints once into the pairing sheet of this PC's own page in that browser, at http://<this PC's mesh address>:4719/.",
+    "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card. Pairing a phone raises its own card on the PC that approves it. Making a laptop's, tablet's or browser's key at this PC's own terminal raises no card, because it can only be done there.",
+    "limit": "This one can never be hidden, so a lost phone can always be removed. Chat and voice only read the list: they never add, remove, rename or retire a device - a key is made at this PC's own terminal, and Remove is on this Settings, Devices card. A second PC running the Jarvis desktop app is not supported yet.",
     "surface": "both",
     "covers": [
       "settings.devices",
@@ -2120,6 +2120,7 @@
       "paired"
     ],
     "gate": [
+      "pair_device",
       "unretire_shared_key"
     ],
     "lesson_id": "phone-pairing",

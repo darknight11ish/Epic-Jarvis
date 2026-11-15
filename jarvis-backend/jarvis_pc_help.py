@@ -218,8 +218,8 @@ class Readers:
     databases()-> [{"name", "path", "wal_bytes"}] for the .db-wal files in
                    Jarvis's home folder (Pillar 28)
     devices()  -> jarvis_devices.paired_status(): {"devices": [{"id", "name",
-                   "kind", "created", "last_seen", "reach"}], "readable",
-                   "why"} (Pillar 28)
+                   "kind", "created", "last_seen", "reach", "approval_key"}],
+                   "readable", "why"} (Pillar 28)
     ollama()   -> {"state": "ok" | "not_running" | "wedged" | "error",
                    "why": <name>} - one loopback /api/ps question (Pillar 28)
     """
