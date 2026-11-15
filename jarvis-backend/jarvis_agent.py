@@ -14039,6 +14039,64 @@ class _Round:
         return [{k: v for k, v in c.items() if k != "_index"} for c in self.calls]
 
 
+def _is_native_reply(obj) -> bool:
+    """Is this one object of Ollama's NATIVE /api/chat reply, rather than an
+    OpenAI-shaped chunk? The two never share a key: a native reply carries
+    `message`/`done`, an OpenAI chunk carries `choices`."""
+    if not isinstance(obj, dict) or "choices" in obj:
+        return False
+    return isinstance(obj.get("message"), dict) or "done" in obj
+
+
+def _native_as_chunk(obj: dict) -> dict:
+    """One object of Ollama's NATIVE /api/chat reply, in the `_chunk` shape
+    `_read_chunk` already reads - the one reader both wires go through.
+
+    FIELD NAMES ONLY. Text, tool calls, the finish reason and the usage stay in
+    `_read_chunk`; nothing about what they mean is re-decided here. Two things
+    are deliberate:
+
+      * `thinking` is dropped, for the same reason a `/v1` reasoning delta is
+        not passed on ("What goes down the wire to the app"): no app shows it,
+        and it can quote an email or a file the model just read.
+      * `prompt_eval_count` becomes `usage.prompt_tokens`. That is the number
+        `dropped_prompt_note` reads to tell the owner the model was handed only
+        the end of a long conversation, and the number the speed row records -
+        so the native wire must carry it, exactly as the /v1 wire did.
+    """
+    msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+    delta: dict = {}
+    if isinstance(msg.get("content"), str) and msg["content"]:
+        delta["content"] = msg["content"]
+    calls = []
+    for call in msg.get("tool_calls") or []:
+        if not isinstance(call, dict):
+            continue
+        fn = call.get("function") if isinstance(call.get("function"), dict) else {}
+        # The same shape an OpenAI delta carries (and the native reply omits the
+        # id Ollama does not use): `_Round.add_calls` takes it either way.
+        calls.append({"type": "function",
+                      "function": {"name": fn.get("name") or "",
+                                   "arguments": fn.get("arguments")}})
+    if calls:
+        delta["tool_calls"] = calls
+    choice = {"index": 0, "delta": delta, "finish_reason": None}
+    if obj.get("done"):
+        reason = str(obj.get("done_reason") or "stop")
+        # `/api/generate`'s load reply says "load"; a chat answer is never that.
+        choice["finish_reason"] = "stop" if reason == "load" else reason
+    chunk: dict = {"choices": [choice]}
+    usage = {}
+    for src, dst in (("prompt_eval_count", "prompt_tokens"),
+                     ("eval_count", "completion_tokens")):
+        value = obj.get(src)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            usage[dst] = value
+    if usage:
+        chunk["usage"] = usage
+    return chunk
+
+
 def _read_chunk(obj: dict, rnd: _Round, on_text: Callable[[str], None]) -> None:
     if not isinstance(obj, dict):
         return
@@ -14112,6 +14170,8 @@ def _read_line(raw: bytes, rnd: _Round, on_text: Callable[[str], None]) -> None:
         obj = json.loads(line.decode("utf-8", "replace"))
     except ValueError:
         return
+    if _is_native_reply(obj):
+        obj = _native_as_chunk(obj)
     _read_chunk(obj, rnd, on_text)
 
 
@@ -15626,6 +15686,109 @@ def _pooled_num_ctx(ollama_url) -> Optional[int]:
         return None
 
 
+def _pooled_turn_window(ollama_url) -> tuple:
+    """(is this the pooled lane, the window a chat turn on it must NAME or None).
+
+    THE WINDOW THE PRESET NAMES (2026-11-15). Only the pooled lane has a window
+    a request has to name - its own preset measurement, 49,152 for Coding -
+    because Ollama otherwise sizes its runner from the model's own default
+    (8,192 on this PC). Every other lane answers (False, None), so the caller
+    keeps today's request for it, byte for byte.
+
+    The two cases are kept apart on purpose. (False, None) is "not this lane".
+    (True, None) is "this IS the pooled lane and nothing can say which window it
+    is set to", which the turn says out loud rather than treating as (False,
+    None) - that silent guess is what the 2026-11-15 measurement was made of.
+    """
+    if not ollama_url:
+        return (False, None)
+    try:
+        import jarvis_presets
+        if not jarvis_presets.is_pooled_lane(str(ollama_url)):
+            return (False, None)
+    except Exception:
+        return (False, None)
+    return (True, _pooled_num_ctx(ollama_url))
+
+
+#: Said, once per turn, when a pooled turn's window cannot be established: the
+#: app's own words instead of a guess (the same rule as NoKnownContext, one lane
+#: over). The turn still runs - an answer the owner was warned about beats no
+#: answer - but nothing about it is silent.
+POOLED_WINDOW_UNKNOWN_LINE = (
+    "The window this lane is set to could not be read, so this answer may have "
+    "run at Ollama's own smaller one and the start of the chat may not have "
+    "been read. Re-applying the preset fixes it.")
+
+#: Said, once per turn, when this turn's own prompt is bigger than the window
+#: it is about to name. Ollama drops the FRONT of such a prompt and answers
+#: anyway (see "When the model was not given the whole conversation"), so this
+#: says it BEFORE the request rather than waiting for a ratio to notice it
+#: afterwards - the measured 9,794-against-8,192 truncation is too small a
+#: shortfall for that ratio, which is why the window itself is the check now.
+WINDOW_OVERFLOW_LINE = (
+    "This turn's prompt is about {sent:,} tokens and this lane's window is "
+    "{ctx:,}, so it does not fit: Ollama drops the start of a prompt this long "
+    "and answers anyway, which means the earliest part of this chat may not "
+    "have been read. Start a new conversation, or ask again in a shorter "
+    "message.")
+
+
+def native_chat_body(body: dict, num_ctx: int) -> dict:
+    """The same turn in Ollama's NATIVE /api/chat shape, NAMING `num_ctx`.
+
+    WHY THIS EXISTS, MEASURED (2026-11-15, live install 0.2.456, Coding preset,
+    30B on 127.0.0.1:11450). `/v1/chat/completions` does NOT use a top-level
+    `options` field when it chooses a runner. A 49,152 runner was resident
+    (`GET /api/ps` before the turn), the turn's own body named 49,152, and the
+    turn still unloaded it and re-created it at Ollama's own 8,192 - then
+    refused the 9,794-token prompt with HTTP 400 "exceeds the available context
+    size (8192 tokens)". `/api/ps` after the turn said 8,192. The same thing
+    was measured cold on 2026-11-09 (pooled_preload's docstring).
+
+    `/api/chat` DOES honour `options.num_ctx` - it is the same field
+    `/api/generate` honours, measured at 49,152 tokens and zero spill on this
+    PC - so the pooled lane's turn is sent here instead.
+
+    Field names only, no new behaviour: `max_tokens` is Ollama's `num_predict`,
+    `reasoning_effort` is its `think`, and `stream_options` (an OpenAI-only
+    field) is dropped because a native reply carries `prompt_eval_count` and
+    `eval_count` in its final object already.
+    """
+    out = {"model": body.get("model"), "messages": body.get("messages") or [],
+           "stream": bool(body.get("stream", True))}
+    opts = {"num_ctx": int(num_ctx)}
+    for src, dst in (("temperature", "temperature"), ("top_p", "top_p"),
+                     ("max_tokens", "num_predict")):
+        value = body.get(src)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            opts[dst] = value
+    out["options"] = opts
+    if body.get("tools"):
+        out["tools"] = body["tools"]
+    effort = body.get("reasoning_effort")
+    if effort == "none":
+        out["think"] = False
+    elif effort in ("low", "medium", "high"):
+        out["think"] = effort
+    return out
+
+
+def _has_content_parts(messages) -> bool:
+    """Does any message carry a LIST content (a picture or an attached file)?
+
+    Those are OpenAI-shaped parts; Ollama's NATIVE /api/chat wants a picture in
+    a separate `images` field instead. A picture turn therefore keeps today's
+    `/v1` request even on the pooled lane - this change is about the window,
+    and a shape it has not translated must not be sent just because the port
+    is the pooled one.
+    """
+    for m in messages or []:
+        if isinstance(m, dict) and isinstance(m.get("content"), list):
+            return True
+    return False
+
+
 #: How the last pooled-lane preload went (for the tests, and for anyone
 #: asking): state "warmed" | "already" | "off" | "failed", that model and
 #: window, and why. Mirrors WARM_LAST one lane over.
@@ -15649,7 +15812,7 @@ def _pooled_preload_record(state: str, why: str, model: str, ctx) -> dict:
 
 def pooled_preload(ollama_url: str, model: str) -> dict:
     """F2 (2026-11-09): make the POOLED lane's runner resident at the window the
-    chat request names, BEFORE the /v1/chat/completions turn is dispatched.
+    chat request names, BEFORE the turn is dispatched.
 
     Why this exists, measured live on the 0.2.441 install at 2026-11-09 04:00
     PT: `/v1/chat/completions` IGNORES a top-level `options` field when it
@@ -15660,11 +15823,21 @@ def pooled_preload(ollama_url: str, model: str) -> dict:
     resident: it is exactly the call the Q8 warm measured at 49,152 tokens /
     0 spill on this PC, and the one `warm_everyday` already uses.
 
+    THE SECOND FINDING, 2026-11-15, IS WHY THIS ALONE WAS NOT ENOUGH. A
+    resident runner is not proof the /v1 turn will reuse it: measured again on
+    0.2.456, `/api/ps` said 49,152 before the turn, the turn named 49,152, and
+    the runner still came back at 8,192 - then the 9,794-token prompt was
+    refused with HTTP 400. So a warm runner is no longer the guarantee; the
+    guarantee is the NATIVE /api/chat request that names the window (see
+    native_chat_body and _pooled_turn_window). This preload still runs, first,
+    because a cold 30B load takes ~32 s and it overlaps that with the turn's
+    own prompt building - but the window is carried by the request itself.
+
     So: read the lane's own `/api/ps`, and only when this model is not resident
     there, or is resident below the lane's configured window, send that native
-    load first. The /v1 turn then reuses the resident runner. When `/api/ps`
-    cannot be read the preload is sent anyway - a model already at the named
-    window is not reloaded - so the guarantee is not traded for a probe.
+    load first. When `/api/ps` cannot be read the preload is sent anyway - a
+    model already at the named window is not reloaded - so the guarantee is not
+    traded for a probe.
 
     Only the pooled lane, the one `jarvis_presets.lane_num_ctx` names; every
     other lane answers "off" without a request, so the everyday and coding
@@ -15707,9 +15880,19 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
     """One request to Ollama's /v1/chat/completions, in the order its fields
     have always been sent: model, messages, stream, stream_options, the
     app's temperature/top_p and max_tokens (`opts`), reasoning_effort
-    (from jarvis_thinking unless this Ollama refused it once), tools. No `options`,
-    no num_ctx, no keep_alive: the model's own settings decide those
-    (jarvis-primary.Modelfile says why).
+    (from jarvis_thinking unless this Ollama refused it once), tools. No
+    keep_alive: the model's own setting decides that (jarvis-primary.Modelfile
+    says why).
+
+    ONE EXCEPTION, AND IT IS NOT HONOURED ON /v1 (2026-11-15). On the pooled
+    lane the body also carries `options.num_ctx` - the window its preset names
+    - because Q5 (2026-11-08) put it there. `/v1` does not use that field when
+    it picks a runner (measured 2026-11-09 and again 2026-11-15), so the body
+    this function returns is NOT what the pooled turn sends any more: the turn
+    translates it with `native_chat_body` and sends Ollama's native `/api/chat`,
+    which does honour the field. The `options` here is kept for callers and
+    tests that read the body, and because a `/v1` request still carries it
+    harmlessly; it is simply not the thing that sets the runner's window.
 
     Thinking is left off when the answer's own allowance is too small to
     share with it (REASONING_MIN_ANSWER_TOKENS): both come out of `max_tokens`,
@@ -15730,6 +15913,13 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
     # reloads/truncates the 49,152-token window the preset measured. Only the
     # pooled lane gets this; every other lane keeps its server's environment
     # window and no options field (today's byte-for-byte request).
+    # WHERE IT IS ACTUALLY NAMED (2026-11-15): not on this /v1 body. `/v1` does
+    # not use the field when it chooses a runner, and the measured turn that
+    # named 49,152 here still came back at 8,192 and failed its 9,794-token
+    # prompt. The pooled turn's number is put on Ollama's native /api/chat by
+    # `native_chat_body`, from `_pooled_turn_window`; this line stays because
+    # the body is still what callers and tests read, and because a request that
+    # does reach /v1 loses nothing by carrying it.
     _ctx = _pooled_num_ctx(ollama_url)
     if _ctx:
         body["options"] = {"num_ctx": int(_ctx)}
@@ -16544,6 +16734,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # F2 (2026-11-09): a failed pooled preload is said once per turn, not once
     # per round; POOLED_PRELOAD_LAST keeps the record either way.
     preload_note = {"said": False}
+    # THE WINDOW (2026-11-15): the pool's unknown-window and prompt-does-not-fit
+    # lines are said once per TURN too, not once per round - a tool round must
+    # not repeat an alarm the owner has already read.
+    window_note = {"said": False, "unknown": False}
 
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
@@ -16631,6 +16825,54 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                          offer["schemas"] if offer_tools else None,
                          spoken=watch.spoken, question=question_text, role="everyday",
                          ollama_url=base_url, per_turn=think_per_turn)
+        # THE WINDOW THIS TURN NAMES (2026-11-15). The pooled lane's preset gives
+        # it a window, and `/v1/chat/completions` ignores the field that names it
+        # (measured twice: 2026-11-09 and 2026-11-15, where a resident 49,152
+        # runner was replaced by an 8,192 one and the 9,794-token prompt was
+        # refused). So that ONE lane's round goes to Ollama's NATIVE /api/chat,
+        # which honours `options.num_ctx`; every other lane keeps the /v1 request
+        # it has always sent. A picture turn (list content) also keeps /v1: its
+        # parts are OpenAI-shaped and this change does not translate pictures.
+        _pooled, _window = _pooled_turn_window(base_url)
+        _native = bool(_window) and not _has_content_parts(sent_messages)
+
+        def wire() -> tuple:
+            """(url, payload) for this round, rebuilt every time it is asked.
+
+            Rebuilt - rather than captured - because `body` can change after it
+            is built: the reasoning retry below pops `reasoning_effort`, and the
+            native body must lose `think` with it."""
+            if _native:
+                return (base_url.rstrip("/") + "/api/chat",
+                        native_chat_body(body, int(_window)))
+            return chat_url(), body
+
+        if _pooled and not _window and not window_note["unknown"]:
+            # Nothing could say which window this lane is set to. Said, never
+            # guessed: treating it as an ordinary lane is what made the turn run
+            # at Ollama's own small default with no one told (2026-11-15).
+            window_note["unknown"] = True
+            if announce is not None:
+                try:
+                    announce(POOLED_WINDOW_UNKNOWN_LINE)
+                except Exception:
+                    pass
+        if _native and not window_note["said"]:
+            # Would this round's own prompt fit the window it is about to name?
+            # Ollama drops the FRONT of a prompt that does not, and answers
+            # anyway, so the check is made here - before the request - rather
+            # than left to the after-the-fact ratio, which a 9,794-against-8,192
+            # shortfall is deliberately too small to call.
+            _sent_est = (estimate_tokens(sent_messages)
+                         + estimate_tokens(offer["schemas"] or []))
+            if _sent_est > int(_window):
+                window_note["said"] = True
+                if announce is not None:
+                    try:
+                        announce(WINDOW_OVERFLOW_LINE.format(sent=int(_sent_est),
+                                                             ctx=int(_window)))
+                    except Exception:
+                        pass
         stripper = _ThinkStripper()
         first = {"text": True}
         # A spending table is on the screen for this answer: the model's words
@@ -16694,16 +16936,19 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             except Exception:
                 pass
         if post is not None:
-            whole = dict(body, stream=False)
+            _url, _payload = wire()
+            whole = dict(_payload, stream=False)
             # Only a stream takes stream_options; a whole reply has `usage`.
             whole.pop("stream_options", None)
-            resp = post(chat_url(), whole)
+            resp = post(_url, whole)
+            if _is_native_reply(resp):
+                resp = _native_as_chunk(resp)
             _read_chunk(resp, rnd, on_text)
             rnd.ended = True
         else:
             for attempt in (1, 2):
                 try:
-                    upstream = streamer(chat_url(), body)
+                    upstream = streamer(*wire())
                     break
                 except urllib.error.HTTPError as exc:
                     raw = ""

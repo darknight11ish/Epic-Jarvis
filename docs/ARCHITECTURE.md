@@ -2477,11 +2477,16 @@ the verification step and the second-card analysis are in
 [MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md). Two things belong here because they
 are architectural rather than configuration:
 
-- **`num_ctx` cannot be set from the HUD's own request.** It posts to an
+- **`num_ctx` cannot be set from the HUD's own `/v1` request.** It posts to an
   OpenAI-compatible endpoint, which has no field for it. Context length lives on
-  the model or in the environment; left alone, Ollama picks 4096. The chat path
-  now warms the pooled lane natively with `options.num_ctx` before a cold turn
-  (wave 13), so the window it asks for is the window the runner loads.
+  the model or in the environment; left alone, Ollama picks 4096. Warming the
+  pooled lane natively before a cold turn (wave 13) turned out NOT to be enough
+  on its own: measured 2026-11-15, a resident 49,152 runner was replaced by an
+  8,192 one by the `/v1` turn that named 49,152 (DEF-076). So the pooled Coding
+  lane's turn now goes to Ollama's NATIVE `/api/chat` carrying
+  `options.num_ctx` (`native_chat_body()` / `_pooled_turn_window()` in
+  `jarvis_agent.py`), which Ollama does honour when it loads or reuses a
+  runner. Every other lane still posts to `/v1`.
 - **The recalled-facts block goes late, never at index 0.** At index 0 it
   invalidates the KV prefix cache for the whole conversation every turn, *and*
   suppresses the Modelfile's `SYSTEM` block — which is where the persona

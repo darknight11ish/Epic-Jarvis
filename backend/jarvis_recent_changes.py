@@ -20,10 +20,10 @@ from pathlib import Path
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
     'The General preset stops claiming the model "answered nothing" without thinking',
+    "The Coding preset's chat turn gets the window its preset names",
     'Widgets wear their own colours',
     'Send a video from your PC to your phone',
     'The button beside the big window\'s chat box is called "Open the Atlas bar"',
-    'Three GitHub reads now hand the model real data instead of a guess: a state filter on `github_list`, the actual unified diff in `github_pr_detail`, and the failing checks by name in `github_ci_status` - plus a measured...',
 )
 
 
