@@ -5297,6 +5297,29 @@ what is missing is only the Settings screen agreeing about who turned it off.
   unchanged in this pull request - the screen has now been measured, but the
   measurement lives in this paragraph, not in that list; `tools/check_parity.py`
   has nothing to classify because no route is added.
+- **A read-aloud carrying on out of sight is the phone's, and the desktop needs
+  nothing for it** (2026-11-15; the owner's report: *"when i move out of the
+  jarvis android app on my phone (whether thats just putting it in picture in
+  picture mode or moving to a different app or homescreen, it should continue
+  the read outloud if thats what i selected on the jarvis app. right now it
+  stops it"*, and his answer to the question put to him that it keeps going with
+  the screen locked too). On the phone, leaving the app used to stop the read by
+  design - the ruling of 2026-10-27, "stop immediately, privacy first" - and
+  that ruling is reversed here: `MainActivity` no longer stops a read on
+  ON_STOP, and neither read loop stops for a lock landing mid-read. A
+  `mediaPlayback` foreground service (`service/ReadAloudService.kt`) holds the
+  process awake for the rest of the read and carries ONE notification, with "Stop
+  talking" and a tap that opens the app; the runtime starts it when a read begins
+  and stops it when the read ends or is stopped, so it never runs with nothing to
+  play. The desktop HUD never stopped reading when its window lost focus, so
+  there is no desktop half to write and `tools/check_parity.py` classifies
+  nothing - no route is added in either direction. **What does NOT change:** the
+  start-time refusals (a locked phone, App lock, a stale link, a busy speaker)
+  and every "kept on screen" rule - this is only about a read the owner already
+  started carrying on. The service is NOT-TESTABLE off a phone; the field test is
+  to start a read, press HOME, lock the screen, hear it finish, and stop it from
+  the shade.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
