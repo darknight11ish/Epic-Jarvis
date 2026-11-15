@@ -14,6 +14,9 @@
  *   with "Load older".
  * - One conversation, read-only. Where a turn's words came from is said
  *   quietly under it when they were not typed or spoken by the owner.
+ * - "About this conversation": a small "i" on each row opens one compact card
+ *   with that row's own facts - which app it was had in, started, last used,
+ *   the message count, and only the marks it carries (2026-11-15).
  * - Delete ONE, after a confirm. There is no "delete all" here or on the
  *   PC: irreversible bulk actions stay off the API.
  * - The switch and "Delete conversations older than" are drawn by brain.js
@@ -557,6 +560,11 @@ export function readHistory(answer) {
         // PC always sends it on a conversation row; an older PC sends nothing,
         // and its chats are all live (`false`).
         archived: c.archived === true,
+        // Pinned to the top (the pin, 2026-10-27 - JARVIS-API.md section
+        // 18.3). The row itself has no Pin button in this window; the card
+        // "About this conversation" says it, so the flag is read here rather
+        // than dropped. An older PC sends nothing, which reads as not pinned.
+        pinned: c.pinned === true,
       })),
   };
 }
@@ -659,6 +667,90 @@ export function rowMeta(c, nowMs = Date.now(), opts = {}) {
   const lead = c.kind === "live" ? liveLine(c.started, c.updated, nowMs, opts)
     : whenLine(c.updated ?? c.started, nowMs, opts);
   return [lead, messagesWords(c.turns)].filter(Boolean).join(" · ");
+}
+
+/* ==========================================================================
+   "About this conversation" - the one compact card a History row opens.
+
+   The owner's ask of 2026-11-15: "does chat history have in both jarvis
+   desktop and app have an info menu that i can click show (or a symbol or
+   something) on each conversation that i can look at? that includes info like
+   if the chat was on which device (phone or laptop) and more? without this
+   being overwhelming". The answer is a small "i" on each row and this card
+   behind it: the row's OWN facts, one line each, and nothing the row does not
+   carry - a chat with no voice, no taint, no tag, no pin and no archive says
+   only its device, its two dates and its message count.
+
+   The words live HERE, not in brain.js, because the phone shows the same card
+   with the same words (jarvis-client; the phone half mirrors these strings
+   exactly), and because a Node suite can pin every line without a browser.
+   The builder reuses `deviceTag`, `messagesWords` and `whenLine` above - the
+   row's and the phone's own wording - rather than a second copy of any.
+
+   WHY THE TAG HAS A SWITCH. A tag's NAME is only known when this window may
+   read the tag list at all: while "Hide memory lists and chat history" (or App
+   lock) is on, the PC sends no tag names and this window must not imply one,
+   so `tagsKnown: false` leaves the line out entirely rather than say "not
+   filed" about a chat it cannot see the filing of. With the list readable,
+   every row says which it is: "Filed under: Work" or "Not filed under a tag."
+
+   NO DOM, NO IMPORTS: pure, so the test pins the words with no page.
+   ========================================================================== */
+
+/** The card's heading and its one button, word for word in both apps. */
+export const INFO_TITLE = "About this conversation";
+export const INFO_CLOSE = "Close";
+/** The two dates, each one label plus the PC's own time words. */
+export const INFO_STARTED = "Started: ";
+export const INFO_USED = "Last used: ";
+/** Said only when the row carries the mark it describes. */
+export const INFO_VOICE = "Some of it was said aloud.";
+export const INFO_OUTSIDE =
+  "It read text that did not come from you: a web page, a file, an email or another tool's output.";
+export const INFO_PIN = "Pinned to the top.";
+export const INFO_ARCHIVE = "In Archived.";
+/** The tag line, filed or not (both apps). */
+export const INFO_TAG_FILED = "Filed under: ";
+export const INFO_TAG_NONE = "Not filed under a tag.";
+/** In place of a date the PC did not send - never a guess, never silence. */
+export const INFO_NODATE = "The PC did not say when.";
+
+/** "Filed under: Work" - the tag's name as the PC spells it, never re-worded. */
+export function filedUnderWords(name) {
+  return `${INFO_TAG_FILED}${text(name).trim()}`;
+}
+
+/**
+ * The card for ONE conversation row: `{ title, close, lines }`.
+ *
+ * `lines` is exactly the facts the row holds, in the order the card shows
+ * them: the device, "Started", "Last used" (left out when it is the same
+ * minute as Started), the message count, then only the marks it has - said
+ * aloud, read outside text, the tag, pinned, archived. Nothing is fetched and
+ * nothing is written: the row already holds all of it.
+ *
+ * `nowMs` is the clock `whenLine` reads ("Today 14:05"); tests pass it so the
+ * words do not drift with the day. `tagName`/`tagsKnown` decide the tag line -
+ * see the block comment above.
+ */
+export function chatInfoCard(c, nowMs = Date.now(), { tagName = "", tagsKnown = false } = {}) {
+  const row = c && typeof c === "object" ? c : {};
+  const started = whenLine(row.started, nowMs);
+  const used = whenLine(row.updated, nowMs);
+  const lines = [
+    deviceTag(row.device).words,
+    `${INFO_STARTED}${started || INFO_NODATE}`,
+  ];
+  // One line per fact: a chat used in the minute it started has ONE time, not
+  // the same words twice under two labels.
+  if (used !== started) lines.push(`${INFO_USED}${used || INFO_NODATE}`);
+  lines.push(messagesWords(row.turns));
+  if (row.hasVoice === true) lines.push(INFO_VOICE);
+  if (row.tainted === true) lines.push(INFO_OUTSIDE);
+  if (tagsKnown) lines.push(text(tagName).trim() ? filedUnderWords(tagName) : INFO_TAG_NONE);
+  if (row.pinned === true) lines.push(INFO_PIN);
+  if (row.archived === true) lines.push(INFO_ARCHIVE);
+  return { title: INFO_TITLE, close: INFO_CLOSE, lines };
 }
 
 /**
@@ -804,8 +896,10 @@ export function readSearch(answer) {
           tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
           // Search still finds archived chats (the PC did not narrow it), so
           // each result says whether it is put away - and then is not carried
-          // on from here (2026-10-29).
+          // on from here (2026-10-29). A result keeps its pin too, so the
+          // card says the same thing about a chat found either way.
           archived: c.archived === true,
+          pinned: c.pinned === true,
           hits: num(c.hits) ?? 0,
           snippet: {
             role: ["user", "assistant", "title"].includes(s.role) ? s.role : "user",
