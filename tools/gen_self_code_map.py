@@ -2,7 +2,8 @@
 """Build `backend/jarvis-self-code.json`: a map of Jarvis's own code.
 
     py -3 tools/gen_self_code_map.py
-    py -3 tools/gen_self_code_map.py --check
+    py -3 tools/gen_self_code_map.py --check       # main's snapshot, not a PR
+    py -3 tools/gen_self_code_map.py --coherence   # the check every PR runs
     py -3 tools/gen_self_code_map.py --map-out somewhere/else.json
 
 WHY THIS EXISTS. Asked "what is your own GitHub repository?", the live backend
@@ -21,6 +22,23 @@ twenty commit subjects. `--check` re-derives all of it in memory and compares,
 byte for byte, with the committed file - so a module that moved, a docstring
 that changed or a subsystem whose files drifted fails loudly instead of leaving
 a map that quietly describes last week.
+
+WHO RUNS WHAT, AND WHY (the owner's ruling Q1, 2026-11-15). The map is a
+SNAPSHOT OF `main`, not a file a feature pull request carries. Until this
+ruling every feature PR regenerated it, and because the map records every
+tracked file - the changelog and decisions fragments every PR owes included -
+every PR wrote the same 330 KB file: six pull requests landed one night and the
+map forced a full conflict plus a fresh CI round on every one, turning eight
+merges into about nine hours. So a feature PR now runs `--coherence` instead:
+every tracked file belongs to exactly one subsystem and every key module, suite
+and document the table names exists. That needs no map file and regenerates
+nothing. `--check` is the MAIN gate: `.github/workflows/self-code-map.yml` runs
+it after every merge into `main`, and when the map no longer describes main's
+tree it fails and names the one command that re-takes it. The snapshot is then
+one small pull request of its own, the same shape as the changelog roll
+(`tools/roll_changelog.py`) and the docs size refresh (`tools/gen_docs_map.py`).
+A rebuild the map does not need is a conflict everybody pays for; a map nobody
+checks is worse. These are the two halves that keep both from happening.
 
 COMPLETENESS IS THE POINT, SO IT IS CHECKED. Every file git would track is
 assigned to exactly ONE subsystem by the table below. The generator exits
@@ -1186,6 +1204,41 @@ def _load(path: Path):
         return None, f"{path.name} is not valid JSON ({exc})."
 
 
+def _status_paths(root: Path, *, untracked: bool = True) -> list:
+    """The paths `git status` reports as changed, repo-relative, or [] when clean.
+
+    `untracked=False` drops `??` entries: the map walks the INDEX, so a file git
+    does not know cannot change the tree the map describes.
+    """
+    args = ["status", "--porcelain"] + ([] if untracked else ["--untracked-files=no"])
+    out = []
+    for line in _run(root, *args).splitlines():
+        changed = line[3:].strip().strip('"').replace("\\", "/")
+        if changed:
+            out.append(changed)
+    return out
+
+
+def _uncommitted_inputs(root: Path, *map_paths: Path) -> list:
+    """Tracked changes that are NOT the map files, so a write would record a lie.
+
+    The map records `HEAD` as the commit it was built from, while its file lists
+    come from the INDEX. On a clean tree those agree. On a dirty one they do not:
+    measured on `main` on 2026-11-15, a map generated during an in-progress merge
+    recorded the pre-merge commit as its `ref` while listing files that commit
+    never had. Writing on a dirty tree is what produced that, so `main()` refuses
+    - the map files themselves are ignored because re-running the generator
+    leaves them modified by design.
+    """
+    ignore = set()
+    for path in map_paths:
+        try:
+            ignore.add(path.resolve().relative_to(root.resolve()).as_posix())
+        except ValueError:
+            continue
+    return [p for p in _status_paths(root, untracked=False) if p not in ignore]
+
+
 def _dirty_refusal(root: Path, map_path: Path) -> str:
     """Why `--check` should refuse this tree, or "".
 
@@ -1196,17 +1249,15 @@ def _dirty_refusal(root: Path, map_path: Path) -> str:
     the changes, the person is building or updating it and a dirty tree is the
     point; comparing is exactly what they asked for.
     """
-    status = _run(root, "status", "--porcelain")
-    if not status.strip():
+    changed = _status_paths(root)
+    if not changed:
         return ""
     try:
         rel = map_path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return ""
-    for line in status.splitlines():
-        changed = line[3:].strip().strip('"').replace("\\", "/")
-        if changed == rel or changed.endswith("/" + rel):
-            return ""
+    if any(path == rel or path.endswith("/" + rel) for path in changed):
+        return ""
     return ("the working tree has uncommitted changes and the map itself is not "
             "one of them, so checking it would say the map matches a tree nobody "
             "committed. Commit or stash first, or run without --check to write the "
@@ -1265,31 +1316,111 @@ def _check(root: Path, map_path: Path) -> int:
     return 1
 
 
-def main(argv=None) -> int:
+def coherence(root: Path = REPO) -> int:
+    """0 when every tracked file belongs to exactly one subsystem, 1 when not.
+
+    THE CHECK A FEATURE PULL REQUEST RUNS (owner's ruling Q1, 2026-11-15). The
+    committed map is a snapshot of an earlier commit on `main`, so comparing it
+    byte for byte with a feature branch's tree would fail every PR that adds a
+    changelog fragment - which is every PR. What a PR must keep is the property
+    that makes the map complete at all: every file the tree carries belongs to
+    exactly one subsystem or is excluded by name, and every key module, suite
+    and document the table references exists. That is this function.
+
+    It reads no map file and writes nothing, so it cannot be satisfied by
+    regenerating anything - and it cannot be weakened by a stale map either,
+    because `main`'s snapshot is checked separately with `--check`.
+    """
+    try:
+        files = tree_files(root)
+        by_id, dropped = assign(files)
+    except CoverageError as exc:
+        # The exception already names every unowned or twice-claimed path.
+        print(str(exc))
+        print("Add the file to the SUBSYSTEMS table in tools/gen_self_code_map.py "
+              "(or name it in EXCLUDED, with a reason). A feature pull request "
+              "does NOT regenerate the map - main's snapshot is taken after the "
+              "merge, so this table edit is the whole cost.")
+        return 1
+    except RuntimeError as exc:
+        # A git failure is a plain sentence, never a traceback from a tool.
+        print(f"tree coherence could not be checked: {exc}")
+        return 1
+    missing = []
+    for row in _rows():
+        for path in row["key_modules"] + row["tests"] + row["docs"]:
+            if not (root / path).is_file():
+                missing.append(f"{row['id']}: {path}")
+    if missing:
+        print("the generator's table names files this tree does not have, so the "
+              "next snapshot on main would fail:\n  " + "\n  ".join(missing))
+        print("Fix the path in the SUBSYSTEMS table, or restore the file.")
+        return 1
+    covered = sum(len(paths) for paths in by_id.values())
+    excluded = len(files) - covered
+    if covered + sum(len(paths) for paths in dropped.values()) != len(files):
+        print("the coverage arithmetic does not add up: "
+              f"{covered} covered + {excluded} excluded != {len(files)} tracked")
+        return 1
+    print(f"tree coherence holds: {covered} file(s) belong to exactly one "
+          f"subsystem, {excluded} are excluded by name, {len(files)} tracked in "
+          f"total. The map itself was not read and not regenerated - that is "
+          f"main's snapshot.")
+    return 0
+
+
+def main(argv=None, root: Path = None) -> int:
+    root = Path(root) if root else REPO
     parser = argparse.ArgumentParser(
         description="Build or check backend/jarvis-self-code.json.")
     parser.add_argument("--check", action="store_true",
-                        help="compare the committed map with this tree; exit 1 on drift")
+                        help="compare the committed map with this tree; this is "
+                             "the main-only snapshot gate (exit 1 on drift)")
+    parser.add_argument("--coherence", action="store_true",
+                        help="check only that every tracked file belongs to exactly "
+                             "one subsystem and every table reference exists; this "
+                             "is the per-pull-request gate, and it needs no map")
     parser.add_argument("--map-out", default=None,
                         help="write the map here instead of backend/jarvis-self-code.json")
     args = parser.parse_args(argv)
-    out = Path(args.map_out) if args.map_out else (REPO / MAP_REL)
+    if args.coherence:
+        if args.check or args.map_out:
+            print("--coherence checks the tree only; it takes no --check and no "
+                  "--map-out. Run it on its own.")
+            return 2
+        return coherence(root)
+    out = Path(args.map_out) if args.map_out else (root / MAP_REL)
     if not out.is_absolute():
-        out = REPO / out
+        out = root / out
     if args.check:
-        rc = check(REPO, out)
+        rc = check(root, out)
         if rc == 0 and not args.map_out:
             # Ruling Q4 (2026-11-08): a map that matches the tree but whose
             # published base twin differs is the same failure in a new shape, so
             # --check refuses it too instead of leaving it for the audit job.
-            twin = REPO / TWIN_REL
+            twin = root / TWIN_REL
             if not twin.exists() or twin.read_bytes() != out.read_bytes():
                 print(f"the map and {TWIN_REL} differ - run "
                       "`py -3 tools/gen_self_code_map.py` to write both in one run.")
                 return 1
         return rc
+    # THE MAP RECORDS THE COMMIT IT WAS BUILT FROM, so it has to be built on a
+    # clean tree: its file lists come from the INDEX while `ref` comes from HEAD,
+    # and on a dirty tree those describe two different trees. Measured on `main`
+    # on 2026-11-15: a map generated during an in-progress merge recorded the
+    # pre-merge commit as its ref while listing files that commit never had.
+    dirty = _uncommitted_inputs(root, out, root / TWIN_REL)
+    if dirty:
+        print("the tree has uncommitted changes, so a map written now would record "
+              "HEAD as its commit while describing a different tree:\n  "
+              + "\n  ".join(dirty[:20])
+              + ("\n  ...and more" if len(dirty) > 20 else ""))
+        print("Commit or stash first (a merge in progress counts as dirty), then "
+              "run this again. Checking a dirty tree is what --check refuses; "
+              "WRITING one is what makes the map false.")
+        return 1
     try:
-        text = generate(REPO)
+        text = generate(root)
     except CoverageError as exc:
         print(str(exc))
         return 1
@@ -1302,7 +1433,7 @@ def main(argv=None) -> int:
     if not args.map_out:
         # The base's copy, in the SAME run as the repository copy (ruling Q4,
         # 2026-11-08): one command, both files, always the same bytes.
-        twin = REPO / TWIN_REL
+        twin = root / TWIN_REL
         twin.parent.mkdir(parents=True, exist_ok=True)
         twin.write_bytes(text.encode("utf-8"))
     doc = json.loads(text)

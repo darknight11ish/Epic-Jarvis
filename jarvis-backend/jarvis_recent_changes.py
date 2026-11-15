@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    'Widgets wear their own colours',
-    'Send a video from your PC to your phone',
-    "The phone's Local AI answer now tells the truth",
-    'The button beside the big window\'s chat box is called "Open the Atlas bar"',
-    'Three GitHub reads now hand the model real data instead of a guess: a state filter on `github_list`, the actual unified diff in `github_pr_detail`, and the failing checks by name in `github_ci_status` - plus a measured...',
+    'A feature pull request no longer commits the self-code map',
+    'The General preset stops claiming the model "answered nothing" without thinking',
+    'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
+    "The Coding preset's chat turn gets the window its preset names",
+    "An approved GitHub card now merges, or says in code's words why it did not",
 )
 
 

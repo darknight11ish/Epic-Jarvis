@@ -5,6 +5,15 @@ recorded defect so the next session would start from the measured evidence inste
 also records the fix shape and its proof. The change is internal to the existing chat path: no new route,
 card, tier or permission, and the everyday/coding lanes are untouched.
 
+**SUPERSEDED IN PART, 2026-11-15.** Shape (A) below - the native preload - was built as this page
+recommended, and it was measured NOT to be enough: on the live 0.2.456 install a 49,152 runner WAS resident
+before a pooled turn (`GET /api/ps` before it), the `/v1` turn named 49,152, and the runner still came back at
+8,192 - so the 9,794-token prompt was refused with `HTTP 400: request (9794 tokens) exceeds the available
+context size (8192 tokens)` (DEF-076). Shape (B) - the pooled turn on Ollama's native `/api/chat` carrying
+`options.num_ctx` - is what now carries the window (`native_chat_body()` and `_pooled_turn_window()` in
+`backend/jarvis_agent.py`, `backend/test_chat_window.py`). The preload described below still runs first, but
+it is no longer the guarantee. The rest of this page stands as the 2026-11-09 record, unchanged.
+
 ## The defect, as the wave-11 deploy field test measured it
 
 The pooled Coding lane is measured at **49,152 tokens, 0 spill** (Q8 warm: `/api/ps` on 11450, model
