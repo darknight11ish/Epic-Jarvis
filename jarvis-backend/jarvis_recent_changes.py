@@ -24,7 +24,6 @@ BULLETS = (
     'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
     "An approved GitHub card now merges, or says in code's words why it did not",
     'Widgets wear their own colours',
-    'Send a video from your PC to your phone',
 )
 
 
