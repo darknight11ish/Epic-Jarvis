@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e7d1b65be94bb6b4131b331a216a0c249f5644c0",
- "built_at": "2026-11-15T00:29:59-08:00",
+ "ref": "5422283a791631d7f0211590d9096f8837e70b41",
+ "built_at": "2026-11-15T01:55:47-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4705,6 +4705,7 @@
     "changelog.d/2026-11-13-wake-word-activation-truth.md",
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
+    "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
@@ -4902,6 +4903,7 @@
     "decisions.d/2026-11-13-wake-word-not-planned.md",
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
+    "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
@@ -5411,7 +5413,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 984,
+   "file_count": 986,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6498,6 +6500,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "5422283a791631d7f0211590d9096f8837e70b41",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
+  },
+  {
+   "sha": "11622bb67d5596f082db2b7efb3fdbee6f4254a0",
+   "date": "2026-11-15",
+   "subject": "chore(records): regenerate the self-code map for the files this change touched"
+  },
+  {
    "sha": "e7d1b65be94bb6b4131b331a216a0c249f5644c0",
    "date": "2026-11-15",
    "subject": "docs(defects): record DEF-073, DEF-074 and DEF-075 from the live GitHub read run"
@@ -6586,16 +6598,6 @@
    "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
    "date": "2026-11-14",
    "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
-  },
-  {
-   "sha": "aea8722735618832ee3d6d0d5c0ba58bdaee4f01",
-   "date": "2026-11-14",
-   "subject": "Teach every copy of the tool list about android_app: rust, HUD, phone test, and the map"
-  },
-  {
-   "sha": "c26fa729e855121c4afbd371bfdfcf8a99f6036a",
-   "date": "2026-11-14",
-   "subject": "Record the Atlas copy pass and the builder entry point, and re-hash the map"
   }
  ],
  "top_level": [
@@ -6627,7 +6629,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 280
+   "files": 281
   },
   {
    "path": "tools/",
@@ -6642,7 +6644,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 196
+   "files": 197
   },
   {
    "path": "plugins/",
@@ -6721,8 +6723,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5844,
-  "covered": 5361,
+  "tracked_files": 5846,
+  "covered": 5363,
   "excluded": 483,
   "subsystems": 27
  },
