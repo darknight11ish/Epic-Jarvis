@@ -412,6 +412,9 @@ import {
   NO_TITLE,
   chatFactsHiddenLine,
   chatFactsIntro,
+  // "About this conversation": the row's own facts, one line each, and the
+  // words the phone will say too (history-view.js owns them, not this file).
+  chatInfoCard,
   deleteAndForgetQuestion,
   deleteChatButton,
   deleteDoneWords,
@@ -4476,6 +4479,9 @@ async function topicEdit(edit) {
 /* ---- The dialog every form uses ----------------------------------------- */
 
 let topicDialogSeq = 0;
+// The one dialog this window has open, if any. Opening another closes it
+// first, so a card can never sit behind a form - or the other way round.
+let openDialogApi = null;
 
 function closeTopicDialog() {
   const dlg = tp.dlg;
@@ -4485,12 +4491,17 @@ function closeTopicDialog() {
   else dlg.remove();
 }
 
-/** Opens a modal dialog with a title, a body and footer buttons. `build`
- *  gets the body element and returns the footer's buttons. The dialog sits on
- *  the page, outside the section, so a repaint of the rows never destroys it.
- *  Escape and Cancel close it and the keyboard goes back to where it was. */
-function openTopicDialog(title, build) {
-  closeTopicDialog();
+/**
+ * The ONE dialog this window draws: a title, a body, footer buttons, put on
+ * the page (outside the section) so a repaint of the rows never destroys it.
+ * Escape closes it and the keyboard goes back to where it was. `outside: true`
+ * also closes it on a click outside - an info card is never something the
+ * owner has to hunt a button to leave (2026-11-15).
+ *
+ * `build` gets the body element and returns the footer's buttons.
+ */
+function openDialog(title, build, { outside = false, onClose = null } = {}) {
+  if (openDialogApi) openDialogApi.close();
   const dlg = document.createElement("dialog");
   dlg.className = "topics-dialog";
   const titleId = `topics-dialog-title-${++topicDialogSeq}`;
@@ -4502,6 +4513,7 @@ function openTopicDialog(title, build) {
   error.setAttribute("role", "alert");
   error.hidden = true;
   const foot = el("div", "row-actions topics-dialog-foot");
+  let closed = false;
   const api = {
     dlg,
     body,
@@ -4509,24 +4521,60 @@ function openTopicDialog(title, build) {
       error.textContent = words || "";
       error.hidden = !words;
     },
-    close: () => closeTopicDialog(),
+    // One way out: the close event (a modal dialog's Escape, its own `close`,
+    // or ours) and the fallback path below all end in `finish`, exactly once.
+    close() {
+      if (typeof dlg.close === "function" && dlg.open) dlg.close();
+      else finish();
+    },
+  };
+  const finish = () => {
+    if (closed) return;
+    closed = true;
+    if (openDialogApi === api) openDialogApi = null;
+    dlg.remove();
+    if (onClose) onClose();
   };
   const buttons = build(body, api) || [];
   for (const b of buttons) foot.append(b);
   dlg.append(h, body, error, foot);
-  tp.dlgReturn = tp.lastFocus || "";
-  dlg.addEventListener("close", () => {
-    if (tp.dlg === dlg) tp.dlg = null;
-    dlg.remove();
-    tp.focusNext = tp.focusNext || tp.dlgReturn;
-    paintTopics();
+  dlg.addEventListener("close", finish);
+  // Escape closes it even where `showModal` is missing (the `open` fallback
+  // below); a modal dialog would also close by itself.
+  dlg.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    api.close();
   });
+  if (outside) {
+    // A click on the backdrop targets the <dialog> element itself.
+    dlg.addEventListener("click", (event) => {
+      if (event.target === dlg) api.close();
+    });
+  }
   document.body.append(dlg);
-  tp.dlg = dlg;
+  openDialogApi = api;
   if (typeof dlg.showModal === "function") dlg.showModal();
   else dlg.setAttribute("open", "");
   const first = dlg.querySelector("input:checked, input, select, textarea") || dlg.querySelector("button");
   if (first) first.focus({ preventScroll: true });
+  return api;
+}
+
+/** The Topics forms' dialog: the one above, remembering where focus came from
+ *  and repainting the topics list when it closes. */
+function openTopicDialog(title, build) {
+  closeTopicDialog();
+  let api = null;
+  api = openDialog(title, build, {
+    onClose: () => {
+      if (tp.dlg === api.dlg) tp.dlg = null;
+      tp.focusNext = tp.focusNext || tp.dlgReturn;
+      paintTopics();
+    },
+  });
+  tp.dlgReturn = tp.lastFocus || "";
+  tp.dlg = api.dlg;
   return api;
 }
 
@@ -6487,11 +6535,26 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
   const open = chats.openId === c.id;
   const device = deviceTag(c.device);
   const archived = c.archived === true;
+  // Every row's buttons say WHICH chat they are for (the second chat audit,
+  // 2026-09-28, desktop A1): "Open" ten times over names nothing.
+  const named = c.title || NO_TITLE;
+  // "About this conversation" (the owner, 2026-11-15: "does chat history have
+  // ... an info menu that i can click show ... without this being
+  // overwhelming"): one small quiet "i" with the row's own facts behind it.
+  // It reads what the row already holds - no request, no write, no card of
+  // its own - and it is drawn FIRST, so the row's three actions still read as
+  // Open / Archive / Delete.
+  const info = button("i", () => openChatInfo(c),
+    { title: "What this PC knows about this conversation. Nothing changes." });
+  info.classList.add("ghost");
+  info.setAttribute("aria-label", `About ${named}`);
+  info.dataset.fkey = `about:${c.id}`;
   const item = row({
     tag: device.tag,
     title: c.title || NO_TITLE,
     meta: [rowMeta(c), snippet ? hitsWords(c.hits) : ""],
     actions: [
+      info,
       button(open ? "Close" : "Open", () => toggleConversation(c.id, needle),
         { title: open ? "Close the conversation." : "Read the conversation. Nothing changes." }),
       // Archive / Unarchive (the owner's ask of 2026-10-29: "make sure i can
@@ -6514,21 +6577,19 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
   const tagOf = tagView ? tagById(tagView, c.tagId) : null;
 
   if (device.words) item.querySelector(".row-tag").title = device.words;
-  // Every row's buttons say WHICH chat they are for (the second chat audit,
-  // 2026-09-28, desktop A1): "Open" ten times over names nothing.
-  const named = c.title || NO_TITLE;
+  // The info button is [0]; its aria-label is already set above, from `named`.
   const buttons = item.querySelectorAll(".row-actions button");
-  if (buttons[0]) {
-    buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
-    buttons[0].dataset.fkey = `open:${c.id}`;
-  }
   if (buttons[1]) {
-    buttons[1].setAttribute("aria-label", `${historyLabelFor("archive", c.pinned === true, archived)} ${named}`);
-    buttons[1].dataset.fkey = `archive:${c.id}`;
+    buttons[1].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
+    buttons[1].dataset.fkey = `open:${c.id}`;
   }
   if (buttons[2]) {
-    buttons[2].setAttribute("aria-label", `Delete ${named}`);
-    buttons[2].dataset.fkey = `delete:${c.id}`;
+    buttons[2].setAttribute("aria-label", `${historyLabelFor("archive", c.pinned === true, archived)} ${named}`);
+    buttons[2].dataset.fkey = `archive:${c.id}`;
+  }
+  if (buttons[3]) {
+    buttons[3].setAttribute("aria-label", `Delete ${named}`);
+    buttons[3].dataset.fkey = `delete:${c.id}`;
   }
   const main = item.querySelector(".row-main");
   if (tagOf) main.append(tagPillNode(tagOf));
@@ -6587,6 +6648,33 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     main.append(marks);
   }
   return item;
+}
+
+/**
+ * "About this conversation" (the owner, 2026-11-15): the facts the row already
+ * holds, in the one dialog this window draws - which app it was had in, when
+ * it started and was last used, how many messages, and only the marks it
+ * carries. Nothing is asked of the PC, nothing is written, and it closes on
+ * Escape, on Close and on a click outside.
+ *
+ * The words are `chatInfoCard`'s (history-view.js), so the phone says the same
+ * ones; the tag's name comes from this window's own tag list, and when that
+ * list may not be read (App lock / hidden memory lists) the card says nothing
+ * about filing at all.
+ */
+function openChatInfo(c) {
+  const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
+  const tagOf = tagView ? tagById(tagView, c.tagId) : null;
+  const card = chatInfoCard(c, Date.now(), {
+    tagName: tagOf ? tagOf.name : "",
+    tagsKnown: Boolean(tagView),
+  });
+  openDialog(card.title, (body, api) => {
+    const list = el("ul", "history-info-lines");
+    for (const line of card.lines) list.append(el("li", "", line));
+    body.append(list);
+    return [button(card.close, () => api.close())];
+  }, { outside: true });
 }
 
 /** The PC's search results, in place of the list, while words are in the box. */
