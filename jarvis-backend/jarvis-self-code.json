@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "ad8b7ce717cfbc5466f56bb221eddcda1df72df5",
- "built_at": "2026-11-15T09:06:52-08:00",
+ "ref": "0ee2133ec8a7db73be288b50dd9b772626611bf1",
+ "built_at": "2026-11-15T10:20:23-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4717,6 +4717,7 @@
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
+    "changelog.d/2026-11-15-approved-merge-card-runs-or-says-why.md",
     "changelog.d/2026-11-15-chat-window-honoured.md",
     "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/2026-11-15-preset-window-truth.md",
@@ -4922,6 +4923,7 @@
     "decisions.d/2026-11-15-a-measured-window-is-a-claim-about-the-runner.md",
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
     "decisions.d/2026-11-15-github-answers-are-refusals.md",
+    "decisions.d/2026-11-15-merge-card-reads-its-own-pin.md",
     "decisions.d/2026-11-15-name-the-window-on-the-native-endpoint.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5426,7 +5428,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 997,
+   "file_count": 999,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6513,14 +6515,34 @@
  ],
  "recent_commits": [
   {
+   "sha": "0ee2133ec8a7db73be288b50dd9b772626611bf1",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (f96d5dcfe) into fix/chat-window-honoured-2026-11-15"
+  },
+  {
+   "sha": "f96d5dcfe1cf3b9f916791501df7dfb2be170559",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1268 from darknight11ish/feat/github-robustness-2026-11-15"
+  },
+  {
    "sha": "ad8b7ce717cfbc5466f56bb221eddcda1df72df5",
    "date": "2026-11-15",
    "subject": "fix(chat): the window the preset names is the window the turn gets"
   },
   {
+   "sha": "2adeb007b2acdd05c517b77fbdcf80145dec0654",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (9f8dde1c8) into feat/github-robustness-2026-11-15"
+  },
+  {
    "sha": "9f8dde1c8b99edac44de0806b2dee0ef596e4366",
    "date": "2026-11-15",
    "subject": "Merge pull request #1266 from darknight11ish/fix/ctx-window-truth-2026-11-15"
+  },
+  {
+   "sha": "4218b2e5b54d8a293ff9e9506829e8d37425098a",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (2aacc71ba, GitHub parity stage 1 / #1264) into feat/github-robustness-2026-11-15"
   },
   {
    "sha": "2b7cefdd2bc662578c3a23478d4ca21440001251",
@@ -6546,6 +6568,11 @@
    "sha": "ab9801a1c25e8162af452e0685e116b4e4e5325d",
    "date": "2026-11-15",
    "subject": "Merge pull request #1263 from darknight11ish/fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
+   "sha": "05a54cc74f66b32cda9afc4d3ad78ea770311237",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (275fbb571) into feat/github-robustness-2026-11-15"
   },
   {
    "sha": "65480b1469cb2cd84a2a155eb5aa4aabf16bb00b",
@@ -6578,39 +6605,14 @@
    "subject": "Merge commit '5ca2fb86e69dd19bc69168064fee6fab7a637d93' into fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
+   "sha": "8848eb16777e3cbeefc71716468a953bb90aa9b1",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into feat/github-robustness-2026-11-15"
+  },
+  {
    "sha": "695e85687af2b682f3eb76f400e2c4d598f78417",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into fix/ctx-window-truth-2026-11-15"
-  },
-  {
-   "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
-  },
-  {
-   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
-   "date": "2026-11-15",
-   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
-  },
-  {
-   "sha": "5422283a791631d7f0211590d9096f8837e70b41",
-   "date": "2026-11-15",
-   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
-  },
-  {
-   "sha": "11622bb67d5596f082db2b7efb3fdbee6f4254a0",
-   "date": "2026-11-15",
-   "subject": "chore(records): regenerate the self-code map for the files this change touched"
   }
  ],
  "top_level": [
@@ -6642,7 +6644,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 286
+   "files": 287
   },
   {
    "path": "tools/",
@@ -6657,7 +6659,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 203
+   "files": 204
   },
   {
    "path": "plugins/",
@@ -6736,8 +6738,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5859,
-  "covered": 5376,
+  "tracked_files": 5861,
+  "covered": 5378,
   "excluded": 483,
   "subsystems": 27
  },
