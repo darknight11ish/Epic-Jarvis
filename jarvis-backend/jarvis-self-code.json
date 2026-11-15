@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "08126eb741c6da9f488ac43bdedf590a7ea7aa3d",
- "built_at": "2026-11-15T00:22:08-08:00",
+ "ref": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
+ "built_at": "2026-11-15T02:08:20-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6503,6 +6503,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
+   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
+  },
+  {
    "sha": "08126eb741c6da9f488ac43bdedf590a7ea7aa3d",
    "date": "2026-11-15",
    "subject": "chore(records): re-take the self-code map over the preset and catalogue changes"
@@ -6521,6 +6531,11 @@
    "sha": "101641fc731117ed8b6d74c1ebd83c601cf3160c",
    "date": "2026-11-15",
    "subject": "The General preset stops saying its thinking must stay off (Q5)"
+  },
+  {
+   "sha": "87e40c6a5165eb5efdd49968a982d1d176a41841",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
   },
   {
    "sha": "55637c18b18fa967bb1ae8ffaeb8515815260ea1",
@@ -6546,6 +6561,11 @@
    "sha": "be536881b40c7317f6880ff6d14c39397a321fcc",
    "date": "2026-11-14",
    "subject": "Bench suites ask for room to think, and name the budget when it runs out"
+  },
+  {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
   },
   {
    "sha": "e496e93c373679d108b7924d370f031517298c6a",
@@ -6581,26 +6601,6 @@
    "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
    "date": "2026-11-14",
    "subject": "Merge pull request #1260 from darknight11ish/integration/wave20-2026-11-14"
-  },
-  {
-   "sha": "64f224e52d8e6c280b407a04f27a0d908d3e0f83",
-   "date": "2026-11-14",
-   "subject": "Give android_app its diet hints, so the tool can actually be shown"
-  },
-  {
-   "sha": "e43379848911d09db748f5c6b3612e1579575e27",
-   "date": "2026-11-14",
-   "subject": "The desktop's raw-tool list is eight now, and its test says so"
-  },
-  {
-   "sha": "81f05a38609e0212f7812d9a26e67532987d3db1",
-   "date": "2026-11-14",
-   "subject": "Read the tool-action rows as a table, and stop ranking git walks"
-  },
-  {
-   "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
-   "date": "2026-11-14",
-   "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
   }
  ],
  "top_level": [
