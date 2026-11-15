@@ -41,12 +41,19 @@ made from the whole patch stack (backend/_stack.py). What is proved:
     address is a WARN, a home-network one a FAIL, Tailscale/Meshnet off or
     moved a FAIL, Jarvis not listening there a FAIL with the fix that fits
     where the address came from, and a missing firewall rule a WARN with
-    the exact one-line fix - every Windows call faked.
+    the exact one-line fix - every Windows call faked;
+  * which commit each piece came from (Gemini's ruling Q8, 2026-11-15): the
+    desktop app's own start-up line and the backend's SOURCE-COMMIT are read,
+    an older record than the files it describes is not believed, a piece that
+    does not say is said to not say, the phone is reported as unreadable from
+    this PC, and two pieces at different commits produce the MIXED COMMITS
+    WARN - never a FAIL, because the ruling asks for visibility, not a gate.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -228,10 +235,10 @@ def _rows(rows, key):
 
 def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
-    want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
-            "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "sleep", "phone", "data_health", "credentials", "screen",
-            "engine_config"]
+    want = ["backend", "handshake", "model", "chat", "patches", "modules", "commits",
+            "private_files", "gate", "stop_all", "scheduler", "folders", "instant_email",
+            "events", "voice", "reach", "home", "sleep", "phone", "data_health",
+            "credentials", "screen", "engine_config"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -568,6 +575,141 @@ def t_modules():
     check("files newer than the running Jarvis: WARN, restart it",
           any(st == S.WARN and "changed after Jarvis started" in what and "Restart" in d_
               for st, what, d_ in mod), mod)
+
+
+def _desktop_log_dir(version: str, commit: str = "", short: int = 12) -> Path:
+    """A temp log folder holding one desktop start-up line, as the app writes it."""
+    logs = Path(tempfile.mkdtemp(prefix="jarvis-preflight-commits-logs-"))
+    line = f"\n===== Jarvis Desktop {version} starting ====="
+    if commit:
+        line += f" (commit {commit[:short]}, logs in C:\\logs)"
+    else:
+        line += " (logs in C:\\logs)"
+    (logs / "jarvis-desktop.log").write_text(line + "\n", encoding="utf-8")
+    return logs
+
+
+def _backend_with_commit(version: str, commit: str = "", *, record_version: str = "",
+                         schema: str = "jarvis-source-commit/1") -> Path:
+    """A temp backend folder with a VERSION and, when asked, a SOURCE-COMMIT."""
+    d = Path(tempfile.mkdtemp(prefix="jarvis-preflight-commits-backend-"))
+    (d / "VERSION").write_text(version, encoding="utf-8")
+    if commit or record_version:
+        doc = {"schema": schema, "commit": commit,
+               "ref": "origin/main", "version": record_version or version}
+        (d / "SOURCE-COMMIT").write_text(json.dumps(doc), encoding="utf-8")
+    return d
+
+
+def t_commits():
+    """Gemini's ruling Q8 (2026-11-15): each piece records the commit it came
+    from, and the preflight says so plainly - including MIXED COMMITS when two
+    pieces that DO say it disagree. Never a FAIL: visibility, not a gate.
+
+    Every case below fails on the code before this check existed (there was no
+    "commits" check at all), which is what makes it a test of the ruling rather
+    than of its own fixture.
+    """
+    # 1. Two pieces that name different commits: the warning, in those words.
+    live, _f, _o = _live(
+        backend=_backend_with_commit("0.2.456", "04d4748cf0123456789abcdef0123456789abcde"),
+        log_dir=_desktop_log_dir("0.2.458", "7a8fe7d0123456789abcdef0123456789abcde"))
+    _p, fails, _w, _s, rows, text = _run(live, only={"commits"})
+    got = _rows(rows, "commits")
+    check("two pieces at different commits: a MIXED COMMITS warning",
+          any(st == S.WARN and "MIXED COMMITS:" in what for st, what, _d in got), got)
+    check("... naming both commits, so the owner can tell which is which",
+          any(st == S.WARN and "MIXED COMMITS:" in what
+              and "7a8fe7d" in what and "04d4748" in what for st, what, _d in got), got)
+    check("... and never a FAIL: the ruling asks for visibility, not a gate", fails == 0, got)
+    check("... and it is the first row, where the eye lands",
+          got and got[0][0] == S.WARN and "MIXED COMMITS:" in got[0][1], got)
+    check("... and it says what to do about it",
+          any("Update both" in f"{what} {_d}" for _st, what, _d in got), got)
+    check("the two pieces are ALSO named one by one",
+          any(st == S.PASS and "7a8fe7d" in what for st, what, _d in got)
+          and any(st == S.PASS and "04d4748" in what for st, what, _d in got), got)
+    check("the phone is reported as unreadable from this PC, not guessed at",
+          any(st == S.SKIP and "phone" in what and "cannot be read from this PC" in what
+              for st, what, _d in got), got)
+    check("the phone row names no commit of its own - it does not guess one",
+          not any(re.search(r"[0-9a-f]{7,40}", f"{what} {_d}")
+                  for st, what, _d in got if st == S.SKIP and "phone" in what), got)
+
+    # 2. The same tree recorded short (the build's 12 characters) and long (the
+    #    deploy's 40) is ONE commit, not a mismatch.
+    live, _f, _o = _live(
+        backend=_backend_with_commit("0.2.458", "7a8fe7d0123456789abcdef0123456789abcde"),
+        log_dir=_desktop_log_dir("0.2.458", "7a8fe7d0123456789abcdef0123456789abcde",
+                                 short=12))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"commits"})
+    got = _rows(rows, "commits")
+    check("the same commit, one side short: they MATCH (not MIXED COMMITS)",
+          not any("MIXED COMMITS:" in what for _st, what, _d in got), got)
+    check("... and a PASS says so", any(st == S.PASS and "both came from" in what
+                                        for st, what, _d in got), got)
+    check("... still never a FAIL", fails == 0, got)
+
+    # 3. A desktop build older than this check: its log names the version and no
+    #    commit, and the honest line says that rather than inventing one.
+    live, _f, _o = _live(
+        backend=_backend_with_commit("0.2.456", "04d4748cf0123456789abcdef0123456789abcde"),
+        log_dir=_desktop_log_dir("0.2.456"))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"commits"})
+    got = _rows(rows, "commits")
+    check("a desktop build that does not name its commit: said in those words",
+          any(st == S.WARN and what == "the desktop app does not say which commit it came "
+                                       "from" for st, what, _d in got), got)
+    check("... and no MIXED COMMITS claim can be made from one known commit",
+          not any("MIXED COMMITS:" in what for _st, what, _d in got), got)
+    check("... while the backend that DOES say is still named",
+          any(st == S.PASS and "04d4748" in what for st, what, _d in got), got)
+
+    # 4. A backend deployed some other way: no SOURCE-COMMIT beside VERSION.
+    live, _f, _o = _live(
+        backend=_backend_with_commit("0.2.456"),
+        log_dir=_desktop_log_dir("0.2.458", "7a8fe7d0123456789abcdef0123456789abcde"))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"commits"})
+    got = _rows(rows, "commits")
+    check("a backend with no commit record: said in those words",
+          any(st == S.WARN and what == "the backend does not say which commit it came from"
+              for st, what, _d in got), got)
+    check("... and it names where that record comes from",
+          any("reconcile_live_backend.py" in _d for _st, _w, _d in got), got)
+    check("... and no MIXED COMMITS claim is made either",
+          not any("MIXED COMMITS:" in what for _st, what, _d in got), got)
+
+    # 5. A commit record left behind by an earlier deploy: VERSION has moved
+    #    since, so the recorded commit is not the one running now. That is
+    #    "does not say", never a stale sha presented as the current one.
+    live, _f, _o = _live(
+        backend=_backend_with_commit("0.2.456", "04d4748cf0123456789abcdef0123456789abcde",
+                                     record_version="0.2.421"),
+        log_dir=_desktop_log_dir("0.2.458", "7a8fe7d0123456789abcdef0123456789abcde"))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"commits"})
+    got = _rows(rows, "commits")
+    check("a record older than the files it describes: not believed",
+          any(st == S.WARN and "the backend does not say" in what for st, what, _d in got), got)
+    check("... and it says WHY, naming both versions",
+          any(st == S.WARN and "0.2.421" in _d and "0.2.456" in _d
+              for st, _w, _d in got), got)
+    check("... and a stale sha is never shown as the backend's commit",
+          not any(st == S.PASS and "04d4748" in what for st, what, _d in got), got)
+
+    # 6. Junk in the record is not a commit.
+    live, _f, _o = _live(
+        backend=_backend_with_commit("0.2.456", "not-a-sha"),
+        log_dir=_desktop_log_dir("0.2.458"))
+    _p, fails, _w, _s, rows, _t = _run(live, only={"commits"})
+    got = _rows(rows, "commits")
+    check("a record that does not name a commit: does not say, never a guess",
+          any(st == S.WARN and "the backend does not say" in what for st, what, _d in got)
+          and not any("not-a-sha" in what for _st, what, _d in got), got)
+    check("and the comparison helper agrees only on real hex",
+          S._same_commit("7a8fe7d0123", "7a8fe7d") and
+          not S._same_commit("7a8fe7d", "7a8fe7e") and
+          not S._same_commit("", "7a8fe7d") and
+          not S._same_commit("not-a-sha", "not-a-sha"))
 
 
 def t_owner_check_and_stop_all():

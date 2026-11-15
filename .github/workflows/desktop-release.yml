@@ -239,6 +239,7 @@ jobs:
           printf '%s\n' "$notes" > dist/notes.txt
           node scripts/updater-manifest.mjs \
             --version "$VERSION" \
+            --commit "$GITHUB_SHA" \
             --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
             --nsis "dist/jarvis-desktop_${VERSION}_x64-setup.exe" \
             ${msi_args[@]+"${msi_args[@]}"} \

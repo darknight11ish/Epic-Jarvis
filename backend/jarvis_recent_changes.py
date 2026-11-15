@@ -19,6 +19,7 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The preflight now says which commit each piece came from, and warns MIXED COMMITS when they disagree',
     'A feature pull request no longer commits the self-code map',
     'The General preset stops claiming the model "answered nothing" without thinking',
     'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
