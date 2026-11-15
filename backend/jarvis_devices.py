@@ -2283,12 +2283,13 @@ def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
 
 
 def paired_status() -> dict:
-    """What PC help's silent-failure doctor reads: every PAIRED device, when
-    it was last heard from (epoch seconds), and whether it has remote reach at
-    all. Read-only, and never a token, key or hash.
+    """What PC help's silent-failure doctor and the chat read: every PAIRED
+    device, when it was last heard from (epoch seconds), whether it has remote
+    reach at all, and whether it has its own approval key. Read-only, and never
+    a token, key or hash.
 
-    {"devices": [{"id", "name", "kind", "created", "last_seen", "reach"}],
-     "readable": bool, "why": ""}
+    {"devices": [{"id", "name", "kind", "created", "last_seen", "reach",
+                  "approval_key"}], "readable": bool, "why": ""}
 
     `last_seen` is the newest of the row's written sighting and this
     process's in-memory one - the same pair `devices_view()` merges - or None
@@ -2297,7 +2298,12 @@ def paired_status() -> dict:
     for every row that has its own key: this design has no separate
     "also on my phone" switch (the string does not exist in this tree), so a
     paired device with its own key IS the device that can reach Jarvis, and
-    its last check-in is the evidence it still does."""
+    its last check-in is the evidence it still does. `approval_key` is
+    `approval_key_state()`'s own answer - True (on), "waiting" (its
+    register_approval_key card is up) or False (off) - added 2026-11-14 so the
+    chat can say it without a second read of the registry; it is the same
+    "Signed approvals" line both apps' Devices cards show, never the key.
+    """
     doc, why = load()
     with _SEEN_LOCK:
         seen = dict(_SEEN)
@@ -2310,7 +2316,8 @@ def paired_status() -> dict:
         row = {"id": r.get("id"), "name": row_shown(r),
                "kind": r.get("kind", "phone"),
                "created": r.get("created") if isinstance(r.get("created"), int) else None,
-               "last_seen": last, "reach": True}
+               "last_seen": last, "reach": True,
+               "approval_key": approval_key_state(r.get("id"), r)}
         rows.append(row)
     return {"devices": rows, "readable": not why, "why": why}
 
