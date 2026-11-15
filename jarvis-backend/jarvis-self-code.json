@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f4d672e9d072e17650c49bb7178ede4d7401a5a2",
- "built_at": "2026-11-15T00:20:16-08:00",
+ "ref": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
+ "built_at": "2026-11-15T02:08:20-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4706,6 +4706,7 @@
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
     "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
+    "changelog.d/2026-11-14-catalogue-every-card.md",
     "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
@@ -4904,6 +4905,7 @@
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
     "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
+    "decisions.d/2026-11-14-catalogue-counts-every-card.md",
     "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
@@ -5414,7 +5416,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 987,
+   "file_count": 989,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6501,6 +6503,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
+   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
+  },
+  {
+   "sha": "08126eb741c6da9f488ac43bdedf590a7ea7aa3d",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the self-code map over the preset and catalogue changes"
+  },
+  {
+   "sha": "46ae82881269d295f3fabd9a086af1c3174e1421",
+   "date": "2026-11-15",
+   "subject": "Merge commit 'f4d672e9d' into fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
    "sha": "f4d672e9d072e17650c49bb7178ede4d7401a5a2",
    "date": "2026-11-15",
    "subject": "chore(records): re-take the self-code map after the preset copy change"
@@ -6511,9 +6533,19 @@
    "subject": "The General preset stops saying its thinking must stay off (Q5)"
   },
   {
+   "sha": "87e40c6a5165eb5efdd49968a982d1d176a41841",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
+  },
+  {
    "sha": "55637c18b18fa967bb1ae8ffaeb8515815260ea1",
    "date": "2026-11-15",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/bench-answer-budget-2026-11-14"
+  },
+  {
+   "sha": "792d1ed96ec5eebef3abb68db6100ca120e1513c",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
    "sha": "04d4748cfea08924a8facf798b01ae490769f989",
@@ -6521,9 +6553,19 @@
    "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
   },
   {
+   "sha": "6b24a96468ac383f42da95d98139d5000ec2a199",
+   "date": "2026-11-14",
+   "subject": "Fix the model catalogue to count every card nvidia-smi reports"
+  },
+  {
    "sha": "be536881b40c7317f6880ff6d14c39397a321fcc",
    "date": "2026-11-14",
    "subject": "Bench suites ask for room to think, and name the budget when it runs out"
+  },
+  {
+   "sha": "05207213363f553ce526f05a1512ba45d774f822",
+   "date": "2026-11-14",
+   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
   },
   {
    "sha": "e496e93c373679d108b7924d370f031517298c6a",
@@ -6559,46 +6601,6 @@
    "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
    "date": "2026-11-14",
    "subject": "Merge pull request #1260 from darknight11ish/integration/wave20-2026-11-14"
-  },
-  {
-   "sha": "64f224e52d8e6c280b407a04f27a0d908d3e0f83",
-   "date": "2026-11-14",
-   "subject": "Give android_app its diet hints, so the tool can actually be shown"
-  },
-  {
-   "sha": "e43379848911d09db748f5c6b3612e1579575e27",
-   "date": "2026-11-14",
-   "subject": "The desktop's raw-tool list is eight now, and its test says so"
-  },
-  {
-   "sha": "81f05a38609e0212f7812d9a26e67532987d3db1",
-   "date": "2026-11-14",
-   "subject": "Read the tool-action rows as a table, and stop ranking git walks"
-  },
-  {
-   "sha": "f8727312b9d8b9b26ab816121b7250462f2ce92c",
-   "date": "2026-11-14",
-   "subject": "Regenerate the two records the new fragment moved, with the map read after git add"
-  },
-  {
-   "sha": "97009915516c9c8e1c4e6ef3655b5998366e9f70",
-   "date": "2026-11-14",
-   "subject": "Carry the builder's gate rows in the repair tool instead of a patch, and fix the last two Linux-only checks"
-  },
-  {
-   "sha": "665afdb44cdeb879121d0ae00ced71db179d04cc",
-   "date": "2026-11-14",
-   "subject": "Merge origin/main: the self-code map is regenerated, not hand-merged"
-  },
-  {
-   "sha": "dd8a9b97c943c89346b7ff84ff1c93a62238f6c9",
-   "date": "2026-11-14",
-   "subject": "Fix the six suites the DEF-068 lane turned red, and carry its gate rows in a patch"
-  },
-  {
-   "sha": "c3355f9fafbd29dc771e8b0c135425822f80defc",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1259 from darknight11ish/docs/backend-env-rule-2026-11-14"
   }
  ],
  "top_level": [
@@ -6630,7 +6632,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 281
+   "files": 282
   },
   {
    "path": "tools/",
@@ -6645,7 +6647,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 198
+   "files": 199
   },
   {
    "path": "plugins/",
@@ -6724,8 +6726,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5847,
-  "covered": 5364,
+  "tracked_files": 5849,
+  "covered": 5366,
   "excluded": 483,
   "subsystems": 27
  },
