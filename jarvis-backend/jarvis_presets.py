@@ -1297,6 +1297,18 @@ def pooled_num_ctx() -> Optional[int]:
             return None
 
 
+def is_pooled_lane(url) -> bool:
+    """Is `url` the on-demand pooled lane's own port? Read-only, never raises.
+
+    Split out of `lane_num_ctx` on 2026-11-15 because a caller now has to tell
+    "this is not the pooled lane, so it keeps today's request" apart from "this
+    IS the pooled lane and nothing can say which window it is set to". The
+    second is said to the owner in jarvis_agent; treating it as the first would
+    be the silent guess the 2026-11-15 measurement was made of.
+    """
+    return _port_of_url(url) == _pooled_port()
+
+
 def lane_num_ctx(url) -> Optional[int]:
     """The configured `num_ctx` a chat request on LANE `url` must carry, or None.
 
@@ -1306,8 +1318,14 @@ def lane_num_ctx(url) -> Optional[int]:
     its server carries the window in its environment and the request sends no
     options. The number comes from the lane module's own config, never a second
     copy here.
+
+    THAT NAME GOES ON /api/chat SINCE 2026-11-15, not on the /v1 body: `/v1`
+    does not use a top-level `options` field when it picks a runner (measured
+    twice - 2026-11-09 and 2026-11-15), so the number was never honoured there.
+    This function still answers the number; `jarvis_agent._pooled_turn_window`
+    is what decides which request carries it.
     """
-    if _port_of_url(url) != _pooled_port():
+    if not is_pooled_lane(url):
         return None
     return pooled_num_ctx()
 

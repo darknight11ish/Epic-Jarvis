@@ -67,7 +67,10 @@ chat turn posts to Ollama's own `OLLAMA_URL/v1/chat/completions`
 `temperature`, `max_tokens` (1,024 unless the app asks otherwise),
 `reasoning_effort: "none"` and, with tools on, `tools` - and the
 OpenAI-compatible surface has no field for context length, so no request can
-choose the size. What changed is the machine: the environment variable does,
+choose the size. That last part is about THIS everyday lane: it stopped being
+true of the pooled Coding lane on 2026-11-15, whose turn now goes to Ollama's
+native `/api/chat` and names `options.num_ctx` there (DEF-076;
+`native_chat_body` in `backend/jarvis_agent.py`). What changed is the machine: the environment variable does,
 which is one of the two routes "Setup" below describes. **A fresh install
 without it still gets 4,096**, which is why the ladder is kept.
 
