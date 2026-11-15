@@ -1929,14 +1929,20 @@ class _Scratch:
 
 def _prepared_folder(root: Path, *, repo="darknight11ish/Epic-Jarvis",
                      number="1116", head_ref="feature/tray-icon",
-                     head_sha=HEAD_SHA, checks=None) -> Path:
+                     head_sha=HEAD_SHA, checks=None, title="",
+                     base_ref="") -> Path:
     """A folder the prepare stage could have made: the marker in its `.git`."""
     owner, name = repo.split("/", 1)
     folder = Path(root) / f"{owner}__{name}__pr{number}"
     (folder / ".git").mkdir(parents=True, exist_ok=True)
-    (folder / ".git" / GH.MARKER_NAME).write_text(json.dumps({
-        "repo": repo, "number": number, "head_ref": head_ref,
-        "head_sha": head_sha, "failing_checks": checks or []}), encoding="utf-8")
+    doc = {"repo": repo, "number": number, "head_ref": head_ref,
+           "head_sha": head_sha, "failing_checks": checks or []}
+    if title:
+        doc["title"] = title
+    if base_ref:
+        doc["base_ref"] = base_ref
+    (folder / ".git" / GH.MARKER_NAME).write_text(json.dumps(doc),
+                                                  encoding="utf-8")
     return folder
 
 
@@ -2026,8 +2032,10 @@ def t_fix_prepare_copies_the_pr_into_its_own_scratch_folder():
         check("... and the end of the job log, read without following the "
               "redirect",
               "mismatched types" in text, text)
-        check("a check still running is not called a failure", "audit" not in text,
-              text)
+        check("a check still running is named unfinished, never called a failure",
+              "audit (in_progress)" in text and "have not finished yet" in text
+              and "audit: failure" not in text
+              and "There are no failing checks" not in text, text)
         check("it says nothing was pushed and what to do next",
               "Nothing has been pushed." in text and 'stage="push"' in text, text)
         check("the annotation and log evidence are bounded",
@@ -2111,6 +2119,201 @@ def t_a_pre_existing_scratch_folder_is_refused_and_never_deleted():
               target.is_dir() and kept.is_file()
               and kept.read_text(encoding="utf-8")
               == "the owner's own work from last time", str(target))
+
+
+def t_the_fix_cards_say_where_the_token_really_goes():
+    """Every card that spends the key names BOTH hosts it really reaches.
+
+    The old fix card said "api.github.com and nowhere else", but prepare clones
+    and fetches over github.com and the push goes to github.com. The write card
+    is the one card that spends no token at all, and it must keep saying so.
+    """
+    for tool in ("github_fix_and_push", "github_open_pr"):
+        r, _text = _card(tool)
+        text = GH.describe(r)
+        check(f"{tool}'s card names api.github.com for the reads",
+              "api.github.com" in text, text[-400:])
+        check(f"{tool}'s card names github.com for the git step",
+              "to github.com" in text, text[-400:])
+        check(f"{tool}'s card never claims api.github.com alone",
+              "api.github.com and nowhere else" not in text, text[-400:])
+    with _Scratch() as box:
+        folder = _prepared_folder(box.root)
+        push = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "push", "worktree": str(folder)}, git=_push_git())
+        text = GH.describe(push)
+        check("the push card names api.github.com for the re-read",
+              "api.github.com" in text, text[-400:])
+        check("... and github.com for the git push", "to github.com" in text,
+              text[-400:])
+        check("... and never claims api.github.com alone",
+              "api.github.com and nowhere else" not in text, text[-400:])
+    with _Scratch() as box:
+        folder = _prepared_folder(box.root)
+        write = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "write", "worktree": str(folder),
+             "path": "backend/new.py", "content": "x = 1\n",
+             "message": "Add the missing module"}, git=FakeGit())
+        text = GH.describe(write)
+        check("the local write card says it uses no GitHub token",
+              "uses no GitHub token" in text and "api.github.com" not in text,
+              text[-400:])
+
+
+def t_prepare_git_timeout_is_measured_and_a_failed_copy_is_cleaned_up():
+    """The clone needs the room, and a failed copy is retried then named."""
+    check("the git timeout is at least twice the 297 s clone measured here",
+          GH.GIT_TIMEOUT >= 600, GH.GIT_TIMEOUT)
+    routes = [("/pulls/1116", (200, _pr_doc())),
+              ("/check-runs", (200, json.dumps({"check_runs": []})))]
+    with _Scratch() as box:
+        target = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        real = shutil.rmtree
+        calls = []
+
+        def flaky(path, ignore_errors=False):
+            calls.append(path)
+            if len(calls) < 3:
+                return
+            real(path, ignore_errors=ignore_errors)
+
+        GH.shutil.rmtree = flaky
+        try:
+            out = _run_request(r, Routed(routes), git=FakeGit(
+                [("clone", (128, "", "fatal: network down"))]))
+        finally:
+            GH.shutil.rmtree = real
+        check("a failed clone is refused", out.get("ok") is False, out)
+        check("... and the half-made folder is removed after retries",
+              not target.exists(), str(target))
+        check("... and the answer does not claim it could not remove it",
+              "could not remove" not in out.get("error", ""), out)
+
+        if target.exists():
+            real(str(target), ignore_errors=True)
+
+        def never(_path, **_kwargs):
+            pass
+
+        GH.shutil.rmtree = never
+        try:
+            out2 = _run_request(r, Routed(routes), git=FakeGit(
+                [("clone", (128, "", "fatal: network down"))]))
+        finally:
+            GH.shutil.rmtree = real
+        said = out2.get("error", "")
+        check("when removal really fails, the answer names the folder and asks "
+              "the owner to delete it",
+              str(target) in said and "delete that folder yourself" in said, said)
+
+
+def t_prepare_names_pending_checks_and_never_calls_them_passing():
+    """Pending is not a pass: prepare names the unfinished checks and waits."""
+    routes = [
+        ("/pulls/1116", (200, _pr_doc())),
+        ("/check-runs", (200, json.dumps({"check_runs": [
+            {"id": 55, "name": "rust", "status": "completed",
+             "conclusion": "success"},
+            {"id": 57, "name": "audit", "status": "in_progress",
+             "conclusion": None}]}))),
+    ]
+    with _Scratch() as box:
+        target = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        out = _run_request(r, Routed(routes), git=FakeGit())
+        text = out.get("text", "")
+        check("prepare succeeds", out.get("ok") is True, out)
+        check("the unfinished check is named with GitHub's status",
+              "audit (in_progress)" in text and "have not finished yet" in text,
+              text)
+        check("... and is never called a failure", "audit: failure" not in text,
+              text)
+        check("... and the answer never says there are no failing checks",
+              "There are no failing checks" not in text, text)
+        marker = json.loads((target / ".git" / GH.MARKER_NAME).read_text(
+            encoding="utf-8"))
+        check("the marker keeps unfinished checks separate from failures",
+              marker.get("failing_checks") == []
+              and marker.get("pending_checks")
+              == [{"name": "audit", "status": "in_progress"}], marker)
+        push = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "push", "worktree": str(target)}, git=_push_git())
+        ptext = GH.describe(push)
+        check("the push card repeats the unfinished check",
+              "audit (in_progress)" in ptext and "still running" in ptext, ptext)
+
+
+def t_prepare_refuses_a_merged_pull_request_before_the_clone():
+    merged = _pr_doc(state="closed", merged=True,
+                     merged_at="2026-11-15T08:01:33Z")
+    git = FakeGit()
+    with _Scratch() as box:
+        target = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        out = _run_request(r, Routed([("/pulls/1116", (200, merged))]), git=git)
+        said = out.get("error", "")
+        check("a merged pull request is refused", out.get("ok") is False, out)
+        check("... by number and state", "#1116" in said
+              and "already merged" in said, said)
+        check("... before any git command", git.commands() == [], git.commands())
+        check("... and no scratch folder was made", not target.exists(),
+              str(target))
+
+
+def t_the_push_plan_refuses_a_branch_that_is_not_a_valid_ref():
+    with _Scratch() as box:
+        folder = _prepared_folder(box.root, head_ref="a..b")
+        try:
+            GH.plan_fix_and_push(
+                {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+                 "stage": "push", "worktree": str(folder)},
+                git=_push_git(branch="a..b"))
+            check("a branch containing '..' is refused before a card", False,
+                  "it was NOT refused")
+        except GH.GitHubError as exc:
+            said = str(exc)
+            check("a branch containing '..' is refused before a card",
+                  "branch name" in said.lower() and "a..b" in said, said)
+
+
+def t_write_and_push_cards_carry_title_base_command_and_abandon():
+    """Both cards carry the facts the owner needs to judge the change."""
+    with _Scratch() as box:
+        folder = _prepared_folder(box.root, title="Fix the tray icon",
+                                  base_ref="main")
+        write = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "write", "worktree": str(folder),
+             "path": "backend/new.py", "content": "x = 1\n",
+             "message": "Add the missing module"}, git=FakeGit())
+        text = GH.describe(write)
+        for label, needle in (
+                ("the title", "Title: Fix the tray icon"),
+                ("the base branch", "Base branch: main"),
+                ("the push command",
+                 "git push origin HEAD:refs/heads/feature/tray-icon"),
+                ("plain words for the ref",
+                 "HEAD means the commit in this folder"),
+                ("how to abandon it", "To abandon this fix"),
+                ("a reset command", "reset --hard " + HEAD_SHA)):
+            check(f"the write card carries {label}", needle in text, text[-600:])
+        push = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "push", "worktree": str(folder)}, git=_push_git())
+        ptext = GH.describe(push)
+        for label, needle in (
+                ("the title", "Title: Fix the tray icon"),
+                ("the base branch", "Base branch: main"),
+                ("the push command",
+                 "git push origin HEAD:refs/heads/feature/tray-icon"),
+                ("plain words for the ref",
+                 "HEAD means the commit in this folder"),
+                ("how to abandon it", "To abandon it, do not approve this card")):
+            check(f"the push card carries {label}", needle in ptext, ptext[-600:])
 
 
 def t_the_job_log_redirect_is_allowlisted_and_strips_the_token():
@@ -3354,6 +3557,12 @@ if __name__ == "__main__":
                    t_fix_prepare_refuses_a_fork_and_a_protected_branch,
                    t_a_failed_prepare_removes_its_folder_and_the_next_prepare_works,
                    t_a_pre_existing_scratch_folder_is_refused_and_never_deleted,
+                   t_the_fix_cards_say_where_the_token_really_goes,
+                   t_prepare_git_timeout_is_measured_and_a_failed_copy_is_cleaned_up,
+                   t_prepare_names_pending_checks_and_never_calls_them_passing,
+                   t_prepare_refuses_a_merged_pull_request_before_the_clone,
+                   t_the_push_plan_refuses_a_branch_that_is_not_a_valid_ref,
+                   t_write_and_push_cards_carry_title_base_command_and_abandon,
                    t_the_job_log_redirect_is_allowlisted_and_strips_the_token,
                    t_a_job_log_read_error_is_not_shown_as_a_log_tail,
                    t_the_push_card_shows_the_commits_files_and_exact_command,
