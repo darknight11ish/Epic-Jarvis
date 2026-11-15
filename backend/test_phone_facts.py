@@ -194,10 +194,26 @@ def main():
              REPO / "jarvis-backend" / "jarvis_surface.py"]
     check("module: both copies exist", all(p.is_file() for p in twins))
     check("module: the twin is byte-identical", twins[0].read_bytes() == twins[1].read_bytes())
-    where = (REPO / "backend" / "_where.py").read_text(encoding="utf-8")
-    script = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
+    # Both SHIPPED lists are read by the CODE that ships from them, never by
+    # matching their source text: `_where.SHIPPED` is the repository's own
+    # tuple, and `parse_powershell_list` is the parser the deploy tool itself
+    # uses on `scripts/apply-patches.ps1` (it refuses a duplicate, a `..` or a
+    # base-folder entry). A text pin here would go red on a rename and stay
+    # green if the list stopped being the one that is deployed - and it is also
+    # what the source-pin gate (tools/check_no_source_pins.py) counts.
+    import _where
+    if str(REPO / "tools") not in sys.path:
+        sys.path.insert(0, str(REPO / "tools"))
+    import reconcile_live_backend as _deploy
+
+    shipped_repo = set(_where.SHIPPED)
+    shipped_deploy = set(_deploy.parse_powershell_list(
+        (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8"), "SHIPPED"))
     check("module: named in both SHIPPED lists",
-          '"jarvis_surface.py"' in where and "'jarvis_surface.py'" in script)
+          "jarvis_surface.py" in shipped_repo
+          and "jarvis_surface.py" in shipped_deploy,
+          ([n for n in shipped_repo if "surface" in n],
+           [n for n in shipped_deploy if "surface" in n]))
 
     S.reset()
 
