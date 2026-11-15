@@ -263,6 +263,16 @@ the backend files. Each published build is `0.2.<run number>`, so every
 build is newer than the one before. The updater only ever offers a higher
 number than the one installed.
 
+**Which commit is each piece on:** the desktop, the phone's APK and the live
+backend each record the commit they were built from. The desktop's start-up
+log line names it (the build reads it from `git` at build time, so it is the
+commit this binary really came from), `latest.json` carries it as a `commit`
+field so a program can read what the release notes say in prose, and the
+backend keeps a `SOURCE-COMMIT` file beside `VERSION` (written by
+`tools/reconcile_live_backend.py`). `py -3 backend\selftest.py --preflight`
+reads them and prints **MIXED COMMITS** when two pieces disagree. That is a
+warning, never a block: an urgent one-piece fix may still be installed.
+
 **What leaves your PC:** a check is one plain request for `latest.json` at
 `https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json`,
 with nothing about you in it. A download whose signature does not match the

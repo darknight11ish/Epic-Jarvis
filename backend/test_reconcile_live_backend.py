@@ -5078,9 +5078,9 @@ def fixture_version_reader(exe: Path):
 
 
 def release_report(text: str) -> list:
-    """The VERSION:/BESIDE: lines, for a failure message that shows the report."""
+    """The VERSION:/SOURCE-COMMIT:/BESIDE: lines, for a failure message."""
     return [line for line in text.splitlines()
-            if line.startswith(("VERSION:", "BESIDE:"))]
+            if line.startswith(("VERSION:", "SOURCE-COMMIT:", "BESIDE:"))]
 
 
 def t_release_markers_carry_the_version_and_the_beside_files():
@@ -5103,6 +5103,12 @@ def t_release_markers_carry_the_version_and_the_beside_files():
               "BESIDE: would write requirements.lock" in text
               and "BESIDE: would write quiz_grader_cases.json" in text,
               release_report(text))
+        check("release: ... and the source commit, from the commit the files came from",
+              f"SOURCE-COMMIT: would write {FIXTURE_HEAD[:12]}" in text, release_report(text))
+        check("release: the source commit is recorded BESIDE VERSION, not inside it",
+              not (live / "SOURCE-COMMIT").exists()
+              and (live / "VERSION").read_bytes() == before,
+              (live / "VERSION").read_bytes())
         check("release: the dry run leaves the live VERSION alone",
               (live / "VERSION").read_bytes() == before)
         check("release: ... and creates no beside-file",
@@ -5110,13 +5116,15 @@ def t_release_markers_carry_the_version_and_the_beside_files():
               and not (live / "quiz_grader_cases.json").exists())
         # The runbook's formula: to add + to update + the DISTINCT files among
         # the inserts + the release markers (each differing beside file plus the
-        # VERSION when it differs) - `wrote N` covers all of them since 2026-11-06.
-        # Here VERSION differs (0.2.421 -> 9.9.9) and BOTH beside files are
-        # missing, so the release term is 3.
+        # VERSION when it differs, plus SOURCE-COMMIT when it is not already the
+        # record this run would write) - `wrote N` covers all of them since
+        # 2026-11-06. Here VERSION differs (0.2.421 -> 9.9.9), BOTH beside files
+        # are missing, and SOURCE-COMMIT is absent (Gemini's ruling Q8,
+        # 2026-11-15), so the release term is 4.
         def summ(label):
             found = re.search(rf"^  {re.escape(label)}: (\d+)$", text, re.M)
             return int(found.group(1)) if found else 0
-        expected_release = 3
+        expected_release = 4
         expected_wrote = (summ("to add") + summ("to update")
                           + len(set(re.findall(r"^ {6}\S.*? -> (\S+) \(", text, re.M)))
                           + expected_release)
@@ -5146,9 +5154,17 @@ def t_release_markers_carry_the_version_and_the_beside_files():
               wrote is not None and int(wrote.group(1)) == expected_wrote,
               (wrote.group(1) if wrote else None, expected_wrote))
         check("release: ... and the report says how many were release markers",
-              "wrote %d file(s) (3 of them release markers: VERSION, "
-              "requirements.lock, quiz_grader_cases.json)" % expected_wrote in text2,
+              "wrote %d file(s) (4 of them release markers: VERSION, "
+              "SOURCE-COMMIT, requirements.lock, quiz_grader_cases.json)"
+              % expected_wrote in text2,
               (text2[-4:], expected_wrote))
+        # The record itself: the full commit, in the format the preflight reads.
+        record = json.loads((live / "SOURCE-COMMIT").read_text(encoding="utf-8"))
+        check("release: SOURCE-COMMIT names the commit the bytes came from",
+              record.get("commit") == FIXTURE_HEAD
+              and record.get("schema") == R.SOURCE_COMMIT_SCHEMA
+              and record.get("ref") == "origin/main"
+              and record.get("version") == FIXTURE_DESKTOP_VERSION, record)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -5251,7 +5267,9 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         lock = write(live / "requirements.lock", "")  # same bytes as the ref -> does NOT count
         lock.write_bytes(fake_show(repo, "origin/main", "requirements.lock"))
         # quiz_grader_cases.json is absent -> differs -> counts.
-        expected_release = 2
+        # SOURCE-COMMIT is absent too, and the ref resolves to FIXTURE_HEAD, so
+        # the record is written and counts (Q8, 2026-11-15).
+        expected_release = 3
 
         lines = []
         code = run_fixture(repo, live, apply=False, out_lines=lines,
@@ -5259,12 +5277,14 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         text = "\n".join(lines)
         check("formula: the dry run succeeds", code == 0, (code, lines[-5:]))
         check("formula: the release header states the count in the formula",
-              "RELEASE MARKERS (2 in the formula: VERSION and beside-files):" in text,
+              "RELEASE MARKERS (3 in the formula: VERSION, SOURCE-COMMIT and the "
+              "beside-files):" in text,
               release_report(text))
-        check("formula: ... and its lines name exactly the two writes",
+        check("formula: ... and its lines name exactly the three writes",
               "VERSION: would write 9.9.9 (now 0.2.421)" in text
               and "BESIDE: would write quiz_grader_cases.json" in text
-              and "BESIDE: unchanged requirements.lock" in text,
+              and "BESIDE: unchanged requirements.lock" in text
+              and f"SOURCE-COMMIT: would write {FIXTURE_HEAD[:12]}" in text,
               release_report(text))
         planned = re.search(
             r"^PLANNED CHANGES: (\d+) file-level change\(s\) = add (\d+) \+ "
@@ -5275,7 +5295,8 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
               [l for l in lines if l.startswith("PLANNED CHANGES")])
         if planned:
             total, add_n, upd_n, ins_n, rel_n, pyc_n = (int(g) for g in planned.groups())
-            check("formula: ... with beside+version = 2 (one beside file + VERSION)",
+            check("formula: ... with beside+version = 3 (one beside file + VERSION + "
+                  "SOURCE-COMMIT)",
                   rel_n == expected_release, rel_n)
             check("formula: ... and the total is add + update + insert + "
                   "beside+version + pycache",
@@ -5302,8 +5323,9 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
               (wrote_n, summ("to add"), summ("to update"), distinct_inserts,
                expected_release))
         check("formula: ... and the report names the release markers it counted",
-              wrote_n > 0 and ("wrote %d file(s) (2 of them release markers: "
-                               "VERSION, quiz_grader_cases.json)" % wrote_n) in text2,
+              wrote_n > 0 and ("wrote %d file(s) (3 of them release markers: "
+                               "VERSION, SOURCE-COMMIT, quiz_grader_cases.json)"
+                               % wrote_n) in text2,
               (text2[-4:], wrote_n))
 
         lines3 = []
@@ -5312,12 +5334,98 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         text3 = "\n".join(lines3)
         check("formula: a second apply is idempotent", code3 == 0, (code3, lines3[-8:]))
         check("formula: ... it plans 0 release markers, because nothing differs",
-              "RELEASE MARKERS (0 in the formula: VERSION and beside-files):" in text3,
+              "RELEASE MARKERS (0 in the formula: VERSION, SOURCE-COMMIT and the "
+              "beside-files):" in text3,
               release_report(text3))
         check("formula: ... and says no file changed",
               "no file changed (already current)" in text3, text3[-4:])
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def t_source_commit_is_recorded_beside_version_and_never_guessed():
+    """Gemini's ruling Q8 (2026-11-15): the backend says which commit it came
+    from, and a deploy that cannot say so says THAT instead of inventing one.
+
+    The record is `SOURCE-COMMIT` beside `VERSION` - never inside it, because
+    `VERSION` is the shared release marker the desktop HUD compares character
+    for character - and it is the one file the preflight reads to answer "which
+    commit is the backend on?" without a network fetch.
+    """
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        write(live / "VERSION", FIXTURE_DESKTOP_VERSION)
+        # An OLDER record, from a deploy of another commit.
+        write(live / "SOURCE-COMMIT", json.dumps(
+            {"schema": R.SOURCE_COMMIT_SCHEMA, "commit": "0" * 40,
+             "ref": "origin/main", "version": FIXTURE_DESKTOP_VERSION}) + "\n")
+
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("q8: the dry run succeeds over an older record", code == 0, (code, lines[-5:]))
+        check("q8: ... and says it WOULD replace the commit as well as the version",
+              f"SOURCE-COMMIT: would write {FIXTURE_HEAD[:12]}" in text
+              and "VERSION: unchanged" in text, release_report(text))
+
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
+                            desktop_exe=exe, version_reader=reader)
+        text2 = "\n".join(lines2)
+        record = json.loads((live / "SOURCE-COMMIT").read_text(encoding="utf-8"))
+        check("q8: the apply writes the commit the bytes really came from",
+              code2 == 0 and record.get("commit") == FIXTURE_HEAD, (code2, record))
+        check("q8: ... and the report says so, in its own line",
+              f"SOURCE-COMMIT: wrote {FIXTURE_HEAD[:12]}" in text2, release_report(text2))
+        check("q8: VERSION itself stays the bare release number, with no sha in it",
+              (live / "VERSION").read_bytes() == FIXTURE_DESKTOP_VERSION.encode(),
+              (live / "VERSION").read_bytes())
+
+        # No readable commit: the record is SKIPPED and the deploy still works.
+        # A deploy is not refused for a note it cannot write, and no sha is
+        # invented - the preflight then says "the backend does not say".
+        repo2, live2, _show2 = make_fixture_pc(tmpdir())
+        write(live2 / "VERSION", FIXTURE_DESKTOP_VERSION)
+        lines3 = []
+        code3 = run_fixture(repo2, live2, apply=True, out_lines=lines3,
+                            allow_worktree_mismatch=True,
+                            resolve_shas=lambda _repo, _ref: ("", ""),
+                            desktop_exe=exe, version_reader=reader)
+        text3 = "\n".join(lines3)
+        check("q8: no readable commit: the deploy still succeeds", code3 == 0,
+              (code3, lines3[-6:]))
+        check("q8: ... the record is skipped, with the reason",
+              "SOURCE-COMMIT: skipped (" in text3 and "did not resolve to a commit" in text3,
+              release_report(text3))
+        check("q8: ... and no SOURCE-COMMIT file is written from nothing",
+              not (live2 / "SOURCE-COMMIT").exists())
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_source_commit_blob_is_stable_and_validated():
+    """The record's bytes are a pure function of what it says, so a second run
+    plans nothing; and a non-commit is refused at the writer as well as read
+    as "not a commit" by the preflight."""
+    one = R.source_commit_blob("A" * 40, "origin/main", version="0.2.456")
+    two = R.source_commit_blob("a" * 40, " origin/main ", version=" 0.2.456 ")
+    check("q8: the same facts give the same bytes (so a re-run is unchanged)",
+          one == two, (one, two))
+    doc = json.loads(one.decode("utf-8"))
+    check("q8: ... lower-case, full-length, and claiming the schema the reader knows",
+          doc == {"schema": R.SOURCE_COMMIT_SCHEMA, "commit": "a" * 40,
+                  "ref": "origin/main", "version": "0.2.456"}, doc)
+    for bad in ("", "not-a-sha", "7a8fe7", "0" * 41):
+        try:
+            R.source_commit_blob(bad, "origin/main")
+            refused = False
+        except R.Refused:
+            refused = True
+        check(f"q8: {bad!r} is refused rather than written", refused)
 
 
 def t_release_markers_leave_unchanged_files_alone():
@@ -5687,6 +5795,8 @@ def main():
                t_release_markers_never_touch_the_owners_toml_or_the_excluded_files,
                t_a_missing_installed_desktop_is_skipped_not_guessed,
                t_release_markers_leave_unchanged_files_alone,
+               t_source_commit_is_recorded_beside_version_and_never_guessed,
+               t_source_commit_blob_is_stable_and_validated,
                t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
                t_a_half_applied_gate_is_refused_not_guessed,
