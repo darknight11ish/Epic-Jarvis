@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "7330b25b764ad7f8db3cb386c0fea90e8601c757",
- "built_at": "2026-11-15T08:09:27-08:00",
+ "ref": "1530c2994e3391db8633e6eb89d6374f6e03040a",
+ "built_at": "2026-11-15T10:49:24-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4719,6 +4719,7 @@
     "changelog.d/2026-11-15-approved-merge-card-runs-or-says-why.md",
     "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/2026-11-15-preset-window-truth.md",
+    "changelog.d/2026-11-15-self-code-map-snapshot.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4922,6 +4923,7 @@
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
     "decisions.d/2026-11-15-github-answers-are-refusals.md",
     "decisions.d/2026-11-15-merge-card-reads-its-own-pin.md",
+    "decisions.d/2026-11-15-self-code-map-out-of-pull-requests.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5425,7 +5427,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 997,
+   "file_count": 999,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5473,6 +5475,7 @@
     ".github/workflows/ci.yml",
     ".github/workflows/desktop-release.yml",
     ".github/workflows/jarvis-client.yml",
+    ".github/workflows/self-code-map.yml",
     ".github/workflows/verify-toolchain.yml",
     ".gitignore",
     "backend/.gitignore",
@@ -5958,7 +5961,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 509,
+   "file_count": 510,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6512,14 +6515,59 @@
  ],
  "recent_commits": [
   {
+   "sha": "1530c2994e3391db8633e6eb89d6374f6e03040a",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the recent-changes module after merging main (8f3d551da)"
+  },
+  {
+   "sha": "37a617f89e01d38c04458dd4a817bfa3c3abe54b",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into ci/self-code-map-not-in-prs-2026-11-15"
+  },
+  {
+   "sha": "3a4d7ecd792fdb3e58ebe6983be2c5fd5e83cdaf",
+   "date": "2026-11-15",
+   "subject": "chore(records): seed the self-code map for the snapshot rule (one command, both copies)"
+  },
+  {
+   "sha": "f04fabc4e11bb56c9a9d2db093ca453d30b086a4",
+   "date": "2026-11-15",
+   "subject": "feat(records): the self-code map leaves feature PRs; main carries a checked snapshot"
+  },
+  {
+   "sha": "8f3d551da1010fe97e6ac67a6fbf8d882597d72f",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1269 from darknight11ish/fix/github-approved-card-runs-2026-11-15"
+  },
+  {
+   "sha": "7af81bb05c284f37ab7e8f8c2f37096b7f5f3e20",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (f96d5dcfe) into fix/github-approved-card-runs-2026-11-15"
+  },
+  {
+   "sha": "f96d5dcfe1cf3b9f916791501df7dfb2be170559",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1268 from darknight11ish/feat/github-robustness-2026-11-15"
+  },
+  {
    "sha": "7330b25b764ad7f8db3cb386c0fea90e8601c757",
    "date": "2026-11-15",
    "subject": "Merge origin/main (9f8dde1c8) into fix/github-approved-card-runs-2026-11-15"
   },
   {
+   "sha": "2adeb007b2acdd05c517b77fbdcf80145dec0654",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (9f8dde1c8) into feat/github-robustness-2026-11-15"
+  },
+  {
    "sha": "9f8dde1c8b99edac44de0806b2dee0ef596e4366",
    "date": "2026-11-15",
    "subject": "Merge pull request #1266 from darknight11ish/fix/ctx-window-truth-2026-11-15"
+  },
+  {
+   "sha": "4218b2e5b54d8a293ff9e9506829e8d37425098a",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (2aacc71ba, GitHub parity stage 1 / #1264) into feat/github-robustness-2026-11-15"
   },
   {
    "sha": "d87d9c91f430daa85b3f75e59c5bf49440bb377b",
@@ -6557,59 +6605,14 @@
    "subject": "Merge origin/main (275fbb571) into fix/github-approved-card-runs-2026-11-15"
   },
   {
+   "sha": "05a54cc74f66b32cda9afc4d3ad78ea770311237",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (275fbb571) into feat/github-robustness-2026-11-15"
+  },
+  {
    "sha": "65480b1469cb2cd84a2a155eb5aa4aabf16bb00b",
    "date": "2026-11-15",
    "subject": "Merge origin/main (275fbb571) into fix/ctx-window-truth-2026-11-15"
-  },
-  {
-   "sha": "d8d0717deb4d83a71e9bd811a72ce9dc641fe933",
-   "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "f0213f0466c5de9804ce10f73e1d8f0e45293c59",
-   "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "275fbb5719b708c300d5994504d76c0a5262f43c",
-   "date": "2026-11-15",
-   "subject": "Merge pull request #1262 from darknight11ish/fix/bench-answer-budget-2026-11-14"
-  },
-  {
-   "sha": "5c70fce2450cd129a3b86b51299d12b53a83efec",
-   "date": "2026-11-15",
-   "subject": "Merge commit '2f8ab342f' into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "2f8ab342f51af44841d0352b98210eab39fa6ee9",
-   "date": "2026-11-15",
-   "subject": "Merge commit '5ca2fb86e69dd19bc69168064fee6fab7a637d93' into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "ae5b8fa4700db751afd3c3f62c45ec1513413a2b",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/github-approved-card-runs-2026-11-15"
-  },
-  {
-   "sha": "695e85687af2b682f3eb76f400e2c4d598f78417",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/ctx-window-truth-2026-11-15"
-  },
-  {
-   "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
-  },
-  {
-   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
   }
  ],
  "top_level": [
@@ -6641,7 +6644,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 286
+   "files": 287
   },
   {
    "path": "tools/",
@@ -6656,7 +6659,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 203
+   "files": 204
   },
   {
    "path": "plugins/",
@@ -6689,14 +6692,14 @@
    "files": 20
   },
   {
-   "path": "contract/",
-   "line": "the cross-app fixtures both clients are compared against",
+   "path": ".github/",
+   "line": "the GitHub Actions workflows that gate a merge",
    "files": 6
   },
   {
-   "path": ".github/",
-   "line": "the GitHub Actions workflows that gate a merge",
-   "files": 5
+   "path": "contract/",
+   "line": "the cross-app fixtures both clients are compared against",
+   "files": 6
   },
   {
    "path": "server/",
@@ -6735,8 +6738,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5858,
-  "covered": 5375,
+  "tracked_files": 5861,
+  "covered": 5378,
   "excluded": 483,
   "subsystems": 27
  },
