@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1d5682fa3c75a0609e095742389709a750f91daf",
- "built_at": "2026-11-15T02:12:38-08:00",
+ "ref": "e0860835f4ff3a7dd5eb80bba55ed5f7f646176d",
+ "built_at": "2026-11-15T04:59:27-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6505,9 +6505,54 @@
  ],
  "recent_commits": [
   {
+   "sha": "e0860835f4ff3a7dd5eb80bba55ed5f7f646176d",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
+  },
+  {
+   "sha": "ab9801a1c25e8162af452e0685e116b4e4e5325d",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1263 from darknight11ish/fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
+   "sha": "d8d0717deb4d83a71e9bd811a72ce9dc641fe933",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
+  },
+  {
+   "sha": "f0213f0466c5de9804ce10f73e1d8f0e45293c59",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
+   "sha": "275fbb5719b708c300d5994504d76c0a5262f43c",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1262 from darknight11ish/fix/bench-answer-budget-2026-11-14"
+  },
+  {
+   "sha": "5c70fce2450cd129a3b86b51299d12b53a83efec",
+   "date": "2026-11-15",
+   "subject": "Merge commit '2f8ab342f' into feat/github-parity-stage1-2026-11-14"
+  },
+  {
+   "sha": "2f8ab342f51af44841d0352b98210eab39fa6ee9",
+   "date": "2026-11-15",
+   "subject": "Merge commit '5ca2fb86e69dd19bc69168064fee6fab7a637d93' into fix/catalogue-sees-all-cards-2026-11-14"
+  },
+  {
    "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
+  },
+  {
+   "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
+  },
+  {
+   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
   },
   {
    "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
@@ -6558,51 +6603,6 @@
    "sha": "55637c18b18fa967bb1ae8ffaeb8515815260ea1",
    "date": "2026-11-15",
    "subject": "Merge remote-tracking branch 'origin/main' into fix/bench-answer-budget-2026-11-14"
-  },
-  {
-   "sha": "3227ccf14364a3ee40dbf075b204c69cd9b9ebc9",
-   "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "792d1ed96ec5eebef3abb68db6100ca120e1513c",
-   "date": "2026-11-15",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "04d4748cfea08924a8facf798b01ae490769f989",
-   "date": "2026-11-15",
-   "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
-  },
-  {
-   "sha": "e81bd483f4511198ecf36a3d8cd3d7d3facc21c9",
-   "date": "2026-11-14",
-   "subject": "Widen three GitHub reads, and stop a 481 KB answer reading as zero files"
-  },
-  {
-   "sha": "6b24a96468ac383f42da95d98139d5000ec2a199",
-   "date": "2026-11-14",
-   "subject": "Fix the model catalogue to count every card nvidia-smi reports"
-  },
-  {
-   "sha": "be536881b40c7317f6880ff6d14c39397a321fcc",
-   "date": "2026-11-14",
-   "subject": "Bench suites ask for room to think, and name the budget when it runs out"
-  },
-  {
-   "sha": "05207213363f553ce526f05a1512ba45d774f822",
-   "date": "2026-11-14",
-   "subject": "feat(devices): Jarvis knows every paired device, how each is paired, and what each can approve"
-  },
-  {
-   "sha": "e496e93c373679d108b7924d370f031517298c6a",
-   "date": "2026-11-14",
-   "subject": "chore(desktop): regenerate the feature-directory fixture after the contract changed"
-  },
-  {
-   "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
-   "date": "2026-11-14",
-   "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
   }
  ],
  "top_level": [
