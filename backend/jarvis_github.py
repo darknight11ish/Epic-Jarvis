@@ -2864,7 +2864,7 @@ def _checks_summary(parts: dict) -> str:
     if checks:
         lines.append("Failing checks when this folder was prepared: " + ", ".join(
             f"{str(c.get('name') or 'a check')} "
-            f"({str(c.get('conclusion') or 'failed')})"
+            f"({str(c.get('conclusion') or 'no result')})"
             for c in checks))
     if pending:
         lines.append("Checks still running when this folder was prepared: "
@@ -4777,6 +4777,8 @@ def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
     bounded to the last `MAX_LOG_CHARS` characters. A check that has not
     finished is NOT a failure and is NOT a pass: it is kept separately so the
     prepare answer can name it as still running and say what it is waiting for.
+    The judgement is `_check_verdict`'s, the same one the pull request CI answer
+    and the scan use, so the three cannot disagree about the same commit.
 
     A log that could not be read goes in `log_error`, NOT in `log`: an error
     sentence in the log field would render as if it were the end of the job log.
@@ -4787,13 +4789,12 @@ def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
     out = []
     unfinished = []
     for run_doc in runs:
-        status = str(run_doc.get("status") or "")
-        if status != "completed":
+        verdict, conclusion = _check_verdict(run_doc)
+        if verdict == "running":
             unfinished.append({"name": _check_name(run_doc),
-                               "status": status or "unfinished"})
+                               "status": str(run_doc.get("status") or "unfinished")})
             continue
-        conclusion = str(run_doc.get("conclusion") or "")
-        if conclusion in ("success", "neutral", "skipped", ""):
+        if verdict == "ok":
             continue
         item = {"name": _check_name(run_doc), "conclusion": conclusion,
                 "annotations": "", "log": "", "log_error": ""}
@@ -4853,7 +4854,8 @@ def _evidence_words(checks: list, unfinished: list = ()) -> str:
     if checks:
         lines.append(f"{len(checks)} failing check(s) on that commit:")
         for item in checks:
-            lines.append(f"  {_check_name(item)}: {item.get('conclusion')}")
+            lines.append(f"  {_check_name(item)}: "
+                         f"{item.get('conclusion') or 'no result'}")
             notes = _clean_github_text(item.get("annotations"),
                                        limit=MAX_ANNOTATION_CHARS)
             if notes:

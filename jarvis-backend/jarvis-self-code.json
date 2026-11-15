@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "4218b2e5b54d8a293ff9e9506829e8d37425098a",
- "built_at": "2026-11-15T06:18:11-08:00",
+ "ref": "eda7a1fc95c62dccf2bff8b4d935e7fbdd44afd1",
+ "built_at": "2026-11-15T09:25:19-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6510,9 +6510,34 @@
  ],
  "recent_commits": [
   {
+   "sha": "eda7a1fc95c62dccf2bff8b4d935e7fbdd44afd1",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/github-fix-flow-cards-2026-11-15"
+  },
+  {
+   "sha": "f96d5dcfe1cf3b9f916791501df7dfb2be170559",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1268 from darknight11ish/feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "2adeb007b2acdd05c517b77fbdcf80145dec0654",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (9f8dde1c8) into feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "9f8dde1c8b99edac44de0806b2dee0ef596e4366",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1266 from darknight11ish/fix/ctx-window-truth-2026-11-15"
+  },
+  {
    "sha": "4218b2e5b54d8a293ff9e9506829e8d37425098a",
    "date": "2026-11-15",
    "subject": "Merge origin/main (2aacc71ba, GitHub parity stage 1 / #1264) into feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "2b7cefdd2bc662578c3a23478d4ca21440001251",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (2aacc71ba) into fix/ctx-window-truth-2026-11-15"
   },
   {
    "sha": "2aacc71ba28edc0170a0545aab17b351f15ffc1b",
@@ -6538,6 +6563,11 @@
    "sha": "05a54cc74f66b32cda9afc4d3ad78ea770311237",
    "date": "2026-11-15",
    "subject": "Merge origin/main (275fbb571) into feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "65480b1469cb2cd84a2a155eb5aa4aabf16bb00b",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (275fbb571) into fix/ctx-window-truth-2026-11-15"
   },
   {
    "sha": "d8d0717deb4d83a71e9bd811a72ce9dc641fe933",
@@ -6570,44 +6600,14 @@
    "subject": "Merge origin/main (7a8fe7d29) into feat/github-robustness-2026-11-15"
   },
   {
+   "sha": "695e85687af2b682f3eb76f400e2c4d598f78417",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/ctx-window-truth-2026-11-15"
+  },
+  {
    "sha": "1d5682fa3c75a0609e095742389709a750f91daf",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into feat/github-parity-stage1-2026-11-14"
-  },
-  {
-   "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
-  },
-  {
-   "sha": "74633c1de97cfa3d34e1fa0993e6c66026ee5d75",
-   "date": "2026-11-15",
-   "subject": "Merge origin/main (7a8fe7d29) into fix/catalogue-sees-all-cards-2026-11-14"
-  },
-  {
-   "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
-   "date": "2026-11-15",
-   "subject": "Merge pull request #1267 from darknight11ish/feat/device-awareness-2026-11-14"
-  },
-  {
-   "sha": "4db99a34f952560a371695be97b8d891373509a1",
-   "date": "2026-11-15",
-   "subject": "chore(records): re-take the recent-changes module for this branch's own bullet"
-  },
-  {
-   "sha": "9125c19d124464eece4babc19c24042f61090224",
-   "date": "2026-11-15",
-   "subject": "chore(records): regenerate the self-code map for the file this suite is about"
-  },
-  {
-   "sha": "f6fa8e95417ed70309e51217606103f4192834c5",
-   "date": "2026-11-15",
-   "subject": "fix(github): the PR scan names the checks that are not green"
-  },
-  {
-   "sha": "f187503ef40be4c7cb3edfd340af21b8d80ac0c8",
-   "date": "2026-11-15",
-   "subject": "test(github): name the fixture for what it is"
   }
  ],
  "top_level": [
