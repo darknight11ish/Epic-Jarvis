@@ -502,32 +502,44 @@ def t_every_asks_first_change_is_the_same_in_both_doors():
 
 def _tool_core(name):
     core = re.sub(r"^(?:the|my)\s+", "", str(name))
-    return re.sub(r"\s+tool$", "", core)
+    # `tools?` since 2026-11-15: the master GitHub group switch's first alias
+    # is plural ("the github tools"), and a phrase built from it must not read
+    # "the github tools tool".
+    return re.sub(r"\s+tools?$", "", core)
 
 
 def t_every_tool_switch_is_the_same_in_both_doors():
-    """All 60 switchable tools: the generated names resolve, ON and OFF, both doors."""
+    """Every switchable tool, plus the master GitHub group switch: both doors."""
     targets = R.tool_targets()
     extra = [t for t in targets if t not in AF.TOOLS_SWITCHABLE]
     check("the registry names every switchable tool, plus the legacy "
-          "reading-tool row the old sentences still reach",
+          "reading-tool row the old sentences still reach, plus the one "
+          "master group switch (2026-11-15)",
           all(t in targets for t in AF.TOOLS_SWITCHABLE)
-          and extra == ["email_read"],
+          and extra == ["email_read", AF.GITHUB_TOOLS_GROUP],
           (len(targets), len(AF.TOOLS_SWITCHABLE), extra))
     for tool, names in targets.items():
         COVERED_KEYS.add(f"tool:{tool}")
-        core = _tool_core(names[0] if names else tool)
+        if tool == AF.GITHUB_TOOLS_GROUP:
+            # The master group switch's own sentence is PLURAL - "the github
+            # tools" - so the generic "<name> tool" builder would say "the
+            # github tools tool". It is pinned with the words a person says,
+            # which is the whole point of this change (2026-11-15).
+            phrase_on, phrase_off = ("turn on the github tools",
+                                     "turn off the github tools")
+        else:
+            core = _tool_core(names[0] if names else tool)
+            phrase_on, phrase_off = (f"turn on the {core} tool",
+                                     f"turn off the {core} tool")
         for on, phrase in (
-                (True, f"turn on the {core} tool"),
+                (True, phrase_on),
                 (True, f"let the ai model read {names[0]}"),
-                (False, f"turn off the {core} tool"),
+                (False, phrase_off),
                 (False, f"stop letting the ai model read {names[0]}")):
             got = Q.match(phrase)
             check(f"{phrase!r} reaches the {tool} tool switch",
                   got is not None and got.name == "settings_tool"
                   and got.f.get("tool") == tool and got.f.get("on") is on, got)
-        phrase_on = f"turn on the {core} tool"
-        phrase_off = f"turn off the {core} tool"
         for phrase, waiting in ((phrase_on, True), (phrase_off, False)):
             rec = FamilyRecorder(waiting=waiting)
             saved = R.set_reading_tool

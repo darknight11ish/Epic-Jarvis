@@ -6748,10 +6748,20 @@ _TOOL_OFF = re.compile(
 #: weather" - still falls through exactly as before, and a half-heard name is
 #: never guessed into a switch. The card rule is the switch's own: ON is the PC
 #: only, one card plus Windows Hello; OFF is instant.
+#:
+#: PLURAL "TOOLS", added 2026-11-15. The master GitHub group switch is ONE
+#: switch that speaks for twenty tools and is named in the plural - "turn on
+#: the github tools", "switch on the github tools", "disable the github tools"
+#: - and this pattern only ever matched the singular, so every one of those
+#: sentences fell to the model (which then offered a card it had no door to
+#: raise). Plural is not a loosening: the tail must STILL be a whole alias
+#: (`find_tool_target("github")` is the group, `find_tool_target("kitchen
+#: light")` is None) and the sentence must STILL say tool/tools, so the
+#: device sentences above keep their own paths exactly as before.
 _TOOL_SWITCH = re.compile(
-    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool"
-    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool\s+(on|off)"
-    r"|(enable|disable)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool")
+    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tools?"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tools?\s+(on|off)"
+    r"|(enable|disable)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tools?")
 
 #: "How much Jarvis may interrupt you" (jarvis_arbiter.py, 2026-10-08) - the
 #: number of times a day it may speak up UNASKED, and the hour the brief
