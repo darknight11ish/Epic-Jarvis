@@ -698,8 +698,15 @@ def t_a_cut_files_list_is_not_reported_as_zero_files():
           out.get("ok") is True and "Fix the tray icon" in text, out)
     check("a cut files list is NEVER shown as zero files",
           "Changed files (0)" not in text and "files: (none)" not in text, text)
+    # MERGED TRUTH (2026-11-15): main's `_pr_files` retries the changed-files read
+    # in a smaller page, and when every page is still cut it says in the heading
+    # that none of them could be read and why. That names what was left out and
+    # how many the pull request has, so the check accepts main's wording: what
+    # must never happen is a row that claims zero files, or that stays silent.
     check("a cut files list says what was left out and how many there are",
-          "481" in text and "not shown" in text, text)
+          "481" in text and ("could be read" in text
+                             or "longer than Jarvis reads" in text
+                             or "not shown" in text), text)
     check("a cut files list is one line, not a blob of JSON",
           "filename" not in text and "{" not in text, text)
 
@@ -716,7 +723,11 @@ def t_a_malformed_detail_list_is_never_an_empty_section():
         check(f"an unreadable {needle} answer says it could not be read",
               f"{keyword}" in text and ("could not be read" in text
                                         or "not shown" in text), text)
-    out = _detail_out(files="[]", commits="[]", comments="[]", reviews="[]")
+    # MERGED TRUTH (2026-11-15): main's `_run_pr_detail` prints the pull
+    # request's OWN `changed_files` count, so a genuinely empty list is only
+    # "Changed files (0)" when GitHub says the pull request changes none.
+    out = _detail_out(files="[]", commits="[]", comments="[]", reviews="[]",
+                      pr=_pr_doc(changed_files=0))
     check("a genuinely empty list is still a plain (none)",
           "Changed files (0)" in str(out.get("text", "")), out.get("text"))
 
@@ -786,18 +797,24 @@ def t_a_pull_request_ci_answer_cannot_say_passed_while_a_check_is_red():
           out.get("ok") is True and "finished successfully" in text
           and "NOT all green" not in text, out)
     # The other half of the same false answer: a run that failed while the
-    # checks say green must still stop the word "green" being used.
+    # checks say green must still stop the word "green" being used. MERGED TRUTH
+    # (2026-11-15): main's `_ci_failed_lines` renders the names ("CI: failure"),
+    # so the check reads that shape - the point is that the row does not claim
+    # the commit is fine.
     one_red_run = [{"name": "CI", "status": "completed",
                     "conclusion": "failure", "head_branch": "feature/x"}]
     out = _run_request(r, routes(green, one_red_run))
+    text = str(out.get("text", ""))
     check("a red RUN beside green checks still blocks a green answer",
-          "will not call that green" in str(out.get("text", "")), out)
+          "did not" in text and "CI: failure" in text
+          and "passed" not in text.lower(), out)
     # A repository that reports NO check runs at all: every visible run counts,
     # never just the first one.
     out = _run_request(r, routes([], passing_first))
     text = str(out.get("text", ""))
     check("with no check runs, the second, failing run is still found",
-          "passed" not in text.lower() and "CI (failure)" in text, out)
+          "passed" not in text.lower() and "CI: failure" in text
+          and "did not finish successfully" in text, out)
 
 
 def t_the_runs_list_answers_even_when_the_answer_is_cut():

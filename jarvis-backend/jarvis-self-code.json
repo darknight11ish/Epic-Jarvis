@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "8848eb16777e3cbeefc71716468a953bb90aa9b1",
- "built_at": "2026-11-15T02:12:46-08:00",
+ "ref": "05a54cc74f66b32cda9afc4d3ad78ea770311237",
+ "built_at": "2026-11-15T03:47:31-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4707,10 +4707,12 @@
     "changelog.d/2026-11-14-android-native-screens.md",
     "changelog.d/2026-11-14-atlas-copy-and-builder-entry.md",
     "changelog.d/2026-11-14-bench-suites-ask-for-thinking-room.md",
+    "changelog.d/2026-11-14-catalogue-every-card.md",
     "changelog.d/2026-11-14-device-awareness.md",
     "changelog.d/2026-11-14-field-test-archive.md",
     "changelog.d/2026-11-14-field-test-matrix.md",
     "changelog.d/2026-11-14-gate-rows-by-repair-tool.md",
+    "changelog.d/2026-11-14-github-parity-stage1.md",
     "changelog.d/2026-11-14-open-the-atlas-bar.md",
     "changelog.d/2026-11-14-send-to-phone-2gb.md",
     "changelog.d/2026-11-14-widget-look.md",
@@ -4906,10 +4908,12 @@
     "decisions.d/2026-11-14-android-native-screens.md",
     "decisions.d/2026-11-14-atlas-copy-scope.md",
     "decisions.d/2026-11-14-bench-answer-budgets-are-caps-not-costs.md",
+    "decisions.d/2026-11-14-catalogue-counts-every-card.md",
     "decisions.d/2026-11-14-device-awareness.md",
     "decisions.d/2026-11-14-field-test-archive.md",
     "decisions.d/2026-11-14-field-test-matrix.md",
     "decisions.d/2026-11-14-gate-rows-not-patches.md",
+    "decisions.d/2026-11-14-github-parity-stage1.md",
     "decisions.d/2026-11-14-send-to-phone-two-gigabytes.md",
     "decisions.d/2026-11-14-widget-look.md",
     "decisions.d/2026-11-15-general-preset-copy-drops-the-thinking-ban.md",
@@ -5417,7 +5421,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 989,
+   "file_count": 993,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6504,9 +6508,24 @@
  ],
  "recent_commits": [
   {
+   "sha": "05a54cc74f66b32cda9afc4d3ad78ea770311237",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (275fbb571) into feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "275fbb5719b708c300d5994504d76c0a5262f43c",
+   "date": "2026-11-15",
+   "subject": "Merge pull request #1262 from darknight11ish/fix/bench-answer-budget-2026-11-14"
+  },
+  {
    "sha": "8848eb16777e3cbeefc71716468a953bb90aa9b1",
    "date": "2026-11-15",
    "subject": "Merge origin/main (7a8fe7d29) into feat/github-robustness-2026-11-15"
+  },
+  {
+   "sha": "5ca2fb86e69dd19bc69168064fee6fab7a637d93",
+   "date": "2026-11-15",
+   "subject": "Merge origin/main (7a8fe7d29) into fix/bench-answer-budget-2026-11-14"
   },
   {
    "sha": "7a8fe7d29877b612e76432bb7d7b94dda4e2c864",
@@ -6544,14 +6563,34 @@
    "subject": "fix(github): an adversarial suite, and every defect it proved"
   },
   {
+   "sha": "f4d672e9d072e17650c49bb7178ede4d7401a5a2",
+   "date": "2026-11-15",
+   "subject": "chore(records): re-take the self-code map after the preset copy change"
+  },
+  {
+   "sha": "101641fc731117ed8b6d74c1ebd83c601cf3160c",
+   "date": "2026-11-15",
+   "subject": "The General preset stops saying its thinking must stay off (Q5)"
+  },
+  {
    "sha": "87e40c6a5165eb5efdd49968a982d1d176a41841",
    "date": "2026-11-15",
    "subject": "Merge origin/main (04d4748cf) and regenerate the records it moved"
   },
   {
+   "sha": "55637c18b18fa967bb1ae8ffaeb8515815260ea1",
+   "date": "2026-11-15",
+   "subject": "Merge remote-tracking branch 'origin/main' into fix/bench-answer-budget-2026-11-14"
+  },
+  {
    "sha": "04d4748cfea08924a8facf798b01ae490769f989",
    "date": "2026-11-15",
    "subject": "Merge pull request #1261 from darknight11ish/feat/send-to-phone-2gb-2026-11-14"
+  },
+  {
+   "sha": "be536881b40c7317f6880ff6d14c39397a321fcc",
+   "date": "2026-11-14",
+   "subject": "Bench suites ask for room to think, and name the budget when it runs out"
   },
   {
    "sha": "05207213363f553ce526f05a1512ba45d774f822",
@@ -6567,41 +6606,6 @@
    "sha": "f0a27d1a475b4c7d7d54d73a0e9ef890d2407747",
    "date": "2026-11-14",
    "subject": "chore(records): copy the recent-changes twin and re-take the self-code map last"
-  },
-  {
-   "sha": "0168dca083b4e4c1668423e845381704273709a3",
-   "date": "2026-11-14",
-   "subject": "chore(generated): regenerate the feature catalogue and recent changes; keep the new suite off source text"
-  },
-  {
-   "sha": "d5116b1f460631bcfa8ef804f622a6a681f1aeb8",
-   "date": "2026-11-14",
-   "subject": "fix(gate): the file-to-phone denial row, and an audit that reads the published base"
-  },
-  {
-   "sha": "764531987eaf6d29dc6b131483d072b2695fe7a4",
-   "date": "2026-11-14",
-   "subject": "fix(send): name the refusal reason without a bare word the jargon ratchet counts"
-  },
-  {
-   "sha": "f036bfb990fada12923ea6b3abfd8eead1854af0",
-   "date": "2026-11-14",
-   "subject": "feat(send): any file from the PC to the phone, up to 2 GiB, in 1 MiB pieces"
-  },
-  {
-   "sha": "82b202238b8dc83900400c6a68e968f9fd0fedc6",
-   "date": "2026-11-14",
-   "subject": "Merge pull request #1260 from darknight11ish/integration/wave20-2026-11-14"
-  },
-  {
-   "sha": "64f224e52d8e6c280b407a04f27a0d908d3e0f83",
-   "date": "2026-11-14",
-   "subject": "Give android_app its diet hints, so the tool can actually be shown"
-  },
-  {
-   "sha": "e43379848911d09db748f5c6b3612e1579575e27",
-   "date": "2026-11-14",
-   "subject": "The desktop's raw-tool list is eight now, and its test says so"
   }
  ],
  "top_level": [
@@ -6633,7 +6637,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 282
+   "files": 284
   },
   {
    "path": "tools/",
@@ -6648,7 +6652,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 199
+   "files": 201
   },
   {
    "path": "plugins/",
@@ -6727,8 +6731,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5850,
-  "covered": 5367,
+  "tracked_files": 5854,
+  "covered": 5371,
   "excluded": 483,
   "subsystems": 27
  },
