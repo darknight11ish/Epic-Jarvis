@@ -2364,21 +2364,22 @@
 
       <!-- ── Hardware and models ──────────────────────────────────────────
            Read from GET /api/hardware (hardware-panel.js). The graphics
-           cards, what runs on them now, and three setups. Nothing changes
-           until the owner picks one; picking one lists its steps, and each
-           step is ONE button that raises that step's own approval card.
+           cards, what runs on them now, and three setups. Picking one
+           changes nothing by itself; it lists the steps. Only the next
+           routable step has an Ask button, and that raises its own approval
+           card - the settings command is run by hand, with no card.
            docs/HARDWARE-PROFILES.md is the design. -->
       
 
       <section class="card" id="hardware">
         <h2>Hardware and models</h2>
-        <p class="note">
+        <p class="note" id="hw-intro">
           Jarvis works out three setups for the graphics cards in this
           computer: the fastest answers, the smartest answers, or the most
-          features. Nothing changes until you pick one. Picking one shows
-          its steps, and each step asks you with its own approval card, in
-          order. Every number is calculated, not measured, until you press
-          Measure.
+          features. Picking one changes nothing by itself. It lists the
+          setup's steps, in order. Calculated figures are estimates; a line
+          that says it was measured is an older measurement - press Measure
+          to check this PC now.
         </p>
 
         <p class="state" id="hw-state" role="status">Checking your graphics cards…</p>

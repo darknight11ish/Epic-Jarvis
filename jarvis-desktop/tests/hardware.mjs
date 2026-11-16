@@ -16,6 +16,8 @@
  *   sends the step's id only (the Rust reads the route from the backend),
  *   and the step then says it waits for approval. No "do them all";
  * - the one command, its undo and the check line, each with Copy;
+ * - the page's own words never call every number calculated, and the Measure
+ *   fallback says only that THIS check has not run (the 2026-11-16 copy fix);
  * - an older backend, or no answer, is a sentence - never a code or JSON.
  *
  * The CONTROL checks read the Rust and the permissions.
@@ -248,7 +250,34 @@ await check("Measure sends one request and says what it will do first", async ()
   const s = await section(page);
   await page.close();
   assert.match(s.all, /It loads each model once/);
-  assert.match(s.measured, /Not measured yet|Measuring/);
+  assert.match(s.measured,
+    /^(Not measured by this check yet; a measured line above is an older measurement\.|Measuring)/);
+});
+
+await check("the page's own words no longer deny a measured line, and both copies agree (2026-11-16)", async () => {
+  const page = await open({ status: HW.today_one_card });
+  await settle(page);
+  const s = await section(page);
+  const intro = await page.evaluate(() => document.getElementById("hw-intro").innerText);
+  await page.close();
+  // The old paragraph said EVERY number was calculated. It was false beside
+  // the live card heat, power and load above it and the "Measured on this PC."
+  // a setup line can carry, and it denied the measured line under Measure.
+  // "Each step asks you with its own approval card" was false for the settings
+  // command step, which has no route and no Ask button (the steps check above
+  // pins that: the fourth step has no button and says to run the command).
+  assert.doesNotMatch(intro, /every number/i);
+  assert.doesNotMatch(intro, /each step asks you with its own approval card/i);
+  assert.match(intro, /Picking one changes nothing by itself\./);
+  assert.match(intro, /Calculated figures are estimates/);
+  assert.match(intro, /a line that says it was measured is an older measurement/);
+  assert.match(intro, /press Measure to check this PC now/);
+  // Under Measure, the fallback says only what is true of THIS check, and it
+  // says the same thing about a measured line that the paragraph does.
+  assert.equal(s.measured,
+    "Not measured by this check yet; a measured line above is an older measurement.");
+  assert.doesNotMatch(s.measured, /every number/i);
+  assert.match(s.measured, /older measurement/);
 });
 
 await check("an older backend, or no answer: a sentence, never a code", async () => {
