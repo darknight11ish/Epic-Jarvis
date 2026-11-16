@@ -54,6 +54,34 @@ program. This section is not: it covers source code copied or
 closely adapted by hand into backend/jarvis_browser_control.py. Each adapted
 piece names its origin in a comment there.
 
+PATTERNS CREDITED (no code copied - a credit line, not a licence block)
+-----------------------------------------------------------------------
+These four projects are named in backend/jarvis_notes.py and
+backend/jarvis_note_capture.py because a PATTERN was adapted from each: an
+observable behaviour or a vocabulary, re-expressed as plain Python. No source
+code, text or file from any of them is copied, and none is shipped.
+
+Vinzent03/obsidian-advanced-uri - https://github.com/Vinzent03/obsidian-advanced-uri
+License: MIT. Pattern: the order a note name is resolved in - a vault path
+first, then the file name through Obsidian's own link resolution, then a scan of
+every note's `aliases:` - adapted as jarvis_notes.resolve_note()'s tiers.
+
+cyanheads/obsidian-mcp-server - https://github.com/cyanheads/obsidian-mcp-server
+License: Apache-2.0. Pattern: the refusal vocabulary (`case_variant_exists`,
+`content_preexists`, `ambiguous_section` with a candidate list), re-expressed as
+plain Python result codes and sentences in jarvis_notes.resolve_note().
+
+coddingtonbear/obsidian-local-rest-api - https://github.com/coddingtonbear/obsidian-local-rest-api
+License: MIT. Pattern: the two boolean create options
+(`Create-Target-If-Missing`, `Reject-If-Content-Preexists`), re-expressed as
+jarvis_notes.create_target()'s keyword arguments rather than a second HTTP
+surface.
+
+liamcain/obsidian-daily-notes-interface - https://github.com/liamcain/obsidian-daily-notes-interface
+License: MIT. Pattern: the daily-note settings behaviour (`folder`, `format`,
+`template`, with the template applied only to a new daily note), re-expressed in
+jarvis_note_capture.py as daily_settings()/daily_template().
+
 browser-use v0.13.10 - https://github.com/browser-use/browser-use
 Adapted: page reading (browser_use/dom/serializer/clickable_elements.py,
 browser_use/dom/serializer/paint_order.py, browser_use/dom/service.py),

@@ -32113,11 +32113,13 @@ create-shaped sentence had produced a 0-byte file named after the whole
 sentence; and "add to the workout log that ..." was answered with "I'm not sure
 where your new note is yet" - no lookup happened at all.
 
-**The registry is the note's own frontmatter.** A note is found by, in order:
-its exact vault path, an exact value of its own YAML `aliases:` list, its exact
-title, then a title that contains the words. Obsidian reads `aliases:` natively
-(Properties, and `[[` completion), so it travels with the note and needs no
-index, no model and no earlier conversation. For the owner's own note:
+**The registry is the note's own frontmatter.** A name is resolved by ONE
+resolver, `jarvis_notes.resolve_note()`, in a stated order: the exact vault
+path the owner named, then the file name alone matched case-insensitively,
+then an exact value of the note's own YAML `aliases:` list, then a refusal that
+lists any candidates. Obsidian reads `aliases:` natively (Properties, and `[[`
+completion), so it travels with the note and needs no index, no model and no
+earlier conversation. For the owner's own note:
 
     ---
     aliases:
@@ -32126,12 +32128,13 @@ index, no model and no earlier conversation. For the owner's own note:
     pinned: true
     ---
 
-"my workout log", "the workout log" and "workout log" all resolve to
-`Private & Shared/Workout/Workout Log.md`. An alias match WINS over a file-name
-match, because an alias is a name the owner chose. Two matches are never
-guessed: the answer asks which note was meant. The resolver is
-`jarvis_notes_edit.find_name()`, used by chat append/tag/rename/move and by the
-read/open answers; there is no new route and no new tool.
+"my workout log" and "the workout log" resolve to
+`Private & Shared/Workout/Workout Log.md`; "workout log" resolves at the file
+name tier if that name is the file's. Two matches are never guessed: the
+answer asks which note was meant, naming both. `jarvis_notes_edit.find_name()`
+is a compatibility shape over that one resolver, used by chat
+append/tag/rename/move and by the read/open answers; there is no new route and
+no new tool. The full ruling is section 170.13.
 
 **Create.** "Make a new note called X" (also "... for me that's called X" and
 "... that is called X") creates exactly ONE note, card-free for a direct owner
@@ -32170,6 +32173,86 @@ new and existing date headings (and an older day), the collision, vault
 boundaries, one card per append, and that the existing bytes are untouched.
 
 The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical.
+
+### 170.13 One resolver for every note tool, and the vault's daily-note settings (added 2026-11-16)
+
+The principal architect's Wave 1 ruling: **`jarvis_notes_edit.py` stays the
+sole vault writer** - no loopback bridge, no second writer - and **resolution
+moves to `backend/jarvis_notes.py`**, in one place every note tool routes
+through. `jarvis_notes.resolve_note(name)` is that place;
+`jarvis_notes_edit.find_name()` is a thin compatibility shape over it (the
+`(row, why, matches)` the chat and editor callers already use), so there is one
+implementation, not two. The writer modules still do all writing.
+
+**The tier order**, adapted as a pattern (not code) from
+[Vinzent03/obsidian-advanced-uri](https://github.com/Vinzent03/obsidian-advanced-uri)
+(MIT), whose `filename` parameter first asks Obsidian's own
+`getFirstLinkpathDest` (a vault path, then the file name) and only then scans
+every note's `aliases:`:
+
+1. `path` - the exact vault-relative path the owner named (a slash, or a
+   `.md`/`.txt` ending, is what makes a name a path). Case matters here.
+2. `basename` - the file's own name, matched case-insensitively. This is the
+   tier that has to answer on Windows, where `Gym.md` and `gym.md` are one
+   file. Two folders with that name are `ambiguous_section`, never a guess.
+3. `alias` - an exact value of the note's own YAML `aliases:` list, compared
+   case-insensitively and with a leading my/the/a/an and a trailing "note"
+   ignored, so "my workout log" and "the workout log" reach the same note.
+4. **refusal** - `not_found`, with any near candidates in `candidates`.
+
+**There is no daily-note fallback at any point.** The resolver has no branch
+that knows what a daily note is; a name that matches nothing is a refusal. The
+measured bug was that fallback, and a test asserts it cannot return here.
+
+**The refusal vocabulary**, adapted as patterns (not code) from
+[cyanheads/obsidian-mcp-server](https://github.com/cyanheads/obsidian-mcp-server)
+(Apache-2.0) and
+[coddingtonbear/obsidian-local-rest-api](https://github.com/coddingtonbear/obsidian-local-rest-api)
+(MIT):
+
+| code | when |
+|---|---|
+| `case_variant_exists` | a file differing only by capital letters is already in that folder (the Windows case-collision trap); the answer names it |
+| `content_preexists` | a create target already has content; a note is never overwritten |
+| `ambiguous_section` | two or more notes answer to the name; `candidates` lists every one |
+| `not_found` | nothing answers; `candidates` lists near matches |
+
+`jarvis_notes.create_target()` carries the two options those projects expose
+as request headers, as boolean arguments rather than a second HTTP surface:
+`create_target_if_missing` (default False - a lookup never creates anything; a
+create-shaped tool passes True) and `reject_if_content_preexists` (default
+True). Epic Jarvis never overwrites, so False only allows filling an EMPTY
+existing note; content is still `content_preexists`. `POST /api/notes/create`
+accepts both booleans; its refusals now carry the `code` and `candidates`
+above, and its strict collision behaviour is unchanged.
+
+**Daily-note settings are honoured.** `jarvis_note_capture.py` reads
+`.obsidian/daily-notes.json` for `folder`, `format` and `template`, following
+the behaviour (as a pattern, not code) of
+[liamcain/obsidian-daily-notes-interface](https://github.com/liamcain/obsidian-daily-notes-interface)
+(MIT) `settings.ts` and `createDailyNote`/`parse.ts`: `folder` trimmed with ""
+meaning the vault's top folder, `format || "YYYY-MM-DD"`, and a template
+applied only when the daily note is new - its bytes first, the owner's words
+after them. A vault with **no** `daily-notes.json` (the owner's vault today)
+behaves exactly as before: `YYYY-MM-DD` in the top folder, a new note holding
+just the owner's words, the card saying no template is set, and no settings
+file invented. A configured template that is missing, hidden or outside the
+vault is said plainly on the card, and the note is made empty exactly as
+Obsidian does; the template is read again at write time, and one that vanished
+then refuses the write.
+
+**What this does NOT do.** No second writer, no loopback bridge, no new HTTP
+route, no heading/block/frontmatter patching and no search index. The tier
+order is a rule now and is recorded in `decisions.d/`.
+
+**Proven.** `backend/test_notes_resolve.py` (69 checks) pins each tier
+separately, the two-match refusal naming its candidates, the case-collision
+refusal, the create options, no daily-note fallback, and the absent /
+present / broken `daily-notes.json` cases. `backend/test_notes_create_find_append.py`
+adds the chat-level no-fallback assertion (102 checks).
+
+The module's twin `jarvis-backend/jarvis_notes.py` is byte-identical, and so are
+`jarvis_notes_edit.py` and `jarvis_note_capture.py`.
 
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
