@@ -44,7 +44,7 @@
     "restart_pending": null,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 1 graphics card; Ollama can use 1: the AMD Radeon RX 6600.",
+   "found": "Found 1 graphics card; Ollama can use 1: the AMD Radeon RX 6600. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
@@ -426,7 +426,7 @@
     "restart_pending": false,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 3 graphics cards; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "found": "Found 3 graphics cards; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
@@ -827,7 +827,7 @@
     "restart_pending": false,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
@@ -1228,7 +1228,7 @@
     "restart_pending": false,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": {
     "at": 0,
@@ -1634,7 +1634,7 @@
     "restart_pending": false,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
@@ -1970,7 +1970,7 @@
     "restart_pending": null,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. Ollama's log was not found, so this is from nvidia-smi alone: which cards Ollama really uses is assumed, not read.",
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. This is the default Ollama server's lane; a preset on another card names that card in its own row. Ollama's log was not found, so this is from nvidia-smi alone: which cards Ollama really uses is assumed, not read.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
@@ -2359,7 +2359,7 @@
     "restart_pending": false,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 6 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 2 graphics cards; Ollama can use 2: the NVIDIA GeForce RTX 2080 SUPER and the NVIDIA GeForce RTX 2060.",
+   "found": "Found 2 graphics cards; Ollama can use 2: the NVIDIA GeForce RTX 2080 SUPER and the NVIDIA GeForce RTX 2060. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
@@ -2873,7 +2873,7 @@
     "restart_pending": false,
     "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
    },
-   "found": "Found 2 graphics cards; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "found": "Found 2 graphics cards; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. This is the default Ollama server's lane; a preset on another card names that card in its own row.",
    "gap_gb": 0.75,
    "last": null,
    "measure": {
