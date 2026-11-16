@@ -357,7 +357,14 @@ object Hardware {
         val bits = mutableListOf<String>()
         if (s.measureState == "running") bits += "Measuring…" else if (s.measureWhy.isNotBlank()) bits += s.measureWhy
         bits += s.measureRoles
-        return bits.joinToString(" ").ifBlank { "Not measured yet: every number above is calculated." }
+        // NOT "every number above is calculated" (the audit of 2026-11-15): the
+        // presets above this line carry their own dated measurements - "Measured
+        // 2026-10-18: cold load 18.5-20.5 s" - so the old sentence contradicted
+        // the screen it was printed on. This says only what is true: THIS check
+        // has not been run on this PC, and any dated line above it is older.
+        return bits.joinToString(" ").ifBlank {
+            "Not measured by this check yet; any dated line above is an older measurement."
+        }
     }
 
     // ---------------------------------------------------------------- write --
