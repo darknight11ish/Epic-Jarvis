@@ -29,6 +29,7 @@ import androidx.compose.ui.window.Dialog
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Limits
+import com.jarvis.client.net.NotifyRows
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -39,6 +40,15 @@ import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+
+/**
+ * Where the PC's own notification rows live on the phone now (2026-11-16).
+ * ONE home: the card under Settings' "Notifications from Jarvis" row
+ * ([PcNotifySection]) owns all eight switches, so this plate names that row
+ * instead of drawing a second live copy of the same controls.
+ */
+private const val NOTIFY_HOME =
+    "Your PC's notification settings are under Notifications from Jarvis."
 
 /**
  * "Limits and how often Jarvis does things" - the phone's Settings row for the
@@ -53,13 +63,21 @@ import kotlinx.serialization.json.JsonPrimitive
  * deliberate habit the switches on "How Jarvis talks" already have, so a step
  * is never just a "-" and a clock is never just "Change".
  *
- * THE PC'S OWN NOTIFICATIONS ARE ROWS HERE TOO (the owner's decision of
- * 2026-10-08): which of the PC's own toasts fire, and the quiet hours around
- * them, so the phone can change them. Their titles all say "(on your PC)" - the
- * phone's OWN notification settings are a different screen and must never be
- * mistaken for them. While quiet hours are off the PC says so on every row
- * (`quiet_on`), and the two clock rows then show their value with a line saying
- * the hour decides nothing rather than a picker that would change nothing.
+ * THE PC'S OWN NOTIFICATIONS USED TO BE ROWS HERE (the owner's decision of
+ * 2026-10-08), and since 2026-11-16 they are not. The same eight switches were
+ * drawn twice in Settings - once here and once in the Notifications card that
+ * is named for them ([PcNotifySection], under Settings' "Notifications from
+ * Jarvis" row), both reading the one limits read and both writing the one
+ * limits settings write - so one setting had two live controls and each
+ * screen was silent about the other. ONE home, the rule the spoken-interruption
+ * mute already follows: that card keeps every one of the eight rows, its own
+ * three subheadings and its Test button, and this plate leaves them out and
+ * says where they went ([NOTIFY_HOME]). Nothing else about them changed - same
+ * route, same switches, same permission model, no new call; this file only
+ * stops drawing what that card already draws. While quiet hours are off the PC
+ * still says so on every row (`quiet_on`), and the two clock rows still show
+ * their value with a line saying the hour decides nothing rather than a picker
+ * that would change nothing - on the card that now owns them.
  *
  * WHAT IT WILL NOT PRETEND. A change applies at once, or it is a loosening and
  * the PC puts ONE approval card to the owner and writes nothing until it is
@@ -88,8 +106,9 @@ import kotlinx.serialization.json.JsonPrimitive
  * the warning colour; one that went through (or that is now waiting on the PC)
  * keeps the ordinary one.
  *
- * [Limits.offered] is what is drawn, so a row the PC marks `pc_only` cannot
- * appear here even if a PC sends one.
+ * [Limits.offered] is what is drawn, minus [NotifyRows.KEYS] - the PC's own
+ * notification rows, which have their own card - so a row the PC marks
+ * `pc_only` cannot appear here even if a PC sends one.
  */
 @Composable
 internal fun LimitsSection(canAct: Boolean) {
@@ -115,11 +134,19 @@ internal fun LimitsSection(canAct: Boolean) {
     var saidFailed by remember { mutableStateOf(false) }
     /** The key of the clock row whose picker is open, if any. */
     var picking by remember { mutableStateOf<String?>(null) }
+    /** The PC offered at least one of its own notification rows here. */
+    var notifMoved by remember { mutableStateOf(false) }
 
     LaunchedEffect(reads) {
         when (val r = JarvisRuntime.limits()) {
             is ApiResult.Ok -> {
-                rows = Limits.offered(r.value)
+                // ONE home for the PC's own notification rows (2026-11-16): the
+                // Notifications card takes them, so this plate must not draw a
+                // second live copy. Asked of the answer, not assumed, so the
+                // pointer below is only shown when a row was really taken out.
+                val offered = Limits.offered(r.value)
+                notifMoved = offered.any { it.key in NotifyRows.KEYS }
+                rows = offered.filterNot { it.key in NotifyRows.KEYS }
                 missing = false
                 readError = null
             }
@@ -165,6 +192,14 @@ internal fun LimitsSection(canAct: Boolean) {
             // does not. Never repeated per row, never softened.
             Text(Limits.LOOSEN_NOTE, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
             Gap(6)
+            // The rows this plate no longer draws, pointed at by name. Shown
+            // only when the PC really offered one of them: a line saying "they
+            // are over there" while the other card has nothing to show would be
+            // a promise this screen cannot keep.
+            if (notifMoved) {
+                Text(NOTIFY_HOME, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                Gap(6)
+            }
             val v = rows
             val err = readError
             when {
