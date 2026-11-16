@@ -70,6 +70,10 @@ class ApiContractTest {
     private fun ok(json: String) = MockResponse().setResponseCode(200)
         .setHeader("Content-Type", "application/json").setBody(json)
 
+    /** A route that raises a card and waits: 202 with `waiting: true`. */
+    private fun accepted(json: String) = MockResponse().setResponseCode(202)
+        .setHeader("Content-Type", "application/json").setBody(json)
+
     @Before
     fun start() {
         server = MockWebServer()
@@ -682,6 +686,13 @@ class ApiContractTest {
      * The History routes (section 18), with the token and the client header
      * like every other: one page, one conversation, and one delete - by id,
      * in the body, never in bulk.
+     *
+     * The delete is the CARDED route since DEF-047 - `POST
+     * /api/conversations/clear` (`ChatLog.CLEAR_PATH`, docs/JARVIS-API.md
+     * 184.6): phase one raises ONE `conversation_clear` approval card and
+     * answers **202** `{"waiting": true}`, which is not a delete. This test
+     * stubbed the old `/api/history/delete` and a 200, so it failed the moment
+     * the client moved and this file did not.
      */
     @Test
     fun theHistoryRoutesAreTheContracts() = runBlocking {
@@ -690,7 +701,9 @@ class ApiContractTest {
                "encrypted":true,"conversations":[{"id":"abcd1234","title":"Dentist","started":1,
                "updated":2,"turns":2,"device":"phone","has_voice":false,"tainted":false}]}""",
         )
-        routes["/api/history/delete"] = ok("""{"ok":true}""")
+        routes["/api/conversations/clear"] = accepted(
+            """{"ok":true,"waiting":true,"id":"abcd1234","action":"conversation_clear"}""",
+        )
 
         val page = api.history()
         assertTrue(page is ApiResult.Ok)
@@ -699,10 +712,17 @@ class ApiContractTest {
         assertEquals("hud", list.getHeader("X-Jarvis-Client"))
         assertEquals(TOKEN, list.getHeader("X-Jarvis-Token"))
 
+        // The carded clear: 202 `waiting: true` is ONE approval card, and the
+        // client must read it as an answer it got - not as a failure, and not
+        // as "already gone".
         val gone = api.deleteHistory("abcd1234")
         assertTrue(gone is ApiResult.Ok)
+        val (clearCode, clearBody) = (gone as ApiResult.Ok).value
+        assertEquals(202, clearCode)
+        assertEquals("true", clearBody?.get("waiting").toString())
         val del = server.takeRequest(10, TimeUnit.SECONDS)!!
         assertEquals("POST", del.method)
+        assertEquals("/api/conversations/clear", del.path)
         assertEquals("abcd1234", org.json.JSONObject(del.body.readUtf8()).getString("id"))
         assertEquals("hud", del.getHeader("X-Jarvis-Client"))
 
