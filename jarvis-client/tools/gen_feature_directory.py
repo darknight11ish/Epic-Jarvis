@@ -194,6 +194,10 @@ def main() -> int:
     if args.check:
         if want != have:
             print(f"STALE {OUT.relative_to(ROOT)} - run this generator")
+            # The exact one line that clears it: this runs in CI's `audit` job
+            # now, and "run this generator" is not a command anyone can type.
+            print("run `py -3 jarvis-client/tools/gen_feature_directory.py` "
+                  "and commit the one file it writes.")
             return 1
         print(f"ok  {OUT.relative_to(ROOT)} matches contract/feature-controls.json")
         return 0
