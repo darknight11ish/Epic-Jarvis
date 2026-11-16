@@ -38,8 +38,11 @@ WHAT IT PROVES, and these are the rules the answers exist to keep:
   5. the loaded answer quotes the stub's OWN name, memory, card share and
      context - nothing in the answer is typed into the source;
   6. no card, no model call, no socket and no write: with the readers stubbed,
-     a socket connection is an assertion failure, the answer functions never
-     mention the gate or the agent, and no approvals/receipts database appears;
+     a socket connection is an assertion failure, a `jarvis_gate` module that
+     raises on ANY attribute is installed and every answer still answers, the
+     fake readers record the calls the answers really made (`ps_models` at the
+     lane's address, `probe` on the lane's port), and no approvals/receipts
+     database appears;
   7. the neighbours keep their own answers: "which model are you running" is
      still `model_current`, "what models are installed" is still `models_list`,
      "how much disk space do i have" is still `pc_help`, and the sentences this
@@ -232,16 +235,6 @@ def _restore(saved):
             sys.modules.pop(name, None)
         else:
             sys.modules[name] = mod
-
-
-def _source_of(name: str) -> str:
-    """The named top-level function's own source, from the real file."""
-    text = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
-    start = text.find("\ndef " + name + "(")
-    if start < 0:
-        return ""
-    following = text.find("\ndef ", start + 1)
-    return text[start:following if following > 0 else len(text)]
 
 
 def main():
@@ -506,13 +499,15 @@ def main():
 
         real_connect = socket.socket.connect
         socket.socket.connect = counted_connect
-        saved2 = _install(lanes=_fake_lanes(), bench=_fake_bench(rows=[loaded_row]),
+        lanes9, bench9 = _fake_lanes(), _fake_bench(rows=[loaded_row])
+        saved2 = _install(lanes=lanes9, bench=bench9,
                           models=_fake_models(installed=["qwen3.5:9b"]),
                           hardware=_fake_hardware(),
                           pc_facts=_fake_pc_facts("C: has 100.0 GB free of 200.0 GB."))
+        saids = []
         try:
             for sentence, _want in AUDIT:
-                say(sentence)
+                saids.append(say(sentence)[1])
         finally:
             socket.socket.connect = real_connect
             _restore(saved2)
@@ -526,16 +521,24 @@ def main():
               not (_TMP / "config" / "approvals.db").exists())
         check("no write: no receipts database was created",
               not (_TMP / "config" / "receipts.db").exists())
-        for name in ("_run_models_loaded", "_run_ollama_running",
-                     "_run_pc_facts", "_run_models_list"):
-            body = _source_of(name)
-            check(f"no card, no model: {name} never mentions the gate or the agent",
-                  bool(body) and "jarvis_gate" not in body
-                  and "jarvis_agent" not in body, body[:120])
-        for name, reader in (("_run_models_loaded", "ps_models"),
-                             ("_run_ollama_running", "probe")):
-            check(f"the read is named in {name}: {reader}",
-                  reader + "(" in _source_of(name), name)
+        # BEHAVIOUR, not the answer's source text: `_NoGate` raises on ANY
+        # attribute, so an answer that reached for a card would have crashed the
+        # run above, and each one still had to produce words of its own.
+        check("no card: every audit answer ran with the gate module raising, "
+              "and each one answered",
+              len(saids) == len(AUDIT) and all(isinstance(s, str) and s
+                                               for s in saids),
+              saids)
+        # The reader each answer SAYS it used is the one the fake saw called:
+        # `/api/ps` at the lane's own address, and the lane's `/api/tags` probe
+        # on the lane's own port. (A source-text pin cannot prove this - it only
+        # proves a name was typed - which is why the checker forbids one.)
+        check("the loaded answer really called the /api/ps reader, at the lane's address",
+              bool(bench9.CALLED) and all(u.startswith("http://127.0.0.1:11436")
+                                          for u in bench9.CALLED),
+              bench9.CALLED)
+        check("the running answer really called the lane's /api/tags probe, on its port",
+              bool(lanes9.PROBED) and set(lanes9.PROBED) == {11436}, lanes9.PROBED)
 
         # ------------------------------------------------------------------
         #  10. Neighbours keep their own answers
