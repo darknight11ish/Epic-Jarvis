@@ -497,6 +497,18 @@ def main():
                       "cannot tell how much disk space" in said
                       and "will not guess" in said, said)
 
+            # The two cases below are about what the READER said, so they have
+            # to reach the reader on every host - and by itself this one only
+            # does on Windows. `_run_pc_facts` asks `_backend_drive()` first
+            # and returns the "does not name the drive" answer above when it is
+            # "", which is every POSIX runner (`os.path.splitdrive` there is
+            # posixpath's, and it always returns ""). So the reader was never
+            # called, and the two assertions could only pass on a PC with a
+            # drive letter. Pin the letter the same way the first case above
+            # pins it: a fixed "C", not the host's own, so a failing read is
+            # driven deterministically instead of by the machine running it.
+            Q._backend_drive = lambda: "C"
+
             pc, calls = _fake_pc_facts(raises=True)
             sys.modules["jarvis_pc_facts"] = pc
             intent, said = say("what is my disk space")
