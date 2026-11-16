@@ -36,9 +36,10 @@ import kotlinx.coroutines.launch
  *
  * It used to say "Every number is calculated, not measured, until you press
  * Measure" - under three setup rows that print [Hardware.measuredLine], and
- * dated focus-preset costs - so the plate called the screen above it a liar
- * (the audit of 2026-11-16, finding 1). One constant so a JVM test can pin
- * it (`HardwarePlateCopyTest`): change the words and the test together.
+ * focus-preset costs that carry dated measurements - so the plate called the
+ * screen above it a liar (the audit of 2026-11-16, finding 1). One constant so
+ * a JVM test can pin it (`HardwarePlateCopyTest`): change the words and the
+ * test together.
  */
 internal const val HARDWARE_CLOSING_LINE =
     "Picking a setup changes nothing by itself. Calculated lines are estimates; " +

@@ -12,11 +12,12 @@ import org.junit.Test
  * The line used to read "Every number is calculated, not measured, until you
  * press Measure", 141 lines under the plate's own measured lines: each setup
  * prints `Hardware.measuredLine(p)` ("Measured on this PC." once a measurement
- * row exists), and each focus-preset row's cost is dated ("Measured
- * 2026-10-18: ..."). The same line also said "Nothing changes until you pick a
- * setup", while a local preset on the same plate "switches at once"
- * (`FocusPresetsPlate.kt`'s own introduction) - so the plate promised
- * something the plate above it had already broken.
+ * row exists), and the focus-preset costs above include dated measurements
+ * ("Measured 2026-10-18: ...") and "Same measured setup as General" rows. The
+ * same line also said "Nothing changes until you pick a setup", while a local
+ * preset on the same plate "switches at once" (`FocusPresetsPlate.kt`'s own
+ * introduction) - so the plate promised something the plate above it had
+ * already broken.
  *
  * This is a NODE PIN, in the suite's usual shape (`SourceFile`): it holds the
  * facts the screen actually shows, and it fails if the false universal
