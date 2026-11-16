@@ -24,10 +24,15 @@ confidence-threshold = 0.9
 #
 # The two that used to be here (paste, fxhash) came in through `screenshots`
 # and left with it, along with two CVSS 7.5 quick-xml advisories. `cargo audit`
-# exits 0 on this lockfile.
+# exits 0 on this lockfile. `paste` is BACK as of 2026-11-16, through the
+# tauri-specta pilot and not through screenshots: specta's own derive pulls it
+# in, it is unmaintained rather than vulnerable, and it is the one price of the
+# generated-bindings pilot - recorded here by id, so it cannot arrive unnoticed
+# anywhere else.
 ignore = [
   "RUSTSEC-2024-0370",  # proc-macro-error, unmaintained (tauri-plugin tree)
   "RUSTSEC-2024-0429",  # glib, unsound VariantStrIter (Linux GTK backend only)
+  "RUSTSEC-2024-0436",  # paste, unmaintained - NEW 2026-11-16 through specta (see above)
   "RUSTSEC-2025-0075",  # unic-char-range, unmaintained
   "RUSTSEC-2025-0080",  # unic-common, unmaintained
   "RUSTSEC-2025-0081",  # unic-char-property, unmaintained

@@ -26,7 +26,27 @@ tauri-build = { version = "2.7", features = [] }
 # The 2.12 generation (2026-10-13). Every crate in this group declares MSRV
 # 1.90, which is why `rust-version` above had to come with them; they are one
 # generation and are bumped as one thing.
-tauri = { version = "2.12", features = ["tray-icon", "image-ico", "image-png"] }
+# The `specta` feature is tauri-specta's own requirement: it is what teaches
+# tauri that an `AppHandle` argument is not something the page sends, so the
+# generated binding leaves it out (`impl FunctionArg for AppHandle` in tauri's
+# src/lib.rs returns None).
+tauri = { version = "2.12", features = ["tray-icon", "image-ico", "image-png", "specta"] }
+# PART OF THE ONE-COMMAND PILOT (2026-11-16) - `set_hotkeys` only. `specta` is a
+# NORMAL dependency, not a dev one, because `#[derive(specta::Type)]` and
+# `#[specta::specta]` compile generated code into the binary; tauri already
+# names `^2.0.0-rc.16` and tauri-specta pins `=2.0.0-rc.28`, so this exact pin
+# is the one copy in the graph rather than a second one.
+specta = { version = "=2.0.0-rc.28", features = ["derive", "function"] }
+# The bindings EXPORTER for the same pilot. NORMAL dependencies, not dev ones,
+# and the reason is Cargo's own: the exporter lives in `src/bin/export_bindings.rs`
+# and a dev-dependency is not available to a `[[bin]]` target. It could not stay a
+# `#[test]` - see that file's docstring for the measured reason (a test binary
+# gets no Windows manifest, so the loader kills it before `main`). The app never
+# calls the exporter, so it is dead code in the shipped binary;
+# tools/gen_notices.py counts normal dependencies, so it DOES credit these crates
+# in THIRD-PARTY-NOTICES.txt, which is the safe direction to be wrong in.
+tauri-specta = { version = "=2.0.0-rc.29", features = ["javascript"] }
+specta-typescript = "0.0.15"
 tauri-plugin-global-shortcut = "2.4"
 tauri-plugin-clipboard-manager = "2.4"
 tauri-plugin-notification = "2.6"
@@ -218,6 +238,7 @@ windows-future = { version = "0.2", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
 
 [features]
 # WebView2 devtools in release builds. Devtools are always on in debug builds.
