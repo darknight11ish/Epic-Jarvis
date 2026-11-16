@@ -136,12 +136,19 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     Gap(8)
     Kicker(FocusPresets.TITLE, Modifier.semantics { heading() })
     Gap(4)
+    // What a preset changes, and the one rule the rows cannot show: a press
+    // either acts at once or raises a card. Everything else the old paragraph
+    // said is drawn on the row itself, or is said by the PC when the button is
+    // pressed (the audit of 2026-11-16, finding 5): a heavy preset's cost -
+    // the other models paused - sits on its own row above the button, each
+    // row's model line names its model and card, and the card says what it is
+    // when it appears. The old "Fast uses the 2080 SUPER" sentence was a
+    // hand-typed copy of the Fast row's own model line, so it is gone with the
+    // rest.
     Text(
         "Presets choose the local model and card for the work you are about to do. " +
-            "Picking a local preset that is not Coding or Medical switches at once, and picking another switches straight back. " +
-            "Coding and Medical pause the other models first, and the Cloud row changes where your words go, " +
-            "so those three still raise one approval card on your PC. " +
-            "The Fast preset uses the 2080 SUPER.",
+            "Picking one that is not Coding or Medical switches at once; Coding and " +
+            "Medical raise one approval card.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
     )
