@@ -267,18 +267,30 @@ await check("the main search brings the directory card up; the card's box narrow
   await page.close();
 });
 
-await check("a known multi-field row keeps its planned note", async () => {
-  // R5: the honest note is words, not just a flag. Pin one row the contract
-  // marks multi-field and prove the page renders the exact sentence.
-  const note = "Settings control today; typed path still being wired.";
+await check("a multi-field row keeps its own note, and no row promises a typed path that works", async () => {
+  // DEF-038 (2026-11-16): the planned note is COMPUTED from the row's own
+  // example phrase, never stamped from a multi-field board. The eighteen rows
+  // the board named all had an answerable example phrase, and the old sentence
+  // told the owner their typed path was "still being wired" anyway. So the note
+  // now appears only on a row whose own phrase the matcher cannot answer, and
+  // the row keeps its own recorded note otherwise. Nothing is promised today;
+  // the rule is what this pins, so it still bites if a note comes back.
   const row = FIXTURE.rows.find((r) => r.id === "read-aloud");
   assert.ok(row, "the pinned multi-field row read-aloud is missing");
-  assert.equal(row.note, note);
+  const note = String(row.note || "").trim();
+  assert.ok(note.length > 0, "read-aloud lost its own note entirely");
+  assert.notStrictEqual(note, PLANNED_NOTE,
+    "read-aloud promises a typed path that its own example already answers");
+  const promised = FIXTURE.rows
+    .filter((r) => String(r.note || "").trim() === PLANNED_NOTE);
+  const wrong = promised.filter((r) => r.example_ok !== false).map((r) => r.id);
+  assert.deepEqual(wrong, [],
+    `a row promises a typed path its own example already answers: ${wrong.join("; ")}`);
   const page = await open();
   const shown = await page.evaluate(() =>
     (document.querySelector('#fd-list [data-fd-id="read-aloud"] .fd-note') || {})
       .textContent || "");
-  assert.equal(shown, note, "the page lost the multi-field planned note");
+  assert.equal(shown.trim(), note, "the page did not render read-aloud's own note");
   await page.close();
 });
 
