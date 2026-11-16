@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'One plan card per job, and trusted mode, are designed and written down',
     "The PC's eight notification settings now have one home in Settings, and the voice-check card stops saying its setting twice",
     "The phone's Hardware plate stops saying nothing above it is measured",
     'Three phone paragraphs stop re-telling what the screen already shows',
     "The Hardware screen's two remaining false sentences are fixed: the answer after choosing a setup no longer promises an approval card for every step, and the Details list no longer calls its own measured line calculated",
-    'A switched-off GitHub tool is one card away, in the answer',
 )
 
 
