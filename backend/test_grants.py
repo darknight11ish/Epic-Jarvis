@@ -16,6 +16,13 @@ THE NAMED CASES THE BRIEF ASKS FOR, and where each lives:
         t_the_cap_is_reached_exactly_at_twenty
   - a requested cap of 99 clamped to 30
         t_a_requested_cap_of_99_is_clamped_to_thirty
+  - the cap's resolution order (caller, setting, 20) and that a setting change
+    reaches only new windows
+        t_the_caller_can_name_the_cap_for_one_session,
+        t_the_setting_decides_the_default_when_the_caller_does_not,
+        t_twenty_is_the_fallback_when_neither_says,
+        t_the_cap_is_clamped_at_every_level,
+        t_changing_the_setting_changes_only_new_windows
   - each banned verb refused
         t_each_banned_verb_is_refused
   - each of the eleven allowed shapes accepted
@@ -44,12 +51,13 @@ THE AUDIT IS THE GATE'S OWN
 live gate owns. This suite installs a stand-in module with those three names,
 so the calls are proved without importing the 3,380-line gate (which needs the
 owner's files). `t_the_three_audit_writers_are_the_gates_own` also reads the
-published base and the module's own source, proving the event strings are not
-copied into the engine.
+published base and walks the engine's own `ast` nodes, proving the event
+strings are not copied into the engine without pinning its source text.
 """
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import ast
 import sys
 import traceback
 import types
@@ -80,6 +88,29 @@ sys.modules["jarvis_gate"] = FAKE_GATE
 
 import jarvis_grants as jg  # noqa: E402
 import _base  # noqa: E402
+
+REAL_SETTING_CAP = jg.setting_cap
+CAP_STATE = {"setting": 20}
+
+
+def _fixed_setting_cap():
+    """The setting's value for this run, so every case is deterministic.
+
+    The real reader asks `jarvis_limits`, which reads the owner's own settings
+    file; a PC whose owner has already changed the cap must not change what
+    this suite proves. The one test that exercises the REAL reader swaps the
+    limits table's own functions instead (t_the_real_reader_asks_the_limits_table).
+    """
+    return CAP_STATE["setting"]
+
+
+jg.setting_cap = _fixed_setting_cap
+
+try:
+    import jarvis_limits as JL  # noqa: E402  - the table the setting lives in
+except Exception as _exc:                                  # noqa: BLE001
+    JL = None
+    print(f"  NOTE  jarvis_limits could not be imported ({type(_exc).__name__})")
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +418,127 @@ def t_a_bool_or_a_negative_cap_cannot_be_a_cap():
     session = trusted(actions={"github_comment"}, cap=0)
     check("a cap of zero is clamped up to one, never left at zero",
           session.max_actions == 1)
+
+
+# ---------------------------------------------------------------------------
+# Where the default comes from: caller, then the owner's setting, then 20
+# ---------------------------------------------------------------------------
+
+
+def t_the_setting_is_registered_in_the_limits_table():
+    if JL is None:
+        skip("jarvis_limits could not be imported")
+        return
+    row = JL.find(jg.SETTING_KEY)
+    check("the cap setting is jarvis_limits.LIMITS['trusted_actions']",
+          row is not None, jg.SETTING_KEY)
+    if row is None:
+        return
+    check("... as [grants].max_actions",
+          row.section == "grants" and row.name == "max_actions",
+          (row.section, row.name))
+    check("... default 20, range 1..30",
+          row.default == 20 and row.low == 1 and row.high == 30,
+          (row.default, row.low, row.high))
+    check("... and raising it is the direction that asks",
+          row.loosening == "up", row.loosening)
+    check("the engine's own fallback is the same 20",
+          jg.MAX_TRUSTED_ACTIONS == row.default == 20)
+
+
+def t_the_real_reader_asks_the_limits_table():
+    if JL is None:
+        skip("jarvis_limits could not be imported")
+        return
+    real_find, real_value = JL.find, JL.value_of
+    try:
+        JL.value_of = lambda row: 13
+        check("setting_cap() reads the value through jarvis_limits",
+              REAL_SETTING_CAP() == 13)
+        JL.find = lambda key: None
+        check("... and answers None when the row is not on this PC",
+              REAL_SETTING_CAP() is None)
+    finally:
+        JL.find, JL.value_of = real_find, real_value
+
+
+def t_the_caller_can_name_the_cap_for_one_session():
+    CAP_STATE["setting"] = 7
+    session = trusted(actions={"github_comment"}, cap=25)
+    check("a caller's own number wins over the setting",
+          session.max_actions == 25, session.max_actions)
+    store = jg.GrantStore()
+    opened = store.open_trusted("c1", {"github_comment"}, (target(),), T0,
+                                max_actions=12)
+    check("... through the store too",
+          opened is not None and opened.max_actions == 12)
+
+
+def t_the_setting_decides_the_default_when_the_caller_does_not():
+    CAP_STATE["setting"] = 7
+    store = jg.GrantStore()
+    opened = store.open_trusted("c1", {"github_comment"}, (target(),), T0)
+    check("no caller number: the setting decides",
+          opened is not None and opened.max_actions == 7,
+          None if opened is None else opened.max_actions)
+    session = jg.TrustedSession(
+        "trusted", "chat-2", {"github_comment"}, (target(),), T0, T60, True
+    )
+    check("... and a directly built window reads it too",
+          session.max_actions == 7)
+
+
+def t_twenty_is_the_fallback_when_neither_says():
+    CAP_STATE["setting"] = None
+    check("resolve_max_actions() falls back to 20",
+          jg.resolve_max_actions() == 20)
+    store = jg.GrantStore()
+    opened = store.open_trusted("c1", {"github_comment"}, (target(),), T0)
+    check("... and a window opened with no setting uses 20",
+          opened is not None and opened.max_actions == jg.MAX_TRUSTED_ACTIONS == 20)
+
+
+def t_the_cap_is_clamped_at_every_level():
+    CAP_STATE["setting"] = 99
+    check("a setting of 99 is clamped to the hard ceiling of 30",
+          jg.resolve_max_actions() == 30)
+    CAP_STATE["setting"] = 0
+    check("a setting of 0 is clamped up to 1", jg.resolve_max_actions() == 1)
+    CAP_STATE["setting"] = 7
+    check("a caller's 99 is clamped to 30", jg.resolve_max_actions(99) == 30)
+    check("a caller's 0 is clamped up to 1", jg.resolve_max_actions(0) == 1)
+    check("the caller's number is clamped without touching the setting",
+          jg.resolve_max_actions(99) == 30 and CAP_STATE["setting"] == 7)
+
+
+def t_changing_the_setting_changes_only_new_windows():
+    CAP_STATE["setting"] = 20
+    store = jg.GrantStore()
+    first = store.open_trusted("c1", {"github_comment"}, (target(),), T0)
+    check("the first window opened at the old setting",
+          first is not None and first.max_actions == 20)
+    CAP_STATE["setting"] = 7
+    second = store.open_trusted("c2", {"github_comment"}, (target(),), T0)
+    check("a window opened after the change uses the new number",
+          second is not None and second.max_actions == 7,
+          None if second is None else second.max_actions)
+    check("the window already open keeps its own number",
+          first.max_actions == 20 and first.remaining("github_comment") == 20)
+    for _ in range(7):
+        decision = jg.consult(second, "github_comment",
+                              {"repo": REPO, "pr": 1295}, T5,
+                              stream_fresh=True)
+        if decision.outcome != "run":
+            check("the new window allows its 7 uses", False, decision.reason)
+            return
+        jg.record_action(second, "github_comment")
+    decision = expect(
+        jg.consult(second, "github_comment", {"repo": REPO, "pr": 1295}, T5,
+                   stream_fresh=True),
+        "refuse",
+    )
+    check("... and its 8th use is refused", "7" in decision.reason,
+          decision.reason)
 
 
 # ---------------------------------------------------------------------------
@@ -779,9 +931,18 @@ def t_the_three_audit_writers_are_the_gates_own():
         for name in ("grant_made", "granted", "grant_ended"):
             check(f"the gate really has its own {name}()",
                   f"def {name}(" in text)
-    source = (HERE / "jarvis_grants.py").read_text(encoding="utf-8")
+    # The event STRINGS live in jarvis_gate, not here. This walks the module's
+    # AST rather than pinning its source text: a string constant that starts
+    # "gate.grant_" would be a second copy of the gate's vocabulary, and a
+    # docstring (also an ast.Constant) mentioning it is not a copy.
+    tree = ast.parse((HERE / "jarvis_grants.py").read_text(encoding="utf-8"))
+    literals = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
     check("the engine carries no copy of the gate's event strings",
-          '"gate.grant_' not in source and "'gate.grant_" not in source)
+          not any(value.startswith("gate.grant_") for value in literals))
     store = jg.GrantStore()
     session = store.open_trusted("c1", {"github_comment"}, (target(),), T0)
     check("opening calls the gate's grant_made with the new id",
@@ -881,6 +1042,13 @@ CASES = (
     t_a_requested_cap_of_99_is_clamped_to_thirty,
     t_the_cap_is_per_action,
     t_a_bool_or_a_negative_cap_cannot_be_a_cap,
+    t_the_setting_is_registered_in_the_limits_table,
+    t_the_real_reader_asks_the_limits_table,
+    t_the_caller_can_name_the_cap_for_one_session,
+    t_the_setting_decides_the_default_when_the_caller_does_not,
+    t_twenty_is_the_fallback_when_neither_says,
+    t_the_cap_is_clamped_at_every_level,
+    t_changing_the_setting_changes_only_new_windows,
     t_each_banned_verb_is_refused,
     t_a_ban_beats_a_plan_grant,
     t_a_pending_card_is_never_swallowed,
@@ -913,6 +1081,7 @@ def main() -> int:
     print(f"  module {Path(jg.__file__).resolve()}")
     for fn in CASES:
         reset_audit()
+        CAP_STATE["setting"] = 20
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

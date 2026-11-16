@@ -370,7 +370,11 @@ def t_every_entry_says_which_direction_loosens():
     15-minute approval card whose limit he can change in Settings. A LONGER wait
     is the loosening direction and so it asks, exactly as `undo_window` does -
     a card that stays answerable for longer is more, not less. Turning it down
-    tightens, and is immediate."""
+    tightens, and is immediate.
+
+    `trusted_actions` joined them on 2026-11-16, when the owner asked to be able
+    to change trusted mode's cap: a BIGGER cap lets one window do more before it
+    needs a new card, so raising it asks and lowering it is immediate."""
     directions = {limit.key: limit.loosening for limit in L.LIMITS}
     check("every entry names a direction this module understands",
           bool(directions) and set(directions.values()) <= {"up", "down", "none"},
@@ -381,7 +385,8 @@ def t_every_entry_says_which_direction_loosens():
           directions)
     check("... and nothing else does",
           sorted(k for k, d in directions.items() if d == "up")
-          == ["approval_wait", "memory_people", "undo_window"], directions)
+          == ["approval_wait", "memory_people", "trusted_actions",
+              "undo_window"], directions)
     check("the voice check's bar is the one that goes down",
           directions.get("voice_bar") == "down", directions)
     shown = {r["key"]: r["loosen_up"] for r in L.view()["limits"]}

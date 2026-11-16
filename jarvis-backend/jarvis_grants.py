@@ -29,7 +29,9 @@ THE NINE INVARIANTS, EACH ENFORCED IN CODE
      grant can never make a banned request legal.
   3. A hard cap of `MAX_TRUSTED_ACTIONS` (20) USES PER ACTION PER SESSION, with
      a hard ceiling of 30: a caller asking for 99 gets 30, never 99. The
-     twenty-first use of one action is refused.
+     twenty-first use of one action is refused. The number one window gets is
+     resolved at open: the caller's own number, else the owner's
+     `[grants].max_actions` setting, else 20 (see below).
   4. A trusted window lives at most sixty minutes from the moment it opened;
      at exactly sixty minutes it is closed.
   5. In memory only. Nothing here writes a file; a grant carries the id of the
@@ -48,12 +50,19 @@ THE NINE INVARIANTS, EACH ENFORCED IN CODE
 THE API, IN THE ORDER THE GATE USES IT
     GrantStore.open_trusted(chat_id, allowed_writes, targets, now, *,
                             seconds=3600, owner_approved=True,
-                            max_actions=MAX_TRUSTED_ACTIONS) -> TrustedSession | None
+                            max_actions=None) -> TrustedSession | None
     GrantStore.open_plan(job_id, allowed_writes, targets, now, *,
                          seconds) -> PlanGrant | None
         Open a window. Only the after-the-card path may call these, and a
         window whose `grant_made` audit line cannot be written is refused
         rather than allowed unlogged - the existing web-search grant's rule.
+        `max_actions=None` means "resolve it": the caller's number, else the
+        owner's setting, else 20.
+
+    resolve_max_actions(requested=None) -> int
+    setting_cap() -> int | None
+        The cap one window will use, in that order, clamped at every level;
+        and the one read of the owner's `[grants].max_actions` setting.
 
     consult(grant, tool, args, now, *, stream_fresh, tier="ask",
             pending_cards=(), lockdown=False) -> Decision
@@ -84,6 +93,24 @@ THE API, IN THE ORDER THE GATE USES IT
     void_stale(session, now) -> TrustedSession
     GrantStore.revoke(chat_id) / end_chat(chat_id) / end_job(job_id) / restart()
         The four end conditions the existing web-search grant already has.
+
+WHERE THE CAP'S DEFAULT LIVES, AND WHY IT IS NOT A CONSTANT
+    `MAX_TRUSTED_ACTIONS` (20) is the default and the fallback. The number one
+    window actually gets is `resolve_max_actions(caller's)`, in this order:
+      1. the caller's own number for this session (a plan card or a chat
+         sentence that says "20 this time"), clamped;
+      2. otherwise the owner's `[grants].max_actions` setting, read through
+         `jarvis_limits.LIMITS["trusted_actions"]` (1..30, default 20), so a
+         change made once reaches every later window;
+      3. otherwise 20.
+    The number is resolved when a window OPENS and stored on the window, so
+    changing the setting changes the next window and never one already open.
+    This module only READS the setting: changing it is the existing
+    `POST /api/limits/settings` gate action (a raise asks one card, exactly
+    like every other limit), and no code here writes a setting. The chat and
+    Jarvis Live sentences that name this setting - and the `NUMBER_SETTINGS`
+    row that lets the spoken settings runner find it - arrive with the wiring
+    PR; this PR registers the limit and reads it.
 
 THE RECORD, IN THE DESIGN DOCUMENT'S OWN FIELD NAMES
     kind            "plan" | "trusted"
@@ -163,7 +190,9 @@ WHAT THIS ENGINE DOES NOT MODEL
     parameter, so every rule is testable without sleeping. Nothing here reads
     GitHub: a trusted merge requires the request to carry its head SHA and to
     say the required checks passed, and the merge tool must re-check both
-    before it runs.
+    before it runs. It also does not change its own cap setting: the existing
+    limits route owns that gate action, and the engine only reads the resolved
+    number when a window opens.
 """
 
 from __future__ import annotations
@@ -189,6 +218,7 @@ __all__ = [
     "MAX_TRUSTED_ACTIONS_CEILING",
     "OUTCOMES",
     "PlanGrant",
+    "SETTING_KEY",
     "TIERS",
     "TRUSTED_ALLOWLIST",
     "TRUSTED_MAX_LIFETIME",
@@ -201,6 +231,8 @@ __all__ = [
     "consult",
     "current_process_id",
     "record_action",
+    "resolve_max_actions",
+    "setting_cap",
     "simulate_restart",
     "status",
     "void",
@@ -226,10 +258,21 @@ GRANT_STORE_MAX = 200
 #: ceiling 30, and a caller asking for more is clamped - never honoured. It is
 #: a count of *uses*, not of action names: with an eleven-name allowlist a cap
 #: of 20 names could never be reached, so the per-use reading is the only one
-#: in which the number means anything. `TrustedSession.max_actions` is that
-#: per-action number; `actions_taken` is the total across all actions.
+#: in which the number means anything. This constant is the DEFAULT and the
+#: engine's fallback; the owner changes the default through the setting below,
+#: and `resolve_max_actions()` decides what one window actually gets.
+#: `TrustedSession.max_actions` is that per-action number; `actions_taken` is
+#: the total across all actions.
 MAX_TRUSTED_ACTIONS = 20
 MAX_TRUSTED_ACTIONS_CEILING = 30
+
+#: The setting the owner changes to move the default cap: `[grants].max_actions`
+#: in the settings file, declared ONCE as `jarvis_limits.LIMITS["trusted_actions"]`
+#: (1..30, default 20), with its words and its card in that table. The engine
+#: only READS it, at the moment a window opens; changing it is the existing
+#: limits route's gate action, never a write from here. The chat and Jarvis Live
+#: sentences that name it arrive with the wiring PR.
+SETTING_KEY = "trusted_actions"
 
 #: The exact GitHub write surface trusted mode may cover, in the owner's own
 #: shapes: comment, open_issue, rerun_workflow, create_repo, merge_pr,
@@ -451,6 +494,60 @@ def _grant_audit(name: str, **fields: Any) -> bool:
         return True
     except Exception:  # noqa: BLE001 - a missing or broken gate means "no log"
         return False
+
+
+# ---------------------------------------------------------------------------
+# The cap, resolved: caller, then the owner's setting, then 20
+# ---------------------------------------------------------------------------
+
+
+def setting_cap() -> int | None:
+    """What the owner's `[grants].max_actions` setting says now, or None.
+
+    THE ONE READ of the setting. `jarvis_limits` owns the value, its 1..30
+    range and the words both Settings screens show; this function asks that
+    table, keeps no second copy and never writes. `None` means the table or
+    the row is not on this PC - an older backend - and `resolve_max_actions()`
+    then falls back to MAX_TRUSTED_ACTIONS, exactly as on a PC that never
+    touched the setting.
+    """
+    try:
+        import jarvis_limits
+
+        row = jarvis_limits.find(SETTING_KEY)
+        if row is None:
+            return None
+        return int(jarvis_limits.value_of(row))
+    except Exception:  # noqa: BLE001 - an unreadable setting is "not set"
+        return None
+
+
+def resolve_max_actions(requested: int | None = None) -> int:
+    """The cap one window gets: the caller's number, else the setting, else 20.
+
+    The order, and every level is clamped to 1..MAX_TRUSTED_ACTIONS_CEILING:
+
+      1. a number named FOR THIS SESSION (a plan card or a chat sentence that
+         says "20 this time") wins;
+      2. otherwise the owner's `[grants].max_actions` setting decides, so a
+         change made once reaches every later window;
+      3. otherwise MAX_TRUSTED_ACTIONS (20).
+
+    Resolved when a window OPENS and stored on it, so changing the setting
+    changes the next window and never one already open.
+    """
+    if requested is not None:
+        if isinstance(requested, bool) or not isinstance(requested, int):
+            raise ValueError("a cap must be a whole number")
+        return max(1, min(requested, MAX_TRUSTED_ACTIONS_CEILING))
+    value = setting_cap()
+    if value is None:
+        return MAX_TRUSTED_ACTIONS
+    try:
+        wanted = int(value)
+    except (TypeError, ValueError):
+        return MAX_TRUSTED_ACTIONS
+    return max(1, min(wanted, MAX_TRUSTED_ACTIONS_CEILING))
 
 
 # ---------------------------------------------------------------------------
@@ -815,9 +912,11 @@ class TrustedSession(Grant):
                 "a trusted session lasts at most 60 minutes; "
                 f"this one asks for {self.lifetime}"
             )
-        asked = MAX_TRUSTED_ACTIONS if self.max_actions is None else self.max_actions
+        # The cap is RESOLVED once, here: a number named for this session, else
+        # the owner's setting, else 20 - clamped at every level. Storing the
+        # answer is what makes a later setting change reach only new windows.
         object.__setattr__(
-            self, "max_actions", max(1, min(asked, MAX_TRUSTED_ACTIONS_CEILING))
+            self, "max_actions", resolve_max_actions(self.max_actions)
         )
         if "*" in self.allowed_writes:
             if len(self.allowed_writes) != 1:
@@ -957,7 +1056,7 @@ class GrantStore:
         *,
         seconds: float = 3600,
         owner_approved: bool = True,
-        max_actions: int = MAX_TRUSTED_ACTIONS,
+        max_actions: int | None = None,
     ) -> TrustedSession | None:
         """Write a session for this chat after the owner's card; None if refused.
 
@@ -966,6 +1065,11 @@ class GrantStore:
         written into the grant log is refused rather than allowed unlogged. A
         second window for the same chat is refused too, exactly like the
         existing "already on, so there is nothing to ask" answer.
+
+        `max_actions=None` means "resolve it": a number the caller names wins,
+        else the owner's `[grants].max_actions` setting, else 20. The answer is
+        stored on the window, so changing the setting afterwards moves only
+        windows opened later.
         """
         if not isinstance(chat_id, str) or not chat_id.strip():
             return None

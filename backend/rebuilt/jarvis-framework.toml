@@ -2653,3 +2653,12 @@ enabled = false
 # request answers 403 (docs/VOICESTUDIO.md, "The first run").
 [voicestudio]
 enabled = false
+
+# How much trust ONE trusted-mode window may spend on one GitHub action
+# (2026-11-16: the owner asked to be able to change the cap in settings, by
+# chat or in Jarvis Live). 20 is the design's default and 30 its hard ceiling;
+# `jarvis_grants.resolve_max_actions()` reads this when a window OPENS, so a
+# change reaches the next window and never one already open. Raising it asks
+# one card, exactly like every other limit; lowering it is instant.
+[grants]
+max_actions = 20
