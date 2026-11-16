@@ -263,7 +263,12 @@ def t_one_owner_per_sentence():
         ("what about connecting to a gmail account or google calendar?",
          "accounts_connect", None, None),
         ("connect my google calendar", "accounts_connect", None, None),
-        ("connect my email", "accounts_connect", None, None),
+        # "connect my email" MOVED AGAIN on 2026-11-15: a sentence that names
+        # email and NOT the calendar is answered about email alone, because the
+        # four-path inventory led with the calendar's state for a Gmail
+        # question. The calendar shapes above keep the inventory.
+        ("connect my email", "accounts_email", None, None),
+        ("connect my gmail", "accounts_email", None, None),
         # -- this answer: the setup shapes the card does not claim --
         ("calendar setup", "calendar_setup", None, None),
         ("sync my calendar with jarvis", "calendar_setup", None, None),

@@ -16790,6 +16790,58 @@ def _accounts_topic(s: str) -> bool:
     return bool(_ACCOUNTS_TOPIC.search(s))
 
 
+#: A sentence that names EMAIL or Gmail and NOT the calendar is answered about
+#: email alone (the owner's own chat, 2026-11-15). He asked "how do I connect a
+#: Gmail account to you?" and got the four-path inventory below, which opens
+#: with his calendar's state and calls email "not built yet" - neither of them
+#: an answer to that question. Email IS built on this PC: Settings -> Accounts
+#: collects the server addresses (`imap_host`, `imap_port`, `imap_mailbox`) AND
+#: the password, and `jarvis_email` reads the inbox with them. What is missing
+#: is a connect card for email on the PHONE, which is a different fact and is
+#: said as one.
+_ACCOUNTS_NAMES_EMAIL = re.compile(r"\b(?:e-?mail|gmail)\b", re.IGNORECASE)
+_ACCOUNTS_NAMES_CALENDAR = re.compile(r"\b(?:calendar|calendars|gcal)\b", re.IGNORECASE)
+
+#: Said before the how-to: what THIS PC has saved, read from the same file the
+#: desktop's Accounts card writes (`jarvis_accounts.value`, where an
+#: environment variable the owner already set still wins).
+ACCOUNTS_EMAIL_LEAD_OFF = "No mail server is saved on this PC yet.\n"
+ACCOUNTS_EMAIL_LEAD_ON = "A mail server is saved on this PC already.\n"
+
+#: The email answer. Every box named here is one the desktop's Settings,
+#: Accounts really draws (`jarvis-desktop/src/account-secrets.js`: ADDRESSES +
+#: SECRETS), and the Gmail values are that card's own placeholders. Nothing
+#: invites a secret into a chat: the password goes in a box on the PC, and that
+#: is said last. The app-password rule is Google's, not a measurement of his
+#: account, and the sentence says so.
+ACCOUNTS_EMAIL_WORDS = (
+    "Email is set up in Settings, Accounts on the PC, not on the phone: there is no "
+    "connect card for email here yet.\n"
+    "For Gmail: under Server addresses, Mail server imap.gmail.com, port 993, Mailbox "
+    "folder INBOX, and the Sending server can stay empty. Under the account secrets, "
+    "IMAP username is your Gmail address, and IMAP password must be an APP PASSWORD: "
+    "Google refuses your normal password over IMAP, and makes an app password only "
+    "with 2-step verification switched on. That is how Google's app passwords work - "
+    "I have not checked it against your account.\n"
+    "With that saved I read the sender of new mail (no subject, no text, and nothing "
+    "goes to the model) and can send one when you ask. Type the password in that box "
+    "on the PC, never into this chat."
+)
+
+
+def _run_accounts_email() -> Result:
+    """The email answer: this PC's saved state, then the boxes for Gmail."""
+    lead = ACCOUNTS_EMAIL_LEAD_OFF
+    try:
+        import jarvis_accounts as A
+        if A.value("imap_host"):
+            lead = ACCOUNTS_EMAIL_LEAD_ON
+    except Exception:                       # noqa: BLE001 - module absent
+        pass
+    return Result(lead + ACCOUNTS_EMAIL_WORDS, "accounts_email",
+                  open_settings="account-secrets")
+
+
 def _accounts_connect(s: str) -> Optional[Intent]:
     """"can you connect my calendar and email", "what about connecting to a gmail
     account or google calendar?", "connect my google calendar", "connect my
@@ -16815,6 +16867,12 @@ def _accounts_connect(s: str) -> Optional[Intent]:
     if _CONNECT_STATUS.match(said):
         return None
     if _ACCOUNTS_ASK.match(said) or _ACCOUNTS_BARE.match(said):
+        # Email alone, when the sentence names email and not the calendar: the
+        # four-path answer below is the right shape for "gmail or google
+        # calendar", and the wrong shape for "how do I connect a Gmail
+        # account?" (2026-11-15).
+        if _ACCOUNTS_NAMES_EMAIL.search(said) and not _ACCOUNTS_NAMES_CALENDAR.search(said):
+            return Intent("accounts_email")
         return Intent("accounts_connect")
     return None
 
@@ -27207,6 +27265,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # settings grammar above.)
     if n == "accounts_connect":
         return _run_accounts_connect()
+    if n == "accounts_email":
+        return _run_accounts_email()
     if n == "voice_ask":
         return _run_voice_ask()
     if n == "pair_phone":
@@ -28370,7 +28430,7 @@ READ_ONLY_INTENTS = frozenset({
     # and explains - no card is raised, no value is typed, no voice changes -
     # so none may clear "cancel that". ("change your voice to Ashby" is the
     # settings grammar's own bad-value answer, already listed below.)
-    "accounts_connect", "voice_ask", "pair_phone",
+    "accounts_connect", "accounts_email", "voice_ask", "pair_phone",
     # What devices are paired (2026-11-14): the roster and the phone's own state
     # question only READ `jarvis_devices.paired_status()` - no card, no tool, no
     # write, nothing added, removed, renamed or retired - so neither may clear

@@ -133,12 +133,43 @@ GOOGLE_SAID = (
     "what about connecting to a gmail account or google calendar?",
     "what about connecting a gmail account or google calendar",
     "connect my google calendar",
+    "hook up my google calendar",
+    "how do I connect my google calendar",
+)
+
+#: The sentences that name EMAIL and not the calendar, so they are answered
+#: about email alone (2026-11-15). The first is the owner's own question, which
+#: used to get the four-path calendar inventory and never a Gmail step.
+EMAIL_SAID = (
+    "how do I connect a Gmail account to you?",
     "connect my email",
     "connect my gmail",
     "what about gmail?",
-    "hook up my google calendar",
     "set up my gmail account",
-    "how do I connect my google calendar",
+)
+
+#: What the EMAIL answer must name: the real boxes on the desktop's Accounts
+#: card (`jarvis-desktop/src/account-secrets.js`), Gmail's own values from that
+#: card's placeholders, the app-password rule, and the one place a password may
+#: go.
+EMAIL_WANTED = (
+    "Settings, Accounts",
+    "imap.gmail.com",
+    "993",
+    "INBOX",
+    "app password",
+    "2-step verification",
+    "never into this chat",
+)
+
+#: What the email answer must NOT say: the calendar paths are the right answer
+#: to a different question, and "not built yet" is the phrase that made email
+#: sound missing when it is the phone's connect card that is missing.
+EMAIL_NOT_WANTED = (
+    "private iCal link",
+    "connect GitHub",
+    "not built yet",
+    "loopback",
 )
 
 #: What the answer MUST name, one entry per real path (2026-10-29): the Google
@@ -506,8 +537,40 @@ def t_they_change_nothing():
           and _answer("change your voice to Ashby").open_settings is None)
 
 
+def t_email_alone_is_answered_about_email():
+    """The owner's own Gmail question (2026-11-15) gets the email answer: the
+    boxes that really exist on the PC, Gmail's own values, the app-password
+    rule, and one place a password may go - not the calendar's four paths."""
+    for said in EMAIL_SAID:
+        got = Q.match(said)
+        check(f"{said!r} is answered as email", got is not None and got.name == "accounts_email", got)
+        r = _answer(said)
+        check(f"... answered here, not by the model ({said!r})", r is not None, r)
+        if r is None:
+            continue
+        check(f"... with the route naming this answer ({said!r})",
+              r.intent == "accounts_email", r.intent)
+        for want in EMAIL_WANTED:
+            check(f"... it says {want!r}", want.lower() in r.reply.lower(), r.reply)
+        for bad in EMAIL_NOT_WANTED:
+            check(f"... it never says {bad!r}", bad.lower() not in r.reply.lower(), r.reply)
+        for bad in BAD_PHRASES:
+            check(f"... it never says {bad!r}", bad.lower() not in r.reply.lower(), r.reply)
+        check("... it is four lines, not a page", len(r.reply) <= 1000,
+              f"{len(r.reply)} characters")
+        check("... it opens the Accounts card",
+              r.open_settings == "account-secrets", r.open_settings)
+    # The mixed question keeps the four paths: this change narrowed ONE answer,
+    # it did not take the inventory away from the sentences that need it.
+    for said in GOOGLE_SAID:
+        got = Q.match(said)
+        check(f"{said!r} keeps the four paths",
+              got is not None and got.name == "accounts_connect", got)
+
+
 def main():
     for fn in (t_google_and_email_are_answered_with_the_real_paths,
+               t_email_alone_is_answered_about_email,
                t_the_commands_and_the_doc_are_the_real_ones,
                t_the_lead_says_what_is_really_chosen,
                t_the_not_connected_answer_names_no_missing_settings_row,
