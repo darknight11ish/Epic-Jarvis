@@ -56,6 +56,14 @@ REPO = HERE.parent
 CHANGELOG = REPO / "CHANGELOG.md"
 FRAGMENTS = REPO / "changelog.d"
 TARGET = REPO / "backend" / "jarvis_recent_changes.py"
+#: The published base's copy. `backend/<file>` and `jarvis-backend/<file>` are kept
+#: equal, and the self-code map's generator writes both of its copies in one run for
+#: exactly that reason. This tool wrote only `TARGET` until 2026-11-16, and the cost
+#: was measured: `--check` answered "ok" on a tree where `tools/check_stale_twins.py`
+#: (the `audit` job) called the twin stale, so the documented refresh - run the
+#: generator, open one pull request with only the generated files - could not produce
+#: a green pull request without a third file copied by hand.
+TWIN = REPO / "jarvis-backend" / "jarvis_recent_changes.py"
 
 #: How many bullets the module carries. The answer shows two or three; a
 #: couple more are kept so the fixed phrases have something to say without a
@@ -235,9 +243,9 @@ def render(items: list) -> str:
     return header + "".join(body) + tail
 
 
-def current_text() -> str:
+def current_text(path=TARGET) -> str:
     try:
-        return TARGET.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except OSError:
         return ""
 
@@ -256,15 +264,18 @@ def main(argv=None) -> int:
         return 0
     text = render(found)
     if args.check:
-        have = current_text()
-        if have != text:
-            print("OUT OF DATE: backend/jarvis_recent_changes.py - "
-                  "run python3 tools/gen_recent_changes.py", file=sys.stderr)
+        stale = [path for path in (TARGET, TWIN) if current_text(path) != text]
+        if stale:
+            for path in stale:
+                print(f"OUT OF DATE: {path.relative_to(REPO).as_posix()} - "
+                      "run python3 tools/gen_recent_changes.py", file=sys.stderr)
             return 1
-        print(f"ok - backend/jarvis_recent_changes.py carries {len(found)} newest bullets")
+        print(f"ok - {TARGET.relative_to(REPO).as_posix()} and its jarvis-backend/ "
+              f"twin carry {len(found)} newest bullets")
         return 0
-    TARGET.write_text(text, encoding="utf-8", newline="\n")
-    print(f"wrote {TARGET.relative_to(REPO)} with {len(found)} newest bullets")
+    for path in (TARGET, TWIN):
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {path.relative_to(REPO).as_posix()} with {len(found)} newest bullets")
     return 0
 
 
