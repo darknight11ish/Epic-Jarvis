@@ -32084,8 +32084,10 @@ were both driven through `answer_turn()` with their own body shapes in
   Workout Log note").
 - A note's `date` property is not a calendar entry, a reminder or a daily note;
   it records the day the note is about.
-- A "title" longer than 120 characters is not treated as a name: the older
-  grammar keeps that request.
+- A "title" that is really a whole sentence (a comma or semicolon, a clause
+  such as "and pin it"/"that i used ...", or more than twelve words) is **not**
+  filed: the answer asks for the name on its own. Before 2026-11-16 the older
+  grammar kept such a request and wrote the sentence as the file name.
 - The date is not put into the body as text; it is the note's own property.
 
 **Proven.** `backend/test_notes_smart_create.py` (83 checks) pins all of it on
@@ -32100,6 +32102,73 @@ Notes plate makes), the byte-identical twin and this section. Not tested here:
 the live PC (this is a repository change; the deploy is its own pass).
 
 The module's twin `jarvis-backend/jarvis_quick.py` is byte-identical.
+
+### 170.12 Create, find by alias, and append a dated entry (added 2026-11-16)
+
+The owner reported three failures in their own vault: "Make a new note for me
+that's called my workout log and pin it and remember ..." appended the tail of
+the sentence to that day's daily note and created no note; an earlier
+create-shaped sentence had produced a 0-byte file named after the whole
+sentence; and "add to the workout log that ..." was answered with "I'm not sure
+where your new note is yet" - no lookup happened at all.
+
+**The registry is the note's own frontmatter.** A note is found by, in order:
+its exact vault path, an exact value of its own YAML `aliases:` list, its exact
+title, then a title that contains the words. Obsidian reads `aliases:` natively
+(Properties, and `[[` completion), so it travels with the note and needs no
+index, no model and no earlier conversation. For the owner's own note:
+
+    ---
+    aliases:
+      - workout log
+      - my workout log
+    pinned: true
+    ---
+
+"my workout log", "the workout log" and "workout log" all resolve to
+`Private & Shared/Workout/Workout Log.md`. An alias match WINS over a file-name
+match, because an alias is a name the owner chose. Two matches are never
+guessed: the answer asks which note was meant. The resolver is
+`jarvis_notes_edit.find_name()`, used by chat append/tag/rename/move and by the
+read/open answers; there is no new route and no new tool.
+
+**Create.** "Make a new note called X" (also "... for me that's called X" and
+"... that is called X") creates exactly ONE note, card-free for a direct owner
+write as before, with the title taken from the owner's words. A new note lands
+beside the note its name already points at - so "my workout log" is filed with
+the workout notes, not in the vault root - and in the vault root when nothing
+matches. A whole sentence is never a file name: a title with a comma or
+semicolon, a continuing clause ("and pin it", "that i used ...") or more than
+twelve words is refused with a plain request for the name, and nothing is
+written. A path that already exists is a 409 before any card; nothing is ever
+overwritten. The daily-note door no longer claims a create sentence at all
+(`_NOTE_TEXT_SPACE`'s guard), so the tail of a create request can never be
+filed into today's note again.
+
+**Append, dated.** "Add to my workout log that I did light cardio" adds the
+words under a `## YYYY-MM-DD` heading in that note: an existing heading for the
+day is used, a new day gets its heading at the end (newest last), and an older
+day gets its heading in date order. One `edit_vault_note` card, the File
+Guardian copy first, the sha256 guard, and one Undo - the same permission model
+as every other note write. The write is an INSERTION: the block is added at one
+offset and every existing byte stays exactly where it was (a true `O_APPEND`
+write when the block belongs at the end). `POST /api/notes/append` accepts an
+optional `"dated": "YYYY-MM-DD"` for this; without it the route appends to the
+end as it always has. The answer names the file and the heading it used.
+
+**What this does NOT do (said plainly).** It does not create aliases, edit
+frontmatter other than the note's own `aliases` read, patch headings, blocks or
+properties, or build a search index - those are later phases. The chat path is
+deterministic and PC-side; the phone gets it through the same `/api/chat`
+endpoint, and no app rebuild is needed.
+
+**Proven.** `backend/test_notes_create_find_append.py` pins all of it on a
+temporary vault with a fake gate: the owner's exact sentence, the plain create,
+the sentence-as-filename refusal, alias resolution with no other context, the
+new and existing date headings (and an older day), the collision, vault
+boundaries, one card per append, and that the existing bytes are untouched.
+
+The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical.
 
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 

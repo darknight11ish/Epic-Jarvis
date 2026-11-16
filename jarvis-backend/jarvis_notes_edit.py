@@ -231,6 +231,11 @@ _REFUSED_WRITE = {
         "timed_out": "Nobody answered the approval card in time, so nothing was added.",
         "refused": "The approval gate refused it, so nothing was added.",
     },
+    "append_dated": {
+        "denied": "You said no, so nothing was added.",
+        "timed_out": "Nobody answered the approval card in time, so nothing was added.",
+        "refused": "The approval gate refused it, so nothing was added.",
+    },
     "tag": {
         "denied": "You said no, so the note was not tagged.",
         "timed_out": "Nobody answered the approval card in time, so the note was not tagged.",
@@ -1034,6 +1039,103 @@ def _append_block(old: bytes, text: str) -> bytes:
     return lead + body + b"\n"
 
 
+#: A date heading a dated append uses - exactly `## YYYY-MM-DD`, which is the
+#: shape the owner's own Workout Log note already keeps its days in.
+_DATE_HEADING = re.compile(r"^##\s+(?P<day>\d{4}-\d{2}-\d{2})\s*$")
+_ANY_HEADING = re.compile(r"^(?P<level>#{1,6})\s+")
+_DATE_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _entry_line(text: str, eol: str) -> str:
+    """The words as ONE bullet, a second line kept as the bullet's continuation.
+
+    The owner's words are kept verbatim; only the list marker is added (and an
+    existing one is not doubled). A newline inside the words becomes an
+    indented continuation line so the entry stays one item.
+    """
+    lines = str(text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    first = lines[0].strip()
+    out = [first if first.startswith(("- ", "* ", "+ ")) else "- " + first]
+    for line in lines[1:]:
+        if line.strip():
+            out.append("  " + line.strip())
+    return eol.join(out)
+
+
+def _dated_entry(old: bytes, text: str, day: str) -> tuple:
+    """`(new bytes, insert offset, inserted block, why)` for one dated entry.
+
+    The entry goes under a `## YYYY-MM-DD` heading, "newest last": a heading the
+    note already has is used, a newer date gets a new heading after every other
+    one, and an older date gets its heading in date order. The result is the
+    OLD BYTES with the block inserted at `insert_at` - every existing byte
+    stays exactly where it was, so nothing is rewritten. `why` non-empty means
+    the request is refused and nothing should be written.
+    """
+    try:
+        text_all = old.decode("utf-8")
+    except UnicodeDecodeError:
+        return None, 0, b"", ("the note is not valid UTF-8, so this editor will not "
+                              "rewrite it")
+    if not _DATE_DAY.fullmatch(str(day or "")):
+        return None, 0, b"", "the date to file under must be YYYY-MM-DD"
+    eol = "\r\n" if "\r\n" in text_all else "\n"
+    entry = _entry_line(text, eol)
+    lines = text_all.splitlines(keepends=True)
+    heads = []
+    for idx, line in enumerate(lines):
+        stripped = line.rstrip("\r\n")
+        m = _ANY_HEADING.match(stripped)
+        if not m:
+            continue
+        dm = _DATE_HEADING.match(stripped)
+        heads.append((idx, len(m.group("level")), dm.group("day") if dm else ""))
+    date_heads = [(i, lvl, d) for (i, lvl, d) in heads if lvl == 2 and d]
+    mine = next((h for h in date_heads if h[2] == day), None)
+    if mine is not None:
+        idx, _lvl, _d = mine
+        # The section runs to the next heading of the same or a higher level.
+        stop = len(lines)
+        for (j, lvl, _dj) in heads:
+            if j > idx and lvl <= 2:
+                stop = j
+                break
+        content = [j for j in range(idx + 1, stop) if lines[j].strip()]
+        if content:
+            # After the section's last line that has words on it, so an entry
+            # never lands between a heading and its own blank line.
+            at = content[-1] + 1
+            block = ("" if lines[at - 1].endswith(("\n", "\r")) else eol) + entry + eol
+        else:
+            # An empty section gets one blank line after the heading first.
+            at = idx + 1
+            after = lines[at] if at < len(lines) else ""
+            block = ("" if lines[idx].endswith(("\n", "\r")) else eol)
+            block += eol + entry + eol
+            if after and after.strip():
+                block += eol
+        at_chars = len("".join(lines[:at]))
+        new_text = "".join(lines[:at]) + block + "".join(lines[at:])
+        return new_text.encode("utf-8"), at_chars, block.encode("utf-8"), ""
+    # No heading for this day: place the new heading in date order.
+    later = [(i, d) for (i, lvl, d) in date_heads if d > day]
+    if later:
+        idx = later[0][0]
+        lead = "" if idx == 0 or not lines[idx - 1].strip() else eol
+        block = lead + "## " + day + eol + eol + entry + eol + eol
+        at = len("".join(lines[:idx]))
+    else:
+        at = len(text_all)
+        lead = ""
+        if text_all and not text_all.endswith(eol):
+            lead = eol
+        if text_all and not (text_all + lead).endswith(eol + eol):
+            lead += eol
+        block = lead + "## " + day + eol + eol + entry + eol
+    new_text = text_all[:at] + block + text_all[at:]
+    return new_text.encode("utf-8"), at, block.encode("utf-8"), ""
+
+
 def _create_restorer(before) -> None:
     """Undo one created note, from its receipt's before snapshot.
 
@@ -1123,6 +1225,11 @@ def _change_prompt(kind: str, rel: str, payload, extra: dict) -> tuple:
         data = payload
         return (f"add {len(data)} bytes to the end of {rel} in your Obsidian vault",
                 {"path": rel, "bytes": len(data), "action": "add to the end of a note"})
+    if kind == "append_dated":
+        day = str(extra.get("day") or "")
+        return (f"add a dated entry under ## {day} to {rel} in your Obsidian vault",
+                {"path": rel, "date": day, "bytes": len(extra.get("block") or b""),
+                 "action": "add a dated entry under a heading"})
     if kind in ("insert", "format", "replace", "customize"):
         words = str(extra.get("card") or "change one part of")
         detail = {"path": rel,
@@ -1214,6 +1321,62 @@ def _change_worker(kind: str, job_id: str, full: Path, rel: str, payload,
                     snapshot=snap.get("snapshot_id") or None,
                     message=f"Added to {rel} in your Obsidian vault. You can undo it.")
             _audit("appended", {"job": job_id, "path": rel, "bytes": len(block)})
+            return
+        if kind == "append_dated":
+            # The bytes were built BEFORE the card from exactly the bytes the
+            # sha256 names: the old note with one block inserted. Verify that
+            # shape here rather than trusting the payload - then the write
+            # adds bytes and cannot change any existing one.
+            at = int(extra.get("insert_at") or 0)
+            block = extra.get("block") or b""
+            new_data = payload
+            if (at < 0 or at > len(current)
+                    or not isinstance(block, bytes) or not block
+                    or len(new_data) != len(current) + len(block)
+                    or new_data[:at] != current[:at]
+                    or new_data[at + len(block):] != current[at:]):
+                _finish(job_id, state="failed",
+                        message=("The dated entry could not be added safely, so the "
+                                 "note was left exactly as it was."))
+                _audit("append_failed", {"job": job_id, "path": rel, "why": "shape"})
+                return
+            day = str(extra.get("day") or "")
+            try:
+                if at == len(current):
+                    # The block belongs at the very end: a true append, the
+                    # same O_APPEND write the plain append route uses.
+                    fd = os.open(str(full), os.O_WRONLY | os.O_APPEND
+                                 | getattr(os, "O_BINARY", 0))
+                    try:
+                        os.write(fd, block)
+                    finally:
+                        os.close(fd)
+                    with open(str(full), "rb") as fh:
+                        fh.seek(max(0, os.stat(str(full)).st_size - len(block)))
+                        landed = fh.read() == block
+                else:
+                    # A day whose heading is not last: insert the block and keep
+                    # every other byte. This is a splice, never a rewrite of the
+                    # note's words - the check above proved both sides match.
+                    _write_note(full, new_data)
+                    landed = _read_bytes(full) == new_data
+            except OSError as exc:
+                _finish(job_id, state="failed",
+                        message=(f"The note could not be written "
+                                 f"({type(exc).__name__}), so it was left as it was."))
+                _audit("append_failed", {"job": job_id, "path": rel, "why": "write"})
+                return
+            if not landed:
+                _finish(job_id, state="failed",
+                        message="The entry was written but could not be read back, so check the note.")
+                _audit("append_failed", {"job": job_id, "path": rel, "why": "readback"})
+                return
+            _finish(job_id, state="saved", sha256=_sha256(new_data),
+                    snapshot=snap.get("snapshot_id") or None,
+                    message=(f"Added to {rel} under the ## {day} heading in your "
+                             "Obsidian vault. You can undo it."))
+            _audit("appended", {"job": job_id, "path": rel, "bytes": len(block),
+                                "dated": day})
             return
         # tag / insert / format / replace: the new text was worked out before
         # the card, from the same bytes the sha256 named; write it atomically.
@@ -1525,6 +1688,25 @@ def handle_append(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
         return _error(413, (f"{rel2} is {len(current)} bytes, over the "
                             f"{MAX_FILE_BYTES} byte limit this editor writes; open it "
                             "in Obsidian instead."), state="refused")
+    dated = str(body.get("dated") or body.get("day") or "").strip()
+    if dated:
+        # A DATED entry (2026-11-16): the words go under a `## YYYY-MM-DD`
+        # heading, newest last, creating that heading when the note has none.
+        # Same ONE card, same File Guardian copy, same sha guard; the write
+        # only ever adds bytes at one offset.
+        if not _DATE_DAY.fullmatch(dated):
+            return _error(400, "dated must be a YYYY-MM-DD date.", state="refused")
+        new_data, at, the_block, why = _dated_entry(current, text, dated)
+        if why:
+            return _error(400, why + " Nothing was added.", state="refused")
+        if len(new_data) > MAX_FILE_BYTES:
+            return _error(413, (f"Adding those words would make {rel2} over the "
+                                f"{MAX_FILE_BYTES} byte limit, so nothing was added."),
+                          state="refused")
+        return _start_change_job("append_dated", full, rel2, new_data, expected,
+                                 vault, gate_check, wait_s, by,
+                                 {"day": dated, "insert_at": at,
+                                  "block": the_block})
     block = _append_block(current, text)
     if len(current) + len(block) > MAX_FILE_BYTES:
         return _error(413, (f"Adding those words would make {rel2} over the "
@@ -3186,7 +3368,15 @@ def _chat_notes_meta() -> tuple:
 
 
 def chat_find_notes(title: str) -> tuple:
-    """Notes whose title equals (then merely contains) `title`, newest first."""
+    """Notes whose own ALIAS equals `title`, then whose title does, then contains.
+
+    A note's OWN frontmatter `aliases:` list is checked FIRST (2026-11-16): "my
+    workout log", and "workout log", name the note filed as Workout Log.md,
+    because that is the list Obsidian reads natively - and the owner's vault
+    also has an unrelated root file called "Workout log.md" that must not steal
+    the name. The vault is read fresh each time, so no earlier conversation is
+    needed.
+    """
     want = str(title or "").strip()
     if not want:
         return 400, {"said": CHAT_ONE_AT_A_TIME}
@@ -3194,6 +3384,18 @@ def chat_find_notes(title: str) -> tuple:
     if notes is None:
         return 503, {"said": why}
     low = want.lower()
+    # An ALIAS is the owner's own name for a note, so it is checked before a
+    # file whose title merely looks the same (2026-11-16). The owner's vault
+    # holds a root file called "Workout log.md"; "workout log" must still mean
+    # the note that lists it in its own frontmatter.
+    aliased, _why = _alias_rows()
+    key = _name_key(want)
+    if key:
+        hits = _rows_by_path([r for r in aliased
+                              if any(_name_key(a) == key
+                                     for a in r.get("aliases") or [])])
+        if hits:
+            return 200, {"ok": True, "matches": hits, "exact": True}
     exact = [n for n in notes if str(n.get("title", "")).lower() == low]
     if exact:
         return 200, {"ok": True, "matches": exact, "exact": True}
@@ -3316,6 +3518,198 @@ def chat_open_note(title: str) -> tuple:
     first = matches[0]
     return 200, {"ok": True, "title": str(first.get("title") or ""),
                  "path": first.get("path", ""), "count": len(matches)}
+
+
+# ---------------------------------------------------------------------------
+#   The note's own names: the YAML `aliases:` list Obsidian reads natively
+# ---------------------------------------------------------------------------
+#
+# WHY (the owner's report, 2026-11-16). "my workout log" is a note whose file is
+# called `Workout Log.md` inside `Private & Shared/Workout/`; its own front
+# matter says so:
+#
+#     ---
+#     aliases:
+#       - workout log
+#       - my workout log
+#     pinned: true
+#     ---
+#
+# so a resolver that looks only at FILE NAMES cannot find it. The registry is
+# that list - Obsidian reads it natively, it travels with the note, and it needs
+# no index, no model and no state from an earlier conversation. `find_name` is
+# the ONE resolver the chat paths use; it reads the vault fresh every time.
+
+#: Only the first bytes of a note can hold its YAML frontmatter. Reading a
+#: bound keeps a 2 MiB note from being read whole just to look for a name.
+ALIAS_HEAD_BYTES = 8192
+_ALIAS_KEY_LEAD = re.compile(r"^(?:my|the|a|an)\s+", re.I)
+_ALIAS_KEY_TAIL = re.compile(r"\s+notes?$", re.I)
+
+
+def _name_key(text) -> str:
+    """The comparison key for one note name or alias.
+
+    Casefolded and whitespace-collapsed, with a leading "my"/"the"/"a"/"an"
+    and a trailing "note" removed - so "my workout log", "the workout log" and
+    "Workout Log" are ONE name. Nothing else is rewritten: the owner's words
+    are matched, never guessed at.
+    """
+    t = " ".join(str(text or "").replace("\u2019", "'").split()).strip()
+    t = t.strip('"').strip("'").strip("`").strip()
+    t = t.casefold()
+    t = re.sub(r"\.(?:md|txt)$", "", t).strip()
+    t = _ALIAS_KEY_LEAD.sub("", t).strip()
+    t = _ALIAS_KEY_TAIL.sub("", t).strip()
+    return t
+
+
+def _frontmatter_aliases(front: list) -> list:
+    """The `aliases:` values in one front-matter block, or [] when absent.
+
+    Two shapes are read - the two Obsidian itself writes: a block list under
+    `aliases:` and a one-line flow list `aliases: [a, b]`. A plain scalar is
+    read as one alias. A shape this reader does not understand is ignored: the
+    resolver never guesses at YAML, so a note with an unreadable alias simply
+    does not answer to it (and is never mistaken for a different note).
+    """
+    hit = next((i for i, line in enumerate(front)
+                if re.match(r"^aliases\s*:", line, re.I)), -1)
+    if hit < 0:
+        return []
+    rest = front[hit].split(":", 1)[1].strip()
+    if rest.startswith("["):
+        inner = rest[1:].strip()
+        if inner.endswith("]"):
+            inner = inner[:-1].strip()
+        values = [p.strip().strip('"').strip("'") for p in inner.split(",")]
+        return [v for v in values if v]
+    if rest:
+        return [rest.strip('"').strip("'").strip()]
+    out = []
+    for nxt in front[hit + 1:]:
+        stripped = nxt.strip()
+        if not stripped:
+            break
+        m = re.fullmatch(r"-\s+(.+?)\s*", stripped)
+        if not m:
+            break
+        value = m.group(1).strip().strip('"').strip("'")
+        if value:
+            out.append(value)
+    return out
+
+
+def note_aliases(text: str) -> list:
+    """The aliases in one note's own YAML frontmatter ([] when there are none)."""
+    opened, front, _body, why = _split_frontmatter(str(text or ""))
+    if why or not opened:
+        return []
+    return _frontmatter_aliases(front)
+
+
+def _alias_rows() -> tuple:
+    """`([{path, title, aliases}], why)` for every note that names an alias.
+
+    Read-only. It walks the SAME list reader the editor routes use (so hidden
+    folders, links and "Protected from Jarvis" keep their own rules) and reads
+    only each note's first ALIAS_HEAD_BYTES. A note that cannot be read is
+    skipped, never guessed at.
+    """
+    code, body = handle_list("")
+    if code != 200 or not isinstance(body, dict):
+        return [], str((body or {}).get("error") or "The vault could not be read.")
+    vault, why = _vault()
+    if vault is None:
+        return [], why
+    out = []
+    for row in body.get("notes") or []:
+        path = str(row.get("path") or "")
+        if not path:
+            continue
+        try:
+            full = vault.joinpath(*path.split("/"))
+            with open(str(full), "rb") as fh:
+                head = fh.read(ALIAS_HEAD_BYTES)
+        except OSError:
+            continue
+        aliases = note_aliases(head.decode("utf-8", errors="replace"))
+        if aliases:
+            out.append({"path": path, "title": str(row.get("title") or ""),
+                        "aliases": aliases})
+    return out, ""
+
+
+def _rows_by_path(rows: list) -> list:
+    """The rows with one entry per path (case-insensitive), in their order."""
+    seen, out = set(), []
+    for row in rows:
+        path = str(row.get("path") or "").casefold()
+        if path and path not in seen:
+            seen.add(path)
+            out.append(row)
+    return out
+
+
+def find_name(phrase: str) -> tuple:
+    """`(row, why, matches)` - ONE note for a name the owner said, or why not.
+
+    Resolution order, each step using the owner's own words:
+      1. an EXACT path, only when the owner named one (a slash, or a ".md"/
+         ".txt" ending);
+      2. an exact frontmatter ALIAS - the registry Obsidian reads natively, and
+         why "my workout log" finds a note filed as Workout Log.md;
+      3. an exact title;
+      4. a title that CONTAINS the words.
+    An alias match WINS over a title match: an alias is a name the owner chose
+    for that note, so a second note whose file name merely looks like it must
+    not steal the resolution. Several matches come back as a list and the
+    caller asks - this function never picks the first of several.
+    """
+    want = str(phrase or "").strip().strip('"').strip("'").strip("`").strip()
+    if not want:
+        return None, "empty", []
+    code, body = handle_list("")
+    if code != 200 or not isinstance(body, dict):
+        return None, "unreadable", []
+    notes = [r for r in (body.get("notes") or []) if str(r.get("path") or "")]
+    key = _name_key(want)
+    if not key:
+        return None, "not_found", []
+    # 1. The path itself, only when the owner NAMED a path (a slash, or a
+    #    ".md"/".txt" ending). A bare phrase like "workout log" is a NAME, not
+    #    a file name: the owner's vault really has a root file called
+    #    "Workout log.md", and it must not steal the alias below.
+    raw = want.replace("\\", "/").strip().lstrip("/")
+    if "/" in raw or raw.lower().endswith(TEXT_SUFFIXES):
+        cand = raw if raw.lower().endswith(TEXT_SUFFIXES) else raw + ".md"
+        for row in notes:
+            if str(row.get("path") or "").casefold() == cand.casefold():
+                return row, "", [row]
+    # 2. The note's own frontmatter aliases - the registry.
+    aliased, why = _alias_rows()
+    if why:
+        return None, "unreadable", []
+    hits = [r for r in aliased
+            if any(_name_key(a) == key for a in r.get("aliases") or [])]
+    hits = _rows_by_path(hits)
+    if len(hits) == 1:
+        return hits[0], "", hits
+    if len(hits) > 1:
+        return None, "ambiguous", hits
+    # 3. The file's own title.
+    exact = _rows_by_path([r for r in notes if _name_key(r.get("title")) == key])
+    if len(exact) == 1:
+        return exact[0], "", exact
+    if len(exact) > 1:
+        return None, "ambiguous", exact
+    # 4. A title that contains the words ("workout" -> "Workout Log").
+    loose = _rows_by_path([r for r in notes if key in _name_key(r.get("title"))])
+    if not loose:
+        return None, "not_found", []
+    if len(loose) == 1:
+        return loose[0], "", loose
+    return None, "ambiguous", loose
 
 
 # ---------------------------------------------------------------------------

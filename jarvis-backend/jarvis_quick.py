@@ -17166,7 +17166,16 @@ _NOTE_TEXT_COLON = re.compile(
     r"\s*[:,-]\s*(?P<text>.+)$")
 _NOTE_TEXT_SPACE = re.compile(
     r"(?:make|add|write)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?(?:new\s+)?note"
-    r"\s+(?:that\s+|about\s+)?(?!called\b|titled\b|named\b)(?P<text>.+)$")
+    # "make a new note FOR ME that's called X" is a CREATE (the title follows),
+    # not something to file into today's daily note. Before 2026-11-16 this
+    # pattern matched it and handed the TAIL of the sentence ("for me that's
+    # called ...") to the daily capture, which is exactly the measured bug: the
+    # owner asked for a new note and the daily note got the second half of his
+    # sentence. Both guards are needed: this one keeps the daily-note lane off
+    # a create sentence even when the create reader declines it (a title that
+    # is too long, say), and `_CREATE_NOTE_HEAD` below is what claims it.
+    r"\s+(?!for\s+me\b)(?!that'?s\s+(?:called|titled|named)\b)"
+    r"(?:that\s+|about\s+)?(?!called\b|titled\b|named\b)(?P<text>.+)$")
 _NOTE_THAT = re.compile(r"note\s+that\s+(?P<text>.+)$")
 #: "note this: the boiler service is due" - the honesty lane used to own this
 #: shape with an "off" answer; the real capture path owns it now (2026-10-31
@@ -17185,6 +17194,16 @@ _NOTE_CREATE_REFUSED = re.compile(
     r"(?:new\s+|brand\s+new\s+)?note\b"
     r"|(?:a\s+|one\s+)?new\s+note\b"
     r"|note\s+(?:called|titled|named)\b")
+#: A create-shaped sentence the TITLE reader declined (a whole sentence, or a
+#: name over the bound). It asks for the name and writes NOTHING: it must never
+#: reach the daily-note capture, and it must never fall to the old "creating a
+#: note is not built" refusal, which is no longer true (2026-11-16).
+_NOTE_CREATE_SHAPE = re.compile(
+    r"^(?:please\s+)?(?:create|make|start|write)\s+(?:me\s+)?(?:a\s+|one\s+)?"
+    r"(?:new\s+|brand\s+new\s+)?note\b")
+NOTE_CREATE_ASK_SAID = (
+    'That is a whole sentence, not a note name, so nothing was created. Say '
+    '"create a note called" and then the name on its own.')
 _NOTE_RENAME_REFUSED = re.compile(
     r"(?:rename|retitle|change\s+the\s+name\s+of)\s+(?:my\s+|the\s+|a\s+)?"
     r"(?:\w+\s+)?note\b")
@@ -17374,7 +17393,12 @@ _NOTE_CREATE_CAPABILITY = re.compile(
 _CREATE_NOTE_HEAD = re.compile(
     r"(?:please\s+)?(?:create|make|start|write)\s+(?:me\s+)?(?:a\s+|one\s+)?"
     r"(?:new\s+|brand\s+new\s+)?note\s+(?:for\s+me\s+)?"
-    r"(?:called|named|titled)\s+(?P<rest>.+)$")
+    # "that's called" / "that is called" as well as the plain "called": the
+    # owner's own request of 2026-11-15 was "Make a new note for me that's
+    # called my workout log and pin it and remember ...", and the older head
+    # did not read it at all - so nothing was created and the tail of the
+    # sentence went into the daily note instead.
+    r"(?:that'?s\s+|that\s+is\s+)?(?:called|named|titled)\s+(?P<rest>.+)$")
 #: Where a title stops. Each of these opens the NEXT clause of the same
 #: request, not part of the name. A bare "and" is deliberately NOT a boundary
 #: ("a note called Salt and Pepper"), and neither is a bare "on" ("a note
@@ -17424,6 +17448,37 @@ _FREE_TAIL_DATE = re.compile(
 #: A bound on the parsed title. A "title" longer than this is not a name, so
 #: the older grammar keeps the request rather than this reader inventing one.
 _NOTE_TITLE_MAX = 120
+#: Clauses that make a "title" a whole sentence rather than a name (2026-11-16).
+#: The measured bad file was named `Workout Log, pin it, and add using todays
+#: date that i used the punching bag.md`: a comma and a chain of instructions.
+#: A title this reader will not file is refused in plain words, never written.
+_TITLE_SENTENCE_MARK = re.compile(r"[,;]")
+_TITLE_SENTENCE_CLAUSE = re.compile(
+    r"\band\s+(?:then\s+)?(?:pin|unpin|add|put|write|say|saying|use|using|"
+    r"set|remember)\b"
+    r"|\bthat\s+(?:i|we|you|it|he|she|they)\b"
+    r"|\b(?:when|because|which|so\s+that)\b", re.I)
+#: A name is a few words. A dozen is generous for a note title and far below
+#: any whole sentence the owner would dictate.
+_NOTE_TITLE_WORDS = 12
+
+
+def _note_title_sane(title: str) -> bool:
+    """True when `title` is a note's name, not a whole sentence.
+
+    The create path may never turn the owner's sentence into a file name: a
+    title with a comma or semicolon, a clause that continues the request
+    ("and pin it", "that i used ...", "when I ask ...") or more than a dozen
+    words is refused and the owner is asked to say the name on its own.
+    """
+    text = " ".join(str(title or "").split()).strip()
+    if not text or len(text) > _NOTE_TITLE_MAX:
+        return False
+    if _TITLE_SENTENCE_MARK.search(text):
+        return False
+    if _TITLE_SENTENCE_CLAUSE.search(text):
+        return False
+    return len(text.split()) <= _NOTE_TITLE_WORDS
 
 
 def _note_iso_day(now: float, offset: int = 0) -> str:
@@ -17541,6 +17596,11 @@ def _note_create_clauses(rest: str, now: float):
         rest = _CLAUSE_SEP.sub("", rest).strip()
         if not rest:
             break
+        # "and remember that ..." is an instruction to REMEMBER, not words for
+        # the new note (the owner's 2026-11-15 sentence ends that way). It ends
+        # the create part; the memory itself is not this path's job.
+        if re.match(r"^remember\b", rest, re.I):
+            break
         m = _PIN_CLAUSE.match(rest)
         if m:
             pinned = m.group("how") == "pin"
@@ -17586,7 +17646,7 @@ def _note_smart_create(s: str, now: float) -> Optional[Intent]:
         return None
     title, rest = _note_title_and_rest(m.group("rest"))
     title = title.strip().strip("\"'`").strip()
-    if not title or len(title) > _NOTE_TITLE_MAX:
+    if not title or not _note_title_sane(title):
         return None
     body, pinned, date = _note_create_clauses(rest, now)
     fields = {"name": title, "text": " ".join(body).strip()}
@@ -17663,6 +17723,13 @@ _NOTE_APPEND_COLON = re.compile(
 _NOTE_APPEND_PLAIN = re.compile(
     r"(?:add|append|write)\s+(?P<text>.+?)\s+(?:to|into|at\s+the\s+end\s+of)\s+"
     r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
+#: "add to my workout log that I did light cardio" (2026-11-16). The owner
+#: names the note FIRST and then says what happened, so the "that" is the
+#: separator and no colon or comma is needed. This shape is dated: the words go
+#: under a `## YYYY-MM-DD` heading (newest last), not into the file's tail.
+_NOTE_APPEND_TO_THAT = re.compile(
+    r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+(?:my|the)\s+"
+    r"(?P<name>.+?)(?:\s+note)?\s+that\s+(?P<text>.+)$")
 _NOTE_TAG_ADD = re.compile(
     r"(?:add|put)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+(?:to|on)\s+"
     r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
@@ -17741,41 +17808,57 @@ def _note_path_for(name: str) -> str:
     return text if text.lower().endswith((".md", ".txt")) else text + ".md"
 
 
-def _find_note(rel: str):
-    """`(path, "", title)` for a unique note title/path, or `(None, why, "")`.
+def _note_folder_for_new(name: str) -> str:
+    """The folder an existing note for `name` lives in, or "" for the vault root.
 
-    Read-only: it asks the notes editor's existing list (paths and titles, never
-    text) and matches the owner's words against the title or the path. Two
-    matches are an ambiguity answered in words, never guessed.
+    A new note lands BESIDE the note its name already points at - an exact
+    title, or the frontmatter alias the resolver reads - so "make a new note
+    called my workout log" files it with the workout notes instead of in the
+    vault's root. When nothing matches, the root stays, which is where this
+    create path has always put a note.
+    """
+    try:
+        import jarvis_notes_edit as E
+        row, _why, _matches = E.find_name(name)
+    except Exception:                       # noqa: BLE001 - module absent
+        return ""
+    if row is None:
+        return ""
+    path = str(row.get("path") or "")
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def _find_note(rel: str):
+    """`(path, "", title)` for a unique note title/path/ALIAS, or `(None, why, "")`.
+
+    Read-only: it asks `jarvis_notes_edit.find_name`, the module's ONE resolver,
+    which reads the vault fresh each time - an exact path (only when a path is
+    named), then the note's own YAML `aliases:` list (the registry Obsidian
+    reads natively), then its title. That is why "my workout log" finds the note
+    filed as Workout Log.md with no model and no memory of an earlier
+    conversation. It reads each note's FIRST BYTES for that frontmatter and
+    never its body words. Two matches are an ambiguity answered in words, never
+    guessed.
     """
     try:
         import jarvis_notes_edit as E
     except Exception:                       # noqa: BLE001 - module absent
         return None, "The notes editor is not installed on this PC, so nothing was changed.", ""
-    want = str(rel or "").strip().replace("\\", "/").casefold()
-    stem = want.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    code, body = E.handle_list("")
-    if code != 200 or not isinstance(body, dict):
-        return None, "Your Obsidian vault could not be read just now, so nothing was changed.", ""
-    exact, loose = [], []
-    for row in (body.get("notes") or []):
-        path = str(row.get("path") or "")
-        title = str(row.get("title") or "")
-        if not path:
-            continue
-        if path.casefold() == want:
-            exact.append((path, title))
-        elif title.casefold() == stem and len(stem) > 0:
-            loose.append((path, title))
-    found = exact or loose
-    if not found:
+    try:
+        row, why, matches = E.find_name(rel)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return None, (f"Your Obsidian vault could not be read "
+                      f"({type(exc).__name__}), so nothing was changed."), ""
+    if row is not None:
+        return str(row.get("path") or ""), "", str(row.get("title") or "")
+    if why == "not_found":
         return None, "not_found", ""
-    if len(found) > 1:
-        names = "; ".join(p for p, _t in found[:6])
-        return None, (f"That name matches {len(found)} notes (" + names + "), so "
-                      "nothing was changed - say the note's folder and name, like "
-                      "\"add milk to my Shopping note in 02 - Areas\"."), ""
-    return found[0][0], "", found[0][1]
+    if why == "ambiguous":
+        names = "; ".join(str(r.get("path") or "") for r in (matches or [])[:6])
+        return None, (f"That name matches {len(matches or [])} notes (" + names +
+                      "), so nothing was changed - say the note's folder and name, "
+                      "like \"add milk to my Shopping note in 02 - Areas\"."), ""
+    return None, "Your Obsidian vault could not be read just now, so nothing was changed.", ""
 
 
 def _note_read_for_write(path: str):
@@ -17924,7 +18007,18 @@ def _run_note_create(f: dict) -> Result:
     hidden = _notes_write_hidden()
     name = str(f.get("name") or "").strip()
     text = str(f.get("text") or "")
-    path = _note_path_for(name)
+    # A whole sentence is never a file name (2026-11-16). The measured bad file
+    # was `Workout Log, pin it, and add using todays date that i used the
+    # punching bag.md` - a create path taking every word after "called" as the
+    # title and writing nothing. Ask for the name instead of filing a sentence,
+    # with the same sentence the `note_create_ask` answer uses.
+    if name and not _note_title_sane(name):
+        return Result(NOTE_CREATE_ASK_SAID, "note_create_refused")
+    # A name that already names a FOLDER ("Gym/Log") keeps its own path; only a
+    # bare name borrows the folder of the note it already points at.
+    folder = (_note_folder_for_new(name)
+              if "/" not in name.replace("\\", "/") else "")
+    path = ((folder + "/") if folder else "") + _note_path_for(name)
     if not path and text:
         # "write a note for me about ..." names no title: draw one from the
         # owner's own words (the body is exactly what he said).
@@ -17988,7 +18082,7 @@ def _run_note_append(f: dict) -> Result:
     if not name or not text:
         return Result('Say it as "add milk to my Shopping note", and I will add the words.',
                       "note_append_refused")
-    path, why, _title = _find_note(_note_path_for(name))
+    path, why, _title = _find_note(name)
     if path is None:
         if why == "not_found":
             return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_append_refused")
@@ -17996,10 +18090,16 @@ def _run_note_append(f: dict) -> Result:
     sha, why = _note_read_for_write(path)
     if why:
         return Result(why, "note_append_refused")
+    # "add to my workout log that ..." carries the day its words belong under
+    # (2026-11-16). The module files them under `## YYYY-MM-DD`, newest last,
+    # and its own sentence names the file AND the heading.
+    dated = str(f.get("dated") or "").strip()
     try:
         import jarvis_notes_edit as E
-        code, body = E.handle_append({"path": path, "text": text,
-                                      "expected_sha256": sha}, by="chat", wait_s=1.5)
+        request = {"path": path, "text": text, "expected_sha256": sha}
+        if dated:
+            request["dated"] = dated
+        code, body = E.handle_append(request, by="chat", wait_s=1.5)
     except Exception as exc:                # noqa: BLE001
         return Result(f"The words could not be added ({type(exc).__name__}), so nothing was written.",
                       "note_append_refused")
@@ -18018,7 +18118,7 @@ def _run_note_tag(f: dict) -> Result:
     if not name or not tag:
         return Result('Say it as "add tag recipes to my Shopping note", and I will tag it.',
                       "note_tag_refused")
-    path, why, _title = _find_note(_note_path_for(name))
+    path, why, _title = _find_note(name)
     if path is None:
         if why == "not_found":
             return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_tag_refused")
@@ -18052,7 +18152,7 @@ def _run_note_rename(f: dict) -> Result:
         return Result(f"That name matches {len(paths)} notes (" + "; ".join(paths[:6])
                       + "), so nothing was changed - say the note's folder and name.",
                       "note_rename_refused")
-    path, why, _title = _find_note(_note_path_for(name))
+    path, why, _title = _find_note(name)
     if path is None:
         if why == "not_found":
             return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_rename_refused")
@@ -18084,7 +18184,7 @@ def _run_note_move(f: dict) -> Result:
         return Result(f"That name matches {len(paths)} notes (" + "; ".join(paths[:6])
                       + "), so nothing was changed - say the note's folder and name.",
                       "note_move_refused")
-    path, why, _title = _find_note(_note_path_for(name))
+    path, why, _title = _find_note(name)
     if path is None:
         if why == "not_found":
             return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_move_refused")
@@ -18142,7 +18242,7 @@ NOTE_SURGICAL_NO_NOTE = (
 
 def _surgical_note(name: str):
     """`(path, sha, why)` for a note the owner named in a surgical sentence."""
-    path, why, _title = _find_note(_note_path_for(str(name or "")))
+    path, why, _title = _find_note(str(name or ""))
     if path is None:
         if why == "not_found":
             return None, "", NOTE_SURGICAL_NO_NOTE.format(name=name)
@@ -18291,7 +18391,7 @@ _NOTE_TEMPLATE_LIST = re.compile(
 
 
 def _wave3_note(name: str):
-    path, why, _title = _find_note(_note_path_for(str(name or "")))
+    path, why, _title = _find_note(str(name or ""))
     if path is None:
         if why == "not_found":
             return None, "", NOTE_SURGICAL_NO_NOTE.format(name=name)
@@ -18534,6 +18634,10 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
         return got
     m = _NOTE_CREATE_NAMED.fullmatch(s)
     if m:
+        # A "name" that is really the rest of the sentence asks for the name on
+        # its own; it is never handed on as a file name (2026-11-16).
+        if not _note_title_sane(m.group("name")):
+            return Intent("note_create_ask")
         return Intent("note_create", {"name": m.group("name").strip(),
                                       "text": (m.group("text") or m.group("text2") or "").strip()})
     m = _NOTE_TAG_ADD.fullmatch(s) or _NOTE_TAG_WITH.fullmatch(s)
@@ -18657,11 +18761,20 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
 
     def _named_note_exists(name: str) -> bool:
         try:
-            path, _why, _title = _find_note(_note_path_for(name))
+            path, _why, _title = _find_note(name)
             return path is not None
         except Exception:                   # noqa: BLE001 - older tree
             return False
 
+    m = _NOTE_APPEND_TO_THAT.fullmatch(s)
+    if (m and (_says_note or _named_note_exists(m.group("name")))
+            and not _list_owns_name(m.group("name"))):
+        # The words are filed under TODAY's date heading (newest last). `now`
+        # is the turn's own clock, so the heading is the day the owner said it
+        # and a test can fix it; no model, no earlier conversation.
+        return Intent("note_append", {"name": m.group("name").strip(),
+                                      "text": m.group("text").strip(),
+                                      "dated": _note_iso_day(now)})
     m = _NOTE_APPEND_COLON.fullmatch(s)
     if (m and (_says_note or _named_note_exists(m.group("name")))
             and not _list_owns_name(m.group("name"))):
@@ -18689,6 +18802,10 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
             if pin_it:
                 fields["value"] = "true"
             return Intent("note_customize", fields)
+    # A create-shaped sentence the title reader declined asks for the name; it
+    # never becomes a file name, a daily note, or the stale "not built" refusal.
+    if _NOTE_CREATE_SHAPE.match(s):
+        return Intent("note_create_ask")
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
@@ -27460,6 +27577,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_make(f)
     if n == "note_create":
         return _run_note_create(f)
+    if n == "note_create_ask":
+        return Result(NOTE_CREATE_ASK_SAID, "note_create_refused")
     if n == "note_create_capability":
         return _run_note_create_capability()
     if n == "note_location":
