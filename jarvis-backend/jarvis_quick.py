@@ -1402,6 +1402,21 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- the phone's own facts, asked as questions (2026-11-16) -------------
+    # The awareness audit's two remaining phone questions: "what model of phone
+    # am I using right now" and "are you connected to my phone". Both read the
+    # facts the phone already sends on this request, and neither may name a
+    # phone it cannot measure: the answer is live only when the fact came with
+    # this message, and a stored report is returned with its age. Early, beside
+    # the surface question, because both are whole sentences about the request
+    # itself and no other grammar owns their word order.
+    got = _phone_own_facts(s)
+    if got is not None:
+        return got
+    got = _phone_link(s)
+    if got is not None:
+        return got
+
     # "<feature> turned on?" with no leading "is" (2026-11-13, Layer 1
     # routing). Claimed HERE, before the action matchers, because
     # "write a note turned on?" was otherwise taken as a request to write a
@@ -22244,6 +22259,340 @@ def _run_surface_origin() -> Result:
     return Result(SURFACE_ORIGIN_UNKNOWN, "surface_origin")
 
 
+# --- the phone's own facts, asked as questions (2026-11-16) -----------------
+#
+# THE TWO QUESTIONS THE AUDIT COULD NOT ANSWER. The awareness audit of
+# 2026-11-15 ran nineteen questions through the live backend and checked each
+# answer against the machine. PR #1292 fixed two of them; PR #1311 deliberately
+# left "what is the phone model" and "are you connected to my phone" to the
+# model, because the phone's facts are not a local file. They arrive on every
+# request from the phone (`X-Jarvis-Device`, read once by
+# `jarvis_surface.remember`), so these two lanes answer from them - and from
+# nothing else.
+#
+# LIVE OR AGED, and the difference is the whole point. A fact that arrived with
+# THIS request is live: the phone is reaching this PC with the very message
+# being answered, which is also the only honest proof the link is up. A fact
+# stored earlier is returned with its age ("43 minutes ago") and never as a
+# live check. With no facts at all the answer says it does not know yet and
+# names no phone - it does not borrow the pairing record, because a record has
+# a pairing name rather than a model, and PR #1292 already removed a "connected
+# right now" claim built from one (the roster's `reach` flag is a capability,
+# not a liveness probe). The record still answers the desktop half of the link
+# question, with the age of its own last check-in.
+#
+# WHAT IS DELIBERATELY NOT WIRED. The same facts could settle "what Android
+# version / screen / app build is this phone", but the owner asked for the
+# model question and every extra matcher is a hijack risk. "Is my phone
+# connected" keeps its existing `devices_list` answer (`_PHONE_STATE`) - only
+# the word orders no lane owned are claimed here. Questions whose honest source
+# is not on this PC at all ("what are you doing", "what is my mailbox") stay
+# the model's; PR #1311 records why.
+#
+#: How long phone facts may sit after the gate stored them before this answer
+#: stops calling them this message's own. `remember` runs at the start of the
+#: same request, so the real gap is milliseconds; two minutes is far longer
+#: than that, and short enough that nothing from another request can pass.
+_PHONE_FACTS_LIVE_S = 120.0
+
+#: "what model of phone am I using right now" - the owner's own words, and the
+#: close shapes a person actually types. Whole-sentence only: a near-miss goes
+#: to the model exactly as before.
+_PHONE_OWN_FACTS_RX = re.compile(
+    # "what model of phone am I using", "which phone do I have", "what phone am I on"
+    r"(?:what|which)\s+(?:(?:model\s+of\s+(?:a\s+)?)?phone|phone\s+model)\s+"
+    r"(?:am\s+i|do\s+i)\s+(?:using|have|on)(?:\s+(?:right\s+)?now)?"
+    # "what model is my phone", "what model does this phone use"
+    r"|(?:what|which)\s+model\s+(?:is|does)\s+(?:my|this|the)\s+phone(?:\s+use)?"
+    # "what is my phone model", "what is my phone's model", "what's my phone"
+    r"|(?:what|which)\s+is\s+(?:my|this|the)\s+phone(?:'s)?(?:\s+model)?"
+    r"|what(?:'s|s)\s+my\s+phone(?:\s+model)?"
+    # "what phone do I have", "what phone is this"
+    r"|(?:what|which)\s+phone\s+(?:do\s+i\s+have|is\s+this)(?:\s+(?:right\s+)?now)?")
+
+#: "are you connected to my phone" - the question about the LINK, as opposed to
+#: `_PHONE_STATE`'s "is my phone connected" (which asks about the phone's state
+#: and keeps its own roster answer). Only word orders no lane owned are here.
+_PHONE_LINK_RX = re.compile(
+    # "are you connected to my phone", "is Jarvis still linked to the phone"
+    r"(?:are|is)\s+(?:you|jarvis)\s+(?:still\s+)?(?:connected|linked|attached)\s+"
+    r"(?:to|with)\s+(?:my|the|a)\s+(?:phone|android|mobile)"
+    r"(?:\s+(?:right\s+)?now|\s+at\s+the\s+moment)?"
+    # "do you have a connection to my phone"
+    r"|do\s+you\s+have\s+(?:a\s+|an\s+)?(?:connection|link)\s+(?:to|with)\s+"
+    r"(?:my|the)\s+(?:phone|android|mobile)"
+    r"(?:\s+(?:right\s+)?now|\s+at\s+the\s+moment)?"
+    # "do you have my phone connected"
+    r"|do\s+you\s+have\s+(?:my|the)\s+(?:phone|android)\s+"
+    r"(?:connected|linked|paired)")
+
+
+def _phone_own_facts(s: str) -> Optional[Intent]:
+    """"what model of phone am I using right now" (2026-11-16)."""
+    if _PHONE_OWN_FACTS_RX.fullmatch(s):
+        return Intent("phone_own_facts")
+    return None
+
+
+def _phone_link(s: str) -> Optional[Intent]:
+    """"are you connected to my phone" (2026-11-16)."""
+    if _PHONE_LINK_RX.fullmatch(s):
+        return Intent("phone_link")
+    return None
+
+
+#: The honest answer when no phone has ever sent its facts. It names no phone,
+#: invents no model, and says where the facts come from.
+PHONE_FACTS_UNKNOWN = (
+    "I do not know which phone you are using yet: no request from a phone has "
+    "carried its own model details to this PC, so I will not guess. Ask me from "
+    "the Jarvis app on the phone and I will answer from what it sends.")
+
+
+def _phone_facts_tail(facts: dict) -> str:
+    """Everything but the model, in the phone's own reported words: "" if none.
+
+    Only keys the phone actually sent are named. `sdk` is the fallback when a
+    build sent no release string at all - the same rule `device_line` uses."""
+    row = facts if isinstance(facts, dict) else {}
+    bits = []
+    android = str(row.get("android") or "").strip()
+    sdk = str(row.get("sdk") or "").strip()
+    if android:
+        bits.append("Android " + android)
+    elif sdk:
+        bits.append("Android SDK " + sdk)
+    screen = str(row.get("screen") or "").strip()
+    if screen:
+        bits.append("screen " + screen)
+    app = str(row.get("app") or "").strip()
+    if app:
+        bits.append("app " + app)
+    return ", ".join(bits)
+
+
+def _phone_facts_age_words(age) -> str:
+    """A short age for a stored fact - an age, never an invented timestamp."""
+    try:
+        seconds = max(0.0, float(age))
+    except (TypeError, ValueError):
+        return "at a time I cannot tell"
+    if seconds < 120:
+        return "just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)} minutes ago"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)} hours ago"
+    days = int(seconds // 86400)
+    return f"{days} day{'s' if days != 1 else ''} ago"
+
+
+def _phone_facts_state():
+    """("live" | "aged" | "none", facts, age) for the two phone questions.
+
+    LIVE is this request's own facts AND a request that came from the phone:
+    the gate stores them at the start of the request, and a request claiming
+    the desktop is not the owner's phone talking. AGED is the stored newest
+    report, returned with the real age it arrived at. NONE is nothing at all -
+    the caller must say it does not know rather than name a phone.
+    """
+    try:
+        import jarvis_surface as S
+        surface = S.current()
+        facts = S.device()
+        age = S.device_age()
+        if facts and surface == S.PHONE:
+            if age is not None and age <= _PHONE_FACTS_LIVE_S:
+                return "live", facts, age
+            return "aged", facts, age
+        if facts:
+            # Facts on a request that did not claim the phone: still stored
+            # here, and the age is what the answer must say.
+            return "aged", facts, age
+        latest, _at = S.last()
+        if latest:
+            return "aged", latest, S.last_age()
+    except Exception:                       # noqa: BLE001 - module absent
+        pass
+    return "none", {}, None
+
+
+def _run_phone_own_facts() -> Result:
+    """"what model of phone am I using right now" - the phone's own facts.
+
+    Three states, three sentences: the facts this request carried (live), the
+    newest stored report (with its age, and plainly not live), or nothing at
+    all (it does not know, and names no phone). Read-only: no card, no write,
+    no model.
+    """
+    state, facts, age = _phone_facts_state()
+    if state == "none":
+        return Result(PHONE_FACTS_UNKNOWN, "phone_own_facts")
+    model = str(facts.get("model") or "").strip()
+    tail = _phone_facts_tail(facts)
+    if state == "live":
+        if model:
+            said = (f"You are using a {model} right now"
+                    + (f" ({tail})." if tail else ".")
+                    + " That came with this message from the phone, so it is current.")
+        else:
+            said = ("Your phone did not send its model name with this message"
+                    + (f", but it did send {tail}." if tail else ".")
+                    + " I will not guess the model.")
+        return Result(said, "phone_own_facts")
+    when = _phone_facts_age_words(age)
+    if model:
+        said = (f"The last report from your phone was {when}: {model}"
+                + (f", {tail}." if tail else ".")
+                + " Those details are stored, not live with this message, so I "
+                  "cannot say that is the phone you are using right now.")
+    else:
+        said = (f"The last report from your phone was {when}, and it carried no "
+                "model name"
+                + (f", only {tail}." if tail else ".")
+                + " I cannot say which model it is.")
+    return Result(said, "phone_own_facts")
+
+
+def _phone_row_seen(dev: dict) -> float:
+    """A paired-device row's `last_seen` as epoch seconds, or 0.0 when none."""
+    value = (dev or {}).get("last_seen")
+    return float(value) if isinstance(value, (int, float)) and value > 0 else 0.0
+
+
+def _phone_rows(devices_state: dict) -> list:
+    """The phone-shaped rows of a `paired_status()` answer, newest first."""
+    rows = [r for r in ((devices_state or {}).get("devices") or [])
+            if isinstance(r, dict)]
+    phones = [r for r in rows
+              if str(r.get("kind") or "").lower() == "phone"
+              or "phone" in str(r.get("name") or "").lower()]
+    return sorted(phones, key=_phone_row_seen, reverse=True)
+
+
+def _phone_row_words(dev: dict, now: float) -> str:
+    """One phone record as a RECORD: its name and the age of its check-in."""
+    name = str((dev or {}).get("name") or "").strip() or "a phone with no name"
+    seen = _phone_row_seen(dev)
+    if not seen:
+        return f"{name} (no check-in since it was paired)"
+    return (f"{name} (last heard from "
+            f"{_phone_when_words(max(0, int(now - seen)), seen)})")
+
+
+def _phone_name_matches(model: str, name: str) -> bool:
+    """Does a pairing record's name look like the model the phone reports?
+
+    A pairing name is the owner's label or the name the phone gave at pairing
+    ("Pixel 9"); the facts carry `Build.MODEL` ("CPH2419"). They are different
+    kinds of name, so this only decides whether the answer mentions a
+    mismatch - never which phone is live.
+    """
+    a = " ".join(str(model or "").lower().split())
+    b = " ".join(str(name or "").lower().split())
+    return bool(a and b and (a in b or b in a))
+
+
+def _run_phone_link() -> Result:
+    """"are you connected to my phone" - this request first, records second.
+
+    From the phone, the request itself is the live proof: it is reaching this
+    PC as it is being answered. That is named, and the phone's own facts name
+    the handset when it sent them. From the desktop (or a request with no
+    surface header) there is no live check, so the pairing records answer with
+    the age of their own last check-in and say plainly that a record is not a
+    live connection. The roster's `reach` flag is never read: PR #1292 removed
+    that claim because it is a capability, not a liveness probe.
+    """
+    try:
+        import jarvis_surface as S
+        surface = S.current()
+    except Exception:                       # noqa: BLE001 - module absent
+        surface = "unknown"
+    state, facts, _age = _phone_facts_state()
+    try:
+        import jarvis_devices as D
+        devices = D.paired_status()
+    except Exception:                       # noqa: BLE001 - module absent
+        devices = {"devices": [], "readable": False, "why": ""}
+    if not isinstance(devices, dict):
+        devices = {"devices": [], "readable": False, "why": ""}
+    phones = _phone_rows(devices)
+    now = time.time()
+
+    if surface == "phone":
+        model = str(facts.get("model") or "").strip() if state == "live" else ""
+        tail = _phone_facts_tail(facts) if state == "live" else ""
+        if model or tail:
+            said = ("Yes - this message came from your phone just now"
+                    + (f": {model}" if model else "")
+                    + (f" ({tail})" if tail else "")
+                    + ". That is this message's own evidence, so the link is live "
+                      "right now.")
+        elif facts:
+            said = ("This message came from the phone app just now, so the link is "
+                    "live right now, but the details I hold for it are not from "
+                    "this message, so I cannot name the phone.")
+        else:
+            said = ("This message came from the phone app just now, so a phone is "
+                    "reaching this PC right now. It did not send its own model "
+                    "details with it, so I cannot name the phone.")
+        if not devices.get("readable", True):
+            said += (" I cannot read this PC's pairing records right now, so I "
+                     "cannot say which record this phone belongs to.")
+        elif phones:
+            newest = phones[0]
+            newest_name = str(newest.get("name") or "a phone with no name")
+            if model and not _phone_name_matches(model, newest_name):
+                said += (f" The newest pairing record on this PC is "
+                         f"{_phone_row_words(newest, now)}; that is a different "
+                         "name from the model this phone reports, and a record is "
+                         "not a live check, so I am going by this message.")
+        return Result(said, "phone_link")
+
+    # NOT THE PHONE'S OWN REQUEST: no live check exists, so the records answer
+    # with their ages and are never upgraded into a connection.
+    if not devices.get("readable", True) or not phones:
+        # The roster's own honest words for the unreadable and no-phone states.
+        return Result(_phone_state_words(devices, "state"), "phone_link")
+    head = ("This message came from the desktop program, not the phone, so I "
+            "have no live check from the phone with it."
+            if surface == "desktop" else
+            "This request did not say it came from the phone, so I have no live "
+            "check from the phone with it.")
+    if len(phones) == 1:
+        row = phones[0]
+        name = str(row.get("name") or "").strip() or "your phone"
+        seen = _phone_row_seen(row)
+        if seen:
+            when = _phone_when_words(max(0, int(now - seen)), seen)
+            said = (head + f" The only paired phone is {name}, last heard from "
+                           f"{when}.")
+        else:
+            said = (head + f" The only paired phone is {name}, and it has not "
+                           "been heard from since it was paired.")
+        said += (" A pairing is a record, not a live connection, so I cannot say "
+                 "it is connected right now.")
+        if not seen or (now - seen) > _PHONE_CONNECTED_S:
+            said += (" Open the Jarvis app on the phone and check it can reach "
+                     "this PC.")
+        return Result(said, "phone_link")
+    newest_seen = _phone_row_seen(phones[0])
+    tie = newest_seen > 0 and sum(1 for r in phones
+                                  if _phone_row_seen(r) == newest_seen) > 1
+    said = (head + f" {len(phones)} phones are paired with Jarvis on this PC: "
+            + "; ".join(_phone_row_words(r, now) for r in phones) + ".")
+    if tie:
+        said += (" The newest ones were heard from at the same moment, so I cannot "
+                 "tell which is the phone you are holding.")
+    else:
+        said += (f" The newest is {str(phones[0].get('name') or 'a phone with no name')}, "
+                 "but which one you are holding is not something this PC can know.")
+    said += (" A pairing is a record, not a live connection, so I cannot say which "
+             "of them is connected right now.")
+    return Result(said, "phone_link")
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10), and Jarvis's own windows and places
@@ -28044,6 +28393,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # 2026-11-01 field test: "where am I talking from?" - answered from
         # jarvis_surface's own header fact, never the model's guess at a place.
         return _run_surface_origin()
+    if n == "phone_own_facts":
+        # "what model of phone am I using right now" (2026-11-16): the facts
+        # this request carried, else the newest stored report with its age.
+        return _run_phone_own_facts()
+    if n == "phone_link":
+        # "are you connected to my phone" (2026-11-16): this request's own
+        # evidence from the phone, else the pairing records as aged records.
+        return _run_phone_link()
     if n == "history_purge":
         # "how long does it take to clear old chats if i batched a lot of them
         # together?" - answered from this PC's measured state, never the model.
@@ -28763,6 +29120,10 @@ READ_ONLY_INTENTS = frozenset({
     # Which app is asking (2026-11-01): it only reads jarvis_surface's own
     # header fact, so it must not take away what "cancel that" would undo.
     "surface_origin",
+    # The two phone-fact questions (2026-11-16): both read this request's own
+    # headers and, when the request is not the phone's, the pairing records -
+    # no card, no write, no model - so neither may clear "cancel that".
+    "phone_own_facts", "phone_link",
     # Model and preset questions (2026-11-02): "what model does the coding
     # preset use?" and "are you using both cards?" only read the preset
     # contract and this PC's own lane state, and change nothing, so neither

@@ -32688,6 +32688,75 @@ line, and the facts really present in the system turn `jarvis_agent` builds.
 characters stripped from every value, each field capped, the whole value under
 the cap, and an empty value before startup.
 
+### 173.8 The two answers the phone's own facts settle (added 2026-11-16)
+
+The awareness audit left two questions with no deterministic answer: *"what
+model of phone am I using right now"* and *"are you connected to my phone"*
+fell to the 8B model, which can measure neither. Section 173.7's header already
+carries the facts, so `jarvis_quick.py` now answers both from them.
+
+**Live or aged - the rule.** `jarvis_surface` keeps when the facts arrived: the
+facts stored for the current request (`device_age()`) and the newest report the
+process has seen (`last_age()`). A fact that arrived with THIS request is live.
+A stored fact is returned with its age - "43 minutes ago" - and never presented
+as a live check. With nothing at all the answer says it does not know yet and
+names no phone.
+
+**"what model of phone am I using right now"** (`phone_own_facts`). From the
+phone, with this request's facts:
+
+> You are using a CPH2419 right now (Android 15, screen 1080x2400, app 0.2.4295).
+> That came with this message from the phone, so it is current.
+
+From the desktop, the newest stored report, with its age:
+
+> The last report from your phone was 43 minutes ago: CPH2419, Android 15,
+> screen 1080x2400, app 0.2.4295. Those details are stored, not live with this
+> message, so I cannot say that is the phone you are using right now.
+
+With no facts ever:
+
+> I do not know which phone you are using yet: no request from a phone has
+> carried its own model details to this PC, so I will not guess. Ask me from the
+> Jarvis app on the phone and I will answer from what it sends.
+
+A pairing record never answers this question: the roster's name is a pairing
+name, not the model, so even a named phone in the roster leaves the answer at
+"does not know".
+
+**"are you connected to my phone"** (`phone_link`). From the phone, the request
+itself is the live proof - it is reaching the PC as it is being answered:
+
+> Yes - this message came from your phone just now: CPH2419 (Android 15, screen
+> 1080x2400, app 0.2.4295). That is this message's own evidence, so the link is
+> live right now.
+
+From the desktop there is no live check, so the records answer with the age of
+their own last check-in and say what they are:
+
+> This message came from the desktop program, not the phone, so I have no live
+> check from the phone with it. The only paired phone is Pixel 9, last heard
+> from 43 minutes ago. A pairing is a record, not a live connection, so I
+> cannot say it is connected right now.
+
+The roster's `reach` field is never read: PR #1292 removed a "connected right
+now" claim built from it, because it is a capability and not a liveness probe.
+When the newest record names a different phone from the one this message came
+from, the answer says so and goes by the message. No phone paired and an
+unreadable roster keep the `devices_list` answer's own honest sentences.
+
+**What is deliberately not wired.** The same facts could settle "what Android
+version / screen / app build is this phone", but the owner asked for the model
+question and every extra matcher is a hijack risk. "Is my phone connected"
+keeps its `devices_list` answer; the two new lanes claim only word orders no
+existing answer owned. Questions whose honest source is not on this PC ("what
+are you doing", "what is my mailbox") stay the model's (PR #1311).
+
+Read-only: no card, no write, no route, no model.
+`backend/test_phone_fact_answers.py` pins the four states (live, aged, none, a
+record naming a different phone), the near misses, the roster bite and both
+twins.
+
 ## 174. Opening an app on your phone, and starting a media search (backend only, added 2026-11-01)
 
 The owner asked, in these words:
