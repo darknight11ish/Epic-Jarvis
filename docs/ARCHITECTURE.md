@@ -5297,6 +5297,20 @@ what is missing is only the Settings screen agreeing about who turned it off.
   unchanged in this pull request - the screen has now been measured, but the
   measurement lives in this paragraph, not in that list; `tools/check_parity.py`
   has nothing to classify because no route is added.
+- **The phone's own model, Android version, screen and app build travel from the
+  phone only, and that is one-sided on purpose** (2026-11-15, the owner's *"make
+  sure jarvis can tell when im messaging from the phone and be more phone
+  specific in the answers"*; JARVIS-API §173.7). The Android app sends
+  `X-Jarvis-Device` on every request, and the one system sentence the model is
+  given names the phone and asks for an answer sized to it. The desktop sends
+  nothing equivalent: it has no handset to describe, and a device line for this
+  PC would be a second, worse source of truth about hardware Jarvis already
+  reads properly (`/api/hardware`, §8's graphics-card section). No route is
+  added in either direction, so `tools/check_parity.py` has nothing to classify.
+  `backend/test_phone_facts.py` holds the backend half - the parse, the
+  unchanged sentence without the header, and the facts in the prompt
+  `jarvis_agent` builds - and `DeviceFactsTest.kt` holds the phone's.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

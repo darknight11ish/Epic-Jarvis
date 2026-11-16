@@ -23,7 +23,7 @@ BULLETS = (
     'A feature pull request no longer commits the self-code map',
     'The General preset stops claiming the model "answered nothing" without thinking',
     'The preflight now says which commit the desktop, the backend and `main` each came from, in one row',
-    'The GitHub tools are a switch you can say, ask about, and change by talking',
+    'The phone tells Jarvis which phone it is, so answers can be phone specific',
 )
 
 

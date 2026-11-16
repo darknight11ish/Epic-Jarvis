@@ -32547,6 +32547,72 @@ look is in Appearance (theme, the face, face size, text size and spacing). No
 phone-side HUD editor is claimed, because there is none. With no header, or from
 the desktop, the old path is untouched; `backend/test_surface.py` pins both.
 
+### 173.7 The phone's own facts, so the answer can be phone specific (added 2026-11-15)
+
+The owner's words, after the phone audit: *"make sure jarvis can tell when im
+messaging from the phone and be more phone specific in the answers"*. Section
+173 answers the first half - the PC knows a **phone** is asking. It could not
+name the phone, size an answer to its screen, or tell Android 15 from Android
+17: one word was all it had. This is the second half.
+
+**The header.** The Android app adds one more on every request, beside the two
+it already sends:
+
+    X-Jarvis-Device: model=CPH2419;android=15;sdk=35;screen=1080x2400;app=0.2.4295
+
+It is built once, in `JarvisApp.onCreate`, by `DeviceFacts.initialise` (the
+phone's own `Build.MODEL`, `Build.VERSION.RELEASE`, `Build.VERSION.SDK_INT`,
+the screen's pixel size and `BuildConfig.VERSION_NAME`), and put on the request
+by the one `JarvisApi.Request.Builder.authed()` that already carries the token,
+the client header and the surface header.
+
+**What may arrive is fixed.** Five keys, no others: `model`, `android`, `sdk`,
+`screen`, `app`. Each value is stripped to letters, digits, spaces and
+`. _ + -` - so no newline, brace, comma, quote or `;` can travel - each is
+capped (28/8/3/12/18 characters), and the whole line is refused above
+`MAX_DEVICE_CHARS` (240 on the server; the app stops at 200). The app and the
+server each keep the rule, so neither trusts the other. A value that sanitises
+to nothing is left out rather than sent empty.
+
+**Where the PC reads it.** The same shipped gate, at the same moment: the
+gate's one call to `jarvis_surface.remember(headers)` now reads both headers,
+so nothing else on the request path changed and no route was added.
+
+**What the model is told.** `jarvis_surface.sentence()` returns exactly what it
+returned before when no device header arrived. With one, it appends a second
+line:
+
+    The owner is talking to you from the Android app.
+    Phone: CPH2419, Android 15, screen 1080x2400, app 0.2.4295. Answer for a
+    phone screen: short sentences, no tables. If something can only be done on
+    the PC, say so plainly.
+
+That is the whole prompt change: the facts, and how to use them. It is one
+system message, under 400 characters, and it says nothing about the owner, the
+conversation or anything on the phone - five facts about a handset. There is
+deliberately **no device identifier**, because an identifier would turn a
+description of a phone into a way to follow one.
+
+**What it is not.** Not authentication, not a secret, and it grants nothing: a
+request is still allowed or refused by the origin check and the token. It adds
+no route, no stored state and no setting. Sending it from the desktop, from a
+script, or not at all changes no answer - the desktop is unchanged, and an
+older app is byte-for-byte the old request.
+
+**One-sided on purpose.** The desktop does not send `X-Jarvis-Device`: it has no
+phone to describe, and inventing a device line for a PC would be a second, worse
+source of truth about the hardware Jarvis already reads properly
+(`/api/hardware`). Recorded in `docs/ARCHITECTURE.md` §8.
+
+**What proves it.** `backend/test_phone_facts.py` - the parse (unknown keys,
+newlines, quotes, over-cap values and over-cap lines all dropped), both headers
+read in one `remember` call, the sentence unchanged without the header, the
+sentence naming the phone when it is there, the desktop never getting a phone
+line, and the facts really present in the system turn `jarvis_agent` builds.
+`DeviceFactsTest.kt` proves the app's line: exact output, the format's own
+characters stripped from every value, each field capped, the whole value under
+the cap, and an empty value before startup.
+
 ## 174. Opening an app on your phone, and starting a media search (backend only, added 2026-11-01)
 
 The owner asked, in these words:
