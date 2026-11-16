@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -197,7 +198,8 @@ def t_one_red_run_is_never_called_more_than_one():
     check("ONE red run is never described as 'more than one'",
           "more than one ci run" not in text.lower(), text)
     check("the answer says there is ONE CI run on the commit",
-          "the one ci run on that commit" in text.lower(), text)
+          re.search(r"(?<!more than )one ci run is on the head commit",
+                    text.lower()), text)
     check("the answer says the run did not finish successfully",
           "did not finish successfully" in text, text)
     check("... and it never says the run passed",
@@ -219,7 +221,7 @@ def t_two_red_runs_are_counted_as_two():
     out = _run_one("pr", "7", fetch=fake)
     text = out.get("text", "")
     check("two red runs are counted as TWO",
-          "2 ci runs are on that commit" in text.lower(), text)
+          "2 ci runs are on the head commit" in text.lower(), text)
     check("... and neither is called 'more than one' in the old phrase",
           "more than one ci run" not in text.lower(), text)
     check("... and both runs are named as not successful",
@@ -259,7 +261,8 @@ def t_an_unreadable_check_runs_answer_is_said_not_guessed():
     check("... it does not pretend GitHub reported NO check runs",
           "no check runs" not in text.lower(), text)
     check("... and the ONE run it did read is still counted as one",
-          "the one ci run on that commit" in text.lower(), text)
+          re.search(r"(?<!more than )one ci run is on the head commit",
+                    text.lower()), text)
     check("... and no false 'more than one' count is made",
           "more than one ci run" not in text.lower(), text)
     check("... and the failing run remains named",

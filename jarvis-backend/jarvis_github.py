@@ -6395,6 +6395,33 @@ def _red_lines(headline: str, evidence, checks: list) -> str:
     return "\n".join(_ci_failed_lines(headline, told))
 
 
+def _ci_red_runs_headline(who: str, runs: list, checks_doc) -> str:
+    """The failed-commit sentence: what was READ about the checks, and how many runs.
+
+    DEF-078 (2026-11-16). This sentence used to be "More than one CI run is on
+    the head commit of {who} and at least one did not finish successfully",
+    whatever the run list held: with NO readable check runs and exactly ONE red
+    run on the head commit it told the owner there was more than one run, a
+    false count about his own repository - and the count spoke where the checks
+    had never been read.
+
+    The count now comes from the runs this answer actually holds, so "more than
+    one" is only ever said when it is true. The check half says which fact it
+    is and never borrows the other's words: GitHub REPORTING no check runs (a
+    repository that only uses workflows) is not the same as a check-runs answer
+    that could not be read at all, and `checks_doc` being None is the second.
+    """
+    if isinstance(checks_doc, dict):
+        checks_read = f"GitHub reports no check runs on {who}"
+    else:
+        checks_read = f"GitHub did not answer with the check runs on {who}"
+    if len(runs) == 1:
+        return (f"{checks_read}; one CI run is on the head commit and it did not "
+                f"finish successfully.")
+    return (f"{checks_read}; {len(runs)} CI runs are on the head commit and at "
+            f"least one did not finish successfully.")
+
+
 def _ci_words(doc, evidence: Optional[dict] = None, *,
               checks_doc=None, who: str = "") -> str:
     """THE CI answer. ONE renderer, two questions, ONE judgement of red/running.
@@ -6481,14 +6508,14 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
                     evidence, named_red_runs)
             return (f"Every check on {who} finished successfully "
                     f"({len(checks)} checks on the head commit).")
-        # No check runs at all (a repository that only uses workflows): judge
-        # EVERY visible run on the commit, never just the first.
+        # No CHECK RUNS readable (a repository that only uses workflows, or a
+        # check-runs answer that did not arrive): judge EVERY visible run on the
+        # commit, never just the first, and say which of the two it was.
         if not runs:
             return "There is no recent CI run there to report."
         if red_runs:
-            return _red_lines(
-                f"More than one CI run is on the head commit of {who} and at "
-                f"least one did not finish successfully.", evidence, named_red_runs)
+            return _red_lines(_ci_red_runs_headline(who, runs, checks_doc),
+                              evidence, named_red_runs)
         # Nothing red and no check runs: the newest-run sentences below are the
         # answer, which is the path a branch read takes too.
     # ---- The RUN question (a branch or a repository): the newest run. ----
