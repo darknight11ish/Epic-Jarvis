@@ -37,17 +37,21 @@ The file is about 300 KB. It names code; it does not contain code bodies.
 ## How it is built
 
 `tools/gen_self_code_map.py` is deterministic, standard-library only and opens no
-socket. Run it from the repository root:
+socket. Run it from the repository root when you are taking a snapshot of `main`:
 
 ```powershell
-py -3 tools/gen_self_code_map.py            # write backend/jarvis-self-code.json
-py -3 tools/gen_self_code_map.py --check    # compare, exit 1 on drift
+py -3 tools/gen_self_code_map.py              # write BOTH copies in one run
+py -3 tools/gen_self_code_map.py --check      # main's gate: compare, exit 1 on drift
+py -3 tools/gen_self_code_map.py --coherence  # a PR's gate: is the tree fully owned?
 ```
 
-It walks the tree a commit would carry (`git ls-files --cached --others
---exclude-standard`), reads `VERSION`, reads each key module's docstring with
-`ast` (it never imports the module), and reads the newest commits with
-`git log`. It writes with LF endings and no absolute path anywhere.
+It walks the tree a commit would carry (`git ls-files --cached`), reads
+`VERSION`, reads each key module's docstring with `ast` (it never imports the
+module), and reads the newest commits with `git log`. It writes with LF endings
+and no absolute path anywhere. It refuses to write on a dirty tree: its file
+lists come from the index while the commit it records comes from `HEAD`, so a
+write during an uncommitted change - or during a merge - would record a commit
+that is not the tree it describes. Commit or stash first.
 
 **Completeness is checked by construction.** Every file belongs to exactly one
 subsystem, from the table in the generator. The generator exits non-zero and
@@ -70,6 +74,46 @@ check honest rather than self-referential:
   still matches" would be an answer about code nobody committed. When the map is
   one of the changes, a dirty tree is the point - you are building it.
 
+## A snapshot of `main`, not a file a pull request carries
+
+The owner's ruling Q1 (2026-11-15) settled this, and the reason is measured. The
+map records every tracked file, so every pull request - and every PR owes a
+changelog fragment and a decisions fragment - changed it. Two such PRs always
+wrote the same 330 KB file in the same place: six PRs landed one night and the
+map forced a full conflict plus a fresh CI round on every one, turning eight
+merges into about nine hours.
+
+So the map has two gates now, and they ask different questions:
+
+- **A pull request: is the TREE coherent?** Every tracked file stays owned by
+  exactly one subsystem, and every key module, suite and document the
+  generator's table names exists. `backend/test_self_code.py` proves this in the
+  required `backend` job, and `py -3 tools/gen_self_code_map.py --coherence`
+  runs the same check at the desk. A PR never regenerates the map. If it adds a
+  new module, it adds that module to the `SUBSYSTEMS` table in the generator -
+  that table edit is the whole cost, and it is the human decision the
+  completeness property exists to ask for.
+- **`main`: is the committed map TRUE?** `.github/workflows/self-code-map.yml`
+  runs `py -3 tools/gen_self_code_map.py --check` after every merge. When the
+  map no longer describes main's tree it prints the first differing line, names
+  the one command, and goes red. The snapshot is then one small pull request
+  with only the two map files - never a push to `main`, which is protected.
+  **The same job now owns a second generated file.** The owner's ruling Q2
+  (2026-11-15) moved `backend/jarvis_recent_changes.py` - and its
+  `jarvis-backend/` twin, generated from `changelog.d/` - out of pull requests
+  for exactly the reason above: every PR that adds a fragment rewrote the same
+  two lines of both files, so two such PRs always conflicted. That step runs
+  `py -3 tools/gen_recent_changes.py --check` and names the one command too.
+  The required `backend` job asks the weaker question a pull request can answer
+  - every bullet the module carries is a real run of the record
+  (`backend/test_self_knowledge_honesty.py`) - and byte-exact freshness only
+  under `JARVIS_RECENT_CHANGES_STRICT=1`, which this workflow sets.
+
+The committed map is allowed to be a snapshot of an earlier commit than `HEAD`.
+What it is never allowed to do is describe a tree that commit never had: the
+suite checks that every file it lists existed at its own `ref`, and that its
+file count is that commit's own count.
+
 ## What it cannot do, plainly
 
 - **It does not read code bodies.** It knows a module's path and its first
@@ -82,7 +126,11 @@ check honest rather than self-referential:
   no git, no network, no writes. A question about code merged after that deploy
   is answered with "not in the map I was built with", never with a guess.
 - **It is a map, not an authority.** When the map and the code disagree, the code
-  wins and the map is stale - which `--check` is there to catch.
+  wins and the map is stale - and on `main` that is caught, never silent:
+  `self-code-map.yml` goes red until the snapshot is re-taken. Between merges the
+  map can be one merge behind, and its own fields say which commit it describes;
+  that is why "what changed recently" names the commit rather than claiming to be
+  current.
 - **It is a beside-file, so it travels in two copies.** `backend/jarvis-self-code.json`
   and `jarvis-backend/jarvis-self-code.json` are byte-identical, the same
   two-file rule every shipped module follows. `backend/test_base_matches_repo.py`
@@ -90,18 +138,23 @@ check honest rather than self-referential:
 
 ## How to refresh it
 
-On a branch, after any change that adds, moves or renames files - and after a
-change to a key module's docstring or to the subsystem table:
+On its own branch off `main`, with everything else committed and nothing else in
+the tree - **not** on a feature branch:
 
 ```powershell
-py -3 tools/gen_self_code_map.py
-py -3 tools/gen_self_code_map.py --check
-Copy-Item backend\jarvis-self-code.json jarvis-backend\jarvis-self-code.json
-py -3 backend\test_self_code.py
+py -3 tools/gen_self_code_map.py            # writes BOTH copies, in one run
+py -3 tools/gen_self_code_map.py --check    # main's gate: must pass
+py -3 backend\test_self_code.py             # the tree is still coherent
 ```
 
-Commit both copies in the same change, with the code they describe. `--check`
-in CI (and `backend/test_self_code.py` at the desk) fails when they drift.
+Commit both copies (`backend/jarvis-self-code.json` and
+`jarvis-backend/jarvis-self-code.json`) and open ONE pull request with nothing
+else in it. That is the whole snapshot. The generator refuses a dirty tree on
+purpose: the map records the commit it was built from, so commit the rest first.
+
+On a feature branch there is nothing to do. The PR's gate is `--coherence`, and
+the map is re-taken on `main` after the merge by whoever sees
+`self-code-map.yml` red.
 
 ## What reads it
 

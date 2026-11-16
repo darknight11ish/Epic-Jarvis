@@ -28,6 +28,10 @@ object NotificationIds {
     const val AVATAR_OVERLAY = 0x4A58
     const val SCREEN_WATCH = 0x4A59
 
+    // Read aloud kept going while the app is not in front (2026-11-15, the
+    // owner: "it should continue the read outloud" when he leaves the app).
+    const val READ_ALOUD = 0x4A60
+
     // Call recording (2026-11-04): the one ongoing notice while a call is
     // recorded - armed, then recording with the clock, then Stop.
     const val CALL_RECORD = 0x4A5A
@@ -69,6 +73,7 @@ object NotificationIds {
         "WAKE_WORD" to WAKE_WORD,
         "AVATAR_OVERLAY" to AVATAR_OVERLAY,
         "SCREEN_WATCH" to SCREEN_WATCH,
+        "READ_ALOUD" to READ_ALOUD,
         "CALL_RECORD" to CALL_RECORD,
         "HANDSFREE" to HANDSFREE,
         "HANDSFREE_CARD" to HANDSFREE_CARD,

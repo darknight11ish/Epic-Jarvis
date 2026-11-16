@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The preflight now says which commit each piece came from, and warns MIXED COMMITS when they disagree',
+    'A feature pull request no longer commits the self-code map',
+    'A read-aloud now carries on when you leave the app, PiP and the lock screen included, and long answers are read to the end',
     'The General preset stops claiming the model "answered nothing" without thinking',
-    'The GitHub tool layer refuses hostile input, bounds every answer, and cannot report a false green',
-    'Widgets wear their own colours',
-    'Send a video from your PC to your phone',
-    'The button beside the big window\'s chat box is called "Open the Atlas bar"',
+    'The preflight now says which commit the desktop, the backend and `main` each came from, in one row',
 )
 
 

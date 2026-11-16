@@ -32547,6 +32547,72 @@ look is in Appearance (theme, the face, face size, text size and spacing). No
 phone-side HUD editor is claimed, because there is none. With no header, or from
 the desktop, the old path is untouched; `backend/test_surface.py` pins both.
 
+### 173.7 The phone's own facts, so the answer can be phone specific (added 2026-11-15)
+
+The owner's words, after the phone audit: *"make sure jarvis can tell when im
+messaging from the phone and be more phone specific in the answers"*. Section
+173 answers the first half - the PC knows a **phone** is asking. It could not
+name the phone, size an answer to its screen, or tell Android 15 from Android
+17: one word was all it had. This is the second half.
+
+**The header.** The Android app adds one more on every request, beside the two
+it already sends:
+
+    X-Jarvis-Device: model=CPH2419;android=15;sdk=35;screen=1080x2400;app=0.2.4295
+
+It is built once, in `JarvisApp.onCreate`, by `DeviceFacts.initialise` (the
+phone's own `Build.MODEL`, `Build.VERSION.RELEASE`, `Build.VERSION.SDK_INT`,
+the screen's pixel size and `BuildConfig.VERSION_NAME`), and put on the request
+by the one `JarvisApi.Request.Builder.authed()` that already carries the token,
+the client header and the surface header.
+
+**What may arrive is fixed.** Five keys, no others: `model`, `android`, `sdk`,
+`screen`, `app`. Each value is stripped to letters, digits, spaces and
+`. _ + -` - so no newline, brace, comma, quote or `;` can travel - each is
+capped (28/8/3/12/18 characters), and the whole line is refused above
+`MAX_DEVICE_CHARS` (240 on the server; the app stops at 200). The app and the
+server each keep the rule, so neither trusts the other. A value that sanitises
+to nothing is left out rather than sent empty.
+
+**Where the PC reads it.** The same shipped gate, at the same moment: the
+gate's one call to `jarvis_surface.remember(headers)` now reads both headers,
+so nothing else on the request path changed and no route was added.
+
+**What the model is told.** `jarvis_surface.sentence()` returns exactly what it
+returned before when no device header arrived. With one, it appends a second
+line:
+
+    The owner is talking to you from the Android app.
+    Phone: CPH2419, Android 15, screen 1080x2400, app 0.2.4295. Answer for a
+    phone screen: short sentences, no tables. If something can only be done on
+    the PC, say so plainly.
+
+That is the whole prompt change: the facts, and how to use them. It is one
+system message, under 400 characters, and it says nothing about the owner, the
+conversation or anything on the phone - five facts about a handset. There is
+deliberately **no device identifier**, because an identifier would turn a
+description of a phone into a way to follow one.
+
+**What it is not.** Not authentication, not a secret, and it grants nothing: a
+request is still allowed or refused by the origin check and the token. It adds
+no route, no stored state and no setting. Sending it from the desktop, from a
+script, or not at all changes no answer - the desktop is unchanged, and an
+older app is byte-for-byte the old request.
+
+**One-sided on purpose.** The desktop does not send `X-Jarvis-Device`: it has no
+phone to describe, and inventing a device line for a PC would be a second, worse
+source of truth about the hardware Jarvis already reads properly
+(`/api/hardware`). Recorded in `docs/ARCHITECTURE.md` §8.
+
+**What proves it.** `backend/test_phone_facts.py` - the parse (unknown keys,
+newlines, quotes, over-cap values and over-cap lines all dropped), both headers
+read in one `remember` call, the sentence unchanged without the header, the
+sentence naming the phone when it is there, the desktop never getting a phone
+line, and the facts really present in the system turn `jarvis_agent` builds.
+`DeviceFactsTest.kt` proves the app's line: exact output, the format's own
+characters stripped from every value, each field capped, the whole value under
+the cap, and an empty value before startup.
+
 ## 174. Opening an app on your phone, and starting a media search (backend only, added 2026-11-01)
 
 The owner asked, in these words:
@@ -36095,7 +36161,7 @@ last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 | `github_rerun_workflow` | asks GitHub to run an existing workflow run again | `POST .../actions/runs/{id}/rerun` |
 | `github_create_repo` | creates ONE new, empty repository on the owner's own account | `POST /user/repos` |
 | `github_pr_scan` | the read-only PR cockpit: every open pull request, whether it can merge, and the required check holding it | `GET .../pulls?state=open`, then each `GET .../pulls/{n}` and its check runs |
-| `github_merge_pr` | merges ONE pull request with a merge commit, pinned to the exact head commit on the card | `GET .../pulls/{n}` and its check runs, then `PUT .../pulls/{n}/merge` |
+| `github_merge_pr` | merges ONE pull request with a merge commit, pinned to the exact head commit on the card | when no usable pin is supplied, ONE planning `GET .../pulls/{n}` to pin its real head; then `GET .../pulls/{n}` and its check runs, then `PUT .../pulls/{n}/merge` |
 | `github_fix_and_push` | copies a failing pull request into a scratch folder here, **writes ONE file of the fix there on its own card** (wave 16B), then pushes the fix to that pull request's own branch | `GET .../pulls/{n}`, its check runs, annotations and job log; `git clone`/`fetch`/`checkout`; the local write and `git commit` (no socket); `git push` |
 | `github_pr_detail` | reads ONE pull request in full: its body, changed files WITH THEIR UNIFIED DIFF (at most 20 files and 60,000 characters, with one line naming what was left out), commits, comments and reviews (ten of each at most) | five fixed `GET`s under `.../pulls/{n}` |
 | `github_open_pr` | prepares a NEW branch in the isolated copy, then pushes that one branch and opens ONE pull request | `git clone`/`checkout -b`/`push`; `POST .../pulls` |
@@ -36109,7 +36175,7 @@ last seven rows here, and §190.9-§190.10 and §216 are their envelopes):
 
 **Updated 2026-11-14 (stage-1 GitHub parity - three widenings, no new permission):** `github_list` takes the `state` filter above; `github_ci_status` names the failing checks and shows ONE bounded excerpt of the first failing check's log (one extra fixed GET for the run's jobs, made only when the newest run failed); and `github_pr_detail` shows the pull request's own unified diff, bounded to 20 files and 60,000 characters with one line naming what was left out. The last one also fixed a measured read bug: GitHub puts every changed file's `patch` in the files answer, PR #1261's 61-file answer was **481 KB**, and the read layer's 200 KB cap turned it into an unparseable answer that was silently reported as **"Changed files (0)"**. A cut answer is now an error rather than an empty document, the changed-files page is at most 20 files and is retried smaller when even that is cut, and the count always comes from the pull request's own `changed_files` field. None of it loosens a ban: no auto-merge, no gist, no admin bypass, and the token is still never printed, logged or written to a file.
 
-**The cockpit is a READ, and it prints the number the merge needs.** `github_pr_scan` sends only `GET` requests, changes nothing, and prints, for every open pull request, its number, its title, one of the five words (merge-ready / blocked / conflicted / running / draft), the reason, its base branch and its **full 40-character head commit** - `#12 <title>: merge-ready - <why>; head <40 hex>; base main`. That whole line is the point: `github_merge_pr` requires the exact 40-hex head commit, the title and the base branch, and the fix-and-push prepare reads from the same place, so the owner (and the model) copy them straight off the cockpit answer onto the card. The cockpit never merges, pushes or changes anything itself; that is always the separate carded tool.
+**The cockpit is a READ, and it prints the number the merge needs.** `github_pr_scan` sends only `GET` requests, changes nothing, and prints, for every open pull request, its number, its title, one of the five words (merge-ready / blocked / conflicted / running / draft), the reason, its base branch and its **full 40-character head commit** - `#12 <title>: merge-ready - <why>; head <40 hex>; base main`. That whole line is the point: `github_merge_pr` takes the exact 40-hex head commit, the title and the base branch from that answer, and since 2026-11-15 it reads the pull request itself and pins its real head when the model leaves any of them out - so a stale copy no longer becomes a card that cannot merge - and the fix-and-push prepare reads from the same place, so the owner (and the model) copy them straight off the cockpit answer onto the card. The cockpit never merges, pushes or changes anything itself; that is always the separate carded tool.
 
 ### 190.2 The tiers: thirteen `ask` actions, and one that ships `auto` on purpose
 
@@ -36164,7 +36230,7 @@ ONE pull request, ONE merge commit, ONE card, and the card names the commit it
 will merge.
 
 * **Merge commit only.** `MERGE_METHOD = "merge"` and the request body is built by the planner as exactly `{"merge_method": "merge", "sha": "<head_sha>"}`. There is no code path that can send `squash`, `rebase`, an admin bypass or an auto-merge; `test_github_tools.py` pins the only `merge_method` literal in the module to the constant, and pins that a model-supplied `merge_method` argument is ignored.
-* **TOCTOU pin.** `head_sha` is required, and it must be a full 40-hex commit id - a branch name or a short sha is refused; the title and `base_ref` the card names are required too, both copied from the cockpit's answer. Immediately before the one `PUT`, `run()` re-reads the pull request and refuses, **sending nothing**, if it is a draft, already merged or closed, `mergeable` is not `true`, `mergeable_state` is not `clean` (each state is mapped to plain words: blocked, unstable, dirty, unknown, behind), a check on that commit is still running, a check named in `REQUIRED_CHECKS` did not conclude `success` (or never reported), the live head sha is not the one on the card - *"the pull request moved since you looked - look again"* - or the live base branch is not the target branch on the card, which is a pull request RETARGETED to another base: a different merge from the one the owner approved, so *"the pull request was retargeted since you looked - look again"*. Only then is the `PUT` sent, and the answer reports the real merge commit GitHub returned, or an honest failure.
+* **TOCTOU pin.** The merge is pinned to a full 40-hex commit id. `head_sha` may be supplied (and must then be a full 40-hex commit id - a branch name or a short sha is refused), with the title and `base_ref` copied from the cockpit's answer; **since 2026-11-15 all three may be left out**, and the planner then reads the pull request itself (ONE `GET`) and pins the head commit, title and base branch GitHub reports - the card shows that exact commit. A supplied `head_sha` that is not the pull request's head is refused **before the card is raised**, in words, because a card built from a stale echo could never merge (the live defect of 2026-11-15: the card was approved and the run refused it). Immediately before the one `PUT`, `run()` re-reads the pull request and refuses, **sending nothing**, if it is a draft, already merged or closed, `mergeable` is not `true`, `mergeable_state` is not `clean` (each state is mapped to plain words: blocked, unstable, dirty, unknown, behind), a check on that commit is still running, a check named in `REQUIRED_CHECKS` did not conclude `success` (or never reported), the live head sha is not the one on the card - *"The card named commit <sha>, but that pull request's head commit is <live> ... Nothing was merged"*, which deliberately does not claim the pull request MOVED, because a wrong pin and a moved head look the same from there - or the live base branch is not the target branch on the card, which is a pull request RETARGETED to another base: a different merge from the one the owner approved, so *"the pull request was retargeted since you looked - look again"*. Only then is the `PUT` sent, and the answer reports the real merge commit GitHub returned, or an honest failure. When an APPROVED card's run fails, `jarvis_agent._one_call` puts the module's own reason into the answer itself, so the owner reads the real cause and not only the model's account of it.
 * **The required checks** are the seven the owner's ruleset requires (`rust`, `frontend`, `backend`, `backend-windows`, `credential-manager`, `powershell-5`, `phone-unit-tests`).
 * **The card** prints, in plain words, the repository, the pull request number and title, the pull request's own address on github.com, the target branch, the pinned 40-hex head commit, the seven required checks that must have passed, the method ("one merge commit - never squash or rebase") and that squash/rebase/admin/auto-merge are impossible; the exact body it sends is `{"merge_method": "merge", "sha": <the 40-hex head commit>}` and is built by the planner, never typed by the model.
 * **The tier** is its own action, `github_merge_pr`, `"ask"` in both shipped settings files, and it is in `jarvis_agent.NEEDS_A_PERSON`, so loosening the tier line still raises the card.
@@ -39416,10 +39482,11 @@ it is still started by hand with `tools\voicestudio_sidecar.ps1 -Start`, and the
 answer says switching it on changes nothing you would hear. `backend/test_voicestudio.py` and
 `backend/test_feature_control_phrases.py` are the proof.
 
-**The on-device model has no route and no section, by design.** Nothing that runs a model ships in the phone app, so there is
-nothing for `JARVIS-API.md` to describe: the answer is one fixed sentence in `jarvis_quick.py`
-(`ONDEVICE_MODEL_UNAVAILABLE`: *"No - not in this build..."*), its plate says "Not available in this build.", and the design is
-`docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` - DESIGN ONLY. Section 8 above carries the one-sided reason.
+**The on-device model adds no route and no section to this file, by design.** The engine itself is real code in the APK (section
+223), but it is a separate chat, off by default, with no network path and no link to this PC, so there is still nothing for
+`JARVIS-API.md` to describe: the answer is one fixed sentence in `jarvis_quick.py` (`ONDEVICE_MODEL_ANSWER`: *"Yes - but it is a
+separate chat, and it is off by default..."*), its plate points at Home -> More -> Local AI, and the ordinary Jarvis chat still
+uses the PC's model. Section 8 above carries the one-sided reason.
 
 ## 222. Two phone-only features with no route: an encrypted settings backup and a checksum-pinned update (adapted from Mobile-Harness, MIT, 2026-11-13)
 

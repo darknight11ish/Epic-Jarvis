@@ -286,6 +286,42 @@ def main():
               and "label_note" in no_note.stdout,
               no_note.stdout + no_note.stderr)
 
+        # ---- DEF-037 (2026-11-15): the planned half of this file's own
+        # promise. A `planned` row says the typed path is not wired yet, and
+        # the checker now re-runs the row's own displayed phrases - the same
+        # instrument guard 1 uses - to catch the row when they already change
+        # it. Two bites, because the ratchet has two edges: new staleness must
+        # fail, and a recorded row that gets fixed must fail too, so the list
+        # can only shrink.
+
+        # 1. New staleness is caught: take a recorded id out of the set.
+        reset_surfaces(tmp)
+        kept = set(CHECKER.STALE_PLANNED)
+        CHECKER.STALE_PLANNED.discard("manner")
+        try:
+            unrecorded = run(tmp)
+        finally:
+            CHECKER.STALE_PLANNED.clear()
+            CHECKER.STALE_PLANNED.update(kept)
+        check("a planned row whose typed path already works fails unless it is recorded",
+              unrecorded.returncode == 1 and "manner: still planned" in unrecorded.stdout
+              and "already works" in unrecorded.stdout,
+              unrecorded.stdout + unrecorded.stderr)
+
+        # 2. The recorded set can only shrink: a recorded row that stops
+        # working means the row was fixed, so the set must lose it.
+        reset_surfaces(tmp)
+        doc = read_json(tmp)
+        fixed = next(f for f in doc["features"] if f["id"] == "manner")
+        fixed["control"]["turn_on"] = "this sentence is not in the grammar"
+        fixed["control"]["turn_off"] = "this sentence is not in the grammar either"
+        fixed["control"]["adjust"] = []
+        write_json(tmp, doc)
+        fixed_row = run(tmp)
+        check("a recorded stale-planned row that stops working fails (the set only shrinks)",
+              fixed_row.returncode == 1 and "manner: listed in STALE_PLANNED" in fixed_row.stdout,
+              fixed_row.stdout + fixed_row.stderr)
+
         reset_surfaces(tmp)
         html = tmp / "jarvis-desktop/src/settings.html"
         text = html.read_text(encoding="utf-8")

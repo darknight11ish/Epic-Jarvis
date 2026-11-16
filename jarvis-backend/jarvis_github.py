@@ -84,7 +84,11 @@ that same secret and invents no second way to store one.
 THE SHAPE, WHICH IS THE POINT
 
     plan_*(args)  -> Request    works out exactly what would be sent, and sends
-                                nothing. No socket is opened.
+                                nothing. No socket is opened - with one READ
+                                only: `plan_merge_pr` reads the pull request
+                                itself when it has no usable head commit, title
+                                and target branch from the model (2026-11-15),
+                                and that read becomes the merge's pin.
     describe(r)   -> str        the words on the approval card.
     run(r, ...)                 only ever called after a person said yes.
 
@@ -1125,6 +1129,11 @@ class Step:
 class Request:
     """What a person is being asked about, worked out with no socket open.
 
+    The one exception is `plan_merge_pr`'s own read of the pull request when the
+    model gave no usable pin (2026-11-15) - a GET that changes nothing, whose
+    answer BECOMES the pin. Every other planner builds its request from
+    arguments alone.
+
     The merge and fix-and-push fields exist for the two 2026-11-10 flows. Every
     one of them is copied from the arguments the planner already validated, never
     from a later live answer - which is the whole point: `run()` compares the live
@@ -1325,8 +1334,8 @@ def describe(r: Request) -> str:
                      "this - Jarvis cannot do any of those here.")
     elif r.action == ACTION_MERGE:
         lines.append("This merge is refused unless the pull request is still "
-                     "exactly at the head commit on this card: if it moved since "
-                     "you looked, nothing is merged and you look again.")
+                     "exactly at the head commit on this card: if its head commit "
+                     "is a different one, nothing is merged and you look again.")
     elif r.action == ACTION_FIX_PUSH:
         lines.append("Nothing is pushed until you approve a SEPARATE card that "
                      "shows the exact commits, files and command.")
@@ -1503,6 +1512,17 @@ def capabilities_line() -> str:
 
 # --------------------------------------------------------------------------
 #   The planners - each one validates its own arguments and sends nothing
+#
+#   ONE exception, and it is a READ (2026-11-15): `plan_merge_pr` reads the
+#   pull request itself when it has not been given a usable head commit, title
+#   and target branch. A merge card exists to pin ONE exact commit, and a pin
+#   the model had to echo from an earlier scan can be a commit that is not the
+#   pull request's head at all - measured on the owner's own PC: the card was
+#   approved and the run then refused it, so nothing merged and the only
+#   account of why was the model's own paraphrase. The read costs one GET that
+#   changes nothing, and it makes the card name the real head; `run()` still
+#   re-reads and refuses if it moved. Nothing WRITE-shaped happens before a
+#   person says yes, and no planner can send a request body.
 # --------------------------------------------------------------------------
 
 
@@ -2659,7 +2679,57 @@ def plan_scan_prs(args: Optional[dict] = None) -> Request:
     )
 
 
-def plan_merge_pr(args: Optional[dict] = None) -> Request:
+def _read_merge_pull_request(repo: str, number: str, fetch=None) -> dict:
+    """The pull request itself, read so a merge card can name its REAL head.
+
+    This is a READ and nothing else: one GET, no body, no socket unless the
+    real `_default_fetch` is the seam. It exists because a merge card's whole
+    job is to pin ONE exact commit, and the three values it shows used to come
+    only from the model's echo of an earlier `github_pr_scan` answer. Measured
+    on the owner's PC (2026-11-15): a card pinned a commit that was never the
+    pull request's head, the owner approved it, and the run refused - nothing
+    merged, and the only account of why was the model's own words. Reading here
+    cannot weaken the pin, because the value that is read becomes the pin and
+    `run()` re-reads and refuses if it moved after the card.
+
+    Raises `GitHubError` in plain words when the read fails, so `_one_call`
+    turns it into an ordinary tool result and NO card is raised.
+    """
+    try:
+        token = _need_token()
+    except GitHubError as exc:
+        raise GitHubError(str(exc)) from None
+    doc, err = _read(fetch or _default_fetch,
+                     f"{_repo_path(repo)}/pulls/{number}",
+                     _headers(token), token)
+    if err:
+        raise GitHubError(f"Jarvis could not read pull request #{number} in "
+                          f"{repo}, so nothing was asked and nothing was merged. "
+                          f"{err}")
+    if not isinstance(doc, dict):
+        raise GitHubError(f"GitHub answered without pull request #{number} in "
+                          f"{repo}, so nothing was asked and nothing was merged.")
+    return doc
+
+
+def _merge_values(args: dict) -> tuple:
+    """(head_sha, title, base_ref) the model gave, checked as far as is possible.
+
+    A sha that is PRESENT must be a full 40-character commit id - a short one is
+    still refused here rather than silently replaced, because "which commit did
+    you mean" is not a question this module may answer for the model. A MISSING
+    sha (or title, or base branch) is different: it is the documented way to
+    ask Jarvis to read the pull request itself.
+    """
+    given = str(args.get("head_sha") or "").strip().lower()
+    sha = _check_sha(given) if given else ""
+    title = _clean_github_text(args.get("title"), limit=MAX_TITLE_CHARS,
+                               wrap=False)
+    base_ref = str(args.get("base_ref") or "").strip()
+    return sha, title, base_ref
+
+
+def plan_merge_pr(args: Optional[dict] = None, *, fetch=None) -> Request:
     """Merge ONE pull request with a merge commit, pinned to the sha on the card.
 
     The body is built HERE, field by field: `merge_method` is the module's own
@@ -2676,27 +2746,69 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
     does NOT print the raw JSON request body any more - "GitHub is told: merge,
     and only merge, at this exact commit" says the same thing in words the owner
     can check.
+
+    SINCE 2026-11-15 the card can also be built with NO pin from the model: when
+    `head_sha`, `title` and `base_ref` are not all usable, Jarvis reads the pull
+    request itself (`_read_merge_pull_request`) and pins the head commit it
+    finds. That is the ONLY read any planner here makes before a card, it sends
+    nothing, and `run()` still compares the live head against the pinned one.
+    A pin that IS given but is not the pull request's head is refused here,
+    before anyone is asked, rather than raised as a card that could never merge.
     """
     args = args or {}
     repo = _check_repo(args.get("repo"))
     number = _check_number(args.get("number"), "pull request")
-    sha = _check_sha(args.get("head_sha"))
-    title = _clean_github_text(args.get("title"), limit=MAX_TITLE_CHARS,
-                               wrap=False)
+    sha, title, base_ref = _merge_values(args)
+    pinned_from_pr = False
+    base_ok = bool(base_ref) and bool(_REF.match(base_ref)) and ".." not in base_ref
+    if not (sha and title and base_ok):
+        doc = _read_merge_pull_request(repo, number, fetch)
+        live_sha = str((doc.get("head") or {}).get("sha") or "").strip().lower()
+        live_title = _clean_github_text(doc.get("title"), limit=MAX_TITLE_CHARS,
+                                        wrap=False)
+        live_base = str((doc.get("base") or {}).get("ref") or "").strip()
+        if not _SHA.match(live_sha):
+            raise GitHubError(
+                f"GitHub did not name pull request #{number}'s head commit, so "
+                f"Jarvis cannot pin a merge to an exact commit. Nothing was "
+                f"asked and nothing was merged.")
+        if sha and sha != live_sha:
+            # A pin the model supplied that is not the pull request's head: a
+            # card built from it could never merge, so it is refused BEFORE the
+            # owner is asked (2026-11-15).
+            raise GitHubError(
+                f"The commit you gave ({sha}) is not pull request #{number}'s head: "
+                f"GitHub says its head commit is {live_sha}. Jarvis asked nobody and "
+                f"nothing was merged. Call github_merge_pr again with just the "
+                f"repository and the number, and it will read the pull request "
+                f"itself and pin that commit.")
+        if base_ok and live_base and base_ref != live_base:
+            raise GitHubError(
+                f'That pull request is set to merge into "{live_base}", not '
+                f'"{base_ref}". Jarvis asked nobody and nothing was merged. Call '
+                f"github_merge_pr again with just the repository and the number, "
+                f"and the card will name the branch it really merges into.")
+        sha, title, base_ref = live_sha, (live_title or title), live_base
+        pinned_from_pr = True
+    sha = _check_sha(sha)
     if not title:
         raise GitHubError(
             "Jarvis needs the pull request's title, exactly as github_pr_scan "
             "printed it, so the card can name what is being merged.")
-    base_ref = str(args.get("base_ref") or "").strip()
+    # `base_ref` is NOT re-read from `args` here: `_merge_values` already took it
+    # from there, and when the model left it out the read above REPLACED it with
+    # the branch GitHub reports. Re-reading args at this point would throw that
+    # away and refuse a plan that just read the truth (found by
+    # backend/test_github_tools.py after the 2026-11-15 #1268 merge).
     if not base_ref:
         raise GitHubError(
             'Jarvis needs the branch this pull request is merged INTO, exactly as '
             'github_pr_scan printed it after "base", so the card can name the '
             "target branch.")
-    # The SHAPE of that name is `_check_ref`'s job, in one place: a card that
-    # named `refs/heads/main` or `HEAD` would name something that is not the
-    # branch the pull request merges into, and the run stage would then refuse
-    # the merge against a base that never matches (2026-11-15).
+    # The SHAPE of that name is `_check_ref`'s job, in one place (2026-11-15):
+    # a card that named `refs/heads/main` or `HEAD` would name something that is
+    # not the branch the pull request merges into, and the run stage would then
+    # refuse the merge against a base that never matches.
     base_ref = _check_ref(base_ref)
     payload = {"merge_method": MERGE_METHOD, "sha": sha}
     checks = ", ".join(REQUIRED_CHECKS)
@@ -2707,6 +2819,9 @@ def plan_merge_pr(args: Optional[dict] = None) -> Request:
         f"Target branch: {base_ref}",
         f"Open it to see what you are approving: https://github.com/{repo}/pull/{number}",
         f"It will be merged at this exact commit: {sha}",
+    ] + ([("Jarvis just read this pull request itself, so that commit, title "
+           "and target branch are the ones GitHub has now.")]
+         if pinned_from_pr else []) + [
         "Method: one merge commit. Nothing else - no squash, no rebase, no admin "
         "bypass, no auto-merge.",
         "Before it sends anything Jarvis reads the pull request again and stops "
@@ -4605,9 +4720,20 @@ def _run_merge(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
                   "merged. Mark it ready for review first.")
     live = str((doc.get("head") or {}).get("sha") or "")
     if live != r.expected_sha:
-        return no("The pull request moved since you looked - its head commit is "
-                  "no longer the one on the card. Look again (github_pr_scan), "
-                  "then ask for the merge of the commit it shows now.")
+        # WHAT THIS SENTENCE MAY AND MAY NOT CLAIM (2026-11-15). It used to say
+        # "the pull request moved since you looked" for every mismatch - and
+        # that was measured FALSE on the owner's own PC: the card had pinned a
+        # commit the pull request never had, so nothing had moved. What is
+        # always true is the mismatch itself, so that is what the owner is told,
+        # plus the two ways to fix it.
+        return {"ok": False, "error": (
+            f"The card named commit {r.expected_sha}, but that pull request's "
+            f"head commit is {live or 'one GitHub did not name'}, so the commit "
+            f"you approved is not the one there is to merge. Nothing was merged. "
+            f"Nothing else was tried. Look again (github_pr_scan), then ask again "
+            f"for the merge of the commit it shows - or ask with only the "
+            f"repository and the pull request number and Jarvis will read the "
+            f"pull request itself and pin its head.")}
     live_base = str((doc.get("base") or {}).get("ref") or "").strip()
     if live_base != r.base_ref:
         # The card named a target branch; a pull request retargeted to another

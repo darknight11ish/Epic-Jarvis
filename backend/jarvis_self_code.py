@@ -11,8 +11,9 @@
 WHAT IT READS, AND WHAT IT DOES NOT
 ===================================
 One file: `jarvis-self-code.json`, beside this module. It is generated from the
-repository tree at the commit the deploy was built from, by
-`tools/gen_self_code_map.py`, and it travels with this module the same way
+repository tree at a commit on `main` by `tools/gen_self_code_map.py` -
+a snapshot taken after merges land, not by a feature pull request (owner's
+ruling Q1, 2026-11-15) - and it travels with this module the same way
 `quotes_corpus.json` travels with `jarvis_quotes.py` (the BESIDE list in
 `tools/gen_base_from_backend.py`). The reader therefore never runs git, never
 opens a socket, never writes anything, and never imports a module to look at
@@ -29,8 +30,8 @@ the repository's version and its newest twenty commit subjects.
 It does NOT hold code bodies: it knows a module's path and the first sentence of
 its docstring, not what is inside it. It does not run code, so it cannot say
 what a function returns or why something is slow. And it knows nothing newer
-than the deploy that installed it - a question about code merged after that
-deploy is answered "not in the map I was built with", never guessed at.
+than the commit its snapshot names - a question about code merged after that
+commit is answered "not in the map I was built with", never guessed at.
 
 If the JSON is absent, that is itself the answer: the map was not installed with
 this build. Every function here says so in plain words and none of them raises,

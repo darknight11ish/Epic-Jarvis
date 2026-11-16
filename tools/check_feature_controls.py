@@ -19,7 +19,13 @@ It does not edit any of them, and it does not treat a recorded gap as a pass:
 * a `not-a-setting`, `open-only`, `pc-only` or `planned` row must carry an
   owner + a reason, and the checker re-derives that the gap is still there; a
   planned grammar gap that has since been fixed is a FAILURE (the matrix is
-  stale), never a quiet pass;
+  stale), never a quiet pass. That last half was missing until 2026-11-15
+  (DEF-037): a planned row is now checked by RE-RUNNING its own displayed
+  phrases through `jarvis_quick.match`, exactly as an enforced row is, and a
+  phrase that already changes the row's own control fails. Eighteen such rows
+  were measured that day and are named in `STALE_PLANNED`; they are reported by
+  name on a green run, the set may only shrink, and a planned row that starts
+  working outside it is a failure on the spot;
 * an unknown new feature (or a dropped one) is a loud failure - nothing may be
   silently omitted from the contract;
 * every BOOL_SETTINGS switch, every SETTINGS_ROWS row and every SECTIONS
@@ -90,6 +96,49 @@ KEYED_INTENTS = {"settings_bool", "settings_choice", "feature_switch",
 NOT_A_CHANGE = {"feature_switch_refused", "feature_howto", "feature_explain",
                 "feature_state", "feature_unknown", "animal_ask"}
 
+#: `planned` rows whose displayed phrase measurably ALREADY changes their own
+#: control - the typed path is wired and the row has not been reclassified.
+#:
+#: THIS IS A RATCHET, NOT A WAIVER, and it is the whole point of DEF-037
+#: (2026-11-15). The header above says "a planned grammar gap that has since
+#: been fixed is a FAILURE", and until this change that sentence was never
+#: checked: a planned row was only asked for a known owner and its desktop or
+#: phone evidence, so rows kept saying "planned" while `jarvis_quick` resolved
+#: their own displayed sentences to their own keys, and this checker printed OK.
+#: They are named here so the truth is reported today without turning the check
+#: red for a known, measured, already-recorded gap. The two rules are the useful
+#: half:
+#:
+#:   * a planned row that starts working and is NOT in this set -> FAILURE
+#:     (new staleness cannot appear quietly);
+#:   * a row IN this set that stops working -> FAILURE (the row is fixed, so it
+#:     must come out of the set: the list can only ever shrink).
+#:
+#: When a row is reclassified to `enforced` (DEF-037's remaining work, in the
+#: phone pass), delete its id in the same commit.
+STALE_PLANNED = {
+    "animal-options",       # 'keep the animal still' -> animal_switch
+    "attention-budget",     # 'speak up 3 times a day' -> settings_budget
+    "big-model",            # 'turn on the big model' -> settings_bool
+    "briefing",             # 'turn on The morning briefing' -> feature_switch
+    "browser-engine",       # 'turn on A browser without a window' -> feature_switch
+    "email-read",           # 'stop asking before reading my email' -> settings_asks_first
+    "focus-presets",        # 'set the focus preset to fast' -> control_set
+    "history",              # 'turn on chat history' -> settings_bool
+    "manner",               # 'turn on humour' -> settings_bool
+    "media-read",           # 'turn on Read the words in a recording or video'
+    "notifications",        # 'turn on alarm sounds' -> settings_bool
+    "pictures",             # 'turn on Ask for a picture, and keep it' -> feature_switch
+    "prompt-coach",         # 'turn on Check a prompt before you send it'
+    "second-card",          # 'turn on one bigger model on both cards' -> settings_bool
+    "topics",               # 'stop using my work topic' -> topic_mode
+    "weather-sky",          # 'turn on the sun and moon' -> animal_sky
+    "web-search",           # 'turn on Web search' -> settings_bool
+    "what-asks-first",      # 'turn on What asks first' -> feature_switch
+}
+
+
+
 
 def load_modules(root: Path):
     importlib.invalidate_caches()
@@ -140,6 +189,46 @@ def match(q, phrase):
         return None
 
 
+def displayed_phrases(row):
+    """The phrases a row shows the owner, in the order the contract lists them."""
+    control = row.get("control") or {}
+    phrases = [control.get("turn_on"), control.get("turn_off")]
+    for adjust in control.get("adjust") or []:
+        if adjust.get("env_dependent") and adjust.get("reason"):
+            # The voice-name choice is the owner's configured list, not a
+            # grammar question, so it is not evidence either way.
+            continue
+        if adjust.get("phrase"):
+            phrases.append(adjust.get("phrase"))
+    return [p for p in phrases if p]
+
+
+def planned_phrase_already_works(q, row):
+    """Does a `planned` row's own displayed phrase already change ITS control?
+
+    `jarvis_quick.match` is the whole authority on whether a typed path is
+    wired. A phrase "already works" when it resolves to a mutating intent that
+    is this row's OWN - one of its `own_intents`, or a keyed intent on one of
+    its `own_keys`. Guard 1 (below) deliberately lets exactly that case through,
+    because that is what a correct `enforced` row looks like; for a `planned`
+    row it is the opposite - the gap it claims no longer exists.
+
+    Returns the offending phrases, ready to print, or [] when the row is a real
+    gap. An unreadable or refusing phrase is not evidence of a fixed gap: only a
+    phrase that CHANGES something counts.
+    """
+    own_keys = set(row.get("own_keys") or [])
+    own_intents = set(row.get("own_intents") or [])
+    found = []
+    for phrase in displayed_phrases(row):
+        it = match(q, phrase)
+        if it is None or it.name not in MUTATING_INTENTS:
+            continue
+        if it.name in own_intents or (it.f or {}).get("key") in own_keys:
+            found.append("%r -> %s" % (phrase, it.name))
+    return found
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Check the feature-controls matrix against the real sources.")
     ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
@@ -147,6 +236,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     root = args.root.resolve()
     c = Check()
+    #: (id, phrases) for every planned row whose typed path already works and
+    #: which is therefore recorded in STALE_PLANNED. Reported by name, so a
+    #: green run still says out loud which rows are stale.
+    stale_reported = []
     contract_path = root / CONTRACT
     if not contract_path.is_file():
         print("FAIL: missing " + str(contract_path))
@@ -253,6 +346,23 @@ def main(argv=None):
             elif owner == "Session B":
                 c.need((row.get("phone") or {}).get("found") is not True,
                        "%s: planned for the phone, but the phone evidence is now present" % fid)
+            # THE HALF THAT WAS MISSING (DEF-037, 2026-11-15). The sentence in
+            # this file's own header - "a planned grammar gap that has since
+            # been fixed is a FAILURE (the matrix is stale), never a quiet
+            # pass" - was never implemented for the TYPED path: only the owner
+            # and the desktop/phone evidence were asked for. Re-run the row's
+            # own displayed phrases, which is the same instrument guard 1 uses.
+            works = planned_phrase_already_works(q, row)
+            if fid in STALE_PLANNED:
+                if not works:
+                    c.fail("%s: listed in STALE_PLANNED but its typed path no longer works - "
+                           "the row is fixed, so remove it from that set" % fid)
+                else:
+                    stale_reported.append((fid, works))
+            elif works:
+                c.fail("%s: still planned, but its typed path already works (%s) - the "
+                       "matrix is stale, so either reclassify the row or record it in "
+                       "STALE_PLANNED" % (fid, ", ".join(works)))
         elif status == "pc-only":
             code = (row.get("command") or {}).get("reason_code")
             c.need(feat.get("surface") in {"desktop", "phone"} or code in {"pc-only", "app-local", "credentials"},
@@ -787,6 +897,9 @@ def main(argv=None):
         for e in c.errors:
             print("  - " + e)
         return 1
+    if stale_reported:
+        print("stale planned rows (typed path already works, DEF-037): %d - %s" % (
+            len(stale_reported), ", ".join(sorted(fid for fid, _ in stale_reported))))
     print("OK: the matrix agrees with the real files. Known gaps above are REPORTED, not passed.")
     return 0
 

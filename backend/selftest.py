@@ -936,7 +936,7 @@ class Live:
     def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
                  ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
                  with_chat=False, log_dir=None, token_store=None, reads=None, home=None, power=None,
-                 phone=None):
+                 phone=None, git=None):
         self.env = os.environ if env is None else env
         p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
         try:
@@ -963,6 +963,7 @@ class Live:
         self.home = home                # {"check": fn, "weather": fn} stand-ins
         self.power = power              # () -> powercfg's text or None, for the sleep check
         self.phone = phone              # {"desktop", "addresses", "owns", "connects", "firewall"}
+        self.git = git                  # (args, cwd) -> output, for the provenance check
         self.token = None
         self.token_where = None
         self.up = False
@@ -1554,6 +1555,283 @@ def pf_modules(live: Live) -> list:
                      "The running Jarvis may still use the old code for them. Restart "
                      "Jarvis (quit the desktop app and open it again)."))
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Which commit did each piece come from?
+# ---------------------------------------------------------------------------
+#
+# The owner's binding ruling of 2026-11-15 (Gemini, Q8): record the source
+# `HEAD` sha in each artifact's manifest/version metadata, and say so plainly
+# when the pieces the owner runs disagree. It was measured, not theoretical -
+# the desktop release 0.2.458 was built from 7a8fe7d, the Android APK from
+# 2aacc71ba, and the live backend's VERSION said 0.2.456, from 04d4748cf, and
+# nothing anywhere told him.
+#
+# Each piece already carries what it is, so this reads rather than guesses:
+#   * the desktop app logs the commit it was BUILT from
+#     (`build.rs` puts it in the compile environment), in its startup line;
+#   * the live backend folder carries `SOURCE-COMMIT`, written beside `VERSION`
+#     by `tools/reconcile_live_backend.py` from the commit it deployed;
+#   * the APK records its own in `client-latest.json` (published) and in its
+#     `BuildConfig.GIT_SHA` - and both stay on the phone, so this PC cannot
+#     read it. That is said out loud rather than worked around: fetching the
+#     release from GitHub here would break this check's own "no network" rule,
+#     and asking the phone to report in would be a new feature in two apps.
+#
+# READ-ONLY, and NEVER a FAIL. The ruling asks for visibility, not a gate: an
+# urgent single-piece fix must not be blocked by a warning, so a mismatch is a
+# WARN and a missing record is a WARN, and nothing here raises a card.
+
+#: The desktop app's log, in the folder Tauri gives `app_log_dir` (see
+#: DESKTOP_ID). Its startup line has always named the version; since
+#: 2026-11-15 it names the commit too.
+DESKTOP_LOG = "jarvis-desktop.log"
+
+#: The file `tools/reconcile_live_backend.py` writes BESIDE `VERSION`: the
+#: commit whose bytes it deployed. Beside and not inside, because `VERSION` is
+#: the shared release marker the desktop HUD compares character for character
+#: ("MISMATCH: the backend 0.2.421, but this HUD expects 0.2.433"), and its
+#: read is a bare version number everywhere else - a sha inside it would break
+#: every one of those reads.
+SOURCE_COMMIT = "SOURCE-COMMIT"
+
+#: The one format that file is written in. An unknown schema is "does not say"
+#: rather than a guess at someone else's file.
+SOURCE_COMMIT_SCHEMA = "jarvis-source-commit/1"
+
+#: The branch "main" means here: the one every release is built from. Read with
+#: `git rev-parse`, which reads the refs ALREADY on this PC and fetches nothing -
+#: so an offline PC answers, and this check never touches the network.
+MAIN_REF = "origin/main"
+
+#: How many characters of a commit are shown. Short on purpose: the two ids
+#: are compared in full (below), and short is what fits a preflight line.
+SHOWN_COMMIT = 7
+
+
+def _short_commit(commit: str) -> str:
+    return str(commit or "")[:SHOWN_COMMIT]
+
+
+def _same_commit(one: str, other: str) -> bool:
+    """True when two commit ids name the same commit.
+
+    One side is allowed to be short: `build.rs` records twelve characters and a
+    deploy records the full forty, so comparing the strings directly would call
+    one tree two different trees. Anything that is not hex is not a commit and
+    never matches.
+    """
+    one = str(one or "").strip().lower()
+    other = str(other or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{7,40}", one) or not re.fullmatch(r"[0-9a-f]{7,40}", other):
+        return False
+    return one.startswith(other) or other.startswith(one)
+
+
+def _desktop_build(live: Live) -> tuple:
+    """(version, commit, why-not) for the desktop app that last ran on this PC.
+
+    The commit comes from the app's own log line, which `build.rs` fills in at
+    BUILD time (`git rev-parse` into the compile environment) - so it is the
+    commit the binary really came from, not whatever a checkout says now. A
+    build made from a source copy with no `.git`, or one older than 2026-11-15,
+    logs no commit; the answer is then honestly `None`, never a guess.
+    """
+    logs = live.desktop_logs()
+    if logs is None:
+        return None, None, "this PC does not say where the desktop app keeps its log"
+    try:
+        text = (logs / DESKTOP_LOG).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None, f"there is no {DESKTOP_LOG} on this PC"
+    version, commit = None, None
+    for line in text.splitlines():
+        start = re.match(r"^\s*===== Jarvis Desktop (\S+) starting =====", line)
+        if not start:
+            continue
+        version = start.group(1)
+        named = re.search(r"=== \(commit ([0-9a-fA-F]{7,40}),", line)
+        commit = named.group(1).lower() if named else None
+    if version is None:
+        return None, None, f"the {DESKTOP_LOG} on this PC holds no start-up line"
+    return version, commit, ""
+
+
+def _backend_build(live: Live) -> tuple:
+    """(version, commit, why-not) for the live backend folder.
+
+    `VERSION` is the release marker the in-app updater writes; `SOURCE-COMMIT`
+    is the commit the last `tools/reconcile_live_backend.py` deploy took its
+    bytes from. The record is only believed while it still agrees with
+    `VERSION`: a later deploy can move the files (and `VERSION` with them)
+    without touching it, and a stale commit read as the current one is exactly
+    the "nothing tells him" failure this check exists to end.
+    """
+    folder = Path(live.backend)
+    try:
+        version = (folder / "VERSION").read_text(encoding="utf-8",
+                                                 errors="replace").strip()
+    except OSError:
+        version = ""
+    path = folder / SOURCE_COMMIT
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return version, None, f"there is no {SOURCE_COMMIT} beside VERSION"
+    except ValueError:
+        return version, None, f"{SOURCE_COMMIT} is not readable JSON"
+    if not isinstance(doc, dict):
+        return version, None, f"{SOURCE_COMMIT} is not a single record"
+    schema = str(doc.get("schema") or "")
+    if schema != SOURCE_COMMIT_SCHEMA:
+        return version, None, (f"{SOURCE_COMMIT} is in an unknown format ({schema or 'no schema'})")
+    commit = str(doc.get("commit") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return version, None, f"{SOURCE_COMMIT} does not name a commit"
+    recorded = str(doc.get("version") or "").strip()
+    if recorded and version and recorded != version:
+        return version, None, (f"the files have moved since that commit was recorded (the "
+                               f"record is for version {recorded}, VERSION says {version})")
+    return version, commit, ""
+
+
+def _git_out(args: list, cwd, timeout: float = 5.0) -> "str | None":
+    """One read-only git command's output, or None when git cannot answer.
+
+    LOCAL ONLY. `rev-parse` reads refs that are already on this PC, so nothing
+    is fetched: an offline PC gives the same answer, and no server is asked.
+    """
+    try:
+        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True,
+                           text=True, timeout=timeout)
+    except Exception:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def _main_commit(live: Live) -> tuple:
+    """(commit, why-not) for `main`, read from this repository's own refs.
+
+    `live.repo` is the copy of the Jarvis files this `selftest.py` is running
+    from - the checkout, in a checkout, and the live backend's own folder when
+    the owner runs the installed copy. `git rev-parse` fetches nothing, so an
+    offline PC answers; a folder that is not a git checkout, or a PC with no
+    git, says so rather than naming a guessed sha - the same rule as the two
+    pieces above.
+    """
+    out = (live.git or _git_out)(["rev-parse", MAIN_REF], live.repo)
+    lines = str(out or "").strip().lower().splitlines()
+    commit = lines[0].strip() if lines else ""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return None, f"git did not name {MAIN_REF} in {live.repo}"
+    return commit, ""
+
+
+@preflight_check("commits", "Which commit did each piece come from?")
+def pf_commits(live: Live) -> list:
+    """Say what each piece came from, and WARN plainly when they disagree.
+
+    Read-only and never a FAIL: this is a warning to look at, never a gate.
+    A piece that does not say is said to not say - the honest line the ruling
+    asks for - rather than filled in from the newest release or from a guess.
+    """
+    rows = []
+    d_version, d_commit, d_why = _desktop_build(live)
+    b_version, b_commit, b_why = _backend_build(live)
+
+    # The warning FIRST: it is the one line the owner is meant to read, and a
+    # preflight row list is read top to bottom.
+    if d_commit and b_commit and not _same_commit(d_commit, b_commit):
+        rows.append((WARN,
+                     f"MIXED COMMITS: the desktop app came from {_short_commit(d_commit)}, "
+                     f"but the backend came from {_short_commit(b_commit)}",
+                     "Two different versions of Jarvis are on this PC, so a feature may "
+                     "be in one and missing from the other. When it suits you, open "
+                     "Settings, then Updates, and press Update both. Nothing is blocked, "
+                     "and this check changed nothing."))
+    elif d_commit and b_commit:
+        rows.append((PASS, f"the desktop app and the backend both came from "
+                           f"{_short_commit(d_commit)}"))
+
+    if d_commit:
+        rows.append((PASS, f"the desktop app is {d_version or 'an unreadable version'}, "
+                           f"built from commit {_short_commit(d_commit)}"))
+    else:
+        rows.append((WARN, "the desktop app does not say which commit it came from",
+                     (d_why + ". " if d_why else "")
+                     + "Its start-up line names the version; a build from before "
+                     "2026-11-15 cannot name a commit, and this is not guessed at."))
+
+    if b_commit:
+        rows.append((PASS, "the backend's files came from commit "
+                           f"{_short_commit(b_commit)}"
+                           + (f" (VERSION {b_version})" if b_version else "")))
+    else:
+        rows.append((WARN, "the backend does not say which commit it came from",
+                     (b_why + ". " if b_why else "")
+                     + f"tools/reconcile_live_backend.py writes {SOURCE_COMMIT} beside "
+                     "VERSION when it deploys, so a backend that has been deployed that "
+                     "way says. This is not guessed at."))
+
+    rows.append((SKIP, "the phone's APK commit cannot be read from this PC",
+                 "The APK records it - client-latest.json's commit, and the build's own "
+                 "GIT_SHA - and both stay on the phone. Reading them from here would "
+                 "mean fetching from the network, which this check never does. The "
+                 "phone's own update check compares them."))
+    return rows
+
+
+@preflight_check("provenance", "Do the desktop, the backend and main agree on one commit?")
+def pf_provenance(live: Live) -> list:
+    """ONE sentence: whether the three agree, or which of them differs.
+
+    The `commits` check says what each piece came from. This one puts the three
+    side by side with the branch the releases are built from, because every
+    piece on its own can be right and the three together still be a mix - the
+    measured case (Gemini's ruling Q8, 2026-11-15) was a desktop from 7a8fe7d,
+    a phone from 2aacc71ba and a backend from 04d4748cf, with nothing anywhere
+    saying so. `main` is read with `git rev-parse origin/main`, which reads the
+    ref already on this PC: no fetch, no network, no card.
+
+    READ-ONLY, and never a FAIL, for the same reason as `commits`: this is a
+    sentence to read, not a gate, so an urgent one-piece fix is never blocked. A
+    piece that does not say is said to not say, and nothing is guessed.
+    """
+    _d_version, d_commit, d_why = _desktop_build(live)
+    _b_version, b_commit, b_why = _backend_build(live)
+    m_commit, m_why = _main_commit(live)
+    pieces = [("the desktop app", d_commit, d_why),
+              ("the backend", b_commit, b_why),
+              ("the main branch", m_commit, m_why)]
+    known = [(name, commit) for name, commit, _why in pieces if commit]
+    silent = [(name, why) for name, commit, why in pieces if not commit]
+
+    def came_from(name: str, commit: str) -> str:
+        return (f"{name} is {_short_commit(commit)}" if name == "the main branch"
+                else f"{name} came from {_short_commit(commit)}")
+
+    def together(items: list) -> str:
+        words = [came_from(name, commit) for name, commit in items]
+        return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+    if not silent:
+        if all(_same_commit(known[0][1], commit) for _name, commit in known):
+            return [(PASS, "the desktop app, the backend and the main branch all came "
+                           f"from {_short_commit(known[0][1])}")]
+        return [(WARN, f"{together(known)}, so they do not agree")]
+
+    names = [name for name, _why in silent]
+    if len(names) == 1:
+        sentence = f"{names[0]} does not say which commit it came from"
+        if silent[0][1]:
+            sentence += f": {silent[0][1]}"
+    else:
+        sentence = (f"{', '.join(names[:-1])} and {names[-1]} do not say which commit "
+                    "they came from")
+    if len(known) >= 2 and not all(_same_commit(known[0][1], commit) for _name, commit in known):
+        return [(WARN, f"{sentence}, and {together(known)}, so they do not agree")]
+    return [(WARN, f"{sentence}, so the three cannot be compared")]
 
 
 def _settings_marker(backend: Path):

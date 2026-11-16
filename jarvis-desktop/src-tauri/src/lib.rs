@@ -1960,9 +1960,19 @@ pub fn run() {
             // anything that goes wrong below would be lost exactly the way the
             // backend's startup errors used to be.
             match logfile::init(&handle) {
+                // The commit is in this line because it is the ONE place the
+                // app says what it is, and `build.rs` already knows it (it is
+                // read at BUILD time, so it is the commit this binary really
+                // came from). The preflight reads this line to compare the
+                // desktop with the backend and the phone and to say
+                // "MIXED COMMITS" when they disagree (Gemini's ruling Q8,
+                // 2026-11-15); before it, three pieces sat at three commits
+                // and nothing said so. `unknown` is said rather than guessed
+                // at for a build made from a source copy with no `.git`.
                 Some(dir) => logfile::log(&format!(
-                    "\n===== Jarvis Desktop {} starting ===== (logs in {})",
+                    "\n===== Jarvis Desktop {} starting ===== (commit {}, logs in {})",
                     env!("CARGO_PKG_VERSION"),
+                    crate::backend_update::app_commit().unwrap_or_else(|| "unknown".to_string()),
                     dir.display()
                 )),
                 None => eprintln!(

@@ -432,8 +432,13 @@ result, so the model discusses what is really there. With them:
 
 - **"What changed in your last update?"** is answered from
   `jarvis_recent_changes.py`, generated from `CHANGELOG.md` and the newest
-  `changelog.d/` fragments by `tools/gen_recent_changes.py --check`, plus the
+  `changelog.d/` fragments by `tools/gen_recent_changes.py`, plus the
   PC's own `VERSION` - never "I haven't changed" and never an invented list.
+  `main` regenerates it after every merge (owner's ruling Q2, 2026-11-15):
+  `.github/workflows/self-code-map.yml` runs the generator's `--check` and
+  names the one command when it is behind. A pull request does not carry it,
+  so the required suite asks instead that every bullet it does carry is a real
+  bullet of the record, in the record's own order.
 - **"Can you explain any setting?"** / **"what is X set to?"** reach the
   existing explain door (`find_explain_setting` / `explain_setting_words`) for
   every one of the 37 switches, 10 named choices and the one number setting.
