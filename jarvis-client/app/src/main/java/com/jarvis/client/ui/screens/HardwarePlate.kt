@@ -59,6 +59,9 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
     var notice by remember { mutableStateOf<String?>(null) }
     // Steps asked for from this screen, and when (Hardware.shown).
     var asked by remember { mutableStateOf(mapOf<String, Long>()) }
+    // Whether the PC's one command is being read on this phone (the audit of
+    // 2026-11-15): closed by default, because it is not a control here.
+    var showCommand by remember { mutableStateOf(false) }
     val now = rememberTickingNow(asked, 15_000L)
 
     val act: (String, suspend () -> String) -> Unit = { id, work ->
@@ -291,15 +294,31 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
                         modifier = Modifier.liveStatus())
                 }
 
-                // 5. The one command: for the PC, shown to read.
+                // 5. The one command: for the PC, shown to read - BEHIND A TAP
+                // since the audit of 2026-11-15. The line is 565 characters of
+                // PowerShell this phone cannot run, and it used to be printed in
+                // full on every visit to this plate: the single longest thing on
+                // any phone screen. The audit's rule is the one Help already
+                // keeps - one line visible, the detail behind a tap - so the
+                // pointer below says where the command runs, and the command
+                // itself is one tap away for reading. Nothing is lost: the
+                // desktop app's Copy button is what actually runs it, and that
+                // is what the pointer says.
                 status.commandLine?.let { line ->
                     Gap(12)
                     Kicker("The one command", Modifier.semantics { heading() })
                     Gap(4)
-                    Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
-                        fontFamily = FontFamily.Monospace)
-                    Gap(2)
                     Text(Hardware.COMMAND_ON_PC, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    Gap(2)
+                    Quiet(
+                        if (showCommand) "Hide the command" else "Show the command",
+                        color = chrome.textMid,
+                    ) { showCommand = !showCommand }
+                    if (showCommand) {
+                        Gap(4)
+                        Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                            fontFamily = FontFamily.Monospace)
+                    }
                     if (status.restartPending == true) {
                         Gap(4)
                         Text(Hardware.RESTART, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)

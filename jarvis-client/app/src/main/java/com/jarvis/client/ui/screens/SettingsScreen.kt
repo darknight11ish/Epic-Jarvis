@@ -1,5 +1,6 @@
 package com.jarvis.client.ui.screens
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -676,11 +677,21 @@ fun SettingsScreen(
                             // already plays its answers as assistant sound
                             // (audio/Speaker.kt, USAGE_ASSISTANT), which Android 17
                             // gives its own volume slider. Nothing to switch on.
-                            Text(
-                                ASSISTANT_VOLUME_LINE,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textLo,
-                            )
+                            //
+                            // ONLY ON ANDROID 17 (the audit of 2026-11-15): the
+                            // phone that was audited is Android 15, where that
+                            // slider does not exist - so the paragraph described
+                            // something the owner could not find. A caveat whose
+                            // condition is false on this phone is not drawn on
+                            // this phone. 37 is Android 17 and has no
+                            // `VERSION_CODES` constant in this compileSdk (36).
+                            if (Build.VERSION.SDK_INT >= 37) {
+                                Text(
+                                    ASSISTANT_VOLUME_LINE,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textLo,
+                                )
+                            }
                         }
                         // "Hey Jarvis" and how this phone listens: moved here from
                         // Platform checks, next to the other voice settings.
