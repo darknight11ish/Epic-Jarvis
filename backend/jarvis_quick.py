@@ -17902,8 +17902,11 @@ _NOTE_TAG_WITH = re.compile(
     r"(?P<tag>[#A-Za-z0-9_/-]+)\b.*")
 #: "pin my Workout Log note" / "unpin the gym note" (2026-11-09). ONE existing
 #: note, so it is an EDIT and keeps the one card, guardian copy and undo the
-#: customize route already has. A bare "pin it"/"pin this note" with no name is
-#: deliberately not matched: nothing here remembers which note that was.
+#: customize route already has. A bare "pin it" with no note word is
+#: deliberately not matched: nothing here remembers which note that was. A
+#: sentence whose only "name" is an article or the word "note" ("pin a note",
+#: "pin this note") asks which note instead (2026-11-16) - it never becomes a
+#: lookup of a note called "a".
 _NOTE_PIN = re.compile(
     r"(?:please\s+)?(?P<how>unpin|pin)\s+(?:my\s+|the\s+|this\s+)?"
     r"(?P<name>.+?)(?:\s+note)?\s*$")
@@ -17923,11 +17926,13 @@ _NOTE_FAVOURITE = re.compile(
 _NOTE_FLAG_QUESTION = re.compile(
     r"is\s+(?:my\s+|the\s+|our\s+|this\s+)?(?P<name>.+?)\s+note\s+"
     r"(?P<what>pinned|favourited|favorited|favourite|favorite)\s*\??$")
-#: A name that is only an article or a pronoun is not a name: "pin a note"
-#: means "which note?", never a note literally called "a" (2026-11-16,
-#: measured: it resolved to note_customize with {'name': 'a'}).
-_NOTE_NAME_EMPTY = frozenset({"a", "an", "the", "this", "that", "one", "some",
-                              "my", "our", "your", "it", "note"})
+#: A name that is only an article (or the literal noun) is not a name: "pin a
+#: note" means "which note?", never a note literally called "a" (2026-11-16,
+#: measured: it resolved to note_customize with {'name': 'a'}). Pronouns are
+#: deliberately NOT here: "pin it" carries no note word, and a sentence about
+#: anything else must keep the model, which is the older rule the `_NOTE_PIN`
+#: comment above already states.
+_NOTE_NAME_EMPTY = frozenset({"a", "an", "the", "one", "some", "note"})
 #: The fixed ask for a note write with no name. The create path asks the same
 #: way (`NOTE_CREATE_ASK_SAID`); no title is listed, because a write path must
 #: not name notes while the lists are hidden and this answer runs before the

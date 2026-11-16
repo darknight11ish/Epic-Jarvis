@@ -376,6 +376,11 @@ def t_pin_a_note_asks_which_note():
           res.reply if res else "")
     check("pin: nothing was written and no card was asked",
           gate.calls == [] and not list(VAULT.glob("*.md")), gate.calls)
+    # A pronoun is NOT a note name and keeps the model: "pin it" about
+    # anything else must not become a note question.
+    for said in ("pin it", "favourite it"):
+        check(f"pin: {said!r} keeps its own path (no note is named)",
+              getattr(Q.match(said), "name", None) is None, Q.match(said))
     # The named sentence still works, so the ask did not replace the edit.
     write_note("Workout Log.md", "squats")
     gate = Gate()
