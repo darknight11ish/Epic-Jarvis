@@ -182,6 +182,17 @@ def rows(data: dict) -> list:
         # note cannot be stamped on a row that is not planned.
         planned_row = (str(row.get("status") or "") == "planned"
                        and str(row.get("label") or "") == SWITCHABLE)
+        # THE NOTE IS COMPUTED FROM THE PHRASE, NEVER STAMPED FROM A BOARD
+        # (2026-11-15, DEF-038). The row's own sentence - the one this list
+        # already shows the owner - is the whole question: "Settings control
+        # today; typed path still being wired" may only be printed while that
+        # sentence does NOT resolve. Until this change the note was stamped on
+        # every planned multi-field row without ever asking, so it promised a
+        # gap on rows whose phrase already changed the setting (measured on
+        # 2026-11-04: 10 of the 23 noted rows worked). One read of the phrase,
+        # used by both the note and `example_ok`, so the two cannot disagree.
+        example = str(evidence["example_phrase"]).strip()
+        example_ok = _resolves(example)
         note = ""
         if planned_row and fid in multi:
             # A feature named by a multi-field board gets the board's honest
@@ -190,8 +201,10 @@ def rows(data: dict) -> list:
             # Spiral"), but it is also named by the per-face-tuning board
             # (sharpness and frame rate, still untyped) - and saying of the
             # whole row "typed path still being wired" would contradict its
-            # own example sentence on the page.
-            note = PLANNED_NOTE
+            # own example sentence on the page. A phrase that resolves is that
+            # same contradiction, so it keeps the note off now (DEF-038).
+            if not example_ok:
+                note = PLANNED_NOTE
         elif planned_row and fid in planned:
             gap = planned[fid]
             reason = str(gap.get("reason") or "").strip()
@@ -224,8 +237,8 @@ def rows(data: dict) -> list:
             "label": row["label"],
             "status": str(row.get("status") or ""),
             "label_note": str(row.get("label_note") or "").strip(),
-            "example": str(evidence["example_phrase"]).strip(),
-            "example_ok": _resolves(str(evidence["example_phrase"]).strip()),
+            "example": example,
+            "example_ok": example_ok,
             "where": where,
             "where_desktop": where_desktop,
             "where_phone": where_phone,
