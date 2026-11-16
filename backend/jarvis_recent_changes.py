@@ -21,9 +21,9 @@ from pathlib import Path
 BULLETS = (
     'The preflight now says which commit each piece came from, and warns MIXED COMMITS when they disagree',
     'A feature pull request no longer commits the self-code map',
+    "The generated snapshots now describe `main` after tonight's batch",
+    'A pull request no longer re-takes the recent-changes module - main does, after the merge',
     'A read-aloud now carries on when you leave the app, PiP and the lock screen included, and long answers are read to the end',
-    'The General preset stops claiming the model "answered nothing" without thinking',
-    'The preflight now says which commit the desktop, the backend and `main` each came from, in one row',
 )
 
 
