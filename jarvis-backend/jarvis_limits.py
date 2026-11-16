@@ -772,6 +772,21 @@ LIMITS: tuple = (
                "you on the PC first.",
           source=VOICE_BAR_SOURCE, action=LOWER_ACTION,
           card_more="That lets more clips count as your voice."),
+    # `[grants].max_actions` - the cap ONE trusted-mode window may put on one
+    # GitHub action (the owner's ask, 2026-11-16: "i would like to be able to
+    # change this cap default in settings or by chat or Jarvis live"). The
+    # design's default is 20 and its hard ceiling is 30, so the range is 1..30
+    # and UP asks: a bigger cap lets one window do more before it needs a new
+    # card. `jarvis_grants.resolve_max_actions()` reads this row when a window
+    # OPENS, so a change here reaches the next window and never one already
+    # open. A caller may still name its own number for one session, clamped to
+    # the same ceiling.
+    Limit("trusted_actions", "grants", "max_actions",
+          "Trusted mode: uses of one action", "int", 20,
+          low=1, high=30, loosening="up", app="both",
+          unit="uses per action",
+          note="How many times one GitHub action may run inside one trusted "
+               "window. 20 by default; 30 is the most the code will accept."),
 ) + _notify_rows() + _STANDBY_ROWS
 
 

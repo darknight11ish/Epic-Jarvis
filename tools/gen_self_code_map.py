@@ -151,6 +151,7 @@ SUBSYSTEMS = (
             "jarvis_approval_policy", "jarvis_asks_first", "jarvis_card_summary",
             "jarvis_card_words", "jarvis_claims", "jarvis_owner_check",
             "jarvis_limits", "jarvis_receipts", "jarvis_ledger",
+            "jarvis_grants",
         ),
         "paths": (),
         "key_modules": ("jarvis_asks_first", "jarvis_approval_policy",
