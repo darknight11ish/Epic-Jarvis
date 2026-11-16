@@ -279,6 +279,13 @@ def main(argv: list) -> int:
         if problems:
             print("gen_feature_directory --check: stale or missing: "
                   + ", ".join(problems), file=sys.stderr)
+            # The one line that clears it, because this now runs in CI's
+            # `audit` job and a red step nobody can act on reads as a mystery.
+            # Both files come from the one writer, so both are named.
+            print("run `py -3 tools/gen_feature_directory.py` and commit the "
+                  "two files it writes (jarvis-desktop/src/feature-directory.js "
+                  "and jarvis-desktop/tests/fixtures/feature-directory.json).",
+                  file=sys.stderr)
             return 1
         print("feature-directory.js and its fixture match the feature contract "
               f"({got['data']['feature_count']} features, five labels)")

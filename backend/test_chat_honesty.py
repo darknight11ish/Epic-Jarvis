@@ -550,9 +550,15 @@ def t_the_phone_state_is_read_from_the_real_pairing():
             "readable": True, "why": ""}
         got = ask("what timer is on my phone")
         reply = got.reply if got is not None else ""
-        check("a connected phone is named as connected",
-              "Pixel test" in reply
-              and "connected to Jarvis right now" in reply, reply)
+        # THE WORDS CHANGED (the awareness audit, 2026-11-15): the answer said
+        # "connected to Jarvis right now" beside "last heard from 21 minutes
+        # ago". A pairing is a record, so it now says "paired" and lets the age
+        # it names be the evidence.
+        check("a paired phone is named, with its own last-heard age",
+              "Pixel test" in reply and "Your phone is paired with Jarvis" in reply
+              and "just now" in reply, reply)
+        check("... and it never turns a record into a live connection",
+              "connected to Jarvis right now" not in reply, reply)
         check("... and the answer never claims it is not connected",
               "not connected" not in reply.lower(), reply)
         check("... timers stay on the phone, they are not read from the PC",

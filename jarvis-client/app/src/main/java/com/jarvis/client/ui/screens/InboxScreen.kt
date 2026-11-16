@@ -17,7 +17,6 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -35,7 +34,6 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
-import com.jarvis.client.ui.parts.Toggle
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalChrome
 
@@ -88,7 +86,6 @@ fun InboxScreen(
     onRevert: (UndoEntry) -> Unit,
     onCancelJob: (JobRecord) -> Unit,
     onMarkSeen: () -> Unit,
-    onSetMuted: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -217,41 +214,6 @@ fun InboxScreen(
                                 retryShown = onRetry != null,
                             )
                         }
-                    }
-                }
-            }
-
-            item(key = "mute") {
-                Plate {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "Mute spoken interruptions",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = chrome.textHi,
-                            )
-                            // There is no "mute forever", and this says so rather
-                            // than leaving the user to discover the limit.
-                            Text(
-                                "Until tomorrow. Anything you asked for is never counted.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textMid,
-                            )
-                        }
-                        Toggle(
-                            // `muted` is its own field on the budget. `blocked_by` says why the
-                            // budget is zero — "quiet", "standby", a locked session — and is
-                            // null most of the time, so a switch reading it was a switch that
-                            // could never be on.
-                            checked = attention.muted,
-                            onCheckedChange = onSetMuted,
-                            // This app's own switch now (visual-11), and named: the stock
-                            // one was read by TalkBack as just "switch, off", with the
-                            // words beside it a separate stop it had no link to.
-                            modifier = Modifier.semantics {
-                                contentDescription = "Mute spoken interruptions until tomorrow"
-                            },
-                        )
                     }
                 }
             }

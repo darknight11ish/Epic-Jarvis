@@ -106,9 +106,9 @@ def main():
 
     # --- 1. what is it running? ---------------------------------------------
     r = ask("what ai model do you have?")
-    check("current: names the running model and the preset",
+    check("current: names the model it is set to use, and the preset",
           r is not None and "qwen3.5:9b" in r.reply and "General" in r.reply
-          and "You are running" in r.reply, getattr(r, "reply", None))
+          and "set to use" in r.reply, getattr(r, "reply", None))
     r = ask("which model are you using?")
     check("current: the other shape answers the same fact",
           r is not None and "qwen3.5:9b" in r.reply)

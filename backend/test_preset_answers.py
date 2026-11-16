@@ -365,9 +365,14 @@ def main():
     # ------------------------------------------------------------------
     got = ask("what model are you using now?")
     said = getattr(got, "reply", "") or ""
+    # "SET TO USE", not "running" (the awareness audit, 2026-11-15): the model is
+    # a configured choice, and `ollama ps` listed nothing loaded at the moment the
+    # old sentence claimed to be running it. The check still demands both facts -
+    # the recorded model and the chosen preset - and only stops demanding a claim
+    # this PC cannot prove. See `_run_model_current` for the same rule in words.
     check("current model: names the recorded model and the chosen preset",
           got is not None and got.intent == "model_current"
-          and "You are running qwen3.5:9b" in said and "General" in said, said)
+          and "set to use qwen3.5:9b" in said and "General" in said, said)
     saved = models.CURRENT["name"]
     models.CURRENT["name"] = None
     got = ask("what model are you using now?")
