@@ -8891,7 +8891,8 @@ Both apps show `said` as it is. The settings are environment variables on
 the PC (`backend/README.md`, "Sending email"): the account and password are
 `JARVIS_IMAP_USER` and `JARVIS_IMAP_PASSWORD`; the server is `smtp.X` for
 `JARVIS_IMAP_HOST = imap.X`, or `JARVIS_SMTP_HOST` / `JARVIS_SMTP_PORT` /
-`JARVIS_SMTP_TLS`. Neither app has a box for any of them.
+`JARVIS_SMTP_TLS`. The desktop's Settings -> Accounts page has a box for the
+username, the password and the server addresses (§44, §116); the phone has none.
 
 ### 26.5 Known gaps, said plainly
 
