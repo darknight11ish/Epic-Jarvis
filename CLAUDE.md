@@ -527,6 +527,23 @@ tripped Syncthing's "< 1% free" database halt.
   dirty tree, because the map records the commit it was built from and a map
   written during a merge was measured describing a tree that commit never had
   (2026-11-15).
+- **The recent-changes module is a snapshot of `main` too, and a feature pull
+  request does not carry it either.** The owner's ruling Q2 (2026-11-15), for
+  the same reason as the map: `backend/jarvis_recent_changes.py` and its
+  `jarvis-backend/` twin are generated from `changelog.d/`, so every PR that
+  adds a fragment rewrote the same two lines of both files, and two such PRs
+  always conflicted. A pull request still owes its changelog fragment and its
+  decisions fragment - it just does not run
+  `py -3 tools/gen_recent_changes.py`. The same workflow,
+  `.github/workflows/self-code-map.yml` (its job is now named for generated
+  files rather than the map), runs `py -3 tools/gen_recent_changes.py --check`
+  after every merge and names the one command when main is behind. The required
+  `backend` suite no longer demands byte-exact freshness on a PR, because it
+  cannot be had there: `backend/test_self_knowledge_honesty.py` proves every
+  bullet the module carries is a real run of the record's own order, and
+  demands the exact bytes only when `JARVIS_RECENT_CHANGES_STRICT=1` is set -
+  which that workflow sets. So a committed module on a pull request may be one
+  merge old; that is the design, not a red.
 
 ## Do not regenerate the size on `docs/README.md` - just bump the count
 

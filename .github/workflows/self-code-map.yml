@@ -10,15 +10,24 @@
 # exactly one subsystem. `backend/test_self_code.py` proves that in the required
 # `backend` job, with no map involved.
 #
-# This workflow is the half that keeps the map true ON MAIN. It runs after every
-# merge (and by hand) and fails when the committed map is not exactly what
-# main's tree produces. It does not commit anything itself: main is protected by
-# required status checks and there is no bot token, so the snapshot is a
-# deliberate one-command pull request - the same shape as the changelog roll
+# THE SAME TREATMENT FOR THE RECENT-CHANGES MODULE (owner's ruling Q2,
+# 2026-11-15). `backend/jarvis_recent_changes.py` and its `jarvis-backend/` twin
+# are generated from `changelog.d/`, so every PR that adds a fragment rewrote
+# the same two lines of both files - the last whole-tree conflict left in the
+# queue. A PR still owes its fragment; it no longer re-takes the module. This
+# workflow owns that too, and the required `backend` suite checks the module is
+# HONEST everywhere (every bullet it carries is a real run of the record) while
+# demanding byte-exact freshness only here, with JARVIS_RECENT_CHANGES_STRICT=1.
+#
+# This workflow is the half that keeps both generated files true ON MAIN. It
+# runs after every merge (and by hand) and fails when a committed file is not
+# exactly what main's tree produces. It does not commit anything itself: main is
+# protected by required status checks and there is no bot token, so the snapshot
+# is a deliberate one-command pull request - the same shape as the changelog roll
 # (`tools/roll_changelog.py`) and the docs size refresh (`tools/gen_docs_map.py`).
 # It is deliberately NOT a job in ci.yml: it must never run on a pull request,
-# where the map is allowed to be one merge behind.
-name: Self-code map
+# where both files are allowed to be one merge behind.
+name: Generated files on main
 
 on:
   push:
@@ -30,11 +39,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: self-code-map-${{ github.ref }}
+  group: generated-on-main-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  map-is-true-on-main:
+  generated-files-are-true-on-main:
     # The push trigger is main only; the guard keeps a hand-dispatched run from
     # a branch from pretending its tree is main.
     if: github.ref == 'refs/heads/main'
@@ -46,25 +55,34 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The committed map is exactly what main's tree produces
         run: python3 tools/gen_self_code_map.py --check
+      # The module the answer "what changed in your last update?" reads. A
+      # fragment merged to main makes it one bullet old: this is where that is
+      # caught, not on the pull request that added the fragment.
+      - name: The committed recent-changes module is exactly what main's tree produces
+        run: python3 tools/gen_recent_changes.py --check
       - name: What to do about it
         if: failure()
         run: |
           {
-            echo "## The self-code map no longer describes \`main\`"
+            echo "## A generated file no longer describes \`main\`"
             echo
-            echo "This is expected after a merge that changed the tree. The map is"
-            echo "a snapshot taken on main, not a file a pull request carries."
+            echo "This is expected after a merge that changed the tree or added a"
+            echo "\`changelog.d/\` fragment. Both files are snapshots taken on main,"
+            echo "not files a pull request carries."
             echo
             echo "Run this on a branch off \`main\`, then open ONE small pull request"
-            echo "with only the two map files:"
+            echo "with only the generated files it touched:"
             echo
             echo '```'
             echo 'py -3 tools/gen_self_code_map.py'
-            echo 'py -3 tools/gen_self_code_map.py --check'
+            echo 'py -3 tools/gen_recent_changes.py'
+            echo 'copy backend\jarvis_recent_changes.py jarvis-backend\'
             echo 'git add backend/jarvis-self-code.json jarvis-backend/jarvis-self-code.json'
+            echo 'git add backend/jarvis_recent_changes.py jarvis-backend/jarvis_recent_changes.py'
             echo '```'
             echo
-            echo "The generator refuses a dirty tree on purpose: the map records the"
-            echo "commit it was built from, so commit everything else first."
+            echo "Run each \`--check\` again before pushing. The map generator refuses"
+            echo "a dirty tree on purpose: the map records the commit it was built"
+            echo "from, so commit everything else first."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::main's self-code map is stale. Run 'py -3 tools/gen_self_code_map.py' on a branch off main and open one small PR with the two map files - this job's summary has the exact commands."
+          echo "::error::a generated file on main is stale. Run the generators on a branch off main and open one small PR with the files that changed - this job's summary has the exact commands."
