@@ -421,16 +421,26 @@ fn action(id: &str) -> Option<&'static Action> {
 }
 
 /// What happened when one binding was offered to the OS.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `registered` is true when the OS accepted it; false means another
+/// application owns the key, and `error` then says why in the OS's words.
+///
+/// `Type` is the pilot's (2026-11-16): it lets `bindings_js` write the field
+/// names and types into `jarvis-desktop/src/bindings.js`, so the Settings page
+/// reads them from Rust instead of from a copy a person typed. The per-FIELD
+/// doc comments that used to say the same two sentences had to move up here:
+/// the JSDoc exporter writes a field's docs as `/** ... */` INSIDE the one
+/// comment block that describes the whole type, and the inner `*/` closes the
+/// outer comment early, so the generated file did not parse. Worth knowing
+/// before the other 592 commands are considered.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Bound {
     pub id: String,
     pub label: String,
     pub hint: String,
     pub accelerator: String,
     pub default: String,
-    /// True when the OS accepted it. False means another application owns it.
     pub registered: bool,
-    /// Why not, in the OS's words, when it did not bind.
     pub error: Option<String>,
 }
 
@@ -568,7 +578,6 @@ fn persist(app: &AppHandle, bindings: &BTreeMap<String, String>) -> Result<(), S
 fn validate(bindings: &BTreeMap<String, String>) -> Result<(), String> {
     let mut seen: BTreeMap<String, &str> = BTreeMap::new();
     for (id, accel) in bindings {
-        // Blank means `configured` already left this one unbound because its
         // default lost to another action's own saved key (finding #7) - not
         // a real gap to reject. Nothing else in this build can produce a
         // blank entry: the recording UI only ever writes a real combination.
@@ -754,6 +763,7 @@ pub fn get_hotkeys(app: AppHandle) -> Vec<Bound> {
 /// Validation happens before anything is written OR unregistered, so a rejected
 /// set leaves the machine exactly as it was.
 #[tauri::command]
+#[specta::specta]
 pub fn set_hotkeys(
     app: AppHandle,
     bindings: BTreeMap<String, String>,
@@ -784,6 +794,44 @@ pub fn reset_hotkeys(app: AppHandle) -> Result<Vec<Bound>, String> {
     let out = apply(&app);
     relabel_tray(&app);
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// The generated bindings (the one-command pilot, 2026-11-16)
+// ---------------------------------------------------------------------------
+
+/// What `set_hotkeys` looks like from JavaScript, generated from THIS signature
+/// by `specta` - the argument names, their types and the shape of the answer.
+///
+/// ONE command, on purpose: the pilot's whole question is whether a generated
+/// binding catches a page that disagrees with Rust, and one command answers it.
+/// Every other command stays hand-written `invoke(...)` until that answer is in.
+///
+/// It lives in the library rather than in the exporter binary because
+/// `collect_commands!` resolves the hidden macro `#[tauri::command]` plants
+/// beside the function, and that macro is not visible from another crate.
+pub fn bindings_js() -> String {
+    let scratch = std::env::temp_dir().join(format!("jarvis-bindings-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).expect("a scratch folder for the export");
+    let fresh = scratch.join("bindings.js");
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![set_hotkeys])
+        .export(specta_typescript::JSDoc::default(), &fresh)
+        .expect("exporting the hotkey bindings");
+    let mut out = std::fs::read_to_string(&fresh).expect("reading back what was exported");
+    let _ = std::fs::remove_dir_all(&scratch);
+    // The exporter writes the npm specifier its own docs assume: a TypeScript
+    // app with `@tauri-apps/api` installed. This page has neither a bundler nor
+    // `node_modules` - it is loaded straight off disk by the webview - so that
+    // bare specifier cannot resolve, and a `<script type="importmap">` is not an
+    // option either (`tests/csp-inline.mjs` pins settings.html to ONE inline
+    // script and that count is never raised). So the generator points it at the
+    // local shim over the `window.__TAURI__` global Tauri already injects
+    // (`withGlobalTauri`). Done HERE, in the generator, rather than by editing
+    // the file afterwards: a hand edit to a generated file is exactly the drift
+    // this pilot is trying to end.
+    out = out.replace("\"@tauri-apps/api/core\"", "\"./tauri-api-core.js\"");
+    out
 }
 
 #[cfg(test)]

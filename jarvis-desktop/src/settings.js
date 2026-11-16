@@ -109,6 +109,11 @@ import {
   SETTINGS_PLACE_EVENT,
 } from "./settings-place.js";
 import { withBudget } from "./invoke-budget.js";
+// The pilot's ONE generated binding call (2026-11-16). It is a module of its
+// own because the page is plain JavaScript: nothing reads the generated JSDoc
+// types unless a type-checked file calls them, and this file is far too big to
+// put under `tsc --checkJs`. See src/hotkeys-bindings.js.
+import { saveHotkeys } from "./hotkeys-bindings.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1586,7 +1591,10 @@ dom.saveHotkeys.addEventListener("click", async () => {
   stopRecording();
   const bindings = Object.fromEntries(hotkeys.map((h) => [h.id, h.accelerator]));
   try {
-    hotkeys = await invoke("set_hotkeys", { bindings });
+    // Generated from `hotkeys.rs` and type-checked (THE PILOT, 2026-11-16):
+    // see src/hotkeys-bindings.js. Every other call on this page is still a
+    // hand-written `invoke(...)`, on purpose.
+    hotkeys = await saveHotkeys(bindings);
     renderHotkeys();
     // A key left off on purpose is not "held by another application".
     const refused = hotkeys.filter((h) => !h.registered && h.accelerator);
