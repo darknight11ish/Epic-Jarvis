@@ -1409,7 +1409,7 @@ def _finish_create(job_id: str, full: Path, rel: str, data: bytes,
                    kind: str = "create", source: str = "") -> None:
     """The new note (or template): receipt first, one O_EXCL file, read back."""
     if full.exists():
-        _finish(job_id, state="failed",
+        _finish(job_id, state="failed", code="content_preexists",
                 message=f"There is already a note at {rel}, so nothing was created.")
         _audit("create_failed", {"job": job_id, "path": rel, "why": "exists"})
         return
@@ -1438,7 +1438,7 @@ def _finish_create(job_id: str, full: Path, rel: str, data: bytes,
         with open(str(full), "rb") as fh:
             landed = fh.read() == data
     except FileExistsError:
-        _finish(job_id, state="failed",
+        _finish(job_id, state="failed", code="content_preexists",
                 message=f"There is already a note at {rel}, so nothing was created.")
         try:
             import jarvis_receipts as R
@@ -1500,7 +1500,8 @@ def _create_now(full: Path, rel: str, data: bytes) -> tuple:
                                "nothing was created; use the notes editor for a "
                                "bigger note.")}
     if full.exists():
-        return 409, {"ok": False, "state": "exists", "path": rel,
+        return 409, {"ok": False, "state": "exists", "code": "content_preexists",
+                     "path": rel,
                      "error": f"There is already a note at {rel}, so nothing was created."}
     # On Windows a name is case-insensitive: "gym.md" and "Gym.md" are the SAME
     # note, but a case-sensitive filesystem would let a second one appear. Look
@@ -1511,7 +1512,12 @@ def _create_now(full: Path, rel: str, data: bytes) -> tuple:
         if parent.is_dir():
             for sibling in parent.iterdir():
                 if sibling.name.casefold() == key:
-                    return 409, {"ok": False, "state": "exists", "path": rel,
+                    sib_rel = (((rel.rsplit("/", 1)[0] + "/") if "/" in rel else "")
+                               + sibling.name)
+                    return 409, {"ok": False, "state": "exists",
+                                 "code": "case_variant_exists", "path": rel,
+                                 "candidates": [{"path": sib_rel,
+                                                 "title": sibling.stem}],
                                  "error": (f"There is already a note at {sibling.name} "
                                            f"(same name, different case) so nothing "
                                            "was created.")}
@@ -1549,7 +1555,8 @@ def _create_now(full: Path, rel: str, data: bytes) -> tuple:
             R.discard(rid)
         except Exception:                                   # noqa: BLE001
             pass
-        return 409, {"ok": False, "state": "exists", "path": rel,
+        return 409, {"ok": False, "state": "exists", "code": "content_preexists",
+                     "path": rel,
                      "error": f"There is already a note at {rel}, so nothing was created."}
     except OSError as exc:
         try:
@@ -1625,9 +1632,41 @@ def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
         _said = _P.path_refusal(str(full), write=True)
         if _said:
             return _error(403, _said, state="refused")
+    # THE VOCABULARY AND THE TWO OPTIONS live in the ONE resolver
+    # (`jarvis_notes.create_target`): `content_preexists`,
+    # `case_variant_exists`, `ambiguous_section`, and the booleans
+    # `create_target_if_missing` / `reject_if_content_preexists`. Their defaults
+    # keep this route's behaviour exactly as it was; the checks below stay as
+    # the final guard against a race.
+    try:
+        import jarvis_notes as N
+        target = N.create_target(
+            rel2,
+            create_target_if_missing=bool(body.get("create_target_if_missing", True)),
+            reject_if_content_preexists=bool(
+                body.get("reject_if_content_preexists", True)))
+    except Exception:                       # noqa: BLE001 - module absent
+        target = None
+    if isinstance(target, dict) and not target.get("ok"):
+        code = str(target.get("code") or "")
+        if code in ("content_preexists", "case_variant_exists"):
+            return 409, {"ok": False, "state": "exists", "code": code,
+                         "path": str(target.get("path") or rel2),
+                         "candidates": list(target.get("candidates") or []),
+                         "error": str(target.get("reason") or "")}
+        if code == "ambiguous_section":
+            return 409, {"ok": False, "state": "ambiguous", "code": code,
+                         "candidates": list(target.get("candidates") or []),
+                         "error": str(target.get("reason") or "")}
+        if code == "not_found":
+            return 400, {"ok": False, "state": "refused", "code": code,
+                         "error": (str(target.get("reason") or "")
+                                   + " This request asked not to create a note "
+                                     "that is not there.")}
     if full.exists():
-        return _error(409, f"There is already a note at {rel2}, so nothing was created.",
-                      state="exists")
+        return 409, {"ok": False, "state": "exists", "code": "content_preexists",
+                     "path": rel2,
+                     "error": f"There is already a note at {rel2}, so nothing was created."}
     # OWNER DECISION 2026-10-31: creating a brand-new note is card-free - but
     # ONLY when the owner is writing directly in the HUD (typed or voice).
     # After outside text, a background job, or another client, the ONE-card
@@ -3368,14 +3407,13 @@ def _chat_notes_meta() -> tuple:
 
 
 def chat_find_notes(title: str) -> tuple:
-    """Notes whose own ALIAS equals `title`, then whose title does, then contains.
+    """Notes that answer to `title`, the ONE resolver's tiers plus a read list.
 
-    A note's OWN frontmatter `aliases:` list is checked FIRST (2026-11-16): "my
-    workout log", and "workout log", name the note filed as Workout Log.md,
-    because that is the list Obsidian reads natively - and the owner's vault
-    also has an unrelated root file called "Workout log.md" that must not steal
-    the name. The vault is read fresh each time, so no earlier conversation is
-    needed.
+    `jarvis_notes.resolve_note()` decides (exact path, case-insensitive
+    basename, the note's own `aliases:`); this only turns its answer into the
+    chat read shape. A refusal that listed candidates still returns them, so a
+    partial title can be read when exactly one note contains it (the behaviour
+    readers already have), and two or more make the chat ask which.
     """
     want = str(title or "").strip()
     if not want:
@@ -3383,25 +3421,27 @@ def chat_find_notes(title: str) -> tuple:
     notes, why = _chat_notes_meta()
     if notes is None:
         return 503, {"said": why}
+    try:
+        import jarvis_notes as N
+        got = N.resolve_note(want)
+    except Exception:                       # noqa: BLE001 - module absent
+        return 503, {"said": "The notes could not be read on this PC."}
+    if got.get("ok"):
+        return 200, {"ok": True, "exact": True,
+                     "matches": [{"path": str(got.get("path") or ""),
+                                  "title": str(got.get("title") or "")}]}
+    rows = [{"path": str(r.get("path") or ""), "title": str(r.get("title") or "")}
+            for r in (got.get("candidates") or []) if isinstance(r, dict)]
+    if str(got.get("code") or "") == "ambiguous_section" and rows:
+        return 200, {"ok": True, "matches": rows, "exact": True}
+    # A read question also accepts a merely CONTAINING title ("read my note
+    # about the boiler" names no exact title). The resolver listed those as
+    # near candidates; one may be read, several make the chat ask.
     low = want.lower()
-    # An ALIAS is the owner's own name for a note, so it is checked before a
-    # file whose title merely looks the same (2026-11-16). The owner's vault
-    # holds a root file called "Workout log.md"; "workout log" must still mean
-    # the note that lists it in its own frontmatter.
-    aliased, _why = _alias_rows()
-    key = _name_key(want)
-    if key:
-        hits = _rows_by_path([r for r in aliased
-                              if any(_name_key(a) == key
-                                     for a in r.get("aliases") or [])])
-        if hits:
-            return 200, {"ok": True, "matches": hits, "exact": True}
-    exact = [n for n in notes if str(n.get("title", "")).lower() == low]
-    if exact:
-        return 200, {"ok": True, "matches": exact, "exact": True}
-    return 200, {"ok": True,
-                 "matches": [n for n in notes if low in str(n.get("title", "")).lower()],
-                 "exact": False}
+    loose = [n for n in notes if low in str(n.get("title", "")).lower()]
+    if rows:
+        loose = rows
+    return 200, {"ok": True, "matches": loose, "exact": False}
 
 
 def _chat_read(path: str) -> tuple:
@@ -3540,176 +3580,47 @@ def chat_open_note(title: str) -> tuple:
 # no index, no model and no state from an earlier conversation. `find_name` is
 # the ONE resolver the chat paths use; it reads the vault fresh every time.
 
-#: Only the first bytes of a note can hold its YAML frontmatter. Reading a
-#: bound keeps a 2 MiB note from being read whole just to look for a name.
-ALIAS_HEAD_BYTES = 8192
-_ALIAS_KEY_LEAD = re.compile(r"^(?:my|the|a|an)\s+", re.I)
-_ALIAS_KEY_TAIL = re.compile(r"\s+notes?$", re.I)
-
-
-def _name_key(text) -> str:
-    """The comparison key for one note name or alias.
-
-    Casefolded and whitespace-collapsed, with a leading "my"/"the"/"a"/"an"
-    and a trailing "note" removed - so "my workout log", "the workout log" and
-    "Workout Log" are ONE name. Nothing else is rewritten: the owner's words
-    are matched, never guessed at.
-    """
-    t = " ".join(str(text or "").replace("\u2019", "'").split()).strip()
-    t = t.strip('"').strip("'").strip("`").strip()
-    t = t.casefold()
-    t = re.sub(r"\.(?:md|txt)$", "", t).strip()
-    t = _ALIAS_KEY_LEAD.sub("", t).strip()
-    t = _ALIAS_KEY_TAIL.sub("", t).strip()
-    return t
-
-
-def _frontmatter_aliases(front: list) -> list:
-    """The `aliases:` values in one front-matter block, or [] when absent.
-
-    Two shapes are read - the two Obsidian itself writes: a block list under
-    `aliases:` and a one-line flow list `aliases: [a, b]`. A plain scalar is
-    read as one alias. A shape this reader does not understand is ignored: the
-    resolver never guesses at YAML, so a note with an unreadable alias simply
-    does not answer to it (and is never mistaken for a different note).
-    """
-    hit = next((i for i, line in enumerate(front)
-                if re.match(r"^aliases\s*:", line, re.I)), -1)
-    if hit < 0:
-        return []
-    rest = front[hit].split(":", 1)[1].strip()
-    if rest.startswith("["):
-        inner = rest[1:].strip()
-        if inner.endswith("]"):
-            inner = inner[:-1].strip()
-        values = [p.strip().strip('"').strip("'") for p in inner.split(",")]
-        return [v for v in values if v]
-    if rest:
-        return [rest.strip('"').strip("'").strip()]
-    out = []
-    for nxt in front[hit + 1:]:
-        stripped = nxt.strip()
-        if not stripped:
-            break
-        m = re.fullmatch(r"-\s+(.+?)\s*", stripped)
-        if not m:
-            break
-        value = m.group(1).strip().strip('"').strip("'")
-        if value:
-            out.append(value)
-    return out
-
-
 def note_aliases(text: str) -> list:
-    """The aliases in one note's own YAML frontmatter ([] when there are none)."""
-    opened, front, _body, why = _split_frontmatter(str(text or ""))
-    if why or not opened:
-        return []
-    return _frontmatter_aliases(front)
+    """The aliases in one note's own YAML frontmatter ([] when there are none).
 
-
-def _alias_rows() -> tuple:
-    """`([{path, title, aliases}], why)` for every note that names an alias.
-
-    Read-only. It walks the SAME list reader the editor routes use (so hidden
-    folders, links and "Protected from Jarvis" keep their own rules) and reads
-    only each note's first ALIAS_HEAD_BYTES. A note that cannot be read is
-    skipped, never guessed at.
+    The parser lives in `jarvis_notes` (the ONE resolver); this keeps the name
+    the editor's callers already use.
     """
-    code, body = handle_list("")
-    if code != 200 or not isinstance(body, dict):
-        return [], str((body or {}).get("error") or "The vault could not be read.")
-    vault, why = _vault()
-    if vault is None:
-        return [], why
-    out = []
-    for row in body.get("notes") or []:
-        path = str(row.get("path") or "")
-        if not path:
-            continue
-        try:
-            full = vault.joinpath(*path.split("/"))
-            with open(str(full), "rb") as fh:
-                head = fh.read(ALIAS_HEAD_BYTES)
-        except OSError:
-            continue
-        aliases = note_aliases(head.decode("utf-8", errors="replace"))
-        if aliases:
-            out.append({"path": path, "title": str(row.get("title") or ""),
-                        "aliases": aliases})
-    return out, ""
-
-
-def _rows_by_path(rows: list) -> list:
-    """The rows with one entry per path (case-insensitive), in their order."""
-    seen, out = set(), []
-    for row in rows:
-        path = str(row.get("path") or "").casefold()
-        if path and path not in seen:
-            seen.add(path)
-            out.append(row)
-    return out
+    try:
+        import jarvis_notes as N
+        return N.note_aliases(text)
+    except Exception:                       # noqa: BLE001 - module absent
+        return []
 
 
 def find_name(phrase: str) -> tuple:
-    """`(row, why, matches)` - ONE note for a name the owner said, or why not.
+    """`(row, why, matches)` - a compatibility shape over the ONE resolver.
 
-    Resolution order, each step using the owner's own words:
-      1. an EXACT path, only when the owner named one (a slash, or a ".md"/
-         ".txt" ending);
-      2. an exact frontmatter ALIAS - the registry Obsidian reads natively, and
-         why "my workout log" finds a note filed as Workout Log.md;
-      3. an exact title;
-      4. a title that CONTAINS the words.
-    An alias match WINS over a title match: an alias is a name the owner chose
-    for that note, so a second note whose file name merely looks like it must
-    not steal the resolution. Several matches come back as a list and the
-    caller asks - this function never picks the first of several.
+    `jarvis_notes.resolve_note()` is where a name is resolved (exact vault path,
+    then case-insensitive basename, then the note's own `aliases:`, then a
+    refusal that lists the candidates). This function adds nothing to that
+    order; it keeps the `(row, why, matches)` shape the chat and editor callers
+    already use, so there is one implementation behind every door.
     """
-    want = str(phrase or "").strip().strip('"').strip("'").strip("`").strip()
-    if not want:
-        return None, "empty", []
-    code, body = handle_list("")
-    if code != 200 or not isinstance(body, dict):
+    try:
+        import jarvis_notes as N
+        got = N.resolve_note(phrase)
+    except Exception:                       # noqa: BLE001 - module absent
         return None, "unreadable", []
-    notes = [r for r in (body.get("notes") or []) if str(r.get("path") or "")]
-    key = _name_key(want)
-    if not key:
-        return None, "not_found", []
-    # 1. The path itself, only when the owner NAMED a path (a slash, or a
-    #    ".md"/".txt" ending). A bare phrase like "workout log" is a NAME, not
-    #    a file name: the owner's vault really has a root file called
-    #    "Workout log.md", and it must not steal the alias below.
-    raw = want.replace("\\", "/").strip().lstrip("/")
-    if "/" in raw or raw.lower().endswith(TEXT_SUFFIXES):
-        cand = raw if raw.lower().endswith(TEXT_SUFFIXES) else raw + ".md"
-        for row in notes:
-            if str(row.get("path") or "").casefold() == cand.casefold():
-                return row, "", [row]
-    # 2. The note's own frontmatter aliases - the registry.
-    aliased, why = _alias_rows()
-    if why:
-        return None, "unreadable", []
-    hits = [r for r in aliased
-            if any(_name_key(a) == key for a in r.get("aliases") or [])]
-    hits = _rows_by_path(hits)
-    if len(hits) == 1:
-        return hits[0], "", hits
-    if len(hits) > 1:
-        return None, "ambiguous", hits
-    # 3. The file's own title.
-    exact = _rows_by_path([r for r in notes if _name_key(r.get("title")) == key])
-    if len(exact) == 1:
-        return exact[0], "", exact
-    if len(exact) > 1:
-        return None, "ambiguous", exact
-    # 4. A title that contains the words ("workout" -> "Workout Log").
-    loose = _rows_by_path([r for r in notes if key in _name_key(r.get("title"))])
-    if not loose:
-        return None, "not_found", []
-    if len(loose) == 1:
-        return loose[0], "", loose
-    return None, "ambiguous", loose
+    rows = [{"path": str(r.get("path") or ""), "title": str(r.get("title") or "")}
+            for r in (got.get("candidates") or []) if isinstance(r, dict)]
+    if got.get("ok"):
+        row = {"path": str(got.get("path") or ""),
+               "title": str(got.get("title") or "")}
+        return row, "", [row]
+    code = str(got.get("code") or "")
+    if code == "not_found":
+        return None, "not_found", rows
+    if code == "ambiguous_section":
+        return None, "ambiguous", rows
+    if code == "case_variant_exists":
+        return None, "case_variant", rows
+    return None, "unreadable", rows
 
 
 # ---------------------------------------------------------------------------

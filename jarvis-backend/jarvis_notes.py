@@ -713,6 +713,471 @@ def _inside(root: str, path: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+#   ONE NAME, ONE NOTE: the resolver every note tool routes through
+# ---------------------------------------------------------------------------
+#
+# WHY HERE. The owner's report of 2026-11-16 was that "add to the workout log
+# that ..." found nothing, or found the wrong thing, because each note tool had
+# its own idea of what a name means. This is now the ONE place: every tool
+# resolves a name here, and only here.
+#
+# THE TIER ORDER is adapted (a pattern, not code) from
+# Vinzent03/obsidian-advanced-uri (MIT). Its `filename` parameter first asks
+# Obsidian's own link resolution - `metadataCache.getFirstLinkpathDest()`,
+# which tries a vault path and then the file name - and only when that finds
+# nothing does it scan every note's `aliases:` frontmatter. The same order is
+# here, with a refusal at the end instead of a silently invented new file:
+#
+#   1. "path"      the exact vault-relative path the owner named (a slash, or
+#                  a ".md"/".txt" ending, is what makes it a path). Case
+#                  matters here, because a path is a path.
+#   2. "basename"  the file's own name, matched case-insensitively. This is
+#                  the tier that has to answer on Windows, where "Gym.md" and
+#                  "gym.md" are the same file and Obsidian treats them that
+#                  way. Two different folders with that name are NEVER
+#                  guessed: they come back as `ambiguous_section` with a
+#                  `candidates` list.
+#   3. "alias"     a value in the note's own YAML `aliases:` list - the
+#                  registry Obsidian reads natively, so it travels with the
+#                  note and needs no index. Compared case-insensitively, and
+#                  with a leading my/the/a/an and a trailing "note" ignored,
+#                  so "my workout log" and "the workout log" reach the same
+#                  note. An exact alias still beats a merely similar one.
+#   4. REFUSAL     `not_found`, with any near candidates (a title or alias that
+#                  contains the owner's words) listed in `candidates`.
+#
+# THE DAILY NOTE IS NEVER A FALLBACK. There is no branch here that reaches
+# today's daily note: a name that matches no note is a refusal, not a place to
+# file the words instead. The measured bug was exactly that fallback, and this
+# resolver makes it impossible rather than unlikely.
+#
+# THE REFUSAL VOCABULARY is adapted (patterns, not code) from
+# cyanheads/obsidian-mcp-server (Apache-2.0) and
+# coddingtonbear/obsidian-local-rest-api (MIT):
+#
+#   case_variant_exists  a file that differs from the wanted name only by
+#                        case already exists in that folder (the Windows
+#                        case-collision trap), so creating it could make a
+#                        duplicate or silently write the wrong note.
+#   content_preexists    the note is already there and has content; a create
+#                        never overwrites it.
+#   ambiguous_section    more than one note answers to the name; `candidates`
+#                        lists them, and nothing is chosen.
+#   not_found           no note answers to the name; `candidates` holds any
+#                        near ones, and nothing is chosen.
+#
+# The two options those projects expose as request headers are boolean
+# arguments here - never a second HTTP surface:
+#
+#   create_target_if_missing=False       a name that is not there is refused,
+#                                        not created (the default: a tool that
+#                                        means to create passes True).
+#   reject_if_content_preexists=True     refuse when the note already has
+#                                        content. Epic Jarvis never overwrites
+#                                        a note, so False only allows filling
+#                                        an EMPTY existing note; content is
+#                                        still `content_preexists`.
+
+#: The order a name is resolved in, stated once so a report can print it.
+RESOLVE_TIERS = ("path", "basename", "alias")
+#: Only the first bytes of a note can hold its YAML frontmatter.
+RESOLVE_HEAD_BYTES = 8192
+#: The most notes one resolution will look at, newest-first order is not kept
+#: (the walk is sorted by path so the same vault answers the same way).
+RESOLVE_MAX_NOTES = 2000
+_ALIAS_KEY_LEAD = re.compile(r"^(?:my|the|a|an)\s+", re.I)
+_ALIAS_KEY_TAIL = re.compile(r"\s+notes?$", re.I)
+
+
+def _note_key(text) -> str:
+    """Case- and article-blind comparison key for a NAME or one ALIAS.
+
+    "my workout log", "the workout log" and "workout log" are one key, which is
+    what lets the owner's own phrasing reach the alias he wrote. Only those two
+    decorations are removed; nothing else in his words is rewritten.
+    """
+    t = " ".join(str(text or "").replace("\u2019", "'").split()).strip()
+    t = t.strip('"').strip("'").strip("`").strip().casefold()
+    t = re.sub(r"\.(?:md|txt)$", "", t).strip()
+    t = _ALIAS_KEY_LEAD.sub("", t).strip()
+    t = _ALIAS_KEY_TAIL.sub("", t).strip()
+    return t
+
+
+def _basename_key(text) -> str:
+    """Case-insensitive key for the file name ALONE - the "basename" tier."""
+    t = str(text or "").replace("\\", "/").strip().rstrip("/")
+    t = t.rsplit("/", 1)[-1].strip().strip('"').strip("'").strip("`")
+    t = re.sub(r"\.(?:md|txt)$", "", t, flags=re.I).strip()
+    return t.casefold()
+
+
+def _norm_name(name) -> str:
+    """The owner's name, tidied enough to compare: no quotes, forward slashes."""
+    return str(name or "").replace("\\", "/").strip().strip('"').strip("'").strip("`").strip()
+
+
+def _looks_like_a_path(text: str) -> bool:
+    """A slash or a note extension is what makes a name a PATH, not a name."""
+    return "/" in text or text.lower().endswith((".md", ".txt"))
+
+
+def _frontmatter_aliases(text: str) -> list:
+    """The `aliases:` values in one note's YAML frontmatter, or [].
+
+    Two shapes are read, the two Obsidian itself writes: a block list under
+    `aliases:` and a one-line flow list `aliases: [a, b]`. A plain scalar is
+    read as one alias. A shape this reader does not understand is ignored: the
+    resolver never guesses at YAML, so a note with an unreadable alias simply
+    does not answer to it.
+    """
+    if not str(text or "").startswith("---"):
+        return []
+    lines = str(text).splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return []
+    front = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        front.append(line)
+    else:
+        return []
+    hit = next((i for i, line in enumerate(front)
+                if re.match(r"^aliases\s*:", line, re.I)), -1)
+    if hit < 0:
+        return []
+    rest = front[hit].split(":", 1)[1].strip()
+    if rest.startswith("["):
+        inner = rest[1:].strip()
+        if inner.endswith("]"):
+            inner = inner[:-1].strip()
+        values = [p.strip().strip('"').strip("'") for p in inner.split(",")]
+        return [v for v in values if v]
+    if rest:
+        return [rest.strip('"').strip("'").strip()]
+    out = []
+    for nxt in front[hit + 1:]:
+        stripped = nxt.strip()
+        if not stripped:
+            break
+        m = re.fullmatch(r"-\s+(.+?)\s*", stripped)
+        if not m:
+            break
+        value = m.group(1).strip().strip('"').strip("'")
+        if value:
+            out.append(value)
+    return out
+
+
+def note_aliases(text: str) -> list:
+    """The aliases in one note's own YAML frontmatter ([] when there are none)."""
+    try:
+        return _frontmatter_aliases(str(text or ""))
+    except Exception:                                       # noqa: BLE001
+        return []
+
+
+def vault_root() -> tuple:
+    """`(resolved vault Path, "")` or `(None, why)` - the ONE vault lookup."""
+    try:
+        vault = obsidian_vault()
+        why = vault_problem(vault)
+    except Exception as exc:                                # noqa: BLE001
+        return None, (f"the Obsidian vault setting could not be read "
+                      f"({type(exc).__name__})")
+    if why:
+        return None, why
+    return Path(os.path.realpath(str(vault))), ""
+
+
+def _vault_for(vault) -> tuple:
+    """`(root, why)`, honoring an explicit Path for a test or a caller."""
+    if vault is not None:
+        try:
+            root = Path(os.path.realpath(str(vault)))
+        except Exception as exc:                            # noqa: BLE001
+            return None, f"that vault could not be read ({type(exc).__name__})"
+        if not root.is_dir():
+            return None, "there is no folder at that vault path"
+        return root, ""
+    return vault_root()
+
+
+def _vault_notes(root: Path) -> list:
+    """`[{path, title, full}]` for every note the vault editor may see.
+
+    The same rules as the editor's list: never a hidden folder, never anything
+    whose real place is outside the vault, never a "Protected from Jarvis"
+    folder or note, `.md` only, and a bound so a huge vault cannot hold up a
+    chat turn. Sorted by path, so the same vault always answers the same way.
+    """
+    _P = _protection()
+    rows = []
+    try:
+        for dirpath, dirnames, filenames in os.walk(str(root), followlinks=False):
+            dirnames[:] = sorted(
+                d for d in dirnames
+                if not d.startswith(".")
+                and _inside(str(root), os.path.realpath(os.path.join(dirpath, d)))
+                and not (_P is not None
+                         and _P.blocked_path(os.path.join(dirpath, d))))
+            for name in sorted(filenames):
+                if name.startswith(".") or not name.lower().endswith((".md", ".txt")):
+                    continue
+                full = os.path.join(dirpath, name)
+                real = os.path.realpath(full)
+                if not _inside(str(root), real) or not os.path.isfile(real):
+                    continue
+                if _P is not None and _P.blocked_path(real):
+                    continue
+                rows.append({"path": os.path.relpath(full, root).replace(os.sep, "/"),
+                             "title": os.path.splitext(name)[0], "full": real})
+                if len(rows) >= RESOLVE_MAX_NOTES:
+                    return rows
+    except OSError:
+        return rows
+    return rows
+
+
+def _row_public(row: dict) -> dict:
+    """One candidate as a caller may see it - never the absolute path."""
+    return {"path": row.get("path", ""), "title": row.get("title", "")}
+
+
+def _match(row: dict, tier: str, aliases=None) -> dict:
+    return {"ok": True, "code": "resolved", "tier": tier,
+            "path": row["path"], "title": row["title"], "full": row["full"],
+            "aliases": list(aliases or []), "candidates": [_row_public(row)]}
+
+
+def _refusal(code: str, reason: str, candidates=None) -> dict:
+    return {"ok": False, "code": code, "reason": reason,
+            "candidates": [_row_public(r) for r in (candidates or [])]}
+
+
+def _near_candidates(want: str, notes: list) -> list:
+    """Notes whose title or alias CONTAINS the owner's words - never chosen."""
+    key = _note_key(want)
+    if not key:
+        return []
+    found = []
+    for row in notes:
+        if key in _note_key(row["title"]):
+            found.append(row)
+            continue
+        try:
+            with open(row["full"], "rb") as fh:
+                head = fh.read(RESOLVE_HEAD_BYTES)
+        except OSError:
+            continue
+        if any(key in _note_key(a)
+               for a in note_aliases(head.decode("utf-8", "replace"))):
+            found.append(row)
+    return found
+
+
+def resolve_note(name, *, vault=None) -> dict:
+    """Resolve ONE name to ONE note, or refuse - the ONE resolver.
+
+    Returns a dict:
+      ok, code ("resolved" or a refusal code), tier ("path"/"basename"/"alias"),
+      path (vault-relative), title, full (absolute), aliases, candidates.
+    A refusal carries `code` (`not_found`, `ambiguous_section`,
+    `case_variant_exists`, `no_vault`) and a plain `reason`; a two-or-more
+    match refusal lists every `candidates` entry, and no note is picked.
+    Never falls back to the daily note: no branch below knows what a daily
+    note is.
+    """
+    want = _norm_name(name)
+    if not want:
+        return _refusal("not_found", "No note name was given.")
+    root, why = _vault_for(vault)
+    if root is None:
+        return _refusal("no_vault", "No note was looked up: " + why + ".")
+    notes = _vault_notes(root)
+    # 1. The exact vault path the owner named.
+    if _looks_like_a_path(want):
+        rel = want.lstrip("/")
+        if not rel.lower().endswith((".md", ".txt")):
+            rel += ".md"
+        for row in notes:
+            if row["path"] == rel:
+                return _match(row, "path")
+    # 2. The file name alone, case-insensitively.
+    key = _basename_key(want)
+    if key:
+        hits = [row for row in notes if _basename_key(row["path"]) == key]
+        if len(hits) == 1:
+            return _match(hits[0], "basename")
+        if len(hits) > 1:
+            return _refusal(
+                "ambiguous_section",
+                (f'"{want}" matches {len(hits)} notes: '
+                 + "; ".join(r["path"] for r in hits[:6])
+                 + ". Say the folder and the note's name, so one is chosen."),
+                hits)
+    # 3. The note's own YAML `aliases:` list.
+    alias_key = _note_key(want)
+    alias_hits = []
+    if alias_key:
+        for row in notes:
+            try:
+                with open(row["full"], "rb") as fh:
+                    head = fh.read(RESOLVE_HEAD_BYTES)
+            except OSError:
+                continue
+            aliases = note_aliases(head.decode("utf-8", "replace"))
+            if any(_note_key(a) == alias_key for a in aliases):
+                alias_hits.append((row, aliases))
+        if len(alias_hits) == 1:
+            row, aliases = alias_hits[0]
+            return _match(row, "alias", aliases)
+        if len(alias_hits) > 1:
+            return _refusal(
+                "ambiguous_section",
+                (f'"{want}" is an alias on {len(alias_hits)} notes: '
+                 + "; ".join(r["path"] for r, _a in alias_hits[:6])
+                 + ". Say the folder and the note's name, so one is chosen."),
+                [r for r, _a in alias_hits])
+    # 4. Refuse, listing any near candidates. Never a daily-note fallback.
+    near = _near_candidates(want, notes)
+    said = f'No note in your vault is called "{want}".'
+    if near:
+        said += (" The closest are: "
+                 + "; ".join(r["path"] for r in near[:6]) + ".")
+    return _refusal("not_found", said, near)
+
+
+def case_variant(rel, *, vault=None) -> str:
+    """The existing vault path that differs from `rel` only by case, or "".
+
+    This is the Windows case-collision trap: `gym.md` and `Gym.md` are one file
+    there, so a create that means a new note must say the name already exists
+    rather than write through the other one. Read-only; returns the existing
+    vault-relative path, never an absolute one.
+    """
+    text = _norm_name(rel).lstrip("/")
+    if not text:
+        return ""
+    root, _why = _vault_for(vault)
+    if root is None:
+        return ""
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return ""
+    parent = root.joinpath(*parts[:-1])
+    try:
+        if not parent.is_dir():
+            return ""
+        want = parts[-1].casefold()
+        for child in parent.iterdir():
+            if child.name.casefold() == want and child.is_file():
+                return "/".join(parts[:-1] + [child.name])
+    except OSError:
+        return ""
+    return ""
+
+
+def _proposed_rel(name: str) -> str:
+    """The vault-relative path a create would use, or "" when it escapes."""
+    text = _norm_name(name).lstrip("/")
+    if not text:
+        return ""
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return ""
+    if not parts[-1].lower().endswith((".md", ".txt")):
+        parts[-1] += ".md"
+    return "/".join(parts)
+
+
+def create_target(name, *, create_target_if_missing: bool = False,
+                  reject_if_content_preexists: bool = True, vault=None) -> dict:
+    """Where a CREATE would write, with the two boolean options.
+
+    It is `resolve_note` plus what a create needs to know, so the create path
+    does not grow a second resolver:
+
+      * the note resolves and contains content - `content_preexists`, refused.
+        Epic Jarvis never overwrites a note, so even with
+        `reject_if_content_preexists=False` content is never replaced; False
+        only allows filling an EMPTY existing note (there is nothing to lose).
+      * the note resolves and is empty - refused when the flag is True (the
+        default), otherwise `ok` with `existing=True` and `create=False`.
+      * the note does not resolve and `create_target_if_missing` is True -
+        `ok` with the proposed vault path, `create=True`. A case variant in
+        that folder is `case_variant_exists`, refused.
+      * anything else is `resolve_note`'s own refusal, unchanged.
+
+    `create_target_if_missing` is False by default so a lookup never creates
+    anything; a create-shaped tool passes True explicitly.
+    """
+    got = resolve_note(name, vault=vault)
+    # A create that NAMED A PATH means that path. If the only difference is
+    # capital letters, that is the Windows case-collision trap and it gets the
+    # code for it rather than a quiet write through the other file. A path in a
+    # DIFFERENT folder is a new note: the basename tier may have found a
+    # same-named note elsewhere, and that note is not this target.
+    want_rel = (_proposed_rel(name)
+                if _looks_like_a_path(_norm_name(name)) else "")
+    if got.get("ok") and want_rel:
+        have = str(got.get("path") or "")
+        if have.casefold() == want_rel.casefold() and have != want_rel:
+            return {"ok": False, "code": "case_variant_exists",
+                    "reason": (f'There is already a note at {have}, which '
+                               "differs from that name only by capital letters, so "
+                               "nothing was created."),
+                    "path": have,
+                    "candidates": [{"path": have,
+                                    "title": got.get("title", "")}]}
+        if have.casefold() != want_rel.casefold():
+            got = {"ok": False, "code": "not_found",
+                   "reason": (f'There is no note at {want_rel}.'),
+                   "candidates": list(got.get("candidates") or [])}
+    if got.get("ok"):
+        root, why = _vault_for(vault)
+        if root is None:
+            return _refusal("no_vault", "No note was looked up: " + why + ".")
+        full = Path(root).joinpath(*str(got["path"]).split("/"))
+        try:
+            size = full.stat().st_size
+        except OSError:
+            size = 0
+        if size > 0 or reject_if_content_preexists:
+            return {"ok": False, "code": "content_preexists",
+                    "reason": (f'There is already a note at {got["path"]}, so '
+                               "nothing was created."),
+                    "path": got["path"], "title": got["title"],
+                    "candidates": list(got.get("candidates") or [])}
+        out = dict(got)
+        out.update({"existing": True, "create": False, "existing_empty": True})
+        return out
+    if got.get("code") != "not_found":
+        return got
+    if not create_target_if_missing:
+        return got
+    rel = _proposed_rel(name)
+    if not rel:
+        return got
+    variant = case_variant(rel, vault=vault)
+    if variant:
+        return {"ok": False, "code": "case_variant_exists",
+                "reason": (f'There is already a note at {variant}, which differs '
+                           'from that name only by capital letters, so nothing '
+                           "was created."),
+                "path": variant,
+                "candidates": [{"path": variant, "title": Path(variant).stem}]}
+    root, why = _vault_for(vault)
+    full = ""
+    if root is not None:
+        full = os.path.join(str(root), *rel.split("/"))
+    return {"ok": True, "code": "resolved", "tier": "new", "create": True,
+            "path": rel, "title": Path(rel).stem, "full": full,
+            "aliases": [], "candidates": list(got.get("candidates") or [])}
+
+
 def _vault_snippet(text: str, terms: list) -> str:
     """Up to _MAX_SNIPPET_CHARS of `text`, starting a little before the
     first matched word (or at the top, when only the title matched)."""

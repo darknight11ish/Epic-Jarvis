@@ -138,8 +138,9 @@ def t_default_settings_file_in_the_vault_root():
     check("the card shows the exact text", "\ncall the plumber\n" in card, card)
     check("the card shows the exact file", str(real / "2026-09-24.md") in card, card)
     check("the card says nothing leaves this PC", "Nothing leaves this PC" in card)
-    check("the card says a new file gets no template",
-          "not there yet" in card and "template" in card and "is not applied" in card, card)
+    check("the card says a new file gets no template (none is set)",
+          "not there yet" in card and "template" in card
+          and "No daily note template is set" in card, card)
     check("the card says what refusing costs", "If you say no: nothing is written" in card)
     check("the gate action is append_obsidian_daily", NC.ACTIONS["obsidian"] == "append_obsidian_daily")
 

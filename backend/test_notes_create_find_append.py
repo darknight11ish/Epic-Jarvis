@@ -672,6 +672,40 @@ def _same_text(a: Path, b: Path) -> bool:
         return False
 
 
+def t_there_is_no_daily_note_fallback():
+    """A missing note is REFUSED; the words never go to today's daily note.
+
+    The owner's measured bug was exactly this fallback: a name that could not be
+    found was filed into `2026-11-15.md` instead. The resolver has no daily
+    branch at all, and the append door refuses when the note is not there.
+    """
+    reset_vault(alias_note=False, collision=False)      # only the daily note
+    import jarvis_notes as N
+    got = N.resolve_note("my workout log")
+    check("no-fallback: the resolver refuses a name that is not in the vault",
+          got.get("ok") is False and got.get("code") == "not_found", got)
+    check("no-fallback: ... and it has no path to the daily note",
+          not str(got.get("path") or "").endswith(DAILY), got)
+    gate = Gate()
+    set_gate(gate)
+    before = read(DAILY)
+    got = ask("add to the workout log that I did light cardio")
+    check("no-fallback: the chat path never files it into the daily note",
+          got is None or got.intent not in ("note_made", "note_make_waiting"),
+          got.intent if got else "model (no write)")
+    check("no-fallback: ... and the fast path claims no daily-note write",
+          Q.match("add to the workout log that I did light cardio", NOW) is None
+          or Q.match("add to the workout log that I did light cardio", NOW).name
+          != "note_make",
+          getattr(Q.match("add to the workout log that I did light cardio", NOW),
+                  "name", None))
+    check("no-fallback: ... with no card asked", gate.calls == [], gate.calls)
+    check("no-fallback: ... and the daily note is byte-for-byte unchanged",
+          read(DAILY) == before and "## " not in read(DAILY), repr(read(DAILY)))
+    check("no-fallback: no new note was made either", rel_files() == {DAILY},
+          sorted(rel_files()))
+
+
 def t_twins_and_docs_agree():
     for name in ("jarvis_notes_edit.py", "jarvis_quick.py"):
         check(f"records: {name} has a byte-identical published twin",
@@ -700,6 +734,7 @@ TESTS = [
     t_one_card_and_no_whole_file_rewrite,
     t_the_daily_door_is_unchanged,
     t_hidden_lists_still_guard_the_same_writes,
+    t_there_is_no_daily_note_fallback,
     t_both_apps_get_the_same_answer,
     t_twins_and_docs_agree,
 ]

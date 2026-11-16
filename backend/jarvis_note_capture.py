@@ -109,11 +109,18 @@ NAMES (their spelling follows Obsidian's language setting), week numbers,
 
 The note is added at the END of that file, after a blank line, as its own
 paragraph; the file is opened for append only and never truncated. If the
-file is not there yet it is made, holding just the note - Obsidian's daily
-note TEMPLATE is not applied, because only Obsidian applies it, and the card
-says so. Missing folders on the way (a new month's folder, say) are made,
-the way Obsidian makes them. The resolved path, after `..` and every link,
-must stay inside the vault, or nothing is written.
+file is not there yet it is made first. When `.obsidian/daily-notes.json`
+names a `template`, that template's bytes are written into the new file first
+and the note follows them - Obsidian's own rule, and the behaviour of
+liamcain/obsidian-daily-notes-interface's `createDailyNote` (MIT), ported as a
+pattern, not code. A vault with no `daily-notes.json` gets exactly the old
+behaviour: a new note holding just the owner's words, and the card says no
+template is set. A configured template that is missing or unreadable is said
+plainly on the card and the note is made empty instead (Obsidian does the
+same); the template is read again at write time, and a template that vanished
+then refuses the write. Missing folders on the way (a new month's folder, say)
+are made, the way Obsidian makes them. The resolved path, after `..` and every
+link, must stay inside the vault, or nothing is written.
 
 FIRST, A COPY (added with the file guardian, Pillar 18): before a byte is
 appended, the existing daily note's bytes are copied by
@@ -301,6 +308,8 @@ class Plan:
     url: str = ""               # joplin: the local service base, TOKEN-FREE
     vault: str = ""             # obsidian: the vault folder, links resolved
     new_folder: str = ""        # obsidian: a folder that will be made, if any
+    template: str = ""          # obsidian: the daily note template that applies
+    template_why: str = ""      # obsidian: why a configured template is not applied
     reason_empty: str = ""      # set when nothing can be written, and why
     if_refused: str = "nothing is written"
 
@@ -438,6 +447,73 @@ def _inside(root: str, path: str) -> bool:
         return False
 
 
+def daily_settings(vault: Path) -> tuple:
+    """`(settings, why)`: the vault's daily-note settings, or the defaults.
+
+    Reads `<vault>/.obsidian/daily-notes.json` and follows the behaviour of
+    liamcain/obsidian-daily-notes-interface's `settings.ts` (MIT), as a
+    pattern, not code: `folder`, `format` and `template`, with a missing or
+    empty `format` meaning "YYYY-MM-DD" and "" for the folder meaning the
+    vault's top folder. A vault with no such file gets the defaults - the
+    exact behaviour this module had before template support - and nothing here
+    ever creates the file.
+    """
+    obs = vault / ".obsidian"
+    data, err = _read_json(obs / "daily-notes.json")
+    if err:
+        return {}, f"Obsidian's daily note settings: {err}"
+    if data is not None and not isinstance(data, dict):
+        return {}, "Obsidian's daily note settings file (daily-notes.json) is not in the expected shape"
+    data = data or {}
+    folder = data.get("folder") if isinstance(data.get("folder"), str) else ""
+    fmt = data.get("format") if isinstance(data.get("format"), str) else ""
+    template = data.get("template") if isinstance(data.get("template"), str) else ""
+    return ({"folder": folder, "format": fmt or DAILY_DEFAULT_FORMAT,
+             "template": template.strip()}, "")
+
+
+def daily_template(vault: Path, daily_path: str = "") -> str:
+    """The vault-relative path of the daily note template, or "" - and why not.
+
+    Returns `(relative path, "")` when `.obsidian/daily-notes.json` names a
+    template that really is a readable note inside the vault; `("", why)` when
+    one is named but cannot be applied (missing, outside the vault, hidden, or
+    the daily note itself); and `("", "")` when no template is set. The bytes
+    are read again at write time, so the card and the write cannot disagree
+    about which template was used.
+    """
+    settings, why = daily_settings(vault)
+    if why:
+        return "", why
+    raw = str(settings.get("template") or "").strip()
+    if not raw:
+        return "", ""
+    rel = raw.replace("\\", "/").lstrip("/")
+    parts = [p for p in rel.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return "", f'the template "{raw}" goes outside your vault'
+    if any(p.startswith(".") for p in parts):
+        return "", f'the template "{raw}" is in a hidden folder'
+    if not parts[-1].lower().endswith(".md"):
+        parts[-1] += ".md"
+    root = os.path.realpath(str(vault))
+    full = Path(root).joinpath(*parts)
+    if not _inside(root, os.path.realpath(str(full))):
+        return "", f'the template "{raw}" goes outside your vault'
+    if daily_path and os.path.realpath(daily_path) == os.path.realpath(str(full)):
+        return "", ""
+    try:
+        if not os.path.isfile(str(full)):
+            return "", f'the template "{raw}" is not in your vault'
+        if os.stat(str(full)).st_size > _MAX_SETTINGS_BYTES:
+            return "", f'the template "{raw}" is too big to use'
+        with open(str(full), "rb") as fh:
+            fh.read(1)
+    except OSError:
+        return "", f'the template "{raw}" could not be read'
+    return "/".join(parts), ""
+
+
 def daily_note_path(vault: Path, day: _dt.date) -> tuple:
     """(absolute path of the daily note for `day`, "") or ("", why not).
 
@@ -449,15 +525,11 @@ def daily_note_path(vault: Path, day: _dt.date) -> tuple:
         return "", ("the Periodic Notes plugin is turned on in this vault and can "
                     "decide the daily note's name, and Jarvis does not read its "
                     "settings - turn its daily notes off, or that plugin off")
-    data, err = _read_json(obs / "daily-notes.json")
-    if err:
-        return "", f"Obsidian's daily note settings: {err}"
-    if data is not None and not isinstance(data, dict):
-        return "", "Obsidian's daily note settings file (daily-notes.json) is not in the expected shape"
-    data = data or {}
-    folder = data.get("folder") if isinstance(data.get("folder"), str) else ""
-    fmt = data.get("format") if isinstance(data.get("format"), str) else ""
-    fmt = fmt or DAILY_DEFAULT_FORMAT
+    settings, why = daily_settings(vault)
+    if why:
+        return "", why
+    folder = settings["folder"]
+    fmt = settings["format"]
     if "\\" in folder:
         return "", f'the daily note folder "{folder}" has a "\\" in it, which Obsidian does not use'
     parts = [s for s in folder.strip().split("/") if s not in ("", ".")]
@@ -525,6 +597,14 @@ def plan(target: str, text: str, *, title: str = "", notebook: str = "",
         parent = Path(p.file).parent
         if not parent.exists():
             p.new_folder = os.path.relpath(str(parent), p.vault).replace(os.sep, "/")
+        # The vault's own daily-note setting may name a template. It is applied
+        # only when the daily note does not exist yet (Obsidian's own rule), and
+        # the card says plainly which template, or why none is applied.
+        tpl, tpl_why = daily_template(vault, p.file)
+        if tpl:
+            p.template = tpl
+        elif tpl_why:
+            p.template_why = tpl_why
         return p
 
     ttl = _clean(title, MAX_TITLE_CHARS).replace("\n", " ")
@@ -551,12 +631,21 @@ def describe(p: Plan) -> str:
         exists = Path(p.file).exists()
         lines = [f"Add this to your Obsidian daily note for {p.day}:", "",
                  obsidian_block(p.text).rstrip("\n"), "",
-                 f"File: {p.file}",
-                 ("It is added at the end of that file, after a blank line. Nothing "
-                  "already in it is changed." if exists else
-                  "That file is not there yet, so it is made with just this note in it. "
-                  "Your daily note template, if you use one, is not applied - only "
-                  "Obsidian applies it.")]
+                 f"File: {p.file}"]
+        if exists:
+            lines.append("It is added at the end of that file, after a blank line. "
+                         "Nothing already in it is changed.")
+        elif p.template:
+            lines.append("That file is not there yet, so it is made from your daily "
+                         f'note template "{p.template}", and this note is added '
+                         "after it.")
+        elif p.template_why:
+            lines.append("That file is not there yet, so it is made with just this "
+                         "note in it; your daily note template is not applied: "
+                         + p.template_why + ".")
+        else:
+            lines.append("That file is not there yet, so it is made with just this "
+                         "note in it. No daily note template is set in this vault.")
         if p.new_folder:
             lines.append(f'The folder "{p.new_folder}" in your vault is made first, '
                          f"the way Obsidian would make it.")
@@ -722,7 +811,43 @@ def _append_obsidian(p: Plan) -> dict:
             f.seek(-min(2, size), os.SEEK_END)
             tail = f.read()
         lead = "" if tail.endswith(b"\n\n") else "\n" if tail.endswith(b"\n") else "\n\n"
-    block = (lead + obsidian_block(p.text)).encode("utf-8")
+    # A NEW daily note is made from the vault's own template first, when
+    # `.obsidian/daily-notes.json` names one (the plan/card said so), then this
+    # note follows it - Obsidian's own rule. The template is read HERE, again,
+    # and a template that vanished refuses the write rather than silently
+    # making an empty note the card did not promise.
+    prefix = b""
+    if not size and p.template:
+        tpl_full = Path(root).joinpath(*p.template.split("/"))
+        try:
+            if not _inside(root, os.path.realpath(str(tpl_full))):
+                return {"ok": False,
+                        "reason": "the daily note template is not inside the vault; "
+                                  "nothing was written"}
+            with open(str(tpl_full), "rb") as f:
+                prefix = f.read(MAX_JOURNAL_BYTES + 1)
+        except OSError:
+            return {"ok": False,
+                    "reason": f'the daily note template "{p.template}" could not be '
+                              "read, so nothing was written"}
+        if len(prefix) > MAX_JOURNAL_BYTES:
+            return {"ok": False,
+                    "reason": f'the daily note template "{p.template}" is over '
+                              f"{MAX_JOURNAL_BYTES // (1024 * 1024)} MB, which is not "
+                              "normal; nothing was written"}
+        if path.exists():
+            # It appeared between the plan and this write: append, as always.
+            prefix = b""
+        elif prefix:
+            gap = (b"" if prefix.endswith(b"\n\n")
+                   else b"\n" if prefix.endswith(b"\n") else b"\n\n")
+            prefix = prefix + gap
+    block = prefix + (lead + obsidian_block(p.text)).encode("utf-8")
+    if size + len(block) > MAX_JOURNAL_BYTES:
+        return {"ok": False,
+                "reason": f"today's daily note would be over "
+                          f"{MAX_JOURNAL_BYTES // (1024 * 1024)} MB, which is not "
+                          f"normal; nothing was written"}
     fd = os.open(str(path), _APPEND_FLAGS, 0o644)     # append only - see _append_logseq
     try:
         os.write(fd, block)
@@ -736,6 +861,7 @@ def _append_obsidian(p: Plan) -> dict:
                                        "open the daily note to check"}
     rel = os.path.relpath(str(path), root).replace(os.sep, "/")
     return {"ok": True, "target": "obsidian", "file": rel, "day": p.day,
+            "template": p.template or None,
             "before_sha256": str(snapshot.get("before_sha256") or ""),
             "snapshot_id": str(snapshot.get("snapshot_id") or ""),
             "receipt_id": str(snapshot.get("receipt_id") or "")}
