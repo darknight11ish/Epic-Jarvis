@@ -1278,6 +1278,12 @@ def _found_sentence(rows, planned, log) -> str:
     names = " and ".join(f"the {P.card_label(c, planned)}" for c in planned) or "none"
     head = (f"Found {len(rows)} graphics card{'s' if len(rows) != 1 else ''}; "
             f"Ollama can use {n}: {names}.")
+    # Whose lane the count describes (2026-11-15): the default Ollama server
+    # uses one card, a preset's second lane serves another, and the phone draws
+    # the preset's rows right under this sentence - which read as a
+    # contradiction only because the sentence never said which lane it meant.
+    head += (" This is the default Ollama server's lane; a preset on another card "
+             "names that card in its own row.")
     if log is None:
         head += (" Ollama's log was not found, so this is from nvidia-smi alone: which cards "
                  "Ollama really uses is assumed, not read.")
