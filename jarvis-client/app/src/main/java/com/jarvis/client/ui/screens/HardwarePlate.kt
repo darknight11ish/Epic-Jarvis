@@ -32,6 +32,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
+ * The plate's closing line, under the Measure section.
+ *
+ * It used to say "Every number is calculated, not measured, until you press
+ * Measure" - under three setup rows that print [Hardware.measuredLine], and
+ * focus-preset costs that carry dated measurements - so the plate called the
+ * screen above it a liar (the audit of 2026-11-16, finding 1). One constant so
+ * a JVM test can pin it (`HardwarePlateCopyTest`): change the words and the
+ * test together.
+ */
+internal const val HARDWARE_CLOSING_LINE =
+    "Picking a setup changes nothing by itself. Calculated lines are estimates; " +
+        "dated lines are older measurements - press Measure to check this PC now. " +
+        "Nothing here sends anything off your PC."
+
+/**
  * "Hardware" on the Mind screen (docs/HARDWARE-PROFILES.md 4.6, "Phone"):
  * the PC's cards (names and memory), what runs now and whether it was
  * measured, the three setups the PC worked out for its own cards with the
@@ -40,9 +55,10 @@ import kotlinx.coroutines.launch
  * Not a model catalogue (CLAUDE.md): the PC sends three setups for ITS
  * cards, as words - there is no list of models, no search and no picker.
  * Choosing changes nothing by itself; each step is ONE tap that asks the PC
- * for that step, and the PC raises that step's own approval card, decided
- * on the PC or in this phone's approvals, one at a time. Only the next step
- * has a button. The PowerShell line is for the PC: shown here to read.
+ * for that step, and the PC raises that step's own approval card where the
+ * step needs one, decided on the PC or in this phone's approvals, one at a
+ * time. Only the next step has a button; the settings command is run on the
+ * PC. The PowerShell line is for the PC: shown here to read.
  *
  * Reads and acts through [JarvisRuntime] directly, like [BigModelSection],
  * so [BrainScreen] needs one line for it. Everything that asks is greyed
@@ -349,9 +365,7 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
 
                 Gap(10)
                 Text(
-                    "Nothing changes until you pick a setup, and then each step asks with its own " +
-                        "approval card on your PC and phone. Every number is calculated, not " +
-                        "measured, until you press Measure. Nothing here sends anything off your PC.",
+                    HARDWARE_CLOSING_LINE,
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
