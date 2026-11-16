@@ -269,17 +269,20 @@ def t_unknown_feature_names_are_answered_honestly():
 # --------------------------------------------------------------------------
 #   3b. the DESIGN-ONLY features answer honestly, and name no ability
 # --------------------------------------------------------------------------
-#: The 2026-11-13 awareness audit's GAP-3/GAP-4. These three features are
+#: The 2026-11-13 awareness audit's GAP-3/GAP-4. These two features are
 #: deliberately NOT rows in `features/features.json` (a row there is drawn in
 #: both apps' Features pages, so it would be the claim each of them exists to
-#: remove), so none of them can be answered from the catalogue - and before this
-#: suite's three cases existed two of them were answered by the WRONG owner:
-#: "can you run a model on my phone" was read as a request to open a program
-#: called "model on my phone", and "what can you do with the desktop companion"
-#: was answered with the Anti-Slop filter's own words.
+#: remove), so neither can be answered from the catalogue - and before this
+#: suite's cases existed, "what can you do with the desktop companion" was
+#: answered with the Anti-Slop filter's own words.
+#:
+#: The third case that used to live here, "can you run a model on my phone", is
+#: NOT design-only any more: the Local AI engine shipped in the APK on
+#: 2026-11-13, so its answer is pinned by
+#: `t_the_local_ai_answer_tells_the_truth` below. The sentence here used to
+#: require "not in this build", and that became the false text this replaces.
 NOT_BUILT = (
     # (sentence, intent name, a phrase the answer must contain)
-    ("can you run a model on my phone", "ondevice_model", "not in this build"),
     ("how do I obfuscate my project", "project_obfuscate_unavailable",
      "cannot obfuscate"),
     ("what can you do with the desktop companion", "companion_overview",
@@ -311,6 +314,55 @@ def t_design_only_features_answer_honestly():
         # The three are NOT rows: adding one would be the false claim.
         for absent in ("on-device-model", "code-protection", "desktop-companion"):
             check(f"the feature list carries no {absent} row", absent not in BY_ID)
+
+
+# --------------------------------------------------------------------------
+#   3c. the phone's Local AI answer tells the truth, at runtime
+# --------------------------------------------------------------------------
+def t_the_local_ai_answer_tells_the_truth():
+    """The engine SHIPPED on 2026-11-13, and the old answer denied it.
+
+    This reads the module's own constant at run time rather than its source
+    text (`tools/check_no_source_pins.py`): the claim is about the words the
+    owner is actually given, and a copy of those sentences in this file would
+    prove only that the copy exists. The four facts are the ones the owner
+    approved on 2026-11-14: the engine ships in the APK, it is off by default,
+    it is a separate chat with no network path and no link to this PC, and the
+    ordinary chat still uses the model on the PC.
+    """
+    facts = str(Q.ONDEVICE_MODEL_ANSWER)
+    lowered = facts.lower()
+    check("the answer names the engine that ships in the app",
+          "ships" in lowered and "on-device engine" in lowered, facts[:260])
+    check("the answer says it is off by default",
+          "off by default" in lowered, facts[:260])
+    check("the answer says it has no network path",
+          "no network path" in lowered, facts[:260])
+    check("the answer says it has no link to this PC",
+          "no link to this pc" in lowered, facts[:260])
+    check("the answer says the ordinary chat still uses the model on this PC",
+          "ordinary jarvis chat" in lowered and "model on this pc" in lowered,
+          facts[:260])
+    for lie in ("not in this build", "no on-device engine",
+                "nothing that runs a model ships"):
+        check(f"the old denial is gone: {lie!r}", lie not in lowered,
+              facts[:260])
+
+    res, intent = _answer("can you run a model on my phone")
+    check("the question is still deterministic and never the model",
+          res is not None and intent is not None
+          and intent.name == "ondevice_model", repr(intent))
+    if res is None:
+        return
+    check("... and the owner is given exactly that answer",
+          res.reply == facts, res.reply[:260])
+    check("... claiming no ability the answer does not have",
+          not any(bad in res.reply.lower() for bad in ABILITY_CLAIMS),
+          res.reply[:260])
+    check("... and quoting no catalogue row",
+          not any(t and t in res.reply for t in TITLES), res.reply[:200])
+    check("... and changing or opening nothing",
+          not res.made and res.open_settings is None and res.open_brain is None)
 
 
 def t_the_phone_history_answer_names_both_doors():
@@ -484,6 +536,7 @@ def main():
                t_what_can_you_tell_me_about_a_known_feature,
                t_unknown_feature_names_are_answered_honestly,
                t_design_only_features_answer_honestly,
+               t_the_local_ai_answer_tells_the_truth,
                t_the_phone_history_answer_names_both_doors,
                t_model_entry_point_is_never_called,
                t_the_coding_preset_cannot_change_the_words,

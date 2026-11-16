@@ -282,11 +282,59 @@ class ReadAloudTest {
     }
 
     @Test
-    fun `a long answer is capped, and a silly cap still speaks one sentence`() {
+    fun `a long answer is not cut off at twenty-four sentences`() {
+        // The owner's report of 2026-11-15: a long note "will just stop" and the
+        // Read aloud button came back. The cause was a 24-sentence cap; an
+        // ordinary long answer must now be read to its end.
         val long = (1..40).joinToString(" ") { "Sentence number $it." }
-        assertEquals(ReadAloud.READ_ALOUD_SENTENCE_CAP, ReadAloud.sentences(long).size)
+        assertEquals(40, ReadAloud.sentences(long).size)
         assertEquals(1, ReadAloud.sentences(long, max = 0).size)
         assertEquals(3, ReadAloud.sentences(long, max = 3).size)
+    }
+
+    @Test
+    fun `a whole paragraph is cut into pieces a request can carry`() {
+        // One 900-character paragraph with no stop mark used to be ONE request,
+        // which is the "huge gap" the owner heard before its first word.
+        val paragraph = (1..120).joinToString(" ") { "word$it" }
+        val pieces = ReadAloud.sentences(paragraph)
+        assertTrue("it must be more than one piece", pieces.size > 1)
+        assertTrue(
+            "no piece may be longer than the request size",
+            pieces.all { it.length <= ReadAloud.READ_ALOUD_PIECE_CHARS },
+        )
+        assertEquals(
+            "nothing may be lost or repeated",
+            paragraph.trim(),
+            pieces.joinToString(" ").trim(),
+        )
+    }
+
+    @Test
+    fun `markdown and html marks are not spoken`() {
+        val note = """
+            **Regular Play:**
+            -<u>VPIP</u> is 17-20%
+            ???
+            ---
+            <u>**TRY ACTING**</u>
+        """.trimIndent()
+        val said = ReadAloud.spoken(note)
+        assertFalse("no asterisks in a voice", said.contains("*"))
+        assertFalse("no tags in a voice", said.contains("<") || said.contains(">"))
+        assertFalse("no rule lines in a voice", said.contains("---"))
+        assertTrue("the words themselves survive", said.contains("VPIP") && said.contains("TRY ACTING"))
+        assertTrue(
+            "a line of nothing but punctuation is not a sentence",
+            ReadAloud.sentences(note).none { it.trim().all { c -> !c.isLetterOrDigit() } },
+        )
+    }
+
+    @Test
+    fun `a bullet dash is not a word`() {
+        val said = ReadAloud.spoken("- one thing\n- another thing")
+        assertTrue(said.contains("one thing"))
+        assertTrue(said.contains("another thing"))
     }
 
     @Test

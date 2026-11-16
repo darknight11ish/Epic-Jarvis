@@ -85,8 +85,8 @@ class ReadAloudWiringTest {
     }
 
     @Test
-    fun `the clip is the PC's voice, one sentence at a time, capped`() {
-        assertTrue("read-aloud does not use the PC's say route", runtime.contains("api.say(sentence)"))
+    fun `the clip is the PC's voice, one piece at a time`() {
+        assertTrue("read-aloud does not use the PC's say route", runtime.contains("api.say(piece)"))
         assertTrue("the cap is not applied", runtime.contains("ReadAloud.sentences(offer.text)"))
         assertTrue("the speaker is not armed before playing", runtime.contains("voice.speaker.arm()"))
         assertTrue("the clip is not played through the one speaker", runtime.contains("voice.speaker.play(clip.wav)"))
@@ -146,8 +146,14 @@ class ReadAloudWiringTest {
             .filterNot { it.trimStart().startsWith("*") || it.trimStart().startsWith("//") }
             .joinToString("\n")
         assertTrue(
-            "the read-aloud object does not keep the named 24-sentence cap",
-            readAloudCode.contains("const val READ_ALOUD_SENTENCE_CAP = 24"),
+            "the old 24-sentence cap is back - that cap ended a long read " +
+                "part-way (the owner's report of 2026-11-15)",
+            !readAloudCode.contains("READ_ALOUD_SENTENCE_CAP"),
+        )
+        assertTrue(
+            "the read-aloud object does not name its new limits",
+            readAloudCode.contains("READ_ALOUD_PIECE_CHARS") &&
+                readAloudCode.contains("READ_ALOUD_MAX_CHARS"),
         )
         assertTrue(
             "the two on-screen sentences have drifted apart",
@@ -158,21 +164,27 @@ class ReadAloudWiringTest {
     }
 
     @Test
-    fun `a locked or backgrounded phone stops the read`() {
-        // The `locked` fact is a snapshot of when the answer came in, so the read
-        // asks the live question again before every sentence; leaving the screen
-        // stops it outright (the Lead's ruling of 2026-10-27: privacy first).
-        assertTrue("the read never re-checks the lock", runtime.contains("readAloudLockedNow()"))
-        assertTrue("a lock found mid-read does not stop it", runtime.contains("if (readAloudLockedNow())"))
-        assertTrue("a lock found mid-read does not call the stop path", runtime.contains("stopReadingAloud()"))
-        val activity = source("MainActivity.kt")
+    fun `a read carries on when the phone locks or the app is left`() {
+        // The owner's report of 2026-11-15 ("it should continue the read
+        // outloud", and a locked phone too) reversed the ruling of 2026-10-27,
+        // which stopped a read the moment the screen left. The lock is still
+        // asked once, before a read STARTS; it is not asked during one.
         assertTrue(
-            "leaving the screen does not stop the read",
+            "the read must still refuse to start on a locked phone",
+            runtime.contains("if (readAloudLockedNow())"),
+        )
+        val activity = source("MainActivity.kt")
+        assertFalse(
+            "leaving the screen must not stop the read",
             activity.contains("JarvisRuntime.stopReadingAloud()"),
         )
         assertTrue(
             "the screen leaving is not observed",
             activity.contains("Lifecycle.Event.ON_STOP"),
+        )
+        assertTrue(
+            "the read is not kept alive once the app is left",
+            runtime.contains("ReadAloudService.start("),
         )
     }
 
@@ -383,23 +395,28 @@ class ReadAloudWiringTest {
     }
 
     @Test
-    fun `a rotation does not stop a read that is still on screen`() {
-        // F3 is MANDATED (the Lead's 2026-10-27 ruling): rotation is not "away":
-        // ON_STOP also fires for a configuration change - there is no
-        // `configChanges` on MainActivity in AndroidManifest.xml - so turning
-        // the phone sideways used to cut a read still in front of the owner.
+    fun `nothing about the screen leaving stops a read`() {
+        // The 2026-10-27 ruling that a rotation must not stop a read is now the
+        // whole rule rather than an exception in it: the owner's report of
+        // 2026-11-15 ("it should continue the read outloud" when he leaves the
+        // app, locked phone included) removed the stop from ON_STOP entirely,
+        // so there is no configuration-change branch left to special-case.
         val activity = source("MainActivity.kt")
         val from = activity.indexOf("LifecycleEventObserver")
         val to = activity.indexOf("activity.lifecycle.addObserver(observer)")
         assertTrue("the ON_STOP observer is gone", from > 0 && to > from)
         val observer = activity.substring(from, to)
-        assertTrue(
-            "the observer no longer stops the read at all",
-            observer.contains("JarvisRuntime.stopReadingAloud()"),
+        assertFalse(
+            "the observer must not stop the read when the screen leaves",
+            observer.contains("stopReadingAloud()"),
+        )
+        assertFalse(
+            "there is no rotation exception left to keep",
+            observer.contains("isChangingConfigurations"),
         )
         assertTrue(
-            "a configuration change (a rotation) stops a read that is still on screen",
-            observer.contains("isChangingConfigurations"),
+            "ON_STOP must still be observed, to refresh the one-off offer",
+            observer.contains("refreshReadAloudUnlocked()"),
         )
     }
 }

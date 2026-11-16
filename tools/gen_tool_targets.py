@@ -31,6 +31,14 @@ before this, and phrases/labels use them): "the calendar tool", "calendar",
 "my calendar", and so on. A legacy alias is only kept for the four rows that
 had one - the rest are derived, never guessed.
 
+THE MASTER GROUP SWITCH IS THE ONE HAND-WRITTEN ROW (2026-11-15). See
+`GROUP_NAMES`: `jarvis_asks_first.GITHUB_TOOLS_GROUP` has been a real switch
+end to end since 2026-11-10, but it is not a model tool and so could not be
+generated from TOOLS_SWITCHABLE - and until this run no sentence the owner
+says for it ("turn on the github tools") reached it at all. It is written LAST
+in the table, because `find_tool_target` walks the table in order and a
+sentence naming one tool must always win.
+
 WHAT THE CARDS ARE IS UNCHANGED. `_TOOL_TARGETS` is only a NAME table: the
 switch itself still runs through `jarvis_asks_first.request_tool_enable` (ON
 is the PC only, one approval card plus Windows Hello; OFF is instant), and
@@ -75,6 +83,30 @@ LEGACY_NAMES = {
     "notes_search": ("the notes tool", "notes", "my notes"),
     "home_read": ("the home status tool", "home status"),
 }
+
+#: The MASTER GROUP SWITCH's spoken names (2026-11-15, the owner's "I should be
+#: able to talk to jarvis about what github tools it has available, what is
+#: enabled, and activate them through chat or jarvis live").
+#:
+#: `jarvis_asks_first.GITHUB_TOOLS_GROUP` is ONE switch that offers or removes
+#: all twenty GitHub and review tools at once. It is deliberately NOT a model
+#: tool, so it is not in TOOLS_SWITCHABLE and the loop below can never produce
+#: it - yet `request_tool_enable`/`set_tools_enabled` have accepted that id end
+#: to end since 2026-11-10. Measured on origin/main (a17a7b2): every sentence
+#: the owner says for it - "turn on the github tools", "enable the github
+#: tools", "let the ai model use the github tools" - fell to the model, because
+#: `find_tool_target('github')` and `find_tool_target('github tools')` were
+#: both None.
+#:
+#: THE GROUP GOES LAST, and that is load-bearing: `find_tool_target` walks the
+#: table in order, so a sentence naming ONE tool must keep that tool ("github
+#: search" is github_search, "github pr scan" is github_pr_scan, "the github
+#: and review tools" is only the group because no single tool is spelled that
+#: way). The bare "github" is safe as an alias for the same reason: every
+#: single tool carries its own noun after it, so the bare word names none of
+#: them.
+GROUP_NAMES = ("the github tools", "github tools", "all the github tools",
+               "the github and review tools", "the github group", "github")
 
 #: The ONE explicit table for natural names the key's own words cannot
 #: produce (a leading verb hides the noun a person says: "set_timer" is "the
@@ -188,12 +220,29 @@ def targets() -> dict:
                     f"{name!r}: {other!r} and {tool!r}")
             seen[name] = tool
         out[tool] = tuple(legacy)
+    # THE MASTER GROUP SWITCH LAST (2026-11-15). One sentence may name a whole
+    # tool AND the word "tools" ("the github search tools"), so the group is
+    # only ever the answer when nothing earlier matched - which is exactly what
+    # putting it at the end of this ordered dict buys.
+    group = str(getattr(AF, "GITHUB_TOOLS_GROUP", "") or "github_tools_group")
+    for name in GROUP_NAMES:
+        other = seen.get(name)
+        if other is not None and other != group:
+            raise SystemExit(
+                f"the master group switch would answer to the same words "
+                f"{name!r} as {other!r}. The generator will not guess which one "
+                "the owner meant - rename the group alias.")
+        seen[name] = group
+    out[group] = GROUP_NAMES
     return out
 
 
 def block() -> str:
     """The exact generated text, markers included."""
-    lines = [BEGIN, "_TOOL_TARGETS = {\n"]
+    lines = [BEGIN,
+             "# The master GitHub group switch is the LAST row: find_tool_target\n",
+             "# walks this table in order, so any sentence naming one tool keeps it.\n",
+             "_TOOL_TARGETS = {\n"]
     for tool, names in targets().items():
         lines.append("    " + repr(tool) + ": (" +
                      ", ".join(repr(n) for n in names) + "),\n")

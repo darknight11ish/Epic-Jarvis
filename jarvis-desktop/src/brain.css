@@ -3614,6 +3614,19 @@ mark.find-current {
   margin-top: 12px;
 }
 
+/* "About this conversation" (2026-11-15): one line per fact. The card reuses
+   the one dialog above; this is only its list, and it is a list so a reader
+   hears how many facts there are. */
+.history-info-lines {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.history-info-lines li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+
 .topics-choices,
 .topics-palette,
 .topics-icons {

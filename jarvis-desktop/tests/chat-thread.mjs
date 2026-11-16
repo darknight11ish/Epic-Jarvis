@@ -16,7 +16,8 @@
 import assert from "node:assert/strict";
 import * as K from "./uikit.mjs";
 import * as CH from "../src/chat-history.js";
-import { chatFactsTaught, chatFactsTaughtHidden } from "../src/history-view.js";
+import { chatFactsTaught, chatFactsTaughtHidden, whenLine,
+  INFO_ARCHIVE, INFO_OUTSIDE, INFO_PIN, INFO_TAG_NONE } from "../src/history-view.js";
 import { eraseAlsoChatNamedConfirm } from "../src/auto-learn.js";
 
 const fails = [];
@@ -296,18 +297,73 @@ async function historyTab(history = {}, extra = {}) {
   return page;
 }
 
-await check("History: every row's Open, Archive and Delete name their chat", async () => {
+await check("History: every row's info, Open, Archive and Delete name their chat", async () => {
   // Archive joined the row on 2026-10-29 ("make sure i can archive and delete
   // chats (with a confirm step)"), so it names its chat like the other two:
-  // "Archive" ten times over says nothing about which chat it puts away.
+  // "Archive" ten times over says nothing about which chat it puts away. The
+  // small "i" ("About <title>") joined them on 2026-11-15 and names its chat
+  // the same way; it is drawn first, so the three actions keep their order.
   const page = await historyTab({ conversations: LIST, transcripts: TRANSCRIPTS });
   const names = await page.locator("#history-list .row-item button").evaluateAll(
     (bs) => bs.map((b) => b.getAttribute("aria-label")));
   await page.close();
   assert.deepEqual(names, [
-    "Open Planning the weekend", "Archive Planning the weekend", "Delete Planning the weekend",
-    "Open Groupon refund", "Archive Groupon refund", "Delete Groupon refund",
-    "Open Dentist on Tuesday", "Archive Dentist on Tuesday", "Delete Dentist on Tuesday"]);
+    "About Planning the weekend", "Open Planning the weekend",
+    "Archive Planning the weekend", "Delete Planning the weekend",
+    "About Groupon refund", "Open Groupon refund",
+    "Archive Groupon refund", "Delete Groupon refund",
+    "About Dentist on Tuesday", "Open Dentist on Tuesday",
+    "Archive Dentist on Tuesday", "Delete Dentist on Tuesday"]);
+});
+
+await check("History: the small i opens one compact card, and Escape or a click outside leaves it", async () => {
+  // The owner, 2026-11-15: "does chat history ... have an info menu that i can
+  // click show (or a symbol or something) on each conversation ... without
+  // this being overwhelming". The row's own "i" opens the card the words of
+  // which are pinned line by line in tests/chat-info.mjs; what is proved HERE
+  // is the part that only a page can: the button opens it, it says that row's
+  // facts and no line it does not carry, and it can never trap the owner -
+  // Escape and a click outside both close it, as Close does.
+  const page = await historyTab({ conversations: LIST, transcripts: TRANSCRIPTS });
+  const row = page.locator("#history-list .row-item").first();
+  const dialog = page.locator("dialog.topics-dialog");
+  const open = () => row.getByRole("button", { name: "About Planning the weekend" }).click();
+
+  await open();
+  await dialog.waitFor();
+  assert.equal(await dialog.locator(".topics-dialog-title").innerText(),
+    "About this conversation");
+  const lines = await dialog.locator(".history-info-lines li").allInnerTexts();
+  assert.deepEqual(lines.slice(0, 5), [
+    "Had in the Jarvis bar on this PC.",
+    `Started: ${whenLine(NOW - 7200)}`,
+    `Last used: ${whenLine(NOW - 6480)}`,
+    "8 messages",
+    "Some of it was said aloud.",
+  ]);
+  // This chat read no outside text, is not pinned and is not archived: none of
+  // those lines may appear. At most one line may speak about filing, and the
+  // mock's tag list decides which of the two it is.
+  for (const absent of [INFO_OUTSIDE, INFO_PIN, INFO_ARCHIVE]) {
+    assert.ok(!lines.includes(absent), `the card grew a line the row does not carry: ${absent}`);
+  }
+  assert.ok(lines.filter((l) => l.startsWith("Filed under: ") || l === INFO_TAG_NONE).length <= 1,
+    "more than one line about filing");
+  assert.deepEqual(await dialog.locator(".topics-dialog-foot button").allInnerTexts(),
+    ["Close"], "the card offers one way out, and it is Close");
+
+  // Escape closes it, and the page is usable again (no modal left behind).
+  await page.keyboard.press("Escape");
+  await K.until(page, "Escape to close the card", async () => (await dialog.count()) === 0);
+  assert.equal(await page.locator("#history-list .row-item").count(), 3,
+    "closing the card changed the list");
+
+  // And a click outside closes it too: the card never traps the owner.
+  await open();
+  await dialog.waitFor();
+  await page.mouse.click(4, 4);
+  await K.until(page, "a click outside to close the card", async () => (await dialog.count()) === 0);
+  await page.close();
 });
 
 await check("History: a search keeps each row's kind, and combines with Show", async () => {
