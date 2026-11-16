@@ -23356,11 +23356,11 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Fourteen of them (`jarvis_limits.LIMITS` holds these
-fourteen written by hand, and `_notify_rows()` appends **eight more** notification
+the owner's own words for it. Fifteen of them (`jarvis_limits.LIMITS` holds these
+fifteen written by hand, and `_notify_rows()` appends **eight more** notification
 rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff`,
 `notif_setup` and the three Quiet-hours rows - so the table a client receives is
-twenty-two rows long. Only the fourteen are listed here; the eight are built from
+twenty-three rows long. Only the fifteen are listed here; the eight are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -23376,6 +23376,7 @@ no-second-copy reason as the numbers below):
 | `tag_suggest_age` | how long a chat must sit untouched before the overnight tag suggester may read it | neither direction asks | desktop |
 | `memory_people` | whether a model reads what the owner saves, looking for people and things | turning it ON | phone |
 | `voice_bar` | how sure the voice check must be that it is the owner's voice | a SMALLER number (a lower bar means more clips count as the owner's voice) | both |
+| `trusted_actions` | how many times one action may run inside one trusted window (`[grants].max_actions`) | a BIGGER number (a bigger cap lets one window do more before it needs a new card) | both |
 | `standby_hours_on` | whether the owner's hours apply at all (`[power].schedule_enabled`, "Power" in the same section) | **neither** - but it asks in BOTH directions: it changes the RULES that put Jarvis under on their own, which `jarvis_power`'s docstring says waits | both |
 | `standby_hours_unload` | whether those hours unload the graphics cards (`[power].schedule_mode`, a word - `standby` or `quiet`) | **neither** - asks in both directions, same reason | both |
 | `standby_hours_start` | when the hours begin (`[power].quiet_start`) | **neither**, and a time is not a number: asks in both directions | both |
