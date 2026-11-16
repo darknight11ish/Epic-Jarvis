@@ -128,12 +128,34 @@ object ReadAloud {
             "so I cannot check whether it is safe to hear. Tap Read aloud on a new answer."
 
     /**
-     * At most this many sentences per answer: every sentence is one round trip
-     * to `/api/voice/say`, so a long answer is capped rather than turned into
-     * hundreds of requests. One named constant so the HUD read-aloud slice
-     * adopts the identical number.
+     * At most this many characters are ever spoken from one answer.
+     *
+     * THIS REPLACES A 24-SENTENCE CAP (2026-11-15). The owner reported that a
+     * long note "will just stop" part-way and the Read aloud button came back,
+     * and the cause was that cap: the 24th sentence ended the read, so an answer
+     * with forty sentences was read for a page and then went quiet. It was a
+     * guard against "hundreds of requests", and the honest guard is the amount
+     * of speech rather than the number of sentences: a very long answer now
+     * reads to [READ_ALOUD_MAX_PIECES] pieces or this many characters, whichever
+     * comes first, and both are high enough that an ordinary long answer
+     * finishes.
      */
-    const val READ_ALOUD_SENTENCE_CAP = 24
+    const val READ_ALOUD_MAX_CHARS = 60_000
+
+    /**
+     * Longest single thing sent to `/api/voice/say`, in characters.
+     *
+     * WHY THIS EXISTS (2026-11-15, the same report): a paragraph with no full
+     * stop used to be ONE request, and the phone waited for the PC to synthesise
+     * the whole thing before a word came out - the owner's "huge gaps between
+     * each paragraph". Cutting every sentence into pieces of about this size
+     * keeps each round trip short, so the voice starts sooner and the gap
+     * between pieces is a fraction of a sentence rather than a whole paragraph.
+     */
+    const val READ_ALOUD_PIECE_CHARS = 220
+
+    /** At most this many pieces in one answer: a final, pathological-answer guard. */
+    const val READ_ALOUD_MAX_PIECES = 600
 
     /**
      * Every rule that can keep a typed answer on screen, in the order they are
@@ -322,19 +344,73 @@ object ReadAloud {
     }
 
     /**
-     * The answer split into speakable sentences, capped at [max] (never below
-     * one). Blank paragraphs are dropped; a paragraph with no stop punctuation
-     * stays one sentence, which is what the voice path does with it too.
+     * The answer split into speakable pieces, in order.
+     *
+     * Three things happen here, and the second and third are the fix for the
+     * owner's report of 2026-11-15 ("it will just stop ... huge gaps between
+     * each paragraph"):
+     *
+     * 1. [spoken] removes the marks a voice should not say - markdown emphasis,
+     *    HTML tags, horizontal rules - and drops lines that are only punctuation.
+     * 2. Sentence splitting is unchanged (a stop mark plus a space, or a line
+     *    break), so blank paragraphs still disappear.
+     * 3. Every sentence is then cut into pieces of at most
+     *    [READ_ALOUD_PIECE_CHARS] at a word boundary, so no single request is a
+     *    whole paragraph. The read stops only at [max] pieces or
+     *    [READ_ALOUD_MAX_CHARS] characters.
      */
-    fun sentences(text: String, max: Int = READ_ALOUD_SENTENCE_CAP): List<String> {
+    fun sentences(text: String, max: Int = READ_ALOUD_MAX_PIECES): List<String> {
         val limit = if (max < 1) 1 else max
-        val cleaned = text.replace("\r\n", "\n").replace('\r', '\n').trim()
+        val cleaned = spoken(text)
         if (cleaned.isEmpty()) return emptyList()
-        return cleaned
-            .split(BREAK)
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .take(limit)
+        val pieces = ArrayList<String>()
+        var budget = READ_ALOUD_MAX_CHARS
+        for (sentence in cleaned.split(BREAK).map { it.trim() }.filter { it.isNotEmpty() }) {
+            for (piece in cut(sentence)) {
+                if (pieces.size >= limit || budget <= 0) return pieces
+                pieces.add(piece)
+                budget -= piece.length
+            }
+        }
+        return pieces
+    }
+
+    /**
+     * What a voice should actually say: the answer with its marks removed.
+     *
+     * A note pasted into chat carries `**bold**`, `<u>underline</u>`, `#`
+     * headings, `---` rules and lines that are only `???`. Speaking them
+     * literally is wrong - and a line of nothing but punctuation is not a
+     * sentence at all, so it is dropped rather than read as silence.
+     */
+    fun spoken(text: String): String {
+        var out = text.replace("\r\n", "\n").replace('\r', '\n')
+        out = out.replace(Regex("<[^>]{1,40}>"), " ")
+        out = out.replace(Regex("[*`#>|]+"), " ")
+        out = out.replace(Regex("(?m)^[ \t]*[-_=]{3,}[ \t]*$"), "\n")
+        out = out.replace(Regex("[ \t]+"), " ")
+        val keep = out.split('\n').filter { line ->
+            val trimmed = line.trim()
+            trimmed.isEmpty() || trimmed.any { it.isLetterOrDigit() }
+        }
+        return keep.joinToString("\n").trim()
+    }
+
+    /** One sentence, cut into request-sized pieces at word boundaries. */
+    private fun cut(sentence: String): List<String> {
+        val limit = READ_ALOUD_PIECE_CHARS
+        if (sentence.length <= limit) return listOf(sentence)
+        val pieces = ArrayList<String>()
+        var rest = sentence
+        while (rest.length > limit) {
+            val window = rest.substring(0, limit)
+            val at = window.lastIndexOf(' ')
+            val cutAt = if (at > limit / 2) at else limit
+            pieces.add(rest.substring(0, cutAt).trim())
+            rest = rest.substring(cutAt).trim()
+        }
+        if (rest.isNotEmpty()) pieces.add(rest)
+        return pieces.filter { it.isNotEmpty() }
     }
 
     /** A sentence ends at . ! or ? followed by space, or at a line break. */

@@ -21,9 +21,9 @@ from pathlib import Path
 BULLETS = (
     'The preflight now says which commit each piece came from, and warns MIXED COMMITS when they disagree',
     'A feature pull request no longer commits the self-code map',
+    'A read-aloud now carries on when you leave the app, PiP and the lock screen included, and long answers are read to the end',
     'The General preset stops claiming the model "answered nothing" without thinking',
     'The preflight now says which commit the desktop, the backend and `main` each came from, in one row',
-    'The phone tells Jarvis which phone it is, so answers can be phone specific',
 )
 
 

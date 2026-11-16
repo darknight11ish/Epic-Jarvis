@@ -5310,6 +5310,41 @@ what is missing is only the Settings screen agreeing about who turned it off.
   `backend/test_phone_facts.py` holds the backend half - the parse, the
   unchanged sentence without the header, and the facts in the prompt
   `jarvis_agent` builds - and `DeviceFactsTest.kt` holds the phone's.
+- **A read-aloud carrying on out of sight is the phone's, and the desktop needs
+  nothing for it** (2026-11-15; the owner's report: *"when i move out of the
+  jarvis android app on my phone (whether thats just putting it in picture in
+  picture mode or moving to a different app or homescreen, it should continue
+  the read outloud if thats what i selected on the jarvis app. right now it
+  stops it"*, and his answer to the question put to him that it keeps going with
+  the screen locked too). On the phone, leaving the app used to stop the read by
+  design - the ruling of 2026-10-27, "stop immediately, privacy first" - and
+  that ruling is reversed here: `MainActivity` no longer stops a read on
+  ON_STOP, and neither read loop stops for a lock landing mid-read. A
+  `mediaPlayback` foreground service (`service/ReadAloudService.kt`) holds the
+  process awake for the rest of the read and carries ONE notification, with "Stop
+  talking" and a tap that opens the app; the runtime starts it when a read begins
+  and stops it when the read ends or is stopped, so it never runs with nothing to
+  play. The desktop HUD never stopped reading when its window lost focus, so
+  there is no desktop half to write and `tools/check_parity.py` classifies
+  nothing - no route is added in either direction. **What does NOT change:** the
+  start-time refusals (a locked phone, App lock, a stale link, a busy speaker)
+  and every "kept on screen" rule - this is only about a read the owner already
+  started carrying on. **A long answer is read to its end, in short pieces**
+  (the same report: a long note "will just stop", with "huge gaps between each
+  paragraph"). Three causes were found and fixed in `voice/ReadAloud.kt`: a
+  24-sentence cap ended the read part-way; a paragraph with no full stop was ONE
+  `/api/voice/say` request, so the phone waited for the whole paragraph to be
+  synthesised before its first word (the gap); and markdown/HTML marks (`**`,
+  `<u>`, `---`, a line of `???`) were read out as themselves. Pieces are now at
+  most `READ_ALOUD_PIECE_CHARS` (220) characters cut at a word boundary, the
+  next piece is asked for while the current one is spoken, the marks are removed
+  by `ReadAloud.spoken`, and the only limits are `READ_ALOUD_MAX_PIECES` (600)
+  and `READ_ALOUD_MAX_CHARS` (60,000). A single failed piece is skipped; three
+  in a row still end the read with the ordinary refusal rather than quietly
+  skipping half the answer.
+  The service is NOT-TESTABLE off a phone; the field test is
+  to start a read, press HOME, lock the screen, hear it finish, and stop it from
+  the shade.
 
 ## 9. Where the backend lives
 
