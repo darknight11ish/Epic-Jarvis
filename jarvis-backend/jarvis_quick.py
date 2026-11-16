@@ -1391,7 +1391,13 @@ def match(text, now: Optional[float] = None,
     # Names become FILE NAMES: the matching form is lowercased, so restore the
     # owner's capitals from the raw sentence before any handler uses them. On a
     # case-sensitive filesystem "Shopping" -> "shopping" is a different file.
-    for key in ("name", "tname", "folder", "new", "old", "target", "tag"):
+    # `title` is here for the note read/open handlers (2026-11-16): a title can
+    # be a vault PATH ("Private & Shared/Workout/Workout Log"), and
+    # `resolve_note`'s exact-path tier compares it with the note's real path, so
+    # a lowercased one never matches. Titles that are not paths are matched
+    # case-insensitively by the resolver, so restoring them changes nothing
+    # there.
+    for key in ("name", "tname", "folder", "new", "old", "target", "tag", "title"):
         if got is not None and got.f.get(key):
             got.f[key] = _restore(text, got.f[key])
     # The template's own name is the LAST match in its sentence ("save my
@@ -19724,13 +19730,26 @@ def _note_no_match(title: str) -> str:
     return said + (" Your vault is the folder {0}.".format(root) if root else "")
 
 
+#: The resolver's own sentence for an ambiguous note (jarvis_notes.resolve_note,
+#: the module's ambiguous_section refusals). Repeating it here rather than a
+#: second "tell me which one" wording is the point: the folder plus the name is
+#: the answer its exact-path tier accepts, and the owner's clarification must
+#: name the thing that actually selects a note. Two notes can lowercase to the
+#: same title, so the title alone cannot (2026-11-16).
+NOTE_CHOOSE_BY_FOLDER = "Say the folder and the note's name, so one is chosen."
+
+
 def _note_choices_said(title: str = "") -> Result:
-    """Which note? - each candidate's title and how it starts, then the ask.
+    """Which note? - each candidate's title, folder and start, then the ask.
 
     A read that names no title ("read my notes") and a title that matches more
     than one note ("read my Note") are the same question, so they get the same
-    answer: at most `CHAT_SEARCH_SHOWN` titles with the first line of each, and
-    one plain sentence asking which. Exactly one candidate is READ, not listed.
+    answer: at most `CHAT_SEARCH_SHOWN` candidates with the folder and the first
+    line of each, and the resolver's own sentence asking which. The folder is
+    printed BESIDE each candidate (2026-11-16): two notes whose titles lowercase
+    to the same string are told apart by nothing else, and saying one of the two
+    titles back re-asks the identical question. Exactly one candidate is READ,
+    not listed.
     """
     try:
         import jarvis_notes_edit as NE
@@ -19750,14 +19769,19 @@ def _note_choices_said(title: str = "") -> Result:
     parts = []
     for row in rows:
         start = str(row.get("start") or "").strip()
+        folder = str(row.get("folder") or "").strip()
         name = '"' + str(row.get("title") or "") + '"'
+        # The folder is the fact that chooses between two same-named notes. A
+        # note at the vault ROOT prints nothing extra: there is no folder to
+        # say, and the older "title (start)" shape stays byte-for-byte.
+        where = (" in " + folder) if folder else ""
         # The note's own first line is kept verbatim (it is a quote), in
         # brackets so its own full stop is not the sentence's.
-        parts.append(name + (" (" + start + ")" if start else ""))
+        parts.append(name + where + (" (" + start + ")" if start else ""))
     said = head + ". " + "; ".join(parts) + "."
     if body.get("truncated"):
         said += " I have shown the first {0}.".format(len(rows))
-    return Result(said + " Tell me which one to read.", "note_read")
+    return Result(said + " " + NOTE_CHOOSE_BY_FOLDER, "note_read")
 
 
 def _run_note_read(title: str) -> Result:

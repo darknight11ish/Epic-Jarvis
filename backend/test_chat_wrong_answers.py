@@ -631,6 +631,46 @@ def t_the_second_card_free_claim_is_derived():
 
 
 # --------------------------------------------------------------------------
+# The clarification the fast path asks: which note?
+# --------------------------------------------------------------------------
+def t_the_ambiguous_note_question_is_answerable():
+    """2026-11-16: two notes whose titles lowercase to the same string.
+
+    Measured on the live install: "read my workout log note" answered
+    '"workout log" matches 2 notes. "Workout Log" (---); "Workout log" (Nov 15).
+    Tell me which one to read.' Saying either title back re-asked the identical
+    sentence, and the first-line facts selected nothing. The answer now prints
+    each note's FOLDER and asks for the folder and the name, which the
+    resolver's exact-path tier accepts - so the clarification really selects one
+    note.
+    """
+    reset_vault()
+    write_note("Private & Shared/Workout/Workout Log.md", "day one")
+    write_note("Notes/Workout log.md", "Nov 15")
+    res = ask("read my workout log note")
+    reply = str(res.reply if res is not None else "")
+    check("which note: the ambiguous read is the read lane's ask",
+          res is not None and res.intent == "note_read", res.intent if res else "model")
+    check("which note: it says how many notes match",
+          "matches 2 notes" in reply, reply[:300])
+    check("which note: each candidate carries its FOLDER",
+          '"Workout Log" in Private & Shared/Workout' in reply
+          and '"Workout log" in Notes' in reply, reply[:400])
+    check("which note: it asks for the folder and the name, in the resolver's words",
+          reply.endswith("Say the folder and the note's name, so one is chosen."),
+          reply[-160:])
+    check("which note: the old title-only 'Tell me which one to read' is gone",
+          "Tell me which one" not in reply, reply[:400])
+    # The sentence it asks for must actually resolve to ONE note.
+    res = ask("read my Private & Shared/Workout/Workout Log note")
+    reply = str(res.reply if res is not None else "")
+    check("which note: naming the folder and the name reads exactly one note",
+          res is not None and res.intent == "note_read"
+          and '"Workout Log" says' in reply and "day one" in reply,
+          reply[:300])
+
+
+# --------------------------------------------------------------------------
 # The records: jarvis_quick.py and its published twin
 # --------------------------------------------------------------------------
 def t_the_twin_is_byte_identical():
@@ -656,6 +696,7 @@ TESTS = [
     t_favourite_on_an_existing_note_is_one_card,
     t_favourite_can_be_set_on_a_new_note,
     t_the_flags_are_read_back_from_the_note,
+    t_the_ambiguous_note_question_is_answerable,
     t_the_second_card_free_claim_is_derived,
     t_the_twin_is_byte_identical,
 ]
