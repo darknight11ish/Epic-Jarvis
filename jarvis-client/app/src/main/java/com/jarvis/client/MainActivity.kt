@@ -3459,7 +3459,6 @@ class MainActivity : FragmentActivity() {
                             onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
                             onCancelHold = { scope.launch { JarvisRuntime.cancelHold(it) } },
                             onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
-                            onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
                             onBack = { nav.back() },
                             modifier = root,
                             read = inboxRead,
@@ -3513,6 +3512,10 @@ class MainActivity : FragmentActivity() {
                             // a change to "Speak up" / "Brief at": one route,
                             // not the dozen refreshBrain probes.
                             onRefreshAttention = { scope.launch { JarvisRuntime.refreshAttention() } },
+                            // The mute switch now lives on Brain (the audit of
+                            // 2026-11-15): it moved here from the Inbox, which
+                            // keeps only the count, so one setting has one home.
+                            onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
                             memoryDecideBusyId = memoryDecideBusyId,
                             onDecideMemory = { id, accept ->
                                 if (memoryDecideBusyId == null) {

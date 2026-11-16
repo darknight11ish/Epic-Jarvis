@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.audiofx.AcousticEchoCanceler
 import androidx.core.content.edit
 import com.jarvis.client.net.ChatHistory
+import com.jarvis.client.net.HostSource
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.MicBargeIn
 import com.jarvis.client.voice.PrivateAloud
@@ -17,7 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * The token is deliberately not here — it lives in [TokenStore], behind the
  * Keystore. This class holds only things that are not secrets.
  */
-class ClientSettings(context: Context) {
+class ClientSettings(context: Context) : HostSource {
 
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -445,14 +446,14 @@ class ClientSettings(context: Context) {
      * says why, and every request and the event stream show that sentence
      * where they would show any other connection failure.
      */
-    fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf {
+    override fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf {
         // Debug builds may reach a MockWebServer/emulator on loopback; a
         // release build keeps the strict ts.net/nord-only rule.
         PhoneAddress.problem(it, allowLoopback = com.jarvis.client.BuildConfig.DEBUG) == null
     }
 
     /** Why the saved address is not used, in one plain sentence, or null. */
-    fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let {
+    override fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let {
         PhoneAddress.problem(it, allowLoopback = com.jarvis.client.BuildConfig.DEBUG)
     }
 

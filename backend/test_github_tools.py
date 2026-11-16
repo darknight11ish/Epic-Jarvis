@@ -3958,6 +3958,122 @@ def t_ci_status_names_the_failing_checks_and_one_log_excerpt():
           "fix and push" in text, text[-300:])
 
 
+def t_one_renderer_answers_both_ci_questions():
+    """The owner's ruling Q2 of 2026-11-15: ONE renderer answers both questions.
+
+    `github_ci_status` is asked about a branch (one run list) and about a pull
+    request (its head commit's checks AND runs), and both mean the same thing to
+    the reader: which checks are red, and which are still running. They used to
+    be two functions, `_ci_words` and `_pr_ci_words`, and two functions
+    answering one question is how two answers drift apart. This proves there is
+    now ONE: the module defines exactly one CI-word renderer, BOTH call sites
+    really go through it (a stand-in that answers a sentinel is what BOTH
+    questions answer back), the same evidence produces the same sentence
+    character for character, and the one failing-detail renderer names the red
+    checks for both.
+    """
+    # 1. The source itself: ONE renderer, and the second is not merely unused.
+    tree = ast.parse(Path(GH.__file__).read_text(encoding="utf-8"))
+    renderers = sorted(n.name for n in ast.walk(tree)
+                       if isinstance(n, ast.FunctionDef) and "ci_words" in n.name)
+    check("the module defines exactly ONE CI renderer",
+          renderers == ["_ci_words"], renderers)
+    check("the second CI renderer is gone, not just unreached",
+          not hasattr(GH, "_pr_ci_words"),
+          [n for n in dir(GH) if "ci_words" in n])
+
+    branch_r = GH.plan_ci({"repo": "darknight11ish/Epic-Jarvis", "branch": "main"})
+    pr_r = GH.plan_ci({"repo": "darknight11ish/Epic-Jarvis", "pr": "1263"})
+    pr_who = f"pull request #{pr_r.number} in {pr_r.repo}"
+    green = json.dumps({"workflow_runs": [
+        {"name": "CI", "status": "completed", "conclusion": "success",
+         "head_branch": "feature/x"}]})
+    no_runs = json.dumps({"workflow_runs": []})
+    no_checks = (200, json.dumps({"check_runs": []}))
+    red_checks = (200, json.dumps({"check_runs": [
+        {"name": "audit", "status": "completed", "conclusion": "failure"}]}))
+
+    def branch_fake(runs):
+        return Routed([("/actions/runs", (200, runs))])
+
+    def pr_fake(runs, checks=no_checks):
+        return Routed([("/pulls/1263", (200, _pr_doc(number=1263))),
+                       ("/check-runs", checks),
+                       ("/actions/runs", (200, runs))])
+
+    # 2. BOTH call sites go through the one function: a stand-in that answers a
+    #    sentinel is what BOTH questions answer back. The pull request case is a
+    #    RED check, deliberately: the old `_pr_ci_words` only ever reached
+    #    `_ci_words` when a commit had no check runs and nothing red, so a case
+    #    it did NOT share is the one that proves the call site itself changed.
+    real, calls = GH._ci_words, []
+
+    def stand_in(*args, **kwargs):
+        calls.append((args, kwargs))
+        return "ONE RENDERER"
+
+    GH._ci_words = stand_in
+    try:
+        branch_out = _run_request(branch_r, branch_fake(green))
+        pr_out = _run_request(pr_r, pr_fake(no_runs, red_checks))
+    finally:
+        GH._ci_words = real
+    check("the branch question is answered by the one renderer",
+          branch_out.get("text") == "ONE RENDERER", branch_out)
+    check("the pull request question is answered by the SAME one",
+          pr_out.get("text") == "ONE RENDERER", pr_out)
+    check("... the branch call hands it nothing but the run list",
+          len(calls) == 2 and calls[0][1] == {}, calls)
+    check("... and the pull request call hands it the head commit's checks and "
+          "the subject its sentences name",
+          len(calls) == 2
+          and calls[1][1].get("checks_doc") == {"check_runs": [
+              {"name": "audit", "status": "completed", "conclusion": "failure"}]}
+          and calls[1][1].get("who") == pr_who,
+          calls[1][1] if len(calls) > 1 else calls)
+
+    # 3. The same evidence, asked both ways, is the SAME sentence - character
+    #    for character - because there is one place that sentence is written.
+    for label, runs in (("a green run", green), ("no run at all", no_runs)):
+        branch_out = _run_request(branch_r, branch_fake(runs))
+        pr_out = _run_request(pr_r, pr_fake(runs))
+        check(f"with no check runs and {label}, both questions say the SAME thing",
+              branch_out.get("text") == pr_out.get("text")
+              and bool(branch_out.get("text")), (branch_out, pr_out))
+
+    # 4. ONE renderer names the red checks too: `_ci_failed_lines` is what the
+    #    branch form's "failed" and the pull request form's "NOT all green" both
+    #    go through, so a failing check cannot be named one way in one place and
+    #    another way in the other.
+    red_run = json.dumps({"workflow_runs": [
+        {"id": 4242, "name": "CI", "status": "completed",
+         "conclusion": "failure", "head_branch": "main"}]})
+    headlines, real_lines = [], GH._ci_failed_lines
+
+    def counting(headline, evidence):
+        headlines.append(headline)
+        return real_lines(headline, evidence)
+
+    GH._ci_failed_lines = counting
+    try:
+        branch_out = _run_request(
+            branch_r, Routed([
+                ("/actions/runs/4242/jobs", (200, json.dumps({"jobs": [
+                    {"id": 11, "name": "CI", "status": "completed",
+                     "conclusion": "failure"}]}))),
+                ("/actions/runs", (200, red_run))]),
+            log=FakeLog())
+        pr_out = _run_request(pr_r, pr_fake(no_runs, red_checks))
+    finally:
+        GH._ci_failed_lines = real_lines
+    check("the one failing-detail renderer serves BOTH questions",
+          headlines == ["The newest CI run (CI on main) failed.",
+                        f"The checks on {pr_who} are NOT all green."], headlines)
+    check("... and each answer names its own red check",
+          "CI: failure" in branch_out.get("text", "")
+          and "audit: failure" in pr_out.get("text", ""), (branch_out, pr_out))
+
+
 def t_the_six_github_reads_are_card_free_and_every_write_asks():
     """Q3/Q4: six reads out of NEEDS_A_PERSON; all thirteen writes stay in."""
     READS = ("github_list", "github_read_file", "github_ci_status",
@@ -4098,6 +4214,7 @@ if __name__ == "__main__":
                    t_pr_detail_shows_the_real_diff_bounded,
                    t_pr_detail_never_reports_zero_files_for_a_cut_page,
                    t_ci_status_names_the_failing_checks_and_one_log_excerpt,
+                   t_one_renderer_answers_both_ci_questions,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
                    t_review_tools_are_card_free_and_in_the_master_switch):
             print(f"\n--- {fn.__name__} ---")
