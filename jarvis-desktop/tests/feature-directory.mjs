@@ -277,6 +277,13 @@ await check("a multi-field row keeps its own note, and no row promises a typed p
   // the rule is what this pins, so it still bites if a note comes back.
   const row = FIXTURE.rows.find((r) => r.id === "read-aloud");
   assert.ok(row, "the pinned multi-field row read-aloud is missing");
+  // Read the retired sentence from the generator itself, never retyped here:
+  // the check and the generator share one copy of the rule, which is the whole
+  // point of DEF-038 (a retyped second copy is how the two drift apart).
+  const genSrc = read("../tools/gen_feature_directory.py").toString();
+  const PLANNED_NOTE = (genSrc.match(/^PLANNED_NOTE\s*=\s*"([^"]+)"/m) || [])[1];
+  assert.ok(PLANNED_NOTE,
+    "could not read PLANNED_NOTE from tools/gen_feature_directory.py");
   const note = String(row.note || "").trim();
   assert.ok(note.length > 0, "read-aloud lost its own note entirely");
   assert.notStrictEqual(note, PLANNED_NOTE,
