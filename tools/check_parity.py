@@ -117,7 +117,12 @@ PHONE_DIRS = [("jarvis-client/app/src/main/java", (".kt",))]
 # that way; both are also written out in full elsewhere).
 _LIT = r"[A-Za-z0-9_-]+"
 _PH = r"(?:\$\{[^}\n]*\}|\{[^}/\"\n]*\}|\$[A-Za-z_][A-Za-z0-9_]*)"
-ROUTE = re.compile(rf"/api/{_LIT}(?:/(?:{_LIT}|{_PH}))*/?")
+# `@tauri-apps/api/core` is the npm PACKAGE a page imports, not a route this app
+# serves. The generated bindings (#1319) call `invoke` through it, and without
+# this guard the specifier reads as a call to `/api/core` and the parity check
+# fails on a route that does not exist. Measured on the branch: this is the only
+# reason the four backend shards went red (2026-11-16).
+ROUTE = re.compile(rf"(?<!@tauri-apps)/api/{_LIT}(?:/(?:{_LIT}|{_PH}))*/?")
 _IS_PH = re.compile(rf"^{_PH}$")
 # `fun <name>(` - the declaration half of the call check below.
 _FUN = re.compile(r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
