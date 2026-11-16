@@ -20,6 +20,21 @@ So the bullets are turned into a shipped Python module
 a file that is not copied cannot. `--check` fails when the committed module is
 stale, so the answer cannot drift from the record.
 
+WHO REGENERATES IT (the owner's ruling Q2, 2026-11-15). A pull request adds a
+`changelog.d/` fragment and does NOT re-take this module. It could not: the
+module is generated from the tree, so every PR that adds a fragment rewrites
+the same two files (this one's output and its `jarvis-backend/` twin), and two
+such PRs always rewrite the same lines. `main` owns it instead, exactly as it
+owns the self-code map: `.github/workflows/self-code-map.yml` runs `--check`
+after every merge and names the one command when it is behind. So a committed
+module may legitimately be ONE MERGE OLD on a pull request, which is why the
+required suite checks it differently there - every bullet it carries must be a
+real bullet of the record **in the record's own order** (a subsequence of
+`all_bullets()`, not necessarily a contiguous run, because a fragment can leave
+`changelog.d/` when the changelog roll folds it in) - and byte-exact freshness
+is demanded only when `JARVIS_RECENT_CHANGES_STRICT=1`. See
+`backend/test_self_knowledge_honesty.py`.
+
 The VERSION is deliberately NOT baked in: the module reads `VERSION` beside
 itself at answer time (as `jarvis_self_portrait` does), so a build number on
 the owner's PC can never disagree with the text.
@@ -65,8 +80,13 @@ def _clean(title: str) -> str:
     return text
 
 
-def _fragment_bullets() -> list:
-    """Titles from the newest changelog.d fragments, newest file name first."""
+def _fragment_bullets(limit=None) -> list:
+    """Titles from changelog.d fragments, newest file name first.
+
+    `limit=None` reads EVERY fragment, which is what the honesty check needs:
+    a fragment that has just left this folder for the changelog is still a real
+    bullet, and a module that carries it is not lying.
+    """
     out = []
     if not FRAGMENTS.is_dir():
         return out
@@ -83,13 +103,17 @@ def _fragment_bullets() -> list:
         title = _clean(m.group(1))
         if title:
             out.append(title)
-        if len(out) >= KEEP:
+        if limit is not None and len(out) >= limit:
             break
     return out
 
 
-def _changelog_bullets() -> list:
-    """The newest bullets the rolled changelog itself carries, in file order."""
+def _changelog_bullets(limit=None) -> list:
+    """Bullets the rolled changelog itself carries, in file order.
+
+    `limit=None` reads the whole roll, so a bullet that has dropped below the
+    newest few is still recognisable as the record's own.
+    """
     out = []
     try:
         text = CHANGELOG.read_text(encoding="utf-8", errors="replace")
@@ -99,13 +123,20 @@ def _changelog_bullets() -> list:
         title = _clean(m.group(1))
         if title:
             out.append(title)
-        if len(out) >= KEEP:
+        if limit is not None and len(out) >= limit:
             break
     return out
 
 
-def bullets() -> list:
-    """The newest user-visible bullets, newest first, no duplicates."""
+def all_bullets() -> list:
+    """EVERY bullet the record carries, newest first, no duplicates.
+
+    The module ships only the newest `KEEP` of these, but the check that
+    supervises the module reads this whole list: a pull request that adds a
+    fragment slides the committed module down by exactly one, so the module is
+    a contiguous WINDOW of this list and stays honest while it does. Callers
+    that want what the module carries want `bullets()`, not this.
+    """
     seen, out = set(), []
     for title in _fragment_bullets() + _changelog_bullets():
         key = title.lower()
@@ -113,9 +144,12 @@ def bullets() -> list:
             continue
         seen.add(key)
         out.append(title)
-        if len(out) >= KEEP:
-            break
     return out
+
+
+def bullets() -> list:
+    """The newest user-visible bullets, newest first, no duplicates."""
+    return all_bullets()[:KEEP]
 
 
 def render(items: list) -> str:
