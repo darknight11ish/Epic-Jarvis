@@ -24,6 +24,14 @@ class JarvisApp : Application() {
             }.getOrNull()
         }
 
+        // This phone's own facts - model, Android version, screen, app version -
+        // read once here so every request can carry them in `X-Jarvis-Device`
+        // (the owner's "be more phone specific in the answers", 2026-11-15).
+        // Nothing personal is in them and nothing leaves the device unasked: the
+        // line only reaches the owner's own PC. A failure is ignored, because a
+        // request without the header is exactly what this app sent before.
+        runCatching { com.jarvis.client.net.DeviceFacts.initialise(this) }
+
         // And the other half of the same question: a hang raises nothing, so
         // the handler above never runs and the owner is told nothing at all.
         // Android's own record of it is turned into the same note, before any

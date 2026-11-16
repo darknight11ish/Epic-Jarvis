@@ -170,4 +170,12 @@
     <string name="accessibility_service_label">Atlas app control</string>
     <string name="accessibility_service_summary">Let Atlas read the screen and perform one approved step</string>
     <string name="accessibility_service_description">Off unless you turn it on here. When on, Atlas can read the controls in the app in front - never a password field - and send a masked copy to your own PC, so your PC can show you ONE step to approve. Nothing is tapped, typed or swiped until you approve that step on your PC, and a screen that changes stops the run. Atlas never decides anything by itself.</string>
+    <!-- Read aloud that keeps going when the app is not in front (the owner's
+         ask of 2026-11-15; service/ReadAloudService.kt). One line while it
+         reads, with the same "Stop talking" the app uses, so a read that
+         carries on out of sight is always stoppable from the shade. -->
+    <string name="read_aloud_channel">Reading aloud</string>
+    <string name="read_aloud_channel_why">Shown while Atlas reads an answer out loud with the app in the background.</string>
+    <string name="read_aloud_reading">Atlas is reading this answer</string>
+    <string name="read_aloud_notice">It keeps reading while you use another app. Tap to open, or Stop talking.</string>
 </resources>

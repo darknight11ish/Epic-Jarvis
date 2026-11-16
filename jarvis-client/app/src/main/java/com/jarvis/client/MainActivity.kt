@@ -1667,28 +1667,25 @@ class MainActivity : FragmentActivity() {
             }
             onDispose { stop() }
         }
-        // A read-aloud stops the moment this screen leaves the owner's sight. The
-        // read is Jarvis's own voice saying an answer; it must not keep talking
-        // behind a lock screen, from a pocket, or under another app (the Lead's
-        // ruling of 2026-10-27: stop immediately, privacy first). ON_STOP covers
-        // all three - pressing power stops the activity before the keyguard is
-        // drawn - and it costs nothing when nothing is being read, because
-        // stopReadingAloud() on an idle runtime is two state writes.
+        // A read-aloud CARRIES ON when this screen leaves the owner's sight
+        // (2026-11-15, his own words: "when i move out of the jarvis android app
+        // ... it should continue the read outloud ... right now it stops it",
+        // and his answer that a locked phone keeps going too). This replaces the
+        // ruling of 2026-10-27, which stopped a read immediately, privacy first:
+        // ReadAloudService keeps the process awake for the rest of the read, and
+        // Stop talking - in the shade, in the app, or said aloud - ends it.
+        // Nothing here STARTS a read, so the start-time refusals (a locked
+        // phone, App lock, a stale link) are exactly as they were.
         DisposableEffect(Unit) {
             val activity = this@MainActivity
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                 when (event) {
                     androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
-                        // A rotation stops and restarts the activity, and ON_STOP
-                        // fires for it (there is no `configChanges` on this
-                        // activity in AndroidManifest.xml). That is not "away":
-                        // the screen is still in front of the owner, so the read
-                        // carries on. The same test onStop() already uses for the
-                        // lock session. The Lead ruled 2026-10-27 that rotation must
-                        // NOT stop a read: a configuration change is not leaving.
-                        if (!activity.isChangingConfigurations) {
-                            JarvisRuntime.stopReadingAloud()
-                        }
+                        // The read is NOT stopped here any more: ON_STOP fires
+                        // for HOME, another app, PiP and the keyguard, and the
+                        // owner asked for the voice to carry on through all of
+                        // them. ReadAloudService holds the process awake; Stop
+                        // talking is how it ends.
                         // The one-off "Read it aloud anyway" action (the owner's
                         // decision of 2026-11-06) is drawn only while the phone
                         // was unlocked at the last live check. Whatever stopped
@@ -1702,8 +1699,7 @@ class MainActivity : FragmentActivity() {
                 }
             }
             activity.lifecycle.addObserver(observer)
-            onDispose { activity.lifecycle.removeObserver(observer) }
-        }
+            onDispose { activity.lifecycle.removeObserver(observer) }        }
         // Everything FaceView draws with comes through here: the one live
         // budget, FaceQuality, re-resolved whenever a setting or the phone's
         // state changes. Nothing here reaches the desktop. A SideEffect, not a
