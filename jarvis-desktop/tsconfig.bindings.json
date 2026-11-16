@@ -1,0 +1,29 @@
+{
+  "//": [
+    "The bindings typecheck - THE PILOT, 2026-11-16.",
+    "",
+    "It checks exactly two files: the generated src/bindings.js and the one",
+    "module that calls it, src/hotkeys-bindings.js. Deliberately NOT the whole",
+    "page: settings.js is thousands of lines of plain JavaScript with hundreds",
+    "of hand-written `invoke(...)` calls, and putting it under `checkJs` would",
+    "bury a real drift in tens of thousands of unrelated complaints. The pilot",
+    "is one command, and this is the seam that command goes through.",
+    "",
+    "The `paths` entry stands in for the package this page cannot install; the",
+    "runtime half is settings.html's import map, and both point at the same",
+    "shim. See src/tauri-api-core.d.ts."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src/hotkeys-bindings.js"]
+}
