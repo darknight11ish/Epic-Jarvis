@@ -98,6 +98,16 @@ So the map has two gates now, and they ask different questions:
   map no longer describes main's tree it prints the first differing line, names
   the one command, and goes red. The snapshot is then one small pull request
   with only the two map files - never a push to `main`, which is protected.
+  **The same job now owns a second generated file.** The owner's ruling Q2
+  (2026-11-15) moved `backend/jarvis_recent_changes.py` - and its
+  `jarvis-backend/` twin, generated from `changelog.d/` - out of pull requests
+  for exactly the reason above: every PR that adds a fragment rewrote the same
+  two lines of both files, so two such PRs always conflicted. That step runs
+  `py -3 tools/gen_recent_changes.py --check` and names the one command too.
+  The required `backend` job asks the weaker question a pull request can answer
+  - every bullet the module carries is a real run of the record
+  (`backend/test_self_knowledge_honesty.py`) - and byte-exact freshness only
+  under `JARVIS_RECENT_CHANGES_STRICT=1`, which this workflow sets.
 
 The committed map is allowed to be a snapshot of an earlier commit than `HEAD`.
 What it is never allowed to do is describe a tree that commit never had: the

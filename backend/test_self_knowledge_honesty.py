@@ -15,8 +15,13 @@ holds the fixed answers that replaced the model's guesses:
    `jarvis_feature_guide.SELF_FACTS`, reached through `jarvis_quick.match`, and
    the approval-policy words name the card, the second yes and Windows Hello.
 2. F2: "what changed in your last update?" is `recent_changes`, answers from
-   the generated module with the version and real bullets, and the generator
-   `tools/gen_recent_changes.py --check` passes (a stale module fails here).
+   the generated module with the version and real bullets, and every bullet the
+   module carries is a real bullet of the record, in the record's own order. A
+   pull request is allowed to leave the module ONE MERGE BEHIND (the owner's
+   ruling Q2, 2026-11-15: `main` regenerates it after the merge, in the
+   self-code-map workflow, so two PRs adding fragments never rewrite the same
+   file); byte-exact freshness is demanded only when
+   `JARVIS_RECENT_CHANGES_STRICT=1`, which that workflow sets.
 3. F4: "can you explain any setting" and "how do I find out what a setting is
    set to" reach the explain door, and a named "what is X set to?" resolves to
    the real registry row.
@@ -53,6 +58,7 @@ a scratch ChatLog in a temporary folder and its key provider is never called.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -120,21 +126,59 @@ def test_four_false_denial_families_answer():
             assert denial not in words.lower(), (family, denial)
 
 
+def _recent_changes_generator():
+    """The generator module itself, so its own uncapped record can be read."""
+    sys.path.insert(0, str(HERE.parent / "tools"))
+    try:
+        import gen_recent_changes
+    finally:
+        sys.path.pop(0)
+    return gen_recent_changes
+
+
 def test_recent_changes_answer_and_generator():
     Q = _quick()
     got = Q.match("what changed in your last update?")
     assert got is not None and got.name == "recent_changes", got
     got = Q.match("what's new in you?")
     assert got is not None and got.name == "recent_changes", got
-    gen = subprocess.run([sys.executable, str(HERE.parent / "tools" / "gen_recent_changes.py"),
-                          "--check"], capture_output=True, text=True,
-                         cwd=str(HERE.parent))
-    assert gen.returncode == 0, gen.stdout + gen.stderr
+    # IS THE MODULE HONEST? Every bullet it carries must be a real bullet of the
+    # record, in the record's own order. That is what "one merge behind" looks
+    # like: the record has grown at the top, and the module is the same bullets
+    # it always was. It is deliberately a SUBSEQUENCE and not a contiguous run,
+    # because a real record moves underneath it in two legitimate ways - a
+    # fragment can leave `changelog.d/` when the changelog roll folds it in, and
+    # the module keeps only the newest `KEEP`. Both leave gaps. Neither lets an
+    # invented, re-worded or re-ordered bullet through, which is the property
+    # this suite is for. Freshness is main's job (ruling Q2), below.
+    import jarvis_recent_changes as RC
+    truth = _recent_changes_generator()
+    carried = [b for b in RC.BULLETS if b]
+    assert carried, "the generated module carries no bullets at all"
+    assert len(carried) <= truth.KEEP, (
+        f"the module carries {len(carried)} bullets; the generator ships {truth.KEEP}")
+    record = truth.all_bullets()
+    at = -1
+    for bullet in carried:
+        try:
+            at = record.index(bullet, at + 1)
+        except ValueError:
+            raise AssertionError(
+                "the module carries a bullet the record does not, in that order:\n"
+                f"  module bullet: {bullet!r}\n"
+                f"  record: {record[:12]!r}") from None
+    # BYTE-EXACT FRESHNESS IS `main`'s BUSINESS (owner's ruling Q2, 2026-11-15):
+    # the regeneration moved to the self-code-map workflow after each merge, so
+    # a pull request is legitimately one merge behind and is not asked for it.
+    if os.environ.get("JARVIS_RECENT_CHANGES_STRICT") == "1":
+        gen = subprocess.run([sys.executable, str(HERE.parent / "tools" / "gen_recent_changes.py"),
+                              "--check"], capture_output=True, text=True,
+                             cwd=str(HERE.parent))
+        assert gen.returncode == 0, gen.stdout + gen.stderr
     out = Q._run_recent_changes()
     words = str(out.reply)
     assert "newest changes on record are" in words, words[:300]
     assert "I haven't changed" not in words
-    import jarvis_recent_changes as RC
     first = RC.bullets(1)[0]
     assert first in words, (first, words[:300])
     assert "version" in words.lower(), "version line missing from the answer"
