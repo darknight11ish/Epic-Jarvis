@@ -234,4 +234,66 @@ class PresetsLandingTest {
             plate.contains("var busy by remember { mutableStateOf<String?>(null) }"),
         )
     }
+
+    @Test
+    fun `a preset row opens at one line and its prose waits behind one tap`() {
+        // The audit of 2026-11-15 measured the ten rows drawing five blocks of
+        // prose each: 9,703 characters across the list with every word out, and
+        // 1,944 for Coding alone, so the plate read as one wall of text. The
+        // owner's choice: a row opens at one line, and the rest waits behind ONE
+        // tap per preset. As with the rotation pin above, this holds the rule by
+        // reading the shipped source - no emulator here, so no device pass.
+        val plate = source("ui/screens/FocusPresetsPlate.kt")
+        val fold = plate.indexOf("var show by remember { mutableStateOf(false) }")
+        assertTrue(
+            "no preset row has a fold of its own",
+            fold > plate.indexOf("for (p in view.presets) {"),
+        )
+        assertTrue(
+            "the fold has no tap, or the tap does not say what it opens",
+            plate.contains("if (show) \"Hide why\" else \"Why this one\""),
+        )
+        assertTrue("the tap does not flip the fold", plate.contains("show = !show"))
+        val opened = plate.indexOf("if (show) {")
+        assertTrue("the row has no folded block", opened > fold)
+        // The fold's block only, from `if (show) {` to its closing brace: the
+        // `helper` and label blocks inside it close four spaces deeper.
+        val folded = plate
+            .substring(opened + "if (show) {".length)
+            .substringBefore("\n        }\n")
+        assertTrue("the fold is empty", folded.isNotBlank())
+
+        fun times(where: String, piece: String) = where.split(piece).size - 1
+
+        // Folded, not deleted: each piece is still drawn once, and only behind
+        // the tap - a copy left outside the fold would make the two counts differ.
+        for (piece in listOf(
+            "Text(p.what",
+            "FocusPresets.HELPER",
+            "FocusPresets.WHY",
+            "Text(p.cost",
+            "FocusPresets.WORSE",
+            "Text(p.worse",
+        )) {
+            assertTrue("$piece is not drawn behind the tap", times(folded, piece) == 1)
+            assertTrue(
+                "$piece is also drawn with the row closed",
+                times(folded, piece) == times(plate, piece),
+            )
+        }
+
+        // What the owner asked to keep: the title, the focus words, the model
+        // line, a heavy preset's cost, the blocker and the button.
+        for (piece in listOf(
+            "Text(title",
+            "Text(p.focus",
+            "Text(FocusPresets.modelLine(p)",
+            "FocusPresets.heavyCost(p)",
+            "FocusPresets.blocker(",
+            "FocusPresets.USE_THIS",
+        )) {
+            assertTrue("$piece is now behind the tap", times(folded, piece) == 0)
+            assertTrue("$piece is no longer drawn at all", times(plate, piece) == 1)
+        }
+    }
 }
