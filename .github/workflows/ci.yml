@@ -2064,6 +2064,48 @@ jobs:
       - name: The screen feature's safety rules hold
         run: python3 ../../tools/check_screen_safety.py
       # ---------------------------------------------------------------------
+      # THE TWO FEATURE DIRECTORY WRITERS, EACH WITH ITS OWN --check STEP.
+      #
+      # Both apps draw a Settings directory that indexes every feature, and
+      # neither file is typed by hand: the desktop's "Abilities & commands"
+      # page reads jarvis-desktop/src/feature-directory.js and the phone's "All
+      # features and abilities" screen reads FeatureDirectory.kt, each written
+      # from contract/feature-controls.json by a generator named below. A stale
+      # one is not an error anywhere - the page draws last week's rows and the
+      # suites that pin a COUNT still pass, because a count is not the wording.
+      #
+      # Measured 2026-11-15 in a clean worktree of origin/main 3beaa66b9: the
+      # desktop's --check exited 0 and the phone's exited 1. 052072133 ("Jarvis
+      # knows every paired device") moved a `where` sentence in the contract
+      # and re-ran no writer; the phone prints `where` as a row's "why", so its
+      # directory described the old Devices row from that merge on, and nothing
+      # said so until this check found it (the row COUNT never changed, which is
+      # why FeatureDirectoryTest.kt's count cross-check could not see it). The
+      # desktop reads `label_evidence.screen_path`
+      # instead, which is why the same edit left it current - the two files
+      # read different fields, so neither writer's check stands in for the
+      # other's.
+      #
+      # WHICH WRITERS WERE GATED BEFORE THIS, MEASURED: the desktop's --check
+      # ran inside jarvis-desktop/tests/feature-directory.mjs in the required
+      # `frontend` job, and tools/gen_feature_guide_catalogue.py (the PC's
+      # feature catalogue) is gated from the required `backend` job by
+      # backend/test_feature_guide.py. The PHONE's --check was run by no
+      # workflow at all: its only guard was a count cross-check in
+      # FeatureDirectoryTest.kt, which speaks for the counts and never for the
+      # words. The steps below make all three direct, in the job whose contract
+      # is "reads only the repository" (see the block above).
+      #
+      # Each failure names the exact one-line command that clears it, so a red
+      # `audit` reads as work to do rather than as a mystery. `audit` gates no
+      # merge, so a red one here is a signal about main's state and never a
+      # reason to hold a pull request.
+      # ---------------------------------------------------------------------
+      - name: The desktop's feature directory is up to date
+        run: python3 ../../tools/gen_feature_directory.py --check
+      - name: The phone's FeatureDirectory.kt is up to date
+        run: python3 ../../jarvis-client/tools/gen_feature_directory.py --check
+      # ---------------------------------------------------------------------
       # Three are deliberately NOT wired, and this comment is here so nobody
       # later "fixes" one of them by weakening it until it passes - which is
       # the shape that cost this project a day. Each needs something CI does
