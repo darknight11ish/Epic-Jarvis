@@ -3490,6 +3490,18 @@ _PC_FACTS = (
     ("space_all", re.compile(
         r"how\s+much\s+(?:free\s+)?(?:space|storage)\s+"
         r"(?:do\s+i\s+have|have\s+i\s+got|is\s+there)(?:\s+(?:left|available))?")),
+    # "what is my disk space?" (2026-11-16, the awareness audit's eleven gaps).
+    # The audit asked this exact sentence and the live backend sent it to the
+    # model, which has no way to read a disk. The gap was the PHRASING, not the
+    # fact: the `space_all` row above already answers "how much disk space is
+    # left" from `jarvis_pc_facts` and names EVERY drive. So this row repeats
+    # that EXISTING shape - one reader, one sentence - and only widens which
+    # sentences reach it. It deliberately adds no answer of its own: a
+    # drive-by-drive reply would be narrower than the one this PC already gives.
+    ("space_all", re.compile(
+        r"what(?:'?s|\s+is)\s+(?:my|the|this\s+pc'?s?)\s+(?:free\s+)?"
+        r"(?:disk|drive|hard\s+drive|hard\s+disk|ssd|storage)\s+"
+        r"(?:space|capacity|usage|room)(?:\s+(?:free|left|available))?")),
     ("ram", re.compile(
         r"how\s+much\s+(?:ram|memory)\s+(?:do\s+i\s+have|is\s+free|"
         r"have\s+i\s+got|does\s+(?:my|this|the)\s+(?:pc|computer)\s+have)")),
@@ -19562,12 +19574,47 @@ def _run_note_open(title: str) -> Result:
 
 MODEL_CURRENT_UNKNOWN = ("This PC does not record which model is running right now, so I "
                          "do not know yet. Brain, Models lists every installed model.")
-MODELS_NOT_LISTED = ("This PC does not list its installed models right now. Brain, "
-                     "Models on the PC is where the list is.")
+#: The empty list `jarvis_model_knowledge.installed_models()` returns is BOTH
+#: "none are installed" and "the read failed" - it cannot tell them apart - so
+#: the answer says it cannot tell rather than claiming zero (2026-11-16, the
+#: awareness audit's rule: an answer that cannot be read is never guessed).
+MODELS_NOT_LISTED = ("This PC does not list its installed models right now, so I cannot "
+                     "tell how many are installed and I will not guess. Brain, Models "
+                     "on the PC is where the list is.")
 PRESETS_NOT_LISTED = ("This PC does not list its presets right now (the preset contract "
                       "module is missing), so I cannot tell you which model a preset uses.")
 MODEL_CARD_WORDS = ("Nothing switches until you answer the ONE approval card on your PC"
                     " (Windows Hello for a risky one).")
+
+#: "what models are loaded?" (2026-11-16, the awareness audit's eleven gaps): a
+#: READ of Ollama's own `/api/ps` - what is in memory RIGHT NOW - and never the
+#: configured choice. `_run_model_current` says "set to use" for that choice
+#: (PR #1292's rule); this says loaded, and "nothing is loaded" when the list is
+#: empty.
+_K_MODELS_LOADED = re.compile(
+    # "what / which / how many models are loaded", "... are in memory"
+    r"(?:what|which|how\s+many)\s+(?:local\s+)?models?\s+(?:are\s+|is\s+)?"
+    r"(?:currently\s+|right\s+now\s+)?(?:loaded|in\s+memory|resident)\b.*"
+    # "is a model loaded", "are any models loaded", "is anything loaded"
+    r"|(?:is|are)\s+(?:a|any|one|anything|the\s+models?|models?)\s+(?:models?\s+)?"
+    r"(?:currently\s+|right\s+now\s+)?(?:loaded|in\s+memory|resident)\b.*"
+    # "what is loaded", "what's loaded in ollama", "what is in memory"
+    r"|what(?:'?s|\s+is)\s+(?:currently\s+)?(?:loaded|in\s+memory|resident)\b.*"
+    # "what do you have loaded", "what does ollama have loaded"
+    r"|what\s+(?:do\s+you|does\s+(?:ollama|the\s+model\s+server))\s+have\s+loaded\b.*",
+    re.I)
+
+#: "is ollama running?" (2026-11-16, the same audit): whether the lane's own
+#: server ANSWERS - the read `jarvis_model_lanes.probe` already makes for both
+#: apps' lane warning - and the plain truth when it does not.
+_K_OLLAMA_RUNNING = re.compile(
+    r"(?:is|are)\s+(?:the\s+|my\s+|this\s+pc'?s\s+)?(?:local\s+)?"
+    r"(?:ollama|model\s+server|ollama\s+server)(?:\s+server)?\s+"
+    r"(?:currently\s+|still\s+|actually\s+)?"
+    r"(?:running|up|alive|answering|on|online|serving|working)\b.*"
+    r"|what(?:'?s|\s+is)\s+(?:the\s+|my\s+)?(?:ollama|model\s+server)"
+    r"(?:'s)?\s+(?:status|state)\b.*",
+    re.I)
 
 _K_MODEL_CURRENT = re.compile(
     r"(?:what|which)\s+(?:ai\s+)?model\s+(?:are\s+you\s+(?:running|using|on)|"
@@ -19586,8 +19633,14 @@ _K_MODEL_ANSWERED = re.compile(
     r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
     r"(?:that|this|it|the\s+answer)\b.*")
 _K_MODELS_LIST = re.compile(
-    r"(?:what|which)\s+(?:local\s+)?models?\s+(?:are\s+)?(?:installed|available|"
-    r"do\s+you\s+have|can\s+you\s+use|can\s+you\s+run)\b.*"
+    # "how many models are installed" (2026-11-16, the awareness audit's eleven
+    # gaps): the audit asked this exact sentence and it fell to the model. It is
+    # the SAME fact `models_list` already answers ("This PC has N local models
+    # installed: ..."), so the one answer takes both the count and the list.
+    r"(?:what|which|how\s+many)\s+(?:local\s+|installed\s+)?models?\s+(?:are\s+)?"
+    r"(?:installed|available|do\s+(?:you|i)\s+have|have\s+(?:you|i)\s+got|"
+    r"can\s+you\s+use|can\s+you\s+run)\b.*"
+    r"|how\s+many\s+(?:local\s+)?models?\s+(?:are\s+)?there\b.*"
     r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?(?:local\s+|installed\s+)?"
     r"models?\s*\??$")
 _K_PRESETS_LIST = re.compile(
@@ -19997,6 +20050,18 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("both_cards")
     if _K_MODEL_BEFORE.fullmatch(s):
         return Intent("model_before")
+    # What is LOADED now, and whether Ollama answers (2026-11-16, the awareness
+    # audit's eleven gaps). BEFORE the "what model are you using" shapes and the
+    # installed list: "what models are loaded" is a read of Ollama's /api/ps,
+    # not the configured choice and not what is installed, and on the audited
+    # tree all of these fell to the model, which cannot measure either. A
+    # question about the PHONE's own model is not this read, so a phone tail is
+    # refused here rather than answered about the PC.
+    _phone = re.search(r"\b(?:on|in|from)\s+(?:my|the|your)\s+phone\b", s)
+    if _phone is None and _K_MODELS_LOADED.fullmatch(s):
+        return Intent("models_loaded")
+    if _phone is None and _K_OLLAMA_RUNNING.fullmatch(s):
+        return Intent("ollama_running")
     for rx, intent_name in ((_K_MODEL_CURRENT, "model_current"),
                             (_K_MODEL_ANSWERED, "model_answerer")):
         if rx.fullmatch(s):
@@ -21965,6 +22030,162 @@ def _run_models_list() -> Result:
         said += f" ({len(refs) - len(shown)} more not listed.)"
     said += ' Ask "how fast is <model>" for a measured speed, or "switch to <model>".'
     return Result(said, "models_list")
+
+
+def _chat_ollama_read() -> dict:
+    """The Ollama the CHAT uses, as this PC resolves it - never a guessed port.
+
+    Returns `{"url", "port", "lane", "why"}`. The address comes from
+    `jarvis_model_lanes.target()` (the module that owns "which lane is the chat
+    on" - it reads the address the chat itself reads), and otherwise from
+    `jarvis_hardware._main_url()`, the same address the rest of this backend
+    already uses. A non-loopback address is refused: a model server on another
+    PC is not this PC's, and nothing here should read it. `url` is "" only when
+    this PC cannot name such an address, and then no answer may invent one.
+    """
+    out = {"url": "", "port": None, "lane": "", "why": ""}
+    try:
+        import jarvis_model_lanes as L
+    except Exception:                       # noqa: BLE001 - older PC
+        L = None
+    lane = None
+    if L is not None:
+        try:
+            lane = L.target()
+        except Exception:                   # noqa: BLE001 - said as unknown
+            lane = None
+    url = ""
+    if lane is not None:
+        url = f"http://127.0.0.1:{int(lane.port)}"
+        out["lane"] = str(lane.key)
+        out["why"] = f"the {lane.key} lane is the one the chat uses"
+    if not url:
+        try:
+            import jarvis_hardware as H
+            url = str(H._main_url() or "")
+        except Exception:                   # noqa: BLE001 - older PC
+            url = ""
+    if not url:
+        out["why"] = ("this PC does not name the Ollama address the chat uses")
+        return out
+    url = url.rstrip("/")
+    try:
+        import jarvis_bench as B
+        local = bool(B.is_loopback(url))
+    except Exception:                       # noqa: BLE001 - the same rule, typed
+        local = url.startswith(("http://127.0.0.1", "http://localhost",
+                                "http://[::1]", "http://0.0.0.0"))
+    if not local:
+        out["why"] = "the address the chat uses is not on this PC"
+        return out
+    out["url"] = url
+    if L is not None:
+        try:
+            out["port"] = L.port_of(url)
+        except Exception:                   # noqa: BLE001 - said as unknown
+            out["port"] = None
+    if lane is None:
+        out["why"] = "the chat's Ollama address is this PC's, but no lane names it"
+    return out
+
+
+def _loaded_model_words(row: dict) -> str:
+    """One `/api/ps` row in phone-sized words: name, memory, card share, context."""
+    row = row if isinstance(row, dict) else {}
+    name = str(row.get("name") or row.get("model") or "a model")
+    size = row.get("size")
+    words = ""
+    if isinstance(size, (int, float)) and not isinstance(size, bool) and size > 0:
+        words = f"{float(size) / (1024 ** 3):.1f} GB"
+        vram = row.get("size_vram")
+        if isinstance(vram, (int, float)) and not isinstance(vram, bool):
+            share = int(min(100, round(float(vram) * 100 / float(size))))
+            words += ", all on the card" if share >= 100 else f", {share}% on the card"
+    ctx = row.get("context_length")
+    if isinstance(ctx, (int, float)) and not isinstance(ctx, bool) and ctx > 0:
+        words += (", " if words else "") + f"{int(ctx):,}-token context"
+    return name + (f" ({words})" if words else "")
+
+
+def _run_models_loaded() -> Result:
+    """"What models are loaded?" - Ollama's own `/api/ps`, read at answer time.
+
+    THE MEASURED GAP (2026-11-15 awareness audit): the question fell to the 8B
+    model, which has no way to read `/api/ps`, so its answer was invention. This
+    reads the module that already wraps the endpoint (`jarvis_bench.ps_models`,
+    the benchmark's own reader) and says WHICH read answered. An empty list is
+    "nothing is loaded right now", never an invented name; a read that fails
+    says it cannot tell and never falls back to the configured model's name as
+    if it were loaded. The configured model is "set to use" (PR #1292's rule).
+    """
+    read = _chat_ollama_read()
+    if not read["url"]:
+        return Result("I cannot tell which model is loaded: " + str(read["why"])
+                      + ", so I will not guess.", "models_loaded")
+    try:
+        import jarvis_bench as B
+        loaded = B.ps_models(read["url"])
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        loaded = None
+    if loaded is None:
+        return Result("I could not read Ollama's own /api/ps at "
+                      + read["url"] + ", so I cannot tell what is loaded and I "
+                      "will not guess. Nothing was started.", "models_loaded")
+    loaded = [row for row in loaded if isinstance(row, dict)]
+    if not loaded:
+        said = ("Nothing is loaded right now: a read of Ollama's own /api/ps at "
+                + read["url"] + " lists no model in memory.")
+        current = _model_record()
+        if current:
+            # "SET TO USE", never "running": the configured choice is not a
+            # loaded model, and this PC's keep-alive can keep one resident for
+            # days, so the answer claims neither.
+            said += (f" Jarvis is set to use {current}; that is the configured "
+                     "choice, not proof it is loaded.")
+        return Result(said, "models_loaded")
+    shown = loaded[:4]
+    bits = [_loaded_model_words(row) for row in shown]
+    said = ("Loaded right now: " + "; ".join(bits)
+            + f". That is a read of Ollama's own /api/ps at {read['url']}")
+    if read["lane"]:
+        said += f", the {read['lane']} lane the chat uses"
+    said += "."
+    if len(loaded) > len(shown):
+        said += f" ({len(loaded) - len(shown)} more loaded, not listed.)"
+    return Result(said, "models_loaded")
+
+
+def _run_ollama_running() -> Result:
+    """"Is Ollama running?" - whether the lane's own server ANSWERS, in words.
+
+    THE MEASURED GAP (2026-11-15 awareness audit): the question fell to the 8B
+    model, which cannot probe a server. The read is `jarvis_model_lanes.probe` -
+    the same `/api/tags` probe both apps' lane warning already makes, so this
+    answer and the warning can never disagree. A server that does not answer is
+    said plainly ("not answering", not "definitely stopped"), a PC that cannot
+    name the address says it cannot tell, and nothing is ever started here.
+    """
+    read = _chat_ollama_read()
+    if not read["url"] or not read["port"]:
+        return Result("I cannot tell whether Ollama is running: "
+                      + str(read["why"] or "this PC does not name the Ollama the "
+                        "chat uses") + ", so I will not guess.",
+                      "ollama_running")
+    try:
+        import jarvis_model_lanes as L
+        up = bool(L.probe(read["port"]))
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return Result("I cannot tell whether Ollama is running: this PC's probe "
+                      "could not be made, so I will not guess.", "ollama_running")
+    lane = f"the {read['lane']} lane the chat uses" if read["lane"] \
+        else "the address the chat uses"
+    if up:
+        return Result("Yes - Ollama is running on this PC: it answered its own "
+                      f"/api/tags at {read['url']}, {lane}.", "ollama_running")
+    return Result("No - Ollama is not answering on this PC: a read of its own "
+                  f"/api/tags at {read['url']}, {lane}, got nothing back, so it "
+                  "is not serving a model right now. I did not start it.",
+                  "ollama_running")
 
 
 def _run_presets_list() -> Result:
@@ -28062,6 +28283,15 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_model_answerer()
     if n == "models_list":
         return _run_models_list()
+    if n == "models_loaded":
+        # "what models are loaded?" (2026-11-16, the awareness audit's eleven
+        # gaps): Ollama's own /api/ps, read at answer time - never the
+        # configured choice, never an invented name.
+        return _run_models_loaded()
+    if n == "ollama_running":
+        # "is ollama running?" (the same audit): whether the lane's server
+        # answers its own /api/tags - the probe both apps' lane warning makes.
+        return _run_ollama_running()
     if n == "presets_list":
         return _run_presets_list()
     if n == "focus_presets":
@@ -28661,6 +28891,15 @@ READ_ONLY_INTENTS = frozenset({
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
+    # The two Ollama reads and the PC-facts read (2026-11-16, the awareness
+    # audit's eleven gaps): what is loaded (`/api/ps`), whether the server
+    # answers (`/api/tags`), and the disk/RAM/CPU/GPU facts all only READ - they
+    # start nothing, write nothing and call no model - so none may take away
+    # what "cancel that" would undo. `pc_facts` is the existing read the new
+    # "what is my disk space" answer routes to, and `models_list` is the
+    # existing answer the new "how many models are installed" question reaches;
+    # neither was in this set, so a plain read cleared the undo record.
+    "models_loaded", "ollama_running", "pc_facts", "models_list",
     # The two Wave-9 fixed refusals (2026-11-07): the phone-connect trap's
     # answer and the cloud switch's read-only rule question write nothing, so
     # they may not take away what "cancel that" would undo.
