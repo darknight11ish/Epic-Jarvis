@@ -195,6 +195,14 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     }
 }
 
+/**
+ * One row per preset, drawn closed: the title (with its CHOSEN mark), the focus
+ * words, the model/lane line, any heavy-cost sentence, the blocker and the "Use
+ * this" button. The prose - `what`, the helper line, "What it is for:" and "What
+ * it is worse at:" - waits behind one "Why this one" tap per row (the audit of
+ * 2026-11-15). Folded, never removed: opening the row draws every one of them, so
+ * nothing the contract says has become unreachable.
+ */
 @Composable
 private fun FocusPresetList(
     view: FocusPresets.View?,
@@ -214,6 +222,27 @@ private fun FocusPresetList(
         Gap(8)
         Rule()
         Gap(6)
+        // The owner's audit of 2026-11-15: each of the ten rows printed five blocks
+        // of prose - about 2,000 characters for Coding alone - so the list read as
+        // one wall of text. The owner's choice: a row opens at one line, and the
+        // rest waits behind ONE tap per preset.
+        //
+        // Drawn with the row CLOSED: the title (with its CHOSEN mark), `focus`, the
+        // model/lane line, any heavy-cost sentence, the blocker, and the Use
+        // button. Behind "Why this one": `what`, the helper line, and the "What it
+        // is for:" / "What it is worse at:" blocks. The prose was folded, not
+        // deleted: every word is still drawn once the row is opened, so nothing the
+        // contract says has become unreachable.
+        //
+        // Measured on the shipped fixture: the ten rows total 9,703 characters
+        // with every word out, and the Coding row alone is 1,944 - so this is a
+        // fold across the whole list, not a tidy on one row. Closed, the ten draw
+        // 1,752. `show` is a plain `remember`, like HardwarePlate's command fold: a
+        // fold that closes on a rotation is a row to open again, never a control
+        // that can come back stuck.
+        var show by remember { mutableStateOf(false) }
+        val helper = FocusPresets.helperLine(p)
+        val hasDetail = p.what.isNotBlank() || helper != null || p.cost.isNotBlank() || p.worse.isNotBlank()
         val title = buildString {
             append(p.title)
             if (view.chosen == p.id) append(" - ").append(FocusPresets.CHOSEN)
@@ -222,18 +251,26 @@ private fun FocusPresetList(
         if (p.focus.isNotBlank()) {
             Text(p.focus, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
-        Text(p.what, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         Gap(2)
         Text(FocusPresets.modelLine(p), style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-        FocusPresets.helperLine(p)?.let {
-            Text(FocusPresets.HELPER + " " + it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        if (hasDetail) {
+            Quiet(
+                if (show) "Hide why" else "Why this one",
+                color = chrome.textMid,
+            ) { show = !show }
         }
-        if (p.what.isNotBlank()) {
-            Text(FocusPresets.WHY, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        if (show) {
+            Text(p.what, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            helper?.let {
+                Text(FocusPresets.HELPER + " " + it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+            if (p.what.isNotBlank()) {
+                Text(FocusPresets.WHY, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            }
+            Text(p.cost, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Text(FocusPresets.WORSE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Text(p.worse, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         }
-        Text(p.cost, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-        Text(FocusPresets.WORSE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-        Text(p.worse, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         // A heavy preset is offered like every other one (2026-11-02): the PC's
         // pooled three-card lane applies it. What it costs - all three cards, the other
         // models paused while it runs - is said here, before the button.
