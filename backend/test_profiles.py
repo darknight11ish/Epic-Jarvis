@@ -561,8 +561,16 @@ def t_words():
           "about 24 pages" in d["chat"]["context_words"] and "estimate" in d["chat"]["context_words"])
     check("every preset says what is off, and why", all(
         P.describe(P.plan([c], p))["off"] for p in P.PRESET_IDS))
-    check("the details say everything is calculated, not measured",
-          d["details"][-1] == "Everything above is calculated, not measured.")
+    check("the details call the arithmetic an estimate, and never deny a measured figure",
+          d["details"][-1] == ("Everything above is a calculated estimate; a line marked "
+                               "measured was measured on this PC."))
+    measured = nv("a", "RTX 2080 SUPER", 8, monitor=True, share_gib=0.87,
+                  share_source="measured now, with no model loaded")
+    md = P.describe(P.plan([measured], "fast"))
+    check("... and a measured desktop share keeps its own word, with the closing line "
+          "owning it",
+          any("(desktop, measured)" in line for line in md["details"])
+          and md["details"][-1] == d["details"][-1], md["details"])
     check("no preset text carries a token-shaped string",
           not re.search(r"(?i)token['\"]?\s*[:=]|X-Jarvis-Token", json.dumps(d)))
 

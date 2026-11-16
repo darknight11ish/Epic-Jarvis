@@ -142,7 +142,10 @@ await check("three setups, one (recommended) with why, each saying what is off a
   assert.match(s.presets[2].text, /It takes turns with chat/);
   assert.match(s.later, /Spark-X2\.5-4B/);
   assert.match(s.later, /qwen3\.5/);
-  assert.match(s.details, /Everything above is calculated, not measured\./);
+  // The Details list is the backend's (jarvis_profiles.details). Its closing
+  // line must own the "(desktop, measured)" line it prints just above it.
+  assert.match(s.details, /Everything above is a calculated estimate; a line marked measured was measured on this PC\./);
+  assert.doesNotMatch(s.details, /Everything above is calculated, not measured\./);
 });
 
 await check("'Use this' sends one request naming the setup, and changes nothing else", async () => {

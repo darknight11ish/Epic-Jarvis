@@ -19,8 +19,8 @@ What it proves:
   - GET /api/hardware: the owner's PC today reads "Custom (your own setup)",
     calculated about 0.6 GB over; nothing changes until a preset is chosen.
   - choosing a preset records it and nothing else; the steps come in order,
-    each its own card; the second-card switch goes OFF when the extra
-    features move.
+    only the carded ones ask, and the settings step is the owner's line; the
+    second-card switch goes OFF when the extra features move.
   - making a tuned model: ONE card, action models_create, tier "ask" only;
     nothing is made before "approved"; never a download.
   - measuring: a spill drops that preset to the next size, which reopens
@@ -725,6 +725,48 @@ def t_choose():
         code, out = H.choose(None)
         check("clearing the choice: immediate, and the settings are left as they are",
               code == 200 and H.lane_plan() is None and "left" not in out.get("error", ""))
+
+
+def t_the_choose_answer_does_not_call_every_step_a_card():
+    """PR #1309 left this one: its answer after choosing said each step below
+    is its own approval card, and the settings step has no card. Bite: the
+    old sentence fails the first and third checks."""
+    with G.World(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]),
+                 user_env=G.TODAY_ENV):
+        code, out = H.choose("fast")
+        said = out["message"]
+        steps = out["applying"]["steps"]
+        check("choosing: the steps are in order, a carded step asks first, the settings "
+              "step is the owner's line",
+              code == 200 and "Nothing has changed yet" in said
+              and "the steps below are in order" in said
+              and "A step with a card asks you first" in said
+              and "the settings step is a line you run on this PC" in said, said)
+        check("... and the step the words name really has no card, so the old universal "
+              "was false",
+              any(s["kind"] == "command" and s["route"] is None for s in steps), steps)
+        check("... and the answer no longer promises a card for every step",
+              "each step below is its own approval card" not in said, said)
+
+
+def t_the_details_closing_line_does_not_deny_a_measured_line():
+    """PR #1309 left this other one: the Details list ends by calling every
+    line calculated while its own room line says '(desktop, measured)'. Bite:
+    the old closing line fails the first and last checks."""
+    with G.World(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]),
+                 user_env=G.TODAY_ENV):
+        details = [p["details"] for p in H.status()["presets"]]
+    want = ("Everything above is a calculated estimate; a line marked measured was "
+            "measured on this PC.")
+    check("the Details closing line calls the arithmetic an estimate and owns the "
+          "measured figure",
+          bool(details) and all(d[-1] == want for d in details),
+          [d[-1] for d in details])
+    check("... while that same list really does print a measured line above it",
+          any("(desktop, measured)" in line for d in details for line in d), details)
+    check("... and it no longer claims everything was calculated",
+          not any("Everything above is calculated, not measured." in line
+                  for d in details for line in d), details)
 
 
 def t_steps_follow_the_pc():

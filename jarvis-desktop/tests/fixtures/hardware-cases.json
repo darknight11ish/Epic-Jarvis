@@ -120,7 +120,7 @@
      "details": [
       "Room on the AMD Radeon RX 6600: 8.00 - 0.90 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 6.02 GB; 5.92 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.25 (conversation, 16,384 tokens, f16) + 0.25 (working space) = 4.79 GB. Ollama's own guess: 3.70 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -198,7 +198,7 @@
      "details": [
       "Room on the AMD Radeon RX 6600: 8.00 - 0.90 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 6.02 GB; 5.92 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.84 (conversation, 6,144 tokens, f16) + 0.30 (working space) = 5.82 GB. Ollama's own guess: 5.52 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -274,7 +274,7 @@
       "Room on the AMD Radeon RX 6600: 8.00 - 0.90 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 6.02 GB; 5.92 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.25 (conversation, 16,384 tokens, f16) + 0.25 (working space) = 4.79 GB. Ollama's own guess: 3.70 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.28 (conversation, 8,192 tokens, f16) + 0.25 (working space) + 0.25 (one picture) = 3.79 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -511,7 +511,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -589,7 +589,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -665,7 +665,7 @@
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -912,7 +912,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -990,7 +990,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -1066,7 +1066,7 @@
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -1318,7 +1318,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -1396,7 +1396,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -1472,7 +1472,7 @@
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -1721,7 +1721,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -1799,7 +1799,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -1875,7 +1875,7 @@
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -2055,7 +2055,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -2133,7 +2133,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -2209,7 +2209,7 @@
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -2460,7 +2460,7 @@
       "Room on the NVIDIA GeForce RTX 2060: 12.00 - 0.62 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 10.30 GB; 10.20 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:7b = 4.34 (weights) + 1.26 (picture reader) + 0.23 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) + 0.25 (one picture) = 6.39 GB. Ollama's own guess: 6.04 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -2569,7 +2569,7 @@
       "Chat: qwen3:14b = 8.42 (weights) + 1.33 (conversation, 16,384 tokens, q8_0) + 0.35 (working space) = 10.10 GB. Ollama's own guess: 10.92 GB.",
       "Long: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": {
@@ -2685,7 +2685,7 @@
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
       "Long: qwen3:14b = 8.42 (weights) + 1.33 (conversation, 16,384 tokens, q8_0) + 0.35 (working space) = 10.10 GB. Ollama's own guess: 10.92 GB.",
       "Pictures: qwen2.5vl:7b = 4.34 (weights) + 1.26 (picture reader) + 0.23 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) + 0.25 (one picture) = 6.39 GB. Ollama's own guess: 6.04 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
@@ -2757,7 +2757,7 @@
    "body": {
     "applying": "(the same as GET /api/hardware's applying)",
     "chosen": "features",
-    "message": "\"Most features\" chosen. Nothing has changed yet: each step below is its own approval card, in order.",
+    "message": "\"Most features\" chosen. Nothing has changed yet: the steps below are in order. A step with a card asks you first; the settings step is a line you run on this PC.",
     "ok": true
    },
    "status": 200
@@ -2958,7 +2958,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.10 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.82 GB; 5.72 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "fast",
      "long": {
@@ -3036,7 +3036,7 @@
      "details": [
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.10 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.82 GB; 5.72 after the 0.10 rounding allowance.",
       "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "smart",
      "long": null,
@@ -3112,7 +3112,7 @@
       "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.10 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.82 GB; 5.72 after the 0.10 rounding allowance.",
       "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
       "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
-      "Everything above is calculated, not measured."
+      "Everything above is a calculated estimate; a line marked measured was measured on this PC."
      ],
      "id": "features",
      "long": {
