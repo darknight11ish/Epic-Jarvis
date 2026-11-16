@@ -33,6 +33,13 @@ short line naming the phone and asking for an answer sized to it. Absent - an
 older app, the desktop, a script, a test - and `sentence()` is byte-for-byte
 what it was before this existed.
 
+LIVE OR AGED (2026-11-16). The facts stored for a request say when they
+arrived (`device_age()`), and the newest report a phone has sent this process
+is kept with its own time (`last_age()`). A fact that arrived with THIS
+request is live; a stored one is returned with its age, and never presented as
+a live check. `jarvis_quick.py` answers the model question from that rule -
+see its `phone_own_facts` answer.
+
 WHAT MAY ARRIVE. Only the five keys in `_DEVICE_KEYS`, each value stripped to
 letters, digits, spaces and `. _ + -`, each capped, and the whole line capped at
 `MAX_DEVICE_CHARS`. That is deliberate: this text reaches a system prompt, so a
@@ -57,6 +64,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from typing import Any, Optional
 
 #: The header the clients send. Lower-case on the wire is fine; HTTP headers
@@ -97,7 +105,19 @@ _DEVICE_VALUE_MAX = {"model": 28, "android": 8, "sdk": 3, "screen": 12, "app": 1
 #:
 #: `device` is the phone's own facts for the same request (`X-Jarvis-Device`),
 #: or an empty dict - which is every desktop request and every older client.
+#: `device_at` is when they were stored (epoch seconds), so an answer can say
+#: how old they are instead of presenting them as live.
 _LOCAL = threading.local()
+
+#: The newest facts any phone has sent THIS PROCESS, and when they arrived.
+#: `remember` writes it on every request that carries the header, so a request
+#: that did not come from the phone still has something honest to say - and
+#: always WITH ITS AGE. Without it a desktop question would have no phone facts
+#: at all, and naming a phone from the pairing record instead is the guess this
+#: exists to prevent. In memory only: never written to disk, never logged, and
+#: the line itself carries no identifier (see `DeviceFacts.kt`).
+_LAST: dict = {"facts": {}, "at": 0.0}
+_LAST_LOCK = threading.Lock()
 
 
 def from_value(value) -> str:
@@ -194,18 +214,75 @@ def from_device_value(value) -> dict:
     return clean_facts(raw)
 
 
-def set_device(facts) -> None:
+def set_device(facts, at: Optional[float] = None) -> None:
     """Set this thread's phone facts (the tests' door, and `remember`'s half).
 
-    Takes the header's own string or a mapping; anything else clears them."""
-    _LOCAL.device = (from_device_value(facts) if isinstance(facts, str)
-                     else clean_facts(facts))
+    Takes the header's own string or a mapping; anything else clears them.
+    `at` is when they arrived (epoch seconds) and defaults to now: the real
+    gate always stores them at the start of the request that carried them, so
+    a timestamp in the past is the aged case a test needs. Facts that arrive
+    are also kept as this process's newest report, which is what a request with
+    no phone header reads."""
+    clean = (from_device_value(facts) if isinstance(facts, str)
+             else clean_facts(facts))
+    when = float(time.time() if at is None else at)
+    _LOCAL.device = clean
+    _LOCAL.device_at = when
+    if clean:
+        set_last(clean, at=when)
 
 
 def device() -> dict:
     """This request's phone facts: {} for the desktop, an older app or a test."""
     facts = getattr(_LOCAL, "device", None)
     return dict(facts) if isinstance(facts, dict) else {}
+
+
+def device_at() -> float:
+    """When this request's phone facts were stored (epoch seconds), or 0.0."""
+    value = getattr(_LOCAL, "device_at", 0.0)
+    return float(value) if isinstance(value, (int, float)) and value > 0 else 0.0
+
+
+def device_age() -> Optional[float]:
+    """Seconds since this request's phone facts arrived, or None without facts.
+
+    This is the LIVE half: the facts are stored by `remember` at the start of
+    the request that carried them, so a normal answer sees a few milliseconds
+    and a test can pass `set_device(..., at=<past>)` to make them old."""
+    if not device():
+        return None
+    at = device_at()
+    return max(0.0, time.time() - at) if at else 0.0
+
+
+def set_last(facts, at: Optional[float] = None) -> None:
+    """Record the newest facts a phone has sent this process, with when.
+
+    The door `remember` uses (through `set_device`) and the tests use to stand
+    in for an earlier request. Empty facts are ignored, not a clear: a later
+    desktop request must not erase the last report the phone sent."""
+    clean = (from_device_value(facts) if isinstance(facts, str)
+             else clean_facts(facts))
+    if not clean:
+        return
+    with _LAST_LOCK:
+        _LAST["facts"] = dict(clean)
+        _LAST["at"] = float(time.time() if at is None else at)
+
+
+def last() -> tuple:
+    """The newest facts a phone has sent this process, and when: ({}, 0.0)."""
+    with _LAST_LOCK:
+        return dict(_LAST["facts"]), float(_LAST["at"])
+
+
+def last_age() -> Optional[float]:
+    """Seconds since the newest report, or None when no phone has sent one."""
+    facts, at = last()
+    if not facts or at <= 0:
+        return None
+    return max(0.0, time.time() - at)
 
 
 def device_line() -> str:
@@ -280,9 +357,13 @@ def app_words() -> str:
 
 
 def reset() -> None:
-    """Forget this thread's surface and phone facts (the tests' cleanup)."""
+    """Forget this thread's surface and phone facts, and the newest report."""
     _LOCAL.value = UNKNOWN
     _LOCAL.device = {}
+    _LOCAL.device_at = 0.0
+    with _LAST_LOCK:
+        _LAST["facts"] = {}
+        _LAST["at"] = 0.0
 
 
 def _fallback_unknown(value: Optional[Any]) -> str:
