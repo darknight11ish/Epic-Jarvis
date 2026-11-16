@@ -30967,23 +30967,26 @@ def _run_obfuscate_unavailable() -> Result:
     return Result(OBFUSCATE_UNAVAILABLE, "project_obfuscate_unavailable")
 
 
-#: The honest answer to "can you run a model on my phone?" (2026-11-13). The
-#: phone's own plate says "Not available in this build." and its design document
-#: says DESIGN ONLY - NOTHING IN THIS DOCUMENT IS BUILT; no model runtime ships
-#: in the APK. Before this sentence existed, the question was read as a request
-#: to OPEN a program called "model on my phone".
-ONDEVICE_MODEL_UNAVAILABLE = (
-    "No - not in this build. Nothing that runs a model ships in the phone app: "
-    "there is no on-device engine in the APK, so the phone cannot answer while "
-    "this PC is unreachable, and nothing is captured or synced offline. The "
-    "phone's own Settings page says exactly that - \"Not available in this "
-    "build.\" - and the design for the real thing is a document, not code. "
-    "Every answer still comes from a model running on this PC.")
+#: The honest answer to "can you run a model on my phone?" (rewritten 2026-11-14).
+#: The phone's Local AI screen really does run a small GGUF engine on the phone
+#: (`libjarvis_llama.so` in the APK, 2026-11-13), so the 2026-11-13 answer that
+#: said nothing that runs a model ships was false. The engine is a SEPARATE chat,
+#: off by default, with no network path and no link to this PC. Before this
+#: sentence existed, the question was read as a request to OPEN a program called
+#: "model on my phone".
+ONDEVICE_MODEL_ANSWER = (
+    "Yes - but it is a separate chat, and it is off by default. The phone app "
+    "ships a small on-device engine, so you can load a model file on the phone "
+    "and talk to it with no PC and no internet; it has no network path at all. "
+    "The switch is off until you turn it on in Home -> More -> Local AI. It has "
+    "no link to this PC: it cannot see your memory, your files or your tools, "
+    "and nothing it says comes from this PC. The ordinary Jarvis chat still "
+    "uses the model on this PC, which is the one that knows your things.")
 
 
 def _run_ondevice_model() -> Result:
-    """Say plainly that no model runs on the phone, and change nothing."""
-    return Result(ONDEVICE_MODEL_UNAVAILABLE, "ondevice_model")
+    """Say plainly what the phone's engine is: separate, off, and unlinked."""
+    return Result(ONDEVICE_MODEL_ANSWER, "ondevice_model")
 
 
 def _voicestudio_module():
