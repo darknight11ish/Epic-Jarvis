@@ -1,9 +1,5 @@
 package com.jarvis.client
 
-import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.jarvis.client.data.ClientSettings
-import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.JarvisApi
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +18,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
@@ -40,14 +35,11 @@ import java.util.concurrent.TimeUnit
  * What is asserted here is mostly what the CLIENT sends and how it behaves
  * across a reconnect, because that is the half a server cannot correct for.
  */
-@RunWith(AndroidJUnit4::class)
 class EventStreamContractTest {
 
-    private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
-
     private lateinit var server: MockWebServer
-    private lateinit var settings: ClientSettings
-    private lateinit var tokens: TokenStore
+    private lateinit var settings: FakeHost
+    private lateinit var tokens: FakeTokens
     private lateinit var stream: EventStream
 
     /** Set before connecting to make /api/events hold its body open. */
@@ -74,10 +66,14 @@ class EventStreamContractTest {
         }
         server.start()
 
-        settings = ClientSettings(context)
-        settings.setHost("${server.hostName}:${server.port}")
+        settings = FakeHost()
+        // 127.0.0.1 rather than server.hostName: on a plain computer hostName
+        // is the machine's own DNS name, which PhoneAddress refuses as
+        // off-network, and the stream then never connects. See ApiContractTest
+        // for the measurement.
+        settings.setHost("127.0.0.1:${server.port}")
         settings.clearResumePoint()
-        tokens = TokenStore(context)
+        tokens = FakeTokens()
         tokens.setToken("jarvis_pair_contract_test")
         stream = EventStream(JarvisApi(settings, tokens))
     }

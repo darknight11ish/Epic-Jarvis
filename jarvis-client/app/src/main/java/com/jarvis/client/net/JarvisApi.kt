@@ -184,6 +184,34 @@ internal fun <T> parseListBody(
 }
 
 /**
+ * What [JarvisApi] needs to know about where the PC is: the address to send to,
+ * and the one plain sentence that says why there is no address.
+ *
+ * This is a two-function seam rather than a wider one because these two
+ * functions are the whole of what the client asks - measured by grepping every
+ * `settings.` use in this file. [com.jarvis.client.data.ClientSettings] is the
+ * app's answer, read from what the owner saved; the phone's contract tests
+ * answer with a string they hold in memory, which is what lets the wire
+ * contract be proven on a plain computer instead of on an emulator.
+ */
+interface HostSource {
+    fun baseUrl(): String?
+    fun baseProblem(): String?
+}
+
+/**
+ * What [JarvisApi] needs in order to authenticate: the pairing token, or the
+ * empty string when there is none.
+ *
+ * [com.jarvis.client.data.TokenStore] is the app's answer, decrypted from the
+ * Android Keystore; a contract test answers with the string it was given. The
+ * Keystore itself is still tested, on a device, by `TokenStoreTest`.
+ */
+interface TokenSource {
+    fun token(): String
+}
+
+/**
  * The REST half of the contract. The SSE half is [EventStream].
  *
  * One OkHttp client for both, so the connection pool and the tailnet route are
@@ -191,8 +219,8 @@ internal fun <T> parseListBody(
  * normal elsewhere.
  */
 class JarvisApi(
-    private val settings: ClientSettings,
-    private val tokens: TokenStore,
+    private val settings: HostSource,
+    private val tokens: TokenSource,
 ) {
 
     val client: OkHttpClient = OkHttpClient.Builder()
