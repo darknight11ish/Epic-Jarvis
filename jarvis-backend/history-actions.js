@@ -45,6 +45,14 @@ export const ACTION_LABELS = Object.freeze({
   unpin: "Unpin chat",
   move: "Move to project",
   noTag: "No project",
+  // ONE chat's own words, out of the panel (2026-11-15, the owner: "i also
+  // want an export and copy button on the sub menu of each individual
+  // chat"). Export writes a file; Copy fills the clipboard. Neither changes
+  // the chat, so neither is archived or deleted by being used. They are here
+  // rather than in `hud-history.js` because this is the one table of row
+  // words - the same reason every other row action's label lives here.
+  export: "Export as Markdown",
+  copy: "Copy transcript",
   archive: "Archive",
   unarchive: "Unarchive",
   delete: "Delete",
@@ -52,12 +60,15 @@ export const ACTION_LABELS = Object.freeze({
   newChat: "New chat",
 });
 
-/** What a row's menu offers, in the order it is drawn. Pinning and archiving
- *  are the two actions whose label depends on the row (`labelFor`); `move`
- *  opens the tag list, which is drawn from the PC's own tags and adds nothing
- *  here. Archive sits before Delete because it is the reversible one - the
- *  thing a row offers before the thing that cannot be undone. */
-export const ROW_ACTIONS = Object.freeze(["open", "pin", "move", "archive", "delete"]);
+/** What a live row's menu offers, in the order it is drawn - New chat is the
+ *  panel's own row below the separator, not an action on the chat, so it is
+ *  not listed. Pinning and archiving are the two actions whose label depends
+ *  on the row (`labelFor`); `move` opens the tag list, which is drawn from the
+ *  PC's own tags and adds nothing here. Archive sits before Delete because it
+ *  is the reversible one - the thing a row offers before the thing that cannot
+ *  be undone. Export and Copy (2026-11-15) only read the chat, so they sit
+ *  above Archive and change nothing about it. */
+export const ROW_ACTIONS = Object.freeze(["open", "pin", "move", "export", "copy", "archive", "delete"]);
 
 /** The word for the archived list, in both windows: the filter chip, the
  *  panel's heading and the "it is under Archived" sentence all say one word. */

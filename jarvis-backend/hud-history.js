@@ -28,7 +28,12 @@
  * chats it holds; a long one shows its first five and a "Show N more
  * sessions" row. A click on a row opens that chat in this window's chat
  * view; a right-click (or the row's "...") offers Open, Pin/Unpin, Move to
- * project, Archive and Delete chat. The current chat is marked.
+ * project, Export as Markdown, Copy transcript, Archive and Delete chat.
+ * Export writes that ONE chat's transcript into the owner's Downloads folder
+ * and Copy puts its plain text on the clipboard (2026-11-15, the owner: "i
+ * also want an export and copy button on the sub menu of each individual
+ * chat"); the archived list's menu offers both too, because reading a chat
+ * out changes nothing. The current chat is marked.
  *
  * ONE CLICK FROM THE MAIN STRIP (the owner, 2026-10-29: "i want the chat
  * history accesible directly from the jarvis hud on desktop"). The rail icon
@@ -52,13 +57,19 @@
  * WHAT IT MAY DO, AND WHAT IT MAY NOT
  * The page holds NO pairing token (apps security audit M2), so in the
  * desktop shell every read goes through `hud_proxy.rs::hud_get` (three
- * History reads on its fixed list) and the writes go through ONE Rust
+ * History reads on its fixed list) and the changes go through ONE Rust
  * command, `hud_history_act` (brain/history.rs): pin, file under a tag,
- * archive/unarchive, or delete ONE chat. In a plain browser the page talks
- * to the backend directly, exactly as the rest of this page already does.
- * Nothing here approves anything, raises a card, deletes in bulk, or sends a
- * chat's words anywhere: the search box filters the list this window already
- * loaded, and its text is never sent to the PC.
+ * archive/unarchive, or delete ONE chat. Export and Copy add no read of
+ * their own - both use the SAME `/api/history/conversation?id=` read Open
+ * uses - and Export's one file write goes through a second, narrower Rust
+ * command, `hud_history_export`, which writes ONE Markdown file inside the
+ * owner's Downloads folder and nothing else. In a plain browser the page
+ * talks to the backend directly, exactly as the rest of this page already
+ * does; a browser has no file writer, so Export says it needs the desktop
+ * app while Copy still works. Nothing here approves anything, raises a
+ * card, deletes in bulk, or sends a chat's words anywhere: the search box
+ * filters the list this window already loaded, and its text is never sent
+ * to the PC.
  *
  * PINNING is the PC's own record: a `pinned` column in the same encrypted
  * history file, set by `POST /api/history/pin` (JARVIS-API section 18.3), so
@@ -431,12 +442,95 @@ import {
   }
 
   /* ------------------------------------------------------------------ *
+   * ONE chat's words, for the row menu's Export and Copy (2026-11-15)
+   * ------------------------------------------------------------------ */
+
+  /** The role word a transcript line starts with: the owner's own words are
+   *  "You", Jarvis's are "Jarvis". The PC keeps no other roles in a chat
+   *  (JARVIS-API section 18); an unexpected one is its own name, never a
+   *  guess at whose words they are. */
+  function roleWord(role) {
+    var r = norm(role);
+    if (r === "user") return "You";
+    if (r === "assistant") return "Jarvis";
+    return r ? r.charAt(0).toUpperCase() + r.slice(1) : "Turn";
+  }
+
+  /** The turns of ONE `/api/history/conversation` answer, or none. */
+  function turnsOf(conv) {
+    var c = conv && typeof conv === "object" ? conv : {};
+    return Array.isArray(c.turns) ? c.turns : [];
+  }
+
+  /** The transcript as plain text - what Copy puts on the clipboard. One
+   *  blank line between turns, the words exactly as the PC keeps them. NO
+   *  HTML: this is a plain string, handed to `writeText` (never a
+   *  `ClipboardItem` with a `text/html` flavour), so nothing here escapes or
+   *  tags anything. "" when the chat has no words to copy. */
+  function transcriptText(conv) {
+    var lines = turnsOf(conv).map(function (turn) {
+      var t = turn && typeof turn === "object" ? turn : {};
+      var words = text(t.text);
+      return words ? roleWord(t.role) + ": " + words : "";
+    }).filter(function (line) {
+      return line;
+    });
+    return lines.join("\n\n");
+  }
+
+  /** The transcript as Markdown - what Export writes into the owner's
+   *  Downloads folder. The title is a heading and the words are the owner's
+   *  own (not escaped: a Markdown export is meant to be read in any editor).
+   *  A chat with no messages still writes a file, with one honest line, so
+   *  Export never fails on an empty chat. */
+  function transcriptMarkdown(conv) {
+    var c = conv && typeof conv === "object" ? conv : {};
+    var title = text(c.title).trim() || "Untitled chat";
+    var turns = turnsOf(c);
+    var out = [
+      "# " + title,
+      "",
+      "_Exported from Jarvis History on this PC. " +
+        (turns.length === 0 ? "This chat has no messages."
+          : turns.length + (turns.length === 1 ? " message." : " messages.")) + "_",
+    ];
+    if (turns.length === 0) return out.join("\n") + "\n";
+    out.push("", "---");
+    turns.forEach(function (turn) {
+      var t = turn && typeof turn === "object" ? turn : {};
+      var words = text(t.text);
+      if (!words) return;
+      out.push("", "**" + roleWord(t.role) + ":**", "", words);
+    });
+    return out.join("\n") + "\n";
+  }
+
+  /** The name Export asks the PC to write: the chat's own title, cleaned of
+   *  everything Windows forbids in a file name (`\ / : * ? " < > |` and the
+   *  control characters), then the chat's short id so two chats with the same
+   *  title never land on one file. The PC checks the shape again and refuses
+   *  anything that is not a bare `*.md` file name, so this is a naming
+   *  convenience, not the guard. A title of only forbidden characters becomes
+   *  "Chat", and a Windows device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+   *  is prefixed, because Windows will not create it. */
+  function exportFileName(title, id) {
+    var stem = text(title).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-");
+    stem = stem.replace(/\s+/g, " ").replace(/^[. ]+/, "").replace(/[. ]+$/, "");
+    if (stem.length > 80) stem = stem.slice(0, 80).replace(/[. ]+$/, "");
+    if (!stem) stem = "Chat";
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem)) stem = "Chat " + stem;
+    var shortId = text(id).replace(/[^A-Za-z0-9]/g, "").slice(-8);
+    return stem + (shortId ? " (" + shortId + ")" : "") + ".md";
+  }
+
+  /* ------------------------------------------------------------------ *
    * The glyphs - the page's own 24-unit grid, stroke=currentColor
    * ------------------------------------------------------------------ */
 
-  /** The ten tag icons of docs/CHAT-TAGS-DESIGN.md, plus this panel's own
-   *  four: a pin, an inbox (untagged), a clock (the rail button) and the
-   *  kind marks. Each value is the `d` of one 24-unit stroke path. */
+  /** The ten tag icons of docs/CHAT-TAGS-DESIGN.md, plus this panel's own:
+   *  a pin, an inbox (untagged), a clock (the rail button), the kind marks,
+   *  and the two row actions added on 2026-11-15 (a download tray for Export,
+   *  two sheets for Copy). Each value is the `d` of one 24-unit stroke path. */
   var PATHS = {
     briefcase: "M3 8h18v11H3zM9 8V6h6v2",
     book: "M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM17 7h2v13",
@@ -465,6 +559,10 @@ import {
     plus: "M12 5v14M5 12h14",
     close: "M6 6l12 12M18 6L6 18",
     chevron: "M9 6l6 6-6 6",
+    // Saving a chat to a file (the arrow into a tray) and putting its words on
+    // the clipboard (two sheets), 2026-11-15.
+    download: "M12 4v10M8 11l4 4 4-4M5 20h14",
+    copy: "M9 9h11v11H9zM15 5H4v11",
   };
 
   /** The ten tag icons the shared contract names, in its order. */
@@ -1159,6 +1257,83 @@ import {
       setOpen(false);
     }
 
+    /* ---- ONE chat's words, out of the panel (2026-11-15) ---- */
+
+    /** Read ONE chat through the SAME read `openChat` makes - the History
+     *  list's own `/api/history/conversation?id=`, through this page's one
+     *  read path (`readJson`: Rust's `hud_get` in the desktop, an ordinary
+     *  same-origin GET in a browser). It does NOT open the chat: the panel,
+     *  the list and the window the owner is looking at all stay exactly as
+     *  they are. A hidden list or a chat deleted since the list was read is
+     *  said in the panel's own status line, in `openChat`'s own words. */
+    function withTranscript(row, use) {
+      readJson("/api/history/conversation?id=" + encodeURIComponent(row.id)).then(function (conv) {
+        if (!conv || typeof conv !== "object") throw new Error("that chat could not be read");
+        if (conv.hidden === true || conv.available === false) {
+          announce("Your chat history is hidden. Press Show on the Brain's History tab first.");
+          return;
+        }
+        use(conv);
+      }).catch(function (error) {
+        announce("That chat could not be read: " + String((error && error.message) || error));
+      });
+    }
+
+    /** Copy ONE chat's transcript to the clipboard as plain text. `writeText`,
+     *  never `write(ClipboardItem)`: there is no HTML flavour on the clipboard
+     *  at all. It is the same call the answer menu's "Copy answer" makes, and
+     *  the receipt is this panel's own status line, not a toast. */
+    function copyChat(row) {
+      announce("Reading that chat…");
+      withTranscript(row, function (conv) {
+        var body = transcriptText(conv);
+        if (!body) {
+          announce("That chat has no messages to copy.");
+          return;
+        }
+        var clip = root.navigator && root.navigator.clipboard;
+        if (!clip || typeof clip.writeText !== "function") {
+          announce("This window cannot copy to the clipboard.");
+          return;
+        }
+        clip.writeText(body).then(function () {
+          announce("Copied this chat's transcript to the clipboard.");
+        }, function () {
+          announce("The clipboard refused the copy.");
+        });
+      });
+    }
+
+    /** Export ONE chat's transcript as Markdown into the owner's Downloads
+     *  folder. The file is written by the PC, not by this page: the page has
+     *  no file access at all, so it hands the PC the name and the text and
+     *  `hud_history_export` writes ONE `*.md` file inside Downloads (it
+     *  refuses a path and NEVER overwrites - a second export of the same
+     *  chat gets " (2)", then " (3)") and answers with the full path, which
+     *  is what the status line says. In a plain browser there is no such
+     *  command, and the item says so instead of pretending. */
+    function exportChat(row) {
+      var tauri = root.__TAURI__;
+      if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) {
+        announce("Saving a chat to a file needs the Jarvis desktop app. Copy works here.");
+        return;
+      }
+      announce("Reading that chat…");
+      withTranscript(row, function (conv) {
+        var name = exportFileName(text(conv.title) || text(row.title),
+          text(conv.id) || text(row.id));
+        announce("Saving…");
+        invoke("hud_history_export", { name: name, markdown: transcriptMarkdown(conv) })
+          .then(function (out) {
+            var saved = out && typeof out === "object" ? text(out.saved) : "";
+            announce(saved ? "Exported to " + saved : "Exported.");
+          }, function (error) {
+            announce("That chat could not be exported: " +
+              String((error && error.message) || error));
+          });
+      });
+    }
+
     /* ---- the row menu ---- */
 
     /** Shut the row menu. `focusBack` puts the keyboard back on the `...` that
@@ -1194,7 +1369,7 @@ import {
         : { right: 300, top: 80 };
       var width = 190;
       var left = Math.min(rect.right + 4, (root.innerWidth || 1280) - width - 8);
-      var top = Math.min(rect.top, (root.innerHeight || 800) - 280);
+      var top = Math.min(rect.top, (root.innerHeight || 800) - 360);
       box.style.left = Math.max(4, left) + "px";
       box.style.top = Math.max(4, top) + "px";
       box.hidden = false;
@@ -1216,6 +1391,20 @@ import {
           closeMenu(false);
           act("archive", row.id, false);
         });
+        // An archived chat is still the owner's chat: reading it out (Export)
+        // or copying it changes nothing, so both stay on its menu. They are
+        // the same two functions the live menu calls - one read, one file
+        // writer and one clipboard call for both lists.
+        var expArch = menuItem(ACTION_LABELS.export, "download");
+        expArch.addEventListener("click", function () {
+          closeMenu(false);
+          exportChat(row);
+        });
+        var copyArch = menuItem(ACTION_LABELS.copy, "copy");
+        copyArch.addEventListener("click", function () {
+          closeMenu(false);
+          copyChat(row);
+        });
         var sepArch = el("div", "hh-sep");
         var delArch = menuItem(ACTION_LABELS.delete, "close", true);
         delArch.addEventListener("click", function () {
@@ -1227,6 +1416,8 @@ import {
           newChat();
         });
         menu.appendChild(un);
+        menu.appendChild(expArch);
+        menu.appendChild(copyArch);
         menu.appendChild(sepArch);
         menu.appendChild(delArch);
         menu.appendChild(addArch);
@@ -1287,6 +1478,20 @@ import {
         sub.hidden = !sub.hidden;
         move.setAttribute("aria-expanded", sub.hidden ? "false" : "true");
       });
+      // Export and Copy (2026-11-15, the owner: "i also want an export and
+      // copy button on the sub menu of each individual chat"). Both sit above
+      // Archive because both only READ the chat: neither changes, files or
+      // deletes anything, and neither asks a question.
+      var exportItem = menuItem(ACTION_LABELS.export, "download");
+      exportItem.addEventListener("click", function () {
+        closeMenu(false);
+        exportChat(row);
+      });
+      var copyItem = menuItem(ACTION_LABELS.copy, "copy");
+      copyItem.addEventListener("click", function () {
+        closeMenu(false);
+        copyChat(row);
+      });
       // Archive: reversible, so no question and no confirm box - it moves the
       // chat to the Archived list and the row disappears from the live one.
       var archive = menuItem(labelFor("archive", row.pinned, row.archived), "archive");
@@ -1309,6 +1514,8 @@ import {
       menu.appendChild(pin);
       menu.appendChild(move);
       menu.appendChild(sub);
+      menu.appendChild(exportItem);
+      menu.appendChild(copyItem);
       menu.appendChild(archive);
       menu.appendChild(sep);
       menu.appendChild(del);
@@ -1503,6 +1710,11 @@ import {
     actArgs: actArgs,
     actBody: actBody,
     labelFor: labelFor,
+    // The one-chat transcript helpers (2026-11-15), pure and DOM-free so the
+    // Node suite can hold the very functions Export and Copy run.
+    transcriptText: transcriptText,
+    transcriptMarkdown: transcriptMarkdown,
+    exportFileName: exportFileName,
     glyphPath: glyphPath,
     tagDots: tagDots,
     mount: mount,

@@ -143,6 +143,11 @@ fn main() {
             // (tools/check_command_acl.py is what catches it). Its reads are
             // hud_get's three History paths, on hud-link's list. HUD only.
             "hud_history_act",
+            // The History sidebar's Export (2026-11-15): ONE chat's
+            // already-read transcript, written as one Markdown file inside
+            // Downloads. It takes the text and a bare file name, never a
+            // path, and answers with where it saved. HUD only.
+            "hud_history_export",
             // A reminder's own action (2026-10-27, the owner's request): the
             // Open button on a reminder that has gone off. The job's ID only -
             // the PC reads the target back from its own answer and re-checks

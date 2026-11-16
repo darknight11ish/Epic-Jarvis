@@ -1167,6 +1167,15 @@ pub fn run() {
             // own POST is still refused by hud_bootstrap.js, and nothing here
             // raises a card or loosens a rule. HUD window only.
             brain::history::hud_history_act,
+            // The HUD History sidebar's Export (2026-11-15, the owner: "i
+            // also want an export and copy button on the sub menu of each
+            // individual chat"). The transcript is the page's own read, so
+            // this command makes NO network request: it writes ONE Markdown
+            // file inside the owner's Downloads folder, numbers a repeated
+            // export instead of overwriting, and answers with the full path.
+            // The page names a bare file name and the text, never a path. No
+            // card, no new route. HUD window only.
+            brain::history::hud_history_export,
             // A reminder's own action (2026-10-27, the owner's request): the
             // Open button on a reminder that went off. The id ONLY - never a
             // URL or a path from the page - so the PC reads the target back

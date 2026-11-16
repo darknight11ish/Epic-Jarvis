@@ -2303,33 +2303,46 @@ permissions = [
   "allow-hud-calendar-act",
 ]
 
-# The HUD History sidebar's ONE write (2026-10-27, the owner's request: "both
-# should have pinnable chats, project organization by chat, and more"). The
-# sidebar's READS need nothing new: they are `hud-get`'s three History paths
-# (`/api/history`, `/api/history/conversation?id=`, `/api/history/tags`), whose
-# query is checked in `brain/history.rs::history_read_path` and whose words are
-# taken out in `lock/rules.rs` while App lock or the private lists are hidden.
+# The HUD History sidebar's two commands (2026-10-27, the owner's request:
+# "both should have pinnable chats, project organization by chat, and more";
+# Export joined on 2026-11-15: "i also want an export and copy button on the
+# sub menu of each individual chat"). The sidebar's READS need nothing new:
+# they are `hud-get`'s three History paths (`/api/history`,
+# `/api/history/conversation?id=`, `/api/history/tags`), whose query is
+# checked in `brain/history.rs::history_read_path` and whose words are taken
+# out in `lock/rules.rs` while App lock or the private lists are hidden.
 #
-# This set is the one write command, `hud_history_act`, and it carries exactly
-# four actions on ONE chat: pin/unpin (`POST /api/history/pin`, section 18.3),
-# file under one of the owner's existing tags or unfiled (`POST
-# /api/history/tag`, section 99), archive or bring back (`POST
-# /api/history/archive`, 2026-10-29: reversible, so it asks no question and
-# takes nothing away - the same builder the Brain's own archive command uses),
-# and delete (`POST /api/history/delete`, the same one-chat route the Brain
-# uses). Every action is held on a stale link, refused while the lists are
-# hidden, and raises NO approval card - they are the owner's own tidying, the
-# same things the Brain's History tab does with the same routes, and none of
-# them loosens a rule or takes anything away except the one chat the owner
-# named. There is no delete-all, no clear-list and no route or body this
-# command can be talked into sending: the action, the id and the three optional
-# fields are the whole surface, and `hud_act_body` refuses anything else
-# (including a field the chosen action does not use).
+# `hud_history_act` carries exactly four actions on ONE chat: pin/unpin (`POST
+# /api/history/pin`, section 18.3), file under one of the owner's existing
+# tags or unfiled (`POST /api/history/tag`, section 99), archive or bring
+# back (`POST /api/history/archive`, 2026-10-29: reversible, so it asks no
+# question and takes nothing away - the same builder the Brain's own archive
+# command uses), and delete (`POST /api/history/delete`, the same one-chat
+# route the Brain uses). Every action is held on a stale link, refused while
+# the lists are hidden, and raises NO approval card - they are the owner's own
+# tidying, the same things the Brain's History tab does with the same routes,
+# and none of them loosens a rule or takes anything away except the one chat
+# the owner named. There is no delete-all, no clear-list and no route or body
+# this command can be talked into sending: the action, the id and the three
+# optional fields are the whole surface, and `hud_act_body` refuses anything
+# else (including a field the chosen action does not use).
+#
+# `hud_history_export` is the panel's Copy/Export half's ONE file write: the
+# page already read the chat through that same `/api/history/conversation`
+# read, so this command makes NO network request and adds no route. It takes
+# ONE bare `*.md` file name and the Markdown text - never a path - and writes
+# ONE file inside the owner's Downloads folder, refusing a name with a
+# separator, a drive, a control character or a Windows device name. A
+# repeated export of the same chat gets " (2)", " (3)" ... rather than
+# overwriting. Like every History command here it is refused while the
+# private lists are hidden. No card, nothing loosened, and no file outside
+# Downloads.
 [[set]]
 identifier = "hud-history"
-description = "Pin or unpin ONE chat, file ONE chat under one of the owner's tags (or unfiled), archive or bring back ONE chat, or delete ONE chat. No card, no delete-all, held on a stale link."
+description = "Pin or unpin ONE chat, file ONE chat under one of the owner's tags (or unfiled), archive or bring back ONE chat, or delete ONE chat. Also save ONE chat's already-read transcript as a Markdown file inside Downloads. No card, no delete-all, held on a stale link."
 permissions = [
   "allow-hud-history-act",
+  "allow-hud-history-export",
 ]
 
 # A reminder's own action (2026-10-27, the owner's request: "a reminder that
