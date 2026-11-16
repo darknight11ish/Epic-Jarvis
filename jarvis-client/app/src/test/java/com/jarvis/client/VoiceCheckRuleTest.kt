@@ -173,33 +173,63 @@ class VoiceCheckRuleTest {
     }
 
     @Test
-    fun `the Live screen no longer promises a check per session`() {
+    fun `the Live screen says the voice rule once and points at the Voice card`() {
         // The sentence at LiveScreen.kt used to say "Every full sentence is
         // checked for your voice on your PC; once this session is verified, a
         // short reply is trusted without a check." That stopped being true on
         // 2026-11-03, and the owner asked for the opposite, so the screen must
-        // not promise it.
+        // not promise it. It then re-told the whole voice rule at 402
+        // characters under the Start button - the same rule the Voice card
+        // says in 298, beside the button that changes it (the audit of
+        // 2026-11-16, finding 4). This screen keeps only what Start cannot
+        // tell the owner: when a session ends by itself, and that a start on a
+        // locked phone checks the voice - then points at Settings, Voice.
         val root = listOf(
             File("src/main/java"),
             File("app/src/main/java"),
             File("jarvis-client/app/src/main/java"),
         ).first { it.isDirectory }
         val screen = File(root, "com/jarvis/client/ui/screens/LiveScreen.kt").readText()
+        // Comments here name the old rule too (this file records its history,
+        // and is allowed to quote what it used to say), so the DRAWN lines are
+        // read: block comments blanked, `//` lines dropped. Every assertion
+        // below is about the copy on the screen, never about a comment.
+        val drawn = screen
+            .replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "")
+            .lines()
+            .filterNot { it.trimStart().startsWith("//") }
+            .joinToString("\n")
         assertFalse(
             "LiveScreen still promises a check on every full sentence",
-            screen.contains("Every full sentence is checked"),
+            drawn.contains("Every full sentence is checked"),
         )
         assertFalse(
             "LiveScreen still promises per-session verification",
-            screen.contains("once this session is verified"),
+            drawn.contains("once this session is verified"),
         )
         assertTrue(
             "LiveScreen says where the one setting is",
-            screen.contains("Settings, Voice"),
+            drawn.contains("Settings, Voice"),
         )
         assertTrue(
-            "LiveScreen states the only check left",
-            screen.contains("hi Jarvis") && screen.contains("locked phone"),
+            "LiveScreen no longer says a start on a locked phone checks the voice",
+            drawn.contains("locked phone"),
+        )
+        assertTrue(
+            "LiveScreen no longer says when a session ends by itself",
+            drawn.contains("quiet for a while"),
+        )
+        assertFalse(
+            "LiveScreen re-tells the Voice card's wake-word cases",
+            drawn.contains("hi Jarvis"),
+        )
+        assertFalse(
+            "LiveScreen re-tells the DEF-033 caveat, which belongs to the Voice card",
+            drawn.contains("still checked for now"),
+        )
+        assertFalse(
+            "LiveScreen hardcodes the quiet length, which is the owner's own setting",
+            drawn.contains("90 seconds"),
         )
     }
 }

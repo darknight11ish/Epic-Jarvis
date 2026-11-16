@@ -392,25 +392,27 @@ fun LiveScreen(
                         onClick = { act { JarvisRuntime.liveStart(resume = sign.resume); null } },
                     )
                     Gap(6)
-                    // THE OWNER'S RULE OF 2026-11-03, said as it is. This
-                    // sentence used to promise the 2026-11-01 behaviour -
-                    // "every full sentence is checked ... once this session is
-                    // verified" - which is no longer what happens: the voice
-                    // is checked for "hi Jarvis" on a LOCKED phone and for a
-                    // Live session STARTED on a locked phone, while an
-                    // unlocked Live start and the mic press do not check. The
-                    // unlocked "hi Jarvis" half is not applied yet (DEF-033),
-                    // so the sentence says it is still checked rather than
-                    // claiming otherwise. It also says where the one setting
-                    // lives, because the owner asked for one.
+                    // THE OWNER'S RULE OF 2026-11-03, said ONCE (the audit of
+                    // 2026-11-16, finding 4). This sentence used to promise the
+                    // 2026-11-01 behaviour - "every full sentence is checked
+                    // ... once this session is verified" - which stopped being
+                    // true on 2026-11-03, and never came back. What this screen
+                    // keeps is the two things the owner cannot get by pressing
+                    // Start: when a session ends by itself, and that a start on
+                    // a locked phone checks the voice. The cases - "hi Jarvis"
+                    // on a locked phone, the mic press never checking, an
+                    // unlocked start - and the DEF-033 caveat that an unlocked
+                    // "hi Jarvis" is still checked are said in full on the
+                    // Voice card (VoiceSwitchesPlate), which also owns the
+                    // button that changes the setting, so this screen points
+                    // there instead of re-telling them. The quiet length is the
+                    // owner's own setting (jarvis_live.quiet_seconds, 30 s to
+                    // 10 min, 90 s by default), so no number is stated here;
+                    // the PC warns before a quiet session ends.
                     Text(
-                        "Jarvis listens after every answer until you end it, say \"Okay Jarvis, " +
-                            "that's all for now\", or it has been quiet for 90 seconds. Your " +
-                            "voice is checked when you say \"hi Jarvis\" on a locked phone, and " +
-                            "when Live starts on a locked phone; starting Live on an unlocked " +
-                            "phone and pressing the mic do not check it. Saying \"hi Jarvis\" " +
-                            "on an unlocked phone is still checked for now. Settings, Voice " +
-                            "changes this.",
+                        "Jarvis listens until you end it, say \"Okay Jarvis, that's all for " +
+                            "now\", or it has been quiet for a while. Starting Live on a " +
+                            "locked phone checks your voice; Settings, Voice changes that.",
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid,
                     )

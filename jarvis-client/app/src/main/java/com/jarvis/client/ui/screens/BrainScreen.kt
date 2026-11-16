@@ -3024,7 +3024,11 @@ internal fun FlowChips(items: Collection<String>, muted: Boolean = false) {
 /**
  * Brain's way into the new Settings screen (ease-of-use audit row 16,
  * 2026-09-27) - the same shape as [HistoryEntrySection]'s way into History:
- * one plate, one line saying what moved, one button.
+ * one plate, a line saying where the settings are and how to reach any of
+ * them, one button. It does not list them (the audit of 2026-11-16, finding
+ * 6): the list here was a hand-typed table of contents for the screen the
+ * button opens, and it had already fallen behind Settings' own "Jump to:"
+ * list (SettingsJump.kt), which is drawn on that screen and cannot drift.
  */
 @Composable
 private fun SettingsEntrySection(onOpen: () -> Unit) {
@@ -3032,12 +3036,8 @@ private fun SettingsEntrySection(onOpen: () -> Unit) {
     Section("Settings") {
         Plate {
             Text(
-                "Voice (including \"hey Jarvis\" and how this phone listens), security, " +
-                    "appearance, how Jarvis talks, web search, what asks first, what Jarvis " +
-                    "can reach, sending email, folders it may look in, backups, phone and " +
-                    "smartwatch notifications, picture mode, the browser, your devices and " +
-                    "the Quick Settings tiles. A \"Jump to\" list at the top of Settings " +
-                    "takes you to any of them.",
+                "Voice, security, appearance and the rest are in Settings. A \"Jump to\" " +
+                    "list at the top takes you to any of them.",
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )
