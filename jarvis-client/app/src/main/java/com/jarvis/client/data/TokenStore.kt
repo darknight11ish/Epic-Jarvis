@@ -7,6 +7,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.edit
+import com.jarvis.client.net.TokenSource
 import java.security.KeyStore
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
@@ -32,7 +33,7 @@ import javax.crypto.spec.GCMParameterSpec
  * entry was invalidated (a changed lock screen, a restored backup) should ask
  * for the token again, not refuse to start.
  */
-class TokenStore(context: Context) {
+class TokenStore(context: Context) : TokenSource {
 
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -40,7 +41,7 @@ class TokenStore(context: Context) {
     fun hasToken(): Boolean = !prefs.getString(KEY_BLOB, null).isNullOrEmpty()
 
     /** The plaintext token, or empty when there is none or it cannot be read. */
-    fun token(): String {
+    override fun token(): String {
         val blob = prefs.getString(KEY_BLOB, null) ?: return ""
         return runCatching { decrypt(blob) }
             .onFailure {

@@ -480,6 +480,18 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 
+    // The REAL org.json, for the JVM tests. `testOptions.unitTests
+    // isReturnDefaultValues = true` (below) makes every method in android.jar's
+    // stub return null/0 instead of throwing "not mocked". That is right for a
+    // stray android.* call in a transitive, and wrong for org.json, which this
+    // app really does parse with: on a device org.json is a real
+    // implementation, on the JVM it was the stub, so JSONObject.opt* and
+    // JSONArray.length() answered null and the three contract suites read every
+    // reply as empty - eight of them failed for exactly that reason on the
+    // first JVM run (2026-11-15). Same lineage as Android's, test-only, and it
+    // wins over the stub because AGP puts the mockable android.jar last.
+    testImplementation("org.json:json:20240303")
+
     // Deliberately just enough to launch the activity and read its lifecycle
     // state. No Compose test rule: the reactor runs an unbounded
     // withFrameNanos loop, and Compose's test clock treats a running animation
@@ -493,11 +505,18 @@ dependencies {
     // as OkHttp itself: MockWebServer 5.x replaced MockResponse's setters with
     // a builder, so the version is load-bearing, not incidental.
     //
-    // androidTest rather than a JVM unit test, deliberately. TokenStore needs
-    // the real Keystore and JarvisApi takes it as a constructor argument, so a
-    // JVM test could only reach this code by making the token store injectable
-    // - a production change to suit a test. On the emulator the whole stack is
-    // real, including the network security config, which already permits
-    // cleartext to 127.0.0.1.
-    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // testImplementation, not androidTestImplementation, since 2026-11-15. The
+    // three API-contract suites (ApiContractTest, EventStreamContractTest,
+    // PicturesConfirmContractTest) used to need the emulator because JarvisApi
+    // took ClientSettings and TokenStore directly, and both want an Android
+    // Context. JarvisApi now takes two one-method interfaces instead -
+    // HostSource and TokenSource, which those two classes implement - so the
+    // suites run on the JVM against ContractFakes.
+    //
+    // That is the point of the move, not a tidy-up: the JVM suites run in the
+    // required `phone-unit-tests` job, which always runs, while the emulator
+    // job (smoke, in `Jarvis client`) is path-filtered and can sit "Expected"
+    // forever on a pull request that does not touch the phone. A contract
+    // break now fails a check that is required to merge.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

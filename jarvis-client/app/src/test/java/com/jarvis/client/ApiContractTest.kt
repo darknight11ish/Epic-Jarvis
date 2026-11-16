@@ -1,9 +1,5 @@
 package com.jarvis.client
 
-import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.jarvis.client.data.ClientSettings
-import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.FeedbackReason
 import com.jarvis.client.net.ApiError
@@ -33,7 +29,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
 
 /**
@@ -41,7 +36,7 @@ import java.util.concurrent.TimeUnit
  *
  * Everything else in this suite is either a pure-JVM test of one function or a
  * three-assertion check that the app opens. Nothing had ever put the real
- * OkHttp client, the real headers, the real token store and the real decoders
+ * OkHttp client, the real headers, a real token and the real decoders
  * end to end against something speaking the protocol — so a mismatch between
  * what this client sends and what `jarvis_hud.py` expects could only be found
  * by a human with a paired phone.
@@ -51,17 +46,18 @@ import java.util.concurrent.TimeUnit
  * REQUEST, not the response.
  *
  * On 127.0.0.1, which `network_security_config.xml` already permits in
- * cleartext alongside `localhost` and `ts.net` — so this exercises the real
- * policy rather than working around it.
+ * cleartext alongside `localhost` and `ts.net`. The saved address comes from
+ * [FakeHost] rather than from `ClientSettings`, which is the one thing this
+ * suite does not prove: `ClientSettings` refuses a loopback address in a
+ * release build, and a test is allowed to talk to its own stub server. The
+ * run itself is on the JVM, because a contract that only runs on an emulator
+ * is a contract that misses the required checks (2026-11-15).
  */
-@RunWith(AndroidJUnit4::class)
 class ApiContractTest {
 
-    private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
-
     private lateinit var server: MockWebServer
-    private lateinit var settings: ClientSettings
-    private lateinit var tokens: TokenStore
+    private lateinit var settings: FakeHost
+    private lateinit var tokens: FakeTokens
     private lateinit var api: JarvisApi
 
     /** Whatever the dispatcher should answer next, by path. */
@@ -85,9 +81,17 @@ class ApiContractTest {
         }
         server.start()
 
-        settings = ClientSettings(context)
-        settings.setHost("${server.hostName}:${server.port}")
-        tokens = TokenStore(context)
+        settings = FakeHost()
+        // 127.0.0.1, NOT server.hostName. On the emulator hostName was
+        // "localhost", which PhoneAddress accepts through the debug loopback
+        // allowance. On a plain computer it is the machine's own DNS name
+        // (measured here: kubernetes.docker.internal), and PhoneAddress refuses
+        // that as "not on your own networks" - so every test in this file got
+        // Unreachable and 33 of them failed at once (2026-11-15). The name of
+        // the host is not what this suite is testing; the route, the headers
+        // and the body are.
+        settings.setHost("127.0.0.1:${server.port}")
+        tokens = FakeTokens()
         tokens.setToken(TOKEN)
         api = JarvisApi(settings, tokens)
     }

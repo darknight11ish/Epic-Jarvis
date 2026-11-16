@@ -1,9 +1,5 @@
 package com.jarvis.client
 
-import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.jarvis.client.data.ClientSettings
-import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.Pictures
@@ -21,7 +17,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
 
 /**
@@ -45,9 +40,11 @@ import java.util.concurrent.TimeUnit
  * What no unit test can prove is that the reader is REACHED: what leaves this
  * phone, which path it goes to, the headers beside it, and how many requests
  * one tap actually makes. So everything here is REAL - the real [JarvisApi] on
- * its real OkHttp clients, the real [ClientSettings] and [TokenStore] (whose
- * token comes back through the Android Keystore), and the real
- * `Pictures.readMake` classification - against a MockWebServer stub PC. Most
+ * its real OkHttp clients, and the real `Pictures.readMake` classification -
+ * against a MockWebServer stub PC. The saved address and the token come from
+ * [FakeHost] and [FakeTokens] rather than from SharedPreferences and the
+ * Keystore, because what this suite proves is the request; `TokenStoreTest`
+ * still proves the Keystore, on a device. Most
  * assertions are about the REQUEST, because that is the half a real server
  * cannot correct for.
  *
@@ -62,14 +59,11 @@ import java.util.concurrent.TimeUnit
  * (the question is cleared before the confirming call, "Not now" sends
  * nothing, no retry) are pinned against its source in `PicturesTest`.
  */
-@RunWith(AndroidJUnit4::class)
 class PicturesConfirmContractTest {
 
-    private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
-
     private lateinit var server: MockWebServer
-    private lateinit var settings: ClientSettings
-    private lateinit var tokens: TokenStore
+    private lateinit var settings: FakeHost
+    private lateinit var tokens: FakeTokens
     private lateinit var api: JarvisApi
 
     /** Whatever the dispatcher should answer next, by path. */
@@ -126,9 +120,12 @@ class PicturesConfirmContractTest {
         }
         server.start()
 
-        settings = ClientSettings(context)
-        settings.setHost("${server.hostName}:${server.port}")
-        tokens = TokenStore(context)
+        settings = FakeHost()
+        // 127.0.0.1 rather than server.hostName: on a plain computer hostName
+        // is the machine's own DNS name, which PhoneAddress refuses as
+        // off-network. See ApiContractTest for the measurement.
+        settings.setHost("127.0.0.1:${server.port}")
+        tokens = FakeTokens()
         tokens.setToken(TOKEN)
         api = JarvisApi(settings, tokens)
     }
