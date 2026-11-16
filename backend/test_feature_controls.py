@@ -10,7 +10,11 @@ that for `tools/check_feature_controls.py`:
 4. an unknown feature row makes it fail (a new catalogue entry must be added);
 5. a deliberately removed settings row makes it fail;
 6. a Settings page that lost a toggle row makes it fail;
-7. `--strict` prints the known gaps and still exits 0 on a clean tree.
+7. `--strict` prints the known gaps and still exits 0 on a clean tree;
+8. a note the desktop's all-features list PRINTS that only LOOKS planned makes it
+   fail (DEF-038): the promise "typed path still being wired" may stand only on a
+   row whose own sentence does not resolve, asked through the generator's own
+   `_resolves()`.
 
 It copies only the files the checker reads into a temporary tree, so nothing
 outside this test's own directory is touched. Run: python -B backend/test_feature_controls.py
@@ -27,11 +31,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECK = ROOT / "tools" / "check_feature_controls.py"
+DIRECTORY_REL = "jarvis-desktop/src/feature-directory.js"
 SOURCES = [
     "backend/jarvis_feature_catalogue.py",
     "backend/jarvis_settings_registry.py",
     "backend/jarvis_quick.py",
     "contract/feature-controls.json",
+    # The desktop's all-features list and the generator that writes its notes:
+    # the checker reads the printed note back (DEF-038), so a bite case that
+    # changes a note needs both in the tree it copies.
+    DIRECTORY_REL,
+    "tools/gen_feature_directory.py",
     "jarvis-desktop/src/settings.html",
     "jarvis-desktop/src/settings-catalog.js",
     # The faces feature's typed values are the visual spec's own ids and
@@ -71,6 +81,22 @@ def reset_surfaces(tmp):
     """Undo any mutation from the previous bite case (backend never changes)."""
     shutil.copyfile(ROOT / "contract/feature-controls.json", tmp / "contract/feature-controls.json")
     shutil.copyfile(ROOT / "jarvis-desktop/src/settings.html", tmp / "jarvis-desktop/src/settings.html")
+    shutil.copyfile(ROOT / DIRECTORY_REL, tmp / DIRECTORY_REL)
+
+
+def write_directory(tmp, doc):
+    """Rewrite the page's own generated copy in the exact shape the writer emits.
+
+    `tools/gen_feature_directory.py` writes the JSON body with a trailing
+    newline, so the object closes on its own line (`}\\n;`) - the shape the
+    checker's reader slices. Anything else would be a differently formatted
+    file, and a test that mutates a file differently from its writer is testing
+    its own formatting rather than the checker.
+    """
+    body = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+    (tmp / DIRECTORY_REL).write_text(
+        "export const FEATURE_DIRECTORY = %s;\n\nexport default FEATURE_DIRECTORY;\n" % body,
+        encoding="utf-8", newline="\n")
 
 
 def _load_checker():
@@ -321,6 +347,41 @@ def main():
         check("a recorded stale-planned row that stops working fails (the set only shrinks)",
               fixed_row.returncode == 1 and "manner: listed in STALE_PLANNED" in fixed_row.stdout,
               fixed_row.stdout + fixed_row.stderr)
+
+        # ---- DEF-038 (2026-11-15): the sentence the page PRINTS --------------
+        # The desktop's all-features list carries a planned row's note, and that
+        # note promised "typed path still being wired" on rows whose own sentence
+        # already changed the setting (10 of 23 when it was measured). The
+        # generator now computes the note from the phrase, and the checker reads
+        # the printed page back and asks the generator's own `_resolves()`.
+        #
+        # The bite: give a row that is NOT a planned gap - an enforced row whose
+        # own sentence resolves and which prints no note today - the planned
+        # note. It only LOOKS planned, and the checker must refuse it.
+        reset_surfaces(tmp)
+        gener = CHECKER.load_directory_generator(tmp)
+        directory = CHECKER.printed_directory(tmp)
+        doc = read_json(tmp)
+        printed = {row["id"]: row for row in (directory or {}).get("rows") or []}
+        candidates = [f["id"] for f in doc["features"]
+                      if f["status"] == "enforced"
+                      and f["id"] in printed
+                      and not printed[f["id"]].get("note")
+                      and gener is not None
+                      and gener._resolves(str(printed[f["id"]].get("example") or ""))]
+        if candidates:
+            lookalike_row = printed[candidates[0]]
+            lookalike_row["note"] = gener.PLANNED_NOTE
+            write_directory(tmp, directory)
+            lookalike = run(tmp)
+            check("a printed planned note that only LOOKS planned fails (DEF-038)",
+                  lookalike.returncode == 1 and candidates[0] in lookalike.stdout
+                  and "only looks planned" in lookalike.stdout,
+                  "row=%s | %s" % (candidates[0], lookalike.stdout + lookalike.stderr))
+        else:
+            check("a printed planned note that only LOOKS planned fails (DEF-038)", False,
+                  "the fixture no longer has an enforced row with no note and a "
+                  "resolving sentence - this bite case has nothing to bite")
 
         reset_surfaces(tmp)
         html = tmp / "jarvis-desktop/src/settings.html"

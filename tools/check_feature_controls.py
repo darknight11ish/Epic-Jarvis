@@ -10,8 +10,10 @@ This checker reads `contract/feature-controls.json` and compares every row
 against the REAL files: `backend/jarvis_feature_catalogue.py` (the catalogue
 features), `backend/jarvis_settings_registry.py` (BOOL_SETTINGS,
 SETTINGS_ROWS, SECTIONS, NOT_BY_ASKING), `backend/jarvis_quick.py` (the typed
-grammar, through its pure `match()`), and the desktop/phone Settings surfaces.
-It does not edit any of them, and it does not treat a recorded gap as a pass:
+grammar, through its pure `match()`), `jarvis-desktop/src/feature-directory.js`
+(the "All features and abilities" words the owner reads), and the desktop/phone
+Settings surfaces. It does not edit any of them, and it does not treat a
+recorded gap as a pass:
 
 * a feature with status `enforced` must have BOTH typed phrases resolving to a
   real control (checked by calling `jarvis_quick.match()`), and its desktop and
@@ -26,6 +28,12 @@ It does not edit any of them, and it does not treat a recorded gap as a pass:
   were measured that day and are named in `STALE_PLANNED`; they are reported by
   name on a green run, the set may only shrink, and a planned row that starts
   working outside it is a failure on the spot;
+* the note the desktop's own all-features list PRINTS is read back: a row whose
+  printed note still promises "typed path still being wired" must show a
+  sentence that does NOT resolve, asked through the generator's own
+  `_resolves()` helper - the one that computes the note - rather than through a
+  second copy of the rule here. A row that only LOOKS planned is a FAILURE on
+  the spot (DEF-038, 2026-11-15), never a quiet sentence on the owner's screen;
 * an unknown new feature (or a dropped one) is a loud failure - nothing may be
   silently omitted from the contract;
 * every BOOL_SETTINGS switch, every SETTINGS_ROWS row and every SECTIONS
@@ -54,10 +62,16 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 DEFAULT_ROOT = TOOLS.parent
 CONTRACT = "contract/feature-controls.json"
+#: The desktop page's own generated copy of the all-features directory. Its
+#: rows are checked here against the same resolution the generator used, so the
+#: words the owner reads cannot promise a gap that closed (DEF-038).
+DIRECTORY = "jarvis-desktop/src/feature-directory.js"
 REQUIRED_SOURCES = [
     "backend/jarvis_feature_catalogue.py",
     "backend/jarvis_settings_registry.py",
     "backend/jarvis_quick.py",
+    DIRECTORY,
+    "tools/gen_feature_directory.py",
     "jarvis-desktop/src/settings.html",
     "jarvis-desktop/src/settings-catalog.js",
     # The faces row's typed values are the visual spec's own ids and display
@@ -229,6 +243,85 @@ def planned_phrase_already_works(q, row):
     return found
 
 
+def load_directory_generator(root: Path):
+    """`tools/gen_feature_directory.py`, the module that WRITES the note.
+
+    The note's wording and the question "does this sentence resolve" are taken
+    from the generator itself (`PLANNED_NOTE`, `_resolves`) instead of being
+    retyped here. Two copies of that rule are how the page and its checker came
+    to disagree in the first place (DEF-038, measured 2026-11-04), so there is
+    one copy and this is a view of it. None means a tree with no generator,
+    where the check below has nothing to ask.
+    """
+    path = root / "tools" / "gen_feature_directory.py"
+    if not path.is_file():
+        return None
+    importlib.invalidate_caches()
+    spec = importlib.util.spec_from_file_location("check_feature_controls_directory_gen", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def printed_directory(root: Path):
+    """The rows `jarvis-desktop/src/feature-directory.js` actually prints.
+
+    The file is `export const FEATURE_DIRECTORY = { ...json... };` followed by a
+    default export. Only that one object literal is read - it is the copy the
+    page loads, not a second rendering of the contract.
+    """
+    path = root / DIRECTORY
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8")
+    start, end = text.find("{"), text.rfind("\n}\n;")
+    if start < 0 or end < 0:
+        return None
+    try:
+        return json.loads(text[start:end + 2])
+    except ValueError:
+        return None
+
+
+def directory_note_guard(directory, gen, c):
+    """DEF-038: the note the all-features list PRINTS must still be true.
+
+    `tools/gen_feature_directory.py` stamps `PLANNED_NOTE` ("Settings control
+    today; typed path still being wired.") on a planned row, and the desktop's
+    "All features and abilities" list shows that sentence to the owner. Nothing
+    read it back: on 2026-11-04 ten of the noted rows already changed their own
+    control, so the page promised a gap that no longer existed.
+
+    The rule is the generator's own, not a second copy of it: the note may only
+    stand where its row's example phrase does NOT resolve. `_resolves` is the
+    helper that computed the note, so the page and this check ask one question.
+    A note that fails that test only LOOKS planned, and that is a failure on the
+    spot rather than a quiet promise on the owner's screen.
+
+    Returns the ids whose note was checked, ready to print on a green run.
+    """
+    if not isinstance(directory, dict) or gen is None:
+        return []
+    note = getattr(gen, "PLANNED_NOTE", None)
+    resolves = getattr(gen, "_resolves", None)
+    if not note or not callable(resolves):
+        c.fail("tools/gen_feature_directory.py no longer exposes PLANNED_NOTE and "
+               "_resolves, so the printed note cannot be checked (DEF-038)")
+        return []
+    checked = []
+    for row in directory.get("rows") or []:
+        if str(row.get("note") or "") != note:
+            continue
+        fid = str(row.get("id") or "")
+        example = str(row.get("example") or "")
+        checked.append(fid)
+        if resolves(example):
+            c.fail("%s: the all-features list still prints %r, but the generator's "
+                   "own _resolves() resolves the row's own sentence %r - the note "
+                   "only looks planned on this row (DEF-038)" % (fid, note, example))
+    return checked
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Check the feature-controls matrix against the real sources.")
     ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
@@ -263,6 +356,13 @@ def main(argv=None):
     # ---- every catalogue feature: no unknown, no silent drop ----------------
     real = {f["id"]: f for f in fc.FEATURES}
     matrix = {f.get("id"): f for f in contract.get("features", [])}
+    # ---- the note the owner's own directory prints (DEF-038) ---------------
+    directory = printed_directory(root)
+    directory_gen = load_directory_generator(root)
+    if directory is None and (root / DIRECTORY).is_file():
+        c.fail(DIRECTORY + ": the generated directory is not readable as the one "
+                          "object literal the page loads")
+    printed_notes = directory_note_guard(directory, directory_gen, c)
     c.need(contract.get("feature_count") == len(fc.FEATURES),
            "feature_count says %r, the catalogue has %d" % (contract.get("feature_count"), len(fc.FEATURES)))
     for fid in sorted(set(real) - set(matrix)):
@@ -900,6 +1000,15 @@ def main(argv=None):
     if stale_reported:
         print("stale planned rows (typed path already works, DEF-037): %d - %s" % (
             len(stale_reported), ", ".join(sorted(fid for fid, _ in stale_reported))))
+    if printed_notes:
+        print("printed directory notes checked (DEF-038): %d - %s" % (
+            len(printed_notes), ", ".join(sorted(printed_notes))))
+    elif directory is not None and directory_gen is not None:
+        # Zero is the honest answer here: no row claims a typed path is still
+        # being wired. Printed rather than silent, so a green run says the check
+        # ran and what it found - the rule this file was written to keep.
+        print("printed directory notes checked (DEF-038): 0 rows claim a typed path "
+              "is still being wired")
     print("OK: the matrix agrees with the real files. Known gaps above are REPORTED, not passed.")
     return 0
 

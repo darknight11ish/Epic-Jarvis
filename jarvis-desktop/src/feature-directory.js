@@ -100,7 +100,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.",
       "not_a_control": true
     },
     {
@@ -116,7 +116,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "spoken style is automatic, not a registered switch or typed control yet",
       "not_a_control": true
     },
     {
@@ -180,7 +180,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: manner; phone: All features and abilities",
       "where_desktop": "manner",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -644,7 +644,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -740,7 +740,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: security; phone: All features and abilities",
       "where_desktop": "security",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch; its control is drawn by hand in the Security card (chat-history-settings.js, so it has no generated toggle row), and the phone changes it in its own History screen, not in Settings. The retention choice is not typed (2026-10-22 decision: no spoken path to immediate deletion)",
       "not_a_control": true
     },
     {
@@ -1012,7 +1012,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: folders; phone: Settings, Folders Jarvis may look in",
       "where_desktop": "folders",
       "where_phone": "Settings, Folders Jarvis may look in",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1076,7 +1076,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: web-search; phone: All features and abilities",
       "where_desktop": "web-search",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1284,7 +1284,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: spending; phone: All features and abilities",
       "where_desktop": "spending",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1508,7 +1508,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1540,7 +1540,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: email-sending; phone: All features and abilities",
       "where_desktop": "email-sending",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1860,7 +1860,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: animal-options; phone: All features and abilities",
       "where_desktop": "animal-options",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1940,7 +1940,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -1956,7 +1956,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -2004,7 +2004,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: notifications; phone: Notifications from Jarvis (the PC's kinds)",
       "where_desktop": "notifications",
       "where_phone": "Notifications from Jarvis (the PC's kinds)",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -2068,7 +2068,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: hardware; phone: All features and abilities",
       "where_desktop": "hardware",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -2116,7 +2116,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: second-card; phone: All features and abilities",
       "where_desktop": "second-card",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -2132,7 +2132,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: big-model; phone: All features and abilities",
       "where_desktop": "big-model",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
@@ -2644,7 +2644,7 @@ export const FEATURE_DIRECTORY = {
       "where": "desktop Settings: asks-first; phone: All features and abilities",
       "where_desktop": "asks-first",
       "where_phone": "All features and abilities",
-      "note": "Settings control today; typed path still being wired.",
+      "note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "not_a_control": true
     },
     {
