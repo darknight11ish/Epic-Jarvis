@@ -1,0 +1,1 @@
+- **The generated snapshots now describe `main` after tonight's batch (2026-11-15).** The self-code map and the recent-changes module were re-taken from the tree `main` holds now, in both of their copies, so neither one describes an older commit any more.
