@@ -1809,9 +1809,24 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny check licenses advisories sources
+      # THIRD-PARTY-NOTICES.txt's Python half (section 3) must name every
+      # package backend/requirements.lock pins, with the licence that release
+      # itself declares. This step needs neither cargo nor an installed
+      # backend: it reads each pinned release's own published metadata (PyPI's
+      # JSON API), so it can run here. After adding or bumping a package:
+      # python3 tools/gen_notices.py --python, and commit the file.
+      #
+      # It lives in this informational `audit` job rather than a required one
+      # on purpose: it is the first guard of its kind, and a network read
+      # should not be able to block an unrelated pull request until it has a
+      # track record. The Rust half below has been guarded here since
+      # DEPS audit B-22.
+      - name: The Python half of the third-party notices is up to date
+        run: python3 ../../tools/gen_notices.py --check --python
       # THIRD-PARTY-NOTICES.txt must name every Rust library the Windows
       # build ships, with its copyright lines (DEPS audit B-22). After adding
       # or updating a crate: python3 tools/gen_notices.py, and commit the file.
+      # (No flag: this run checks the Rust and Python halves together.)
       - name: Third-party notices are up to date
         run: |
           cargo fetch --locked

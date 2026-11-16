@@ -1,0 +1,20 @@
+# Development-only tools for building and checking the third-party notices.
+#
+# Nothing here is ever a Jarvis dependency, and nothing here goes into
+# backend/requirements.lock: none of it is installed on the owner's PC for
+# Jarvis to run. Install it for yourself, from the repository root, with:
+#
+#     py -3 -m pip install -r tools/requirements-dev.txt
+#
+# pip-licenses (MIT, https://github.com/raimon49/pip-licenses) is the SECOND
+# reader of the Python packages' licences. tools/gen_notices.py prints a NOTE
+# for any package where pip-licenses disagrees with the row written from the
+# pinned release's own published metadata.
+#
+# It is deliberately not the source of those rows. pip-licenses reads the
+# packages INSTALLED in the environment it runs in, and installed packages
+# drift from the lock (five of the lock's 78 pins on the owner's PC on
+# 2026-11-16), so its answer would describe the wrong release for those and
+# would describe nothing at all on a machine where the backend is not
+# installed - which is every CI runner that could check the committed file.
+pip-licenses==5.5.5
