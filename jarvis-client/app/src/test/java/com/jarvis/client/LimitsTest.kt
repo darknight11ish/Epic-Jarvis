@@ -4,6 +4,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Limits
+import com.jarvis.client.net.NotifyRows
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -337,10 +338,22 @@ class LimitsTest {
     // -------------------------------------------------------- the screen ----
 
     @Test
-    fun `the plate draws only what Limits offered, and wires every control to setLimit`() {
+    fun `the plate draws what Limits offered minus the PC's notification rows`() {
         val plate = source(PLATE)
-        assertTrue("the plate must draw the filtered list",
-            plate.contains("rows = Limits.offered(r.value)"))
+        // ONE home (2026-11-16). All eight of the PC's own notification switches
+        // are drawn by the Notifications card (PcNotifyPlate.kt), which is named
+        // for them and owns their three subheadings and the Test button. This
+        // plate reads the same route for everything else and must take those
+        // eight keys back out: drawing them here too gives one switch two live
+        // controls in two Settings sections, which is the defect this pins.
+        assertTrue("the plate draws the offered rows unfiltered again - the PC's notification rows are back",
+            plate.contains("rows = offered.filterNot { it.key in NotifyRows.KEYS }"))
+        assertTrue("the plate must read what Limits offered",
+            plate.contains("val offered = Limits.offered(r.value)"))
+        // A removed group with no pointer is a gap where eight rows used to be.
+        assertTrue("the plate must say where those rows went",
+            plate.contains("Your PC's notification settings are under Notifications from Jarvis."))
+        assertTrue("the sentence is written but never drawn", plate.contains("Text(NOTIFY_HOME"))
         assertTrue("every control goes through the runtime's one write",
             plate.contains("val a = JarvisRuntime.setLimit(key, value)"))
         assertTrue("the plate never posts to a route itself", !plate.contains("/api/"))
@@ -461,6 +474,16 @@ class LimitsTest {
             assertFalse("${r.key} is not a loosening either way", r.loosenUp)
             assertEquals("both", r.app)
         }
+        // AND ONE CARD OWNS THEM (2026-11-16). The route still offers all four
+        // of this fixture, so the Notifications card can draw them - and that
+        // card is the only place they are drawn: the limits plate takes this
+        // same list back out. Both halves are asserted, because either one
+        // alone is a way to "fix" the duplicate by losing the controls.
+        assertEquals("the Notifications card must still draw them",
+            listOf("notif_alarms", "notif_quiet_enabled", "notif_quiet_start", "notif_quiet_end"),
+            NotifyRows.rows(notifyBody).map { it.key })
+        assertTrue("the limits plate draws a second copy of these rows again",
+            source(PLATE).contains("filterNot { it.key in NotifyRows.KEYS }"))
     }
 
     @Test

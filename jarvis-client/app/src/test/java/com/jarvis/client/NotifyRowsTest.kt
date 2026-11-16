@@ -286,7 +286,7 @@ class NotifyRowsTest {
     }
 
     @Test
-    fun `the card is drawn in Settings, under the row that promises it`() {
+    fun `the card is drawn in Settings, under the row that promises it, and nowhere else`() {
         val settings =
             repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt").readText()
         // The "Notifications from Jarvis" row's own paragraph ends by naming
@@ -298,5 +298,14 @@ class NotifyRowsTest {
         assertTrue("the pointer row's own promise moved",
             repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/JarvisNotifyPlate.kt")
                 .readText().contains("the PC's own Notifications card"))
+        // AND NOWHERE ELSE (2026-11-16). These same eight rows used to be drawn
+        // a second time by the limits plate, so one switch had two live controls
+        // in two Settings sections. That plate takes these keys back out and
+        // points here; if the filter goes, this is the test that fails.
+        val limits = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/LimitsPlate.kt").readText()
+        assertTrue("the limits plate draws these eight rows a second time again",
+            limits.contains("rows = offered.filterNot { it.key in NotifyRows.KEYS }"))
+        assertTrue("the limits plate no longer points at this card",
+            limits.contains("Notifications from Jarvis"))
     }
 }

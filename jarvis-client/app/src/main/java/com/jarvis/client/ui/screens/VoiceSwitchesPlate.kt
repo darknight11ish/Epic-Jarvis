@@ -298,8 +298,16 @@ internal fun WakeWordSwitchesCard(
         // offers nothing to press.
         if (onVoiceCheck != null) {
             Gap(12)
+            // THE HEADING NAMES THE GROUP; IT MUST NOT RESTATE THE SETTING.
+            // It used to read "Only check my voice on a locked phone", which is
+            // the same sentence as the button that turns the setting ON
+            // ("Only check it on my locked phone") - so the card said one thing
+            // twice, 25 lines apart, and the button read like a status line that
+            // might do nothing (audit 2026-11-16, finding 3). The paragraph
+            // below says what is checked when, and the button says which way the
+            // next tap moves it, so the heading only says what the setting is.
             Text(
-                "Only check my voice on a locked phone",
+                "Checking your voice",
                 style = MaterialTheme.typography.labelLarge,
                 color = chrome.textHi,
             )
