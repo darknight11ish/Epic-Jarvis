@@ -3003,7 +3003,8 @@ def _settings_tool_text() -> str:
     head = ("Call this tool when the owner asks you to change one of Jarvis's own "
             "settings, in any words - do not ask first, just call it. Examples: "
             "\"turn on humour\", \"switch the prompt coach off\", \"enable web "
-            "search\", \"turn on quiet hours\". \"setting\" is their words for it; "
+            "search\", \"turn on quiet hours\", \"turn on the GitHub tools\". "
+            "\"setting\" is their words for it; "
             "\"value\" is on or off, or a named choice such as \"faster\". ")
     tail = ("Its own result says what happened: a loosening waits for one approval "
             "card, cosmetic ones at once, and you never change it yourself; never "
@@ -18816,10 +18817,39 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
         key = number.key
         apply = lambda: number.set(seconds)
     else:
-        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
-        say_step("tool_refused", name)
-        return reply({"ok": False, "changed": False,
-                      "error": R.cannot_change_setting_words(asked)})
+        # A TOOL'S OWN SWITCH, WHICH IS NOT A SETTING (2026-11-15). The owner
+        # asked to be able to talk to Jarvis about what GitHub tools it has,
+        # what is enabled, and to switch them on by asking. The phrase grammar
+        # answers his own sentences without a model; this is the same door for a
+        # turn the MODEL is driving, where it has heard the request in its own
+        # words and called this tool. `find_tool_target` is the registry's
+        # closed-world alias table (`tools/gen_tool_targets.py`), so a sentence
+        # that names no tool still gets the plain "cannot change" answer below.
+        #
+        # IT IS THE GROUP ONLY. `set_reading_tool` reaches every switchable tool,
+        # and a wrong match in the OFF direction is an instant, cardless change -
+        # so this door is opened for the one target the owner asked for, the
+        # twenty-tool master switch, and every single-tool switch keeps its two
+        # existing doors ("turn on the browser control tool" in the phrase
+        # grammar, and its row on "What asks first"). Widening it is its own
+        # decision, made on the record, not a side effect of this one.
+        tool = R.find_tool_target(asked)
+        group = ""
+        try:
+            import jarvis_asks_first as _AF
+            group = str(getattr(_AF, "GITHUB_TOOLS_GROUP", ""))
+        except Exception:                   # noqa: BLE001 - older PC: no group
+            group = ""
+        if tool is None or not group or tool != group:
+            steps.append({"tool": name, "ran": False, "ok": False,
+                          "outcome": "refused"})
+            say_step("tool_refused", name)
+            return reply({"ok": False, "changed": False,
+                          "error": R.cannot_change_setting_words(asked)})
+        if value not in ("on", "off"):
+            return stop(SETTINGS_VALUE_WORDS)
+        key = tool
+        apply = lambda: R.set_reading_tool(tool, value == "on")
     # `peer`/`local` are deliberately NOT passed here, and that is a CHECKED
     # claim rather than an oversight (2026-10-13, raised by a second reader).
     # The spoken path passes them (jarvis_quick._run_settings_bool ->

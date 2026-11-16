@@ -502,32 +502,44 @@ def t_every_asks_first_change_is_the_same_in_both_doors():
 
 def _tool_core(name):
     core = re.sub(r"^(?:the|my)\s+", "", str(name))
-    return re.sub(r"\s+tool$", "", core)
+    # `tools?` since 2026-11-15: the master GitHub group switch's first alias
+    # is plural ("the github tools"), and a phrase built from it must not read
+    # "the github tools tool".
+    return re.sub(r"\s+tools?$", "", core)
 
 
 def t_every_tool_switch_is_the_same_in_both_doors():
-    """All 60 switchable tools: the generated names resolve, ON and OFF, both doors."""
+    """Every switchable tool, plus the master GitHub group switch: both doors."""
     targets = R.tool_targets()
     extra = [t for t in targets if t not in AF.TOOLS_SWITCHABLE]
     check("the registry names every switchable tool, plus the legacy "
-          "reading-tool row the old sentences still reach",
+          "reading-tool row the old sentences still reach, plus the one "
+          "master group switch (2026-11-15)",
           all(t in targets for t in AF.TOOLS_SWITCHABLE)
-          and extra == ["email_read"],
+          and extra == ["email_read", AF.GITHUB_TOOLS_GROUP],
           (len(targets), len(AF.TOOLS_SWITCHABLE), extra))
     for tool, names in targets.items():
         COVERED_KEYS.add(f"tool:{tool}")
-        core = _tool_core(names[0] if names else tool)
+        if tool == AF.GITHUB_TOOLS_GROUP:
+            # The master group switch's own sentence is PLURAL - "the github
+            # tools" - so the generic "<name> tool" builder would say "the
+            # github tools tool". It is pinned with the words a person says,
+            # which is the whole point of this change (2026-11-15).
+            phrase_on, phrase_off = ("turn on the github tools",
+                                     "turn off the github tools")
+        else:
+            core = _tool_core(names[0] if names else tool)
+            phrase_on, phrase_off = (f"turn on the {core} tool",
+                                     f"turn off the {core} tool")
         for on, phrase in (
-                (True, f"turn on the {core} tool"),
+                (True, phrase_on),
                 (True, f"let the ai model read {names[0]}"),
-                (False, f"turn off the {core} tool"),
+                (False, phrase_off),
                 (False, f"stop letting the ai model read {names[0]}")):
             got = Q.match(phrase)
             check(f"{phrase!r} reaches the {tool} tool switch",
                   got is not None and got.name == "settings_tool"
                   and got.f.get("tool") == tool and got.f.get("on") is on, got)
-        phrase_on = f"turn on the {core} tool"
-        phrase_off = f"turn off the {core} tool"
         for phrase, waiting in ((phrase_on, True), (phrase_off, False)):
             rec = FamilyRecorder(waiting=waiting)
             saved = R.set_reading_tool
@@ -784,9 +796,31 @@ def t_representative_settings_write_the_same_state_on_disk():
     # --- A carded switch: ONE card, nothing written, calm line in Live -------
     try:
         srow = next(b for b in R.BOOL_SETTINGS if b.key == "learn_sensitive_topics")
-        before_files = sorted(p.name for p in (TMP / "config").iterdir())
+
+        # WHAT COUNTS AS "A SETTINGS FILE", and why this is not a folder listing.
+        # A plain listing of the config folder lost this check twice on 2026-11-15.
+        # First on `memory.db-journal`, which appeared between the two listings
+        # because SQLite had started and finished a transaction in between. Then,
+        # with the sidecars excluded, once more in about eight desk runs and never
+        # in CI - and the failing detail was not captured, so WHICH file appeared
+        # is not claimed here, only that the folder is not a stable thing to
+        # compare. What IS claimed is narrower and race-free: the settings this
+        # door could write are the JSON files, so those are compared by BYTES and
+        # by name. A new JSON file, or a changed one, is a real write and still
+        # fails; a database file arriving (or its journal coming and going) no
+        # longer can.
+        def _settings_json() -> dict:
+            out = {}
+            for p in sorted((TMP / "config").glob("*.json")):
+                try:
+                    out[p.name] = p.read_bytes()
+                except OSError:                  # being written right now: not a pass
+                    out[p.name] = b"<unreadable>"
+            return out
+
+        before_files = _settings_json()
         typed, live = doors("turn on remembering sensitive topics automatically")
-        after_files = sorted(p.name for p in (TMP / "config").iterdir())
+        after_files = _settings_json()
         both_waiting = (typed is not None and live is not None
                         and "approv" in typed.reply.lower()
                         and "approv" in live.reply.lower())
@@ -794,7 +828,8 @@ def t_representative_settings_write_the_same_state_on_disk():
               (None if typed is None else typed.reply,
                None if live is None else live.reply))
         check("...the carded change wrote no settings file yet",
-              before_files == after_files, (before_files, after_files))
+              before_files == after_files,
+              (sorted(before_files), sorted(after_files)))
         check("...Live speaks ONE calm line for it",
               live is not None and one_calm_line(
                   live.reply, "remembering sensitive topics automatically"),

@@ -59,6 +59,7 @@ import com.jarvis.client.data.HistoryViewPrefs
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatFork
+import com.jarvis.client.net.ChatInfo
 import com.jarvis.client.net.ChatLog
 import com.jarvis.client.net.ChatMark
 import com.jarvis.client.net.ChatTags
@@ -132,9 +133,12 @@ private const val FILING_BANNER_MS = 10 * 60 * 1000L
  * "You're here" on the chat Home is in. A long section shows only five rows
  * and one "Show N more" over what is already loaded; "Load older" still
  * brings more from the PC. Each row's overflow menu carries Open, Pin/Unpin,
- * Move to, Archive/Unarchive and Delete. Pinning is metadata (only the chat's
- * id and the wanted state are sent, no approval card); a refusal says so and
- * leaves the row exactly where it was.
+ * Move to, Archive/Unarchive and Delete. Beside it, one small quiet "i" opens
+ * "About this conversation" - the row's own facts, one line each, in one card
+ * that closes itself ([ChatInfo]; the owner's ask of 2026-11-15, and it asks
+ * the PC nothing). Pinning is metadata (only the chat's id and the wanted state
+ * are sent, no approval card); a refusal says so and leaves the row exactly
+ * where it was.
  *
  * **Archive** (the owner's request of 2026-10-29: "make sure i can archive and
  * delete chats (with a confirm step)"): the menu's Archive row reads Unarchive
@@ -264,6 +268,11 @@ fun HistoryScreen(
     // The row Delete was picked on, waiting for its confirm; and the request.
     var deleteFor by remember { mutableStateOf<ChatLog.Summary?>(null) }
     var deleteBusy by remember { mutableStateOf(false) }
+    // The row whose "i" was tapped: the one "About this conversation" card is
+    // drawn for it, read-only, and closed by Close, by Back or by a tap outside
+    // (the owner's ask of 2026-11-15). Kept over a rotation? No: a card about a
+    // row is worth re-opening, and it says nothing the list does not hold.
+    var infoFor by remember { mutableStateOf<ChatLog.Summary?>(null) }
     // F6 (2026-11-03): a conversation delete is two-phase - the PC raises ONE
     // approval card naming that conversation and nothing is deleted until it is
     // answered. While that is waiting, THOSE card ids are watched: when none of
@@ -1024,6 +1033,11 @@ fun HistoryScreen(
                                 menuAllowed = wanted == null,
                                 deleteOpen = deleteFor?.id == hit.row.id,
                                 deleteBusy = deleteBusy,
+                                onAbout = {
+                                    infoFor = hit.row
+                                    menuFor = null
+                                    moveFor = null
+                                },
                                 onArchive = { archiveChat(hit.row) },
                                 onDelete = { deleteChat(hit.row) },
                                 onKeep = { deleteFor = null },
@@ -1073,6 +1087,11 @@ fun HistoryScreen(
                             menuAllowed = wanted == null,
                             deleteOpen = deleteFor?.id == row.id,
                             deleteBusy = deleteBusy,
+                            onAbout = {
+                                infoFor = row
+                                menuFor = null
+                                moveFor = null
+                            },
                             onArchive = { archiveChat(row) },
                             onDelete = { deleteChat(row) },
                             onKeep = { deleteFor = null },
@@ -1383,6 +1402,90 @@ fun HistoryScreen(
             onDismiss = { filtersOpen = false },
         )
     }
+
+    // "About this conversation" (the owner's ask of 2026-11-15): ONE card,
+    // drawn as the app's own flat Dialog - the same shape as the Filters sheet
+    // just above, so History has one popup style, not two - and closed by its
+    // Close, by Back and by a tap outside it. Every line is a fact the row
+    // already holds ([ChatInfo.card] builds them): nothing is asked of the PC,
+    // nothing is written, and there is no approval card because there is
+    // nothing to approve.
+    //
+    // The tag's name comes from this screen's own tag list, and `tagsKnown` is
+    // whether it may be read at all. It is NOT invented here: the list is null
+    // while the private lists are hidden (the tags read is skipped then) and
+    // null for a PC with no tags route, and in both cases the card says
+    // nothing about filing rather than claim a chat is unfiled - exactly the
+    // desktop's rule.
+    if (infoFor != null) {
+        val infoRow = infoFor!!
+        ChatInfoCard(
+            row = infoRow,
+            tagName = tagView?.tags?.firstOrNull { it.id == infoRow.tagId }?.name,
+            tagsKnown = !privateHidden && tagView != null,
+            onClose = { infoFor = null },
+        )
+    }
+}
+
+/**
+ * "About this conversation": the one compact card a row's small "i" opens
+ * ([ChatInfo] holds the words, and the line order). Read-only, closed by its
+ * Close, by Back and by a tap outside - the same flat Dialog as History's
+ * Filters sheet, so the screen has one popup style.
+ *
+ * The words are the desktop's, character for character (its PR's
+ * `jarvis-desktop/tests/chat-info.mjs` pins the same sentences), so a re-word
+ * on one side fails a test rather than drifting. A tag's name is passed in
+ * only when this screen may read tags at all; otherwise the card says nothing
+ * about filing.
+ */
+@Composable
+private fun ChatInfoCard(
+    row: ChatLog.Summary,
+    tagName: String?,
+    tagsKnown: Boolean,
+    onClose: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val zone = remember { ZoneId.systemDefault() }
+    val today = LocalDate.now(zone)
+    // The row's own facts, one line each, in ChatInfo's order - the SAME
+    // builder the JVM test pins, so what is drawn and what is asserted cannot
+    // be two different things.
+    val card = ChatInfo.card(row, zone, today, tagName = tagName, tagsKnown = tagsKnown)
+    Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(chrome.surface1)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
+            Text(
+                card.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = chrome.textHi,
+                modifier = Modifier.semantics { heading() },
+            )
+            Gap(8)
+            Rule()
+            Gap(8)
+            // One Text per line, not one paragraph: TalkBack reads each fact
+            // separately, and a long sentence wraps without running into the
+            // next one.
+            card.lines.forEach { line ->
+                Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                Gap(4)
+            }
+            Gap(4)
+            Rule()
+            Gap(4)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Quiet(card.close, color = chrome.textMid, onClick = onClose)
+            }
+        }
+    }
 }
 
 /**
@@ -1525,6 +1628,7 @@ private fun ConversationRow(
     menuAllowed: Boolean,
     deleteOpen: Boolean,
     deleteBusy: Boolean,
+    onAbout: () -> Unit,
     onToggleMenu: () -> Unit,
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
@@ -1548,6 +1652,7 @@ private fun ConversationRow(
         menuAllowed = menuAllowed,
         deleteOpen = deleteOpen,
         deleteBusy = deleteBusy,
+        onAbout = onAbout,
         onToggleMenu = onToggleMenu,
         onPin = onPin,
         onToggleMove = onToggleMove,
@@ -1581,6 +1686,7 @@ private fun ChatRowCard(
     deleteBusy: Boolean,
     snippet: AnnotatedString? = null,
     hits: Int? = null,
+    onAbout: () -> Unit,
     onToggleMenu: () -> Unit,
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
@@ -1646,6 +1752,29 @@ private fun ChatRowCard(
                     Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
                 RowMarks(row, tag, current)
+            }
+            // "About this conversation" (the owner's ask of 2026-11-15: "does
+            // chat history have ... an info menu that i can click show ... on
+            // each comversation ... without this being overwhelming"): one
+            // small quiet "i", the same size and tone as the overflow menu
+            // beside it, and the same shape as the desktop's (a ghost "i"
+            // drawn before the row's other actions). It reads what the row
+            // already holds - no request, no write, no card of its own - and
+            // it is drawn FIRST of the two, so the row still ends as it did:
+            // the menu is still the right-hand edge.
+            //
+            // Gone while a "file it under" banner is up, for the menu's own
+            // reason: there a tap on the row files it, and a row with two
+            // meanings should not also offer a third.
+            if (menuAllowed) {
+                Quiet(
+                    "i",
+                    color = chrome.textLo,
+                    modifier = Modifier.semantics {
+                        contentDescription = ChatInfo.aboutFor(row.title)
+                    },
+                    onClick = onAbout,
+                )
             }
             // The overflow menu's trigger. TalkBack names the row it belongs to.
             // Hidden while a "file it under" banner is up: there a tap on the
@@ -1813,6 +1942,7 @@ private fun FoundRow(
     menuAllowed: Boolean,
     deleteOpen: Boolean,
     deleteBusy: Boolean,
+    onAbout: () -> Unit,
     onToggleMenu: () -> Unit,
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
@@ -1849,6 +1979,7 @@ private fun FoundRow(
         deleteBusy = deleteBusy,
         snippet = snippet,
         hits = hit.hits,
+        onAbout = onAbout,
         onToggleMenu = onToggleMenu,
         onPin = onPin,
         onToggleMove = onToggleMove,

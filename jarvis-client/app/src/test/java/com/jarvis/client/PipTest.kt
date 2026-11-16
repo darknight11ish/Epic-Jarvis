@@ -454,16 +454,22 @@ class PipTest {
         // window does not keep anything alive that is not already alive (§1),
         // so this number must not move.
         //
-        // SEVEN since 2026-11-04, and neither is this feature: hands-free added
+        // SEVEN since 2026-11-04, and none is this feature: hands-free added
         // `HandsfreeService` (foregroundServiceType="microphone") because a
         // card can arrive while the app is in the background and the answer
         // window has to record, and call recording added its own
         // `CallRecordService` (also "microphone") - each its own feature, own
         // pull request and own notification. Picture-in-picture still adds
         // none - that is what this test is for - and the exact count is the pin
-        // that makes an unannounced eighth visible.
+        // that makes an unannounced ninth visible.
+        //
+        // EIGHT since 2026-11-15, and again not this feature: `ReadAloudService`
+        // (foregroundServiceType="mediaPlayback") keeps a read-aloud going when
+        // the app is left - the owner's "it should continue the read outloud" -
+        // which is its own feature and its own pull request. A PiP window still
+        // keeps nothing alive that was not already alive.
         assertEquals("a service gained or lost a foregroundServiceType",
-            7, Regex("foregroundServiceType=").findAll(manifest).count())
+            8, Regex("foregroundServiceType=").findAll(manifest).count())
         // And the sixth really is the recorder, not a second microphone for
         // the window: it is declared with the microphone type and the window
         // is not mentioned beside it.

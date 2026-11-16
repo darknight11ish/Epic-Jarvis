@@ -145,6 +145,13 @@
          for by the app's own screen every time. A foreground service of type
          mediaProjection needs this on Android 14+. Never started at boot. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- Read aloud kept going when the app is not in front
+         (service/ReadAloudService.kt; the owner's ask of 2026-11-15: "it should
+         continue the read outloud" when he leaves the app, PiP included, and
+         his answer that it keeps going with the phone locked too). A
+         foreground service of type mediaPlayback needs this on Android 14+.
+         It runs only while a read is being spoken. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Usage access: the ONLY way to know which app is in front while the
          screen is shared (screen sharing does not say). A special switch the
          owner turns on in Android's own settings, never a dialog; it shows
@@ -537,6 +544,19 @@
             android:name=".service.ScreenWatchService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- Read aloud that carries on out of sight (service/ReadAloudService.kt;
+             the owner's ask of 2026-11-15 - PiP, HOME, another app, and - his
+             own answer to the question - a locked phone too). mediaPlayback,
+             because the app really is playing audio: it holds the process awake
+             for as long as one read lasts and carries ONE notification with
+             "Stop talking" and a tap that opens the app. Started by a read
+             beginning, stopped by that read ending, START_NOT_STICKY, never at
+             boot. The words stay the app's: this service plays nothing. -->
+        <service
+            android:name=".service.ReadAloudService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- Hands-free (the owner's request, 2026-11-04;
              service/HandsfreeService.kt): a card is read out, then an answer

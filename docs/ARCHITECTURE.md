@@ -4324,7 +4324,7 @@ are deliberate and recorded rather than left to be discovered:
 | Signing in to a chatbot's account for "Talk to a chatbot for me" (the spare Google account Jarvis uses for Gemini; `docs/CHATBOT-DRIVER-DESIGN.md`, JARVIS-API §87) | Written with the feature's screens, 2026-09-28. The chatbot is driven in a visible browser window ON THE PC, in a browser profile used only for this, so the sign-in happens there, by the owner's own hands - and when Gemini asks to sign in again mid-conversation, the conversation pauses and asks the owner to do it in that window, then press Resume. Neither app ever carries the account's password; there is no route for one. Everything else about a conversation - starting one (one approval card), watching it, Pause, Resume, Stop, new limits, the summary - is on both apps (`/api/chatbot/*`, `ported` in `tools/check_parity.py`). The words both apps show come from the PC's `jarvis_chatbot_routes.WORDS`, through one contract file. |
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | The VoiceStudio sidecar (`backend/jarvis_voicestudio.py`, `tools/voicestudio_sidecar.ps1`; 2026-11-04) | **The program is the PC's alone, and that is one-sided on purpose.** VoiceStudio is a separate AGPL-3.0 program the owner installs and runs on this PC, outside this repository; Jarvis only has a socket to it at `127.0.0.1:11439`, and none of its code, binary or weights is in this tree (docs/VOICESTUDIO.md section 1). There is no phone version and no phone switch: a phone that could start a program on the PC would be a new power, and the measured verdict is CONTENTION - about 1.95 GB of the 8 GB card, 382 MiB free at the peak beside Jarvis's own models, ~1.9 GB paged to system RAM - so it is demand-only, serialised and never resident beside them. Nothing is wired to the speaking voice yet and this slice adds no route; **the switch itself is typed since 2026-11-13** - "turn on voicestudio" is ONE `change_own_config` card plus Windows Hello, "turn off voicestudio" is instant, and Settings, The PC itself has its own card - and the voice wiring is still the next slice. |
-| The phone's "On-device AI model" plate and Settings row (`jarvis-client/.../OnDeviceModelPlate.kt`; 2026-11-12, #1227) | **The plate is the phone's alone, and that is one-sided on purpose.** It has NO controls at all: the earlier version offered a model import, Vulkan/threads/context switches, an auto-sync switch, an offline-memory switch and a battery guard, and none of them changed any behaviour, so "a switch that promises something and does nothing is worse than no switch at all" (the plate's own words). Nothing that runs a model ships in the APK, so the desktop has nothing to match: it has no on-device row, no setting and no route, and the design is `docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md` ("**Status:** DESIGN ONLY - NOTHING IN THIS DOCUMENT IS BUILT"). The chat answer is `backend/jarvis_quick.py`'s `ONDEVICE_MODEL_UNAVAILABLE`, which says so in one sentence. |
+| The phone's "On-device AI model" plate and Settings row (`jarvis-client/.../OnDeviceModelPlate.kt`; 2026-11-12, #1227) | **The plate is the phone's alone, and that is one-sided on purpose.** It has NO controls at all: the earlier version offered a model import, Vulkan/threads/context switches, an auto-sync switch, an offline-memory switch and a battery guard, and none of them changed any behaviour, so "a switch that promises something and does nothing is worse than no switch at all" (the plate's own words). **The engine does ship in the APK** - a small GGUF engine with llama.cpp under it (`libjarvis_llama.so`, 2026-11-13), reached from Home's More menu at Local AI, and **the switch is off by default** - but it is a separate chat with **no network path and no link to this PC**: it cannot see the owner's memory, files or tools, and nothing it says comes from this PC. It is never a fallback or a replacement, and **the ordinary Jarvis chat still uses the model on this PC**. So the desktop still has nothing to match: it has no on-device row, no setting and no route, and the offline-sync design (`docs/MOBILE HARNESS WORK/ON-DEVICE-AI-OFFLINE-SYNC-DESIGN.md`) is older than the engine and is not what shipped. The chat answer is `backend/jarvis_quick.py`'s `ONDEVICE_MODEL_ANSWER`, which says all of that in one answer. |
 | The code-protection tool check (`backend/jarvis_obfuscation.py`, `backend/jarvis_quick.py`; 2026-11-12, #1228) | **PC-only, and it only ever says what is installed.** Nothing in it obfuscates, hardens or changes a file: it reads the tool list on this PC and starts a tool's own `--version`, and every request to obfuscate gets ONE fixed sentence - "Jarvis cannot obfuscate or harden code in this build, so nothing was run and no approval card was raised." There is no `project_obfuscate` action, no card, no tier line and no route, so there is nothing a phone could show or change; the feature-list row is deliberately absent (a row would read as an ability). JARVIS-API section 220 is the section. |
 | The desktop companion's four switches and three preferences (`backend/jarvis_companion.py`; 2026-11-12, #1229) | **Desktop-only, and the drawing half is not built on either app.** The module does not draw anything, open a window, read another program's controls, recognise text in a picture, or click, type or take a screenshot (`jarvis_companion.py`'s own docstring). The four switches and three preferences save a preference to `~/.openjarvis/companion_settings.json` and every answer says "this build does not draw the companion yet, so nothing changes on screen"; they ship off, so no screen reads ON for nothing. The phone could not draw them even if they worked - a companion window over other apps is the PC's own surface - so it shows the seven honest answers and no switch (JARVIS-API section 219). No feature-list row: the ability does not exist, and the preferences are not abilities. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (the phone's Brain, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
@@ -5297,6 +5297,55 @@ what is missing is only the Settings screen agreeing about who turned it off.
   unchanged in this pull request - the screen has now been measured, but the
   measurement lives in this paragraph, not in that list; `tools/check_parity.py`
   has nothing to classify because no route is added.
+- **The phone's own model, Android version, screen and app build travel from the
+  phone only, and that is one-sided on purpose** (2026-11-15, the owner's *"make
+  sure jarvis can tell when im messaging from the phone and be more phone
+  specific in the answers"*; JARVIS-API §173.7). The Android app sends
+  `X-Jarvis-Device` on every request, and the one system sentence the model is
+  given names the phone and asks for an answer sized to it. The desktop sends
+  nothing equivalent: it has no handset to describe, and a device line for this
+  PC would be a second, worse source of truth about hardware Jarvis already
+  reads properly (`/api/hardware`, §8's graphics-card section). No route is
+  added in either direction, so `tools/check_parity.py` has nothing to classify.
+  `backend/test_phone_facts.py` holds the backend half - the parse, the
+  unchanged sentence without the header, and the facts in the prompt
+  `jarvis_agent` builds - and `DeviceFactsTest.kt` holds the phone's.
+- **A read-aloud carrying on out of sight is the phone's, and the desktop needs
+  nothing for it** (2026-11-15; the owner's report: *"when i move out of the
+  jarvis android app on my phone (whether thats just putting it in picture in
+  picture mode or moving to a different app or homescreen, it should continue
+  the read outloud if thats what i selected on the jarvis app. right now it
+  stops it"*, and his answer to the question put to him that it keeps going with
+  the screen locked too). On the phone, leaving the app used to stop the read by
+  design - the ruling of 2026-10-27, "stop immediately, privacy first" - and
+  that ruling is reversed here: `MainActivity` no longer stops a read on
+  ON_STOP, and neither read loop stops for a lock landing mid-read. A
+  `mediaPlayback` foreground service (`service/ReadAloudService.kt`) holds the
+  process awake for the rest of the read and carries ONE notification, with "Stop
+  talking" and a tap that opens the app; the runtime starts it when a read begins
+  and stops it when the read ends or is stopped, so it never runs with nothing to
+  play. The desktop HUD never stopped reading when its window lost focus, so
+  there is no desktop half to write and `tools/check_parity.py` classifies
+  nothing - no route is added in either direction. **What does NOT change:** the
+  start-time refusals (a locked phone, App lock, a stale link, a busy speaker)
+  and every "kept on screen" rule - this is only about a read the owner already
+  started carrying on. **A long answer is read to its end, in short pieces**
+  (the same report: a long note "will just stop", with "huge gaps between each
+  paragraph"). Three causes were found and fixed in `voice/ReadAloud.kt`: a
+  24-sentence cap ended the read part-way; a paragraph with no full stop was ONE
+  `/api/voice/say` request, so the phone waited for the whole paragraph to be
+  synthesised before its first word (the gap); and markdown/HTML marks (`**`,
+  `<u>`, `---`, a line of `???`) were read out as themselves. Pieces are now at
+  most `READ_ALOUD_PIECE_CHARS` (220) characters cut at a word boundary, the
+  next piece is asked for while the current one is spoken, the marks are removed
+  by `ReadAloud.spoken`, and the only limits are `READ_ALOUD_MAX_PIECES` (600)
+  and `READ_ALOUD_MAX_CHARS` (60,000). A single failed piece is skipped; three
+  in a row still end the read with the ordinary refusal rather than quietly
+  skipping half the answer.
+  The service is NOT-TESTABLE off a phone; the field test is
+  to start a read, press HOME, lock the screen, hear it finish, and stop it from
+  the shade.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -5875,6 +5924,15 @@ they landed):
   piece as unknown rather than fetching it. Visibility only: a mismatch, and
   a piece that does not say, are WARNs - never a FAIL, so an urgent
   one-piece fix is never blocked.
+
+  Its `provenance` check (2026-11-15) is the same fact in ONE sentence: it puts
+  the desktop app's commit, the backend's `SOURCE-COMMIT` and `main`'s own
+  commit side by side and says whether the three agree, or what differs. `main`
+  is read with `git rev-parse origin/main` - a ref already on this PC, so the
+  check fetches nothing and answers offline. Three pieces on one commit is a
+  PASS naming it; a difference is a WARN naming both commits; a piece that
+  cannot name its commit is said to not say, never guessed at. PASS or WARN
+  only, for the same reason as `commits`.
 
 **Still missing:**
 

@@ -9787,40 +9787,81 @@ object JarvisRuntime {
         val sentences = com.jarvis.client.voice.ReadAloud.sentences(offer.text)
         if (sentences.isEmpty()) return com.jarvis.client.voice.ReadAloud.NOTHING
         _readingAloud.value = true
+        // Keep it going once this screen is gone (2026-11-15, the owner:
+        // "it should continue the read outloud" when he leaves the app, and his
+        // answer that a locked phone keeps going too). The service is what stops
+        // Android freezing the process mid-sentence; the read itself is still
+        // this loop's.
+        return speakAloud(sentences)
+    }
+
+    /**
+     * Say every piece, in order: "" when it finished or was stopped, or the one
+     * refusal word when it could not.
+     *
+     * ONE PLACE FOR BOTH PATHS (2026-11-15). The last-answer read and the
+     * per-answer read had the same loop twice; the owner's report - a long note
+     * that "will just stop", with "huge gaps between each paragraph" - is fixed
+     * here once, for both.
+     *
+     * PREFETCH. Each piece is one round trip to the PC's say route, so the next
+     * piece is asked for while the current one is being spoken. That is what
+     * turns the gap between paragraphs into a gap between sentences: the PC
+     * synthesises ahead instead of the phone waiting.
+     *
+     * ONE FAILED PIECE IS NOT A FAILED ANSWER. A dropped request skips that
+     * piece and the read carries on; three in a row means the PC or the link is
+     * gone, and the read stops with the ordinary refusal rather than quietly
+     * skipping half the answer. NoEngine still stops at once: there is nothing to
+     * fall back to that would not send the words off this phone.
+     */
+    private suspend fun speakAloud(pieces: List<String>): String {
+        _readingAloud.value = true
+        // Keep it going once this screen is gone (2026-11-15, the owner: "it
+        // should continue the read outloud" when he leaves the app, and his
+        // answer that a locked phone keeps going too). The service is what stops
+        // Android freezing the process mid-sentence; the read itself is this
+        // loop's.
+        com.jarvis.client.service.ReadAloudService.start(appContext)
+        var pending: kotlinx.coroutines.Deferred<com.jarvis.client.net.ApiResult<com.jarvis.client.net.SaidAloud>>? = null
         try {
             // `arm()` first: Speaker's `cancelled` is sticky, so a read after
             // any Stop would otherwise do nothing at all.
             voice.speaker.arm()
-            for (sentence in sentences) {
+            var failures = 0
+            for ((index, piece) in pieces.withIndex()) {
                 if (!_readingAloud.value) return ""
-                // A locked phone never speaks, and the lock can arrive DURING a
-                // read: the `locked` fact recorded when the answer came in is a
-                // snapshot, so the live question is asked again before every
-                // sentence (the Lead's ruling of 2026-10-27: stop immediately,
-                // privacy first). MainActivity also stops the read the moment the
-                // app leaves the screen - the phone locking, HOME, another app -
-                // which covers a lock landing in the middle of one clip.
-                if (readAloudLockedNow()) {
-                    _readAloudUnlocked.value = false
-                    stopReadingAloud()
-                    return ""
+                val asked = pending ?: scope.async { api.say(piece) }
+                pending = if (index + 1 < pieces.size) {
+                    scope.async { api.say(pieces[index + 1]) }
+                } else {
+                    null
                 }
-                when (val said = api.say(sentence)) {
-                    is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
-                        is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
-                        // No engine on the PC: never fall back to the phone's
-                        // own network voice for a typed answer - the words stay
-                        // on screen, said plainly.
-                        is com.jarvis.client.net.SaidAloud.NoEngine ->
-                            return com.jarvis.client.voice.ReadAloud.NO_ENGINE
+                when (val said = asked.await()) {
+                    is com.jarvis.client.net.ApiResult.Ok -> {
+                        failures = 0
+                        when (val clip = said.value) {
+                            is com.jarvis.client.net.SaidAloud.Audio ->
+                                voice.speaker.play(clip.wav)
+                            // No engine on the PC: never fall back to the phone's
+                            // own network voice for a typed answer - the words stay
+                            // on screen, said plainly.
+                            is com.jarvis.client.net.SaidAloud.NoEngine ->
+                                return com.jarvis.client.voice.ReadAloud.NO_ENGINE
+                        }
                     }
-                    is com.jarvis.client.net.ApiResult.Failed ->
-                        return com.jarvis.client.voice.ReadAloud.CANNOT
+                    is com.jarvis.client.net.ApiResult.Failed -> {
+                        failures += 1
+                        if (failures >= 3) return com.jarvis.client.voice.ReadAloud.CANNOT
+                    }
                 }
+                if (!_readingAloud.value) return ""
             }
             return ""
         } finally {
+            pending?.cancel()
             _readingAloud.value = false
+            com.jarvis.client.service.ReadAloudService.stop(appContext)
         }
     }
 
@@ -9828,6 +9869,9 @@ object JarvisRuntime {
     fun stopReadingAloud() {
         _readingAloud.value = false
         voice.speaker.stop()
+        // ...and with it the service that was keeping the process awake, so no
+        // notification is left saying Atlas is reading when it is not.
+        com.jarvis.client.service.ReadAloudService.stop(appContext)
     }
 
     /**
@@ -9891,38 +9935,16 @@ object JarvisRuntime {
         val sentences = com.jarvis.client.voice.ReadAloud.sentences(offer.text)
         if (sentences.isEmpty()) return com.jarvis.client.voice.ReadAloud.NOTHING
         _readingAloud.value = true
-        try {
-            voice.speaker.arm()
-            for (sentence in sentences) {
-                if (!_readingAloud.value) return ""
-                // The lock is asked again before every sentence: a read must
-                // stop the moment the phone locks (the same rule the last-answer
-                // read follows).
-                if (readAloudLockedNow()) {
-                    _readAloudUnlocked.value = false
-                    stopReadingAloud()
-                    return ""
-                }
-                when (val said = api.say(sentence)) {
-                    is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
-                        is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
-                        is com.jarvis.client.net.SaidAloud.NoEngine ->
-                            return com.jarvis.client.voice.ReadAloud.NO_ENGINE
-                    }
-                    is com.jarvis.client.net.ApiResult.Failed ->
-                        return com.jarvis.client.voice.ReadAloud.CANNOT
-                }
-            }
-            return ""
-        } finally {
-            _readingAloud.value = false
-        }
+        // The same continuity as the last-answer read: leaving the app, PiP and
+        // a locked phone no longer end a read the owner started (2026-11-15).
+        return speakAloud(sentences)
     }
 
     /**
-     * True when a read must not speak NOW: the screen is locked, or App lock
-     * would ask for the fingerprint again. Read live, not once per answer - see
-     * [readAloudLastAnswer]'s loop.
+     * True when a read must not START now: the screen is locked, or App lock
+     * would ask for the fingerprint again. Asked once, before a read begins -
+     * not during one: by the owner's decision of 2026-11-15 a read that has
+     * started carries on through HOME, PiP and the lock screen.
      */
     private fun readAloudLockedNow(): Boolean =
         screenLocked() || appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value)
