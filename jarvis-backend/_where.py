@@ -1808,6 +1808,15 @@ SHIPPED = (
     # approval card exists, and it is not a gate action or a tool Jarvis offers.
     # The same entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED.
     "jarvis_obfuscation.py",
+    # The grant engine behind "one plan card per job" and trusted mode
+    # (2026-11-15; docs/PLAN-CARD-AND-TRUSTED-MODE.md): the plan grant, the
+    # trusted window, the per-action cap, the expiry and the three audit events
+    # (called from jarvis_gate, never copied). Pure logic with an injectable
+    # clock; wired to nothing yet - the card, the gate's one call and both apps'
+    # bar are a later pull request. The same entry, in the same position, is in
+    # scripts/apply-patches.ps1's $SHIPPED, above jarvis_bench.py, which stays
+    # last.
+    "jarvis_grants.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate
