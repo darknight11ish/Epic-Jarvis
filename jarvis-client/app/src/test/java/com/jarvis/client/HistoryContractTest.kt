@@ -453,8 +453,8 @@ class HistoryContractTest {
         assertTrue(send.contains("if (!live && ChatHistory.idleExpired("))
         val runtime = repoFile("$main/JarvisRuntime.kt").readText()
         // Deleting the chat Home is in starts a new one, from every path.
-        val delete = runtime.substring(runtime.indexOf("suspend fun deleteHistory("))
-        assertTrue(delete.substring(0, 600).contains("chatsGone(listOf(id))"))
+        val delete = runtime.substring(runtime.indexOf("suspend fun deleteHistory(id: String)"))
+        assertTrue(delete.substring(0, 1500).contains("chatsGone(listOf(id))"))
         val erase = runtime.substring(runtime.indexOf("suspend fun eraseAutoFact("))
         assertTrue(erase.substring(0, 1600).contains("chatsGone(listOf(chatId))"))
         assertTrue(runtime.contains("if (outcome == \"done\") chatsGone(pending)"))

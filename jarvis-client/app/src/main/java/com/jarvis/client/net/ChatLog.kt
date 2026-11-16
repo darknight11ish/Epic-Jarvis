@@ -32,10 +32,13 @@ import java.util.Locale
  * - `GET /api/history?limit=30&before=<updated>` - the switch, why nothing is
  *   being kept (if so), how long it is kept, and conversations newest first.
  * - `GET /api/history/conversation?id=` - one conversation, read-only.
- * - `POST /api/history/delete {"id"}` - ONE conversation, and since F6
- *   (2026-11-03) the PC may ask first: 202/`waiting` means ONE approval card
- *   naming that conversation is up and NOTHING has been deleted yet
- *   ([deleteReply], [DELETE_WAITING]). There is no "delete all" route and no
+ * - `POST /api/conversations/clear {"id"}` - ONE conversation, and the PC
+ *   always asks first: 202/`waiting` means ONE approval card
+ *   (`conversation_clear`, tier `ask`) naming that conversation is up and
+ *   NOTHING has been deleted yet ([deleteReply], [DELETE_WAITING]). This is
+ *   the route History's Delete posts to (docs/JARVIS-API.md 184.6, F6
+ *   2026-11-03; DEF-047). The older uncarded delete route is the desktop's
+ *   and is never called from here. There is no "delete all" route and no
  *   list form, on purpose - clearing is one exact item, one card, one answer.
  * - `POST /api/history/archive {"id", "archived"}` - one conversation out of
  *   the live list and back (reversible, no confirm, no card).
@@ -46,7 +49,16 @@ import java.util.Locale
 object ChatLog {
     const val LIST_PATH = "/api/history"
     const val CONVERSATION_PATH = "/api/history/conversation"
-    const val DELETE_PATH = "/api/history/delete"
+    /**
+     * `POST /api/conversations/clear` `{"id": "<conversation id>"}` - the
+     * carded route (docs/JARVIS-API.md 184.6; `jarvis_self_portrait.clear_request`).
+     * Exactly one id and nothing else: there is no bulk form and no cardless
+     * form. Phase one raises ONE `conversation_clear` approval card (tier
+     * `ask`) and answers 202 with `waiting: true`; nothing is deleted until a
+     * person approves it, and the id is re-read before deleting. [deleteReply]
+     * reads every answer this route gives.
+     */
+    const val CLEAR_PATH = "/api/conversations/clear"
     const val SETTINGS_PATH = "/api/history/settings"
 
     /**
@@ -98,7 +110,9 @@ object ChatLog {
     const val DELETE_KEEPS_FACTS =
         "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
             "over some days, use Forget a time frame. Copies in older backups stay until they age out."
-    const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
+    const val DELETE_CONFIRM =
+        "Delete this conversation from your PC? Nothing is deleted until you approve the card " +
+            "that asks first. This cannot be undone. $DELETE_KEEPS_FACTS"
     /**
      * The search box (the owner's answer of 2026-09-27: "shown on screen
      * only; nothing saved, nothing handed to the AI"). Since 2026-09-28
@@ -787,24 +801,69 @@ object ChatLog {
             "Open Memory to forget them once the card is approved."
 
     /**
-     * What `POST /api/history/delete` answered: whether the conversation is
-     * gone from the PC now, whether the PC is asking first about it, and the
-     * sentence to show. [waiting] and [gone] are never both true.
+     * Said when the card about one conversation has left the queue and the
+     * list, read again from the PC, still holds it: the answer was no (or the
+     * delete failed), and nothing was removed on the phone either.
+     */
+    const val CARD_ANSWERED_KEPT =
+        "Not deleted. The card was answered and this conversation is still on your PC."
+
+    /**
+     * Said when the card about one conversation has been answered and the list,
+     * read again from the PC, no longer holds it. The reading list is the
+     * proof; the phone never says this before the PC's own list says so.
+     */
+    const val CARD_ANSWERED_GONE = "Deleted from your PC. $DELETE_STAYS"
+
+    /**
+     * [CARD_ANSWERED_GONE] when the owner had also ticked facts to forget. The
+     * PC's card says those facts are kept, and this phone does not forget them
+     * behind its back, so the sentence says what really happened and where the
+     * forgetting is done.
+     */
+    const val CARD_ANSWERED_GONE_TICKED =
+        "Deleted from your PC. The facts you ticked were NOT forgotten - open Memory to forget them. " +
+            DELETE_STAYS
+
+    /**
+     * A 404 with no `ok` in the body: this PC's Jarvis has no carded clear
+     * route yet (an older backend). NOTHING was deleted, and the phone does
+     * not fall back to the uncarded route - rule 4, the app never
+     * auto-approves anything.
+     */
+    const val CLEAR_OLD_PC =
+        "Nothing was deleted: your PC's Jarvis is older than this app, so it cannot ask first. " +
+            "Update the backend on the PC with apply-patches.ps1, then try Delete again."
+
+    /**
+     * What `POST /api/conversations/clear` answered: whether the conversation
+     * is gone from the PC now, whether the PC is asking first about it, and
+     * the sentence to show. [waiting] and [gone] are never both true.
      */
     data class Delete(val gone: Boolean, val waiting: Boolean, val said: String)
 
     /**
-     * Reads one delete answer ([Delete]).
+     * Reads one delete answer ([Delete]) from the carded route
+     * (`jarvis_self_portrait.clear_request`).
      *
      * The shapes it accepts, in order:
-     * - 404: gone either way (the row was already deleted). Checked before the
-     *   body because a newer PC may explain a 404 in `ok: false`.
-     * - `ok: false`: the PC said no, in its own words.
+     * - 404: gone either way (the route re-read the id and it is not there).
+     *   Checked before the body because a newer PC may explain a 404 in
+     *   `ok: false`.
+     * - `ok: false`: the PC said no, in its own words - a `400` (not exactly
+     *   `{"id"}`), `409` (another clear card is already waiting), `423` (App
+     *   lock or the memory lists are hidden), `503` (no chat history, the gate
+     *   failed, or the card could not be raised) - and nothing was deleted.
      * - a waiting answer - 202, `waiting: true` or `asking: true`, the three
-     *   spellings this backend's other two-phase routes use: the card is up and
+     *   spellings this backend's two-phase routes use: the card is up and
      *   nothing has been deleted yet ([DELETE_WAITING]).
-     * - any other 2xx: deleted, with the PC's `message` when it sent one.
+     * - any other 2xx: the PC says it deleted it, with its `message` when it
+     *   sent one. The carded route has no such answer today; the branch is
+     *   kept so an unknown success can never be read as a refusal.
      * - anything else: not deleted, and why in words from the PC when it says.
+     *
+     * A 404 with NO `ok` body never reaches here: it is a PC without the route
+     * ([CLEAR_OLD_PC]), and the runtime reads it as such.
      *
      * Pure, so `ConversationClearTest` drives every shape on a plain JVM.
      */
@@ -840,8 +899,8 @@ object ChatLog {
     }
 
     /**
-     * After a 2xx from `/api/history/delete`: whether it is gone, and what to
-     * say. `ok: false` is the PC saying no, in its own words.
+     * After a 2xx from a delete route: whether it is gone, and what to say.
+     * `ok: false` is the PC saying no, in its own words.
      *
      * Kept for the calls that only have the body (the old cardless shape);
      * [deleteReply] is what the runtime uses, because it also reads the status
