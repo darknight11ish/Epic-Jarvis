@@ -4,12 +4,13 @@
  * backend/jarvis_hardware.py). Its real answers are
  * tests/fixtures/hardware-cases.json.
  *
- * NOTHING CHANGES UNTIL THE OWNER PICKS A SETUP, and picking one changes
- * nothing by itself either: it lists the steps. Each step is ONE button that
- * asks the PC for that step and nothing else, and the PC raises that step's
- * own approval card - the existing model-download and model-switch cards,
- * the second-card cards, or the new "make a model" card. Only the next step
- * has a button; the rest wait. There is no "do them all". The Rust command
+ * A chosen setup changes nothing by itself: choosing it only lists its
+ * steps. A routable step is ONE button that asks the PC for that step and
+ * nothing else, and the PC raises that step's own approval card - the
+ * existing model-download and model-switch cards, the second-card cards, or
+ * the new "make a model" card. Only the next routable step has a button; the
+ * rest wait. The settings command step has no route, so no card: it is run by
+ * hand from the box below. There is no "do them all". The Rust command
  * (hardware.rs `hardware_step`) reads the step's route and body from the
  * PC's own answer, so this page never names a route.
  *
@@ -291,7 +292,8 @@ function paint(status) {
       bits.push(parts.join(", ") + ".");
     }
   }
-  say(hw.measured, bits.join(" ") || "Not measured yet: every number above is calculated.",
+  say(hw.measured, bits.join(" ") ||
+    "Not measured by this check yet; a measured line above is an older measurement.",
     lastRow && lastRow.ok === false && (lastRow.roles || []).some((r) => r.spilled) ? "bad" : null);
   hw.measure.disabled = busy || m.state === "running";
 
