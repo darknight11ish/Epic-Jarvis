@@ -22614,12 +22614,132 @@ def _github_counts() -> dict:
     return out
 
 
-def _github_create_repo_words() -> str:
+#: The ONE tool whose switch the create-a-repository answer can raise
+#: (2026-11-16, the owner's ruling). One name, so the answer, the card and the
+#: settings line cannot drift apart.
+GITHUB_CREATE_REPO_TOOL = "github_create_repo"
+
+#: The older OFF sentence, kept for a PC that cannot draw the card at all (a
+#: backend older than `request_tool_enable`, or a route that raised an error):
+#: the honest Settings sentence, never a promise of a card.
+GITHUB_CREATE_REPO_OFF = (
+    "Its own tool, github_create_repo, is switched OFF in Settings, What asks "
+    "first, under \"Jarvis's own tools\" - switching it on is one card on the "
+    "PC. While it is off, I cannot ask GitHub to create one.")
+
+#: What a card that was NOT answered with a yes reads, keyed by
+#: `jarvis_asks_first.TOOL_ENABLE_LAST_WORDS`' own outcome names. Said ONCE,
+#: and the ask after that offers the card again: a declined card is a fact to
+#: report, never a reason to stop offering (the owner's 2026-11-16 ruling).
+GITHUB_CREATE_REPO_CARD_NO = {
+    "denied": ("You declined that card, so its tool stays off and I cannot ask "
+               "GitHub to create one. Ask me again and I'll offer the card again."),
+    "timed_out": ("Nobody answered that card in time, so its tool stays off and I "
+                  "cannot ask GitHub to create one. Ask me again and I'll offer the "
+                  "card again."),
+    "refused": ("Your PC's settings do not let that card be approved, so its tool "
+                "stays off and I cannot ask GitHub to create one."),
+    "withdrawn": ("That card was taken back before it was answered, so its tool stays "
+                  "off and I cannot ask GitHub to create one. Ask me again and I'll "
+                  "offer the card again."),
+    "failed": ("The card was approved, but the settings file could not be changed, "
+               "so its tool stays off and I cannot ask GitHub to create one."),
+}
+
+#: `github_create_repo` -> the card outcome's own `at` that this answer has
+#: already reported. In memory on purpose: a decline is said once, and the next
+#: question offers the card again.
+_GITHUB_CARD_REPORTED: dict = {}
+
+
+def _github_switch_row(status: dict, tool: str) -> dict:
+    """`tool`'s own row from a `jarvis_asks_first.tools_status()` answer."""
+    for item in (status or {}).get("items") or ():
+        if isinstance(item, dict) and str(item.get("id") or "") == tool:
+            return item
+    return {}
+
+
+def _github_switch_offer(peer=None, local=None) -> str:
+    """Offer the create-a-repository tool's OWN switch card where it was asked.
+
+    THE OWNER'S RULING (2026-11-16): "no need to visit Settings to enable a
+    tool". This raises the SAME approval card the Settings switch raises - it
+    calls `jarvis_asks_first.request_tool_enable`, the one function
+    `POST /api/asks_first/tools` calls - and it adds no permission of its own:
+    the card is `enable_reading_tool`, tier "ask" only, Windows Hello on the PC
+    or the phone's own signed approval, OFF instant, and nothing is written
+    until a person approves (`jarvis_asks_first._tools_decide`). The PC-only
+    rule is the route's own: a phone request gets the route's refusal, and this
+    answer says to ask on the PC and that the card can then be approved from the
+    phone.
+
+    Five honest states, each in the route's own words where it has them: a card
+    already waiting, a card answered WITHOUT a yes (said once), the card just
+    raised, the route's refusal (quoted), and a PC that cannot draw it at all
+    (the older Settings sentence - never a promise of a card).
+    """
+    try:
+        import jarvis_asks_first as AF
+    except Exception:                       # noqa: BLE001 - older PC
+        return GITHUB_CREATE_REPO_OFF
+    if not callable(getattr(AF, "request_tool_enable", None)):
+        return GITHUB_CREATE_REPO_OFF
+    try:
+        row = _github_switch_row(AF.tools_status(here=True), GITHUB_CREATE_REPO_TOOL)
+    except Exception:                       # noqa: BLE001 - unreadable is unknown
+        row = {}
+    if row.get("waiting"):
+        return ("A card to offer its own tool to me is already waiting - it is the "
+                "same card the Settings switch raises. Approve it on your PC "
+                "(Windows Hello) or on your phone (its fingerprint or PIN), and I can "
+                "ask GitHub to create one.")
+    last = row.get("last") if isinstance(row.get("last"), dict) else {}
+    outcome = str(last.get("outcome") or "")
+    try:
+        at = float(last.get("at") or 0.0)
+    except (TypeError, ValueError):
+        at = 0.0
+    if (outcome in GITHUB_CREATE_REPO_CARD_NO
+            and at > float(_GITHUB_CARD_REPORTED.get(GITHUB_CREATE_REPO_TOOL) or 0.0)):
+        _GITHUB_CARD_REPORTED[GITHUB_CREATE_REPO_TOOL] = at
+        return GITHUB_CREATE_REPO_CARD_NO[outcome]
+    try:
+        code, out = AF.request_tool_enable(
+            {"tool": GITHUB_CREATE_REPO_TOOL, "enabled": True},
+            peer=peer, local=local)
+    except Exception:                       # noqa: BLE001 - never a broken answer
+        return GITHUB_CREATE_REPO_OFF
+    out = out if isinstance(out, dict) else {}
+    said = " ".join(str(out.get("message") or out.get("error") or "").split())
+    if code == 202 and out.get("waiting"):
+        return (said + " While that card waits the tool is still off, so I cannot ask "
+                       "GitHub to create one.")
+    if code == 200 and out.get("ok") and not out.get("changed", True):
+        # It turned on between the read and this request: saying OFF now would
+        # contradict the write that just happened.
+        return ("Its own tool is offered to me now, so ask me again and I can create "
+                "one.")
+    if out.get("pc_only"):
+        # The route's PC-only rule, said for a chat rather than as a trip to
+        # Settings: the owner asks on the PC, and approves the card from here.
+        return ("Its own tool is switched OFF, and a tool switch can only be turned "
+                "on from a chat on the PC. Ask me there and I'll offer the card; you "
+                "can approve it from this phone. While it is off, I cannot ask GitHub "
+                "to create one.")
+    if said:
+        return said + " While it is off, I cannot ask GitHub to create one."
+    return GITHUB_CREATE_REPO_OFF
+
+
+def _github_create_repo_words(peer=None, local=None) -> str:
     """The real answer to "can you create a repository?", read from the modules.
 
-    Three facts, each read where it lives: the action exists (`GH.ACTIONS`),
-    whether its tool is switched on (`jarvis_asks_first`), and whether a token is
-    saved (`GH.connected()`, appended by the caller as `state`). The name rule is
+    Four facts, each read where it lives: the action exists (`GH.ACTIONS`),
+    whether its tool is switched on (`jarvis_asks_first`), whether a token is
+    saved (`GH.connected()`, appended by the caller as `state`), and - when the
+    tool is OFF - the switch CARD itself, offered in place through
+    `_github_switch_offer` (the owner's ruling, 2026-11-16). The name rule is
     GitHub's own and is the one that made "Fitness Band" fail: no spaces.
     """
     GH = _github_module()
@@ -22643,9 +22763,7 @@ def _github_create_repo_words() -> str:
     if switched is True:
         tool = "Its own tool, github_create_repo, is switched on in Settings, What asks first."
     elif switched is False:
-        tool = ("Its own tool, github_create_repo, is switched OFF in Settings, What "
-                "asks first, under \"Jarvis's own tools\" - switching it on is one "
-                "card on the PC. While it is off, I cannot ask GitHub to create one.")
+        tool = _github_switch_offer(peer=peer, local=local)
     else:
         tool = "I could not read whether its tool is switched on."
     return ("Yes - creating ONE new, empty repository on your own GitHub account is a "
@@ -22847,13 +22965,21 @@ def _github_tools_how_words() -> str:
     return start + " " + stop
 
 
-def _run_github_self(f: dict) -> Result:
+def _run_github_self(f: dict, peer=None, local=None) -> Result:
     """The GitHub questions the model used to invent answers to (2026-11-07).
 
     Every sentence is built from a module that owns the fact at answer time:
     `jarvis_github.connected()`, `jarvis_github.never_words()`,
     `jarvis_asks_first.view()` and the fixed repository constant shared with
-    the updater. No model, no card, no network, no write.
+    the updater. No model, no network, no write.
+
+    ONE shape can raise a card, and only when the tool it is about is OFF: the
+    create-a-repository answer offers that tool's own switch card in place of a
+    trip to Settings (the owner's ruling, 2026-11-16), through
+    `_github_switch_offer` - the same `enable_reading_tool` card the Settings
+    switch raises, and nothing is written until a person approves it. `peer` and
+    `local` are the request's own address, so the route's PC-only rule still
+    decides where the card may be requested from.
     """
     shape = str(f.get("shape") or "")
     state = _github_state_words()
@@ -22906,8 +23032,8 @@ def _run_github_self(f: dict) -> Result:
                       + _github_tools_how_words(),
                       "github_self")
     if shape == "create_repo":
-        return Result((_github_create_repo_words() + " " + state).strip(),
-                      "github_self")
+        return Result((_github_create_repo_words(peer=peer, local=local) + " "
+                       + state).strip(), "github_self")
     if shape == "needs":
         counts = _github_counts()
         offered = (f"offers all {_count_words(counts['offered'])} together on one "
@@ -27633,7 +27759,7 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "connected_list":
         return _run_connected(intent)
     if n == "github_self":
-        return _run_github_self(f)
+        return _run_github_self(f, peer=peer, local=local)
     # The turn after a connect-card save (2026-11-08, the owner's GitHub-token
     # honesty report): answered ONLY from the host's recorded test receipt and
     # the feature guide's own capability words - no model, no network, no card.
@@ -28515,7 +28641,12 @@ READ_ONLY_INTENTS = frozenset({
     "voicestudio_state",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
-    # page) and raises no card, so none may take away what "cancel that" undoes.
+    # page) and changes nothing, so none may take away what "cancel that" undoes.
+    # ONE exception since 2026-11-16, and it is still not a change: the
+    # create-a-repository answer asks for that tool's own switch card (the same
+    # `enable_reading_tool` card the Settings switch raises) when the tool is
+    # off, so it can clear "cancel that" only by what the card later does - the
+    # answer itself writes nothing.
     "github_self", "accounts_answer",
     # The four-way internet answer (2026-11-09): it reads jarvis_reach's own rows
     # and whether a GitHub token is saved, raises no card and opens no socket, so

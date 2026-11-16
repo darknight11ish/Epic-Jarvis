@@ -29,17 +29,20 @@ WHAT THIS SUITE PROVES, with no model, no socket and no real token:
   4. the GitHub half is separate from the three web halves, says whether a
      token is saved and how many of its seven tools are on;
   5. "can you create a repository?" - the owner's own words - and the other
-     capability wordings are answered with the real carded action (and the real
-     reason it is off), while a request that NAMES the repository ("create a
-     repository called Fitness Band") is DELIBERATELY not claimed - it must
-     reach the model, which calls github_create_repo;
+     capability wordings are answered with the real carded action, and when its
+     tool is off the answer offers that tool's OWN switch card in place (the
+     owner's 2026-11-16 ruling), while a request that NAMES the repository
+     ("create a repository called Fitness Band") is DELIBERATELY not claimed -
+     it must reach the model, which calls github_create_repo;
   6. the fixed words are the ones the model's own `self_portrait` carries
      (`jarvis_feature_guide.SELF_FACTS["internet_access"]`), so the
      deterministic answer and a model turn cannot say different things;
   7. the intent is read-only, so "cancel that" cannot undo a question.
 
-Nothing here opens a socket, raises a card, or reads the owner's real token:
-`jarvis_github._token` is replaced with "" for the whole run.
+Nothing here opens a socket, draws a real card, or reads the owner's real token:
+`jarvis_github._token` is replaced with "" for the whole run, and the
+create-repository switch card is stubbed to its waiting answer (its real route,
+write and decline are driven by `test_github_off_switch_card.py`).
 """
 from __future__ import annotations
 
@@ -390,15 +393,50 @@ def t_the_create_repository_question_is_answered_with_the_real_action():
         ASK.tools_enabled_set = keep
     check("its own tool being on is said", "is switched on" in reply, reply[:900])
 
-    keep = ASK.tools_enabled_set
+    # THE OFF RULE CHANGED ON 2026-11-16 (the owner's ruling: no need to visit
+    # Settings to enable a tool). The answer now offers that tool's own switch
+    # card IN PLACE - the SAME `enable_reading_tool` card the Settings switch
+    # raises, through `jarvis_asks_first.request_tool_enable` - and the old
+    # "switched OFF in Settings" sentence is now only the fallback for a PC that
+    # cannot draw the card at all. This suite stubs the card to a waiting one;
+    # `test_github_off_switch_card.py` drives the real route, its write and its
+    # decline.
+    keep_all = {n: getattr(ASK, n) for n in
+                ("_gate", "_tier", "_spawn", "_owner_check_armed",
+                 "request_tool_enable")}
+    seen = []
+    waiting = ("Waiting for your approval. Approve the card on this PC (Windows "
+               "Hello) or on your phone (its fingerprint or PIN), and the AI model "
+               "will be offered this tool.")
+
+    def _card_asked(body, **kw):
+        seen.append((dict(body or {}), dict(kw)))
+        return 202, {"ok": True, "waiting": True, "message": waiting}
+
     try:
         ASK.tools_enabled_set = lambda: set()
+        ASK._owner_check_armed = lambda: True
+        ASK._tier = lambda action: "ask"
+        ASK._gate = lambda *a, **k: None
+        ASK._spawn = lambda fn: None
+        ASK.request_tool_enable = _card_asked
+        ASK._reset_for_tests()
         _intent, reply = _answer("can you create a repository?")
     finally:
         ASK.tools_enabled_set = keep
-    check("its own tool being off is said, with what turns it on",
-          "switched OFF" in reply and "settings, what asks first" in reply.lower(),
-          reply[:1200])
+        for _n, _fn in keep_all.items():
+            setattr(ASK, _n, _fn)
+        ASK._reset_for_tests()
+    check("its own tool being off offers the switch card IN PLACE",
+          bool(seen) and seen[0][0] == {"tool": "github_create_repo",
+                                        "enabled": True},
+          seen)
+    check("... and the answer says that card is waiting, not that it is on",
+          "Waiting for your approval" in reply, reply[:1200])
+    check("... and it never sends him to Settings INSTEAD of the card",
+          "switching it on is one card on the PC" not in reply, reply[:1200])
+    check("... and it says the tool is still off while the card waits",
+          "still off" in reply.lower(), reply[:1200])
     check("the answer never claims a merge card or an automatic create",
           "merge card" not in reply.lower() or "no merge card" in reply.lower(),
           reply[:400])
