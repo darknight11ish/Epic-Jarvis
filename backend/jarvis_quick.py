@@ -3492,12 +3492,13 @@ _PC_FACTS = (
         r"(?:do\s+i\s+have|have\s+i\s+got|is\s+there)(?:\s+(?:left|available))?")),
     # "what is my disk space?" (2026-11-16, the awareness audit's eleven gaps).
     # The audit asked this exact sentence and the live backend sent it to the
-    # model, which has no way to read a disk. It is the SAME fact and the SAME
-    # one reader the `space_all` shape above uses (`jarvis_pc_facts`, which
-    # reads `jarvis_pc_help`'s disks) - asked about the ONE drive this backend
-    # itself lives on, because that is the drive the question is about. The
-    # letter is read from this file's own path, never typed.
-    ("backend_drive", re.compile(
+    # model, which has no way to read a disk. The gap was the PHRASING, not the
+    # fact: the `space_all` row above already answers "how much disk space is
+    # left" from `jarvis_pc_facts` and names EVERY drive. So this row repeats
+    # that EXISTING shape - one reader, one sentence - and only widens which
+    # sentences reach it. It deliberately adds no answer of its own: a
+    # drive-by-drive reply would be narrower than the one this PC already gives.
+    ("space_all", re.compile(
         r"what(?:'?s|\s+is)\s+(?:my|the|this\s+pc'?s?)\s+(?:free\s+)?"
         r"(?:disk|drive|hard\s+drive|hard\s+disk|ssd|storage)\s+"
         r"(?:space|capacity|usage|room)(?:\s+(?:free|left|available))?")),
@@ -3566,44 +3567,10 @@ def _pc_facts(s: str) -> Optional[Intent]:
     return None
 
 
-def _backend_drive() -> str:
-    """The drive letter this backend itself lives on, or "" - never guessed.
-
-    Read from the file this module was loaded from, so an install on another
-    drive answers about ITS drive, and a PC that cannot name one says so
-    instead of remembering this repository's "C:".
-    """
-    try:
-        drive = os.path.splitdrive(os.path.abspath(__file__))[0].rstrip(":\\/")
-        return str(drive).upper()
-    except Exception:                                       # noqa: BLE001
-        return ""
-
-
 def _run_pc_facts(f: dict) -> Result:
     """The fixed PC-facts answer, from the real read-only readers."""
     shape = str(f.get("shape") or "")
     drive = str(f.get("drive") or "")
-    if shape == "backend_drive":
-        # "what is my disk space?" (2026-11-16, the awareness audit's eleven
-        # gaps): the SAME one disk reader the `space_all` shape uses, asked
-        # about the one drive this backend sits on - so the numbers are that
-        # drive's, and the sentence says which drive it read.
-        letter = _backend_drive()
-        if not letter:
-            return Result("I cannot tell how much disk space there is: this PC "
-                          "does not name the drive the backend is on, so I will "
-                          "not guess.", "pc_facts")
-        try:
-            import jarvis_pc_facts as F
-            said = str(F.answer("drive", drive=letter) or "")
-        except Exception:                                   # noqa: BLE001
-            return Result("I could not read this PC's disk just now, so I will "
-                          "not guess.", "pc_facts")
-        if said.upper().lstrip().startswith(letter + ":"):
-            said += (" That is the drive this backend lives on, read from this "
-                     "PC's own disk usage.")
-        return Result(said, "pc_facts")
     try:
         import jarvis_pc_facts as F
         return Result(F.answer(shape, drive=drive), "pc_facts")

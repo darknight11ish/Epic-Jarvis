@@ -15,9 +15,10 @@ read can settle exactly:
   * "how many models are installed" (and which) - the installed-model list the
     app already reads (`jarvis_model_knowledge.installed_models`), through the
     existing `models_list` answer, which already led with the count;
-  * "what is my disk space" - the existing PC-facts disk reader
+  * "what is my disk space" - the same PC-facts disk reader
     (`jarvis_pc_facts`, which reads `jarvis_pc_help`'s own `shutil.disk_usage`
-    rows) asked about the ONE drive this backend lives on;
+    rows) that "how much disk space is left" already reaches, so the reply
+    names EVERY drive: the audit's gap was the phrasing, not a missing fact;
   * "is ollama running" - whether the lane's server answers
     (`jarvis_model_lanes.probe`), the same `/api/tags` probe both apps' lane
     warning already makes.
@@ -273,8 +274,8 @@ def main():
         check(f"'{sentence}' is {want}, not the model",
               got is not None and got.name == want, got)
         if want == "pc_facts" and got is not None:
-            check(f"... '{sentence}' asks about the backend's own drive",
-                  got.f.get("shape") == "backend_drive", got.f)
+            check(f"... '{sentence}' asks the EXISTING whole-PC disk shape",
+                  got.f.get("shape") == "space_all", got.f)
     for sentence in NOT_OURS:
         got = Q.match(sentence)
         check(f"not claimed: '{sentence}' is not one of the four",
@@ -462,71 +463,30 @@ def main():
             _restore(saved2)
 
         # ------------------------------------------------------------------
-        #  8. Disk space: the backend's own drive, from the real reader
+        #  8. Disk space: the audit's PHRASE reaches the WIDE answer that
+        #     already names every drive - not a narrower answer of its own
         # ------------------------------------------------------------------
-        pc, calls = _fake_pc_facts("C: has 100.0 GB free of 200.0 GB (50% free).")
+        # "how much disk space is left" already reached `space_all` and
+        # answered every drive; only "what is my disk space" fell to the model.
+        # So the promise to pin is that the new wording reaches that SAME
+        # answer, widened to both drives rather than narrowed to the one the
+        # backend sits on - and the reader is asked for `space_all`, once.
+        pc, calls = _fake_pc_facts(
+            "C: has 100.0 GB free of 200.0 GB (50% free). "
+            "D: has 400.0 GB free of 500.0 GB (80% free).")
         saved2 = _install(lanes=_fake_lanes(), bench=bench,
                           models=_fake_models(), hardware=_fake_hardware(),
                           pc_facts=pc)
-        real_drive = Q._backend_drive
         try:
-            Q._backend_drive = lambda: "C"
             intent, said = say("what is my disk space")
-            check("disk: the existing pc_facts answer takes it",
-                  intent == "pc_facts", intent)
-            check("disk: asks the one reader about the backend's own drive",
-                  calls == [{"shape": "drive", "drive": "C"}], calls)
-            check("disk: quotes free and total, with the drive named",
-                  "100.0 GB free of 200.0 GB" in said, said)
-            check("disk: says which drive and which read",
-                  "drive this backend lives on" in said
-                  and "disk usage" in said, said)
-            check("disk: short enough for a phone", len(said) <= 260, len(said))
-
-            Q._backend_drive = real_drive
-            letter = Q._backend_drive()
-            if os.name == "nt":
-                want = os.path.splitdrive(os.path.abspath(Q.__file__))[0]
-                check("disk: the real drive letter is this file's own drive",
-                      letter and letter + ":" == want.upper(), (letter, want))
-            else:
-                check("disk: this platform names no drive, and says so",
-                      letter == "", letter)
-                intent, said = say("what is my disk space")
-                check("disk: ... the answer says it cannot tell, and does not guess",
-                      "cannot tell how much disk space" in said
-                      and "will not guess" in said, said)
-
-            # The two cases below are about what the READER said, so they have
-            # to reach the reader on every host - and by itself this one only
-            # does on Windows. `_run_pc_facts` asks `_backend_drive()` first
-            # and returns the "does not name the drive" answer above when it is
-            # "", which is every POSIX runner (`os.path.splitdrive` there is
-            # posixpath's, and it always returns ""). So the reader was never
-            # called, and the two assertions could only pass on a PC with a
-            # drive letter. Pin the letter the same way the first case above
-            # pins it: a fixed "C", not the host's own, so a failing read is
-            # driven deterministically instead of by the machine running it.
-            Q._backend_drive = lambda: "C"
-
-            pc, calls = _fake_pc_facts(raises=True)
-            sys.modules["jarvis_pc_facts"] = pc
-            intent, said = say("what is my disk space")
-            check("disk: a read that fails says so and invents no number",
-                  "could not read this PC's disk" in said
-                  and "will not guess" in said and "GB" not in said, said)
-
-            pc, calls = _fake_pc_facts(
-                "I could not find a fixed drive called C: on this PC, so I "
-                "cannot say how much space it has.")
-            sys.modules["jarvis_pc_facts"] = pc
-            intent, said = say("what is my disk space")
-            check("disk: a drive the read cannot find keeps its own honest words",
-                  "could not find a fixed drive" in said, said)
-            check("disk: ... and no 'this backend lives on' claim is added",
-                  "backend lives on" not in said, said)
+            check("disk: 'what is my disk space' reaches the existing space_all "
+                  "answer, and it names both drives",
+                  intent == "pc_facts"
+                  and calls == [{"shape": "space_all", "drive": ""}]
+                  and "C: has 100.0 GB free of 200.0 GB" in said
+                  and "D: has 400.0 GB free of 500.0 GB" in said,
+                  (intent, calls, said))
         finally:
-            Q._backend_drive = real_drive
             _restore(saved2)
 
         # ------------------------------------------------------------------
@@ -621,10 +581,10 @@ def main():
             Q._K_OLLAMA_RUNNING = saved_running
         saved_facts = Q._PC_FACTS
         Q._PC_FACTS = tuple((shape, rx) for shape, rx in saved_facts
-                            if shape != "backend_drive")
+                            if not rx.fullmatch("what is my disk space"))
         try:
-            check("bite: without the disk shape, 'what is my disk space' is the "
-                  "model's again",
+            check("bite: without the widened disk row, 'what is my disk space' "
+                  "is the model's again",
                   Q.match("what is my disk space") is None,
                   Q.match("what is my disk space"))
         finally:
