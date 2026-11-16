@@ -11953,6 +11953,39 @@ def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
     name = str(primary.get("name") or "your phone")
     seen = _seen(primary)
     when = _phone_when_words(max(0, int(time.time() - seen)), seen) if seen else ""
+    # MORE THAN ONE PHONE RECORD (the awareness audit, 2026-11-15). The owner
+    # asked "is my phone connected" and was told, with confidence, about a
+    # "Pixel 9" - while the phone on his desk is an OnePlus, and the roster held
+    # BOTH records with the same last-seen second. Picking the newest and
+    # calling it "your phone" is a guess when two records tie, so with more
+    # than one phone this says what the records are and leaves the choice to
+    # him. The age is real evidence of the last check-in; WHICH record is the
+    # phone in his hand is not something this PC can know.
+    if len(phones) > 1:
+        listed = []
+        for dev in sorted(phones, key=_seen, reverse=True):
+            label = str(dev.get("name") or "a phone with no name")
+            stamp = _seen(dev)
+            age_words = (_phone_when_words(max(0, int(time.time() - stamp)), stamp)
+                         if stamp else "not heard from since it was paired")
+            listed.append(f"{label} (last heard from {age_words})")
+        newest = _seen(sorted(phones, key=_seen, reverse=True)[0])
+        tie = sum(1 for d in phones if _seen(d) == newest) > 1
+        head = (f"{len(phones)} phones are paired with Jarvis on this PC: "
+                + "; ".join(listed) + ". ")
+        if tie:
+            head += ("The newest ones were heard from at the same moment, so I cannot "
+                     "tell which is the phone you are holding. ")
+        else:
+            head += (f"The newest is {name}, but I cannot tell from here whether that is "
+                     "the phone you are holding. ")
+        tail = ("A pairing is a record, not a live check: the age is when that phone last "
+                "reached this PC. Remove one you no longer use in Settings, Devices.")
+        if timer:
+            tail = ("Timers set on a phone stay on that phone - I cannot read or set them "
+                    "from this PC's chat; open the phone's Clock, or ask Jarvis on the "
+                    "phone.")
+        return head + tail
     if timer:
         parts = []
         for dev in phones:
@@ -11963,7 +11996,14 @@ def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
                              f"{_phone_when_words(max(0, int(time.time() - stamp)), stamp)}")
             else:
                 parts.append(f"{label}, not heard from since it was paired")
-        return ("Your phone is connected to Jarvis right now (" + "; ".join(parts)
+        # "CONNECTED ... RIGHT NOW" WAS A CLAIM THE RECORD DOES NOT SUPPORT (the
+        # awareness audit, 2026-11-15): this line said "connected to Jarvis right
+        # now" beside "last heard from 21 minutes ago". A pairing is a record;
+        # the age is the only evidence, so the words say "paired" here and let
+        # the age speak.
+        paired_word = ("Your phone is paired" if len(phones) == 1
+                       else f"{len(phones)} phones are paired")
+        return (f"{paired_word} with Jarvis (" + "; ".join(parts)
                 + "). Timers set on the phone stay on the phone - I cannot read or "
                   "set them from this PC's chat; open the phone's Clock, or ask "
                   "Jarvis on the phone.")
@@ -21753,11 +21793,18 @@ def _run_model_current() -> Result:
     if not model and not preset:
         return Result(MODEL_CURRENT_UNKNOWN, "model_current")
     if model and preset:
-        said = (f'You are running {model} on this PC, under the "{preset.get("title")}" '
-                "preset. Brain, Models lists every installed model and its measured speed.")
+        # "SET TO USE", not "running" (the awareness audit, 2026-11-15): the
+        # model is a CONFIGURED choice, and `ollama ps` showed nothing loaded at
+        # the moment this answer claimed to be running it. The audit's rule is
+        # the project's own: do not claim more than the evidence supports.
+        said = (f'Jarvis is set to use {model} on this PC, under the "{preset.get("title")}" '
+                "preset. That is the model it answers with: Ollama loads it when you talk "
+                "to it and unloads it when it sits idle. Brain, Models lists every "
+                "installed model and its measured speed.")
     elif model:
-        said = (f"You are running {model} on this PC. Brain, Models lists every installed "
-                "model and its measured speed.")
+        said = (f"Jarvis is set to use {model} on this PC - the model it answers with, "
+                "loaded when you talk to it and unloaded when idle. Brain, Models lists "
+                "every installed model and its measured speed.")
     elif preset.get("model"):
         said = (f'The preset chosen on this PC is "{preset.get("title")}", which uses '
                 f'{preset.get("model")} - but this PC does not record which model is '
@@ -23034,7 +23081,9 @@ def _how_running_words() -> str:
     title = str((row or {}).get("title") or "")
     if model or title:
         if model:
-            head = f"I am running {model}"
+            # "set to use", not "running": the same correction as
+            # `_run_model_current` (the awareness audit, 2026-11-15).
+            head = f"I am set to use {model}"
             if card:
                 # The Coding preset's lane card is the words "both cards", so
                 # "on the both cards" must read "across both cards".
@@ -23044,7 +23093,8 @@ def _how_running_words() -> str:
                 head += f' under the "{title}" preset'
             if ctx:
                 head += f", with {ctx:,} tokens of context"
-            bits.append(head + ".")
+            bits.append(head + ". It is loaded when you talk to me, and Ollama unloads "
+                             "it when it sits idle.")
         else:
             # No running record: name the chosen preset's model as the PLAN -
             # never as the model that is running (the same split
