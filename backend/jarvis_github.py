@@ -234,6 +234,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -522,8 +523,11 @@ DESTRUCTIVE_ARGS = ("delete", "remove", "unlink", "rename", "rename_to",
                     "executable", "symlink", "hardlink")
 
 #: How long one git command may take. The clone is the slow one on a cold
-#: network; a dead network should end in a sentence, not a hang.
-GIT_TIMEOUT = 120.0
+#: network; a dead network should end in a sentence, not a hang. Measured on
+#: this PC on 2026-11-15: a fresh `--no-checkout` clone of
+#: darknight11ish/Epic-Jarvis (about 421 MB) took 257-297 s, so 900 s is about
+#: three times the slowest measured copy. The old 120 s could never finish it.
+GIT_TIMEOUT = 900.0
 
 #: The names/stems/extensions that say "this file holds a key, a password or a
 #: token". The same set `jarvis_project_read._credential` uses, used here as the
@@ -1222,7 +1226,8 @@ FIX_PUSH_TOUCHES = (
     "request's OWN branch only. It never pushes to main, master, release/* or "
     "hotfix/*, never force-pushes, never deletes or mirrors anything, and a "
     "pushed commit cannot be taken back by Jarvis - only a new commit can undo "
-    "it. Nothing else on GitHub changes.")
+    "it. Nothing else on GitHub changes. To abandon it, do not approve this "
+    "card; nothing is pushed.")
 
 #: What the write card says (wave 16B). It is wholly LOCAL: no token, no socket,
 #: no GitHub change - one file and one commit inside the isolated copy, and the
@@ -1309,9 +1314,14 @@ def describe(r: Request) -> str:
     lines.append("")
     if r.action == ACTION_FIX_WRITE:
         lines.append("This card sends nothing anywhere and uses no GitHub token.")
+    elif r.action == ACTION_FIX_PUSH:
+        lines.append("The GitHub token saved on this PC is sent to api.github.com "
+                     "for the reads and to github.com when git downloads or "
+                     "pushes, and nowhere else; it is never shown.")
     elif r.action == ACTION_OPEN_PR:
-        lines.append("This card uses the GitHub token saved on this PC for the "
-                     "git push and the pull request, and for nothing else.")
+        lines.append("The GitHub token saved on this PC is sent to api.github.com "
+                     "for the pull request and to github.com for the git push, "
+                     "and nowhere else; it is never shown.")
     else:
         lines.append("The GitHub token saved on this PC is sent to api.github.com "
                      "and nowhere else; it is never shown.")
@@ -2284,6 +2294,10 @@ def _write_arguments(args: dict) -> dict:
     return {"repo": str(marker.get("repo") or ""),
             "number": str(marker.get("number") or ""),
             "head_ref": str(marker.get("head_ref") or marker.get("branch") or ""),
+            "title": _clean_github_text(marker.get("title"), wrap=False),
+            "base_ref": _clean_github_text(
+                marker.get("base_ref") or marker.get("base"), wrap=False),
+            "head_sha": _clean_github_text(marker.get("head_sha"), wrap=False),
             "open_copy": marker.get("kind") == "open",
             "worktree": os.path.normpath(worktree), "path": rel,
             "target": target, "exists": exists, "before": before,
@@ -2895,6 +2909,18 @@ def _push_arguments(args: dict, git: Callable) -> dict:
         raise GitHubError("That scratch folder's note does not name the pull "
                           "request's branch and head commit, so Jarvis cannot "
                           "tell what a push would carry. Prepare it again.")
+    try:
+        _check_ref(head_ref)
+    except GitHubError:
+        # `_check_ref` is the module's one branch-name rule (no `..`, no spaces,
+        # no control characters). The marker is written by prepare, but a
+        # hand-made or edited marker must not reach a push command: git would
+        # reject `HEAD:refs/heads/a..b`, and the card would still claim it would
+        # push. Refused here, before a Request exists.
+        raise GitHubError(
+            "That scratch folder's note names a branch that is not a valid "
+            f"branch name (\"{_clean_github_text(head_ref, wrap=False)}\"), so "
+            f"Jarvis did not plan a push. Prepare the folder again.") from None
     if branch != head_ref:
         raise GitHubError(f"That folder is on branch \"{branch}\", but the pull "
                           f"request's branch is \"{head_ref}\". Jarvis pushes only "
@@ -2930,19 +2956,40 @@ def _push_arguments(args: dict, git: Callable) -> dict:
             "it from the commit first; nothing was pushed.")
     checks = marker.get("failing_checks") or []
     checks = [c for c in checks if isinstance(c, dict)]
+    pending = marker.get("pending_checks") or []
+    pending = [c for c in pending if isinstance(c, dict)]
     return {"repo": repo, "number": number, "worktree": os.path.normpath(worktree),
             "branch": branch, "head_ref": head_ref, "base": base,
-            "commits": commits, "files": files, "checks": checks}
+            "title": _clean_github_text(marker.get("title"), wrap=False),
+            "base_ref": _clean_github_text(marker.get("base_ref"), wrap=False),
+            "commits": commits, "files": files, "checks": checks,
+            "pending": pending}
 
 
 def _checks_summary(parts: dict) -> str:
-    """The failing-check line on the push card, from the prepare evidence."""
+    """The check lines on the push card, from the prepare evidence.
+
+    Failing and unfinished are separate sentences on purpose: a check that has
+    not finished is not a failure, and it is not a pass either. The old card
+    said only "none recorded" when every check was still running.
+    """
     checks = parts.get("checks") or []
-    if not checks:
-        return ("Failing checks: none recorded when this folder was prepared")
-    return "Failing checks when this folder was prepared: " + ", ".join(
-        f"{str(c.get('name') or 'a check')} ({str(c.get('conclusion') or 'failed')})"
-        for c in checks)
+    pending = parts.get("pending") or []
+    lines = []
+    if checks:
+        lines.append("Failing checks when this folder was prepared: " + ", ".join(
+            f"{str(c.get('name') or 'a check')} "
+            f"({str(c.get('conclusion') or 'no result')})"
+            for c in checks))
+    if pending:
+        lines.append("Checks still running when this folder was prepared: "
+                     + ", ".join(
+                         f"{str(c.get('name') or 'a check')} "
+                         f"({str(c.get('status') or 'unfinished')})"
+                         for c in pending))
+    if not lines:
+        return "Failing checks: none recorded when this folder was prepared"
+    return "\n".join(lines)
 
 
 def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = None) -> Request:
@@ -2971,9 +3018,11 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
                  if parts.get("open_copy")
                  else f"Pull request: #{parts['number']} "
                       f"(branch {parts['head_ref']})")
-        shown = [
-            f"Repository: {parts['repo']}",
-            where,
+        shown = [f"Repository: {parts['repo']}", where]
+        if not parts.get("open_copy"):
+            shown.append(f"Title: {parts['title'] or '(not recorded in this copy)'}")
+        shown += [
+            f"Base branch: {parts['base_ref'] or '(not recorded in this copy)'}",
             f"Scratch folder: {parts['worktree']}",
             f"File: {parts['path']}"
             + ("" if parts["exists"] else " (a NEW file)"),
@@ -2981,7 +3030,20 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
             "",
             "The exact change:",
             parts["diff"].rstrip(),
+            "",
+            f"The push command a later card would use: git push origin "
+            f"HEAD:refs/heads/{parts['head_ref']}",
+            "(HEAD means the commit in this folder, and refs/heads/<name> is "
+            "GitHub's full name for the branch <name>.)",
         ]
+        if parts["head_sha"]:
+            shown.append(
+                f'To abandon this fix after it is made, delete the scratch folder '
+                f'above, or run: git -C "{parts["worktree"]}" reset --hard '
+                f'{parts["head_sha"]}')
+        else:
+            shown.append("To abandon this fix after it is made, delete the "
+                         "scratch folder above.")
         what = (f"Jarvis will change ONE file inside the scratch copy of the new "
                 f"branch \"{parts['head_ref']}\" in {parts['repo']} and make ONE "
                 f"commit there:"
@@ -3011,6 +3073,8 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
         shown = [
             f"Repository: {parts['repo']}",
             f"Pull request: #{parts['number']} (branch {parts['head_ref']})",
+            f"Title: {parts['title'] or '(not recorded in this copy)'}",
+            f"Base branch: {parts['base_ref'] or '(not recorded in this copy)'}",
             f"Scratch folder: {parts['worktree']}",
             _checks_summary(parts),
             "Changed files:",
@@ -3019,6 +3083,8 @@ def plan_fix_and_push(args: Optional[dict] = None, *, git: Optional[Callable] = 
         shown.append("Commits:")
         shown += [f"  {line}" for line in parts["commits"]]
         shown.append(f"The exact command: {command}")
+        shown.append("(HEAD means the commit in this folder, and refs/heads/<name> "
+                     "is GitHub's full name for the branch <name>.)")
         return Request(
             ACTION_FIX_PUSH,
             f"Jarvis will push the {len(parts['commits'])} commit(s) in that "
@@ -4829,26 +4895,33 @@ def _cut_log(text: str, limit: int = MAX_LOG_CHARS) -> str:
 
 def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
                       sha: str, *, log: Optional[Callable] = None) -> tuple:
-    """(list of failing checks with evidence, error).
+    """(failing checks with evidence, unfinished checks, error).
 
-    Each item is `{"name", "conclusion", "annotations", "log", "log_error"}`.
-    Annotations are read for every failing check (bounded to
-    `MAX_ANNOTATION_CHARS`); the job log is read only when the check's own
-    `details_url` names a job, and it is bounded to the last `MAX_LOG_CHARS`
-    characters. A check still running is not a failure and is not listed here.
+    Each failing item is `{"name", "conclusion", "annotations", "log",
+    "log_error"}`. Each unfinished item is `{"name", "status"}`. Annotations are
+    read for every failing check (bounded to `MAX_ANNOTATION_CHARS`); the job log
+    is read only when the check's own `details_url` names a job, and it is
+    bounded to the last `MAX_LOG_CHARS` characters. A check that has not
+    finished is NOT a failure and is NOT a pass: it is kept separately so the
+    prepare answer can name it as still running and say what it is waiting for.
+    The judgement is `_check_verdict`'s, the same one the pull request CI answer
+    and the scan use, so the three cannot disagree about the same commit.
 
     A log that could not be read goes in `log_error`, NOT in `log`: an error
     sentence in the log field would render as if it were the end of the job log.
     """
     runs, err = _check_runs(fetch, headers, token, repo, sha)
     if err:
-        return [], err
+        return [], [], err
     out = []
+    unfinished = []
     for run_doc in runs:
-        if str(run_doc.get("status") or "") != "completed":
+        verdict, conclusion = _check_verdict(run_doc)
+        if verdict == "running":
+            unfinished.append({"name": _check_name(run_doc),
+                               "status": str(run_doc.get("status") or "unfinished")})
             continue
-        conclusion = str(run_doc.get("conclusion") or "")
-        if conclusion in ("success", "neutral", "skipped", ""):
+        if verdict == "ok":
             continue
         item = {"name": _check_name(run_doc), "conclusion": conclusion,
                 "annotations": "", "log": "", "log_error": ""}
@@ -4877,7 +4950,7 @@ def _failing_evidence(fetch: Callable, headers: dict, token: str, repo: str,
             if why:
                 item["log_error"] = why
         out.append(item)
-    return out, ""
+    return out, unfinished, ""
 
 
 def _cut_text(text: str, limit: int) -> str:
@@ -4890,8 +4963,8 @@ def _cut_text(text: str, limit: int) -> str:
 # --------------------------------------------------------------------------
 
 
-def _evidence_words(checks: list) -> str:
-    """The failing-check half of the prepare stage's answer, in plain words.
+def _evidence_words(checks: list, unfinished: list = ()) -> str:
+    """The check half of the prepare stage's answer, in plain words.
 
     The annotations and the end of the job log are FETCHED GitHub text, so both
     go through the one sanitizer and are wrapped in its data delimiters. A job
@@ -4899,29 +4972,43 @@ def _evidence_words(checks: list) -> str:
     error sentence shown under "The end of its log" would claim evidence the
     answer does not have. A completed fix diff, a changed PR or an issue body is
     never an instruction to this model, and the delimiters say so.
+
+    A check that has not finished is NOT a failure and is NOT a pass. It is
+    named as unfinished, with the status GitHub gave it, so an answer can never
+    read as "all clear" while CI is still running.
     """
-    if not checks:
+    lines = []
+    if checks:
+        lines.append(f"{len(checks)} failing check(s) on that commit:")
+        for item in checks:
+            lines.append(f"  {_check_name(item)}: "
+                         f"{item.get('conclusion') or 'no result'}")
+            notes = _clean_github_text(item.get("annotations"),
+                                       limit=MAX_ANNOTATION_CHARS)
+            if notes:
+                lines.append("    GitHub's annotation:")
+                lines.extend("      " + line for line in notes.splitlines())
+            log_error = _clean_github_text(item.get("log_error"),
+                                           limit=MAX_LOG_CHARS, wrap=False)
+            if log_error:
+                # A READ failure is not a log tail, and the words must not
+                # pretend it is: the owner asked for evidence, and this says why
+                # there is none rather than showing an error sentence as the end
+                # of a log.
+                lines.append("    GitHub's job log could not be read:")
+                lines.append("      " + log_error)
+            tail = _clean_github_text(item.get("log"), limit=MAX_LOG_CHARS)
+            if tail:
+                lines.append("    The end of its log:")
+                lines.extend("      " + line for line in tail.splitlines())
+    if unfinished:
+        named = ", ".join(f"{_check_name(item)} ({item.get('status')})"
+                          for item in unfinished)
+        lines.append(
+            f"{len(unfinished)} check(s) on that commit have not finished yet, "
+            f"so Jarvis is not calling them passing: {named}.")
+    if not lines:
         return "There are no failing checks on that commit."
-    lines = [f"{len(checks)} failing check(s) on that commit:"]
-    for item in checks:
-        lines.append(f"  {_check_name(item)}: {item.get('conclusion')}")
-        notes = _clean_github_text(item.get("annotations"),
-                                   limit=MAX_ANNOTATION_CHARS)
-        if notes:
-            lines.append("    GitHub's annotation:")
-            lines.extend("      " + line for line in notes.splitlines())
-        log_error = _clean_github_text(item.get("log_error"), limit=MAX_LOG_CHARS,
-                                       wrap=False)
-        if log_error:
-            # A READ failure is not a log tail, and the words must not pretend
-            # it is: the owner asked for evidence, and this says why there is
-            # none rather than showing an error sentence as the end of a log.
-            lines.append("    GitHub's job log could not be read:")
-            lines.append("      " + log_error)
-        tail = _clean_github_text(item.get("log"), limit=MAX_LOG_CHARS)
-        if tail:
-            lines.append("    The end of its log:")
-            lines.extend("      " + line for line in tail.splitlines())
     return "\n".join(lines)
 
 
@@ -4940,11 +5027,20 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
     if not isinstance(doc, dict):
         return {"ok": False, "error": "GitHub answered without the pull request, so "
                                       "nothing was copied."}
+    state = str(doc.get("state") or "").strip().lower()
+    if doc.get("merged") or doc.get("merged_at") or state == "closed":
+        what = ("already merged" if (doc.get("merged") or doc.get("merged_at"))
+                else "closed")
+        return {"ok": False, "error": (
+            f"Pull request #{r.number} in {r.repo} is {what}, so there is "
+            f"nothing to fix there. Nothing was copied.")}
     head = doc.get("head") or {}
     head_repo = str((head.get("repo") or {}).get("full_name") or "")
     head_ref = str(head.get("ref") or "").strip()
     head_sha = str(head.get("sha") or "").strip()
     title = _clean_github_text(doc.get("title"), wrap=False)
+    base_doc = doc.get("base") if isinstance(doc.get("base"), dict) else {}
+    base_ref = _clean_github_text(base_doc.get("ref"), wrap=False)
     if not head_ref or not _SHA.match(head_sha):
         return {"ok": False, "error": ("GitHub did not say which branch and commit "
                                        "that pull request is, so nothing was copied.")}
@@ -4988,13 +5084,26 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
         `target` did not exist when this call started, so it is this call's to
         remove. Leaving it behind is what made the NEXT prepare clone into a
         non-empty folder - a git error that named neither the folder nor the
-        earlier failure. If the removal does not work the answer says so and
-        names the folder, rather than claiming it is gone.
+        earlier failure. A killed git process can hold a file open for a moment
+        and Windows marks pack files read-only, so the removal is retried a few
+        times with the read-only bit cleared. If it still cannot remove the
+        folder the answer names it and tells the owner to delete it, rather than
+        claiming it is gone.
         """
-        shutil.rmtree(target, ignore_errors=True)
+        for _attempt in range(5):
+            shutil.rmtree(target, ignore_errors=True)
+            if not os.path.lexists(target):
+                break
+            for folder, dirs, files in os.walk(target):
+                for name in dirs + files:
+                    try:
+                        os.chmod(os.path.join(folder, name), stat.S_IWRITE)
+                    except OSError:
+                        pass
+            time.sleep(0.4)
         if os.path.lexists(target):
             error += (f" Jarvis could not remove its half-made scratch folder at "
-                      f"{target}; remove that folder by hand before preparing "
+                      f"{target}; delete that folder yourself before preparing "
                       f"again.")
         return {"ok": False, "error": error}
 
@@ -5029,12 +5138,14 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
             return failed(_git_words("Naming the local branch",
                                      err_text or out, token))
 
-    checks, why = _failing_evidence(fetch, headers, token, r.repo, head_sha,
-                                    log=log)
+    checks, unfinished, why = _failing_evidence(fetch, headers, token, r.repo,
+                                                head_sha, log=log)
     note = {"repo": r.repo, "number": r.number, "head_ref": head_ref,
-            "head_sha": head_sha,
+            "head_sha": head_sha, "title": title, "base_ref": base_ref,
             "failing_checks": [{"name": c["name"], "conclusion": c["conclusion"]}
-                               for c in checks]}
+                               for c in checks],
+            "pending_checks": [{"name": c["name"], "status": c["status"]}
+                               for c in unfinished]}
     bad = _write_marker(target, note)
     if bad:
         return failed(bad)
@@ -5047,7 +5158,7 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
     if why:
         said.append(f"Jarvis could not read the failing checks: {why}")
     else:
-        said.append(_evidence_words(checks))
+        said.append(_evidence_words(checks, unfinished))
     said.append("")
     said.append("Next steps:")
     said.append("  1. Edit the files in that folder and commit the fix there "
