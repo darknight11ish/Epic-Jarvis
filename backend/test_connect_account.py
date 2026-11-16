@@ -964,10 +964,12 @@ def t_the_quick_path_answers_the_owners_sentences():
         # account answer named only the calendar and GitHub, which silently
         # dropped the email half of "can you connect my calendar and email" -
         # and a Google/email question that names no account this card can test
-        # is the four-paths answer's, not this card's.
+        # is the four-paths answer's, not this card's. Since 2026-11-15 an
+        # email-only sentence gets the email answer, which is still not this
+        # card: what this row holds is that the CARD never claims it.
         email = Q.match("connect my email")
-        check("a Google/email sentence is the four-paths answer, not this card",
-              email is not None and email.name == "accounts_connect", email)
+        check("a Google/email sentence is not this card",
+              email is not None and email.name in ("accounts_connect", "accounts_email"), email)
         for said in ("open my calendar", "can you read my calendar?",
                      "set a reminder for my calendar", "connect the printer",
                      "watch my github ci",
