@@ -80,6 +80,7 @@ import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
+import com.jarvis.client.ui.parts.Toggle
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.pressable
@@ -141,6 +142,19 @@ fun BrainScreen(
      * approval card is waiting on the PC", never "it is on".
      */
     onRefreshAttention: () -> Unit = {},
+    /**
+     * Mutes spoken interruptions until tomorrow - THE ONE PLACE EITHER SCREEN
+     * DRAWS THE SWITCH, since the audit of 2026-11-15 (owner's choice, same
+     * day): the Inbox drew a second one beside its own count, so one setting had
+     * two homes, while the numbers it changes - the count, the meter, the daily
+     * limit - are all here. The Inbox keeps the count and this plate keeps the
+     * control. The quick-settings tile is a separate surface and still toggles
+     * the same setting.
+     *
+     * Deliberately has no default: a plate drawing a switch nothing wired would
+     * look live and do nothing, so the compiler makes the caller pass it.
+     */
+    onSetMuted: (Boolean) -> Unit,
     /** Which proposal, if any, has a decision in flight - never two at once. */
     memoryDecideBusyId: Long?,
     onDecideMemory: (id: Long, accept: Boolean) -> Unit,
@@ -1611,6 +1625,7 @@ fun BrainScreen(
                     attention = attention,
                     canAct = canAct,
                     onRefreshAttention = onRefreshAttention,
+                    onSetMuted = onSetMuted,
                 )
             }
 
@@ -2090,12 +2105,14 @@ private fun BrainAttentionPlate(
     attention: Attention,
     canAct: Boolean,
     onRefreshAttention: () -> Unit,
+    onSetMuted: (Boolean) -> Unit,
 ) {
     Section("Attention budget") {
         AttentionPlate(
             attention = attention,
             canAct = canAct,
             onRefreshAttention = onRefreshAttention,
+            onSetMuted = onSetMuted,
         )
     }
 }
@@ -2105,6 +2122,7 @@ private fun AttentionPlate(
     attention: Attention,
     canAct: Boolean,
     onRefreshAttention: () -> Unit,
+    onSetMuted: (Boolean) -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -2177,6 +2195,41 @@ private fun AttentionPlate(
                     Pill("Blocked by $it", color = chrome.textMid)
                 }
             }
+        }
+        // The one mute switch on either screen (the audit of 2026-11-15). The
+        // Inbox drew a second one beside its own count, so one setting had two
+        // homes; the Inbox keeps the count, and the switch lives beside the
+        // numbers it changes.
+        Gap(10)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Mute spoken interruptions",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = chrome.textHi,
+                )
+                // There is no "mute forever", and this says so rather than
+                // leaving the owner to discover the limit.
+                Text(
+                    "Until tomorrow. Anything you asked for is never counted.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
+            Toggle(
+                // `muted` is its own field on the budget. `blocked_by` says why the
+                // budget is zero - "quiet", "standby", a locked session - and is
+                // null most of the time, so a switch reading it was a switch that
+                // could never be on.
+                checked = attention.muted,
+                onCheckedChange = onSetMuted,
+                // This app's own switch (visual-11), and named: the stock one was
+                // read by TalkBack as just "switch, off", with the words beside it
+                // a separate stop it had no link to.
+                modifier = Modifier.semantics {
+                    contentDescription = "Mute spoken interruptions until tomorrow"
+                },
+            )
         }
         if (attention.pending > 0) {
             Gap(10)

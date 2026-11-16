@@ -339,6 +339,33 @@ class AttentionSettingsTest {
     }
 
     @Test
+    fun `the mute switch has one home, and it is the attention plate`() {
+        // The owner's choice of 2026-11-15: one setting, one home. The switch
+        // was drawn on a card in the Inbox while the numbers it changes - the
+        // count, the meter, the daily limit - were here, so the owner read the
+        // state in one place and changed it in another. Brain keeps the switch;
+        // the Inbox keeps only its count line.
+        val plate = source(PLATE)
+        assertTrue("the plate no longer draws the mute switch",
+            plate.contains("\"Mute spoken interruptions\""))
+        // `muted` is the budget's own field. `blocked_by` says why the budget is
+        // zero - "quiet", "standby", a locked session - and is null most of the
+        // time, so a switch reading it was a switch that could never be on.
+        assertTrue("the switch stopped reading the budget's own `muted`",
+            plate.contains("checked = attention.muted"))
+        assertTrue("the switch stopped going through the runtime's one call",
+            plate.contains("onCheckedChange = onSetMuted"))
+
+        val inbox = source(INBOX)
+        assertFalse("the Inbox drew a second mute switch again - one setting, one home",
+            inbox.contains("Mute spoken interruptions"))
+        assertFalse("the Inbox took back a mute control of its own",
+            inbox.contains("onSetMuted"))
+        assertTrue("and it must keep the count line it always showed",
+            inbox.contains("budgetLine(attention, pendingCards)"))
+    }
+
+    @Test
     fun `both controls use the app's own 48dp quiet action`() {
         val screen = source(PLATE)
         // Quiet carries `heightIn(min = 48.dp)` itself (Parts.kt), so the two
@@ -404,6 +431,7 @@ class AttentionSettingsTest {
     private val API = BASE + "net/JarvisApi.kt"
     private val RUNTIME = BASE + "JarvisRuntime.kt"
     private val PLATE = BASE + "ui/screens/BrainScreen.kt"
+    private val INBOX = BASE + "ui/screens/InboxScreen.kt"
     private val MENU_PLACES = BASE + "ui/MenuPlaces.kt"
     private val PARTS = BASE + "ui/parts/Parts.kt"
 }
