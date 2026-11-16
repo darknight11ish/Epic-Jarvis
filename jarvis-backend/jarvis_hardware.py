@@ -34,12 +34,12 @@ PCI-address pass as well as the uuid one. Every test value is still made up and
 labelled so.
 
 NOTHING CHANGES UNTIL THE OWNER CHOOSES (section 4.8). Choosing a preset only
-records the choice in hardware-choice.json beside the other settings. Every
-step after it - downloading a model, making a tuned model, switching chat,
-each second-card switch - is its own approval card, raised when the owner
-presses that step's button, in order; a step waits for the one before it.
-There is no "approve all" (CLAUDE.md). What Ollama reads at start-up is one
-PowerShell line the owner runs.
+records the choice in hardware-choice.json beside the other settings. Each step
+with a card - downloading a model, making a tuned model, switching chat, each
+second-card switch - raises its own approval card when the owner presses that
+step's button, in order; a step waits for the one before it.
+What Ollama reads at start-up is one PowerShell line the owner runs, so the
+settings step has no card. There is no "approve all" (CLAUDE.md).
 
 Never raises from the public calls. Never returns a token or key: card ids
 (GPU-...) are hardware ids. Standard library only.
@@ -1952,8 +1952,9 @@ def choose(preset) -> tuple:
     note = _master_off_if_moved(old_lane, _lanes_now())
     st = status()
     return 200, {"ok": True, "chosen": preset,
-                 "message": (f"\"{_preset_name(preset)}\" chosen. Nothing has changed yet: each "
-                             f"step below is its own approval card, in order.{note}"),
+                 "message": (f"\"{_preset_name(preset)}\" chosen. Nothing has changed yet: the "
+                             f"steps below are in order. A step with a card asks you first; "
+                             f"the settings step is a line you run on this PC.{note}"),
                  "applying": st.get("applying")}
 
 

@@ -936,7 +936,8 @@ def details(lay: Layout) -> list:
             parts.append(f"{PICTURE_GIB:.2f} (one picture)")
         out.append(f"{r.role.capitalize()}: {m.ref} = " + " + ".join(parts) +
                    f" = {r.need:.2f} GB. Ollama's own guess: {m.ollama_guess(r.ctx):.2f} GB.")
-    out.append("Everything above is calculated, not measured.")
+    out.append("Everything above is a calculated estimate; a line marked measured was "
+               "measured on this PC.")
     return out
 
 
