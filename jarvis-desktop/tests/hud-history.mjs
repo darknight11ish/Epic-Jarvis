@@ -401,7 +401,8 @@ check("the archive labels are the shared table's, and the Delete question did no
   assert.equal(H.ACTION_LABELS.unarchive, "Unarchive");
   assert.equal(H.labelFor("archive", false, false), "Archive");
   assert.equal(H.labelFor("archive", false, true), "Unarchive");
-  assert.deepEqual([...H.ROW_ACTIONS], ["open", "pin", "move", "archive", "delete"]);
+  assert.deepEqual([...H.ROW_ACTIONS],
+    ["open", "pin", "move", "export", "copy", "archive", "delete"]);
   // Delete's confirmation is exactly what it was (the brief: keep it).
   assert.equal(H.DELETE_QUESTION, "Delete this conversation?");
   assert.ok(H.DELETE_REMOVES.includes("cannot be undone"));
@@ -454,6 +455,152 @@ check("the delete words are ONE copy, the one both windows read", () => {
   const at = MODULE.indexOf("DELETE_QUESTION + \" \" + DELETE_REMOVES");
   assert.notEqual(at, -1, "the HUD's confirm no longer says the Brain's words");
   assert.ok(MODULE.indexOf("DELETE_KEEPS_FACTS", at) > at);
+});
+
+check("Export and Copy are ON the live row's menu, between Move and Archive", () => {
+  const openAt = MODULE.indexOf("var open = menuItem(ACTION_LABELS.open");
+  assert.notEqual(openAt, -1, "the row menu has no Open item");
+  const live = MODULE.slice(openAt,
+    MODULE.indexOf("/* ---- delete, with the page's own are-you-sure ---- */", openAt));
+  assert.match(live, /menuItem\(ACTION_LABELS\.export, "download"\)/,
+    "the live row's menu has no Export item");
+  assert.match(live, /menuItem\(ACTION_LABELS\.copy, "copy"\)/,
+    "the live row's menu has no Copy item");
+  assert.match(live, /exportChat\(row\)/, "Export is not wired to the export action");
+  assert.match(live, /copyChat\(row\)/, "Copy is not wired to the copy action");
+  assert.match(live, /menu\.appendChild\(exportItem\)/,
+    "the Export item is built but never drawn");
+  assert.match(live, /menu\.appendChild\(copyItem\)/,
+    "the Copy item is built but never drawn");
+  // Both are read-only actions, so they sit above Archive: the things a row
+  // offers before the one that puts it away and the one that cannot be undone.
+  const archAt = live.indexOf("var archive = menuItem(");
+  assert.ok(archAt > live.indexOf("ACTION_LABELS.export") &&
+    archAt > live.indexOf("ACTION_LABELS.copy"),
+    "Archive is drawn before the two actions that only read the chat");
+});
+
+check("Export and Copy are on the ARCHIVED row's menu too", () => {
+  const archViewAt = MODULE.indexOf("if (row.archived === true) {");
+  assert.notEqual(archViewAt, -1, "the archived list has no menu of its own");
+  const archView = MODULE.slice(archViewAt,
+    MODULE.indexOf("var open = menuItem(ACTION_LABELS.open", archViewAt));
+  assert.match(archView, /menuItem\(ACTION_LABELS\.export, "download"\)/,
+    "an archived chat cannot be exported");
+  assert.match(archView, /menuItem\(ACTION_LABELS\.copy, "copy"\)/,
+    "an archived chat cannot be copied");
+  assert.match(archView, /exportChat\(row\)/);
+  assert.match(archView, /copyChat\(row\)/);
+  assert.match(archView, /menu\.appendChild\(expArch\)/);
+  assert.match(archView, /menu\.appendChild\(copyArch\)/);
+  // Still no Open: exporting and copying READ the chat, they do not carry it
+  // on in this window.
+  assert.doesNotMatch(archView, /openChat\(row\)/,
+    "the archived menu opens a chat again");
+});
+
+check("the exported file name is safe for a title Windows would refuse", () => {
+  const name = H.exportFileName('Plan: what? * "x" <y> |z| \\ a/b', "conv-1a2b3c4d");
+  assert.ok(name.endsWith(".md"), "the export is not a .md file: " + name);
+  assert.match(name, / \(1a2b3c4d\)\.md$/, "the short id is not in the name: " + name);
+  for (const bad of [":", "?", "*", '"', "<", ">", "|", "/", "\\"]) {
+    assert.equal(name.includes(bad), false,
+      "the name still contains " + JSON.stringify(bad) + ": " + name);
+  }
+  // A title of only forbidden characters still names a file; nothing ends in
+  // a dot or a space (Windows silently refuses both); a device name (CON,
+  // COM1 ...) is not used as the stem.
+  for (const title of ["", "...", "   ", "CON", "com1", "LPT9", "chat.", " a "]) {
+    const made = H.exportFileName(title, "abc123");
+    assert.ok(made.endsWith(".md") && made.length > 5,
+      JSON.stringify(title) + " made " + JSON.stringify(made));
+    assert.doesNotMatch(made, /[. ]\.md$/, JSON.stringify(title) + " ends in a dot or space");
+    assert.doesNotMatch(made, /^(con|prn|aux|nul|com[1-9]|lpt[1-9])( \(|\\.md)/i,
+      JSON.stringify(title) + " is a Windows device name: " + made);
+  }
+  assert.equal(H.exportFileName("Chat", ""), "Chat.md", "no id means no id in the name");
+  assert.equal(H.exportFileName("Chat", "!!!"), "Chat.md", "an id of only punctuation is no id");
+});
+
+check("an empty chat still exports, as a file with one honest line", () => {
+  const md = H.transcriptMarkdown({ title: "Empty chat", turns: [] });
+  assert.match(md, /^# Empty chat\n/, "the file has no title heading");
+  assert.match(md, /This chat has no messages\./,
+    "an empty chat's file says nothing about being empty");
+  assert.ok(md.endsWith("\n"));
+  assert.match(H.transcriptMarkdown({ turns: [] }), /^# Untitled chat\n/,
+    "a chat with no title has a blank heading");
+  assert.match(H.transcriptMarkdown({}), /^# Untitled chat\n/);
+  assert.equal(H.transcriptText({ turns: [] }), "",
+    "an empty chat's copied text is not empty");
+  assert.equal(H.transcriptText({ turns: [{ role: "user", text: "" }] }), "",
+    "a turn with no words is copied as an empty line");
+});
+
+check("the copied text is the transcript, plain and without markup", () => {
+  const copied = H.transcriptText({
+    title: "Standup",
+    turns: [
+      { role: "user", text: "What did we decide?" },
+      { role: "assistant", text: "We ship on Friday." },
+    ],
+  });
+  assert.equal(copied, "You: What did we decide?\n\nJarvis: We ship on Friday.");
+  assert.doesNotMatch(copied, /<[a-z!/]/i, "the copied text carries HTML");
+  assert.doesNotMatch(copied, /[<>]/, "the copied text carries an angle bracket");
+  // The page hands it to writeText - never write(ClipboardItem), which is
+  // how a second, HTML flavour would ride along with the text. Comments are
+  // stripped first: the page's own comments say the word "ClipboardItem" to
+  // explain why it must not be used.
+  const code = MODULE
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+  assert.match(code, /clip\.writeText\(body\)/, "Copy does not use writeText");
+  assert.doesNotMatch(code, /ClipboardItem/, "Copy offers a ClipboardItem flavour");
+  assert.doesNotMatch(code, /text\/html/, "Copy names an HTML MIME type");
+  assert.match(MODULE, /announce\("Copied this chat's transcript to the clipboard\."\)/,
+    "Copy never says it copied, in the panel's own status line");
+});
+
+check("the Markdown export keeps every turn's words, in order", () => {
+  const md = H.transcriptMarkdown({
+    title: "Standup",
+    turns: [
+      { role: "user", text: "What did we decide?" },
+      { role: "assistant", text: "We ship on Friday." },
+    ],
+  });
+  assert.ok(md.includes("What did we decide?"));
+  assert.ok(md.includes("We ship on Friday."));
+  assert.ok(md.indexOf("What did we decide?") < md.indexOf("We ship on Friday."),
+    "the export reorders the turns");
+  assert.match(md, /\*\*You:\*\*/);
+  assert.match(md, /\*\*Jarvis:\*\*/);
+  assert.doesNotMatch(md, /<[a-z!/]/i, "the export wraps the words in HTML");
+});
+
+check("Export and Copy reuse Open's read and open nothing", () => {
+  const readAt = MODULE.indexOf("function withTranscript(row, use)");
+  assert.notEqual(readAt, -1, "there is no one read for Export and Copy");
+  const reader = MODULE.slice(readAt, MODULE.indexOf("function copyChat(row)", readAt));
+  assert.match(reader,
+    /readJson\("\/api\/history\/conversation\?id=" \+ encodeURIComponent\(row\.id\)\)/,
+    "the transcript read is not the read Open makes (one read, no new route)");
+  assert.doesNotMatch(reader, /host\.open|talk\.open|opener\(/,
+    "reading a transcript opens the chat in the window");
+  assert.doesNotMatch(reader, /fetch\(|\.post\(|method: "POST"/,
+    "the transcript read adds a request of its own");
+  for (const name of ["copyChat", "exportChat"]) {
+    const at = MODULE.indexOf("function " + name + "(row)");
+    assert.notEqual(at, -1, name + " is missing");
+    const fn = MODULE.slice(at, at + 1600);
+    assert.match(fn, /withTranscript\(row/, name + " does not reuse the one read");
+    assert.doesNotMatch(fn, /readJson|fetch\(/, name + " adds a read of its own");
+    assert.doesNotMatch(fn, /confirm\(|prompt\(|alert\(|modal/,
+      name + " opens a dialog instead of saying it in hh-say");
+  }
+  // A browser has no file writer: Export says so rather than failing silently.
+  assert.match(MODULE, /needs the Jarvis desktop app/);
 });
 
 check("the row menu's labels come from the shared table, not from literals here", () => {
@@ -775,6 +922,35 @@ check("the write command exists in the handler, the manifest and the HUD's own s
   assert.match(capability, /"hud-history"/);
   assert.match(surfaces, /identifier = "hud-history"/);
   assert.match(surfaces, /"allow-hud-history-act"/);
+});
+
+check("the export command exists in the handler, the manifest and the HUD's own set", () => {
+  assert.match(rustLib, /brain::history::hud_history_export,/);
+  assert.match(rustBuild, /"hud_history_export",/);
+  assert.match(surfaces, /"allow-hud-history-export"/);
+  const at = rustHistory.indexOf("pub fn hud_history_export(");
+  assert.notEqual(at, -1, "the export command is not in brain/history.rs");
+  const body = rustHistory.slice(at, rustHistory.indexOf("\n}", at));
+  assert.match(body, /private_hidden/, "Export does not ask the hidden lists first");
+  assert.match(body, /HISTORY_STILL_HIDDEN/,
+    "Export does not use the History panel's own hidden-lists sentence");
+  assert.match(body, /checked_export_name\(&name\)/, "the page's name is not checked");
+  assert.match(body, /next_export_path\(/, "a repeated export is not numbered");
+  assert.match(body, /export_dir\(&app\)/, "the folder is not the app's Downloads folder");
+  assert.doesNotMatch(body, /jarvis_base|jarvis_client|reqwest|post\(/,
+    "Export makes a network request - it must only write the words it was handed");
+  // The name check is what keeps the write inside Downloads: no separator, no
+  // drive, no control character, no Windows device name.
+  const checkAt = rustHistory.indexOf("pub(crate) fn checked_export_name");
+  assert.notEqual(checkAt, -1, "there is no name check at all");
+  const rule = rustHistory.slice(checkAt, checkAt + 1400);
+  assert.match(rule, /is_control\(\)/);
+  assert.match(rule, /'\\\\'/);
+  assert.match(rule, /is_device_name/);
+  // Numbered, never overwritten: the formatter says so in one place.
+  const nextAt = rustHistory.indexOf("pub(crate) fn next_export_path");
+  assert.match(rustHistory.slice(nextAt, nextAt + 900), /\(\{n\}\)/,
+    "the repeated export has no number in its name");
 });
 
 check("the write asks the hidden lists and the live link, in that order", () => {

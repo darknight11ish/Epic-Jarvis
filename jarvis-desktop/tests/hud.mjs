@@ -3579,12 +3579,16 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   assert.match(api, /connect_account/, "docs/JARVIS-API.md does not document the card");
   assert.match(api, /api\/connect-account\/save/,
     "docs/JARVIS-API.md does not document the host-only save route");
-  // ...and the History panel's grant is its own set, holding ONE command: pin,
-  // file or delete one chat. No tag creation, no bulk clear, no send.
+  // ...and the History panel's grant is its own set, holding its own
+  // commands: pin, file or delete one chat (hud_history_act), and the Export
+  // item's one file write into Downloads (hud_history_export, 2026-11-15 -
+  // no network, no path from the page, never an overwrite). No tag creation,
+  // no bulk clear, no send.
   const hudHistory = surfaces.slice(surfaces.indexOf('identifier = "hud-history"'));
   const historyPerms = hudHistory.slice(hudHistory.indexOf("permissions = ["),
     hudHistory.indexOf("]") + 1);
-  assert.deepEqual(historyPerms.match(/allow-[a-z-]+/g), ["allow-hud-history-act"]);
+  assert.deepEqual(historyPerms.match(/allow-[a-z-]+/g),
+    ["allow-hud-history-act", "allow-hud-history-export"]);
   // The token is never put in the page.
   const lib = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
   assert.doesNotMatch(BOOT, /__JARVIS_TOKEN__/);

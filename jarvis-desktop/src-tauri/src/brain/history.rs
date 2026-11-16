@@ -30,6 +30,13 @@
 //!   bar reads the conversation itself with [`chat_continue_open`], the
 //!   quickbar's one read of History - a conversation it may carry on, and
 //!   nothing else.
+//! * [`hud_history_export`] - the HUD sidebar's Export (2026-11-15, the
+//!   owner: "i also want an export and copy button on the sub menu of each
+//!   individual chat"): writes ONE chat's already-read transcript as a
+//!   Markdown file inside the owner's Downloads folder and answers with the
+//!   full path. It makes no network request and adds no route; it never
+//!   overwrites (a repeated export gets " (2)"), and it refuses any name
+//!   that could point outside that one folder.
 //!
 //! The list takes a `kind` (chat, live, support, chatbot, compare): "Live
 //! only" and the other History filters (the chat audit, 2026-09-28).
@@ -37,13 +44,15 @@
 //! "Windows Hello for memory lists and chat history" (lock.rs) covers this list too: while
 //! the Brain's private lists are hidden, the list comes back with its
 //! conversations taken out (how many there were is kept), and a transcript
-//! is not opened at all. Here, in Rust, so a page script cannot read round
-//! it.
+//! is not opened at all - [`hud_history_export`] asks the same first, so one
+//! cannot be written to a file either. Here, in Rust, so a page script
+//! cannot read round it.
 //!
 //! The answer-reading functions are plain functions of (status, body) so
 //! their tests run without a Tauri app or a network.
 
 use tauri::AppHandle;
+use tauri::Manager;
 
 use super::{require_link_live, READ_TIMEOUT, WRITE_TIMEOUT};
 use crate::commands;
@@ -1457,6 +1466,159 @@ pub async fn hud_history_act(
     Err(commands::backend_refusal(status, &text))
 }
 
+/// The most bytes [`checked_export_name`] accepts: the page builds at most 80
+/// characters plus the id and the extension, and 400 bytes leaves room for a
+/// multi-byte title without letting a file name grow without bound.
+const EXPORT_NAME_MAX: usize = 400;
+
+/// Said when this PC has no Downloads folder to write into.
+const DOWNLOADS_NOT_FOUND: &str = "Your Downloads folder was not found, so nothing was saved.";
+
+/// ONE chat's already-read transcript, written as Markdown into the owner's
+/// Downloads folder, and the full path said back.
+///
+/// WHY THE PC WRITES IT. The HUD page has no file access of any kind (no
+/// filesystem plugin, no Tauri dialog, and its own POSTs are refused by the
+/// bootstrap), so a file the owner asked for can only be written here. That
+/// also means the page never chooses a path: it hands ONE bare file name and
+/// the Markdown text, and this command writes it inside
+/// `app.path().download_dir()` - `%USERPROFILE%\Downloads` on a normal
+/// install - and nowhere else. [`checked_export_name`] refuses a name that is
+/// not a bare `*.md` file name (no separator, no drive, no `..`, no control
+/// character, no Windows device name), so the page cannot aim the write.
+///
+/// REPEATED EXPORT: never overwrite. The first free name wins - `title.md`,
+/// then `title (2).md`, `title (3).md` - so exporting the same chat twice
+/// leaves the first file exactly as it was.
+///
+/// The transcript's words are the page's: it read them through the same
+/// `/api/history/conversation` read Open uses, so this command makes no
+/// network request at all, adds no route and raises no card. The private
+/// lists are asked first, with the same sentence `hud_history_act` uses: a
+/// chat's words are the owner's, and no copy of them is written while "Hide
+/// memory lists" or App lock is on.
+#[tauri::command]
+pub fn hud_history_export(
+    app: AppHandle,
+    name: String,
+    markdown: String,
+) -> Result<serde_json::Value, String> {
+    if crate::lock::private_hidden(&app) {
+        return Err(HISTORY_STILL_HIDDEN.to_string());
+    }
+    let name = checked_export_name(&name)?;
+    let dir = export_dir(&app)?;
+    let path = next_export_path(&dir, &name, |p| p.exists())?;
+    std::fs::write(&path, markdown.as_bytes())
+        .map_err(|e| format!("could not save {}: {e}", path.display()))?;
+    Ok(serde_json::json!({ "saved": path.display().to_string() }))
+}
+
+/// The one folder [`hud_history_export`] may write into: the owner's
+/// Downloads folder, never a path the page named.
+pub(crate) fn export_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(dir) = app.path().download_dir() {
+        if dir.is_dir() {
+            return Ok(dir);
+        }
+    }
+    // A PC whose Downloads folder was moved or renamed: the profile's own
+    // Downloads is the same place the owner would look, and nothing outside
+    // the profile is ever used.
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|_| DOWNLOADS_NOT_FOUND.to_string())?;
+    let dir = home.join("Downloads");
+    if dir.is_dir() {
+        return Ok(dir);
+    }
+    Err(DOWNLOADS_NOT_FOUND.to_string())
+}
+
+/// A bare `*.md` file name, or why the page's name is refused. Pure, so the
+/// rule is held by a test without a filesystem or a Tauri app: it accepts
+/// exactly what the page builds, and nothing that could name a place outside
+/// the one folder the write may use.
+pub(crate) fn checked_export_name(name: &str) -> Result<String, String> {
+    // No trimming: a name with a space at either edge is not the shape the
+    // page builds, and Windows' own file UI strips or refuses it.
+    if name.is_empty() || name.len() > EXPORT_NAME_MAX || name.trim() != name {
+        return Err("That chat's file name is empty, padded or far too long.".to_string());
+    }
+    if !name.ends_with(".md") {
+        return Err("A chat export must be a Markdown file.".to_string());
+    }
+    if name.starts_with('.')
+        || name.chars().any(|c| {
+            c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+        })
+    {
+        return Err("That chat's title has a character a file name cannot have.".to_string());
+    }
+    let stem = &name[..name.len() - 3];
+    if stem.ends_with(' ') || stem.ends_with('.') {
+        return Err("That chat's file name ends in a space or a dot.".to_string());
+    }
+    if is_device_name(stem) {
+        return Err("That chat's title is a name Windows reserves for a device.".to_string());
+    }
+    Ok(name.to_string())
+}
+
+/// Is this stem a Windows device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9)?
+/// Windows refuses those with or without an extension, so `CON.txt.md` is
+/// refused too - the check is on the part before the first dot.
+fn is_device_name(stem: &str) -> bool {
+    let base = stem
+        .split('.')
+        .next()
+        .unwrap_or(stem)
+        .trim()
+        .to_ascii_lowercase();
+    if matches!(base.as_str(), "con" | "prn" | "aux" | "nul") {
+        return true;
+    }
+    let bytes = base.as_bytes();
+    bytes.len() == 4
+        && (base.starts_with("com") || base.starts_with("lpt"))
+        && bytes[3].is_ascii_digit()
+        && bytes[3] != b'0'
+}
+
+/// The first free name in `dir` for `name`, numbered rather than overwritten.
+/// `taken` is a predicate so the numbering can be held by a test without a
+/// disk; the command passes `Path::exists`. After 999 exports it refuses.
+pub(crate) fn next_export_path(
+    dir: &std::path::Path,
+    name: &str,
+    taken: impl Fn(&std::path::Path) -> bool,
+) -> Result<std::path::PathBuf, String> {
+    let first = dir.join(name);
+    if !taken(&first) {
+        return Ok(first);
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((stem, ext)) => (stem, ext),
+        None => (name, ""),
+    };
+    for n in 2..=999u32 {
+        let candidate = dir.join(if ext.is_empty() {
+            format!("{stem} ({n})")
+        } else {
+            format!("{stem} ({n}).{ext}")
+        });
+        if !taken(&candidate) {
+            return Ok(candidate);
+        }
+    }
+    Err(
+        "There are already 999 exports of that chat in Downloads. Rename or \
+         remove one and try again."
+            .to_string(),
+    )
+}
+
 /// Changes ONE chat history setting: `enabled` (the switch) or `keep_days`.
 ///
 /// Turning history ON raises an approval card and is held on a stale link;
@@ -1481,6 +1643,82 @@ pub async fn brain_history_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_export_name_is_one_bare_markdown_file_name() {
+        // Exactly what the page's exportFileName builds: a title, the chat's
+        // short id, and ".md".
+        let good = "Standup notes (c1e740b1).md";
+        assert_eq!(checked_export_name(good).unwrap(), good);
+        assert!(checked_export_name("Chat (2) (abc).md").is_ok());
+        for bad in [
+            "",
+            "   ",
+            "chat",
+            "chat.txt",
+            "chat.md ",
+            " chat.md",
+            ".md",
+            ".hidden.md",
+            "a/b.md",
+            "a\\b.md",
+            "C:chat.md",
+            "..\\chat.md",
+            "chat?.md",
+            "chat*.md",
+            "chat.md\t",
+            "chat .md",
+            "chat..md",
+            "CON.md",
+            "con.md",
+            "LPT1.md",
+            "COM9.md",
+            "NUL.txt.md",
+        ] {
+            assert!(
+                checked_export_name(bad).is_err(),
+                "{bad:?} was accepted as a file name"
+            );
+        }
+        // A name of only reserved words is fine once it is not exactly one.
+        assert!(checked_export_name("CONSOLE.md").is_ok());
+        assert!(checked_export_name("COM10.md").is_ok());
+    }
+
+    #[test]
+    fn a_repeated_export_gets_a_numbered_name_and_never_overwrites() {
+        let dir = std::path::Path::new("downloads");
+        let name = "Standup notes (c1e740b1).md";
+        let mut taken: Vec<std::path::PathBuf> = Vec::new();
+        let first = next_export_path(dir, name, |p| taken.iter().any(|t| t == p)).unwrap();
+        assert_eq!(first, dir.join(name));
+        taken.push(first);
+        let second = next_export_path(dir, name, |p| taken.iter().any(|t| t == p)).unwrap();
+        assert_eq!(second, dir.join("Standup notes (c1e740b1) (2).md"));
+        taken.push(second);
+        let third = next_export_path(dir, name, |p| taken.iter().any(|t| t == p)).unwrap();
+        assert_eq!(third, dir.join("Standup notes (c1e740b1) (3).md"));
+        // Every name taken: a refusal, never the first name back.
+        assert!(next_export_path(dir, name, |_| true).is_err());
+    }
+
+    #[test]
+    fn every_export_name_stays_a_child_of_the_downloads_folder() {
+        // The check refuses the separators outright, and the numbering joins
+        // the name to the one folder - so no accepted name can climb out.
+        for bad in [
+            "..\\x.md",
+            "../x.md",
+            "a/b.md",
+            "C:x.md",
+            "\\\\server\\x.md",
+        ] {
+            assert!(checked_export_name(bad).is_err(), "{bad:?}");
+        }
+        let dir = std::path::Path::new("downloads");
+        let path = next_export_path(dir, "Chat (abc).md", |_| false).unwrap();
+        assert_eq!(path.parent(), Some(dir));
+    }
 
     #[test]
     fn a_page_is_asked_for_within_the_servers_limits() {
