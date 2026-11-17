@@ -33,8 +33,12 @@ returns and the words the answer says - never by reading the module's source:
    repository" / "remove the repository" / "close all the pull requests"
    answered "Yes - with ONE approval card per merge, and merge commit only."
    - the worst sentence this app says - although Jarvis has no tool that
-   deletes a repository and bulk close is banned. Each now has its own
-   permanent refusal, and the ban it cites is read from `jarvis_github.NEVER`
+   deletes a repository and bulk close is banned. An independent audit the
+   same day found three siblings still on that merge sentence: "close the
+   repo" (closing a repository is destruction), "delete the pull request" and
+   "delete all the pull requests"; and "close pull request 1299" was answered
+   as if closing one pull request were a merge. Each now has its own permanent
+   refusal, and the repository ban it cites is read from `jarvis_github.NEVER`
    at answer time (this suite proves the set carries it).
 
 A NOTE ON THE PERMISSION MODEL. A new note is card-free (the owner's decision
@@ -368,10 +372,18 @@ DESTROY_SENTENCES = ("delete the repo", "delete this repo",
                      "delete the Epic-Jarvis repository", "remove the repository",
                      "delete my repository", "can you delete the repo",
                      "destroy the repo", "wipe the repository", "drop the repo",
-                     "nuke the repository")
+                     "nuke the repository",
+                     # The audit's additions (2026-11-16): closing a repository
+                     # IS repository destruction, and a pull request has no
+                     # delete tool either.
+                     "close the repo", "close the repository",
+                     "delete the pull request", "delete pr 12")
 BULK_CLOSE_SENTENCES = ("close all the pull requests", "close all the issues",
                         "close every pull request", "close all my pull requests",
-                        "close both pull requests", "can you close every issue")
+                        "close both pull requests", "can you close every issue",
+                        "delete all the pull requests", "delete every issue")
+BULK_CLOSE_BEFORE = ("close pull request 1299", "close the pull request",
+                     "close pr 12", "can you close pull request 1299")
 #: Reads: an information question never becomes a request to Jarvis.
 DESTRUCTION_READS = ("how do i delete a repo", "can a repository be deleted",
                      "what deletes a pull request",
@@ -460,15 +472,15 @@ def t_bulk_close_is_refused():
     res = ask("close all the pull requests")
     low = str(res.reply if res is not None else "").lower()
     check("bulk close: the answer opens with No", low.startswith("no"), low[:80])
-    check("bulk close: it says Jarvis never closes things in bulk",
-          "never close things in bulk" in low, low[:220])
+    check("bulk close: it says Jarvis never closes or deletes things in bulk",
+          "never close or delete things in bulk" in low, low[:220])
     check("bulk close: it says one-at-a-time is a real carded action",
           "closing one issue is a real action with its own approval card" in low,
           low[:420])
     check("bulk close: it does not promise closing a pull request",
           "never close a pull request" in low, low[:520])
-    check("bulk close: it says nothing was closed",
-          "nothing was closed" in low, low[-220:])
+    check("bulk close: it says nothing was closed or deleted",
+          "nothing was closed or deleted" in low, low[-220:])
     try:
         import jarvis_github as GH
     except Exception:                       # noqa: BLE001 - module absent on an old PC
@@ -478,11 +490,32 @@ def t_bulk_close_is_refused():
               "bulk_close" in GH.NEVER, sorted(GH.NEVER))
 
 
+def t_closing_one_pull_request_is_refused():
+    for said in BULK_CLOSE_BEFORE:
+        got = Q.match(said)
+        check(f"close pr: {said!r} is its own refusal shape",
+              bool(got is not None and got.name == "github_self"
+                   and got.f.get("shape") == "close_pr"), got)
+    res = ask("close pull request 1299")
+    low = str(res.reply if res is not None else "").lower()
+    check("close pr: the answer opens with No", low.startswith("no"), low[:80])
+    check("close pr: it says Jarvis never closes a pull request",
+          "never close a pull request" in low, low[:220])
+    check("close pr: it says no card offers a close on a pull request",
+          "none of my cards offers a close on a pull request" in low,
+          low[:440])
+    check("close pr: it names the merge as a separate one-card action",
+          "merge one pull request with one merge commit" in low, low[:560])
+    check("close pr: it says nothing was closed",
+          "nothing was closed" in low, low[-220:])
+
+
 def t_the_destruction_controls_keep_their_own_path():
     for said in DESTRUCTION_READS + OTHER_DELETIONS:
         got = Q.match(said)
         check(f"destroy controls: {said!r} is NOT a destruction refusal",
-              _github_shape(got) not in ("destroy", "bulk_close"), got)
+              _github_shape(got) not in ("destroy", "bulk_close", "close_pr"),
+              got)
     # The two deletions that already have a deterministic answer keep it.
     check("destroy controls: deleting a named note keeps its own refusal",
           getattr(Q.match("delete my note called Groceries"), "name", None)
@@ -494,14 +527,15 @@ def t_the_destruction_controls_keep_their_own_path():
 
 
 def t_the_github_controls_keep_their_shapes():
-    for said in ("show my github pull requests", "reopen that issue",
-                 "close pull request 1299"):
+    for said in ("show my github pull requests", "reopen that issue"):
         got = Q.match(said)
         check(f"github controls: {said!r} is NOT a new refusal",
-              _github_shape(got) not in ("destroy", "bulk_close"), got)
-    got = Q.match("merge a pull request")
-    check("github controls: 'merge a pull request' still gets the merge shape",
-          _github_shape(got) == "merge", got)
+              _github_shape(got) not in ("destroy", "bulk_close", "close_pr"),
+              got)
+    for said in ("merge a pull request", "can you merge a pull request?"):
+        got = Q.match(said)
+        check(f"github controls: {said!r} still gets the merge shape",
+              _github_shape(got) == "merge", got)
     got = Q.match("approve that pull request")
     check("github controls: 'approve that pull request' still gets approve",
           _github_shape(got) == "approve", got)
@@ -869,6 +903,7 @@ TESTS = [
     t_the_destruction_answer_says_what_is_banned,
     t_the_destruction_refusal_stands_without_the_github_module,
     t_bulk_close_is_refused,
+    t_closing_one_pull_request_is_refused,
     t_the_destruction_controls_keep_their_own_path,
     t_the_github_controls_keep_their_shapes,
     t_the_merge_and_approve_wording_is_unchanged,
