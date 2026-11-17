@@ -9,8 +9,8 @@ today's daily note. The ruling is that `jarvis_notes_edit.py` stays the ONLY
 vault writer and that RESOLUTION moves to `backend/jarvis_notes.py`, one place
 every note tool routes through:
 
-    exact vault path -> case-insensitive basename -> the note's `aliases:`
-    -> refuse, listing the candidates
+    the vault path (compared without case) -> case-insensitive basename ->
+    the note's `aliases:` -> refuse, listing the candidates
 
 with no daily-note fallback at any point, and with the refusal vocabulary
 (`case_variant_exists`, `ambiguous_section` + `candidates`, `content_preexists`)
@@ -140,11 +140,35 @@ def t_tier_one_exact_path():
           got.get("ok") and got.get("tier") == "path"
           and got.get("path") == "Welcome.md", got)
     got = N.resolve_note("private & shared/workout/workout log.md")
-    check("tier path: a path's CASE is the path's (tier 2 decides it instead)",
-          got.get("ok") and got.get("tier") == "basename", got)
+    check("tier path: a lowercased path is still the PATH tier",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == WORKOUT, got)
     check("tier path: only a path is looked up as a path",
           N.resolve_note("Welcome").get("tier") == "basename",
           N.resolve_note("Welcome"))
+
+
+def t_tier_one_ignores_case():
+    """A chat sentence is lowercased before the note grammar runs.
+
+    `jarvis_quick.normalise()` lowercases the sentence and the note-read
+    grammar captures the title from it, so the resolver is handed
+    "private & shared/workout/workout log". The path tier has to match that
+    against the real, capitalised vault path - `_norm_name` itself changes no
+    case - or a note in a capitalised folder can never be named at all.
+    """
+    make_vault()
+    got = N.resolve_note("private & shared/workout/workout log")
+    check("tier path: a lowercased path still resolves at the PATH tier",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == WORKOUT, got)
+    got = N.resolve_note("PRIVATE & SHARED/WORKOUT/WORKOUT LOG")
+    check("tier path: ... and so does one shouted in capitals",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == WORKOUT, got)
+    got = N.resolve_note("private & shared/workout/no such note")
+    check("tier path: the whole path is compared, so a wrong file is refused",
+          got.get("ok") is False and got.get("code") == "not_found", got)
 
 
 def t_tier_two_case_insensitive_basename():
@@ -225,6 +249,60 @@ def t_two_matches_ask_and_name_both():
     check("ambiguous: ... and the sentence names them",
           "Other/Other log.md" in str(got.get("reason"))
           and WORKOUT in str(got.get("reason")), got.get("reason"))
+
+
+def t_the_folder_the_chat_asks_for_now_works():
+    """The app's own advice: "Say the folder and the note's name, so one is chosen."
+
+    The sentence reaches the resolver lowercased, so that advice was a closed
+    loop before the path tier ignored case: the folder was asked for and then
+    rejected. Two notes of one name still ask; the folder then answers.
+    """
+    v = make_vault()
+    write(v, "Archive/Workout Log.md", "# Old workout log\n")
+    got = N.resolve_note("workout log")
+    check("closed loop: without a folder, two notes of that name still ask",
+          got.get("ok") is False and got.get("code") == "ambiguous_section"
+          and sorted(paths(got)) == ["Archive/Workout Log.md", WORKOUT], got)
+    check("closed loop: ... and the ask is still to say the folder",
+          "Say the folder" in str(got.get("reason")), got.get("reason"))
+    got = N.resolve_note("private & shared/workout/workout log")
+    check("closed loop: the folder it asked for now names that one note",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == WORKOUT, got)
+    got = N.resolve_note("archive/workout log")
+    check("closed loop: and a different folder names the other note",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == "Archive/Workout Log.md", got)
+
+
+def t_two_notes_that_differ_only_by_case_are_refused():
+    """Two notes whose paths differ only by case: refuse, and name both.
+
+    A Windows folder cannot hold both, which is exactly why the resolver has
+    to decide instead of leaving it to the filesystem: a synced vault or a
+    Linux one can. The listing is supplied here for that reason; the two rows
+    are the two notes that listing would hold.
+    """
+    v = make_vault()
+    rows = [
+        {"path": WORKOUT, "title": "Workout Log", "full": str(v / WORKOUT)},
+        {"path": WORKOUT.lower(), "title": "workout log",
+         "full": str(v / WORKOUT)},
+    ]
+    real = N._vault_notes
+    N._vault_notes = lambda root: list(rows)
+    try:
+        got = N.resolve_note("private & shared/workout/workout log")
+    finally:
+        N._vault_notes = real
+    check("case: two notes that differ only by case are refused",
+          got.get("ok") is False and got.get("code") == "ambiguous_section", got)
+    check("case: ... and BOTH are named",
+          sorted(paths(got)) == sorted([WORKOUT, WORKOUT.lower()]), paths(got))
+    check("case: ... and nothing is chosen", not got.get("path"), got)
+    check("case: ... and the sentence says capitals are the only difference",
+          "capital letters" in str(got.get("reason")), got.get("reason"))
 
 
 def t_no_daily_note_fallback():
@@ -398,10 +476,13 @@ def t_periodic_notes_still_wins_when_it_is_on():
 # --------------------------------------------------------------------------
 TESTS = [
     t_tier_one_exact_path,
+    t_tier_one_ignores_case,
     t_tier_two_case_insensitive_basename,
     t_tier_three_the_notes_own_aliases,
     t_refusal_lists_the_candidates,
     t_two_matches_ask_and_name_both,
+    t_the_folder_the_chat_asks_for_now_works,
+    t_two_notes_that_differ_only_by_case_are_refused,
     t_no_daily_note_fallback,
     t_content_preexists_and_the_two_options,
     t_case_variant_exists,

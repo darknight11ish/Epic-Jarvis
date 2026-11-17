@@ -32191,7 +32191,11 @@ implementation, not two. The writer modules still do all writing.
 every note's `aliases:`:
 
 1. `path` - the exact vault-relative path the owner named (a slash, or a
-   `.md`/`.txt` ending, is what makes a name a path). Case matters here.
+   `.md`/`.txt` ending, is what makes a name a path). Compared WITHOUT case:
+   the chat layer lowercases the sentence before this runs
+   (`jarvis_quick.normalise`), and `_norm_name` keeps no case of its own, so a
+   capitalised folder or file name could otherwise never be named at all. Two
+   paths that differ only by case are `ambiguous_section`, never a guess.
 2. `basename` - the file's own name, matched case-insensitively. This is the
    tier that has to answer on Windows, where `Gym.md` and `gym.md` are one
    file. Two folders with that name are `ambiguous_section`, never a guess.

@@ -251,6 +251,27 @@ def main():
     finally:
         PV.note_state(app_locked=False, hide_memory_lists=False)
 
+    # --- 9. a note in a capitalised folder is named BY its folder. --------
+    # The sentence is lowercased before the note-read grammar runs, so the
+    # resolver's path tier has to ignore case. The second note of the same
+    # name makes the bare name ambiguous, so the folder is the only way to
+    # say which one is meant - the app's own advice, made followable.
+    workout = VAULT / "Private & Shared" / "Workout" / "Workout Log.md"
+    workout.parent.mkdir(parents=True, exist_ok=True)
+    workout.write_text("# Workout Log\n\nlight cardio\n", encoding="utf-8")
+    other = VAULT / "Archive" / "Workout Log.md"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    other.write_text("# Old workout log\n", encoding="utf-8")
+    r = ask("read my Workout Log note")
+    check("folder: without a folder, two notes of that name ask which one",
+          r is not None and "Tell me which one to read." in r.reply,
+          f"got {getattr(r, 'reply', None)!r}")
+    r = ask("read my Private & Shared/Workout/Workout Log note")
+    check("folder: the folder the app asks for now names that one note",
+          r is not None and r.reply.startswith('"Workout Log" says:')
+          and "light cardio" in r.reply,
+          f"got {getattr(r, 'reply', None)!r}")
+
 
 if __name__ == "__main__":
     try:

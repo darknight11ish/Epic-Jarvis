@@ -730,8 +730,13 @@ def _inside(root: str, path: str) -> bool:
 # here, with a refusal at the end instead of a silently invented new file:
 #
 #   1. "path"      the exact vault-relative path the owner named (a slash, or
-#                  a ".md"/".txt" ending, is what makes it a path). Case
-#                  matters here, because a path is a path.
+#                  a ".md"/".txt" ending, is what makes it a path). Compared
+#                  WITHOUT case: chat lowercases the sentence before this is
+#                  reached (`jarvis_quick.normalise`), so a path whose folder
+#                  or note name holds a capital letter could otherwise never
+#                  be named at all - and the refusal asking the owner to "say
+#                  the folder" could never be obeyed. Two notes whose paths
+#                  differ only by case are refused, never guessed between.
 #   2. "basename"  the file's own name, matched case-insensitively. This is
 #                  the tier that has to answer on Windows, where "Gym.md" and
 #                  "gym.md" are the same file and Obsidian treats them that
@@ -997,14 +1002,27 @@ def resolve_note(name, *, vault=None) -> dict:
     if root is None:
         return _refusal("no_vault", "No note was looked up: " + why + ".")
     notes = _vault_notes(root)
-    # 1. The exact vault path the owner named.
+    # 1. The exact vault path the owner named, compared WITHOUT case: the
+    #    sentence chat hands over has been lowercased (`jarvis_quick.normalise`
+    #    does it before the grammar runs, and `_norm_name` keeps no case of its
+    #    own), while the vault path keeps its capitals. Two notes that differ
+    #    only by case are refused rather than guessed between.
     if _looks_like_a_path(want):
         rel = want.lstrip("/")
         if not rel.lower().endswith((".md", ".txt")):
             rel += ".md"
-        for row in notes:
-            if row["path"] == rel:
-                return _match(row, "path")
+        key = rel.casefold()
+        hits = [row for row in notes if row["path"].casefold() == key]
+        if len(hits) == 1:
+            return _match(hits[0], "path")
+        if len(hits) > 1:
+            return _refusal(
+                "ambiguous_section",
+                (f'"{want}" matches {len(hits)} notes that differ only by '
+                 "capital letters: " + "; ".join(r["path"] for r in hits[:6])
+                 + ". Nothing was chosen, because only the capital letters "
+                 "tell them apart."),
+                hits)
     # 2. The file name alone, case-insensitively.
     key = _basename_key(want)
     if key:
