@@ -54,6 +54,22 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
     marked cut_off with the shared note; a service whose hidden reasoning the
     cap may not cover is still guarded by the worst-case check (with room for
     it); the key is never in a log, the session view or the money file.
+  - THE ONE EGRESS GATE (2026-11-16): `jarvis_egress_gate.check_egress` is the
+    single place that decides whether a request may leave this PC. All nine of
+    its answers are driven here, in this suite's own temp settings folder
+    (never the owner's): a loopback address is always allowed and needs no
+    file; anything else needs the standing cloud switch on, Lockdown off and
+    the month's money cap not reached; a file that cannot be read refuses; and
+    a reader that blows up is a refusal, not an exception. The adapter asks it
+    about the exact address the socket will open, BEFORE that socket: a
+    refusal ends the conversation as `egress_blocked` in the gate's own words
+    and nothing reaches the server, while a loopback endpoint still sends.
+  - THE CHECKER THAT KEEPS IT THAT WAY: `tools/check_egress_gate.py` fails if
+    any file under `backend/`, `jarvis-backend/` or `tools/` names one of the
+    six cloud hosts without asking the gate or being on its allow-list with a
+    written reason. This suite proves it is wired into CI's `audit` job and
+    that it exits 0 on this tree - a checker nobody runs is exactly the
+    failure the gate exists to prevent.
   - THE CLOUD ESCALATION LANE (docs/ACCOUNT-KEYS-DESIGN.md part C,
     2026-10-06): a lane name such as `jarvis-escalate` resolves to a real
     service and model through `cloud_lane()`; it is None - so nothing is sent
@@ -70,6 +86,8 @@ import http.server
 import io
 import json
 import logging
+import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -84,11 +102,17 @@ from _where import REPO, SHIPPED, require_shipped  # noqa: E402
 
 require_shipped("jarvis_chatbot.py", "jarvis_chatbot_api.py", "jarvis_token_store.py",
                 "jarvis_local_http.py", "jarvis_task_control.py", "jarvis_stop_all.py",
-                "jarvis_search.py", "jarvis_mail_mask.py", "rebuilt/jarvis_router.py")
+                "jarvis_search.py", "jarvis_mail_mask.py", "rebuilt/jarvis_router.py",
+                "jarvis_egress_gate.py")
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.insert(1, str(HERE / "rebuilt"))
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-chatbot-api-"))
+#: jarvis_presets reads the standing cloud switch from this variable (it does
+#: not read the fake framework's CONFIG_DIR), so the whole suite is pointed at
+#: the same temp folder as everything else: the gate must never read the
+#: owner's real ~/.openjarvis in a test.
+os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP)
 CFG: dict = {}
 TIERS: dict = {}
 fw = types.ModuleType("jarvis_framework")
@@ -313,6 +337,11 @@ def clean():
     for f in (API.money_path(), API.money_path().with_name(API.MONEY_FILE + ".tmp")):
         try:
             f.unlink()
+        except FileNotFoundError:
+            pass
+    for name in ("escalate-cloud.json", "lockdown.json"):
+        try:
+            (_TMP / name).unlink()
         except FileNotFoundError:
             pass
 
@@ -1691,6 +1720,202 @@ def t_lane_state_is_the_one_thing_the_hud_asks():
           and all(r["why"] for r in API.lane_status()["lanes"]), API.lane_status())
     API.lane_state("")
     clean()
+
+
+# ==========================================================================
+#   9. The one egress gate (2026-11-16)
+# ==========================================================================
+
+def t_the_one_egress_gate_decides_every_case():
+    """`jarvis_egress_gate.check_egress` is the ONE place that decides whether
+    a request may leave this PC. This drives all nine of its answers directly,
+    in this suite's own temp settings folder, and proves the three things a
+    caller depends on: it never raises, it never sends, and a "no" carries a
+    code and one plain sentence.
+
+    The order of the questions is the order a person would ask: is this PC
+    talking to itself, has the caller said the words stay here, is Lockdown
+    on, is the standing cloud switch on, does this month's cap pay for it.
+    The money file read here is the chatbot driver's own
+    (`<settings>/chatbot/api-money.json`), which is what makes the gate and
+    the driver agree about the same numbers.
+    """
+    import jarvis_egress_gate as G
+    import jarvis_presets as P
+    clean()
+    chat = _TMP / "chatbot"
+    chat.mkdir(parents=True, exist_ok=True)
+    money = chat / API.MONEY_FILE
+    switch = _TMP / "escalate-cloud.json"
+    lockdown = _TMP / "lockdown.json"
+    cloud = "https://api.deepseek.com/chat/completions"
+
+    def write(path, doc):
+        path.write_text(json.dumps(doc), encoding="utf-8")
+
+    def money_doc(limit=5.0, spent=0.0):
+        months = {API.month_key(): {"deepseek_api": {"dollars": spent}}} if spent else {}
+        return {"version": 1, "limits": {"deepseek_api": limit}, "prices": {},
+                "months": months}
+
+    def ask(url=cloud, payload="a question", **kw):
+        return G.check_egress("test_chatbot_api", url, payload, "suite", **kw)
+
+    try:
+        check("the money file the gate reads is the driver's own",
+              API.money_path() == money, (API.money_path(), money))
+
+        # 1. This PC itself. Yes always, and no settings file is read at all.
+        for url in ("http://127.0.0.1:11434/v1/chat/completions",
+                    "http://localhost:8000/v1/chat/completions",
+                    "http://[::1]:8000/v1/chat/completions"):
+            got = ask(url)
+            check(f"{url} is this PC, so it is allowed and needs no setting",
+                  got.allowed is True and got.reason == G.LOOPBACK and got.words == ""
+                  and got.token == "", got)
+
+        # 2. Nothing on disk: the standing cloud switch is off, and off is a no.
+        got = ask()
+        check("no cloud switch on this PC: refused as escalate_off, in plain words",
+              got.allowed is False and got.reason == G.ESCALATE_OFF
+              and got.token == "EGRESS_BLOCKED:escalate_off"
+              and got.words.startswith("Nothing was sent")
+              and "cloud switch" in got.words, got)
+
+        # 3. The caller's own "this stays here" (rule 1) beats a switch that is
+        #    on: nothing private is sent just because cloud use was enabled.
+        write(switch, {"on": True})
+        got = ask(local_only=True)
+        check("local_only (email, files, credentials, stored memory) refuses "
+              "even with the cloud switch on",
+              got.allowed is False and got.reason == G.LOCAL_ONLY
+              and "stays on this PC" in got.words, got)
+
+        # 4. Lockdown, whose own reader fails closed.
+        write(lockdown, {"on": True})
+        got = ask()
+        check("Lockdown on: refused as lockdown",
+              got.allowed is False and got.reason == G.LOCKDOWN
+              and "Lockdown is on" in got.words, got)
+        lockdown.unlink()
+
+        # 5. The monthly cap, read from the driver's own file.
+        write(money, money_doc(spent=9.0))
+        got = ask()
+        check("the month's cap reached: refused as money_limit, naming the limit",
+              got.allowed is False and got.reason == G.MONEY_LIMIT
+              and "$5.00" in got.words and "used this month" in got.words, got)
+        money.unlink()
+        got = ask()
+        check("a service with no monthly limit: refused as money_limit",
+              got.allowed is False and got.reason == G.MONEY_LIMIT
+              and "No monthly money limit" in got.words, got)
+        money.write_text("{not json", encoding="utf-8")
+        got = ask()
+        check("a money file that cannot be read: refused, never allowed",
+              got.allowed is False and got.reason == G.MONEY_LIMIT
+              and "cannot be read" in got.words, got)
+
+        # 6. Everything readable and inside its limit: the one way to a yes.
+        write(money, money_doc())
+        got = ask()
+        check("switch on, a limit set and nothing spent: allowed, in no words",
+              got.allowed is True and got.reason == G.ALLOWED and got.words == ""
+              and got.token == "", got)
+
+        # 7. A host no service on this PC has settings for.
+        got = ask("https://example.invalid/v1/chat/completions")
+        check("a host Jarvis has no settings for: refused as unknown_service",
+              got.allowed is False and got.reason == G.UNKNOWN_SERVICE
+              and "example.invalid" in got.words, got)
+
+        # 8. Not a web address at all.
+        for url in ("ftp://api.deepseek.com/x", "", "api.deepseek.com/x"):
+            got = ask(url)
+            check(f"a target that is not an http(s) address ({url!r}): bad_target",
+                  got.allowed is False and got.reason == G.BAD_TARGET, got)
+
+        # 9. The belt. A settings reader that blows up is a refusal, never an
+        #    exception the caller has to catch - and never an allow.
+        def boom():
+            raise RuntimeError("the reader is broken")
+
+        was = P.escalate_on
+        P.escalate_on = boom
+        try:
+            got = ask()
+        finally:
+            P.escalate_on = was
+        check("a settings reader that raises: config_unreadable, not an exception",
+              got.allowed is False and got.reason == G.CONFIG_UNREADABLE
+              and got.words.startswith("Nothing was sent"), got)
+
+        # What each answer records, and that no payload WORD is read: only its
+        # size is carried, so a private sentence cannot leak through a Decision.
+        payload = "ZEBRAWORD must never be repeated anywhere"
+        got = ask(payload=payload)
+        check("the answer records what was asked, and reads no payload word",
+              got.payload_chars == len(payload) and "ZEBRAWORD" not in repr(got)
+              and got.caller == "test_chatbot_api" and got.surface == "suite"
+              and got.target == cloud, got)
+        check("odd payloads do not raise and are measured as nothing",
+              ask(payload=None).payload_chars == 0
+              and ask(payload=object()).payload_chars == 0)
+        check("asking the gate sends nothing (both fake servers saw no request)",
+              not SRV.requests and not ELSEWHERE.requests,
+              (len(SRV.requests), len(ELSEWHERE.requests)))
+    finally:
+        clean()
+
+
+def t_the_gate_is_asked_before_the_socket_opens():
+    """The chatbot adapter asks the gate about the exact address it is about
+    to open, BEFORE the request is made. A refusal ends the conversation as
+    `egress_blocked` in the gate's own words and nothing reaches the server.
+    Then the same adapter sends to a loopback endpoint and really does, so the
+    refusal is not "everything is broken" - which is the bug this change was
+    reviewed for: a gate that refuses everything is as wrong as one that lets
+    everything through."""
+    clean()
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    API.set_limit("deepseek_api", 5.0)
+
+    def must_not_be_called(req, timeout):
+        raise AssertionError("the gate let a cloud request out")
+
+    # Even if the gate wrongly allowed it, this test must not reach the real
+    # internet: the HTTP hook is replaced for the first half and put back below.
+    API._HTTP = must_not_be_called
+    a = API.ApiChatbot(API.PRESETS["deepseek_api"], API.model_for("deepseek_api")[0])
+    try:
+        a.open()
+        a.send("May this leave the PC?")
+        err = expect_error(a)
+    finally:
+        a.close()
+        API._HTTP = None
+    check("with the cloud switch off the adapter refuses as egress_blocked",
+          err is not None and err.code == "egress_blocked",
+          err and (err.code, err.owner_words))
+    check("... in the gate's own words", err is not None
+          and "Nothing was sent" in err.owner_words
+          and "cloud switch" in err.owner_words, err and err.owner_words)
+    check("... and the request was never made", not SRV.requests, len(SRV.requests))
+
+    # A loopback endpoint is this PC talking to itself: always allowed.
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    a = API.ApiChatbot(API.PRESETS["deepseek_api"], API.model_for("deepseek_api")[0])
+    a.open()
+    try:
+        a.send("Is this PC allowed?")
+        reply = wait_reply(a)
+    finally:
+        a.close()
+    check("a loopback endpoint is always allowed, and the message really goes",
+          isinstance(reply, str) and bool(reply) and len(SRV.requests) == 1,
+          (reply, len(SRV.requests)))
 
 
 def t_shipped_and_documented():
