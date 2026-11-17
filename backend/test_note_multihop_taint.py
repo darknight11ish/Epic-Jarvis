@@ -26,18 +26,39 @@ injected, and every registry lives in a temp folder.
 """
 from __future__ import annotations
 
+import ast
 import json
+import os
 import sys
 import tempfile
+import time
 import traceback
 import types
+from contextlib import closing
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# `jarvis_gate.py` is one of the five patched base files, so it lives only in
+# the published base (`JARVIS_BACKEND` on a real install, never this folder).
+# Appended, not inserted: the shipped modules this suite imports keep coming
+# from `backend/`, and this only lets the real gate be imported at all.
+sys.path.append(str(HERE.parent / "jarvis-backend"))
+
+# The gate's latch rows live in THIS suite's own temp database. The owner's
+# `~/.openjarvis/approvals.db` is never opened, and no card is ever pushed: the
+# approval worker a note write starts here is local to this process.
+os.environ["JARVIS_APPROVALS_DB"] = str(
+    Path(tempfile.mkdtemp(prefix="jarvis-note-taint-db-")) / "approvals.db")
+os.environ["JARVIS_NTFY_TOPIC"] = ""
+os.environ["JARVIS_NTFY_SERVER"] = ""
+os.environ.setdefault("JARVIS_APPROVAL_TIMEOUT", "2.0")
+
 from _where import require_shipped  # noqa: E402
 
-require_shipped("jarvis_notes.py", "jarvis_agent.py", "jarvis_note_capture.py")
+require_shipped("jarvis_notes.py", "jarvis_agent.py", "jarvis_note_capture.py",
+                "jarvis_quick.py", "jarvis_notes_edit.py", "jarvis_gate.py",
+                "jarvis_tellme.py", "jarvis_email.py", "rebuilt/jarvis_router.py")
 
 import jarvis_agent as A  # noqa: E402
 import jarvis_notes as NOTES  # noqa: E402
@@ -273,6 +294,183 @@ def t_the_four_note_writers_are_the_covered_set():
     check("every note writer is in NOTE_WRITES",
           {"append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
            "create_logseq_page"} <= set(A.NOTE_WRITES), sorted(A.NOTE_WRITES))
+
+
+# --------------------------------------------------------------------------
+#   2026-11-16: the owner's own remembered facts are NOT outside text
+# --------------------------------------------------------------------------
+# Measured defect: a memory-injected turn called
+# `jarvis_gate.latch_taint(why="memory_injected")`, and because the latch is ONE
+# boolean with a label no consumer reads, every later note write asked for a
+# card ("Waiting for your approval card") and a setting change was refused as
+# "shaped by something outside of your direct input". The two directions are
+# proved here: memory no longer latches, and every real outside-text reader
+# still does, with the 30-minute sliding window.
+
+def _hud_tree():
+    """The published base HUD, parsed. `tools/check_no_source_pins.py` forbids
+    a source-text pin; an AST node is the sanctioned shape for "this call is
+    gone" and "this guarded call is still here"."""
+    return ast.parse((HERE.parent / "jarvis-backend" / "jarvis_hud.py")
+                     .read_text(encoding="utf-8"))
+
+
+def t_the_hud_never_latches_the_owners_memory_as_outside_text():
+    tree = _hud_tree()
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute) and n.func.attr == "latch_taint"]
+    labels = [k.value.value for c in calls for k in c.keywords
+              if k.arg == "why" and isinstance(k.value, ast.Constant)]
+    check("the base HUD no longer latches recalled memory as outside text",
+          "memory_injected" not in labels, labels)
+    check("... and the only latch it still writes is the every-turn refresh",
+          labels == ["refresh"], labels)
+    refresh = calls[0] if calls else None
+    guarded = refresh is not None and any(
+        isinstance(n, ast.If) and isinstance(n.test, ast.Call)
+        and isinstance(n.test.func, ast.Attribute)
+        and n.test.func.attr == "taint_active"
+        and any(c is refresh for c in ast.walk(n))
+        for n in ast.walk(tree))
+    check("... guarded by taint_active(), so it can only EXTEND a real "
+          "outside-text latch and never create one", guarded)
+    runs = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute) and n.func.attr == "run_local_turn"]
+    wants = [k.value for c in runs for k in c.keywords if k.arg == "request"]
+    check("the agent's request is filtered of Jarvis's own system turn",
+          len(wants) == 1 and isinstance(wants[0], ast.Call)
+          and getattr(wants[0].func, "id", "") == "_request_for_agent"
+          and len(wants[0].args) == 2, wants)
+
+
+def t_a_memory_turn_is_not_shaped_by_outside_text():
+    tree = _hud_tree()
+    fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+               and n.name == "_request_for_agent"), None)
+    check("the base HUD carries the request helper the agent is handed", fn is not None)
+    if fn is None:
+        return
+    ns = {}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "<hud-helper>", "exec"), ns)
+    recalled = {"role": "system",
+                "content": "Things you know about the user, recalled for this "
+                           "question. ...\n---FACTS---\nMario lives at 42 Elm "
+                           "Street\n---END FACTS---"}
+    user = {"role": "user",
+            "content": "can you escalate to the cloud when the local model "
+                       "cannot do it",
+            "provenance": "typed"}
+    payload = {"model": "m", "messages": [user, recalled], "stream": True,
+               "temperature": 0.7, "max_tokens": 2048}
+    fixed = ns["_request_for_agent"](payload, recalled)
+    check("the server's own recalled-facts turn is taken out of the agent's request",
+          recalled not in fixed["messages"] and len(payload["messages"]) == 2,
+          fixed.get("messages"))
+    check("... and the app's own provenance still arrives",
+          fixed["messages"][0].get("provenance") == "typed", fixed.get("messages"))
+    before = A._TurnWatch(payload["messages"], request=payload, tainted=False)
+    after = A._TurnWatch(payload["messages"], request=fixed, tainted=False)
+    check("the control: the raw payload reads as text the APP sent",
+          before.app_context is True)
+    check("... the filtered request does not", after.app_context is False)
+    check("... so a setting change is not refused as outside-shaped",
+          A._settings_turn_is_shaped(after) is False)
+    check("... while the model still receives the recalled facts",
+          any(m.get("role") == "system" and "---FACTS---" in str(m.get("content"))
+              for m in A.messages_for_model(payload["messages"], fixed["messages"])))
+
+
+def _until() -> float:
+    import jarvis_gate as G
+    with closing(G._connect()) as c:
+        row = c.execute("SELECT until FROM taint WHERE key='conversation'").fetchone()
+    return float(row["until"]) if row else 0.0
+
+
+def t_memory_latches_nothing_and_real_outside_text_still_latches():
+    import jarvis_gate as G
+    import jarvis_quick as Q
+    import jarvis_tellme as T
+    import jarvis_email as E
+    try:
+        G.clear_taint()
+        check("memory in a conversation hands the note writer the owner's own write",
+              Q._note_write_tainted() == "typed", Q._note_write_tainted())
+        G.latch_taint(why="page_watch")
+        check("a page read still latches", G.taint_active() is True)
+        check("... and a note write after it still asks",
+              Q._note_write_tainted() == "after_outside_text")
+        until = _until()
+        left = until - time.time()
+        check("... for the same 30-minute window", 29 * 60 <= left <= 31 * 60, left)
+        G.latch_taint(why="refresh")
+        check("... and the every-turn re-latch pushes it out, never shortens it",
+              _until() > until, (until, _until()))
+        held = _until()
+        G.latch_taint(minutes=1)
+        check("... a shorter request can never cut a latch already held",
+              _until() == held)
+        G.clear_taint()
+        check("the page-watch reader still latches",
+              T._latch_page_watch() is True and G.taint_active())
+        G.clear_taint()
+        check("the document/file reader still latches",
+              A._latch_sandbox_tool_read() is True and G.taint_active())
+        G.clear_taint()
+        now = time.time()
+        rows = E.find_quiet_threads(
+            [{"direction": "out", "at": now - 4 * 86400, "thread": "t1",
+              "who": "Alex", "text": "Can you send the file?"}],
+            now=now, latch=True)
+        check("the email-body read still latches",
+              bool(rows) and G.taint_active(), rows)
+    finally:
+        G.clear_taint()
+
+
+def t_a_pasted_file_is_still_kept_on_this_pc():
+    """The pasted file's own boundary, unchanged by the memory fix.
+
+    A file ridden in on a question has never set the 30-minute process-wide
+    latch: `jarvis_attached_file.py:36-41` records the 2026-10-30 decision that
+    it marks the CONVERSATION private and the router's own `file` gate refuses
+    the cloud lane - "so one attachment cannot keep every other chat off the
+    cloud lane". That is what must still hold."""
+    import jarvis_router as RT
+    d = RT.choose("How do I compare two large documents?", local_model="local-model",
+                  lanes=[RT.CLOUD_LANE], has_file=True)
+    check("a pasted-file turn is still refused a cloud lane by its own gate",
+          d.lane == "local-model" and d.gate == "file", (d.lane, d.gate))
+
+
+def t_the_note_card_follows_outside_text_not_memory():
+    import jarvis_gate as G
+    import jarvis_quick as Q
+    import jarvis_notes_edit as E
+    vault = Path(tempfile.mkdtemp(prefix="jarvis-note-card-")) / "vault"
+    vault.mkdir(parents=True)
+    (vault / ".obsidian").mkdir()
+    saved = os.environ.get("JARVIS_OBSIDIAN_VAULT")
+    os.environ["JARVIS_OBSIDIAN_VAULT"] = str(vault)
+    try:
+        G.clear_taint()
+        code, body = E.handle_create(
+            {"path": "Field Test Groceries.md", "text": "milk"},
+            provenance=Q._note_write_tainted(), client="hud", wait_s=0.2)
+        check("a direct owner note write is card-free",
+              code == 200 and body.get("state") == "created", (code, body))
+        G.latch_taint(why="page_watch")
+        code2, body2 = E.handle_create(
+            {"path": "Field Test Groceries 2.md", "text": "eggs"},
+            provenance=Q._note_write_tainted(), client="hud", wait_s=0.5)
+        check("... a write after outside text still raises the one card",
+              code2 == 202 and body2.get("state") == "waiting", (code2, body2))
+    finally:
+        G.clear_taint()
+        if saved is None:
+            os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+        else:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = saved
 
 
 def main() -> int:
