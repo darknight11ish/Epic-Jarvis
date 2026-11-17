@@ -538,6 +538,16 @@ def endpoint_problem(url: str, preset: Preset) -> str:
     return "the address is not https"
 
 
+def request_url(preset: Preset) -> str:
+    """The one address a preset's chat request goes to.
+
+    ONE PLACE, so the egress gate is asked about the same URL the socket will
+    open: the chatbot conversation and the quiz's cloud send both build their
+    request through this (2026-11-16).
+    """
+    return str(preset.base_url).rstrip("/") + "/chat/completions"
+
+
 class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
     """A redirect is refused, never followed: urllib copies every header -
     the key included - onto the redirect target, cross-host too."""
@@ -1238,6 +1248,24 @@ def _card_money(pid: str) -> str:
     return got["line"] if got else ""
 
 
+def _egress_refusal(url: str, payload, surface: str) -> str:
+    """The egress gate's sentence when this request must not leave, else "".
+
+    THE ONE QUESTION BEFORE THE SOCKET OPENS (2026-11-16): may these words
+    leave this PC? `jarvis_egress_gate.check_egress` answers with a Decision;
+    a refusal's plain words are returned so the conversation can end with them
+    instead of pretending an answer. A gate that cannot even be loaded is
+    itself a refusal - nothing is sent when the check cannot run.
+    """
+    try:
+        import jarvis_egress_gate as gate
+        decision = gate.check_egress("jarvis_chatbot_api", url, payload, surface)
+    except Exception:
+        return ("Nothing was sent: Jarvis could not check whether this may leave this "
+                "PC, so it kept it on this PC.")
+    return "" if decision.allowed else decision.words
+
+
 # ============================================================================
 #   The adapter
 # ============================================================================
@@ -1376,7 +1404,7 @@ class ApiChatbot(CB.Adapter):
     # ---- the request ------------------------------------------------------
 
     def _url(self) -> str:
-        return self.preset.base_url.rstrip("/") + "/chat/completions"
+        return request_url(self.preset)
 
     def _request(self, messages: list) -> urllib.request.Request:
         url = self._url()
@@ -1421,6 +1449,9 @@ class ApiChatbot(CB.Adapter):
             if self._cancel.is_set():
                 raise ApiUnavailable(f"The conversation with {self.name} was closed.", "closed")
             req = self._request(messages)
+            why = _egress_refusal(req.full_url, req.data or b"", "chatbot")
+            if why:
+                raise ApiUnavailable(why, "egress_blocked")
             try:
                 status, headers, body = _http(req, self.http_timeout)
             except _Redirected as exc:

@@ -3238,6 +3238,15 @@ $SHIPPED = @(
     # same position, is in backend/_where.py's SHIPPED, above jarvis_bench.py,
     # which stays last.
     'jarvis_grants.py'
+    # The one egress decision (jarvis_egress_gate.py, 2026-11-16): may a cloud
+    # request leave this PC? A loopback address is always allowed; anything
+    # else needs the standing cloud switch ON, Lockdown OFF and the monthly
+    # money cap not reached, and every unreadable setting is a refusal.
+    # "Closed" means refused. jarvis_chatbot_api.py and jarvis_quiz_cloud.py
+    # ask it before their socket opens; the other senders are the second lane.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED,
+    # above jarvis_bench.py, which stays LAST.
+    'jarvis_egress_gate.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate
