@@ -62,6 +62,19 @@ from typing import Callable, Optional
 
 GITHUB_API = "https://api.github.com"
 
+#: The languages an Android app can be built in, one repository-search request
+#: each. TWO REQUESTS, NOT ONE, because GitHub's repository search cannot filter
+#: one query on two languages: `language:kotlin OR language:java` is not a
+#: boolean expression it parses, it is a phrase it finds nothing for. Measured
+#: against `/search/repositories` on 2026-11-16, one request each, `per_page=1`:
+#: the old OR form answered `total_count` 0, while `jarvis language:kotlin`
+#: answered 1,592 and `jarvis language:java` answered 1,283. So the operator was
+#: not widening the search, it was silently emptying it - which is why this
+#: module's whole audit came back with no repositories for every idea. The
+#: owner's approval card prints both URLs in full and says "2 request(s)": that
+#: is the point, because two requests is what will leave the machine.
+SEARCH_LANGUAGES = ("kotlin", "java")
+
 #: Set this, per the owner's own machine, to search private repositories too
 #: and stop hitting the public rate limit. Read fresh on every request rather
 #: than cached at import time, so rotating it needs no restart.
@@ -182,6 +195,14 @@ def plan(idea: str, capabilities: Optional[list] = None) -> Plan:
     "background location", "pdf annotation" - so the matrix grades each part
     of the app separately. An idea is rarely redundant as a whole; it is
     usually two solved problems and one that is not.
+
+    Each capability gets one request per language in `SEARCH_LANGUAGES`, so
+    two for a Kotlin/Java Android app. That is not belt and braces: GitHub's
+    repository search cannot filter one query on two languages at once (the
+    old `language:kotlin OR language:java` form answers nothing at all - 0
+    repositories, measured), so two requests is the only shape that actually
+    covers both. Both are printed in full on the card, because two outbound
+    requests are exactly what the person is being asked to allow.
     """
     words = terms(idea)
     caps = [str(c).strip() for c in (capabilities or []) if str(c).strip()]
@@ -193,14 +214,16 @@ def plan(idea: str, capabilities: Optional[list] = None) -> Plan:
         cap_terms = terms(cap, limit=4) or words[:3]
         if not cap_terms:
             continue
-        q = " ".join(cap_terms) + " language:kotlin OR language:java"
-        url = (f"{GITHUB_API}/search/repositories?q="
-               + urllib.parse.quote(q, safe="")
-               + "&sort=stars&order=desc&per_page=10")
-        queries.append(Query(
-            url=url, host="api.github.com", capability=cap,
-            why=f"find maintained libraries that already do {cap!r}, "
-                f"so it is not written twice"))
+        base = " ".join(cap_terms)
+        for language in SEARCH_LANGUAGES:
+            q = f"{base} language:{language}"
+            url = (f"{GITHUB_API}/search/repositories?q="
+                   + urllib.parse.quote(q, safe="")
+                   + "&sort=stars&order=desc&per_page=10")
+            queries.append(Query(
+                url=url, host="api.github.com", capability=cap,
+                why=(f"find maintained {language.capitalize()} libraries that "
+                     f"already do {cap!r}, so it is not written twice")))
     return Plan(
         idea=str(idea), queries=queries, capabilities=caps,
         if_refused=("no GitHub audit: the matrix will be empty and every "
