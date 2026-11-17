@@ -602,6 +602,21 @@ def t_the_owner_moves_a_job_in_the_queue_by_number():
 
     check("moving a job is a WRITE, so it is not taken for a read-only intent",
           "jobs_priority" not in Q.READ_ONLY_INTENTS)
+
+    # A job that is ALREADY RUNNING is not "picked next", and the answer must
+    # not pretend it is. It is still moved, because the number decides the
+    # order if it parks and comes back. The urgent job is number 1, so the
+    # running one is number 2.
+    J._write(lambda c: c.execute(
+        "UPDATE jobs SET state='running' WHERE id=?", (first,)))
+    running = ask("make job 2 urgent")
+    check("a job that is already running is not promised a turn it cannot have",
+          running is not None and "is running now" in running.reply
+          and "picked up again" in running.reply
+          and "will be picked" not in running.reply, running and running.reply)
+    check("... and it was still moved, for when it comes back",
+          (J.get(first) or {}).get("priority") == 2, J.get(first))
+
     # Matching a job by its own words ("do the milk one first") is its own
     # piece of work: a guess here could move the wrong job, so the sentence is
     # deliberately NOT claimed by this grammar.

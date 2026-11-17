@@ -12523,7 +12523,7 @@ def _run_honest_state(f: dict) -> Result:
     if shape == "jobs_read":
         try:
             import jarvis_jobs as J
-            rows = J.queue_order(200)
+            rows = J.queue_order(200, due_only=False)
         except Exception:
             return Result("This PC could not read its background job list, so "
                           "nothing is shown. Nothing was changed.", "honest_state")
@@ -12607,7 +12607,7 @@ def _run_jobs_priority(f: dict) -> Result:
                       "was changed.", "jobs_priority")
     try:
         import jarvis_jobs as J
-        rows = J.queue_order(200)
+        rows = J.queue_order(200, due_only=False)
     except Exception:
         return Result("This PC could not read its background job list, so "
                       "nothing was changed.", "jobs_priority")
@@ -12626,6 +12626,14 @@ def _run_jobs_priority(f: dict) -> Result:
         return Result(f"Job {position}, {label!r}, has already ended, so there "
                       "was nothing to move. Nothing was changed.",
                       "jobs_priority")
+    if str(row.get("state") or "") == "running":
+        # It is already being worked on, so "it will be picked next" would be a
+        # false claim. The number still lands: it decides the order if this job
+        # parks and comes back.
+        return Result(
+            f"Job {position}, {label!r}, is running now, so it is not waiting "
+            f"for a turn. It is now {_priority_word(value)} for when it parks "
+            "and is picked up again.", "jobs_priority")
     return Result(
         f"Job {position}, {label!r}, is now {_priority_word(value)}. It will be "
         "picked at the next background check, which can be up to 30 minutes "
