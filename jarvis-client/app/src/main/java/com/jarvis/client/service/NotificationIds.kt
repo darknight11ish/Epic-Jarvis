@@ -60,6 +60,13 @@ object NotificationIds {
     // taken yet, kept on this phone until it can be sent.
     const val CALL_RECORD_WAITING = 0x3204
 
+    // A background job that ENDED (2026-11-16): one notice per job, on the
+    // reminders channel, tagged `job:<id>:<state>` so a replayed event
+    // replaces its own notice instead of posting a second one. Its own number
+    // rather than Schedule's, because that range's posts are reconciled
+    // against `/api/schedule` and a job is not in it.
+    const val JOB_DONE = 0x3205
+
     // Approvals: one summary line, then one number per waiting card from FIRST up.
     const val APPROVAL_SUMMARY = 0x4AFF
     const val APPROVAL_FIRST = 0x4B00
@@ -84,6 +91,7 @@ object NotificationIds {
         "HANDOFF" to HANDOFF,
         "WAKE_RESUME" to WAKE_RESUME,
         "CALL_RECORD_WAITING" to CALL_RECORD_WAITING,
+        "JOB_DONE" to JOB_DONE,
         "APPROVAL_SUMMARY" to APPROVAL_SUMMARY,
         "APPROVAL_FIRST" to APPROVAL_FIRST,
     )
