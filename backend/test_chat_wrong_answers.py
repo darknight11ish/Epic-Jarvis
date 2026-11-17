@@ -889,9 +889,9 @@ def t_the_flag_read_takes_the_folder_it_was_given():
     intent at all, so the 8B model answered that it could not see the notes.
 
     Two things are proved here: the folder the sentence names is carried into
-    the resolver's exact-path tier, and the ambiguity is answered by the READ
-    lane's own chooser (folder beside each candidate, the resolver's ask) rather
-    than by the write lane's "nothing was changed" sentence.
+    the resolver, and the ambiguity is answered in READ words (each candidate's
+    title beside its folder, then the resolver's own ask) rather than by the
+    write lane's "nothing was changed" sentence and its write-shaped example.
     """
     reset_vault()
     write_note("Private & Shared/Workout/Workout Log.md",
@@ -908,19 +908,19 @@ def t_the_flag_read_takes_the_folder_it_was_given():
           got is not None and got.name == "note_flag"
           and got.f.get("flag") == "favorite"
           and got.f.get("folder") == "Private & Shared/Workout", got)
-    # The plain question on the same two notes: the read lane's chooser, in
-    # read words, each candidate beside its folder.
+    # The plain question on the same two notes: every candidate listed, then
+    # the resolver's ask - and none of the write lane's wording.
     gate = Gate()
     set_gate(gate)
     res = ask("is my workout log note pinned")
     reply = str(res.reply if res is not None else "")
-    check("flag folder: an ambiguous flag read says how many notes match",
-          res is not None and "matches 2 notes" in reply, reply[:300])
+    check("flag folder: an ambiguous flag read is answered in read words",
+          res is not None and "matches 2 notes" in reply
+          and "nothing was changed" not in reply.lower()
+          and "add milk to" not in reply, reply[:300])
     check("flag folder: ... it lists each candidate's folder",
           '"Workout Log" in Private & Shared/Workout' in reply
           and '"Workout log" in Notes' in reply, reply[:400])
-    check("flag folder: ... it never claims something was changed",
-          "nothing was changed" not in reply.lower(), reply[:400])
     check("flag folder: ... and it asks in the resolver's own words",
           reply.endswith("Say the folder and the note's name, so one is chosen."),
           reply[-160:])
@@ -930,10 +930,87 @@ def t_the_flag_read_takes_the_folder_it_was_given():
     check("flag folder: the folder the answer asks for selects one note",
           res is not None and res.intent == "note_flag"
           and reply.startswith('Yes - "Workout Log" is pinned'), reply[:200])
-    check("flag folder: still no card and no write",
+    check("flag folder: a read still raises no card and writes nothing",
           gate.calls == []
           and read("Private & Shared/Workout/Workout Log.md")
           .startswith("---\npinned: true"), gate.calls)
+
+
+def t_the_flag_read_names_every_candidate():
+    """2026-11-17, after review: an ALIAS is not a title, and case is not a key.
+
+    Three ways the first version of the folder fix was still wrong, each
+    measured before this test was written:
+
+    * two notes carrying `aliases: [workout log]` were told 'No note in your
+      vault is called "workout log"' - a false claim, because the candidates
+      were re-found by TITLE and an alias is not a title;
+    * when one note's TITLE happened to contain the words, that chooser read
+      the note out loud, answering a yes/no question with the note's body;
+    * the folder only selected when the sentence reproduced the vault's
+      capitals byte-for-byte, so the reply's own suggested sentence could ask
+      for itself for ever.
+    """
+    reset_vault()
+    write_note("Journal/2025.md",
+               "---\naliases:\n  - workout log\npinned: true\n---\nold")
+    write_note("Journal/2026.md",
+               "---\naliases:\n  - workout log\npinned: false\n---\nnew")
+    res = ask("is my workout log note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: two notes that both CARRY the alias are both named",
+          res is not None and "matches 2 notes" in reply
+          and '"2025" in Journal' in reply and '"2026" in Journal' in reply,
+          reply[:400])
+    check("flag names: ... and an alias is never answered as 'no such note'",
+          "No note in your vault is called" not in reply, reply[:300])
+    # One note's title contains the words as well: it must be LISTED, never read.
+    write_note("Journal/Workout Log 2026.md",
+               "---\naliases:\n  - workout log\npinned: true\n---\nthe new one")
+    res = ask("is my workout log note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a yes/no question never reads a note's body out loud",
+          res is not None and "the new one" not in reply
+          and "says:" not in reply, reply[:400])
+    check("flag names: ... it lists all three and asks",
+          res is not None and "matches 3 notes" in reply
+          and reply.endswith("Say the folder and the note's name, so one is "
+                             "chosen."), reply[:400])
+    # Case is not the key: the vault is on Windows, where it never is.
+    reset_vault()
+    write_note("Private & Shared/Workout/Workout Log.md",
+               "---\npinned: true\n---\nday one")
+    write_note("Notes/Workout log.md", "---\npinned: false\n---\nNov 15")
+    res = ask("is my workout log note in private & shared/workout pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: the folder selects whatever capitals it was typed in",
+          res is not None and res.intent == "note_flag"
+          and reply.startswith('Yes - "Workout Log" is pinned'), reply[:300])
+    res = ask("is my workout log note in Workout pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: ... and the folder's LAST SEGMENT selects too",
+          res is not None and reply.startswith('Yes - "Workout Log" is pinned'),
+          reply[:300])
+    # A folder that does not hold it is said plainly, never overridden.
+    res = ask("is my Workout Log note in Archive pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a folder that holds no such note is said so",
+          res is not None
+          and reply.startswith('No note called "Workout Log" is in the folder '
+                               '"Archive"'), reply[:300])
+    # No name at all asks which note - it must not answer about "my".
+    res = ask("is my note in the inbox pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a sentence with no note name asks which note",
+          res is not None and reply.startswith("Which note?")
+          and '"my"' not in reply, reply[:300])
+    # Front matter that never closes is UNREADABLE, not 'pinned'.
+    write_note("Broken.md", "---\npinned: true\nstill open")
+    res = ask("is my broken note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: front matter that never closes is not called pinned",
+          res is not None and "front matter" in reply
+          and "Yes -" not in reply, reply[:300])
 
 
 # --------------------------------------------------------------------------
@@ -972,6 +1049,7 @@ TESTS = [
     t_the_flags_are_read_back_from_the_note,
     t_the_ambiguous_note_question_is_answerable,
     t_the_flag_read_takes_the_folder_it_was_given,
+    t_the_flag_read_names_every_candidate,
     t_the_second_card_free_claim_is_derived,
     t_the_twin_is_byte_identical,
 ]
