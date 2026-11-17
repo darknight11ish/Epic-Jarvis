@@ -14168,6 +14168,39 @@ _GITHUB_APPROVE_ASK = re.compile(
     r"\bapprove(?:s|ing)?\b[^.?!]{0,40}\b(?:pull\s*requests?|prs?|pr\s*#?\d+)\b"
     r"|\b(?:pull\s*requests?|prs?)\b[^.?!]{0,40}\bapprove(?:s|ing)?\b")
 
+#: REPOSITORY DESTRUCTION and BULK CLOSING are their own permanent refusals
+#: (2026-11-16), the sibling measured gap to `approve` above. Measured live:
+#: "delete the repo", "delete this repo", "delete the Epic-Jarvis repository"
+#: and "remove the repository" all answered "Yes - with ONE approval card per
+#: merge..." because `delete`/`remove` were change verbs and `repo`/`repository`
+#: GitHub things, so they reached the one GitHub shape that opens "Yes"; and
+#: "close all the pull requests" reached it through `close`. `jarvis_github.NEVER`
+#: has carried `delete_repository`, `close_repository` and `bulk_close` all
+#: along, and no tool or planner in that module implements any of them; the chat
+#: grammar simply never asked. Both new shapes are read-only refusals: no card,
+#: no network, no model.
+#:
+#: The verb must be the sentence's OWN request, not a word inside an
+#: informational question: `s` is already normalised, so "can you delete the
+#: repo" arrives as "delete the repo", while "how do i delete a repo" (a how-to
+#: read) and "can a repository be deleted" (a passive question) keep their own
+#: path. The repository NOUN is required, so "delete the file report.txt",
+#: "delete my note called Groceries" and "delete that" are never claimed here.
+_GITHUB_DESTROY_VERB = re.compile(
+    r"\b(?:delete[sd]?|deleting|remove[sd]?|removing|destroy(?:s|ed|ing)?|"
+    r"wipe[sd]?|wiping|drop(?:s|ped|ping)?|nuke[sd]?|nuking)\b")
+_GITHUB_REPO_NOUN = re.compile(r"\brepos?(?:itory|itories)?\b")
+_GITHUB_DESTROY_LEADS = ("delete ", "remove ", "destroy ", "wipe ", "drop ",
+                         "nuke ")
+#: Bulk closing needs a QUANTIFIER and one of the two things it can close, so
+#: "close all" (which the model already declines in its own words) and "close
+#: pull request 1299" (ONE pull request, which keeps the merge shape) are not
+#: claimed. Issues and pull requests only: closing a branch is not this verb.
+_GITHUB_BULK_CLOSE_ASK = re.compile(
+    r"\bclose[sd]?\b[^.?!]{0,40}\b(?:all|every|both)\b[^.?!]{0,40}"
+    r"\b(?:pull\s*requests?|prs?|issues?)\b")
+_GITHUB_BULK_CLOSE_LEADS = ("close ",)
+
 #: Asking for one of the three real ACTIONS, so the answer can say "one card".
 _GITHUB_ACTION_ASK = re.compile(
     r"\b(?:comment|commenting)\b.*\b(?:issue|pull\s*request|pr)\b"
@@ -14556,6 +14589,21 @@ def _self_github(s: str) -> Optional[Intent]:
         # approval is the one GitHub verb Jarvis can never do, and the merge
         # shape's "Yes - with ONE approval card" was the wrong answer to it.
         return Intent("github_self", {"shape": "approve"})
+    # Repository destruction and bulk closing (2026-11-16) are the same kind of
+    # never-verb as an approval, and they were the same kind of measured wrong
+    # answer: "Yes - with ONE approval card per merge..." to "delete the repo".
+    # BOTH come before the merge shape, which is the one that opens "Yes". The
+    # guard is the approve shape's own: a sentence that STARTS with the verb is
+    # a request to Jarvis (normalise strips "can you"/"please"), and one that
+    # names him is a question about him; an informational how-to keeps its path.
+    if (_GITHUB_DESTROY_VERB.search(s) and _GITHUB_REPO_NOUN.search(s)
+            and (s.startswith(_GITHUB_DESTROY_LEADS)
+                 or re.search(r"\b(?:you|jarvis)\b", s))):
+        return Intent("github_self", {"shape": "destroy"})
+    if (_GITHUB_BULK_CLOSE_ASK.search(s)
+            and (s.startswith(_GITHUB_BULK_CLOSE_LEADS)
+                 or re.search(r"\b(?:you|jarvis)\b", s))):
+        return Intent("github_self", {"shape": "bulk_close"})
     if (_GITHUB_ASK_LEAD.match(s) and _GITHUB_CHANGE_VERB.search(s)
             and (_GITHUB_THING.search(s) or "merge" in s)
             and not re.search(r"\b(?:token|account|connection|link)\b", s)):
@@ -23913,6 +23961,77 @@ def _github_approve_refused_words() -> str:
     return said
 
 
+#: The repository-destruction refusal (2026-11-16). Measured live: "delete the
+#: repo" and "remove the repository" answered "Yes - with ONE approval card per
+#: merge...", the worst sentence this app says, because `delete`/`remove` were
+#: GitHub change verbs and `repo`/`repository` GitHub things. Jarvis has no
+#: tool, no planner and no card that deletes or closes a repository;
+#: `jarvis_github.NEVER` is the module's own record of that, and
+#: `_github_destroy_refused_words` reads it at answer time so this sentence and
+#: the code cannot drift apart. The words after "No" say the three things the
+#: refusal exists for: what is banned, that no card can lift it, and that
+#: nothing was deleted.
+GITHUB_DESTROY_REFUSED = (
+    "No - I never delete a repository, and asking me to cannot change that. "
+    "Deleting, removing or destroying a repository is permanently banned: no "
+    "tool, no planner and no approval card offers it, so no card and no "
+    "setting can lift that ban. I can create a new empty repository, comment, "
+    "open an issue, close ONE issue, merge ONE pull request or re-run a "
+    "workflow, each on its own card, and none of those removes a repository. "
+    "Nothing was deleted.")
+
+#: The bulk-close refusal (2026-11-16), the same measured gap one verb over:
+#: "close all the pull requests" and "close all the issues" answered "Yes -
+#: with ONE approval card per merge...". `jarvis_github.NEVER` carries
+#: `bulk_close`, and the one-at-a-time action the owner kept is closing ONE
+#: issue on its own card - its own row says "never a pull request ... never in
+#: bulk", so this sentence promises exactly that and no more.
+GITHUB_BULK_CLOSE_REFUSED = (
+    "No - I never close things in bulk, and asking me to cannot change that. "
+    "Closing more than one pull request or issue at a time is permanently "
+    "banned: no tool, no planner and no approval card offers it, so no card "
+    "and no setting can lift that ban. Closing ONE issue is a real action with "
+    "its own approval card, and even that can never close a pull request and "
+    "never closes more than one. Nothing was closed.")
+
+
+def _github_never_set() -> set:
+    """`jarvis_github.NEVER` as a set, or an empty set on an older PC."""
+    try:
+        import jarvis_github as GH
+        return set(GH.NEVER)
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return set()
+
+
+def _github_destroy_refused_words() -> str:
+    """The destruction refusal, with the module's never-list fact when readable.
+
+    The ban itself is not typed here: `jarvis_github.NEVER` is the list the
+    module and its parity suites read, and it carries `delete_repository` and
+    `close_repository`. The sentence cites it only when that set really carries
+    it, so this answer and the code cannot drift apart. A PC without the module
+    keeps the fixed refusal, which is still true - there is no tool to delete a
+    repository to call.
+    """
+    said = GITHUB_DESTROY_REFUSED
+    if "delete_repository" in _github_never_set():
+        said += (" That ban is in the GitHub module's own never-list "
+                 "(delete_repository), so it is part of the code, not a "
+                 "promise in this answer.")
+    return said
+
+
+def _github_bulk_close_refused_words() -> str:
+    """The bulk-close refusal, citing `jarvis_github.NEVER`'s `bulk_close`."""
+    said = GITHUB_BULK_CLOSE_REFUSED
+    if "bulk_close" in _github_never_set():
+        said += (" That ban is in the GitHub module's own never-list "
+                 "(bulk_close), so it is part of the code, not a promise in "
+                 "this answer.")
+    return said
+
+
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
     "GitHub tools switched on - all off by default - it can also read "
@@ -24096,6 +24215,15 @@ def _run_github_self(f: dict, peer=None, local=None) -> Result:
         # (2026-11-16): "approve that pull request" used to answer "Yes." as if
         # it were a merge. Read-only: no card, no network, no model.
         return Result(_github_approve_refused_words() + " " + state, "github_self")
+    if shape == "destroy":
+        # Repository destruction (2026-11-16), the sibling measured gap: "delete
+        # the repo" used to answer the merge shape's "Yes". Read-only: no card,
+        # no network, no model, and nothing is deleted.
+        return Result(_github_destroy_refused_words() + " " + state, "github_self")
+    if shape == "bulk_close":
+        # Closing in bulk (2026-11-16): "close all the pull requests" used to
+        # answer the merge shape's "Yes". Read-only, and nothing is closed.
+        return Result(_github_bulk_close_refused_words() + " " + state, "github_self")
     if shape == "merge":
         # 2026-11-10, the owner's "Everything at once": merging IS built now, and
         # a sentence saying there is no merge card would be a lie. The boundary is

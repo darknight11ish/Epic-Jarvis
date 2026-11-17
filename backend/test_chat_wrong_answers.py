@@ -1,4 +1,4 @@
-"""test_chat_wrong_answers.py - six measured wrong answers on the chat fast path.
+"""test_chat_wrong_answers.py - seven measured wrong answers on the chat fast path.
 
     python -B backend/test_chat_wrong_answers.py
 
@@ -28,6 +28,14 @@ returns and the words the answer says - never by reading the module's source:
    settable on a new note ("make a note called X and favourite it").
 6. "is my workout log note pinned" had no intent either. The read-back answers
    pinned and favourited from the note's own front matter, read-only.
+
+7. "delete the repo" / "delete this repo" / "delete the Epic-Jarvis
+   repository" / "remove the repository" / "close all the pull requests"
+   answered "Yes - with ONE approval card per merge, and merge commit only."
+   - the worst sentence this app says - although Jarvis has no tool that
+   deletes a repository and bulk close is banned. Each now has its own
+   permanent refusal, and the ban it cites is read from `jarvis_github.NEVER`
+   at answer time (this suite proves the set carries it).
 
 A NOTE ON THE PERMISSION MODEL. A new note is card-free (the owner's decision
 of 2026-10-31) and pinning/favouriting an EXISTING note is an edit, so it keeps
@@ -351,6 +359,172 @@ def t_an_informational_approval_question_keeps_its_own_path():
         got = Q.match(said)
         check(f"approve: {said!r} is not Jarvis being asked to approve",
               not (got is not None and got.f.get("shape") == "approve"), got)
+
+
+# --------------------------------------------------------------------------
+# 3b. Repository destruction and bulk closing are refused, never "Yes."
+# --------------------------------------------------------------------------
+DESTROY_SENTENCES = ("delete the repo", "delete this repo",
+                     "delete the Epic-Jarvis repository", "remove the repository",
+                     "delete my repository", "can you delete the repo",
+                     "destroy the repo", "wipe the repository", "drop the repo",
+                     "nuke the repository")
+BULK_CLOSE_SENTENCES = ("close all the pull requests", "close all the issues",
+                        "close every pull request", "close all my pull requests",
+                        "close both pull requests", "can you close every issue")
+#: Reads: an information question never becomes a request to Jarvis.
+DESTRUCTION_READS = ("how do i delete a repo", "can a repository be deleted",
+                     "what deletes a pull request",
+                     "how do i close all the issues", "should i delete my repo")
+#: Real deletions that are not a repository, and the two words that only
+#: discard the last thing said. None may be swallowed by the new shapes.
+OTHER_DELETIONS = ("delete my note called Groceries", "delete the file report.txt",
+                   "delete my to-do called milk", "delete the calendar event at 3",
+                   "delete that", "forget that")
+
+
+def _github_shape(got):
+    return got.f.get("shape") if got is not None else None
+
+
+def t_repository_destruction_is_refused():
+    for said in DESTROY_SENTENCES:
+        got = Q.match(said)
+        check(f"destroy: {said!r} is its own refusal shape",
+              bool(got is not None and got.name == "github_self"
+                   and got.f.get("shape") == "destroy"), got)
+        res = ask(said)
+        low = str(res.reply if res is not None else "").lower()
+        check(f"destroy: {said!r} never opens with Yes",
+              res is not None and not low.startswith("yes"), low[:80])
+
+
+def t_the_destruction_answer_says_what_is_banned():
+    res = ask("delete the repo")
+    low = str(res.reply if res is not None else "").lower()
+    check("destroy: the answer opens with No", low.startswith("no"), low[:80])
+    check("destroy: it says Jarvis never deletes a repository",
+          "never delete a repository" in low, low[:220])
+    check("destroy: it says the ban is permanent",
+          "permanently banned" in low, low[:320])
+    check("destroy: it says no approval card can lift that ban",
+          "no approval card" in low and "lift that ban" in low, low[:320])
+    check("destroy: it says nothing was deleted",
+          "nothing was deleted" in low, low[-220:])
+    check("destroy: the shape is read-only (no card, no write)",
+          "github_self" in Q.READ_ONLY_INTENTS)
+    try:
+        import jarvis_github as GH
+    except Exception:                       # noqa: BLE001 - module absent on an old PC
+        skip("destroy: jarvis_github's own never set", "module not installed")
+    else:
+        check("destroy: the module's never set keeps delete_repository",
+              "delete_repository" in GH.NEVER, sorted(GH.NEVER))
+        check("destroy: the answer cites that never-list by name",
+              "own never-list" in low and "delete_repository" in low,
+              low[-320:])
+
+
+def t_the_destruction_refusal_stands_without_the_github_module():
+    """The fixed half must not depend on a module it may not have.
+
+    `None` in sys.modules is Python's own "this import must fail" marker, so an
+    older PC with no jarvis_github is simulated even though this folder is on
+    sys.path. The refusal is still true there - there is no tool to call - and
+    it must not cite a never-list it could not read.
+    """
+    saved = sys.modules.get("jarvis_github")
+    sys.modules["jarvis_github"] = None
+    try:
+        res = ask("delete the repo")
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_github", None)
+        else:
+            sys.modules["jarvis_github"] = saved
+    low = str(res.reply if res is not None else "").lower()
+    check("destroy: without jarvis_github the fixed refusal still says the ban",
+          res is not None and low.startswith("no")
+          and "never delete a repository" in low
+          and "nothing was deleted" in low, low[:240])
+    check("destroy: ... and it does not cite a never-list it cannot read",
+          "own never-list" not in low, low[-240:])
+
+
+def t_bulk_close_is_refused():
+    for said in BULK_CLOSE_SENTENCES:
+        got = Q.match(said)
+        check(f"bulk close: {said!r} is its own refusal shape",
+              bool(got is not None and got.name == "github_self"
+                   and got.f.get("shape") == "bulk_close"), got)
+    res = ask("close all the pull requests")
+    low = str(res.reply if res is not None else "").lower()
+    check("bulk close: the answer opens with No", low.startswith("no"), low[:80])
+    check("bulk close: it says Jarvis never closes things in bulk",
+          "never close things in bulk" in low, low[:220])
+    check("bulk close: it says one-at-a-time is a real carded action",
+          "closing one issue is a real action with its own approval card" in low,
+          low[:420])
+    check("bulk close: it does not promise closing a pull request",
+          "never close a pull request" in low, low[:520])
+    check("bulk close: it says nothing was closed",
+          "nothing was closed" in low, low[-220:])
+    try:
+        import jarvis_github as GH
+    except Exception:                       # noqa: BLE001 - module absent on an old PC
+        skip("bulk close: jarvis_github's own never set", "module not installed")
+    else:
+        check("bulk close: the module's never set keeps bulk_close",
+              "bulk_close" in GH.NEVER, sorted(GH.NEVER))
+
+
+def t_the_destruction_controls_keep_their_own_path():
+    for said in DESTRUCTION_READS + OTHER_DELETIONS:
+        got = Q.match(said)
+        check(f"destroy controls: {said!r} is NOT a destruction refusal",
+              _github_shape(got) not in ("destroy", "bulk_close"), got)
+    # The two deletions that already have a deterministic answer keep it.
+    check("destroy controls: deleting a named note keeps its own refusal",
+          getattr(Q.match("delete my note called Groceries"), "name", None)
+          == "note_change_refused",
+          Q.match("delete my note called Groceries"))
+    check("destroy controls: 'delete that' keeps the undo path",
+          getattr(Q.match("delete that"), "name", None) == "undo",
+          Q.match("delete that"))
+
+
+def t_the_github_controls_keep_their_shapes():
+    for said in ("show my github pull requests", "reopen that issue",
+                 "close pull request 1299"):
+        got = Q.match(said)
+        check(f"github controls: {said!r} is NOT a new refusal",
+              _github_shape(got) not in ("destroy", "bulk_close"), got)
+    got = Q.match("merge a pull request")
+    check("github controls: 'merge a pull request' still gets the merge shape",
+          _github_shape(got) == "merge", got)
+    got = Q.match("approve that pull request")
+    check("github controls: 'approve that pull request' still gets approve",
+          _github_shape(got) == "approve", got)
+    # The brief's own three: no fast-path intent, the model declines in its own
+    # words, exactly as measured on the live install.
+    for said in ("auto-merge it", "force push to main", "close all"):
+        got = Q.match(said)
+        check(f"github controls: {said!r} still has NO fast-path intent",
+              got is None, got)
+
+
+def t_the_merge_and_approve_wording_is_unchanged():
+    res = ask("merge a pull request")
+    merge = str(res.reply if res is not None else "")
+    check("kept words: the merge shape still opens 'Yes - with ONE approval "
+          "card per merge, and merge commit only.'",
+          merge.startswith("Yes - with ONE approval card per merge, and merge "
+                           "commit only."), merge[:140])
+    res = ask("approve that pull request")
+    approve = str(res.reply if res is not None else "")
+    check("kept words: the approve shape still opens its own No",
+          approve.startswith("No - I never approve a pull request, and asking "
+                             "me to cannot change that."), approve[:140])
 
 
 # --------------------------------------------------------------------------
@@ -691,6 +865,13 @@ TESTS = [
     t_the_ban_list_carries_approve,
     t_a_merge_question_still_gets_the_merge_answer,
     t_an_informational_approval_question_keeps_its_own_path,
+    t_repository_destruction_is_refused,
+    t_the_destruction_answer_says_what_is_banned,
+    t_the_destruction_refusal_stands_without_the_github_module,
+    t_bulk_close_is_refused,
+    t_the_destruction_controls_keep_their_own_path,
+    t_the_github_controls_keep_their_shapes,
+    t_the_merge_and_approve_wording_is_unchanged,
     t_pin_a_note_asks_which_note,
     t_favourite_is_its_own_property,
     t_favourite_on_an_existing_note_is_one_card,
@@ -704,7 +885,7 @@ TESTS = [
 
 def main():
     print("=" * 74)
-    print("jarvis_quick - six measured wrong answers on the chat fast path")
+    print("jarvis_quick - seven measured wrong answers on the chat fast path")
     print("=" * 74)
     for test in TESTS:
         print()
