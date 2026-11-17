@@ -338,6 +338,106 @@ object Jobs {
         else -> state
     }
 
+    // --------------------------------------- a job that ENDED says so (2026-11-16) --
+    // The owner's ask: "can Jarvis give me a progress update and send me
+    // notifications when I ask on a task that takes a while". The PC has
+    // published a `job` event for every change since 2026-11-04, and the
+    // durable outbox re-announces a completion it wrote down before a crash.
+    // What was missing was a client that LISTENS: this phone dropped the kind
+    // on the floor ("unhandled event kind 'job'"), so a job that finished at
+    // 03:00 sat in the Work pane until the owner opened it.
+    //
+    // THE EVENT CARRIES A LABEL AND A STATE, NEVER THE WORDS OF THE WORK.
+    // `backend/jarvis_jobs.py`'s own `_row_payload`/`_emit` send
+    // `{id, state, progress, label, note, tainted}` on purpose - no result, no
+    // params - and this file reads only `id`, `state` and `label` out of it.
+    // The `note` is deliberately NOT read: for a failure it is the error text,
+    // which is the owner's own material. The answer waits where it already
+    // was, in the Work pane, and the notification never renders it.
+    //
+    // Everything here is a pure function of the event and the App-lock state,
+    // so the words and the dedupe key are proved on the JVM
+    // (BackgroundJobsTest.kt) without a PC or a phone.
+
+    /** The event kind `jarvis_jobs._emit` publishes ("job"). */
+    const val EVENT = "job"
+
+    /**
+     * The terminal states the owner is told about. `cancelled` is NOT one: the
+     * PC sends no completion notice for a job the owner himself stopped
+     * (`_finish` says why in its own words), and telling him about the
+     * interruption he asked to stop is the thing he was avoiding.
+     */
+    val ENDED_STATES = setOf("done", "failed")
+
+    /** A job's id, state and label out of its `job` event - and nothing else. */
+    data class Ended(val id: String, val state: String, val label: String)
+
+    /** What the title says when the row carries no label (an older PC, or a bare job). */
+    const val NO_LABEL = "A background job"
+
+    /** The words under a finished job. Never its result. */
+    const val FINISHED = "Finished. Tap to see what it found."
+
+    /** The words under a failed one. Never its error text. */
+    const val STOPPED = "Stopped. Tap to see what went wrong."
+
+    /** The same two while App lock or "Hide memory lists" is on: no label either. */
+    const val LOCKED_FINISHED = "A background job finished. Unlock to see what it found."
+    const val LOCKED_STOPPED = "A background job stopped. Unlock to see what went wrong."
+
+    /** What a LOCKED phone shows on the notification itself - the kind, never the label. */
+    const val LOCK_SCREEN_DONE = "A background job finished."
+    const val LOCK_SCREEN_FAILED = "A background job stopped."
+
+    /**
+     * A completion notice out of a `job` event, or null when it is not one:
+     * a progress tick, a cancellation, a job created, or an event with no id.
+     *
+     * Reads `id`, `state` and `label`; every other key the event carries is
+     * left alone on purpose (see the section's note above).
+     */
+    fun ended(data: JsonObject?): Ended? {
+        val id = text(data, "id")?.takeIf { it.isNotEmpty() } ?: return null
+        val state = text(data, "state").orEmpty()
+        if (state !in ENDED_STATES) return null
+        return Ended(id, state, text(data, "label").orEmpty())
+    }
+
+    private fun text(data: JsonObject?, key: String): String? =
+        (data?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
+
+    /**
+     * The deterministic key one completion notice is deduplicated by, and the
+     * notification's own TAG.
+     *
+     * The same shape `jarvis_jobs.done_key` uses on the PC, so a replayed event
+     * after a reconnect - or the outbox's re-announcement after a restart -
+     * REPLACES the notice instead of posting a second one. A tag rather than
+     * only a set in memory is deliberate: Android keys a notification by
+     * (tag, id), so a notice posted by an earlier process is replaced too.
+     */
+    fun doneKey(jobId: String, state: String): String = "job:$jobId:${state.take(20)}"
+
+    /**
+     * (title, text) of the notification for a job that ended. [locked]: App
+     * lock or "Hide memory lists and chat history" is on - then neither the
+     * label nor anything else about the job is shown, the same rule
+     * [com.jarvis.client.net.Schedule.notification] follows for a reminder.
+     */
+    fun notification(ended: Ended, locked: Boolean): Pair<String, String> {
+        val finished = ended.state == "done"
+        if (locked) {
+            return NO_LABEL to (if (finished) LOCKED_FINISHED else LOCKED_STOPPED)
+        }
+        val title = ended.label.ifEmpty { NO_LABEL }
+        return title to (if (finished) FINISHED else STOPPED)
+    }
+
+    /** The public version's line, what a locked phone may show. */
+    fun lockScreen(state: String): String =
+        if (state == "done") LOCK_SCREEN_DONE else LOCK_SCREEN_FAILED
+
     private fun accepted(reply: JsonObject?): Boolean =
         (reply?.get("ok") as? JsonPrimitive)?.booleanOrNull == true
 

@@ -2103,6 +2103,15 @@ object JarvisRuntime {
                 refreshBigModel()
             }
             "attention" -> refreshAttention()
+            // A background job changed (`backend/jarvis_jobs.py`'s `_emit`,
+            // 2026-11-16): `{id, state, progress, label, note, tainted}` - a
+            // label and a state, never the result and never the params. This
+            // used to fall to "unhandled event kind", which is why a job that
+            // finished while the owner was away waited in the Work pane for
+            // him to open it. The handler keeps that pane current AND, on a
+            // terminal state, posts one notification saying what ended - never
+            // what it found.
+            "job" -> onJobEvent(event)
             "activity" -> {
                 // The one field read straight off an event rather than
                 // re-fetched: the progress line is ephemeral and travels on
@@ -7489,6 +7498,18 @@ object JarvisRuntime {
     /** The jobs already shown as notifications, by id and when they went off. */
     private val scheduleShown = LinkedHashSet<String>()
 
+    /**
+     * The background jobs this phone has already announced, by
+     * `Jobs.doneKey` (job id and terminal state).
+     *
+     * In memory, like [scheduleShown]: a replayed event after a reconnect must
+     * not post a second notice. The notification's own TAG is the same key, so
+     * even after a process restart a re-announced completion REPLACES its old
+     * notice rather than stacking a new one - which is what the PC's durable
+     * outbox replay relies on.
+     */
+    private val jobsShown = LinkedHashSet<String>()
+
     /** The "ring my phone" ids already rung here - a replayed event never rings twice. */
     private val ringsHeard = LinkedHashSet<String>()
 
@@ -8979,6 +9000,68 @@ object JarvisRuntime {
                 scheduleKind = kind,
             )
         }
+    }
+
+    /**
+     * A background job changed (2026-11-16, the owner's ask: "can jarvis give
+     * me a progress update and send me notifications when I ask on task that
+     * takes a while").
+     *
+     * The PC has published this frame for every change since 2026-11-04
+     * (`jarvis_jobs._emit`), and its truthful copy is `{id, state, progress,
+     * label, note, tainted}` - a label and a state, never the result, never the
+     * params. This phone dropped it. Two things now read it, and neither one
+     * reads `note` (which, for a failure, is the PC's error text):
+     *
+     *   * the Work pane's own rows follow `state` and `progress` in place, so
+     *     the percentage moves while it is open without a poll;
+     *   * on `done` or `failed`, ONE notification says the job's label and
+     *     that it ended. It never carries the answer - tapping it opens the
+     *     Work pane, where the answer already is
+     *     ([com.jarvis.client.service.ScheduleNotifier.postJobDone]).
+     *
+     * A `cancelled` job gets no notice: the PC sends none for the job the
+     * owner stopped, and the phone keeps that rule rather than inventing one.
+     *
+     * It posts in the foreground too, exactly as a reminder that goes off does:
+     * the scheduled-notification code has no foreground suppression, and this
+     * feature does not invent a second policy. Quiet hours are the owner's call
+     * and are not applied here.
+     */
+    private fun onJobEvent(event: SseEvent) {
+        val data = event.data as? JsonObject ?: return
+        val id = (data["id"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return
+        val state = (data["state"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return
+        val progress = (data["progress"] as? JsonPrimitive)?.content?.toFloatOrNull()
+        // Only a row the pane is already holding: an event for a job this
+        // phone has never listed must not invent a row with three fields where
+        // the read carries a dozen. The pane's own read fills it when opened.
+        if (_jobs.value.any { it.id == id }) {
+            _jobs.update { rows ->
+                rows.map { row ->
+                    if (row.id == id) row.copy(state = state, progress = progress ?: row.progress)
+                    else row
+                }
+            }
+        }
+        val ended = com.jarvis.client.net.Jobs.ended(data) ?: return
+        val context = appContext ?: return
+        // Once per job and state: a replayed event after a reconnect must not
+        // post a second notice. The tag is the same key, so even across a
+        // restart a re-announcement replaces its own notice.
+        val key = com.jarvis.client.net.Jobs.doneKey(ended.id, ended.state)
+        val fresh = synchronized(jobsShown) {
+            if (jobsShown.size > 500) jobsShown.clear()
+            jobsShown.add(key)
+        }
+        if (!fresh) return
+        val (title, text) = com.jarvis.client.net.Jobs.notification(
+            ended, locked = notificationsLocked(settings.security.value),
+        )
+        com.jarvis.client.service.ScheduleNotifier.postJobDone(
+            context, ended.id, ended.state, title, text,
+            com.jarvis.client.net.Jobs.lockScreen(ended.state),
+        )
     }
 
     // ------------------------------------------------- Jarvis Live ----

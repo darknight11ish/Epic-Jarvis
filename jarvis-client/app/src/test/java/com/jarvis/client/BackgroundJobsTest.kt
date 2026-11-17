@@ -467,4 +467,106 @@ class BackgroundJobsTest {
             api.contains("JobsPlate.kt"),
         )
     }
+
+    // ----------------------------- a job that ENDED says so (2026-11-16) ----
+    // The owner's ask: "can jarvis give me a progress update and send me
+    // notifications when I ask on task that takes a while". The PC already
+    // publishes a `job` event (`jarvis_jobs._emit`) and a durable outbox
+    // re-announces a completion it wrote down; the phone did not listen. These
+    // hold the words and every link that makes the notice reach him.
+
+    private fun event(json: String): JsonObject = JarvisJson.parseToJsonElement(json).jsonObject
+
+    @Test
+    fun `a job event is read for its label and state, and nothing else`() {
+        val done = Jobs.ended(
+            event("""{"id":"j1","state":"done","progress":1.0,"label":"Read the repo","note":"it worked"}"""),
+        )
+        assertEquals(Jobs.Ended("j1", "done", "Read the repo"), done)
+        // A progress tick is not an ending...
+        assertNull(Jobs.ended(event("""{"id":"j1","state":"running","progress":0.4}""")))
+        // ...and neither is a cancellation: the PC sends no notice for the job
+        // the owner himself stopped.
+        assertNull(Jobs.ended(event("""{"id":"j1","state":"cancelled"}""")))
+        assertNull("an event with no id is not a notice", Jobs.ended(event("""{"state":"done"}""")))
+        assertNull(Jobs.ended(null))
+    }
+
+    @Test
+    fun `the notice says the label and the state, and never the result`() {
+        assertEquals(
+            "Read the repo" to Jobs.FINISHED,
+            Jobs.notification(Jobs.Ended("j1", "done", "Read the repo"), locked = false),
+        )
+        assertEquals(
+            "Read the repo" to Jobs.STOPPED,
+            Jobs.notification(Jobs.Ended("j2", "failed", "Read the repo"), locked = false),
+        )
+        // A job with no label still says what ended.
+        assertEquals(
+            Jobs.NO_LABEL to Jobs.FINISHED,
+            Jobs.notification(Jobs.Ended("j3", "done", ""), locked = false),
+        )
+    }
+
+    @Test
+    fun `no notice word carries a result, a param or an error`() {
+        val words = listOf(
+            Jobs.FINISHED, Jobs.STOPPED, Jobs.LOCKED_FINISHED, Jobs.LOCKED_STOPPED,
+            Jobs.LOCK_SCREEN_DONE, Jobs.LOCK_SCREEN_FAILED,
+        )
+        for (word in words) {
+            for (banned in listOf("result", "/", "http", "Traceback", "error:")) {
+                assertFalse("a notice says $banned: $word", word.contains(banned))
+            }
+        }
+    }
+
+    @Test
+    fun `App lock hides the label too, and a locked phone gets the kind only`() {
+        val (title, text) = Jobs.notification(
+            Jobs.Ended("j1", "done", "Read the private repo"), locked = true,
+        )
+        assertEquals(Jobs.NO_LABEL, title)
+        assertEquals(Jobs.LOCKED_FINISHED, text)
+        assertFalse("the locked notice names the job", text.contains("private"))
+        assertEquals(Jobs.LOCK_SCREEN_DONE, Jobs.lockScreen("done"))
+        assertEquals(Jobs.LOCK_SCREEN_FAILED, Jobs.lockScreen("failed"))
+    }
+
+    @Test
+    fun `the dedupe key is the PC's own shape, so a replay replaces its notice`() {
+        assertEquals("job:abc:done", Jobs.doneKey("abc", "done"))
+        assertEquals(Jobs.doneKey("abc", "done"), Jobs.doneKey("abc", "done"))
+        assertNotEquals(Jobs.doneKey("abc", "done"), Jobs.doneKey("abc", "failed"))
+    }
+
+    @Test
+    fun `the phone listens for the event, and every link is wired to the next`() {
+        // A test of a function is not a test of its wiring - `jarvis_jobs.py`
+        // says it in its own docstring, after a feature whose every check
+        // passed while it did nothing on this PC. Each line below is one link
+        // the notice needs to reach the owner at all.
+        val runtime = SourceFile.read(
+            "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+        )
+        assertTrue("the job event kind is not handled", runtime.contains("\"job\" -> onJobEvent(event)"))
+        assertTrue("the handler does not read the event", runtime.contains("Jobs.ended(data)"))
+        assertTrue("nothing posts the notice", runtime.contains("ScheduleNotifier.postJobDone("))
+        val notifier = SourceFile.read(
+            "jarvis-client/app/src/main/java/com/jarvis/client/service/ScheduleNotifier.kt",
+        )
+        assertTrue(
+            "the notice is not on the reminders channel, or not on its own id",
+            notifier.contains(
+                "NotificationManagerCompat.from(context).notify(tag, NotificationIds.JOB_DONE, n)",
+            ),
+        )
+        assertTrue("the tap does not ask for Work", notifier.contains("MainActivity.ACTION_OPEN_WORK"))
+        val main = SourceFile.read("jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt")
+        assertTrue(main.contains("ACTION_OPEN_WORK = \"com.jarvis.client.action.OPEN_WORK\""))
+        assertTrue("the tap is never read", main.contains("readWorkIntent(intent)"))
+        assertTrue("the tap does not land on the Work pane", main.contains("nav.go(Screen.INBOX)"))
+        assertTrue(main.contains("LaunchedEffect(openWorkRequested.value)"))
+    }
 }
