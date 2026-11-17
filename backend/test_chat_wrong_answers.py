@@ -878,6 +878,171 @@ def t_the_ambiguous_note_question_is_answerable():
           reply[:300])
 
 
+def t_the_flag_read_takes_the_folder_it_was_given():
+    """2026-11-17, field-tested: the flag read could not be told WHICH note.
+
+    Measured on the live install (FIELD-TEST-ALL-2026-11-17, Step 4 row 6):
+    "is my workout log note pinned" refused with "that name matches 2 notes ...
+    so nothing was changed" - false about a read, and it asked for a shape that
+    did not reach the matcher - and the sentence its own remedy recommended,
+    "is my Workout Log note in Private & Shared/Workout pinned", matched NO
+    intent at all, so the 8B model answered that it could not see the notes.
+
+    Two things are proved here: the folder the sentence names is carried into
+    the resolver, and the ambiguity is answered in READ words (each candidate's
+    title beside its folder, then the resolver's own ask) rather than by the
+    write lane's "nothing was changed" sentence and its write-shaped example.
+    """
+    reset_vault()
+    write_note("Private & Shared/Workout/Workout Log.md",
+               "---\npinned: true\n---\nday one")
+    write_note("Notes/Workout log.md", "---\npinned: false\n---\nNov 15")
+    # The matcher now reaches the folder-qualified sentence at all.
+    got = Q.match("is my Workout Log note in Private & Shared/Workout pinned")
+    check("flag folder: the folder-qualified sentence is the read-back",
+          got is not None and got.name == "note_flag"
+          and got.f.get("name") == "Workout Log"
+          and got.f.get("folder") == "Private & Shared/Workout", got)
+    got = Q.match("is my Workout Log note in Private & Shared/Workout favourited")
+    check("flag folder: ... and the favourite spelling carries it too",
+          got is not None and got.name == "note_flag"
+          and got.f.get("flag") == "favorite"
+          and got.f.get("folder") == "Private & Shared/Workout", got)
+    # The plain question on the same two notes: every candidate listed, then
+    # the resolver's ask - and none of the write lane's wording.
+    gate = Gate()
+    set_gate(gate)
+    res = ask("is my workout log note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag folder: an ambiguous flag read is answered in read words",
+          res is not None and "matches 2 notes" in reply
+          and "nothing was changed" not in reply.lower()
+          and "add milk to" not in reply, reply[:300])
+    check("flag folder: ... it lists each candidate's folder",
+          '"Workout Log" in Private & Shared/Workout' in reply
+          and '"Workout log" in Notes' in reply, reply[:400])
+    check("flag folder: ... and it asks in the resolver's own words",
+          reply.endswith("Say the folder and the note's name, so one is chosen."),
+          reply[-160:])
+    # The remedy that answer gives now works, and reads the RIGHT note.
+    res = ask("is my Workout Log note in Private & Shared/Workout pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag folder: the folder the answer asks for selects one note",
+          res is not None and res.intent == "note_flag"
+          and reply.startswith('Yes - "Workout Log" is pinned'), reply[:200])
+    check("flag folder: a read still raises no card and writes nothing",
+          gate.calls == []
+          and read("Private & Shared/Workout/Workout Log.md")
+          .startswith("---\npinned: true"), gate.calls)
+
+
+def t_the_flag_read_names_every_candidate():
+    """2026-11-17, after review: an ALIAS is not a title, and case is not a key.
+
+    Three ways the first version of the folder fix was still wrong, each
+    measured before this test was written:
+
+    * two notes carrying `aliases: [workout log]` were told 'No note in your
+      vault is called "workout log"' - a false claim, because the candidates
+      were re-found by TITLE and an alias is not a title;
+    * when one note's TITLE happened to contain the words, that chooser read
+      the note out loud, answering a yes/no question with the note's body;
+    * the folder only selected when the sentence reproduced the vault's
+      capitals byte-for-byte, so the reply's own suggested sentence could ask
+      for itself for ever.
+    """
+    reset_vault()
+    write_note("Journal/2025.md",
+               "---\naliases:\n  - workout log\npinned: true\n---\nold")
+    write_note("Journal/2026.md",
+               "---\naliases:\n  - workout log\npinned: false\n---\nnew")
+    res = ask("is my workout log note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: two notes that both CARRY the alias are both named",
+          res is not None and "matches 2 notes" in reply
+          and '"2025" in Journal' in reply and '"2026" in Journal' in reply,
+          reply[:400])
+    check("flag names: ... and an alias is never answered as 'no such note'",
+          "No note in your vault is called" not in reply, reply[:300])
+    # One note's title contains the words as well: it must be LISTED, never read.
+    write_note("Journal/Workout Log 2026.md",
+               "---\naliases:\n  - workout log\npinned: true\n---\nthe new one")
+    res = ask("is my workout log note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a yes/no question never reads a note's body out loud",
+          res is not None and "the new one" not in reply
+          and "says:" not in reply, reply[:400])
+    check("flag names: ... it lists all three and asks",
+          res is not None and "matches 3 notes" in reply
+          and reply.endswith("Say the folder and the note's name, so one is "
+                             "chosen."), reply[:400])
+    # Case is not the key: the vault is on Windows, where it never is.
+    reset_vault()
+    write_note("Private & Shared/Workout/Workout Log.md",
+               "---\npinned: true\n---\nday one")
+    write_note("Notes/Workout log.md", "---\npinned: false\n---\nNov 15")
+    res = ask("is my workout log note in private & shared/workout pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: the folder selects whatever capitals it was typed in",
+          res is not None and res.intent == "note_flag"
+          and reply.startswith('Yes - "Workout Log" is pinned'), reply[:300])
+    res = ask("is my workout log note in Workout pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: ... and the folder's LAST SEGMENT selects too",
+          res is not None and reply.startswith('Yes - "Workout Log" is pinned'),
+          reply[:300])
+    # A folder that does not hold it is said plainly, never overridden.
+    res = ask("is my Workout Log note in Archive pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a folder that holds no such note is said so",
+          res is not None
+          and reply.startswith('No note called "Workout Log" is in the folder '
+                               '"Archive"'), reply[:300])
+    # No name at all asks which note - it must not answer about "my".
+    res = ask("is my note in the inbox pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a sentence with no note name asks which note",
+          res is not None and reply.startswith("Which note?")
+          and '"my"' not in reply, reply[:300])
+    # A note at the TOP of the vault must be selectable by the words the answer
+    # itself offers for it (2026-11-17, review: it was offered as a bare title
+    # and then every folder phrase refused it, including the vault's own name).
+    reset_vault()
+    write_note("Shopping.md", "---\npinned: true\n---\nmilk")
+    write_note("Notes/Shopping.md", "---\npinned: false\n---\neggs")
+    res = ask("is my Shopping note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a note at the top is offered as being at the top",
+          res is not None and '"Shopping" at the top of the vault' in reply
+          and '"Shopping" in Notes' in reply, reply[:400])
+    res = ask("is my Shopping note in Notes pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: ... the folder selects the note inside it",
+          res is not None and reply.startswith('No - "Shopping" is not pinned'),
+          reply[:300])
+    res = ask("is my Shopping note in root pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: ... and the word for the top selects the top one",
+          res is not None and reply.startswith('Yes - "Shopping" is pinned'),
+          reply[:300])
+    # Seven notes with one name: never claim more than is shown.
+    reset_vault()
+    for n in range(1, 8):
+        write_note(f"F{n}/Shopping.md", f"---\npinned: false\n---\nbag {n}")
+    res = ask("is my Shopping note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a long list says how many it actually showed",
+          res is not None and "matches 7 notes" in reply
+          and "I have shown the first 6." in reply, reply[:400])
+    # Front matter that never closes is UNREADABLE, not 'pinned'.
+    write_note("Broken.md", "---\npinned: true\nstill open")
+    res = ask("is my broken note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: front matter that never closes is not called pinned",
+          res is not None and "front matter" in reply
+          and "Yes -" not in reply, reply[:300])
+
+
 # --------------------------------------------------------------------------
 # The records: jarvis_quick.py and its published twin
 # --------------------------------------------------------------------------
@@ -913,6 +1078,8 @@ TESTS = [
     t_favourite_can_be_set_on_a_new_note,
     t_the_flags_are_read_back_from_the_note,
     t_the_ambiguous_note_question_is_answerable,
+    t_the_flag_read_takes_the_folder_it_was_given,
+    t_the_flag_read_names_every_candidate,
     t_the_second_card_free_claim_is_derived,
     t_the_twin_is_byte_identical,
 ]

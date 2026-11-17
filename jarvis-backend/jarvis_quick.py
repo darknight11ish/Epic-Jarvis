@@ -18152,12 +18152,28 @@ _NOTE_PIN = re.compile(
 _NOTE_FAVOURITE = re.compile(
     r"(?:please\s+)?(?P<how>unfavourite|unfavorite|favourite|favorite)\s+"
     r"(?:my\s+|the\s+|this\s+)?(?P<name>.+?)(?:\s+note)?\s*$")
+#: The five words that are the flag itself, never a note's name (2026-11-17):
+#: "is my pinned note in the vault favourited" read the note's name as "pinned".
+_NOTE_FLAG_WORDS = frozenset({"pinned", "favourited", "favorited",
+                              "favourite", "favorite"})
 #: "is my workout log note pinned?" / "is it favourited?" (2026-11-16): the
 #: read-back that makes pin and favourite usable, answered from the note's own
 #: front matter. Whole sentences only, so a sentence that merely mentions a pin
 #: ("add a pinned section") keeps its own path.
+#:
+#: THE FOLDER MAY BE NAMED BETWEEN THE NOTE AND THE FLAG (2026-11-17,
+#: field-tested). Two notes whose titles lowercase to the same string make the
+#: title alone ambiguous, and this matcher's own refusal tells the owner to "say
+#: the folder and the note's name" - so the shape it recommends has to reach it.
+#: Measured before the fix: "is my Workout Log note in Private & Shared/Workout
+#: pinned" matched NOTHING (the pattern required the flag straight after "note"),
+#: so the sentence fell through to the model, which answered that it could not
+#: see the owner's notes. The folder is optional here, so every sentence that
+#: worked before still matches exactly as it did; when it is present it becomes
+#: the resolver's own exact-path tier (`Private & Shared/Workout/Workout Log`).
 _NOTE_FLAG_QUESTION = re.compile(
-    r"is\s+(?:my\s+|the\s+|our\s+|this\s+)?(?P<name>.+?)\s+note\s+"
+    r"is\s+(?:my\s+|the\s+|our\s+|this\s+)?(?P<name>.+?)\s+note"
+    r"(?:\s+in\s+(?P<folder>.+?))?\s+"
     r"(?P<what>pinned|favourited|favorited|favourite|favorite)\s*\??$")
 #: A name that is only an article (or the literal noun) is not a name: "pin a
 #: note" means "which note?", never a note literally called "a" (2026-11-16,
@@ -18165,7 +18181,16 @@ _NOTE_FLAG_QUESTION = re.compile(
 #: deliberately NOT here: "pin it" carries no note word, and a sentence about
 #: anything else must keep the model, which is the older rule the `_NOTE_PIN`
 #: comment above already states.
-_NOTE_NAME_EMPTY = frozenset({"a", "an", "the", "one", "some", "note"})
+#:
+#: THE POSSESSIVES ARE HERE NOW (2026-11-17). They were missing because a
+#: sentence with no name at all could not reach this check while the flag
+#: matcher still gated on it - "is my note in the inbox pinned" consumes "my"
+#: as the optional prefix OR captures it as the name, and the regex engine
+#: prefers the second, so the name came out as "my" and the answer was 'No note
+#: in your vault is called "my"'. A note called "my", "our" or "this" is not a
+#: thing, so they are names only in the sense that stops the question.
+_NOTE_NAME_EMPTY = frozenset({"a", "an", "the", "one", "some", "note",
+                              "my", "our", "this"})
 #: The fixed ask for a note write with no name. The create path asks the same
 #: way (`NOTE_CREATE_ASK_SAID`); no title is listed, because a write path must
 #: not name notes while the lists are hidden and this answer runs before the
@@ -18886,15 +18911,105 @@ def _note_flag_state(text: str, key: str):
         return False                     # no front matter: the flag is not set
     keys = ("favorite", "favourite") if key == _FAVOURITE_KEY else (key,)
     lines = raw.splitlines()
+    # The VALUE is remembered and reported only when the front matter CLOSES
+    # (2026-11-17). It used to be returned the moment the line was seen, so a
+    # note whose front matter never closes - no second `---`, which Obsidian
+    # reads as body text rather than as properties - answered "Yes, pinned" for
+    # a property it does not have. The docstring already promised None for that
+    # case; the code now does it.
+    found = None
     for line in lines[1:]:
         if line.strip() == "---":
-            return False                 # front matter closed, the key is absent
+            return False if found is None else found
         m = re.match(r"([A-Za-z0-9_.-]+)\s*:\s*(.*)$", line)
         if not m or m.group(1).casefold() not in keys:
             continue
-        value = m.group(2).strip().strip("\"'").casefold()
-        return value in ("true", "yes", "on", "1")
+        if found is None:                # the first one wins, as YAML does
+            value = m.group(2).strip().strip("\"'").casefold()
+            found = value in ("true", "yes", "on", "1")
     return None                          # opened and never closed: unreadable
+
+
+def _note_flag_root_names() -> set:
+    """The names a person gives the TOP of the vault, casefolded.
+
+    A note at the top has no folder of its own, so without these there is no
+    sentence that selects it - `_note_flag_choices_said` would offer it as one
+    of two candidates and then refuse every folder phrase for it (2026-11-17,
+    review: the answer asked for something that could not select one of its own
+    candidates). The words people actually use, plus the vault's own folder name
+    and its full path, because that is the folder a root note is literally in.
+    """
+    names = {"root", "top", "vault", "vault root", "the vault", "my vault"}
+    try:
+        import jarvis_notes_edit as NE
+        root = str(NE.chat_vault_root() or "").replace("\\", "/").strip("/")
+    except Exception:                       # noqa: BLE001 - a nicety, not a rule
+        root = ""
+    if root:
+        names.add(root.casefold())
+        names.add(root.rsplit("/", 1)[-1].casefold())
+    return {n for n in names if n}
+
+
+def _note_flag_folder_match(folder: str, path: str) -> bool:
+    """True when `path` sits in the folder the sentence named, ignoring case.
+
+    A vault on Windows is case-insensitive to the owner, so the capitals the
+    sentence happens to carry must never decide whether the folder is found
+    (2026-11-17: the resolver's exact-path tier compares byte-for-byte, so
+    "in private & shared/workout" fell to the basename tier and asked the owner
+    again for the folder they had just said). The whole vault-relative folder is
+    tried first, then its LAST SEGMENT, because "in Workout" says the same thing.
+    """
+    want = str(folder or "").strip().replace("\\", "/").strip("/").casefold()
+    if not want:
+        return True
+    rel = str(path or "").replace("\\", "/")
+    have = rel.rsplit("/", 1)[0].casefold() if "/" in rel else ""
+    if not have:
+        # The note is at the TOP of the vault and has no folder of its own.
+        return want in _note_flag_root_names()
+    # The folder itself, any folder UNDER it ("in Private & Shared" names the
+    # note one level down), or its last segment ("in Workout").
+    return (have == want or have.startswith(want + "/")
+            or have.rsplit("/", 1)[-1] == want)
+
+
+def _note_flag_no_folder(name: str, folder: str) -> str:
+    """That note is not in the folder the sentence named: say so, guess nothing."""
+    return (f'No note called "{name}" is in the folder "{folder}". '
+            f'Check the folder, or ask without one.')
+
+
+def _note_flag_choices_said(name: str, rows) -> Result:
+    """Which note? - every candidate, its title BESIDE its folder, then the ask.
+
+    Built from the resolver's own candidate list, never from a title search
+    (2026-11-17). `jarvis_notes.resolve_note` matches a path, then a basename,
+    then the note's own `aliases:` - and an alias is NOT a title, so a title
+    search answers "no note is called that" for two notes that both carry the
+    alias. The read lane's chooser is not reused either: it READS the one note
+    it happens to find, which must never happen to a yes/no question.
+    """
+    rows = [r for r in (rows or []) if isinstance(r, dict)]
+    bits = []
+    for row in rows[:6]:
+        rel = str(row.get("path") or "").replace("\\", "/")
+        title = str(row.get("title") or "") or rel.rsplit("/", 1)[-1]
+        if title.lower().endswith(".md"):
+            title = title[:-3]
+        folder = rel.rsplit("/", 1)[0] if "/" in rel else ""
+        # A note at the top is OFFERED as such, in the words that then select
+        # it: a bare title beside folders reads as if it too had a folder.
+        bits.append(f'"{title}" in {folder}' if folder
+                    else f'"{title}" at the top of the vault')
+    said = (f'"{name}" matches {len(rows)} notes: ' + "; ".join(bits) + ". "
+            + NOTE_CHOOSE_BY_FOLDER)
+    if len(rows) > len(bits):
+        # Never claim more than it shows (the read chooser's own sentence).
+        said += " I have shown the first {0}.".format(len(bits))
+    return Result(said, "note_flag")
 
 
 def _run_note_flag(f: dict) -> Result:
@@ -18908,19 +19023,62 @@ def _run_note_flag(f: dict) -> Result:
     if _notes_hidden() or _notes_write_hidden():
         return Result(NOTES_READ_HIDDEN, "note_flag")
     name = str(f.get("name") or "").strip()
+    folder = str(f.get("folder") or "").strip().replace("\\", "/").strip("/")
     flag = str(f.get("flag") or "pinned")
     label = "pinned" if flag == "pinned" else "favourited"
     if not name:
         return Result('Which note? Say "is my Workout Log note ' + label + '?"',
                       "note_flag")
-    path, why, title = _find_note(name)
-    if path is None:
-        if why == "not_found":
-            return Result(_note_no_match(name), "note_flag")
-        return Result(why, "note_flag")
+    # The NAME is resolved first, and the folder is then used to CHOOSE among
+    # the notes that name answers to (2026-11-17). Handing the resolver
+    # "folder/name" looked tidier and was wrong: its exact-path tier compares
+    # byte-for-byte, so a lowercase folder fell through to the basename tier,
+    # which cannot see a folder at all - the owner was asked for the folder
+    # they had just said. Resolving the name and filtering its own candidate
+    # list keeps ONE resolver and makes the folder do what it says.
     try:
         import jarvis_notes_edit as E
+    except Exception:                       # noqa: BLE001 - the module is absent
+        # Said as itself: the vault is fine and the note is fine, and the old
+        # sentence ("could not be read (ModuleNotFoundError)") blamed both.
+        return Result("The notes editor is not installed on this PC, so I could "
+                      "not read the note's properties.", "note_flag")
+    try:
         from urllib.parse import quote
+        row, why, matches = E.find_name(name)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"Your Obsidian vault could not be read "
+                      f"({type(exc).__name__}), so I did not read the note.",
+                      "note_flag")
+    cands = [r for r in (matches or []) if isinstance(r, dict)]
+    if why == "ambiguous" and folder:
+        same = [r for r in cands
+                if _note_flag_folder_match(folder, str(r.get("path") or ""))]
+        if len(same) == 1:
+            row, why = same[0], ""           # the folder chose it
+        elif same:
+            return _note_flag_choices_said(name, same)
+        else:
+            return Result(_note_flag_no_folder(name, folder), "note_flag")
+    if row is not None and folder and not _note_flag_folder_match(
+            folder, str(row.get("path") or "")):
+        # One note answers to the name and it is NOT in the folder the owner
+        # named. Say that, never answer about a note in another folder.
+        return Result(_note_flag_no_folder(name, folder), "note_flag")
+    if row is None:
+        if why == "ambiguous":
+            # Two or more notes answer to the name. List them (title beside
+            # folder) and ask; this used to repeat the WRITE path's "so nothing
+            # was changed" sentence, which is false about a read, and whose
+            # example was a write.
+            return _note_flag_choices_said(name, cands)
+        if why == "not_found":
+            return Result(_note_no_match(name), "note_flag")
+        return Result("Your Obsidian vault could not be read just now, so I did "
+                      "not read the note.", "note_flag")
+    path = str(row.get("path") or "")
+    title = str(row.get("title") or "")
+    try:
         code, body = E.handle_read("path=" + quote(path, safe=""))
     except Exception as exc:                # noqa: BLE001 - said, never swallowed
         return Result(f"I could not read that note's properties "
@@ -19355,11 +19513,19 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
             return Intent("note_customize", fields)
     # "is my workout log note pinned?" / "... favourited?" (2026-11-16): the
     # read-back, from the note's own front matter. Read-only: no card, no write.
+    # A folder the sentence names ("... note in Private & Shared/Workout
+    # pinned") is CARRIED, never dropped: it is the one thing that tells two
+    # notes with the same title apart, and the matcher's own refusal tells the
+    # owner to say it (2026-11-17).
     m = _NOTE_FLAG_QUESTION.fullmatch(s)
-    if m and _note_name_given(m.group("name")):
+    if m:
         what = m.group("what").lower()
+        named = m.group("name").strip()
+        if not _note_name_given(named) or named.casefold() in _NOTE_FLAG_WORDS:
+            named = ""                   # "is my pinned note ..." names no note
         return Intent("note_flag", {
-            "name": m.group("name").strip(),
+            "name": named,
+            "folder": (m.groupdict().get("folder") or "").strip(),
             "flag": "pinned" if what == "pinned" else _FAVOURITE_KEY})
     # A create-shaped sentence the title reader declined asks for the name; it
     # never becomes a file name, a daily note, or the stale "not built" refusal.
