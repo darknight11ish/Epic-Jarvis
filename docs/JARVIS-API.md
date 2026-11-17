@@ -2041,7 +2041,10 @@ path ever appears in it (`routes.rs:67-101`).
 `{"available": true, "recent": [up to 20 answer rows, oldest first; since
 2026-09-26 a row may also carry "cached_tokens" (how much of the prompt
 Ollama reused) and "prompt_rounds" (requests to the model in that answer,
-whose "prompt_tokens" and "cached_tokens" are summed) - numbers only; the
+whose "prompt_tokens" and "cached_tokens" are summed); since 2026-11-16 a
+row also carries "completion_tokens" - the model's own count of what it read
+back, which is the same figure "tokens" holds when the model reported one and
+is absent, never 0, when it reported none (R7) - numbers only; the
 apps read the share below, not these],
 "by_model": {"<model>": {"answers", "median_first_word_ms",
 "median_tokens_per_s", "median_words_per_s", "median_on_gpu_percent",
