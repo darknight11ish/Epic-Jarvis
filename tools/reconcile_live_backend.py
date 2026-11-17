@@ -357,6 +357,38 @@ STATUS_LATCHES_NEW_FILE = "status-latches-new.txt"
 LOOPBACK_OLD_FILE = "hud-loopback-connect-old.txt"
 LOOPBACK_NEW_FILE = "hud-loopback-connect-new.txt"
 
+#: 2026-11-16 (`taint-latch-2`): THE OWNER'S OWN MEMORY IS NOT OUTSIDE TEXT.
+#: The published base HUD stopped calling
+#: `jarvis_gate.latch_taint(why="memory_injected")` when it injects the
+#: owner's recalled facts, and it stopped handing `jarvis_agent.run_local_turn`
+#: a request whose system messages include that recalled block (`_TurnWatch`
+#: reads one there as "text the APP sent", which refused setting changes). NO
+#: `.patch` carries either change - the code is older than the base snapshot -
+#: so without these literal deltas the owner's live HUD keeps the bug and the
+#: deploy would look clean. Four disjoint regions of `jarvis_hud.py`, in this
+#: order: the latch block is replaced by the no-latch one, the `server_block`
+#: marker is inserted in front of the attach-memory `if`, the module-level
+#: `_request_for_agent` helper is inserted in front of the Origin comment, and
+#: the `run_local_turn` call site is replaced. The OLD block of each replace
+#: must appear in the live file exactly once; each entry carries post-image
+#: probes only the NEW side holds, so a second deploy says ALREADY and a
+#: half-applied file is refused rather than guessed at. Extracted from the
+#: owner's live HUD and the published base, and the four applied in order
+#: reconstruct the published base byte for byte in their regions
+#: (`backend/test_reconcile_live_backend.py` proves it).
+HUD_MEMORY_LATCH_OLD_FILE = "hud-memory-latch-old.txt"
+HUD_MEMORY_LATCH_NEW_FILE = "hud-memory-latch-new.txt"
+HUD_MEMORY_SERVER_BLOCK_FILE = "hud-memory-server-block-new.txt"
+HUD_REQUEST_FOR_AGENT_FILE = "hud-request-for-agent-new.txt"
+HUD_AGENT_REQUEST_OLD_FILE = "hud-agent-request-old.txt"
+HUD_AGENT_REQUEST_NEW_FILE = "hud-agent-request-new.txt"
+#: The line the `server_block = None` marker goes in front of, and the comment
+#: the helper goes in front of. Both appear exactly once in the live HUD.
+HUD_MEMORY_ATTACH_ANCHOR = \
+    "        if decision.inject_memory and ROUTING and not jarvis_side_memory:"
+HUD_REQUEST_FOR_AGENT_ANCHOR = \
+    "# Browsers attach Origin to every cross-origin POST, so an unexpected value is"
+
 #: Review ruling 8.2's guard change (PR #680) reaches the live PC the same way
 #: the two HUD fixes do, and for a reason that reads like a silent trap:
 #: `gate-touches.patch` is ALREADY in the live `_jarvis-state.json` patch list,
@@ -1020,6 +1052,45 @@ DELTA_TABLE = {
             "probes": ("_LOOPBACK_CONNECT_S", "def _loopback_connect_ok("),
             "file": LOOPBACK_NEW_FILE,
             "replace_file": LOOPBACK_OLD_FILE,
+        },
+    },
+    # 2026-11-16 (`taint-latch-2`): the owner's own remembered facts are NOT
+    # outside text. The base HUD stopped latching memory, and stopped handing
+    # `run_local_turn` the server's own recalled-facts system turn. NO `.patch`
+    # carries either change (the code predates the base snapshot), so the owner's
+    # live HUD gets them through these four literal entries. Order: the latch
+    # block, the `server_block` marker, the helper, the call site. Probes are
+    # post-image lines only the NEW side holds, so a second deploy reports
+    # ALREADY and a half-applied live file is refused (old block not exactly
+    # once), never guessed at.
+    "hud-memory-latch.patch": {
+        "jarvis_hud.py": {
+            "probes": ("server_block = recalled",
+                       "because that latch is one boolean with a label no consumer"),
+            "file": HUD_MEMORY_LATCH_NEW_FILE,
+            "replace_file": HUD_MEMORY_LATCH_OLD_FILE,
+        },
+    },
+    "hud-memory-server-block.patch": {
+        "jarvis_hud.py": {
+            "probes": ("server_block = None",),
+            "anchor": HUD_MEMORY_ATTACH_ANCHOR,
+            "file": HUD_MEMORY_SERVER_BLOCK_FILE,
+        },
+    },
+    "hud-request-for-agent.patch": {
+        "jarvis_hud.py": {
+            "probes": ("def _request_for_agent(payload: dict, server_block) -> dict:",
+                       "the block is not in this payload"),
+            "anchor": HUD_REQUEST_FOR_AGENT_ANCHOR,
+            "file": HUD_REQUEST_FOR_AGENT_FILE,
+        },
+    },
+    "hud-agent-request.patch": {
+        "jarvis_hud.py": {
+            "probes": ("request=_request_for_agent(payload, server_block),",),
+            "file": HUD_AGENT_REQUEST_NEW_FILE,
+            "replace_file": HUD_AGENT_REQUEST_OLD_FILE,
         },
     },
     # Review ruling 8.2 (PR #680): the guard change is carried to the live
@@ -3492,6 +3563,13 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
            f"({len(d.lines)} lines)" if d.lines else
            f"{d.patch} -> {d.file} ({d.anchor or 'one block'})"
            for d in inserts])
+    # The runbook's formula and `wrote N` count the DISTINCT files the inserts
+    # touch, not the number of delta actions: several entries chain onto one
+    # file. Printed on its own line so the count does not depend on the list
+    # above being short enough to print in full (2026-11-16, four more HUD
+    # entries pushed the second file past `_summ`'s limit and a test that
+    # re-counted the printed lines started undercounting).
+    out(f"  insert files: {len({d.file for d in inserts})}")
     blocked = blocked_delta_lines()
     if blocked:
         out("")

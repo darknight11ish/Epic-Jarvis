@@ -2041,7 +2041,10 @@ path ever appears in it (`routes.rs:67-101`).
 `{"available": true, "recent": [up to 20 answer rows, oldest first; since
 2026-09-26 a row may also carry "cached_tokens" (how much of the prompt
 Ollama reused) and "prompt_rounds" (requests to the model in that answer,
-whose "prompt_tokens" and "cached_tokens" are summed) - numbers only; the
+whose "prompt_tokens" and "cached_tokens" are summed); since 2026-11-16 a
+row also carries "completion_tokens" - the model's own count of what it read
+back, which is the same figure "tokens" holds when the model reported one and
+is absent, never 0, when it reported none (R7) - numbers only; the
 apps read the share below, not these],
 "by_model": {"<model>": {"answers", "median_first_word_ms",
 "median_tokens_per_s", "median_words_per_s", "median_on_gpu_percent",
@@ -2482,7 +2485,7 @@ inside the app, which is behind App lock already.
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin"\|"obsidian", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target, or a body that is not a JSON object (`{"ok": false, "state": "not_filed", "error", "message"}`); **503** not set up (no graph folder, no token, no vault, a daily-note format it cannot follow — `message` says which, starting "X isn't set up on your PC" when it is the setup); **429** four notes already waiting (`state: "not_filed"`, with `error` and a `message` saying why) | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note` / `append_obsidian_daily`, under the owner's own tier for those in `jarvis-framework.toml`. |
+| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin"\|"obsidian", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target, a body that is not a JSON object, or (Joplin only, 2026-11-16) a `title` - or a first line - that is a spoken sentence or an instruction rather than a note's name, or a name that already means one of your notes (`message` quotes the sentence and asks for just the name, or names the note that exists) (`{"ok": false, "state": "not_filed", "error", "message"}`); **503** not set up (no graph folder, no token, no vault, a daily-note format it cannot follow — `message` says which, starting "X isn't set up on your PC" when it is the setup); **429** four notes already waiting (`state: "not_filed"`, with `error` and a `message` saying why) | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note` / `append_obsidian_daily`, under the owner's own tier for those in `jarvis-framework.toml`. A capture with no body is refused and makes no file (2026-11-16). |
 | `GET /api/notes/capture?id=…` | — | 200/202 job; 404 unknown id | How that note ended. |
 | `GET /api/notes/capture` (no id) | — | **200** `{"ok": true, "targets": ["logseq", "joplin", "obsidian"]}` — only those set up on the PC, names only; a backend from before 2026-09-24 answers **404** (its "unknown id") | Which note apps to show. Both apps show only these, and show none (saying why) when this cannot be read. |
 
@@ -35058,7 +35061,7 @@ own.
 
 **ONE RUN = one model + one setup + N repeats + one target lane.** A repeat
 asks Ollama one question, reads Ollama's own counters out of the reply, samples
-both graphics cards, and writes ONE row; the run then writes a second row with
+the graphics cards, and writes ONE row; the run then writes a second row with
 the setup and the median/min/max over its repeats. Every row goes to
 `~/.openjarvis/bench.jsonl` - a NEW file with its own allowlist, its own 500-run
 cap and a 2 MB ceiling. **`speed.jsonl` is never opened**: that file's promise

@@ -43,12 +43,20 @@
   "type": "function",
   "function": {
    "name": "file_read",
-   "description": "Read a local text file.",
+   "description": "Read a local text file. A long file comes back as numbered lines and a note saying which range to ask for next; add start_line and lines to read another range.",
    "parameters": {
     "type": "object",
     "properties": {
      "path": {
       "type": "string"
+     },
+     "start_line": {
+      "type": "integer",
+      "description": "optional: the first line to show, counting from 1 (default 1)"
+     },
+     "lines": {
+      "type": "integer",
+      "description": "optional: how many lines to show (default 400, at most 2000)"
      }
     },
     "required": [

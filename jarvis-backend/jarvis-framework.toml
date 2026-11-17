@@ -1397,9 +1397,9 @@ third_port = 11438
 #     py -3 jarvis_chatbot_gemini.py sign-in
 # Nothing about that is set in this file.
 [chatbot]
-# The full version (both graphics cards: longer conversations, the driver
-# model on the second card's "Longer conversations" lane). Leave false until
-# the second card is installed AND measured with this feature; even when
+# The full version (an extra graphics card: longer conversations, the driver
+# model on that card's "Longer conversations" lane). Leave false until an
+# extra card is installed AND measured with this feature; even when
 # true, the full version runs only while that lane is running, and the
 # limited one-card version runs otherwise.
 full_version = false

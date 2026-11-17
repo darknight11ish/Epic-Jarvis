@@ -40,6 +40,44 @@ a real vault. It is what `GET /api/notes/capture` with no `id` answers
 (`capture_status("")`), so the desktop and the phone show only those. It
 opens no socket, so "joplin" means set up, not that Joplin is open right now.
 
+A NOTE'S NAME IS A NAME, NOT A SENTENCE (added 2026-11-16)
+The owner's spoken commands were being written into his vault as note names.
+Two artefacts of one week: a 37-byte note called `Workout log.md` in the vault
+root beside the real `Private & Shared/Workout/Workout Log.md`, so "read my
+workout log note" has two answers; and a 0-byte note named after the whole
+sentence `Workout Log, pin it, and add using todays date that i used the
+punching bag`. The audit that found them (`.dsh-scratch/GAP-REVIEW-2026-11-16/
+vault-artefacts.md`) did not identify the writer, so what follows is the rule
+applied where THIS module can apply it, not a claim about that writer.
+
+The audit could not identify the writer of those vault files. What it can say
+is the shape: a whole utterance as a file name with an empty body, and a
+date-named note holding an utterance. The vault CREATE path in
+`jarvis_quick.py` is the one the project's own repair names - cc7e84136, "a
+0-byte file named after the whole utterance because _NOTE_CREATE_NAMED took
+every word after 'called' as the title" - and that path is not this module's.
+What IS here is the same defect in miniature: a Joplin note's TITLE is its
+name, and it was taken from the first line of the owner's words and cut at 80
+characters with an ellipsis - so a spoken command became a note's name, and a
+sentence too long for the title became a plausible-looking half of one. The
+rule now, here and (by that commit) there:
+
+  - a name is a few words. A name that joins a second instruction ("and",
+    "then", "but", "plus"), asks Jarvis to do something ("add", "pin", "set"
+    ...), trails off in an ellipsis, or runs past NAME_MAX_WORDS or
+    NAME_MAX_CHARS is REFUSED in plain words: the sentence is quoted, it is
+    said to be a sentence or an instruction, and the owner is asked for just
+    the note's name. It is NEVER truncated into a plausible-looking title - a
+    truncated title is a wrong note, and the owner would never learn it.
+  - a name that already means one of the owner's notes is refused in the ONE
+    resolver's own words (`jarvis_notes.resolve_note`, merged 2026-11-16):
+    "there is already a note at ...", or the resolver's own two-candidate
+    question. A second note with the same name is what made the clarification
+    question unanswerable, so a capture never makes one.
+  - a capture with no body writes nothing at all. Never a 0-byte note: plan()
+    refuses an empty body, and run() refuses one too, so a Plan built by hand
+    cannot make an empty journal or daily-note file either.
+
 WHAT IT WILL NOT DO
   - Overwrite. Logseq and Obsidian: the file is opened for APPEND only (never
     truncated), created only if missing. Joplin: always a NEW note, never an
@@ -138,6 +176,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -175,6 +214,33 @@ _EMPTY = "the note is empty"
 MAX_NOTE_CHARS = 4000
 MAX_TITLE_CHARS = 200
 MAX_NOTEBOOK_CHARS = 200
+#: A name is a name, not a sentence (2026-11-16). Ten words is already a long
+#: note title, and far below a whole dictated line; 80 characters keeps a name
+#: short enough to be said and told apart from another. Both are REFUSALS -
+#: nothing is ever cut to fit them.
+NAME_MAX_WORDS = 10
+NAME_MAX_CHARS = 80
+#: A name this long inside a refusal is quoted in full; past this the quote is
+#: cut (with an ellipsis) so one 4,000-character note cannot fill the card.
+_NAME_QUOTE_CHARS = 120
+#: The example every name refusal gives, so the owner sees what a name is.
+_NAME_EXAMPLE = 'for example "Workout log"'
+#: A clause joining word means a second instruction is riding on the name:
+#: "Workout Log, pin it, and add using todays date ...".
+_NAME_JOINERS = frozenset({"and", "then", "but", "plus"})
+#: A command verb in the imperative. It commands when it is the first word
+#: ("Add milk"), when it follows a clause joining word ("... and add milk"),
+#: or when it is followed by what it acts on ("pin it", "remember that",
+#: "set the date").
+_NAME_COMMANDS = frozenset({
+    "add", "append", "delete", "remove", "pin", "unpin", "rename", "move",
+    "set", "remember", "make", "create", "write", "put"})
+_NAME_AFTER_A_COMMAND = frozenset({
+    "it", "this", "that", "the", "my", "me", "a", "an", "to", "using"})
+#: The refusal reasons that are the REQUEST being wrong (400), not this PC's
+#: setup (503). `plan()` sets one on the Plan it refuses with.
+_BAD_REQUEST_CODES = frozenset({"empty", "bad_target", "not_a_name",
+                               "content_preexists", "ambiguous_section"})
 #: A journal file bigger than this is refused rather than appended to: a day's
 #: journal that size means something is wrong, and this is not the thing to
 #: make it bigger.
@@ -294,6 +360,102 @@ def _clean(text, limit: int) -> str:
 
 
 # --------------------------------------------------------------------------
+#   A note's name is a name (2026-11-16)
+# --------------------------------------------------------------------------
+
+def _named(text, limit: int = _NAME_QUOTE_CHARS) -> str:
+    """`text` for a refusal: one line, quoted, and bounded so a whole dictated
+    note cannot fill the card. Cutting THIS is safe - it is the quote, not the
+    name, and a name is never cut."""
+    said = " ".join(str(text or "").split())
+    if len(said) <= limit:
+        return said
+    return said[:limit - 1].rstrip() + "…"
+
+
+def note_name_problem(name) -> str:
+    """Why `name` is a spoken sentence or an instruction, not a note's name, or "".
+
+    The rules the owner asked for on 2026-11-16, and nothing cleverer:
+
+      * it trails off in an ellipsis, which means part of it was already lost;
+      * it contains a clause joining word ("and", "then", "but", "plus"), so a
+        second instruction is riding on the first;
+      * it uses a command verb in the imperative ("add", "pin", "set", ...),
+        which is the owner telling Jarvis to do something, not naming a note;
+      * it is longer than NAME_MAX_WORDS words or NAME_MAX_CHARS characters.
+
+    Every answer quotes the sentence, says which rule it broke, and asks for
+    just the note's name. It never returns a shortened name: the caller refuses
+    the whole capture instead. The plain words are returned, never raised, so
+    the card and the route say the same sentence.
+    """
+    text = " ".join(str(name or "").split()).strip()
+    if not text:
+        return ""
+    if text.endswith(("…", "...")):
+        return (f'the name "{_named(text)}" trails off in an ellipsis, so it is a '
+                f"spoken sentence rather than a note name - nothing was filed; say "
+                f"just the note's name, {_NAME_EXAMPLE}")
+    words = [w.lower() for w in re.findall(r"[A-Za-z']+", text)]
+    for word in words:
+        if word in _NAME_JOINERS:
+            return (f'the name "{_named(text)}" is a whole sentence, not a note name '
+                    f'(it joins a second instruction with "{word}") - nothing was '
+                    f"filed; say just the note's name, {_NAME_EXAMPLE}")
+    for i, word in enumerate(words):
+        if word not in _NAME_COMMANDS:
+            continue
+        after = words[i + 1] if i + 1 < len(words) else ""
+        if i == 0 or words[i - 1] in _NAME_JOINERS or after in _NAME_AFTER_A_COMMAND:
+            return (f'the name "{_named(text)}" is an instruction, not a note name '
+                    f'(it asks Jarvis to "{word}") - nothing was filed; say just the '
+                    f"note's name, {_NAME_EXAMPLE}")
+    if len(words) > NAME_MAX_WORDS or len(text) > NAME_MAX_CHARS:
+        return (f'the name "{_named(text)}" is too long to be a note name '
+                f"({len(words)} words; a name is at most {NAME_MAX_WORDS} words and "
+                f"{NAME_MAX_CHARS} characters) - nothing was filed; say just the "
+                f"note's name, {_NAME_EXAMPLE}")
+    return ""
+
+
+def _existing_note_refusal(name: str) -> tuple:
+    """`(why, code)` when `name` already means one of the owner's notes, else ("", "").
+
+    THE ONE RESOLVER DECIDES, and its own words are reused, so the capture, the
+    chat and the search refuse the same name in the same sentence: an exact
+    vault path, then the file name (case-blind, Windows), then a frontmatter
+    alias, and two or more matches are a question, never a pick
+    (`jarvis_notes.resolve_note`, merged 2026-11-16). This module does not grow
+    a second resolver and does not change that one.
+
+    Refusing here is the point: a second note with a name that already exists
+    is what made "read my workout log note" a question with two answers. The
+    code is the resolver's own (`content_preexists` for one note,
+    `ambiguous_section` for several), so the route can answer 400 rather than
+    "this PC is not set up" - and `not_found` (no such note) is NOT a refusal:
+    a genuinely new name is filed as before. Read-only: opens no socket, writes
+    nothing; a vault that cannot be read simply means "not checked".
+    """
+    try:
+        import jarvis_notes
+        got = jarvis_notes.resolve_note(name)
+    except Exception:                                       # noqa: BLE001
+        return "", ""
+    if not isinstance(got, dict):
+        return "", ""
+    if got.get("ok"):
+        path = str(got.get("path") or "")
+        return (f"there is already a note at {path}, so nothing was created - give "
+                f"this note a different name, or add to that one instead"), \
+               "content_preexists"
+    if str(got.get("code") or "") == "ambiguous_section":
+        said = str(got.get("reason") or "").strip().rstrip(".")
+        return (said or f'"{name}" matches more than one note', "ambiguous_section")
+    return "", ""
+
+
+# --------------------------------------------------------------------------
 #   The plan
 # --------------------------------------------------------------------------
 
@@ -311,6 +473,11 @@ class Plan:
     template: str = ""          # obsidian: the daily note template that applies
     template_why: str = ""      # obsidian: why a configured template is not applied
     reason_empty: str = ""      # set when nothing can be written, and why
+    #: One word for WHY nothing can be written, when the REQUEST is what is
+    #: wrong ("empty", "bad_target", "not_a_name", "content_preexists",
+    #: "ambiguous_section"). "" means a setup problem, which the route answers
+    #: 503; the codes above answer 400. Added 2026-11-16 with the name gate.
+    reason_code: str = ""
     if_refused: str = "nothing is written"
 
     def as_dict(self) -> dict:
@@ -561,9 +728,11 @@ def plan(target: str, text: str, *, title: str = "", notebook: str = "",
     target = _normal_target(target)
     body = _clean(text, MAX_NOTE_CHARS)
     if target not in ACTIONS:
-        return Plan(target=target, text=body, reason_empty=_BAD_TARGET)
+        return Plan(target=target, text=body, reason_empty=_BAD_TARGET,
+                    reason_code="bad_target")
     if not body:
-        return Plan(target=target, text=body, reason_empty=_EMPTY)
+        return Plan(target=target, text=body, reason_empty=_EMPTY,
+                    reason_code="empty")
     problem = _setup_problem(target)
 
     if target == "logseq":
@@ -607,13 +776,34 @@ def plan(target: str, text: str, *, title: str = "", notebook: str = "",
             p.template_why = tpl_why
         return p
 
-    ttl = _clean(title, MAX_TITLE_CHARS).replace("\n", " ")
-    if not ttl:
-        first = body.split("\n", 1)[0]
-        ttl = first[:80] + ("…" if len(first) > 80 else "")
+    # THE NOTE'S NAME (2026-11-16). A Joplin note's title is its name, and it
+    # used to be the first line of the owner's words, cut at 80 characters and
+    # closed with an ellipsis. That turned a spoken command into a note's name,
+    # and a sentence too long for the title into a plausible-looking half of
+    # one. Now the name is checked AS A NAME and never cut:
+    #   - a sentence or an instruction is refused in plain words that quote it
+    #     and ask for just the name (note_name_problem);
+    #   - a name that already means one of the owner's notes is refused in the
+    #     ONE resolver's own words, so a second note with the same name is
+    #     never made (_existing_note_refusal).
+    raw = str(title or "")
+    name = (_clean(raw, MAX_NOTE_CHARS) if raw.strip()
+            else body.split("\n", 1)[0])
+    name = " ".join(name.split()).strip()
     nb = _clean(notebook, MAX_NOTEBOOK_CHARS).replace("\n", " ")
-    return Plan(target="joplin", text=body, title=ttl, notebook=nb, url=_joplin_base(),
-                reason_empty=problem)
+    if problem:
+        return Plan(target="joplin", text=body, title=name, notebook=nb,
+                    url=_joplin_base(), reason_empty=problem)
+    why = note_name_problem(name)
+    if why:
+        return Plan(target="joplin", text=body, notebook=nb, url=_joplin_base(),
+                    reason_empty=why, reason_code="not_a_name")
+    said, code = _existing_note_refusal(name)
+    if said:
+        return Plan(target="joplin", text=body, title=name, notebook=nb,
+                    url=_joplin_base(), reason_empty=said, reason_code=code)
+    return Plan(target="joplin", text=body, title=name, notebook=nb,
+                url=_joplin_base())
 
 
 def describe(p: Plan) -> str:
@@ -896,6 +1086,14 @@ def run(p: Plan, *, approved: bool = False,
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was written"}
+    # NEVER A 0-BYTE NOTE (2026-11-16). plan() already refuses an empty body,
+    # but run() takes ANY Plan - including one built by hand, which the agent
+    # tools and a test can both do - and an empty body used to make today's
+    # journal or daily-note file with nothing in it. A note with no words is
+    # not a note; nothing is created, and this says so.
+    if not str(p.text or "").strip():
+        return {"ok": False, "reason": "the note is empty, so no note and no file "
+                                       "were made; say what the note should say"}
     if p.reason_empty:
         return {"ok": False, "reason": p.reason_empty}
     try:
@@ -1011,7 +1209,12 @@ def capture(target: str, text: str, *, title: str = "", notebook: str = "",
     """
     p = plan(target, text, title=title, notebook=notebook)
     if p.reason_empty:
-        code = 400 if p.reason_empty in (_EMPTY, _BAD_TARGET) else 503
+        # The request being wrong (an empty note, a spoken sentence where a
+        # name belongs, a name that already means a note) is a 400; this PC
+        # not being set up is a 503. `reason_code` is which (2026-11-16).
+        bad = (p.reason_code in _BAD_REQUEST_CODES
+               or p.reason_empty in (_EMPTY, _BAD_TARGET))
+        code = 400 if bad else 503
         said = p.reason_empty
         if code == 503 and said == _setup_problem(p.target):
             said = f"{_where(p.target)} isn't set up on your PC - {said}"

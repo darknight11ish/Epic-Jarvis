@@ -36,10 +36,15 @@ file are in a temporary folder. What it proves:
    holds; the owner's typed answers appear in no view of the quiz.
 8. The routes through install(); the patch on the stack of earlier patches; the
    gate tables, the framework file, the reach row, the docs and the file lists.
+9. The one egress gate (2026-11-16): a cloud send the gate refuses is the
+   `egress_blocked` class, in the gate's OWN words with `{why}` filled in,
+   with the mark left alone and nothing sent; the standing cloud switch is on
+   in every other test, because a cloud send is what they are about.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -63,6 +68,13 @@ if str(HERE / "rebuilt") not in sys.path:
 import _stack  # noqa: E402
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-quiz-cloud-"))
+#: `jarvis_presets` and `jarvis_asks_first` read the standing cloud switch and
+#: Lockdown from this variable, NOT from the fake framework's CONFIG_DIR, so
+#: the whole suite is pointed at the same temp folder as everything else. Two
+#: things follow: the egress gate never reads the owner's real ~/.openjarvis in
+#: a test, and `fresh()` below can turn that switch on for the tests that are
+#: about a real send.
+os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP)
 CFG: dict = {}
 TIERS: dict = {}
 AUDIT: list = []
@@ -199,12 +211,23 @@ def set_up(pid, key=KEY, limit=5.0):
         assert got.get("ok"), got
 
 
-def fresh(*, services=("mistral_api",), verdict=YES, on_gate=None, **kw):
+def fresh(*, services=("mistral_api",), verdict=YES, on_gate=None, escalate=True, **kw):
     STORE.clear()
     AUDIT.clear()
     TIERS.clear()
     for f in _TMP.glob("chatbot/*"):
         f.unlink()
+    # The standing cloud switch and Lockdown, in THIS suite's temp folder. A
+    # send only leaves with the switch on, so it is on by default here; the
+    # egress test below is the one that turns it off, and `clean()` in the
+    # chatbot suite uses the same two names.
+    for name in ("escalate-cloud.json", "lockdown.json"):
+        try:
+            (_TMP / name).unlink()
+        except FileNotFoundError:
+            pass
+    if escalate:
+        (_TMP / "escalate-cloud.json").write_text('{"on": true}', encoding="utf-8")
     API._HTTP = None
     API._reset_models_for_tests()
     QC._reset_for_tests()
@@ -609,6 +632,32 @@ def t_http_failures_are_plain_words():
     check("a timeout is plain words", q["state"] == "failed" and "did not answer" in q["message"], str(q))
 
 
+def t_a_refused_quiz_is_the_gates_own_words():
+    """The one egress gate (jarvis_egress_gate.py) is asked at the start of
+    `_exchange`, before any socket opens. With the standing cloud switch off
+    the quiz is not sent, the request carries the `egress_blocked` class, and
+    its message is the gate's own sentence with `{why}` filled in - the owner
+    is told exactly why nothing left, and the local mark is left alone."""
+    import jarvis_egress_gate as G
+    r = fresh(escalate=False)
+    qid = make_quiz()
+    q = req_of(go(qid))
+    check("with the cloud switch off, the quiz is refused as egress_blocked and not sent",
+          r.reqs == [] and q["state"] == "failed" and q["error"] == "egress_blocked", str(q))
+    words = G.check_egress("jarvis_quiz_cloud", API.request_url(API.PRESETS["mistral_api"]),
+                           "", "quiz_cloud").words
+    check("... in the gate's OWN words, with {why} filled in and the marks unchanged",
+          q["message"] == words + " Your marks were not changed."
+          and "{why}" not in q["message"]
+          and all("LOCALCOMMENT" in m["comment"] and m["marked_by"] == "model"
+                  for m in marks_of(qid)),
+          (q["message"], words))
+    check("... the class is HTTP 200 with that one shared sentence",
+          QC.CLASSES["egress_blocked"] == (200, "{why} Your marks were not changed."))
+    check("... and the card still came first, and the HTTP hook was never called",
+          r.events == ["card"] and len(r.cards) == 1, (r.events, len(r.cards)))
+
+
 def t_a_changed_quiz_sends_nothing():
     holder = {}
 
@@ -944,6 +993,7 @@ TESTS = (t_refusals_raise_no_card_and_send_nothing, t_big_and_unready_services,
          t_the_send_goes_through_the_chatbot_drivers_adapter,
          t_a_partly_answered_quiz_sends_only_the_answered_questions,
          t_bad_replies_change_nothing, t_http_failures_are_plain_words,
+         t_a_refused_quiz_is_the_gates_own_words,
          t_a_changed_quiz_sends_nothing, t_a_stub_adapter_and_a_hang,
          t_words_in_answers_and_replies_steer_nothing,
          t_the_module_reads_no_files_and_opens_no_sockets, t_routes_through_install,

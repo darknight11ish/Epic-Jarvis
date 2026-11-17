@@ -3131,7 +3131,7 @@ backend routes, in both directions; the rest are listed here only.
   `BACKEND_ONLY` in `tools/check_parity.py` with its lane named, and that check
   fails the day an app starts calling a route still listed there. **What is
   one-sided when a screen does land:** the measurement itself, because a run
-  loads a model onto one of THIS machine's two cards, times it and unloads it,
+  loads a model onto one of THIS machine's graphics cards, times it and unloads it,
   and a phone has neither the cards nor the lane servers - so the screens that
   start, watch and cancel a run are planned on BOTH apps over this same store,
   and the numbers they draw are the PC's. **And one thing has no route at all,

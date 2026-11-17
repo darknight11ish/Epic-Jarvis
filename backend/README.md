@@ -3175,8 +3175,9 @@ own `_open`:
 The whole resolution lives inside `_completions_url` on purpose: `_open`'s own
 body is `cloud-one-turn.patch`'s context, and a change there would stop that
 patch applying to the file it was written for. That patch therefore runs
-BEFORE this one in `apply-patches.ps1`'s list, and the two are textually
-independent in that order.
+AFTER this one in `apply-patches.ps1`'s list: its last context line is the
+`_completions_url(lane, body),` call this patch writes inside `_open`, so it
+applies on top of this patch's output rather than independently of it.
 
 The lane-to-service mapping (three lane names from the shipped
 `degrade_chain`, plus a fallback for any other) lives in
