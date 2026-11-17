@@ -71,6 +71,14 @@ GATE = "check_egress"
 #: fixtures and its transport is replaced; a production sender is listed only
 #: because it belongs to the second lane, and the reason says so.
 ALLOWED = {
+    # A SUITE, not a sender (2026-11-17). test_speed_record.py builds a fake
+    # usage record in order to price one answer: the host and url below are
+    # fixture STRINGS that are never opened, and the request itself is stubbed.
+    # Without this entry the census named two lines of a test and the `audit`
+    # job went red on every branch built after #1337.
+    "backend/test_speed_record.py":
+        "a suite; its host and URL are fixture strings on a fake usage record, and no "
+        "socket is opened",
     "backend/jarvis_search.py":
         "the web-search sender (second lane): it posts to DeepSeek's tools/search and "
         "is deliberately not wired in this PR; listed so the second lane cannot miss it",
