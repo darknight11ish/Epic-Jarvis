@@ -1,0 +1,28 @@
+                # Memory is now in the transcript, and it is the OWNER'S OWN
+                # data, not outside text. It does NOT latch. `jarvis_gate`'s
+                # latch exists to stop a page, an email, a document or a
+                # pasted file from widening what Jarvis may do (the module's
+                # own "Taint latch" comment says so); a recalled fact is the
+                # owner's own words replayed to Jarvis. The line that used to
+                # be here called `latch_taint(why="memory_injected")`, and
+                # because that latch is one boolean with a label no consumer
+                # reads (jarvis_auto_router.py:311-320), it made every note
+                # write ask for a card and refused setting changes in a turn
+                # the owner alone had shaped (measured 2026-11-16).
+                #
+                # Memory still stays on this PC without it: while Jarvis
+                # injects memory itself, `lanes=[]` is passed to choose() above
+                # (no cloud lane is offered at all), and a cloud turn is
+                # stripped to user-role messages only, so neither this block
+                # nor the local model's restatement of it can travel. The
+                # re-latch below still keeps a REAL outside-text latch alive on
+                # every turn, memory-injected turns included.
+                server_block = recalled
+        if GATING:
+            # Keep an active latch alive while the conversation continues, so
+            # it expires N minutes after the LAST turn, not the first.
+            try:
+                if jarvis_gate.taint_active():
+                    jarvis_gate.latch_taint(why="refresh")
+            except Exception:
+                pass
