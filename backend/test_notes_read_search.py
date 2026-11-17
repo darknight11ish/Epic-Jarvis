@@ -87,7 +87,7 @@ def main():
     r = ask("read my notes")
     check("read: many notes lists the titles and how each starts, then asks",
           r is not None and r.reply.startswith("You have 5 notes.")
-          and "Tell me which one to read." in r.reply
+          and "Say the folder and the note's name, so one is chosen." in r.reply
           and '"Welcome" (Hello world.)' in r.reply
           and '"Shopping" (milk and eggs)' in r.reply,
           f"got {getattr(r, 'reply', None)!r}")

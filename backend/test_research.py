@@ -7,6 +7,7 @@ because the whole design rests on that split being real rather than a comment.
     python3 test_research.py
 """
 import socket, sys, time, traceback
+import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -67,20 +68,91 @@ def repo(name="acme/thing", stars=1200, lic="MIT", pushed="2026-08-01T00:00:00Z"
             "html_url": f"https://github.com/{name}"}
 
 
+def _search_query(q):
+    """The decoded `q` parameter of one request - what GitHub actually parses."""
+    _scheme, _netloc, _path, _params, query, _frag = urllib.parse.urlparse(q.url)
+    return urllib.parse.parse_qs(query).get("q", [""])[0]
+
+
+def _params(q):
+    return urllib.parse.parse_qs(urllib.parse.urlparse(q.url).query)
+
+
 def t_planning_touches_nothing():
     with NoNetwork():
         p = R.plan("an offline pdf annotator that syncs between my phone and laptop",
                    ["pdf annotation", "offline sqlite sync"])
-    check("a plan can be built with the network unplugged", len(p.queries) == 2,
+    # TWO queries per capability now. This used to assert one, because the
+    # single query tried to cover both languages with `language:kotlin OR
+    # language:java` - an operator GitHub's repository search does not have, so
+    # it answered total_count 0 for every idea (measured 2026-11-16). A
+    # repository search cannot be filtered on two languages at once, so the
+    # honest way to cover both is one request each; the card prints both.
+    check("a plan can be built with the network unplugged", len(p.queries) == 4,
           f"{len(p.queries)} queries")
-    check("one query per capability",
-          sorted(q.capability for q in p.queries) == ["offline sqlite sync", "pdf annotation"],
+    check("two queries per capability, one per language",
+          sorted(q.capability for q in p.queries) ==
+          ["offline sqlite sync", "offline sqlite sync",
+           "pdf annotation", "pdf annotation"],
           repr([q.capability for q in p.queries]))
     check("every query names exactly one host", all(q.host == "api.github.com" for q in p.queries))
     check("every query carries a reason a person can read",
           all(len(q.why) > 20 for q in p.queries), repr([q.why for q in p.queries]))
     check("the plan says what refusing costs", "BUILD CUSTOM" in p.if_refused,
           p.if_refused)
+
+
+def t_a_capability_is_asked_once_per_language():
+    """One request per (capability x language), because GitHub needs two.
+
+    WHAT WAS MEASURED, and this is why the shape changed: GitHub's repository
+    search has no OR operator. Measured 2026-11-16, one request per row, with
+    `gh api "search/repositories?q=..."` at per_page=1:
+
+        jarvis language:kotlin OR language:java   -> total_count 0
+        jarvis language:kotlin                    -> total_count 1592
+        jarvis language:java                      -> total_count 1283
+
+    (the audit that found the defect measured the same 0, plus 2875 for the two
+    filters with no operator and 531,907 for `jarvis OR kotlin`). So the
+    operator did not widen the search, it killed it: every plan asked and every
+    idea got zero repositories back. The words GitHub gets are still only the
+    locally derived terms; what changed is that the language filter is sent as
+    two requests instead of one unsupported expression.
+    """
+    cap = "offline sqlite sync"
+    p = R.plan("an app that works offline", [cap])
+    check("one capability is now two requests, not one", len(p.queries) == 2,
+          f"{len(p.queries)} queries")
+    langs = sorted(_search_query(q).rsplit("language:", 1)[-1] for q in p.queries)
+    check("... one for Kotlin and one for Java", langs == ["java", "kotlin"],
+          repr(langs))
+
+    for q in p.queries:
+        text = _search_query(q)
+        lang = text.rsplit("language:", 1)[-1]
+        check(f"the {lang} query carries exactly one language filter",
+              text.count("language:") == 1, text)
+        check(f"the {lang} query carries no OR GitHub cannot parse",
+              " or " not in text.lower(), text)
+        # The local-only rule is untouched: the words before the language
+        # filter are the same words `terms()` derived locally, nothing added.
+        check(f"the {lang} query sends only the locally derived words",
+              text.rsplit(" language:", 1)[0] == " ".join(R.terms(cap, limit=4)),
+              text)
+        check(f"the card's reason for the {lang} request names {lang}",
+              lang in q.why.lower(), q.why)
+        check(f"... and the {lang} request keeps the stars-first search",
+              _params(q).get("sort") == ["stars"]
+              and _params(q).get("order") == ["desc"]
+              and _params(q).get("per_page") == ["10"],
+              q.url)
+
+    card = R.describe(p)
+    check("the approval card prints BOTH outbound URLs in full",
+          all(q.url in card for q in p.queries), card)
+    check("... and its count line says two requests, so nothing is elided",
+          "2 request(s)" in card, card)
 
 
 def t_the_card_prints_the_whole_request():
@@ -108,10 +180,13 @@ def t_run_refuses_without_approval():
     with NoNetwork():
         out = R.run(p, approved=False)
     check("approved=False is the same as not asking", out["ok"] is False)
-    # CONTROL: with approval and an injected fetch it does run.
+    # CONTROL: with approval and an injected fetch it does run. Two calls,
+    # because the plan asks one question per language (see
+    # t_a_capability_is_asked_once_per_language) - it used to be one call, and
+    # that was the same single over-broad query this change replaced.
     calls = []
     out = R.run(p, approved=True, fetch=lambda u: (calls.append(u), {"items": [repo()]})[1])
-    check("CONTROL: an approved plan does execute", out["ok"] is True and len(calls) == 1,
+    check("CONTROL: an approved plan does execute", out["ok"] is True and len(calls) == 2,
           repr(out))
 
 
@@ -331,7 +406,8 @@ def t_a_repo_pushed_moments_ago_is_never_negative_years_old():
 
 
 if __name__ == "__main__":
-    for fn in (t_planning_touches_nothing, t_the_card_prints_the_whole_request,
+    for fn in (t_planning_touches_nothing, t_a_capability_is_asked_once_per_language,
+               t_the_card_prints_the_whole_request,
                t_run_refuses_without_approval,
                t_authenticated_requests_are_opt_in_and_disclosed,
                t_grading, t_the_matrix,

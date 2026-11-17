@@ -1313,6 +1313,54 @@ def _strip_meta_instruction(text) -> Optional[str]:
     return stripped or None
 
 
+# --------------------------------------------------------------------------
+#   "stop" - the owner's one word for Stop everything (2026-11-16)
+# --------------------------------------------------------------------------
+# The tray's "Stop everything" row and Alt+Shift+X call POST /api/stop_all,
+# which is `jarvis_stop_all.stop_all()` - the same function this intent calls
+# in process, so chat reaches exactly the place the tray does. It needs no
+# approval card and asks for none: it stops a task and an answer's tools, and
+# nothing it does can start, approve or write anything (the module's own
+# "WHAT IT NEVER DOES" section; the route is token-checked and never carded).
+#
+# WHOLE SENTENCES ONLY, and that is the safety rule: "stop the reminder",
+# "stop the timer", "stop recording" and "stop listening" already have their
+# own owners (the scheduler, jarvis_focus, the phone's recorder, the wake
+# word), and a wider "stop <anything>" grammar would swallow them. Only the
+# words a person actually says when they mean "stop everything" are claimed.
+_STOP_EVERYTHING = re.compile(
+    r"(?:please\s+|jarvis\s+)?(?:"
+    r"stop|stop\s+it|stop\s+that|stop\s+now|stop\s+everything|"
+    r"stop\s+all(?:\s+of\s+it)?|be\s+quiet|quiet\s+down|shut\s+up|"
+    r"enough|that'?s\s+enough|enough\s+of\s+that|"
+    r"stop\s+talking|stop\s+speaking"
+    r")\s*[.!]*")
+
+
+def _run_stop_everything() -> Result:
+    """Stop everything, through `jarvis_stop_all.stop_all()` itself.
+
+    The tray's route calls this same function, so the answer is the module's
+    own sentence ("Stopped everything. ..." / "Nothing was running...") and no
+    second copy of it lives here. No gate, no card: a stop only ever makes
+    Jarvis do less. A PC whose backend predates the module says so and stops
+    nothing - it never pretends something was stopped.
+    """
+    try:
+        import jarvis_stop_all as SA
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("This PC's Jarvis cannot stop anything yet - run "
+                      "apply-patches.ps1 on the PC. Nothing was stopped.",
+                      "stop_all_refused")
+    try:
+        out = SA.stop_all(by="chat")
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"Nothing was stopped: the stop failed "
+                      f"({type(exc).__name__}).", "stop_all_refused")
+    said = str((out or {}).get("message") or "").strip()
+    return Result(said or SA.NOTHING, "stop_all")
+
+
 def match(text, now: Optional[float] = None,
           conversation: Optional[str] = None) -> Optional[Intent]:
     """The intent of a sentence, or None when it is not one of ours.
@@ -1343,7 +1391,13 @@ def match(text, now: Optional[float] = None,
     # Names become FILE NAMES: the matching form is lowercased, so restore the
     # owner's capitals from the raw sentence before any handler uses them. On a
     # case-sensitive filesystem "Shopping" -> "shopping" is a different file.
-    for key in ("name", "tname", "folder", "new", "old", "target", "tag"):
+    # `title` is here for the note read/open handlers (2026-11-16): a title can
+    # be a vault PATH ("Private & Shared/Workout/Workout Log"), and
+    # `resolve_note`'s exact-path tier compares it with the note's real path, so
+    # a lowercased one never matches. Titles that are not paths are matched
+    # case-insensitively by the resolver, so restoring them changes nothing
+    # there.
+    for key in ("name", "tname", "folder", "new", "old", "target", "tag", "title"):
         if got is not None and got.f.get(key):
             got.f[key] = _restore(text, got.f[key])
     # The template's own name is the LAST match in its sentence ("save my
@@ -1372,6 +1426,15 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _safety_intent(s)
     if got is not None:
         return got
+
+    # --- "stop everything", said plainly (2026-11-16) -----------------------
+    # RIGHT AFTER the safety refusals and before every other grammar, because
+    # it is the one sentence that must never be talked around: the tray's own
+    # row and hotkey reach POST /api/stop_all, and this is the same action from
+    # chat. Whole sentences only (see `_STOP_EVERYTHING`), so "stop the
+    # reminder" and "stop listening" keep their own lanes.
+    if _STOP_EVERYTHING.fullmatch(s):
+        return Intent("stop_all")
 
     # --- the cloud/API honesty questions (2026-10-31) -----------------------
     # These come before the feature answers: the owner asked the local model
@@ -14089,11 +14152,21 @@ _GITHUB_THING = re.compile(
     r"\b(?:github|pull\s*requests?|prs?|issues?|repos?(?:itory|itories)?|"
     r"commits?|branches?|workflows?)\b")
 _GITHUB_CHANGE_VERB = re.compile(
-    r"\b(?:merge|push|commit|close|delete|remove|approve)\b")
+    r"\b(?:merge|push|commit|close|delete|remove)\b")
 _GITHUB_ASK_LEAD = re.compile(
     r"^(?:(?:hey\s+|ok\s+|okay\s+)?jarvis[,:]?\s+)?"
     r"(?:(?:can|could|would|will|do|did|have|are)\s+(?:you|jarvis)\b"
-    r"|(?:please\s+)?(?:merge|push|commit|close|delete|remove|approve)\b)")
+    r"|(?:please\s+)?(?:merge|push|commit|close|delete|remove)\b)")
+#: "approve a pull request" is NOT the merge question (2026-11-16). Measured
+#: live: "approve that pull request" answered "Yes." - the merge shape's own
+#: opening - while Jarvis can never approve a pull request at all. The verb was
+#: in `_GITHUB_CHANGE_VERB`, so it reached the one GitHub shape that begins
+#: "Yes"; it is out of that list now and has this shape and its own refusal.
+#: `approve` (not "approved") and `approving` only, so an ordinary past-tense
+#: sentence about the owner's own approval keeps the model.
+_GITHUB_APPROVE_ASK = re.compile(
+    r"\bapprove(?:s|ing)?\b[^.?!]{0,40}\b(?:pull\s*requests?|prs?|pr\s*#?\d+)\b"
+    r"|\b(?:pull\s*requests?|prs?)\b[^.?!]{0,40}\bapprove(?:s|ing)?\b")
 
 #: Asking for one of the three real ACTIONS, so the answer can say "one card".
 _GITHUB_ACTION_ASK = re.compile(
@@ -14276,7 +14349,18 @@ _GITHUB_CODE_CONTEXT = re.compile(
     r"\b(?:github|repos?(?:itory|itories)?|code|commit|branch|project)\b")
 _GITHUB_CODE_VERB = re.compile(
     r"\bclone(?:s|d|ing)?\b"
-    r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b(?!\s+up\b)")
+    # (?!\s+requests?) - "pull request" is GitHub's own NOUN, not a request to
+    # copy a repository (2026-11-16, measured live: "show my github pull
+    # requests" was refused with "No - I never copy a repository to this PC").
+    # The lookahead must sit on the verb, so "pull my repository" still
+    # matches and keeps its refusal.
+    r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b"
+    r"(?!\s+up\b)(?!\s+requests?\b)"
+    # "check out my repo" is the same clone request in git's words. It is
+    # claimed only when the sentence itself names a repository or a branch, so
+    # "check out this code" (a request to look at code) keeps its own path.
+    r"|\bcheck(?:s|ed|ing)?\s+out\b"
+    r"(?=[^.!?]{0,40}\b(?:github|repos?(?:itory|itories)?|branches?)\b)")
 #: An imperative SETTINGS sentence, not a question about what Jarvis can do
 #: (added 2026-11-10). The wave-16 tool names carry a code verb inside them -
 #: "the github fix and push tool", and the natural "github pull request …"
@@ -14460,6 +14544,18 @@ def _self_github(s: str) -> Optional[Intent]:
     # A request to DO one of the never-list things, or to ask whether it can.
     # `token`/`account` are excluded: "delete my GitHub token" is a disconnect
     # question and belongs to the accounts answer below, not to this refusal.
+    if (_GITHUB_APPROVE_ASK.search(s)
+            # A request to JARVIS, not an informational "how do I approve one
+            # myself": the normaliser strips "can/could you" and "please", so a
+            # request arrives as the bare "approve ..." imperative, while the
+            # how-to shapes keep their lead words. `you`/`jarvis` keeps
+            # "do you approve ..." and "what happens if you approve ...".
+            and (s.startswith(("approve", "approving"))
+                 or re.search(r"\b(?:you|jarvis)\b", s))):
+        # BEFORE the merge/never-list below and before every model path: an
+        # approval is the one GitHub verb Jarvis can never do, and the merge
+        # shape's "Yes - with ONE approval card" was the wrong answer to it.
+        return Intent("github_self", {"shape": "approve"})
     if (_GITHUB_ASK_LEAD.match(s) and _GITHUB_CHANGE_VERB.search(s)
             and (_GITHUB_THING.search(s) or "merge" in s)
             and not re.search(r"\b(?:token|account|connection|link)\b", s)):
@@ -17432,7 +17528,8 @@ _CREATE_NOTE_HEAD = re.compile(
 #: called Notes on Physics").
 _TITLE_STOPS = (
     re.compile(r","),
-    re.compile(r"\s+and\s+(?=(?:then\s+)?(?:pin|unpin|add|put|write|say|saying|use|set)\b)"),
+    re.compile(r"\s+and\s+(?=(?:then\s+)?(?:pin|unpin|add|put|write|say|saying|use|set|"
+               r"favourite|favorite|unfavourite|unfavorite)\b)"),
     re.compile(r"\s+(?=(?:pin|unpin)\b)"),
     re.compile(r"\s+(?=(?:with|saying|containing)\s)"),
     re.compile(r"\s+(?=(?:using|dated)\s+(?:today|todays|today's|yesterday|tomorrow|\d|"
@@ -17442,6 +17539,15 @@ _TITLE_STOPS = (
 _CLAUSE_SEP = re.compile(r"^(?:[\s,;.]+|and\s+|then\s+|also\s+)+")
 _PIN_CLAUSE = re.compile(
     r"^(?P<how>unpin|pin)\s+(?:it|this(?:\s+note)?|the\s+note|the\s+new\s+note)\b")
+#: "favourite it" / "unfavorite it" on a NEW note (2026-11-16). A separate
+#: property from `pinned` by the owner's own choice, so a note can be either,
+#: both or neither. The YAML key is always the US spelling `favorite`; both
+#: spellings are accepted in the sentence, and the read-back accepts either key
+#: so a hand-written British one still reads true.
+_FAVOURITE_CLAUSE = re.compile(
+    r"^(?P<how>unfavourite|unfavorite|favourite|favorite)\s+"
+    r"(?:it|this(?:\s+note)?|the\s+note|the\s+new\s+note)\b")
+_FAVOURITE_KEY = "favorite"
 #: A date clause's lead word. "add"/"put"/"with" are also body verbs, so a
 #: date is taken only when a real date phrase follows - "add milk" stays body.
 _DATE_LEAD = re.compile(
@@ -17464,12 +17570,20 @@ _BODY_LEAD = re.compile(
 #: "went to the gym using yesterday"): taken back out of the body.
 _BODY_TAIL_PIN = re.compile(
     r",?\s+(?:and\s+)?(?P<how>unpin|pin)\s+(?:it|this(?:\s+note)?|the\s+note)\s*$")
+#: The same at the end of a body clause, for the separate favourite property
+#: (2026-11-16): "add squats, favourite it".
+_BODY_TAIL_FAV = re.compile(
+    r",?\s+(?:and\s+)?(?P<how>unfavourite|unfavorite|favourite|favorite)\s+"
+    r"(?:it|this(?:\s+note)?|the\s+note)\s*$")
 _BODY_TAIL_DATE = re.compile(r",?\s+(?:using|dated|on)\s+(?P<when>[^,]+?)\s*$")
 #: The same two clauses for a BODY-ONLY create ("write a note about X, pin
 #: it"). The comma/"and" is required here, so an ordinary topic keeps its
 #: words ("a note about how to pin it").
 _FREE_TAIL_PIN = re.compile(
     r"(?:,|\s+and)\s+(?P<how>unpin|pin)\s+(?:it|this(?:\s+note)?)\s*$")
+_FREE_TAIL_FAV = re.compile(
+    r"(?:,|\s+and)\s+(?P<how>unfavourite|unfavorite|favourite|favorite)\s+"
+    r"(?:it|this(?:\s+note)?)\s*$")
 _FREE_TAIL_DATE = re.compile(
     r"(?:,|\s+and)\s+(?:using|dated)\s+(?P<when>[^,]+?)\s*$")
 #: A bound on the parsed title. A "title" longer than this is not a name, so
@@ -17577,16 +17691,25 @@ def _note_date_clause(text: str, now: float):
 
 
 def _note_body_clause(text: str, now: float):
-    """(body, pinned, date) for one body clause, a trailing pin/date removed.
+    """(body, pinned, favourite, date) for one body clause, a tail removed.
 
     `pinned` is None when the clause said nothing about pinning (a new note is
-    not pinned), True for "pin it" and False for "unpin it".
+    not pinned), True for "pin it" and False for "unpin it". `favourite` is the
+    same for the separate `favorite` property (2026-11-16): None when the
+    clause said nothing, True for "favourite it" and False for "unfavourite
+    it". A brand-new note with "unfavourite it" writes nothing, exactly as a
+    new note with "unpin it" does - there is no property to remove.
     """
-    body, pinned, date = str(text or "").strip(), None, ""
+    body, pinned, favourite, date = str(text or "").strip(), None, None, ""
     for _ in range(4):
         m = _BODY_TAIL_PIN.search(body)
         if m:
             pinned = m.group("how") == "pin"
+            body = body[:m.start()].strip()
+            continue
+        m = _BODY_TAIL_FAV.search(body)
+        if m:
+            favourite = m.group("how") in ("favourite", "favorite")
             body = body[:m.start()].strip()
             continue
         m = _BODY_TAIL_DATE.search(body)
@@ -17601,7 +17724,7 @@ def _note_body_clause(text: str, now: float):
     # the words - the same reading the older `_NOTE_CREATE_NAMED` grammar gives.
     body = re.sub(r"\s+(?:in|into|to)\s+it$", "", body).strip()
     body = re.sub(r"^that\s+", "", body).strip()
-    return body, pinned, date
+    return body, pinned, favourite, date
 
 
 def _note_title_and_rest(rest: str):
@@ -17616,8 +17739,8 @@ def _note_title_and_rest(rest: str):
 
 
 def _note_create_clauses(rest: str, now: float):
-    """(body parts, pinned, date) from the words after a note's title."""
-    body, pinned, date = [], None, ""
+    """(body parts, pinned, favourite, date) from the words after a title."""
+    body, pinned, favourite, date = [], None, None, ""
     rest = str(rest or "")
     for _ in range(12):
         rest = _CLAUSE_SEP.sub("", rest).strip()
@@ -17633,6 +17756,11 @@ def _note_create_clauses(rest: str, now: float):
             pinned = m.group("how") == "pin"
             rest = rest[m.end():]
             continue
+        m = _FAVOURITE_CLAUSE.match(rest)
+        if m:
+            favourite = m.group("how") in ("favourite", "favorite")
+            rest = rest[m.end():]
+            continue
         got = _note_date_clause(rest, now)
         if got is not None:
             date, used = got
@@ -17640,24 +17768,28 @@ def _note_create_clauses(rest: str, now: float):
             continue
         m = _BODY_LEAD.match(rest)
         if m:
-            piece, said_pin, said_date = _note_body_clause(m.group("text"), now)
+            piece, said_pin, said_fav, said_date = _note_body_clause(m.group("text"), now)
             if piece:
                 body.append(piece)
             if said_pin is not None:
                 pinned = said_pin
+            if said_fav is not None:
+                favourite = said_fav
             if said_date:
                 date = said_date
             rest = ""
             continue
-        piece, said_pin, said_date = _note_body_clause(rest, now)
+        piece, said_pin, said_fav, said_date = _note_body_clause(rest, now)
         if piece:
             body.append(piece)
         if said_pin is not None:
             pinned = said_pin
+        if said_fav is not None:
+            favourite = said_fav
         if said_date:
             date = said_date
         rest = ""
-    return body, pinned, date
+    return body, pinned, favourite, date
 
 
 def _note_smart_create(s: str, now: float) -> Optional[Intent]:
@@ -17675,24 +17807,30 @@ def _note_smart_create(s: str, now: float) -> Optional[Intent]:
     title = title.strip().strip("\"'`").strip()
     if not title or not _note_title_sane(title):
         return None
-    body, pinned, date = _note_create_clauses(rest, now)
+    body, pinned, favourite, date = _note_create_clauses(rest, now)
     fields = {"name": title, "text": " ".join(body).strip()}
     if pinned is True:
         fields["pinned"] = True
+    if favourite is True:
+        fields[_FAVOURITE_KEY] = True
     if date:
         fields["date"] = date
     return Intent("note_create", fields)
 
 
-def _note_document(text: str, *, pinned=None, date: str = "") -> str:
-    """The bytes of a new note: front matter for pin/date, then the words.
+def _note_document(text: str, *, pinned=None, favourite=None, date: str = "") -> str:
+    """The bytes of a new note: front matter for pin/favourite/date, then the words.
 
-    With neither a pin nor a date this returns `text` unchanged, which is what
-    keeps every older create byte-for-byte as it was.
+    With none of the three this returns `text` unchanged, which is what keeps
+    every older create byte-for-byte as it was. `favourite` writes the separate
+    `favorite: true` property (2026-11-16); it never writes `pinned`, and
+    `pinned` never writes `favorite`.
     """
     props = []
     if pinned is True:
         props.append("pinned: true")
+    if favourite is True:
+        props.append(_FAVOURITE_KEY + ": true")
     if date:
         props.append("date: " + str(date))
     if not props:
@@ -17703,10 +17841,12 @@ def _note_document(text: str, *, pinned=None, date: str = "") -> str:
 
 
 def _note_create_extra_said(f: dict) -> str:
-    """The one added sentence that says a note was pinned and/or dated."""
+    """The one added sentence that says a note was pinned/favourited/dated."""
     bits = []
     if f.get("pinned") is True:
         bits.append("pinned")
+    if f.get(_FAVOURITE_KEY) is True:
+        bits.append("favourited")
     if f.get("date"):
         bits.append("dated " + str(f.get("date")))
     return ("It is " + ", ".join(bits) + ".") if bits else ""
@@ -17768,11 +17908,50 @@ _NOTE_TAG_WITH = re.compile(
     r"(?P<tag>[#A-Za-z0-9_/-]+)\b.*")
 #: "pin my Workout Log note" / "unpin the gym note" (2026-11-09). ONE existing
 #: note, so it is an EDIT and keeps the one card, guardian copy and undo the
-#: customize route already has. A bare "pin it"/"pin this note" with no name is
-#: deliberately not matched: nothing here remembers which note that was.
+#: customize route already has. A bare "pin it" with no note word is
+#: deliberately not matched: nothing here remembers which note that was. A
+#: sentence whose only "name" is an article or the word "note" ("pin a note",
+#: "pin this note") asks which note instead (2026-11-16) - it never becomes a
+#: lookup of a note called "a".
 _NOTE_PIN = re.compile(
     r"(?:please\s+)?(?P<how>unpin|pin)\s+(?:my\s+|the\s+|this\s+)?"
     r"(?P<name>.+?)(?:\s+note)?\s*$")
+#: "favourite my workout log note" / "unfavorite it" (2026-11-16). The owner's
+#: own choice: a SEPARATE property from `pinned`, never an alias of it, so a
+#: note can be pinned, favourited, both or neither. The same one existing note
+#: edit as `_NOTE_PIN`, the same ONE `edit_vault_note` card, guardian copy and
+#: undo - only the key differs (`favorite`, the US spelling, in the YAML).
+#: Both spellings are accepted in the sentence.
+_NOTE_FAVOURITE = re.compile(
+    r"(?:please\s+)?(?P<how>unfavourite|unfavorite|favourite|favorite)\s+"
+    r"(?:my\s+|the\s+|this\s+)?(?P<name>.+?)(?:\s+note)?\s*$")
+#: "is my workout log note pinned?" / "is it favourited?" (2026-11-16): the
+#: read-back that makes pin and favourite usable, answered from the note's own
+#: front matter. Whole sentences only, so a sentence that merely mentions a pin
+#: ("add a pinned section") keeps its own path.
+_NOTE_FLAG_QUESTION = re.compile(
+    r"is\s+(?:my\s+|the\s+|our\s+|this\s+)?(?P<name>.+?)\s+note\s+"
+    r"(?P<what>pinned|favourited|favorited|favourite|favorite)\s*\??$")
+#: A name that is only an article (or the literal noun) is not a name: "pin a
+#: note" means "which note?", never a note literally called "a" (2026-11-16,
+#: measured: it resolved to note_customize with {'name': 'a'}). Pronouns are
+#: deliberately NOT here: "pin it" carries no note word, and a sentence about
+#: anything else must keep the model, which is the older rule the `_NOTE_PIN`
+#: comment above already states.
+_NOTE_NAME_EMPTY = frozenset({"a", "an", "the", "one", "some", "note"})
+#: The fixed ask for a note write with no name. The create path asks the same
+#: way (`NOTE_CREATE_ASK_SAID`); no title is listed, because a write path must
+#: not name notes while the lists are hidden and this answer runs before the
+#: hidden-lists refusal would.
+NOTE_WHICH_SAID = (
+    'Which note? Say the note\'s name after "{verb}", like "{verb} my Workout '
+    'Log note". Nothing was changed.')
+
+
+def _note_name_given(name: str) -> bool:
+    """True when the parsed name is a real name, not just an article."""
+    return str(name or "").strip().casefold() not in _NOTE_NAME_EMPTY
+
 #: Several notes at once: refused, never quietly done to the first one.
 _NOTE_WRITE_BATCH = re.compile(
     r"(?:add|append|write|tag|label|create|make|put)\b.*\b"
@@ -18055,10 +18234,12 @@ def _run_note_create(f: dict) -> Result:
     if not path:
         return Result("What should the new note be called? Say \"create a note called ...\".",
                       "note_create_refused")
-    # A pin and/or a date from the owner's one sentence become the new note's
-    # own front matter (2026-11-09); with neither, `text` is passed through
-    # unchanged, so every older create writes exactly the bytes it wrote before.
+    # A pin, a favourite and/or a date from the owner's one sentence become the
+    # new note's own front matter (2026-11-09, favourite 2026-11-16); with none,
+    # `text` is passed through unchanged, so every older create writes exactly
+    # the bytes it wrote before.
     note_text = _note_document(text, pinned=f.get("pinned"),
+                               favourite=f.get(_FAVOURITE_KEY),
                                date=str(f.get("date") or ""))
     try:
         import jarvis_notes_edit as E
@@ -18448,6 +18629,90 @@ def _run_note_customize(f: dict, action: str, card: str) -> Result:
                               "note_customize_refused")
 
 
+def _run_note_customize_ask(f: dict) -> Result:
+    """"pin a note" with no name: ask which note, writing NOTHING (2026-11-16).
+
+    Measured: "pin a note" was read as a note called "a" and went to the
+    customize route with that name, so the owner got a "no note called a" style
+    refusal for a sentence that simply had no name in it. This asks the one
+    question the other note paths ask ("which note?"), in fixed words, and
+    names no title - the hidden-lists rule is kept whether or not the lists are
+    hidden, because a write path lists nothing.
+    """
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    verb = str(f.get("verb") or "pin").strip().lower() or "pin"
+    return Result(NOTE_WHICH_SAID.format(verb=verb), "note_customize_ask")
+
+
+def _note_flag_state(text: str, key: str):
+    """True/False for a top-level front-matter `key`, or None when unreadable.
+
+    Read-only. A property is a line that starts AT COLUMN 0 (`key: value`), the
+    shape `jarvis_notes_edit._property_edit` writes, so a nested map's own
+    `pinned:` line can never be mistaken for the note's property. `favorite`
+    and the British `favourite` both count when reading the favourite flag, so
+    a hand-written note reads true; Jarvis only ever writes `favorite`.
+    """
+    raw = str(text or "")
+    if not raw.startswith("---"):
+        return False                     # no front matter: the flag is not set
+    keys = ("favorite", "favourite") if key == _FAVOURITE_KEY else (key,)
+    lines = raw.splitlines()
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return False                 # front matter closed, the key is absent
+        m = re.match(r"([A-Za-z0-9_.-]+)\s*:\s*(.*)$", line)
+        if not m or m.group(1).casefold() not in keys:
+            continue
+        value = m.group(2).strip().strip("\"'").casefold()
+        return value in ("true", "yes", "on", "1")
+    return None                          # opened and never closed: unreadable
+
+
+def _run_note_flag(f: dict) -> Result:
+    """"is my workout log note pinned / favourited?" - the note's own property.
+
+    Read-only: no card, no write, no model. The answer names the note's title
+    (the owner named it) and the real state of its front matter; a note with no
+    front matter is not pinned and not favourited, which is what the editor
+    itself would show.
+    """
+    if _notes_hidden() or _notes_write_hidden():
+        return Result(NOTES_READ_HIDDEN, "note_flag")
+    name = str(f.get("name") or "").strip()
+    flag = str(f.get("flag") or "pinned")
+    label = "pinned" if flag == "pinned" else "favourited"
+    if not name:
+        return Result('Which note? Say "is my Workout Log note ' + label + '?"',
+                      "note_flag")
+    path, why, title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(_note_no_match(name), "note_flag")
+        return Result(why, "note_flag")
+    try:
+        import jarvis_notes_edit as E
+        from urllib.parse import quote
+        code, body = E.handle_read("path=" + quote(path, safe=""))
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"I could not read that note's properties "
+                      f"({type(exc).__name__}).", "note_flag")
+    if code != 200 or not isinstance(body, dict):
+        return Result(_note_unreadable(body), "note_flag")
+    state = _note_flag_state(str(body.get("text") or ""), flag)
+    title = title or str(body.get("title") or "")
+    named = ('"' + title + '"') if title else "that note"
+    if state is None:
+        return Result(f"I could not read {named}'s front matter, so I will not say "
+                      f"whether it is {label}.", "note_flag")
+    if state:
+        change = ("unpin" if flag == "pinned" else "unfavourite")
+        return Result(f"Yes - {named} is {label}. Say \"{change} my "
+                      f"{title or 'note'} note\" to change it.", "note_flag")
+    return Result(f"No - {named} is not {label}.", "note_flag")
+
+
 def _run_template_create(f: dict) -> Result:
     if _notes_write_hidden():
         return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
@@ -18634,17 +18899,26 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     m = _NOTE_CREATE_FREE.fullmatch(s)
     if m:
         text = (m.group("text") or m.group("text2") or "").strip()
-        # A body-only create can still carry a pin or a date at its END
-        # ("write a note for me about the gym, pin it"). Only the ", pin it" /
-        # "and pin it" forms are read, so an ordinary topic keeps every word
-        # ("a note about how to pin it"); and with neither clause the fields
-        # are exactly what they were before this reader existed.
+        # A body-only create can still carry a pin, a favourite or a date at
+        # its END ("write a note for me about the gym, pin it"). Only the
+        # ", pin it" / "and pin it" forms are read, so an ordinary topic keeps
+        # every word ("a note about how to pin it"); and with no clause the
+        # fields are exactly what they were before this reader existed.
         fields = {"name": "", "text": text}
-        m2 = _FREE_TAIL_PIN.search(text)
-        if m2 and text[:m2.start()].strip():
-            fields["text"] = text[:m2.start()].strip()
-            if m2.group("how") == "pin":
-                fields["pinned"] = True
+        for _ in range(3):
+            m2 = _FREE_TAIL_PIN.search(fields["text"])
+            if m2 and fields["text"][:m2.start()].strip():
+                fields["text"] = fields["text"][:m2.start()].strip()
+                if m2.group("how") == "pin":
+                    fields["pinned"] = True
+                continue
+            m2 = _FREE_TAIL_FAV.search(fields["text"])
+            if m2 and fields["text"][:m2.start()].strip():
+                fields["text"] = fields["text"][:m2.start()].strip()
+                if m2.group("how") in ("favourite", "favorite"):
+                    fields[_FAVOURITE_KEY] = True
+                continue
+            break
         m2 = _FREE_TAIL_DATE.search(fields["text"])
         if m2:
             said = _note_date_phrase(m2.group("when"), now)
@@ -18821,14 +19095,45 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     m = _NOTE_PIN.fullmatch(s)
     if m:
         name = m.group("name").strip()
-        if name and name.lower() != "note" and (_says_note or _named_note_exists(name)):
-            pin_it = m.group("how") == "pin"
+        pin_it = m.group("how") == "pin"
+        if not _note_name_given(name):
+            # "pin a note" is not a note called "a" (2026-11-16): it asks which
+            # note, writing nothing, exactly as the create path asks for a name.
+            return Intent("note_customize_ask",
+                          {"verb": "pin" if pin_it else "unpin"})
+        if name.lower() != "note" and (_says_note or _named_note_exists(name)):
             fields = {"name": name,
                       "op": "set_property" if pin_it else "remove_property",
                       "key": "pinned"}
             if pin_it:
                 fields["value"] = "true"
             return Intent("note_customize", fields)
+    # "favourite my workout log note" / "unfavorite ..." (2026-11-16). Same one
+    # existing-note edit as the pin above, a SEPARATE property (`favorite`), so
+    # nothing about `pinned` changes.
+    m = _NOTE_FAVOURITE.fullmatch(s)
+    if m:
+        name = m.group("name").strip()
+        how = m.group("how").lower()
+        fav_it = how in ("favourite", "favorite")
+        if not _note_name_given(name):
+            return Intent("note_customize_ask",
+                          {"verb": how})
+        if name.lower() != "note" and (_says_note or _named_note_exists(name)):
+            fields = {"name": name,
+                      "op": "set_property" if fav_it else "remove_property",
+                      "key": _FAVOURITE_KEY}
+            if fav_it:
+                fields["value"] = "true"
+            return Intent("note_customize", fields)
+    # "is my workout log note pinned?" / "... favourited?" (2026-11-16): the
+    # read-back, from the note's own front matter. Read-only: no card, no write.
+    m = _NOTE_FLAG_QUESTION.fullmatch(s)
+    if m and _note_name_given(m.group("name")):
+        what = m.group("what").lower()
+        return Intent("note_flag", {
+            "name": m.group("name").strip(),
+            "flag": "pinned" if what == "pinned" else _FAVOURITE_KEY})
     # A create-shaped sentence the title reader declined asks for the name; it
     # never becomes a file name, a daily note, or the stale "not built" refusal.
     if _NOTE_CREATE_SHAPE.match(s):
@@ -19425,13 +19730,26 @@ def _note_no_match(title: str) -> str:
     return said + (" Your vault is the folder {0}.".format(root) if root else "")
 
 
+#: The resolver's own sentence for an ambiguous note (jarvis_notes.resolve_note,
+#: the module's ambiguous_section refusals). Repeating it here rather than a
+#: second "tell me which one" wording is the point: the folder plus the name is
+#: the answer its exact-path tier accepts, and the owner's clarification must
+#: name the thing that actually selects a note. Two notes can lowercase to the
+#: same title, so the title alone cannot (2026-11-16).
+NOTE_CHOOSE_BY_FOLDER = "Say the folder and the note's name, so one is chosen."
+
+
 def _note_choices_said(title: str = "") -> Result:
-    """Which note? - each candidate's title and how it starts, then the ask.
+    """Which note? - each candidate's title, folder and start, then the ask.
 
     A read that names no title ("read my notes") and a title that matches more
     than one note ("read my Note") are the same question, so they get the same
-    answer: at most `CHAT_SEARCH_SHOWN` titles with the first line of each, and
-    one plain sentence asking which. Exactly one candidate is READ, not listed.
+    answer: at most `CHAT_SEARCH_SHOWN` candidates with the folder and the first
+    line of each, and the resolver's own sentence asking which. The folder is
+    printed BESIDE each candidate (2026-11-16): two notes whose titles lowercase
+    to the same string are told apart by nothing else, and saying one of the two
+    titles back re-asks the identical question. Exactly one candidate is READ,
+    not listed.
     """
     try:
         import jarvis_notes_edit as NE
@@ -19451,14 +19769,19 @@ def _note_choices_said(title: str = "") -> Result:
     parts = []
     for row in rows:
         start = str(row.get("start") or "").strip()
+        folder = str(row.get("folder") or "").strip()
         name = '"' + str(row.get("title") or "") + '"'
+        # The folder is the fact that chooses between two same-named notes. A
+        # note at the vault ROOT prints nothing extra: there is no folder to
+        # say, and the older "title (start)" shape stays byte-for-byte.
+        where = (" in " + folder) if folder else ""
         # The note's own first line is kept verbatim (it is a quote), in
         # brackets so its own full stop is not the sentence's.
-        parts.append(name + (" (" + start + ")" if start else ""))
+        parts.append(name + where + (" (" + start + ")" if start else ""))
     said = head + ". " + "; ".join(parts) + "."
     if body.get("truncated"):
         said += " I have shown the first {0}.".format(len(rows))
-    return Result(said + " Tell me which one to read.", "note_read")
+    return Result(said + " " + NOTE_CHOOSE_BY_FOLDER, "note_read")
 
 
 def _run_note_read(title: str) -> Result:
@@ -23550,6 +23873,46 @@ GITHUB_NEVER_FALLBACK = (
     "pull request, dispatches a workflow or touches gists. The reads are card-free "
     "by default, and the GitHub reads switch in Settings, What asks first, can put "
     "that card back.")
+#: The approve-a-pull-request refusal (2026-11-16). Measured: "approve that
+#: pull request" answered "Yes." because "approve" was one of the GitHub change
+#: verbs and every one of those reached the merge shape. Jarvis can never post
+#: an APPROVE review - it would hand the owner's own sign-off to the assistant
+#: - and the two places the product records that were already saying so:
+#: `jarvis_github.NEVER` holds "approve_pr" and `jarvis_grants.BANNED_ACTIONS`
+#: maps "approve"/"approve_pr" to the standing ban. The chat grammar simply
+#: never asked either. `_github_approve_refused_words` reads the ban list at
+#: answer time, so this sentence and the code cannot drift apart.
+GITHUB_APPROVE_REFUSED = (
+    "No - I never approve a pull request, and asking me to cannot change "
+    "that. A formal APPROVE review would hand your own sign-off to me, so it "
+    "is permanently banned: the GitHub review tool refuses the APPROVE verdict "
+    "by name before any approval card exists, and none of my cards offers it. "
+    "I can post a comment or a request for changes instead, each on its own "
+    "approval card, and a merge is a separate one-card action. Nothing was "
+    "approved.")
+
+
+def _github_approve_refused_words() -> str:
+    """The approve refusal, with the ban list's own fact when it can be read.
+
+    The ban itself is not typed here: `jarvis_grants.BANNED_ACTIONS` is the
+    list the gate consults, and the sentence says so only when that list really
+    carries it. A PC without the module keeps the fixed refusal, which is still
+    true (the review tool's own `_check_review_event` refuses APPROVE by name).
+    """
+    said = GITHUB_APPROVE_REFUSED
+    try:
+        import jarvis_grants as G
+        ban = (G.BANNED_ACTIONS.get("approve_pr")
+               or G.BANNED_ACTIONS.get("approve") or "")
+    except Exception:                       # noqa: BLE001 - older PC
+        ban = ""
+    if str(ban) == "approve":
+        said += (" That ban is in the grant code the gate consults, so no "
+                 "approval window can lift it.")
+    return said
+
+
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
     "GitHub tools switched on - all off by default - it can also read "
@@ -23728,6 +24091,11 @@ def _run_github_self(f: dict, peer=None, local=None) -> Result:
               "neither app has a separate CI screen.", "github_self")
     if shape == "never":
         return Result(never + " " + state, "github_self")
+    if shape == "approve":
+        # The one GitHub verb that is never available, with its own sentence
+        # (2026-11-16): "approve that pull request" used to answer "Yes." as if
+        # it were a merge. Read-only: no card, no network, no model.
+        return Result(_github_approve_refused_words() + " " + state, "github_self")
     if shape == "merge":
         # 2026-11-10, the owner's "Everything at once": merging IS built now, and
         # a sentence saying there is no merge card would be a lie. The boundary is
@@ -23872,6 +24240,40 @@ def _run_self_refresh(intent: Intent) -> Result:
 AS_IS_MISSING = ("Your PC's Jarvis cannot read that about itself yet - run "
                  "apply-patches.ps1 on the PC.")
 
+#: How much of a card's own memory must be free before chat calls it "free"
+#: (2026-11-16). The measured wrong answer: "No second-card feature is switched
+#: on, so the second card is free right now" was composed while nvidia-smi read
+#: 6417 of 8192 MiB used - and the same sentence printed "1.5 GB free". The
+#: claim is now DERIVED from that free figure: at least this share free is
+#: "free", anything less is "busy", and an unreadable figure is said as unknown.
+#: This is a wording threshold, not a setting, and it changes nothing else.
+_SECOND_CARD_FREE_SHARE = 0.8
+
+
+def _second_card_free_words(card) -> str:
+    """The second card's real state, from the free figure the answer prints.
+
+    `card` is the second row of `jarvis_hardware.status()["cards"]` - the same
+    rows whose total/free the answer above lists. Read-only, never raises, and
+    never says "free" unless the number supports it.
+    """
+    row = card if isinstance(card, dict) else {}
+    free = row.get("free_gb")
+    total = row.get("total_gb")
+    if not isinstance(free, (int, float)):
+        return (" I could not read the second card's free memory just now, so I "
+                "will not say whether it is free.")
+    free = float(free)
+    total = (float(total) if isinstance(total, (int, float)) and float(total) > 0
+             else None)
+    if total is not None and free / total < _SECOND_CARD_FREE_SHARE:
+        return (f" The second card is busy right now: only {free:.1f} GB of "
+                f"{total:.1f} GB is free.")
+    if total is not None:
+        return (f" The second card is free right now: {free:.1f} GB of "
+                f"{total:.1f} GB is free.")
+    return f" The second card has {free:.1f} GB free right now."
+
 
 def _how_running_words() -> str:
     """What model, preset and cards, from the preset store and the hardware read."""
@@ -23967,8 +24369,19 @@ def _how_running_words() -> str:
     elif on:
         bits.append("A per-card feature is on: " + _self_list(on) + ".")
     else:
-        bits.append("No second-card feature is switched on, so the second card is "
-                    "free right now.")
+        # The sentence is DERIVED from the second card's own free figure
+        # (2026-11-16): the old wording claimed "free" without one, and the one
+        # measured live reading (6417 of 8192 MiB used) made it false. A PC
+        # with one card says so instead of calling a card that is not there
+        # free; an unreadable figure is said as unknown.
+        second = cards[1] if len(cards) > 1 else None
+        if second is None and cards:
+            bits.append("No second-card feature is switched on, and this PC "
+                        "reports one graphics card, so there is no second card "
+                        "to be free.")
+        else:
+            bits.append("No second-card feature is switched on."
+                        + _second_card_free_words(second))
     bits.append('Ask "are you using both cards" for the both-card lane.')
     return " ".join(bits)
 
@@ -27989,6 +28402,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     here is a carded setting change, which says one calm line instead of the
     setter's own sentence, because Live speaks the answer aloud."""
     n, f = intent.name, intent.f
+    # Stop everything (2026-11-16): the same action the tray's row and
+    # Alt+Shift+X reach through POST /api/stop_all, called in process. No card
+    # and no gate, because a stop only ever makes Jarvis do less; it is
+    # deliberately NOT in READ_ONLY_INTENTS (it does not read, it stops), so
+    # the undo record behaves exactly as for every other non-read answer.
+    if n == "stop_all":
+        return _run_stop_everything()
     # The two pre-push review gates (2026-11-10, wave 16E): the review packet
     # and the record check. Read-only and cardless - `jarvis_review` writes no
     # file, opens no socket and reads no token - so nothing is planned and
@@ -28175,6 +28595,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
                 "remove_property": "remove a property from",
                 "link": "add a link in"}.get(op, "change one part of")
         return _run_note_customize(f, op, card)
+    if n == "note_customize_ask":
+        # "pin a note" / "favourite a note" with no name (2026-11-16): asks
+        # which note and writes nothing.
+        return _run_note_customize_ask(f)
+    if n == "note_flag":
+        # "is my workout log note pinned / favourited?" (2026-11-16): read-only,
+        # from the note's own front matter. Listed in READ_ONLY_INTENTS below.
+        return _run_note_flag(f)
     if n == "note_insert":
         return _run_note_insert(f)
     if n == "note_format":
@@ -29376,6 +29804,11 @@ READ_ONLY_INTENTS = frozenset({
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "note_read", "note_search", "note_open",
+    # "is my workout log note pinned / favourited?" (2026-11-16): it reads the
+    # note's own front matter and changes nothing, so it must not clear what
+    # "cancel that" would undo. The pin/favourite CHANGES (`note_customize`) are
+    # deliberately not here - each can raise the one edit_vault_note card.
+    "note_flag",
     "next_time_list",
     "next_up",
     # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
