@@ -1,0 +1,3 @@
+                        stream=_streaming,
+                        request=_request_for_agent(payload, server_block),
+                        abort=_abort,

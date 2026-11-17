@@ -1,0 +1,18 @@
+                # Memory is now in the transcript. Pin the conversation local
+                # for the latch window so a follow-up cannot carry the model's
+                # restatement of it to a cloud lane - the same over-
+                # approximation the Joplin latch already makes, for the same
+                # reason.
+                if GATING:
+                    try:
+                        jarvis_gate.latch_taint(why="memory_injected")
+                    except Exception:
+                        pass
+        elif GATING:
+            # Keep an active latch alive while the conversation continues, so
+            # it expires N minutes after the LAST turn, not the first.
+            try:
+                if jarvis_gate.taint_active():
+                    jarvis_gate.latch_taint(why="refresh")
+            except Exception:
+                pass

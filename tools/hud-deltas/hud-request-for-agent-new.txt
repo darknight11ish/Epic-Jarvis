@@ -1,0 +1,28 @@
+def _request_for_agent(payload: dict, server_block) -> dict:
+    """`payload` with the server's own system turn taken out of its messages.
+
+    `run_local_turn` is handed `payload` for what the APP asked for (stream,
+    temperature, max_tokens) and for the app's own bookkeeping (provenance,
+    attachment, conversation_id). `jarvis_agent._TurnWatch` reads a system
+    message in that request as "text the APP sent" (`app_context`). Jarvis's
+    recalled-facts block - and a temporary chat's fixed note - are the
+    SERVER's own turn, not the app's, so they are taken out of THIS copy; the
+    model still receives them through `messages`. Without this, a turn where
+    Jarvis recalled one of the owner's own facts counted as shaped by
+    something outside and refused a setting change the owner had asked for in
+    his own words (measured 2026-11-16).
+
+    `server_block` is None when the HUD added no system turn; the payload is
+    returned unchanged then. Nothing else about the request is altered, so the
+    provenance, the attachment fields and the conversation id still arrive.
+    Comparison is by VALUE as well as identity, because the route may have
+    copied the message dict on its way here.
+    """
+    if server_block is None or not isinstance(payload.get("messages"), list):
+        return payload
+    kept = [m for m in payload["messages"] if m != server_block]
+    if len(kept) == len(payload["messages"]):
+        return payload                      # the block is not in this payload
+    return dict(payload, messages=kept)
+
+

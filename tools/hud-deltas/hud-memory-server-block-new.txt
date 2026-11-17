@@ -1,0 +1,7 @@
+        # The system turn the HUD adds below (the owner's recalled facts, or
+        # the temporary chat's fixed note), or None. Kept so that
+        # `_request_for_agent` can hand jarvis_agent a request holding only
+        # what the APP sent: a system message there is read as "text the app
+        # sent" (`jarvis_agent._TurnWatch.app_context`), and Jarvis's own
+        # recalled facts are not the app's (measured 2026-11-16).
+        server_block = None

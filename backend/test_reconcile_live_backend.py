@@ -292,6 +292,35 @@ MINI_HUD += (
 )
 
 
+# 2026-11-16 (taint-latch-2): the four regions the owner's-memory-is-not-
+# outside-text literal deltas replace / insert in front of. The owner's live
+# HUD holds each exactly once, and every fixture that plans the whole
+# DELTA_TABLE with literals=True needs them - the same gap the anchors above
+# fill. The wrapper lines are fixture code, not delta text; the latch block
+# and the call-site line come from the block files the deltas actually read.
+MINI_HUD += (
+    "\n\n"
+    "class _MemoryIsNotOutsideTextFixture:\n"
+    "    def chat(self, decision, ROUTING, GATING, messages, recalled, body):\n"
+    "        injected = 0\n"
+    "        injected_ids = []\n"
+    "        if decision.inject_memory and ROUTING and not jarvis_side_memory:\n"
+    "            facts = []\n"
+    "            if True:\n"
+    + "\n".join(R._delta_lines(R.HUD_MEMORY_LATCH_OLD_FILE)) + "\n"
+    "\n\n"
+    "def _agent_request_fixture(messages, lane, payload, _streaming, _abort):\n"
+    "    if True:\n"
+    "        if True:\n"
+    "            if True:\n"
+    "                if True:\n"
+    "                    if True:\n"
+    + "\n".join(R._delta_lines(R.HUD_AGENT_REQUEST_OLD_FILE)) + "\n"
+    "\n\n"
+    + R.HUD_REQUEST_FOR_AGENT_ANCHOR + "\n"
+)
+
+
 def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Path:
     live = root / "live"
     live.mkdir(parents=True, exist_ok=True)
@@ -1267,6 +1296,65 @@ def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
               (live / "jarvis_hud.py").read_text(encoding="utf-8") == bad)
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_memory_is_not_outside_text_deltas_reconstruct_the_base():
+    """The four literal deltas that carry the 2026-11-16 memory fix to a live
+    install are the published base's own bytes, region by region.
+
+    WHY `read_bytes`. The deploy writes TEXT, so the thing under test really is
+    the base file's text; this is the same staging seam `test_attention_route`
+    uses (`base.read_bytes()`), and `tools/check_no_source_pins.py` treats the
+    bytes read as an artifact rather than a source pin.
+
+    Mutation bite: change one line of a block file, or point an entry at the
+    wrong block, and the reconstruction below stops matching the base - so the
+    deploy would write a different HUD than the one the repository publishes.
+    """
+    def block(name: str) -> str:
+        """The block file's exact text, including the newline each line ends on."""
+        return "\n".join(R._delta_lines(name)) + "\n"
+
+    base = ((REPO / "jarvis-backend" / "jarvis_hud.py").read_bytes()
+            .decode("utf-8").replace("\r\n", "\n"))
+    new_latch = block(R.HUD_MEMORY_LATCH_NEW_FILE)
+    old_latch = block(R.HUD_MEMORY_LATCH_OLD_FILE)
+    new_helper = block(R.HUD_REQUEST_FOR_AGENT_FILE)
+    new_block = block(R.HUD_MEMORY_SERVER_BLOCK_FILE)
+    new_call = block(R.HUD_AGENT_REQUEST_NEW_FILE)
+    old_call = block(R.HUD_AGENT_REQUEST_OLD_FILE)
+    for name, text in (("latch", new_latch), ("helper", new_helper),
+                       ("server_block", new_block), ("call", new_call)):
+        check(f"the published base holds the {name} block exactly once",
+              base.count(text) == 1, base.count(text))
+    check("... and none of the two OLD sides survives in the base",
+          old_latch not in base and old_call not in base)
+    # Reverse the four regions to the LIVE shape, then apply exactly what the
+    # deploy applies (in DELTA_TABLE order) and require the base back.
+    shape = base.replace(new_block, "", 1).replace(new_helper, "", 1)
+    shape = shape.replace(new_latch, old_latch, 1).replace(new_call, old_call, 1)
+    staged = shape.replace(old_latch, new_latch, 1).replace(old_call, new_call, 1)
+    staged = R.insert_before_anchor(staged, new_block.splitlines(),
+                                    R.HUD_MEMORY_ATTACH_ANCHOR)
+    staged = R.insert_before_anchor(staged, new_helper.splitlines(),
+                                    R.HUD_REQUEST_FOR_AGENT_ANCHOR)
+    check("the four deltas reconstruct the published base byte for byte",
+          staged == base)
+    check("... and the LIVE shape they start from still compiles, so the OLD "
+          "blocks are a real HUD and not a snippet",
+          R.rehearse({"jarvis_hud.py": shape}) == [],
+          R.rehearse({"jarvis_hud.py": shape}))
+    # Every entry must exist at its own name, with the block file it carries.
+    names = {
+        "hud-memory-latch.patch": R.HUD_MEMORY_LATCH_NEW_FILE,
+        "hud-memory-server-block.patch": R.HUD_MEMORY_SERVER_BLOCK_FILE,
+        "hud-request-for-agent.patch": R.HUD_REQUEST_FOR_AGENT_FILE,
+        "hud-agent-request.patch": R.HUD_AGENT_REQUEST_NEW_FILE,
+    }
+    check("the four memory deltas are in DELTA_TABLE, each with its block",
+          all((R.DELTA_TABLE.get(n) or {}).get("jarvis_hud.py", {}).get("file")
+              == block for n, block in names.items()),
+          {n: (R.DELTA_TABLE.get(n) or {}).get("jarvis_hud.py") for n in names})
 
 
 def t_the_two_2026_10_14_hud_fixes_are_literal_deltas():
@@ -5124,9 +5212,20 @@ def t_release_markers_carry_the_version_and_the_beside_files():
         def summ(label):
             found = re.search(rf"^  {re.escape(label)}: (\d+)$", text, re.M)
             return int(found.group(1)) if found else 0
+
+        def insert_files(blob: str) -> int:
+            """The DISTINCT files the insert deltas touch, as the tool prints it.
+
+            Read from the tool's own line, not re-counted from the printed delta
+            list: `_summ` only prints the first twelve, and four more HUD
+            entries (2026-11-16) pushed a second file past that limit.
+            """
+            found = re.search(r"^  insert files: (\d+)$", blob, re.M)
+            return int(found.group(1)) if found else 0
+
         expected_release = 4
         expected_wrote = (summ("to add") + summ("to update")
-                          + len(set(re.findall(r"^ {6}\S.*? -> (\S+) \(", text, re.M)))
+                          + insert_files(text)
                           + expected_release)
 
         lines2 = []
@@ -5312,8 +5411,11 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         def summ(label):
             found = re.search(rf"^  {re.escape(label)}: (\d+)$", text2, re.M)
             return int(found.group(1)) if found else 0
-        distinct_inserts = len(set(re.findall(
-            r"^ {6}\S.*? -> (\S+) \(", text2, re.M)))
+        # The DISTINCT files the insert deltas touch, from the tool's own line:
+        # re-counting the printed delta list undercounts once `_summ` truncates
+        # it (four more HUD entries did exactly that on 2026-11-16).
+        found_inserts = re.search(r"^  insert files: (\d+)$", text2, re.M)
+        distinct_inserts = int(found_inserts.group(1)) if found_inserts else 0
         wrote = re.search(r"wrote (\d+) file\(s\)", text2)
         wrote_n = int(wrote.group(1)) if wrote else -1
         check("formula: wrote N is add + update + distinct insert files + "
@@ -5839,6 +5941,7 @@ def main():
                t_no_test_touches_a_live_folder,
                t_insertion_uses_its_anchor_and_refuses_a_bad_one,
                t_the_two_2026_10_14_hud_fixes_are_literal_deltas,
+               t_the_memory_is_not_outside_text_deltas_reconstruct_the_base,
                t_the_api_status_route_delta_replaces_the_inline_route,
                t_the_session_latch_delta_chains_after_the_status_route_delta,
                t_the_loopback_connect_delta_ships_the_020_timeout,

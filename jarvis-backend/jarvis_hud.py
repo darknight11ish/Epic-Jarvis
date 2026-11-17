@@ -4854,6 +4854,13 @@ class Handler(BaseHTTPRequestHandler):
         # ---- attach memory, but only on local turns -----------------------
         injected = 0
         injected_ids: list = []
+        # The system turn the HUD adds below (the owner's recalled facts, or
+        # the temporary chat's fixed note), or None. Kept so that
+        # `_request_for_agent` can hand jarvis_agent a request holding only
+        # what the APP sent: a system message there is read as "text the app
+        # sent" (`jarvis_agent._TurnWatch.app_context`), and Jarvis's own
+        # recalled facts are not the app's (measured 2026-11-16).
+        server_block = None
         if decision.inject_memory and ROUTING and not jarvis_side_memory:
             facts = load_facts()
             chosen_facts = None
@@ -5011,17 +5018,27 @@ class Handler(BaseHTTPRequestHandler):
                     recalled = {"role": "system", "content": _TEMPORARY_NOTE}
                 messages = (messages[:-1] + [recalled, messages[-1]]
                             if messages else [recalled])
-                # Memory is now in the transcript. Pin the conversation local
-                # for the latch window so a follow-up cannot carry the model's
-                # restatement of it to a cloud lane - the same over-
-                # approximation the Joplin latch already makes, for the same
-                # reason.
-                if GATING:
-                    try:
-                        jarvis_gate.latch_taint(why="memory_injected")
-                    except Exception:
-                        pass
-        elif GATING:
+                # Memory is now in the transcript, and it is the OWNER'S OWN
+                # data, not outside text. It does NOT latch. `jarvis_gate`'s
+                # latch exists to stop a page, an email, a document or a
+                # pasted file from widening what Jarvis may do (the module's
+                # own "Taint latch" comment says so); a recalled fact is the
+                # owner's own words replayed to Jarvis. The line that used to
+                # be here called `latch_taint(why="memory_injected")`, and
+                # because that latch is one boolean with a label no consumer
+                # reads (jarvis_auto_router.py:311-320), it made every note
+                # write ask for a card and refused setting changes in a turn
+                # the owner alone had shaped (measured 2026-11-16).
+                #
+                # Memory still stays on this PC without it: while Jarvis
+                # injects memory itself, `lanes=[]` is passed to choose() above
+                # (no cloud lane is offered at all), and a cloud turn is
+                # stripped to user-role messages only, so neither this block
+                # nor the local model's restatement of it can travel. The
+                # re-latch below still keeps a REAL outside-text latch alive on
+                # every turn, memory-injected turns included.
+                server_block = recalled
+        if GATING:
             # Keep an active latch alive while the conversation continues, so
             # it expires N minutes after the LAST turn, not the first.
             try:
@@ -5508,7 +5525,9 @@ class Handler(BaseHTTPRequestHandler):
                         # temperature, max_tokens), and how to cut off
                         # Ollama if the app goes away mid-answer - the same
                         # reset the plain relay below uses.
-                        stream=_streaming, request=payload, abort=_abort,
+                        stream=_streaming,
+                        request=_request_for_agent(payload, server_block),
+                        abort=_abort,
                         # second-card.patch: the choice made above, so the
                         # header and the turn agree. Only to a jarvis_agent
                         # that knows the argument.
@@ -5883,6 +5902,34 @@ def _history_tainted(messages: list, body: dict) -> bool:
         return True
     # A client may still assert taint; it can add it, never remove it.
     return bool(body.get("tainted"))
+
+
+def _request_for_agent(payload: dict, server_block) -> dict:
+    """`payload` with the server's own system turn taken out of its messages.
+
+    `run_local_turn` is handed `payload` for what the APP asked for (stream,
+    temperature, max_tokens) and for the app's own bookkeeping (provenance,
+    attachment, conversation_id). `jarvis_agent._TurnWatch` reads a system
+    message in that request as "text the APP sent" (`app_context`). Jarvis's
+    recalled-facts block - and a temporary chat's fixed note - are the
+    SERVER's own turn, not the app's, so they are taken out of THIS copy; the
+    model still receives them through `messages`. Without this, a turn where
+    Jarvis recalled one of the owner's own facts counted as shaped by
+    something outside and refused a setting change the owner had asked for in
+    his own words (measured 2026-11-16).
+
+    `server_block` is None when the HUD added no system turn; the payload is
+    returned unchanged then. Nothing else about the request is altered, so the
+    provenance, the attachment fields and the conversation id still arrive.
+    Comparison is by VALUE as well as identity, because the route may have
+    copied the message dict on its way here.
+    """
+    if server_block is None or not isinstance(payload.get("messages"), list):
+        return payload
+    kept = [m for m in payload["messages"] if m != server_block]
+    if len(kept) == len(payload["messages"]):
+        return payload                      # the block is not in this payload
+    return dict(payload, messages=kept)
 
 
 # Browsers attach Origin to every cross-origin POST, so an unexpected value is
