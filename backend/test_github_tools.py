@@ -68,6 +68,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import inspect
 import json
 import os
 import re
@@ -77,6 +78,7 @@ import sys
 import tempfile
 import traceback
 import urllib.error
+import urllib.parse
 from pathlib import Path
 
 # A temp config dir BEFORE any backend import: jarvis_gate opens an approval
@@ -250,17 +252,60 @@ class NoSocket:
 
 
 class Fake:
-    """A stand-in for `_default_fetch`: records every call, answers by rule."""
+    """A stand-in for `_default_fetch`: records every call, answers by rule.
 
-    def __init__(self, status=200, body="[]"):
+    TWO ADDRESSES ARE ANSWERED BEFORE `status`/`body`, because since 2026-11-17
+    `run()` resolves what a request names before it sends anything (the Q5
+    target gate), and those two reads are not the answer this fake is modelling:
+
+      * a repository root, `/repos/{owner}/{name}` exactly -> 200 with that
+        `full_name` and push permission (the repository exists); a name in
+        `missing` gets GitHub's real 404 instead, which is how a test drives the
+        invented-repository refusal;
+      * a branch, `/repos/{owner}/{name}/branches/{branch}` -> 200 (it exists);
+        a name in `missing_branches` gets 404.
+
+    Every other address answers `status`/`body`, which is what the tests below
+    are about. `after_target()` drops the gate's leading reads from `calls`, for
+    the assertions that count what the TOOL itself sent.
+    """
+
+    def __init__(self, status=200, body="[]", missing=(), missing_branches=()):
         self.status = status
         self.body = body
         self.calls = []
+        self.missing = {str(m).lower() for m in missing}
+        self.missing_branches = {str(b) for b in missing_branches}
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
         self.calls.append({"method": method, "url": url, "headers": dict(headers or {}),
                            "body": body, "timeout": timeout})
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         return self.status, self.body
+
+    def target_answer(self, url):
+        """The gate's own answer for a repository root or a branch, or None."""
+        root = _repo_root(url)
+        if root is not None:
+            if root.lower() in self.missing:
+                return 404, "{}"
+            return 200, json.dumps({"full_name": root,
+                                    "permissions": {"push": True}})
+        branch = _branch_name(url)
+        if branch is not None:
+            if branch in self.missing_branches:
+                return 404, "{}"
+            return 200, json.dumps({"name": branch})
+        return None
+
+    def after_target(self):
+        """The calls after the target gate's own leading reads."""
+        calls = list(self.calls)
+        while calls and self.target_answer(calls[0]["url"]) is not None:
+            calls.pop(0)
+        return calls
 
     def urls(self):
         return [c["url"] for c in self.calls]
@@ -277,11 +322,16 @@ class Routed(Fake):
 
     `routes` is a sequence of `(needle, answer)` pairs, where an answer is either
     `(status, body)` or a callable taking the call and returning `(status, body)`.
-    An address no route matches is a 404, which is what GitHub answers too.
+    An address no route matches is a 404, which is what GitHub answers too -
+    EXCEPT the two addresses the target gate owns (2026-11-17), which `Fake`
+    answers: a repository root and a branch, both "exists" unless the test names
+    them in `missing` / `missing_branches`. A route that matches one of those
+    addresses still WINS, so a test that deliberately routes the repository root
+    (a 403, a redirect, a renamed repository) keeps answering with what it says.
     """
 
-    def __init__(self, routes):
-        super().__init__()
+    def __init__(self, routes, missing=(), missing_branches=()):
+        super().__init__(missing=missing, missing_branches=missing_branches)
         self.routes = list(routes)
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
@@ -292,10 +342,34 @@ class Routed(Fake):
                 if callable(answer):
                     return answer(self.calls[-1])
                 return answer
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         return 404, "{}"
 
     def writes(self):
         return [c for c in self.calls if c["method"] not in ("GET", "HEAD")]
+
+
+#: `owner/name` when `url` is exactly a repository root under api.github.com,
+#: otherwise None. The target gate's own address, matched the way GitHub's API
+#: matches it: nothing may follow the name.
+_REPO_ROOT = re.compile(r"^https://api\.github\.com/repos/([^/?#]+/[^/?#]+)$")
+
+#: `branch` when `url` is a branch read, otherwise None. A branch's own name may
+#: carry slashes, so everything after `/branches/` is the name.
+_BRANCH_READ = re.compile(r"^https://api\.github\.com/repos/[^/?#]+/[^/?#]+"
+                          r"/branches/(.+)$")
+
+
+def _repo_root(url: str):
+    found = _REPO_ROOT.match(str(url or "").split("?")[0])
+    return found.group(1) if found else None
+
+
+def _branch_name(url: str):
+    found = _BRANCH_READ.match(str(url or "").split("?")[0])
+    return urllib.parse.unquote(found.group(1)) if found else None
 
 
 class FakeGit:
@@ -1723,7 +1797,8 @@ def t_pr_scan_classifies_each_open_pull_request():
     check("the cockpit writes nothing - no body at all",
           all(c["body"] is None for c in fake.calls), fake.bodies())
     check("it reads the list, then each pull request, then its checks",
-          len(fake.calls) == 1 + len(prs) + len(prs), len(fake.calls))
+          len(fake.after_target()) == 1 + len(prs) + len(prs),
+          len(fake.after_target()))
     check("the token is sent on every read",
           all(c["headers"].get("Authorization") == f"Bearer {TOKEN}"
               for c in fake.calls))
@@ -1932,7 +2007,7 @@ def t_merge_sends_exactly_the_pinned_body_once():
     check("... carrying the token, and nothing else of the owner's",
           puts[0]["headers"].get("Authorization") == f"Bearer {TOKEN}")
     check("the merge re-read the pull request first and read its checks",
-          [c["method"] for c in fake.calls] == ["GET", "GET", "PUT"],
+          [c["method"] for c in fake.after_target()] == ["GET", "GET", "PUT"],
           fake.methods())
 
 
@@ -2811,7 +2886,8 @@ def t_the_push_run_rechecks_everything_then_pushes_once():
         check("... and no word of the answer prints it",
               TOKEN not in json.dumps(out), out)
         check("it re-read the pull request before pushing",
-              fake.calls and fake.calls[0]["url"].endswith("/pulls/1116"),
+              fake.after_target()
+              and fake.after_target()[0]["url"].endswith("/pulls/1116"),
               fake.urls())
         check("... and sent nothing except that read",
               fake.writes() == [], fake.calls)
@@ -3100,9 +3176,10 @@ def t_workflow_cancels_or_reruns_only_failed_jobs():
     _r, out = _run("github_workflow", fake, args={
         "repo": "darknight11ish/Epic-Jarvis", "run_id": "9", "action": "cancel"})
     check("a running run is cancelled", out.get("ok") is True, out)
+    onsent = fake.after_target()
     check("... with exactly one POST, to its own cancel address",
-          [c["method"] for c in fake.calls] == ["GET", "POST"]
-          and fake.calls[1]["url"].endswith("/actions/runs/9/cancel"),
+          [c["method"] for c in onsent] == ["GET", "POST"]
+          and onsent[1]["url"].endswith("/actions/runs/9/cancel"),
           fake.urls())
     # A finished run cannot be cancelled, and NOTHING is posted.
     fake = Routed([("/actions/runs/9", (200, json.dumps(
@@ -3110,7 +3187,7 @@ def t_workflow_cancels_or_reruns_only_failed_jobs():
     _r, out = _run("github_workflow", fake, args={
         "repo": "darknight11ish/Epic-Jarvis", "run_id": "9", "action": "cancel"})
     check("a finished run cannot be cancelled, and nothing is posted",
-          out.get("ok") is False and len(fake.calls) == 1, out)
+          out.get("ok") is False and len(fake.after_target()) == 1, out)
     # Only the failed jobs of a finished failed run are re-run.
     fake = Routed([("/actions/runs/9", (200, json.dumps(
         {"status": "completed", "conclusion": "failure"})))])
@@ -3128,7 +3205,7 @@ def t_workflow_cancels_or_reruns_only_failed_jobs():
         "repo": "darknight11ish/Epic-Jarvis", "run_id": "9",
         "action": "rerun_failed"})
     check("a successful run has no failed jobs, and nothing is posted",
-          out.get("ok") is False and len(fake.calls) == 1, out)
+          out.get("ok") is False and len(fake.after_target()) == 1, out)
     check("a workflow is never dispatched - it stays banned",
           "workflow_dispatch" in GH.NEVER
           and "dispatch" not in " ".join(GH.WORKFLOW_OPS))
@@ -3182,7 +3259,7 @@ def t_edit_pr_shows_before_and_after_and_pins_them():
     out = _run_request(r, fake)
     check("a pull request whose title moved since the card is refused",
           out.get("ok") is False and "title" in out.get("error", "").lower()
-          and [c["method"] for c in fake.calls] == ["GET"], out)
+          and [c["method"] for c in fake.after_target()] == ["GET"], out)
     fake = Routed([("/pulls/1116", (200, _pr_doc(title="Fix the tray icon",
                                                  body=None)))])
     out = _run_request(r, fake)
@@ -3377,7 +3454,7 @@ def t_open_pr_prepares_then_pushes_and_opens_one_pull_request():
               and "moved since the card was shown" in out.get("error", ""), out)
         check("... and NOTHING is pushed or posted",
               not [c for c in git.calls if c["args"][:1] == ["push"]]
-              and fake.calls == [], (git.commands(), fake.calls))
+              and fake.after_target() == [], (git.commands(), fake.calls))
         # A rejected push is said plainly, and no pull request is opened.
         git = _open_git(push=(1, "", "! [rejected] already exists"))
         fake = Routed([("/pulls", (201, "{}"))])
@@ -4051,7 +4128,7 @@ def t_ci_status_names_the_failing_checks_and_one_log_excerpt():
         out = GH.run(GH.plan_ci({"repo": "darknight11ish/Epic-Jarvis"}),
                      fetch=fake, approved=True, log=FakeLog())
     check("a green run says it passed and reads no jobs at all",
-          "passed" in out.get("text", "") and len(fake.calls) == 1,
+          "passed" in out.get("text", "") and len(fake.after_target()) == 1,
           (out, fake.urls()))
 
     # The jobs read failing is said plainly, and points at the fix flow.
@@ -4250,6 +4327,248 @@ def t_review_tools_are_card_free_and_in_the_master_switch():
           and set(AF.GITHUB_TOOLS) == set(expected))
 
 
+def t_an_invented_target_is_refused_before_anything_else_is_sent():
+    """Q5, 2026-11-17: a repository, owner or branch that GitHub does not have.
+
+    The failure this suite now pins: the local model INVENTS a repository, an
+    owner or a branch, and the tool builds a request around the invented name.
+    GitHub then answers 404 in words that never name what was wrong ("there is
+    nothing there - or it is private"), or - worse - the invented name happens
+    to be somebody else's real repository, and a write-shaped request was aimed
+    at it.
+
+    So `run()` resolves what a request names with GitHub BEFORE any of its own
+    steps are sent, and there is no argument that turns that off. These checks
+    drive every repository-naming tool through the REAL `run()` with a fake
+    GitHub that says "no such repository", then drive the branch, the rename,
+    the substitution, the write-permission, the network and the not-skippable
+    halves.
+    """
+    gh_repo = "darknight11ish/Epic-Jarvis"
+    root_url = GH.GITHUB_API + "/repos/" + gh_repo
+
+    def invented(name):
+        """A fake GitHub that has every repository EXCEPT `name`."""
+        return Routed([], missing=[name])
+
+    # 1. EVERY tool that names a repository: the invented name is refused, the
+    #    sentence names it, and the ONE target check is the only thing sent.
+    naming = [tool for tool in ARGS if "repo" in ARGS[tool]]
+    refused, quiet, named = [], [], []
+    for tool in naming:
+        fake = invented(gh_repo)
+        _r, out = _run(tool, fake, args=dict(ARGS[tool]))
+        if out.get("ok") is not False:
+            refused.append(tool)
+        if [c["method"] for c in fake.calls] != ["GET"] or fake.calls[0][
+                "url"] != root_url:
+            quiet.append((tool, fake.calls))
+        if (f'Jarvis asked GitHub about "{gh_repo}" and there is no such '
+                f'repository') not in out.get("error", ""):
+            named.append(tool)
+    check("every repository-naming tool refuses an invented repository",
+          not refused, refused)
+    check("... the sentence names the invented repository, word for word",
+          not named, named)
+    check("... and the ONE target check is the only thing sent - no write "
+          "of any kind", not quiet, quiet)
+    check("there are tools in that set", len(naming) >= 13, naming)
+
+    # 2. The owner half: a repository under an owner that is not on GitHub.
+    fake = invented("no-such-owner-xyz/invented-repo")
+    _r, out = _run("github_list", fake,
+                   args={"scope": "pulls", "repo": "no-such-owner-xyz/invented-repo"})
+    check("an invented OWNER is refused and named",
+          out.get("ok") is False
+          and "no-such-owner-xyz/invented-repo" in out.get("error", ""), out)
+
+    # 3. A BRANCH: the CI question is the one where a wrong branch used to read
+    #    as "no CI run", which is a claim about history rather than spelling.
+    fake = Routed([("/actions/runs", (200, json.dumps({"workflow_runs": []})))],
+                 missing_branches=["invented-branch"])
+    _r, out = _run("github_ci_status", fake,
+                   args={"repo": gh_repo, "branch": "invented-branch"})
+    check("an invented branch is refused and named",
+          out.get("ok") is False
+          and 'branch "invented-branch"' in out.get("error", "")
+          and "no branch with that name" in out.get("error", ""), out)
+    check("... after exactly two reads - the repository, then the branch - and "
+          "no CI read at all",
+          [c["method"] for c in fake.calls] == ["GET", "GET"]
+          and fake.calls[0]["url"] == root_url
+          and fake.calls[1]["url"].endswith("/branches/invented-branch"),
+          fake.urls())
+
+    # 4. A real branch is checked and then answered, unchanged.
+    fake = Routed([("/actions/runs", (200, json.dumps({"workflow_runs": []})))])
+    _r, out = _run("github_ci_status", fake,
+                   args={"repo": gh_repo, "branch": "main"})
+    check("a real branch passes the check and the CI read still happens",
+          out.get("ok") is True
+          and fake.calls[1]["url"].endswith("/branches/main")
+          and any("/actions/runs" in u for u in fake.urls()), out)
+
+    # 5. A RENAMED repository: GitHub answers with a redirect, and Jarvis never
+    #    follows one or silently substitutes the new name.
+    fake = Routed([(root_url, (301, "{}"))])
+    _r, out = _run("github_list", fake, args={"scope": "pulls", "repo": gh_repo})
+    check("a renamed repository is refused, never followed",
+          out.get("ok") is False
+          and "redirect" in out.get("error", "")
+          and "renamed or moved" in out.get("error", "")
+          and len(fake.calls) == 1, out)
+    fake = Routed([(root_url, (200, json.dumps({"full_name": "someone/else"})))])
+    _r, out = _run("github_list", fake, args={"scope": "pulls", "repo": gh_repo})
+    check("a 200 that names a DIFFERENT repository is refused as a "
+          "substitution, and the other name is shown",
+          out.get("ok") is False
+          and '"someone/else"' in out.get("error", "")
+          and "will not quietly act" in out.get("error", ""), out)
+
+    # 6. The other half of "not the owner's intent": a repository that DOES
+    #    exist but that this saved token cannot write to. A write is refused;
+    #    the same repository may still be READ, because a read changes nothing.
+    readonly = (200, json.dumps({"full_name": gh_repo,
+                                 "permissions": {"admin": False, "push": False,
+                                                 "pull": True}}))
+    fake = Routed([(root_url, readonly)])
+    _r, out = _run("github_comment", fake)
+    check("a repository this token cannot push to is refused on a WRITE",
+          out.get("ok") is False
+          and "cannot write to it" in out.get("error", "")
+          and [c["method"] for c in fake.calls] == ["GET"], (out, fake.methods()))
+    fake = Routed([("/pulls?", (200, "[]")), (root_url, readonly)])
+    _r, out = _run("github_list", fake, args={"scope": "pulls", "repo": gh_repo})
+    check("... while the same repository may still be READ",
+          out.get("ok") is True, out)
+    # A `create_repo` names NO repository, so it is not gated by a name that
+    # does not exist yet - and it must not be refused by this gate.
+    fake = Routed([("/user/repos", (201, json.dumps({"full_name": "o/new"})))])
+    _r, out = _run("github_create_repo", fake)
+    check("creating a repository is not gated on a name that does not exist yet",
+          out.get("ok") is True
+          and [c["method"] for c in fake.calls] == ["POST"], (out, fake.methods()))
+
+    # 7. No answer at all, and a token GitHub refused: NEITHER may become
+    #    "there is no such repository" - that is a claim Jarvis cannot make.
+    sent = []
+
+    def down(method, url, **_kw):
+        sent.append((method, url))
+        raise TimeoutError("no answer")
+
+    with _Token():
+        out = GH.run(GH.plan_list({"scope": "pulls", "repo": gh_repo}),
+                     fetch=down, approved=True)
+    check("no answer from GitHub: refused, and it says it could not check",
+          out.get("ok") is False and "could not check whether" in out.get(
+              "error", ""), out)
+    check("... and it does NOT claim the repository does not exist",
+          "there is no such repository" not in out.get("error", ""), out)
+    check("... and only the one check was attempted", len(sent) == 1, sent)
+    fake = Routed([(root_url, (401, "{}"))])
+    _r, out = _run("github_list", fake, args={"scope": "pulls", "repo": gh_repo})
+    check("a token GitHub refused is said as a token problem, not a missing "
+          "repository",
+          out.get("ok") is False
+          and "could not check whether" in out.get("error", "")
+          and "connect GitHub" in out.get("error", ""), out)
+
+    # 8. NOT SKIPPABLE. The gate is inside run(), and run() has no argument that
+    #    can turn it off - the parameter list is pinned exactly.
+    names = list(inspect.signature(GH.run).parameters)
+    check("run() takes no argument that could skip the target check",
+          names == ["r", "fetch", "approved", "git", "log"], names)
+
+    # 9. ... and no planner can dodge it by forgetting to record the name the
+    #    address is built from: every repository-naming planner sets it.
+    plans = {
+        "github_list": (GH.plan_list, {"scope": "pulls", "repo": gh_repo}),
+        "github_read_file": (GH.plan_read_file,
+                             {"repo": gh_repo, "path": "README.md"}),
+        "github_ci_status": (GH.plan_ci, {"repo": gh_repo, "branch": "main"}),
+        "github_ci_status(pr)": (GH.plan_ci, {"repo": gh_repo, "pr": "7"}),
+        "github_comment": (GH.plan_comment,
+                           {"repo": gh_repo, "number": "7", "body": "x"}),
+        "github_open_issue": (GH.plan_open_issue,
+                              {"repo": gh_repo, "title": "x"}),
+        "github_rerun_workflow": (GH.plan_rerun,
+                                  {"repo": gh_repo, "run_id": "9"}),
+        "github_pr_scan": (GH.plan_scan_prs, {"repo": gh_repo}),
+        "github_pr_detail": (GH.plan_pr_detail,
+                             {"repo": gh_repo, "number": "7"}),
+        "github_workflow": (GH.plan_workflow,
+                            {"repo": gh_repo, "run_id": "9",
+                             "action": "cancel"}),
+        "github_issue_labels": (GH.plan_issue_labels,
+                                {"repo": gh_repo, "number": "7",
+                                 "add": ["bug"]}),
+        "github_edit_pr": (GH.plan_edit_pr,
+                           {"repo": gh_repo, "number": "7", "title": "T",
+                            "old_title": "Old"}),
+        "github_pr_review": (GH.plan_pr_review,
+                             {"repo": gh_repo, "number": "7",
+                              "event": "COMMENT", "body": "ok"}),
+        "github_issue_state": (GH.plan_issue_state,
+                               {"repo": gh_repo, "number": "7",
+                                "action": "close", "title": "T"}),
+    }
+    unrecorded = []
+    for name, (planner, args) in plans.items():
+        try:
+            got = planner(dict(args))
+        except Exception as exc:                  # noqa: BLE001 - named below
+            unrecorded.append(f"{name}: {type(exc).__name__}: {exc}")
+            continue
+        if got.repo != gh_repo:
+            unrecorded.append(f"{name}: repo={got.repo!r}")
+    check("every planner records the repository it names, so the gate cannot "
+          "be dodged", not unrecorded, unrecorded)
+
+    # 10. A ref that may be a TAG or a COMMIT must not be checked against
+    #     `/branches/`, which would refuse a perfectly good commit id.
+    fake = Routed([("/contents/", (200, _file_envelope("hello\n")))])
+    _r, out = _run("github_read_file", fake,
+                   args={"repo": gh_repo, "path": "README.md", "ref": "a" * 40})
+    check("a file read at a commit id is not branch-checked",
+          out.get("ok") is True
+          and not any("/branches/" in u for u in fake.urls()), (out, fake.urls()))
+
+    # 11. `scope="repos"` names no repository at all, so nothing is pre-checked.
+    fake = Routed([("/user/repos", (200, "[]"))])
+    _r, out = _run("github_list", fake, args={"scope": "repos"})
+    check("listing your own repositories names no repository, so only that "
+          "read is sent",
+          out.get("ok") is True
+          and [c["method"] for c in fake.calls] == ["GET"]
+          and "/user/repos" in fake.calls[0]["url"], fake.urls())
+
+    # 12. NO REPOSITORY AT ALL is an ASK, not a guess - and it happens BEFORE a
+    #     card exists. The name is never filled in from a default, and nothing
+    #     here reads a git remote to work one out, so the refusal has to say
+    #     what could not be resolved and that nobody was asked.
+    asked = []
+    with _Token():
+        for tool in naming:
+            args = dict(ARGS[tool])
+            args.pop("repo", None)
+            try:
+                AG.TOOLS[tool].prepare(args)
+            except GH.GitHubError as exc:
+                words = str(exc)
+                if not ("could not tell which repository" in words
+                        and "never fills one in from a default or a guess" in words
+                        and "Nothing was sent and nobody was asked" in words):
+                    asked.append((tool, words))
+            except Exception as exc:              # noqa: BLE001 - named below
+                asked.append((tool, f"raised {type(exc).__name__}: {exc}"))
+            else:
+                asked.append((tool, "accepted a request with no repository"))
+    check("with NO repository named, every write is an ASK in plain words and "
+          "raises no card",
+          not asked, asked)
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {GATE_BASE}")
@@ -4325,7 +4644,8 @@ if __name__ == "__main__":
                    t_ci_status_names_the_failing_checks_and_one_log_excerpt,
                    t_one_renderer_answers_both_ci_questions,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
-                   t_review_tools_are_card_free_and_in_the_master_switch):
+                   t_review_tools_are_card_free_and_in_the_master_switch,
+                   t_an_invented_target_is_refused_before_anything_else_is_sent):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

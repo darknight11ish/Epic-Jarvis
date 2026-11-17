@@ -185,21 +185,56 @@ class Fake:
     `headers` is returned as the third value when it is given, which is the shape
     the real `_default_fetch_full` answers in - that is how the `Retry-After`
     case is driven without a network.
+
+    A repository root and a branch are answered by `target_answer` BEFORE
+    `status`/`body`, because since 2026-11-17 `run()` resolves what a request
+    names before it sends anything (the Q5 target gate). `missing` and
+    `missing_branches` give those names GitHub's real 404, which is how a test
+    drives the invented-target refusal; every other address keeps answering
+    `status`/`body`.
     """
 
-    def __init__(self, status=200, body="[]", headers=None):
+    def __init__(self, status=200, body="[]", headers=None, missing=(),
+                 missing_branches=()):
         self.status = status
         self.body = body
         self.headers = headers
         self.calls = []
+        self.missing = {str(m).lower() for m in missing}
+        self.missing_branches = {str(b) for b in missing_branches}
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
         self.calls.append({"method": method, "url": url,
                            "headers": dict(headers or {}), "body": body,
                            "timeout": timeout})
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         if self.headers is None:
             return self.status, self.body
         return self.status, self.body, dict(self.headers)
+
+    def target_answer(self, url):
+        """The gate's own answer for a repository root or a branch, or None."""
+        root = _repo_root(url)
+        if root is not None:
+            if root.lower() in self.missing:
+                return 404, "{}"
+            return 200, json.dumps({"full_name": root,
+                                    "permissions": {"push": True}})
+        branch = _branch_name(url)
+        if branch is not None:
+            if branch in self.missing_branches:
+                return 404, "{}"
+            return 200, json.dumps({"name": branch})
+        return None
+
+    def after_target(self):
+        """The calls after the target gate's own leading reads."""
+        calls = list(self.calls)
+        while calls and self.target_answer(calls[0]["url"]) is not None:
+            calls.pop(0)
+        return calls
 
     def urls(self):
         return [c["url"] for c in self.calls]
@@ -208,8 +243,8 @@ class Fake:
 class Routed(Fake):
     """A `Fake` that answers by URL substring, first match wins."""
 
-    def __init__(self, routes):
-        super().__init__()
+    def __init__(self, routes, missing=(), missing_branches=()):
+        super().__init__(missing=missing, missing_branches=missing_branches)
         self.routes = list(routes)
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
@@ -221,7 +256,28 @@ class Routed(Fake):
                 if callable(answer):
                     return answer(self.calls[-1])
                 return answer
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         return 404, "{}"
+
+
+#: `owner/name` for exactly a repository root under api.github.com, else None.
+_REPO_ROOT = re.compile(r"^https://api\.github\.com/repos/([^/?#]+/[^/?#]+)$")
+
+#: The branch name for a branch read, else None (a branch name may hold "/").
+_BRANCH_READ = re.compile(r"^https://api\.github\.com/repos/[^/?#]+/[^/?#]+"
+                          r"/branches/(.+)$")
+
+
+def _repo_root(url: str):
+    found = _REPO_ROOT.match(str(url or "").split("?")[0])
+    return found.group(1) if found else None
+
+
+def _branch_name(url: str):
+    found = _BRANCH_READ.match(str(url or "").split("?")[0])
+    return urllib.parse.unquote(found.group(1)) if found else None
 
 
 class _Token:
@@ -1174,13 +1230,19 @@ def t_a_merge_is_exactly_the_pinned_body():
             continue
         check(f"a merge at {bad[:12]!r} is refused before any request", False,
               "accepted")
-    # And run() refuses a hand-built merge request whose pin is not a sha.
+    # And run() refuses a hand-built merge request whose pin is not a sha. Since
+    # 2026-11-17 the target gate's own repository read goes first, so the honest
+    # claim is that nothing WRITE-shaped is sent - no merge can leave with a pin
+    # that is not a commit id.
     bad_request = GH.Request(GH.ACTION_MERGE, "merge", (), expected_sha="abc",
                              repo=REPO, number="1116")
     sent = Fake()
     out = _run_request(bad_request, sent)
-    check("a hand-built merge request with a bad pin is refused, not sent",
-          out.get("ok") is False and not sent.calls, out)
+    check("a hand-built merge request with a bad pin is refused, and only the "
+          "target check is sent",
+          out.get("ok") is False
+          and [c["method"] for c in sent.calls] == ["GET"]
+          and _repo_root(sent.calls[0]["url"]) is not None, (out, sent.calls))
 
 
 if __name__ == "__main__":

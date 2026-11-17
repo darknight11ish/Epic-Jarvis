@@ -99,6 +99,13 @@ same reason.
 
 WHAT LEAVES THIS PC, EXACTLY
 
+  * BEFORE ANYTHING ELSE, for a request that names a repository: ONE
+    `GET /repos/{owner}/{name}`, and one `GET .../branches/{name}` for a branch
+    the request names. That is the 2026-11-17 Q5 target check: a name GitHub
+    does not have is refused in a sentence that prints it, and a name that
+    could not be checked at all is refused as "could not check" rather than
+    assumed. Nothing is substituted, nothing is defaulted, and no argument
+    turns it off (see `_target_refusal`). This is a READ and changes nothing.
   * The GitHub token, in an `Authorization` header, to `api.github.com` and to
     nothing else. There is no arbitrary-URL code path here at all: every request
     is built from `GITHUB_API` plus a path this module wrote, so a model cannot
@@ -1165,6 +1172,13 @@ class Request:
       `scope`/`state` `github_list`'s closed scope, and its state filter (`open`
                       by default) when the scope is `pulls` or `issues`. They are
                       kept so the ANSWER can say "closed" instead of "open".
+      `repo`          The repository this request NAMES, exactly as it is in the
+                      addresses. `run()` resolves it with GitHub before anything
+                      else is sent (2026-11-17, Q5) and refuses a name that does
+                      not exist - it is not only merge/fix bookkeeping.
+      `refs`          The branch names this request names, likewise resolved
+                      before its own steps are sent. Empty for a request that
+                      names no branch.
       `ci`            True for `github_ci_status`. `run()` reads the newest run
                       and, when it failed, that run's jobs and ONE bounded log
                       tail, instead of one plain list.
@@ -1203,6 +1217,7 @@ class Request:
     state: str = ""               # github_list: "open" | "closed" | "all"
     ci: bool = False              # github_ci_status: newest run, then its jobs
     runs_list: bool = False       # github_list: the runs LIST, not one CI answer
+    refs: tuple = ()              # branch names the card names, checked first
 
     def urls(self) -> tuple:
         return tuple(s.url() for s in self.steps)
@@ -1669,7 +1684,24 @@ def capabilities_line() -> str:
 
 
 def _check_repo(repo: str) -> str:
+    """The repository a card names - or an ASK, never a guess (2026-11-17, Q5).
+
+    The name must come from the request itself: there is no repository that is
+    filled in from a setting, a default or "the one this chat is probably
+    about", and nothing here reads a git remote to work one out. A guessed name
+    is how a card gets raised for a repository the owner never meant - so an
+    absent name is refused BEFORE a card exists, in words that say what could
+    not be resolved and ask for it.
+    """
     repo = str(repo or "").strip()
+    if not repo:
+        raise GitHubError(
+            'Jarvis could not tell which repository this is about: no repository '
+            'was named, and Jarvis never fills one in from a default or a guess '
+            '- a guessed name could post to, or act on, somebody else\'s '
+            'repository. Say the repository as owner/name, exactly as GitHub '
+            'shows it, like "darknight11ish/Epic-Jarvis". Nothing was sent and '
+            'nobody was asked.')
     owner, _, name = repo.partition("/")
     if not _REPO.match(repo) or name in (".", "..") or owner in (".", ".."):
         # A `.` or `..` "name" passes the character class but is a path step in
@@ -2603,6 +2635,7 @@ def plan_list(args: Optional[dict] = None) -> Request:
         runs_list=(scope == "runs"),
         scope=scope,
         state=state,
+        repo=repo,
     )
 
 
@@ -2621,6 +2654,7 @@ def plan_read_file(args: Optional[dict] = None) -> Request:
         f"Jarvis will read the file {path} in {repo}{where}.",
         (step,),
         touches="Nothing on GitHub changes; this only reads one file.",
+        repo=repo,
     )
 
 
@@ -2676,6 +2710,7 @@ def plan_ci(args: Optional[dict] = None) -> Request:
                      "run ended and, when it failed, which checks failed and the "
                      "end of one log."),
             repo=repo,
+            refs=(ref,),
             ci=True,
         )
     return Request(
@@ -2708,6 +2743,7 @@ def plan_comment(args: Optional[dict] = None) -> Request:
         touches=(f"Your GitHub account posts one public-if-the-thread-is-public "
                  f"comment. It cannot be edited or taken back by Jarvis, and "
                  f"nothing else on GitHub changes."),
+        repo=repo,
     )
 
 
@@ -2738,6 +2774,7 @@ def plan_open_issue(args: Optional[dict] = None) -> Request:
         shows=shows,
         touches=("Your GitHub account opens one new issue. Jarvis cannot close, "
                  "edit or delete it afterwards, and nothing else changes."),
+        repo=repo,
     )
 
 
@@ -2754,6 +2791,7 @@ def plan_rerun(args: Optional[dict] = None) -> Request:
         touches=("This starts one CI run that has already run before. It changes "
                  "no code and no repository setting; it only spends the work of "
                  "running the checks again."),
+        repo=repo,
     )
 
 
@@ -3554,6 +3592,7 @@ def plan_open_pr(args: Optional[dict] = None, *,
             worktree=parts["worktree"],
             pr_title=parts["title"],
             pr_body=parts["body"],
+            refs=(parts["base"],),
         )
     repo = _check_repo(args.get("repo"))
     base = _check_base_branch(args.get("base"))
@@ -3581,6 +3620,7 @@ def plan_open_pr(args: Optional[dict] = None, *,
         repo=repo,
         base_ref=base,
         head_ref=branch,
+        refs=(base,),
     )
 
 
@@ -4094,6 +4134,201 @@ def _push_refusal(why: str) -> str:
     return ""
 
 
+# --------------------------------------------------------------------------
+#   Before anything else is sent, the target a request NAMES must exist
+#
+#   The owner's Q5 of 2026-11-17. The failure this stops is the local model
+#   INVENTING a repository, an owner or a branch that is not on GitHub and the
+#   tool then building a request around the invented name. That used to end in
+#   one of two ways, and both were bad:
+#
+#     * a 404 whose words were "there is nothing there - or it is private",
+#       which never names the name that was wrong, so nobody can see the model
+#       made it up; and
+#     * worse, an invented name that happens to be SOMEBODY ELSE'S real
+#       repository, where a write-shaped request would have acted on a
+#       repository the owner never named.
+#
+#   So every request that names a repository is resolved with ONE `GET
+#   /repos/{owner}/{name}` BEFORE its own steps are sent, and every branch it
+#   names with ONE `GET .../branches/{name}`. A name GitHub does not have is
+#   refused in a sentence that NAMES it: nothing is substituted for it, nothing
+#   is defaulted to a guessed repository, and there is no argument on `run()`
+#   that can turn the check off. A name GitHub could not be asked about at all
+#   is refused as "could not check" rather than assumed to exist.
+#
+#   This is one extra GET per action that names a repository, and it is the
+#   first thing that leaves this PC for that action.
+# --------------------------------------------------------------------------
+
+def _missing_repo_words(repo: str) -> str:
+    """What a person is told when GitHub has never heard of `repo`."""
+    return (f'Jarvis asked GitHub about "{repo}" and there is no such repository: '
+            f'either the owner or the repository name is wrong, or it is private '
+            f'and the token saved on this PC cannot see it. Jarvis stopped there '
+            f'and sent nothing else, so nothing on GitHub changed. Check the name '
+            f'exactly as GitHub shows it - the owner and the repository, like '
+            f'"darknight11ish/Epic-Jarvis".')
+
+
+def _missing_branch_words(ref: str, repo: str) -> str:
+    """What a person is told when the repository is real but the branch is not."""
+    return (f'Jarvis asked GitHub about the branch "{ref}" in {repo} and there is '
+            f'no branch with that name. Jarvis stopped there and sent nothing '
+            f'else, so nothing on GitHub changed. Check the branch name exactly '
+            f'as GitHub shows it - "main", or a name like "feature/tray-icon" - '
+            f'and remember that a tag or a commit is not a branch.')
+
+
+def _redirected_repo_words(repo: str) -> str:
+    """A renamed or moved repository: GitHub redirects, and this will not follow."""
+    return (f'Jarvis asked GitHub about "{repo}" and GitHub answered with a '
+            f'redirect, which means that name now points at a different '
+            f'repository - it was renamed or moved. Jarvis never follows a '
+            f'redirect and will not act on a name it could not confirm, so '
+            f'nothing else was sent. Ask again with the name GitHub shows today.')
+
+
+def _other_repo_words(repo: str, full_name: str) -> str:
+    """GitHub answered 200 but named a DIFFERENT repository than the one asked for."""
+    return (f'Jarvis asked GitHub about "{repo}" and GitHub answered for a '
+            f'different repository: "{full_name}". That name has been renamed or '
+            f'moved, and Jarvis will not quietly act on a repository you did not '
+            f'name. Nothing else was sent. Ask again with the name GitHub gave.')
+
+
+def _cannot_write_words(repo: str) -> str:
+    """Found, but GitHub's own permissions say this token cannot write there."""
+    return (f'Jarvis found "{repo}" on GitHub, but the GitHub account saved on '
+            f'this PC cannot write to it - it is not your repository, or the '
+            f'saved token has read-only access. Nothing else was sent, so nothing '
+            f'on GitHub changed.')
+
+
+def _unverified_words(what: str, why: str) -> str:
+    """What a person is told when GitHub could not confirm a target at all.
+
+    Kept apart from `_missing_repo_words` on purpose: this half must never turn
+    into "there is no such repository", which is a claim Jarvis cannot make from
+    a network failure, a refused token or an answer it could not read.
+    """
+    why = str(why or "").strip().rstrip(".")
+    return (f"Jarvis could not check whether {what} exists, because {why}. "
+            f"It will not guess at a target it could not confirm, so nothing "
+            f"else was sent and nothing on GitHub changed.")
+
+
+def _resolve_repo(fetch: Callable, headers: dict, token: str,
+                  repo: str) -> tuple:
+    """(the repository GitHub reports, or None) and ("" or a refusal sentence).
+
+    ONE GET on the repository's own address. The answers that matter are kept
+    apart here, because they mean different things to the owner:
+
+      * 200 with the SAME `full_name`   -> the target exists; go ahead.
+      * 200 with a DIFFERENT `full_name`-> GitHub has renamed or moved it, and
+                                           substituting it would act on a name
+                                           nobody named (refused).
+      * 404                             -> no such owner/repository, or one this
+                                           token cannot see (refused, named).
+      * 3xx                             -> a redirect, which is the same rename
+                                           in another form (refused).
+      * anything else                   -> COULD NOT CHECK (refused as such).
+    """
+    doc, status, err, cut = _read_part(fetch, _repo_path(repo), headers, token)
+    if status == 404:
+        return None, _missing_repo_words(repo)
+    if status == 0:
+        return None, _unverified_words(f'"{repo}"',
+                                       "api.github.com did not answer from this PC")
+    if 300 <= status < 400:
+        return None, _redirected_repo_words(repo)
+    if err or cut or not isinstance(doc, dict):
+        return None, _unverified_words(
+            f'"{repo}"',
+            err or "GitHub sent back an answer Jarvis could not read")
+    full = str(doc.get("full_name") or "").strip()
+    if full and full.lower() != repo.lower():
+        return None, _other_repo_words(repo, full)
+    return doc, ""
+
+
+def _resolve_ref(fetch: Callable, headers: dict, token: str,
+                 repo: str, ref: str) -> str:
+    """("" or the refusal sentence) for ONE branch name in a resolved repo.
+
+    A branch is only checked where a wrong name would otherwise produce a
+    PLAUSIBLE answer rather than an error: `github_ci_status` on an invented
+    branch used to read as "no CI run", which is a claim about the branch's
+    history, not about the spelling. A ref that may also be a tag or a commit
+    (the file read's `ref`) is deliberately NOT checked here, because
+    `/branches/` would refuse a perfectly good commit id.
+    """
+    path = (f"{_repo_path(repo)}/branches/"
+            f"{urllib.parse.quote(str(ref or ''), safe='/')}")
+    doc, status, err, cut = _read_part(fetch, path, headers, token)
+    if status == 404:
+        return _missing_branch_words(ref, repo)
+    if status == 0:
+        return _unverified_words(f'the branch "{ref}" in {repo}',
+                                 "api.github.com did not answer from this PC")
+    if err or cut or not isinstance(doc, dict):
+        return _unverified_words(
+            f'the branch "{ref}" in {repo}',
+            err or "GitHub sent back an answer Jarvis could not read")
+    return ""
+
+
+def _writes_at_run(r: Request) -> bool:
+    """Whether approving THIS request would change something on GitHub."""
+    if r.action not in ACTIONS or r.action == ACTION_FIX_WRITE:
+        return False
+    # The fix flow's prepare stage only copies the repository; the push has its
+    # own card, so prepare is a read here.
+    if r.action == ACTION_FIX_PUSH and r.fix_stage == "prepare":
+        return False
+    return True
+
+
+def _cannot_write_here(doc: dict) -> bool:
+    """True only when GitHub's OWN answer says this token cannot push.
+
+    `permissions` is what `GET /repos/{owner}/{name}` reports for the token that
+    asked. When it is absent the answer proves the repository exists but says
+    nothing about writing, and Jarvis does not invent a refusal from silence -
+    the write's own answer still decides.
+    """
+    perms = doc.get("permissions") if isinstance(doc, dict) else None
+    if not isinstance(perms, dict) or "push" not in perms:
+        return False
+    return perms.get("push") is False
+
+
+def _target_refusal(r: Request, fetch: Callable, headers: dict,
+                    token: str) -> str:
+    """The refusal for a target GitHub does not have, or "" to go ahead.
+
+    This is the ONE gate every action passes through, and it is inside `run()`
+    rather than in a planner because a planner sends nothing and this needs
+    GitHub's own answer. There is no argument that skips it: a `Request` that
+    names a repository is checked, and `r.repo` is set by the planner that built
+    the address, so the check cannot be told a different name from the one in
+    the URL.
+    """
+    if not r.repo:
+        return ""
+    doc, refusal = _resolve_repo(fetch, headers, token, r.repo)
+    if refusal:
+        return refusal
+    if _writes_at_run(r) and _cannot_write_here(doc):
+        return _cannot_write_words(r.repo)
+    for ref in tuple(r.refs or ()):
+        refusal = _resolve_ref(fetch, headers, token, r.repo, ref)
+        if refusal:
+            return refusal
+    return ""
+
+
 def run(r: Request, *, fetch: Optional[Callable] = None,
         approved: bool = False, git: Optional[Callable] = None,
         log: Optional[Callable] = None) -> dict:
@@ -4131,6 +4366,14 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
     # answers two values is still understood (`_fetched`).
     fetch = fetch or _default_fetch_full
     headers = _headers(token)
+
+    # The 2026-11-17 Q5 gate, and it is the FIRST thing sent: whatever this
+    # request names has to exist on GitHub before its own steps go anywhere.
+    # `r.repo` and `r.refs` are set by the planner that built the addresses, so
+    # the name checked is the name used, and no caller argument can skip it.
+    refusal = _target_refusal(r, fetch, headers, token)
+    if refusal:
+        return {"ok": False, "error": refusal}
 
     # The three 2026-11-10 flows re-read GitHub (and, for a push, the folder)
     # before they send anything. They are their own readers because each one has
