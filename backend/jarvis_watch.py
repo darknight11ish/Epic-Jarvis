@@ -717,7 +717,11 @@ def register_job() -> bool:
         # while it runs.
         topic = (params or {}).get("topic")
         out = check(topic, fetcher=(params or {}).get("fetcher"))
-        ctx.progress(f"checked {out['checked']} topic(s)")
+        # The sentence is a NOTE, not a fraction: `progress(fraction, note)`
+        # swallows a string in the first position (float() raises inside it),
+        # so this used to reach neither the row nor the event frame
+        # (2026-11-17). Passed by keyword, it is published on the bus.
+        ctx.progress(note=f"checked {out['checked']} topic(s)")
         # Even here it does not speak. A notify topic reaches the daily brief;
         # everything else waits for the owner to ask.
         out["queued_for_digest"] = to_digest()
@@ -747,8 +751,8 @@ def register_job() -> bool:
         ctx.require("github_read")
         out = poll_repos()
         out["digest"] = deliver_digest()
-        ctx.progress(f"checked {out['checked']} repository watch(es), "
-                     f"{out['new']} new item(s)")
+        ctx.progress(note=f"checked {out['checked']} repository watch(es), "
+                          f"{out['new']} new item(s)")
         return out
 
     try:

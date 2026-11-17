@@ -325,6 +325,28 @@ def t_d4_waiting_on_you_and_automated_skips():
           len(MAIL.find_quiet_threads([row(72)], now=now)) == 1)
 
 
+def t_d4_the_clock_is_read_when_no_now_is_given():
+    """The no-`now=` call is the one every real caller makes (2026-11-17).
+
+    `find_quiet_threads()` reads `time.time()` when the caller does not fix the
+    clock, and the module had no `import time` at all: calling it without
+    `now=` raised `NameError: name 'time' is not defined`. A lane writing an
+    email-latch test hit exactly that and worked around it by passing `now=`,
+    which is how a missing import survives a suite whose every other call
+    happens to pass one. NOTHING below passes `now=`.
+
+    BITE: delete `import time` from jarvis_email.py and both checks raise.
+    """
+    at = datetime.now().timestamp() - 5 * 86400
+    rows = [{"thread": "t-clock", "direction": "out", "at": at,
+             "who": "Alex", "text": "Can you confirm the date?"}]
+    got = MAIL.find_quiet_threads(rows)                 # deliberately no now=
+    check("quiet threads: no now= reads this PC's clock instead of raising",
+          [r["kind"] for r in got] == ["waiting_on_them"], got)
+    check("quiet threads: ... and an empty list still returns []",
+          MAIL.find_quiet_threads([]) == [])
+
+
 def t_d4_privacy_gates_and_taint():
     now = 1_790_000_000.0
 
@@ -596,6 +618,7 @@ if __name__ == "__main__":
                t_d3_two_minute_prep_degrades_honestly,
                t_d4_waiting_on_them_boundaries,
                t_d4_waiting_on_you_and_automated_skips,
+               t_d4_the_clock_is_read_when_no_now_is_given,
                t_d4_rows_never_carry_email_words,
                t_d4_bare_addresses_and_secret_names_are_scrubbed_everywhere,
                t_d4_privacy_gates_fail_closed_when_the_private_view_raises,

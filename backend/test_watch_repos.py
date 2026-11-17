@@ -656,8 +656,13 @@ def t_the_registered_poll_body_is_callable_with_its_payload():
             def require(self, action):
                 self.required.append(action)
 
-            def progress(self, text):
-                self.progressed.append(text)
+            def progress(self, fraction=None, note=""):
+                # The real `JobContext.progress(fraction=None, note="")`
+                # (jarvis_jobs.py:1196). The same shape the sibling
+                # test_watch_ci.py records: the sentence is the NOTE, and a
+                # string in the first position would be swallowed as a bad
+                # fraction (2026-11-17).
+                self.progressed.append((fraction, note))
         ctx = Ctx()
         out = registered["watch_repos"](ctx, {})
         check("the body asks for github_read (one-shot allow, no standing rule)",
@@ -665,6 +670,10 @@ def t_the_registered_poll_body_is_callable_with_its_payload():
         check("the body polls its payload and returns counts",
               isinstance(out, dict) and out.get("checked") == 1
               and "new" in out and "digest" in out, out)
+        check("... and it reports that count as the progress NOTE, not a fraction",
+              ctx.progressed == [(None, f"checked {out['checked']} repository "
+                                       f"watch(es), {out['new']} new item(s)")],
+              ctx.progressed)
         check("... so the rows the job writes are the decisions log",
               W.repo_watches()[0]["last_polled"] is not None, W.repo_watches())
     finally:

@@ -1315,6 +1315,110 @@ def t_a_finished_job_announces_itself_and_never_its_words():
 
 
 # --------------------------------------------------------------------------
+#  10. A body's progress NOTE reaches the bus (2026-11-17)
+# --------------------------------------------------------------------------
+
+class _Policy:
+    """The out-of-repo policy file, reduced to the calls this path makes.
+
+    `jarvis_framework` lives outside this repository, but `ctx.require()` reads
+    its tier table, so without it a capability job fails before the handler
+    runs and a test of the handler would only ever skip. The two boundaries
+    faked here are the two the suite already fakes: the event bus by module
+    name, and the policy by module object - never the subject.
+
+    `progress_event_seconds = 0` turns OFF `_emit`'s one-frame-a-second
+    throttle, so the assertion is about the body's report and not about how
+    long the test happened to take.
+    """
+
+    def load_framework(self):
+        return {"jobs": {"progress_event_seconds": 0}}
+
+    def action_tier(self, action):
+        return "ask"
+
+    def audit_log(self, event, detail=None):
+        return True
+
+
+def t_a_progress_note_a_body_reports_reaches_the_bus():
+    """The watcher's own sentence must arrive as the frame's `note`.
+
+    `JobContext.progress(fraction=None, note="")` takes the note SECOND. Both
+    watcher bodies were calling it with the sentence as the first positional
+    argument (2026-11-17), so `float("checked 1 topic(s)")` raised inside
+    `progress()` and was swallowed: the row's `note` stayed empty and every
+    published frame carried no words. The running frame still appeared - which
+    is why the announcement test below, which only asked whether a `progress`
+    key exists, never noticed.
+
+    This drives the REAL `watch_github` body - registered by the same
+    `jarvis_watch.register_job()` the route's start-up calls - through the real
+    queue, and reads the frame a client would receive.
+
+    BITE: pass the sentence positionally again and both the row's note and the
+    frame's note are empty while every other check in this suite stays green.
+    """
+    fresh()
+    W, calls, restore_get = _production_watch()
+    real_fw = J.fw
+    real_bus = sys.modules.get("jarvis_events")
+    fake = _recording_bus()
+    J.fw = _Policy()
+    sys.modules["jarvis_events"] = fake
+    try:
+        jid = J.create("watch_github", {}, label=ANNOUNCE_LABEL,
+                       caps=[GITHUB_ACTION])
+        J.run_due()
+        row = J.get(jid) or {}
+    finally:
+        J.fw = real_fw
+        if real_bus is None:
+            sys.modules.pop("jarvis_events", None)
+        else:
+            sys.modules["jarvis_events"] = real_bus
+        restore_get()
+
+    frames = [(kind, payload) for kind, payload in fake.BUS.frames
+              if kind == "job" and payload.get("id") == jid]
+    check("the production body ran to done", row.get("state") == "done",
+          row.get("state"))
+    check("the real search ran once, so the number in the note is real",
+          _job_result(row).get("checked") == 1 and len(calls) == 1,
+          (_job_result(row), calls))
+    check("the sentence the body reported is on the job's own row",
+          row.get("note") == "checked 1 topic(s)", row.get("note"))
+    check("a published frame carries that note, so a pane can show it",
+          any(p.get("note") == "checked 1 topic(s)" for _k, p in frames),
+          frames)
+
+
+def t_no_job_body_reports_its_sentence_as_a_progress_fraction():
+    """The other two watcher call sites, which have no runnable harness.
+
+    `watch_repos` needs a repository poll and `watch_pr_checks` needs a
+    runner, so the sentence-as-fraction shape is pinned at the source instead:
+    any `ctx.progress(...)` in either watcher that passes a STRING positionally
+    is the same mistake the test above proves end to end. `note=` is a keyword,
+    so a correct call cannot trip this.
+    """
+    offenders = []
+    for name in ("jarvis_watch.py", "jarvis_watch_ci.py"):
+        tree = ast.parse((HERE / name).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            func = getattr(node, "func", None)
+            if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute)
+                    and func.attr == "progress"):
+                continue
+            for arg in node.args:
+                if isinstance(arg, (ast.JoinedStr, ast.Constant)):
+                    offenders.append((name, node.lineno))
+    check("no watcher passes its progress sentence as the fraction",
+          offenders == [], offenders)
+
+
+# --------------------------------------------------------------------------
 #   12. PRIORITY (2026-11-16): one job goes first, and only the owner moves it
 # --------------------------------------------------------------------------
 

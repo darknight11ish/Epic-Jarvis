@@ -705,7 +705,8 @@ def handler(ctx, params: dict) -> dict:
                      "reason_code": row.get("reason_code"),
                      "preview_text": row.get("preview_text")})
     try:
-        ctx.progress(f"checked {len(out_prs)} pull request(s)")
+        # A NOTE, not a fraction - see jarvis_watch.py's handler (2026-11-17).
+        ctx.progress(note=f"checked {len(out_prs)} pull request(s)")
     except Exception:                                  # noqa: BLE001
         pass
     return {"mode": m, "checked": len(out_prs), "decisions": rows}
