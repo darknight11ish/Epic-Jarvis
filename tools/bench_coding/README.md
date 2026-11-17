@@ -88,7 +88,7 @@ honest verdict is. Neither reads the other's numbers, and this tool never opens
 
     py -3 tools\bench_coding\run.py --self-test
 
-62 stdlib `unittest` tests under `tools/bench_coding/tests/` (nothing is
+63 stdlib `unittest` tests under `tools/bench_coding/tests/` (nothing is
 registered in `backend/`, so CI's alphabetical shard order is untouched). They
 prove the fixture's defects are real, that an answer can only write inside a
 disposable repo, that an `X-Jarvis-Route` header is parsed as measured, that a
@@ -99,12 +99,12 @@ never prints the token, never pushes and never checks out a branch.
 
 The live state is part of the record, not a footnote:
 
-* **The coding preset's pooled lane was not loaded.** The live PC reported the
-  coding preset as chosen, but chat was pointed at the everyday lane and
-  `qwen3-coder-30b-a3b-ud-q3-k-xl` was loaded there at **8,192 tokens** of
-  context with about 3.5 GiB spilled into system RAM - not the preset's own
-  49,152-token pooled lane. The rows that ran measured the model the product
-  actually served, at that window; the report says so per row.
+* **The pooled lane state is measured, not assumed.** On the final run the PC
+  reported the `pooled` lane loaded with
+  `qwen3-coder-30b-a3b-ud-q3-k-xl:latest` at **49,152 tokens, zero spill, 100%
+  on the cards** - the spec's target. An earlier pilot, before that lane came
+  up, had answered on the everyday lane at 8,192 tokens with about 3.5 GiB
+  spilled; the report records both because the difference is real.
 * **The cloud could not be reached by design.** The cloud escalation switch is
   off and a taint latch was active, so T3.1's cloud leg and all of T3.2 are
   BLOCKED.
