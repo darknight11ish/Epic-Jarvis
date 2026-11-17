@@ -18,6 +18,10 @@ pinned, in plain words:
    checked below). It is only ever sent to this PC.
 4. THE STATUS IS HONEST. "filed" only after the text was read back.
 5. THE PATCH applies to the text the earlier patches wrote, and reverts.
+6. A NAME IS A NAME (2026-11-16). A spoken sentence or an instruction is
+   refused as a note's name in plain words, never truncated into one; a name
+   that already means one of the owner's notes is refused in the ONE
+   resolver's own words; and a capture with no body makes no file at all.
 """
 import json
 import os
@@ -447,6 +451,187 @@ def t_bad_requests():
     check("an empty note is a 400", NC.handle_post({"target": "logseq", "text": ""})[0] == 400)
     check("an unknown target is a 400", NC.handle_post({"target": "x", "text": "y"})[0] == 400)
     check("a non-object body is a 400", NC.handle_post(["x"])[0] == 400)
+
+
+# ---- a note's name is a name (2026-11-16) -----------------------------------
+
+def t_a_spoken_sentence_is_never_a_note_name():
+    """The vault artefact's sentence, and the plain words that refuse it.
+
+    A 0-byte note in the owner's vault is named after the whole utterance
+    `Workout Log, pin it, and add using todays date that i used the punching
+    bag` (`.dsh-scratch/GAP-REVIEW-2026-11-16/vault-artefacts.md`). This module
+    turns the owner's words into a Joplin note's NAME the same way - the first
+    line, cut at 80 characters with an ellipsis - so the same rule is enforced
+    here: the sentence is refused and quoted back, never shortened into a
+    title that looks plausible. The vault's own create path is a different
+    module (see the change's records); this is the capture path's half.
+    """
+    os.environ[NC.JOPLIN_TOKEN_ENV] = TOKEN
+    os.environ.pop(NC.JOPLIN_URL_ENV, None)
+    # This suite has no vault: a name that means a note is the NEXT test's job.
+    saved_vault = os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+    sentence = ("Workout Log, pin it, and add using todays date that i used the "
+                "punching bag")
+    try:
+        with NoNetwork():
+            p = NC.plan("joplin", sentence)
+            card = NC.describe(p)
+        check("the artefact's sentence is refused, not filed", bool(p.reason_empty),
+              p.reason_empty)
+        check("the refusal quotes the sentence", "Workout Log, pin it" in p.reason_empty,
+              p.reason_empty)
+        check("it says that is a sentence, not a note name",
+              "is a whole sentence, not a note name" in p.reason_empty, p.reason_empty)
+        check("and asks for just the note's name",
+              "say just the note's name" in p.reason_empty, p.reason_empty)
+        check("the sentence never became the note's title", p.title == "", repr(p.title))
+        check("the card carries the same refusal and writes nothing",
+              "not a note name" in card and "Nothing would be written" in card, card)
+
+        code, out = NC.handle_post({"target": "joplin", "text": sentence})
+        check("the route refuses it as a bad request (400), not as a setup problem",
+              code == 400 and out["state"] == "not_filed", repr((code, out)))
+        check("and the phone's message field says why",
+              "not a note name" in str(out.get("message")), repr(out.get("message")))
+        calls = []
+
+        def fake(method, path, query, body=None):
+            calls.append((method, path))
+            return {"id": "n1"}
+        sent = NC.run(p, approved=True, joplin_call=fake)
+        check("nothing is sent to Joplin when the name is a sentence",
+              sent["ok"] is False and not calls, repr((sent, calls)))
+
+        check("a name that joins a second instruction is refused",
+              "is a whole sentence" in NC.plan(
+                  "joplin", "Buy milk and eggs on the way home").reason_empty)
+        check("a name that thanks Jarvis for a job is not the point; a command is",
+              "is an instruction" in NC.plan(
+                  "joplin", "Pin the gym schedule").reason_empty)
+        check("... including one that opens with 'remember'",
+              "is an instruction" in NC.plan(
+                  "joplin", "Remember the boiler code").reason_empty)
+        check("a name the caller supplies is checked the same way",
+              "is an instruction" in NC.plan(
+                  "joplin", "milk", title="Add milk to the list").reason_empty)
+        check("a name that trails off in an ellipsis is refused",
+              "ellipsis" in NC.plan("joplin", "Workout log notes…").reason_empty)
+        too_many = " ".join(f"w{i}" for i in range(11))   # 11 words; the bound is 10
+        check("a name past the word bound is refused as too long",
+              "too long" in NC.plan("joplin", too_many).reason_empty)
+        check("a name past the character bound is refused as too long",
+              "too long" in NC.plan("joplin", "a" * 90).reason_empty)  # bound: 80
+
+        long_line = "Cardio " + "walking " * 12
+        cut = NC.plan("joplin", long_line)
+        check("a first line too long for a name is refused, never cut to a title",
+              bool(cut.reason_empty) and cut.title == "", repr(cut.title))
+
+        check("a real name is still a name",
+              NC.plan("joplin", "Call the dentist").title == "Call the dentist")
+        check("and the words after the first line are still the body",
+              NC.plan("joplin", "Shopping list\nmilk and eggs").title == "Shopping list")
+    finally:
+        if saved_vault is not None:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = saved_vault
+        os.environ.pop(NC.JOPLIN_TOKEN_ENV, None)
+
+
+def t_a_name_that_already_means_a_note_is_not_duplicated():
+    """Never a second note with the same name (2026-11-16).
+
+    The duplicate that made "read my workout log note" unanswerable is
+    `Private & Shared/Workout/Workout Log.md` beside the root `Workout log.md`
+    the audit found. Before a named note is created, the ONE resolver
+    (`jarvis_notes.resolve_note`) is asked, and its own words are reused: one
+    note means "there is already a note at ...", several mean the resolver's
+    own question with every candidate. No second note is made either way.
+    """
+    os.environ[NC.JOPLIN_TOKEN_ENV] = TOKEN
+    os.environ.pop(NC.JOPLIN_URL_ENV, None)
+    vault = Path(tempfile.mkdtemp(dir=_TMP, prefix="vault"))
+    (vault / ".obsidian").mkdir()
+    real = vault / "Private & Shared" / "Workout" / "Workout Log.md"
+    real.parent.mkdir(parents=True)
+    real.write_text("---\naliases: [workout log, my workout log]\n---\nNov 15\n",
+                    encoding="utf-8")
+    saved = os.environ.get("JARVIS_OBSIDIAN_VAULT")
+    os.environ["JARVIS_OBSIDIAN_VAULT"] = str(vault)
+    try:
+        with NoNetwork():
+            p = NC.plan("joplin", "Workout Log")
+        check("a name that already means a note is refused", bool(p.reason_empty),
+              p.reason_empty)
+        check("in the ONE resolver's own words: there is already a note at ...",
+              p.reason_empty.startswith(
+                  "there is already a note at Private & Shared/Workout/Workout Log.md"),
+              p.reason_empty)
+        check("with its own refusal code, content_preexists",
+              getattr(p, "reason_code", "") == "content_preexists", repr(p.reason_empty))
+        check("and it does not silently pick that note or make a second one",
+              p.title == "Workout Log" and "nothing was created" in p.reason_empty,
+              repr((p.title, p.reason_empty)))
+        code, out = NC.handle_post({"target": "joplin", "text": "Workout Log"})
+        check("the route refuses it as a bad request, not 'not set up'",
+              code == 400 and "already a note" in str(out.get("message")),
+              repr((code, out.get("message"))))
+
+        (vault / "A").mkdir()
+        (vault / "B").mkdir()
+        (vault / "A" / "Gym.md").write_text("a", encoding="utf-8")
+        (vault / "B" / "Gym.md").write_text("b", encoding="utf-8")
+        two = NC.plan("joplin", "Gym")
+        check("two notes with that name: refused with both named",
+              "matches 2 notes" in two.reason_empty
+              and "A/Gym.md" in two.reason_empty and "B/Gym.md" in two.reason_empty,
+              two.reason_empty)
+        check("... and the resolver's own question, not a pick",
+              "Say the folder and the note's name" in two.reason_empty, two.reason_empty)
+        check("... under the resolver's own code, ambiguous_section",
+              getattr(two, "reason_code", "") == "ambiguous_section", repr(two.reason_empty))
+
+        fresh = NC.plan("joplin", "Brand New")
+        check("a name no note has is still filed as before",
+              fresh.reason_empty == "" and fresh.title == "Brand New",
+              repr(fresh.reason_empty))
+    finally:
+        if saved is None:
+            os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+        else:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = saved
+        os.environ.pop(NC.JOPLIN_TOKEN_ENV, None)
+
+
+def t_a_capture_with_no_body_makes_no_file():
+    """Never an empty note, and never a 0-byte file (2026-11-16).
+
+    plan() already refused an empty body; run() takes ANY Plan, including one
+    built by hand, and used to make today's journal file with only a block
+    marker in it. Nothing is created now, and it says why.
+    """
+    g = graph()
+    code, out = NC.handle_post({"target": "logseq", "text": "   \n\t "})
+    check("an empty capture is a 400 that says the note is empty",
+          code == 400 and "empty" in str(out.get("message")), repr((code, out)))
+    check("and no journal file was made for it",
+          not list((g / "journals").glob("*.md")))
+    target = g / "journals" / "2026-11-16.md"
+    out = NC.run(NC.Plan(target="logseq", text="   ", file=str(target)), approved=True)
+    check("a Plan built by hand with no body writes no file",
+          out["ok"] is False and not target.exists(), repr(out))
+    check("and it says why", "the note is empty" in str(out.get("reason")),
+          repr(out.get("reason")))
+    day = g / "daily" / "2026-11-16.md"
+    out = NC.run(NC.Plan(target="obsidian", text="\n\n", file=str(day), vault=str(g)),
+                 approved=True)
+    check("the Obsidian daily note is not created empty either",
+          out["ok"] is False and not day.exists(), repr(out))
+    existing = g / "journals" / "2026_11_16.md"
+    existing.write_text("- earlier\n", encoding="utf-8")
+    NC.run(NC.Plan(target="logseq", text="", file=str(existing)), approved=True)
+    check("an existing journal is untouched by an empty capture",
+          existing.read_text(encoding="utf-8") == "- earlier\n")
 
 
 def t_the_agent_offers_the_two_tools_gated_by_their_own_names():
