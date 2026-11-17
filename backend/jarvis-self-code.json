@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "682f3d3471604d9e4a9b65e4936d56951232ed11",
- "built_at": "2026-11-16T17:40:47-08:00",
+ "ref": "b9325012e05670495f55f394f45664f39fc91e33",
+ "built_at": "2026-11-17T14:16:06-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3449,9 +3449,10 @@
    "id": "security",
    "title": "Secrets, privacy and protection",
    "group": "runtime",
-   "purpose": "The guards in front of the owner's private material: masking and scrubbing secrets, spotting an injected instruction, the vault, the protected folders and the private-chat gate.",
+   "purpose": "The guards in front of the owner's private material: masking and scrubbing secrets, spotting an injected instruction, the vault, the protected folders, the private-chat gate, and the one egress gate that decides whether a request may leave this PC at all.",
    "files": [
     "backend/jarvis_content_risk.py",
+    "backend/jarvis_egress_gate.py",
     "backend/jarvis_injection.py",
     "backend/jarvis_mail_mask.py",
     "backend/jarvis_paste_guard.py",
@@ -3468,8 +3469,12 @@
     "backend/jarvis_source_independence.py",
     "backend/jarvis_vault.py"
    ],
-   "file_count": 16,
+   "file_count": 17,
    "key_modules": [
+    {
+     "path": "backend/jarvis_egress_gate.py",
+     "summary": "jarvis_egress_gate.py - one decision, asked before any word leaves this PC."
+    },
     {
      "path": "backend/jarvis_scrub.py",
      "summary": "jarvis_scrub.py - takes passwords, keys and the pairing token out of what the backend writes to its log."
@@ -3488,6 +3493,7 @@
     }
    ],
    "tests": [
+    "backend/test_chatbot_api.py",
     "backend/test_scrub.py",
     "backend/test_injection_table.py",
     "backend/test_vault.py",
@@ -4782,24 +4788,45 @@
     "changelog.d/2026-11-15-which-commit-each-piece-came-from.md",
     "changelog.d/2026-11-16-audit-invoke-shim-allowlisted.md",
     "changelog.d/2026-11-16-awareness-gaps.md",
+    "changelog.d/2026-11-16-bench-coding-hybrid.md",
     "changelog.d/2026-11-16-chat-six-wrong-answers.md",
+    "changelog.d/2026-11-16-completion-tokens-recorded.md",
     "changelog.d/2026-11-16-def078-ci-run-count.md",
     "changelog.d/2026-11-16-def079-amended.md",
     "changelog.d/2026-11-16-desktop-hardware-copy-truth.md",
+    "changelog.d/2026-11-16-destroy-refusals.md",
+    "changelog.d/2026-11-16-egress-census-and-browser-exception.md",
     "changelog.d/2026-11-16-github-off-tool-card-in-place.md",
     "changelog.d/2026-11-16-github-trust-probe.md",
+    "changelog.d/2026-11-16-github-write-tiers-on-the-card.md",
     "changelog.d/2026-11-16-hardware-backend-claims-truth.md",
+    "changelog.d/2026-11-16-hardware-three-cards-two-contexts.md",
+    "changelog.d/2026-11-16-job-done-notify.md",
+    "changelog.d/2026-11-16-job-priority.md",
     "changelog.d/2026-11-16-loaded-model-not-askable.md",
+    "changelog.d/2026-11-16-memory-is-not-outside-text.md",
+    "changelog.d/2026-11-16-note-capture-name-gate.md",
     "changelog.d/2026-11-16-notes-resolver-tiers.md",
+    "changelog.d/2026-11-16-ollama-url-loopback.md",
+    "changelog.d/2026-11-16-one-egress-gate.md",
+    "changelog.d/2026-11-16-over-window-refused-and-numbered-file-lines.md",
     "changelog.d/2026-11-16-phone-copy-says-it-once.md",
     "changelog.d/2026-11-16-phone-fact-answers.md",
     "changelog.d/2026-11-16-phone-hardware-closing-line.md",
     "changelog.d/2026-11-16-phone-one-home-for-pc-notification-rows.md",
     "changelog.d/2026-11-16-plan-card-and-trusted-mode-design.md",
+    "changelog.d/2026-11-16-preset-click-uncarded.md",
     "changelog.d/2026-11-16-python-notices-generator.md",
     "changelog.d/2026-11-16-recent-changes-twin-written.md",
     "changelog.d/2026-11-16-research-search-both-languages.md",
     "changelog.d/2026-11-16-specta-hotkeys-pilot.md",
+    "changelog.d/2026-11-17-browser-window-switch.md",
+    "changelog.d/2026-11-17-github-invented-targets-refused.md",
+    "changelog.d/2026-11-17-note-flag-read-takes-the-folder.md",
+    "changelog.d/2026-11-17-pooled-start-order.md",
+    "changelog.d/2026-11-17-readme-claim-audit.md",
+    "changelog.d/2026-11-17-three-surgical-defects.md",
+    "changelog.d/2026-11-17-vault-note-risk-row.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -5033,13 +5060,29 @@
     "decisions.d/2026-11-15-self-code-map-out-of-pull-requests.md",
     "decisions.d/2026-11-15-source-commit-beside-version.md",
     "decisions.d/2026-11-15-trusted-cap-per-action.md",
+    "decisions.d/2026-11-16-a-spoken-sentence-is-never-a-note-name.md",
     "decisions.d/2026-11-16-awareness-gaps.md",
+    "decisions.d/2026-11-16-bench-coding-harness-boundary.md",
+    "decisions.d/2026-11-16-egress-second-round.md",
     "decisions.d/2026-11-16-favourite-own-property.md",
+    "decisions.d/2026-11-16-github-destroy-refusals.md",
     "decisions.d/2026-11-16-github-off-tool-card-in-place.md",
+    "decisions.d/2026-11-16-github-write-tiers-on-the-card.md",
+    "decisions.d/2026-11-16-job-done-notify.md",
+    "decisions.d/2026-11-16-job-priority-is-the-owners.md",
+    "decisions.d/2026-11-16-memory-is-not-outside-text.md",
     "decisions.d/2026-11-16-notes-resolver-tier-order.md",
+    "decisions.d/2026-11-16-ollama-url-refused-not-used.md",
+    "decisions.d/2026-11-16-one-completion-count.md",
+    "decisions.d/2026-11-16-one-egress-gate.md",
+    "decisions.d/2026-11-16-over-window-trim-once-then-refuse.md",
     "decisions.d/2026-11-16-phone-copy-says-it-once.md",
     "decisions.d/2026-11-16-phone-fact-answers.md",
+    "decisions.d/2026-11-16-preset-click-uncarded.md",
     "decisions.d/2026-11-16-research-one-query-per-language.md",
+    "decisions.d/2026-11-17-browser-window-switch.md",
+    "decisions.d/2026-11-17-github-targets-must-exist.md",
+    "decisions.d/2026-11-17-vault-note-risk-row.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5545,7 +5588,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 1087,
+   "file_count": 1124,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5813,6 +5856,21 @@
     "scripts/wait-then-cutover.ps1",
     "sitecustomize.py",
     "tools/_voice_temp.py",
+    "tools/bench_coding/README.md",
+    "tools/bench_coding/cases.py",
+    "tools/bench_coding/client.py",
+    "tools/bench_coding/fixture.py",
+    "tools/bench_coding/grade.py",
+    "tools/bench_coding/report.py",
+    "tools/bench_coding/run.py",
+    "tools/bench_coding/telemetry.py",
+    "tools/bench_coding/tests/__init__.py",
+    "tools/bench_coding/tests/test_fixture.py",
+    "tools/bench_coding/tests/test_grade.py",
+    "tools/bench_coding/tests/test_report.py",
+    "tools/bench_coding/tests/test_run.py",
+    "tools/bench_coding/tests/test_safety.py",
+    "tools/bench_coding/tests/test_telemetry.py",
     "tools/build_locomo_fixture.py",
     "tools/build_patch_history.py",
     "tools/check_apk_16kb.py",
@@ -5821,6 +5879,7 @@
     "tools/check_command_acl.py",
     "tools/check_defect_register.py",
     "tools/check_docs_map.py",
+    "tools/check_egress_gate.py",
     "tools/check_event_names.py",
     "tools/check_fault_probes.py",
     "tools/check_feature_controls.py",
@@ -6012,6 +6071,8 @@
     "tools/hud-deltas/gate-record-call.txt",
     "tools/hud-deltas/gate-update-in-chat-new.txt",
     "tools/hud-deltas/gate-update-in-chat-old.txt",
+    "tools/hud-deltas/hud-agent-request-new.txt",
+    "tools/hud-deltas/hud-agent-request-old.txt",
     "tools/hud-deltas/hud-bench-routes-new.txt",
     "tools/hud-deltas/hud-bench-routes-old.txt",
     "tools/hud-deltas/hud-bench-run-new.txt",
@@ -6024,8 +6085,12 @@
     "tools/hud-deltas/hud-deny-reply-old.txt",
     "tools/hud-deltas/hud-loopback-connect-new.txt",
     "tools/hud-deltas/hud-loopback-connect-old.txt",
+    "tools/hud-deltas/hud-memory-latch-new.txt",
+    "tools/hud-deltas/hud-memory-latch-old.txt",
+    "tools/hud-deltas/hud-memory-server-block-new.txt",
     "tools/hud-deltas/hud-ollama-direct-cap-new.txt",
     "tools/hud-deltas/hud-ollama-direct-cap-old.txt",
+    "tools/hud-deltas/hud-request-for-agent-new.txt",
     "tools/hud-deltas/hud-static-assets.txt",
     "tools/hud-deltas/hud-static-route.txt",
     "tools/hud-deltas/jobs-routes-h3-new.txt",
@@ -6083,7 +6148,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 514,
+   "file_count": 536,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6366,6 +6431,7 @@
     "jarvis-backend/jarvis_devices.py",
     "jarvis-backend/jarvis_docker.py",
     "jarvis-backend/jarvis_documents.py",
+    "jarvis-backend/jarvis_egress_gate.py",
     "jarvis-backend/jarvis_email.py",
     "jarvis-backend/jarvis_email_draft.py",
     "jarvis-backend/jarvis_email_send.py",
@@ -6608,7 +6674,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 343,
+   "file_count": 344,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6638,111 +6704,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "682f3d3471604d9e4a9b65e4936d56951232ed11",
-   "date": "2026-11-16",
-   "subject": "Merge pull request #1322 from darknight11ish/fix/wrong-answers-2026-11-16"
+   "sha": "b9325012e05670495f55f394f45664f39fc91e33",
+   "date": "2026-11-17",
+   "subject": "fix(ollama): OLLAMA_URL must be this PC, and a cloud lane cannot borrow Jarvis's token (#1330)"
   },
   {
-   "sha": "7f5d3de9cdff230ee600b9c9be42404f48e14a9c",
-   "date": "2026-11-16",
-   "subject": "Merge pull request #1325 from darknight11ish/fix/audit-invoke-shim-2026-11-16"
+   "sha": "2ffe919a721f5f979cf9f5bebe5e27fab8b64dd1",
+   "date": "2026-11-17",
+   "subject": "fix(ci): a required check could open a browser, so the window gets its own switch (#1347)"
   },
   {
-   "sha": "199afd04db62e30f42ef6464ffeb61021943b6ef",
-   "date": "2026-11-16",
-   "subject": "test(focus): bare 'stop' is the stop-everything intent, never the focus one"
+   "sha": "90e818084904ef687053a774d53eb9c0cc8b176d",
+   "date": "2026-11-17",
+   "subject": "fix(github): refuse an invented repository, owner or branch before any request (#1348)"
   },
   {
-   "sha": "8250869ad428c3a753e05aa6d35f61130bf9b9f5",
-   "date": "2026-11-16",
-   "subject": "tools: the invoke-grants check accepts the tauri-api-core shim"
+   "sha": "96f85a3b36da1b572e1290ae81dfc1c1516c4540",
+   "date": "2026-11-17",
+   "subject": "fix(notes): the pinned question takes the folder it was asked about (#1349)"
   },
   {
-   "sha": "4dd144d5e034b66b17adfb341f7e88df7c4c4005",
-   "date": "2026-11-16",
-   "subject": "Merge pull request #1323 from darknight11ish/fix/research-search-two-queries-2026-11-16"
+   "sha": "c2072ce6d9ac9201c4f158dfae569ff35ebadca1",
+   "date": "2026-11-17",
+   "subject": "gate: classify edit_vault_note as local/reversible, and reword the unclassified warning (#1350)"
   },
   {
-   "sha": "dd543f3bdf31d41413b55ef848f43c33701e8d72",
-   "date": "2026-11-16",
-   "subject": "fix(notes): make the ambiguous-note question answerable, and fix the red stop near-miss"
+   "sha": "24ebfabb5b88e33bb0ca385f869ffa81a83edfc7",
+   "date": "2026-11-17",
+   "subject": "Merge pull request #1343 from darknight11ish/readme-audit-2026-11-17"
   },
   {
-   "sha": "61276a7b8e1a695695d63b58813d44b02fb9550e",
-   "date": "2026-11-16",
-   "subject": "docs(decisions): record the unauthenticated rate-limit cost of two searches"
+   "sha": "40f2e60029adc64ec876d9ff9153451081847b9a",
+   "date": "2026-11-17",
+   "subject": "Merge pull request #1340 from darknight11ish/feat/egress-second-round-2026-11-16"
   },
   {
-   "sha": "b93cec42fe9f7f68e2f7de7509ed9ad51d2908f8",
-   "date": "2026-11-16",
-   "subject": "Merge origin/main into fix/research-search-two-queries-2026-11-16"
+   "sha": "29582e925e52ef8a6f7a974276b170fe886f5c9f",
+   "date": "2026-11-17",
+   "subject": "Merge pull request #1346 from darknight11ish/fix/w2-surgical-2026-11-17"
   },
   {
-   "sha": "a5b369843f99e675f5b5803292de9c086726dcf2",
-   "date": "2026-11-16",
-   "subject": "fix(research): one GitHub search per language, because OR answers nothing"
+   "sha": "cce3dd2dc358e41a0ff1bef105b4c5a75849c22b",
+   "date": "2026-11-17",
+   "subject": "Merge origin/main into fix/w2-surgical-2026-11-17"
   },
   {
-   "sha": "7c3c58736c48c7ebddc2960e33e91c3853d93fe3",
-   "date": "2026-11-16",
-   "subject": "Merge pull request #1321 from darknight11ish/docs/def079-amended-2026-11-16"
+   "sha": "f1258f1947e6ec0b8ba41d9077c6a749d7e2d44b",
+   "date": "2026-11-17",
+   "subject": "Merge pull request #1339 from darknight11ish/feat/job-priority-2026-11-16"
   },
   {
-   "sha": "e15d673b07e717143aa733488bc8e37077d4d58b",
-   "date": "2026-11-16",
-   "subject": "fix(chat): ask which note only when the name is an article, not a pronoun"
+   "sha": "353928d6421a28affd2556bd7dfe61d006796bad",
+   "date": "2026-11-17",
+   "subject": "test(watch): the repo-watch double learns the real progress signature"
   },
   {
-   "sha": "8858a2db8d09cea7439ec2313f13c26c2dd5b1d6",
-   "date": "2026-11-16",
-   "subject": "Merge pull request #1319 from darknight11ish/chore/specta-hotkeys-pilot-2026-11-16"
+   "sha": "3213e8e67dae6553c207344b090ef475ee1a3710",
+   "date": "2026-11-17",
+   "subject": "test(browser-guard): prove the import-only suite, instead of breaking the pin"
   },
   {
-   "sha": "171dec14cf822d8ccb98e295b96a12845ebe6813",
-   "date": "2026-11-16",
-   "subject": "fix(chat): six measured wrong answers on the fast path, and one false card claim"
+   "sha": "453d921e01481f00ab6242e4d6a31fbd7b8efc28",
+   "date": "2026-11-17",
+   "subject": "Merge pull request #1345 from darknight11ish/fix/pooled-start-order"
   },
   {
-   "sha": "3a3dc36556c524859405ce4a2456487fd3df137c",
-   "date": "2026-11-16",
-   "subject": "docs(register): close DEF-079 by deployment, file DEF-080 for the sentence it leaves"
+   "sha": "7daa277d27d3b8e350cf75832f88b8ba034b6643",
+   "date": "2026-11-17",
+   "subject": "fix(email): find_quiet_threads read the clock with no time imported"
   },
   {
-   "sha": "d589e4d56122f01bd0d85bce890403c4da315c27",
-   "date": "2026-11-16",
-   "subject": "feat(notes): one resolver, tiered, with the vault's daily-note settings (#1320)"
+   "sha": "7d4f5c3edc3a341b7640c8a5bbeae939e7c63b82",
+   "date": "2026-11-17",
+   "subject": "fix(watch): report the progress sentence as the note, not the fraction"
   },
   {
-   "sha": "92d38c34d4882e0c866bfe6fef92b0e8f3b518b1",
-   "date": "2026-11-16",
-   "subject": "fix(parity): an npm specifier is not a route, and paste comes back through specta"
+   "sha": "83435526d4f63d77538254f208cadaaccf6dd1a8",
+   "date": "2026-11-17",
+   "subject": "fix(notes): an append to a note the owner names needs no article"
   },
   {
-   "sha": "dd416d380f01d5f60516ee3fbb3e937fd5612f0b",
-   "date": "2026-11-16",
-   "subject": "feat(grants): the plan-card and trusted-mode engine, wired to nothing (#1308)"
+   "sha": "70b3b08c9c4e9926e82cf892f21da1fc4d426dc9",
+   "date": "2026-11-17",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/job-priority-2026-11-16"
   },
   {
-   "sha": "299e8b436ef031b109d840ca29cc9f2a91e8b03e",
-   "date": "2026-11-16",
-   "subject": "chore: refresh the generated files and make their twin a checked output (#1316)"
+   "sha": "70dba18ebf02d449209abba85e4bded91451657e",
+   "date": "2026-11-17",
+   "subject": "Merge remote-tracking branch 'origin/main' into readme-audit-2026-11-17"
   },
   {
-   "sha": "8e3fe4754e978c8f0321e5bb7a85b8c816de7d3d",
-   "date": "2026-11-16",
-   "subject": "fix(chat): answer the two phone questions from the phone's own facts (#1318)"
+   "sha": "7f74d5991a551274e9128b2d5e19c70ab68927fd",
+   "date": "2026-11-17",
+   "subject": "Merge pull request #1342 from darknight11ish/fix/taint-latch-memory-2026-11-16"
   },
   {
-   "sha": "5e566013979164556c6103cb01cd05b842361a73",
-   "date": "2026-11-16",
-   "subject": "fix(chat): four awareness answers read this PC instead of the model (#1311)"
+   "sha": "bd1fe63b565b7ca51b73b9a31efef54c27220a0b",
+   "date": "2026-11-17",
+   "subject": "merge: keep the census, and allow the speed-record fixture main had just allowed"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1465
+   "files": 1468
   },
   {
    "path": "jarvis-desktop/",
@@ -6760,24 +6826,24 @@
    "files": 495
   },
   {
-   "path": "jarvis-backend/",
-   "line": "the published base: a complete runnable copy of the backend",
-   "files": 355
-  },
-  {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 337
+   "files": 358
+  },
+  {
+   "path": "jarvis-backend/",
+   "line": "the published base: a complete runnable copy of the backend",
+   "files": 356
   },
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 270
+   "files": 292
   },
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 240
+   "files": 256
   },
   {
    "path": "videos/",
@@ -6861,15 +6927,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5984,
-  "covered": 5501,
-  "excluded": 483,
+  "tracked_files": 6047,
+  "covered": 5562,
+  "excluded": 485,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 227,
+   "count": 229,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
