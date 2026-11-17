@@ -25,14 +25,14 @@ docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
   * VERSATILE: one driver (this file) and a separate ADAPTER per chatbot
     website. Each new chatbot is a new named way out of the PC and gets the
     owner's OK first.
-  * TWO VERSIONS BY HARDWARE. Both graphics cards: the full version (long,
-    flexible conversations, the driver model on the second card's "Longer
+  * TWO VERSIONS BY HARDWARE. With an extra graphics card: the full version
+    (long, flexible conversations, the driver model on that card's "Longer
     conversations" lane). One card: the limited version (shorter
     conversations, sharing the main card, waiting while the owner chats).
-    The full version stays off until the second card is installed AND its
+    The full version stays off until an extra card is installed AND its
     lane has been measured - the card being installed is not the same thing
-    as the lane being measured (corrected 2026-10-05: the card IS installed
-    on the owner's PC, and the lane has still never been run).
+    as the lane being measured (corrected 2026-10-05: on the owner's PC the
+    card IS installed, while the full version stays off as shipped).
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3), in this file's words
     plan()      Checks the chatbot, the goal and the limits, picks the
@@ -176,9 +176,9 @@ MOVE_WORDS = {
 ONE_CARD = "one_card"
 TWO_CARDS = "two_cards"
 
-#: (default, most) messages and minutes, per version. The two-card numbers
-#: are docs/CHATBOT-DRIVER-DESIGN.md's (8 and 20 messages, 10 and 30
-#: minutes). The one-card numbers are shorter on purpose - the owner's
+#: (default, most) messages and minutes, per version. The full version's
+#: numbers are docs/CHATBOT-DRIVER-DESIGN.md's (8 and 20 messages, 10 and 30
+#: minutes). The limited version's numbers are shorter on purpose - the owner's
 #: "shorter sessions" - and are a first guess, to be tuned once measured.
 TIER_LIMITS = {
     ONE_CARD: {"turns": (5, 8), "minutes": (10, 15)},
@@ -186,7 +186,7 @@ TIER_LIMITS = {
 }
 TIER_NAMES = {
     ONE_CARD: "the limited version (one graphics card)",
-    TWO_CARDS: "the full version (both graphics cards)",
+    TWO_CARDS: "the full version (an extra graphics card)",
 }
 TIER_WORDS = {
     ONE_CARD: ("shorter conversations; Jarvis's own model on the card you chat on "
