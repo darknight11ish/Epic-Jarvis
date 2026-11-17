@@ -708,10 +708,13 @@ second kind of skip: they are skipped by name, with the reason, on a default
 run unless `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1` is set, and a skip is never
 a pass. CI sets that opt-in so their code-only checks still run there, and the
 window itself needs a SECOND switch, `JARVIS_RUN_REAL_BROWSER=1`, which no CI
-job sets - so their browser halves skip there. (Corrected 2026-11-17: this used
-to say "no CI runner has Playwright installed". Since 2026-10-27 the Ubuntu
-backend job installs it for another suite, and these four really drove a real
-Chromium in a required job until the second switch was added.)
+job sets - so their browser halves skip there. (Corrected 2026-11-17, twice: this
+used to say "no CI runner has Playwright installed". From 2026-10-27 the Ubuntu
+backend job did install it, for `test_browser_control_live.py`, and these four
+really drove a real Chromium in a required job until the second switch was added;
+later the same day that install was removed altogether, so no required CI job can
+launch a browser at all. The one suite it served is skipped by name in the
+required sweep and runs for real in the informational `backend-browser-live` job.)
 
 **The runner is hermetic by default (2026-10-21, Ruling 11).** `backend/run_suites.py`
 now **ignores the ambient `JARVIS_BACKEND`** unless it is asked for explicitly: a plain run
@@ -4017,8 +4020,14 @@ with no store; `read_page` is capped and says so.
 `test_browser_control_live.py`: nineteen scenarios, 66 checks, against a real
 headless Chromium on small pages served from this machine only (two names
 for the same local server stand in for "our site" and "a foreign site").
-**It skips cleanly** (and counts as passing) when Playwright or its Chromium
-is not installed, which is the normal state on your PC today.
+**How it behaves without Playwright.** Run directly it prints one
+`SKIP: playwright is not installed ...` line and exits 0 - a skip, never a pass.
+Run through `backend/run_suites.py` it is skipped BY NAME when the `playwright`
+package is not installed: the line says so, the run counts it as a skipped
+suite, and the run's `SKIPPED BY NAME` line names it. Since 2026-11-17 no
+REQUIRED CI job installs Playwright (a required job must not even be able to
+launch a browser), so it is skipped there and runs for real in CI's
+informational `backend-browser-live` job.
 
 **Where this has and has not run.** Both suites passed on Windows 11 on
 2026-10-27: `test_browser_control_live.py` 66 checks against Playwright 1.64.1

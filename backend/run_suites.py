@@ -89,13 +89,24 @@ layer alone is enough to stop a window.
 
 THE WINDOW NEEDS ITS OWN SWITCH (2026-11-17): `JARVIS_RUN_REAL_BROWSER=1`.
 It had to be split from the opt-in above because the required `backend-shard`
-job sets that opt-in (to keep the 441 code-only checks) AND installs
+job sets that opt-in (to keep the 441 code-only checks) AND used to install
 Playwright's Chromium for `test_browser_control_live.py` - so "Playwright is
-installed" stopped being a safe stand-in for "a window is wanted", and the four
-really ran a browser in a required job. With only the opt-in set they now run
-their code checks and print one `SKIP the real-browser half:
-JARVIS_RUN_REAL_BROWSER=1 is not set ...` line. No job in ci.yml sets it, and
+installed" was not a safe stand-in for "a window is wanted", and the four really
+ran a browser in a required job. With only the opt-in set they now run their
+code checks and print one `SKIP the real-browser half: JARVIS_RUN_REAL_BROWSER=1
+is not set ...` line. No job in ci.yml sets it, and
 `backend/test_browser_test_guard.py` fails if one ever does.
+
+AND THE BROWSER INSTALL LEFT REQUIRED CI (2026-11-17, the other half of that
+fix). Required CI must not even be able to launch a browser, so the
+`playwright install --with-deps chromium` step is gone from `backend-shard`. This
+runner therefore skips `test_browser_control_live.py` BY NAME - with the reason -
+when the `playwright` package is not installed, instead of starting it and
+failing it for passing no check (see NEEDS_PACKAGE below). It still runs for real
+wherever Playwright IS installed: on the owner's PC, and in ci.yml's
+INFORMATIONAL `backend-browser-live` job, which is the only CI job that installs
+it now. A suite skipped this way is printed as `skip`, counted as a skip, and
+named in the run's SKIPPED BY NAME line; it is never an `ok` and never a pass.
 
     python3 backend/run_suites.py --jobs 14
 
@@ -132,9 +143,12 @@ the reason is legitimate. There is no allowlist any more: until 2026-10-27
 evening three suites were exempt by name, the ones needing an OPTIONAL package
 (playwright, cryptography, Pillow), which meant a required job could be green
 while one of them proved nothing. The exemption is gone. The required `backend`
-job installs all three packages, so those three suites run for real there, and
-a machine missing one FAILS the suite with the package named instead of
-counting a skip as anything.
+job installed all three packages then, so those three suites ran for real there,
+and a machine missing one FAILS the suite with the package named instead of
+counting a skip as anything. PLAYWRIGHT IS THE EXCEPTION SINCE 2026-11-17: a
+required job must not even be able to launch a browser, so its install left the
+required job and the one suite that needs it is skipped BY NAME, loudly (see
+NEEDS_PACKAGE below).
 
 A WHOLE SUITE SKIPPED BY NAME IS NOT A PASS EITHER (2026-10-27). The suites
 that need a file from the owner's PC are skipped by name, and each prints its
@@ -159,6 +173,7 @@ this runner and the desktop cannot disagree); a checkout without that tool
 simply cannot check, and this runner never claims it did.
 """
 import concurrent.futures
+import importlib.util
 import json
 import os
 import re
@@ -351,8 +366,58 @@ VISIBLE_BROWSER_SUITES = {
 #: playwright for, print one SKIP line and exit 0 in the REQUIRED job - a green
 #: line under a suite that had run nothing, which is the same lie as
 #: `check("SKIP ...", True)` one level up. `suite_result` now fails any suite
-#: that passed nothing, and the required job installs the three packages so
-#: their checks really run. The replacement for an exemption is an install.
+#: that passed nothing, and the required job then installed the three packages so
+#: their checks really ran. The replacement for an exemption is an install.
+#:
+#: THAT LAST SENTENCE WAS CORRECTED ON 2026-11-17, and only for a browser.
+#: Installing Playwright inside the REQUIRED `backend-shard` job made a browser
+#: reachable from four other suites, which then really drove Chromium in that
+#: job (486 s / 117 s / 55 s / 12 s on one green run). The ruling is that
+#: required CI must not even be able to launch a browser, so that install moved
+#: to the informational `backend-browser-live` job in ci.yml and this runner
+#: skips the one suite it served BY NAME (NEEDS_PACKAGE below). What has NOT
+#: come back is the zero-check allowance, and the difference is the whole point:
+#: an excused suite RAN and was reported as a pass; this one is never started,
+#: prints `skip` with the reason, counts as a skip, and is named in the run's
+#: SKIPPED BY NAME line. Where Playwright IS installed - the owner's PC - it runs
+#: for real exactly as before.
+
+#: THE SUITES THAT NEED AN OPTIONAL PACKAGE NO REQUIRED JOB INSTALLS
+#: (2026-11-17), and the module each asks for. A suite named here is SKIPPED BY
+#: NAME when that module cannot be found: printed as `skip` with the reason,
+#: counted as a skip, and named in the run's SKIPPED BY NAME line. It is never
+#: started, never reported `ok`, and never counted as a pass - so this is not
+#: `ZERO_CHECK_ALLOWED` by another name. It exists because `backend-shard`
+#: removed its Playwright install (a required job must not be able to launch a
+#: browser) and the zero-check rule would otherwise fail this suite for a skip
+#: it cannot avoid. The package IS installed on the owner's PC, so a default run
+#: there still drives a real headless Chromium - and in ci.yml the one job that
+#: installs Playwright, the INFORMATIONAL `backend-browser-live` job, runs this
+#: suite for real. `backend/test_browser_test_guard.py` pins both halves.
+NEEDS_PACKAGE = {
+    "test_browser_control_live.py": "playwright.sync_api",
+}
+
+
+def package_missing(module: str) -> bool:
+    """True when `module` cannot be imported here - the one key for that skip.
+
+    The module is the SUBMODULE the suite itself imports
+    (`playwright.sync_api`, exactly what `jarvis_chatbot_web.playwright_installed`
+    asks for), because `find_spec` imports the PARENT package to resolve a
+    submodule: a `playwright` whose own `__init__` raises therefore counts as
+    missing, which is right - the suite's `import playwright.sync_api` would
+    raise too, and a top-level `find_spec("playwright")` would have found it.
+    Every exception is read as missing on purpose: a broken install then says so
+    as a named skip instead of starting a suite that could only fail. If
+    something ever slips past this, the suite runs, passes nothing, and the
+    zero-check rule FAILS it - the loud answer, which is what this runner wants
+    when it is unsure.
+    """
+    try:
+        return importlib.util.find_spec(module) is None
+    except Exception:
+        return True
 
 
 def visible_browser_opted_in(env=None) -> bool:
@@ -1001,9 +1066,11 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
         if len(skips) > 6:
             echo.append(f"      ... and {len(skips) - 6} more skip line(s)")
         echo.append("      If it needs an OPTIONAL package (playwright, cryptography, "
-                    "Pillow), install it - the required backend job installs all "
-                    "three. Otherwise one of its skip guards has just hidden every "
-                    "check it owns.")
+                    "Pillow), install it - the required backend job installs "
+                    "cryptography and Pillow, but NOT playwright (a required job must "
+                    "not launch a browser; playwright is installed only in ci.yml's "
+                    "informational backend-browser-live job). Otherwise one of its skip "
+                    "guards has just hidden every check it owns.")
         return "FAIL", n, line[:200], echo
     if code == 0:
         # The numbers are shown whenever they are not already on the suite's
@@ -1369,6 +1436,19 @@ def _suite_job(s: Path, backend: Path, env: dict) -> dict:
                 "counts": {"passed": 0, "skipped": 0, "failed": 0},
                 "line": f"skip  {s.name:<34} needs the owner's {', '.join(absent)}",
                 "echo": [], "tail": []}
+    # A package no REQUIRED job installs (2026-11-17): skipped by NAME, with the
+    # reason and where it does run. Deliberately checked BEFORE the suite is
+    # started, so nothing is reported as `ok` and the totals line still names it.
+    package = NEEDS_PACKAGE.get(s.name)
+    if package and package_missing(package):
+        return {"name": s.name, "status": "skip",
+                "counts": {"passed": 0, "skipped": 0, "failed": 0},
+                "line": (f"skip  {s.name:<34} needs the optional "
+                         f"'{package.split('.')[0]}' package, which is not installed "
+                         f"here and which no REQUIRED CI job installs (a required job "
+                         f"must not launch a browser); it runs for real in ci.yml's "
+                         f"informational backend-browser-live job. A skip is not a pass."),
+                "echo": [], "tail": []}
     t0 = time.time()
     why = ""
     env = suite_env(s.name, env)
@@ -1541,6 +1621,10 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     # The visible-browser list is permanent, not "whatever was selected": a
     # renamed or deleted suite must be caught even by `run_suites.py test_x.py`.
     stale_visible = sorted(set(VISIBLE_BROWSER_SUITES) - {s.name for s in known})
+    # The optional-package list is permanent too (2026-11-17): an entry whose
+    # suite was renamed away would stop skipping anything and its reason would
+    # rot, so it fails the run the same way a stale visible-browser entry does.
+    stale_package = sorted(set(NEEDS_PACKAGE) - {s.name for s in known})
     passed, failed, skipped = [], [], []
     # A SHARD IS A SLICE OF THE LIST ABOVE, AND NOTHING ELSE (2026-11-13).
     # `names` and `stale` were computed from the WHOLE list on purpose: a shard
@@ -1578,6 +1662,10 @@ def _sweep(root: Path, only=(), jobs: int = 1,
         print(f"FAIL  run_suites.py's visible-browser skip list names suites that do not "
               f"exist: {stale_visible}")
         failed += stale_visible
+    if stale_package:
+        print(f"FAIL  run_suites.py skips suites for an optional package that do not "
+              f"exist: {stale_package}")
+        failed += stale_package
     no_owner = sorted(k for k, v in NEEDS_OWNER.items() if not set(v) & OWNER_FILES)
     if no_owner:
         print(f"FAIL  run_suites.py skips suites that need nothing from the owner's PC: {no_owner}")

@@ -973,11 +973,14 @@ def visible_browser_tests_allowed(env=None) -> bool:
 #: THE SECOND SWITCH, FOR THE WINDOW ITSELF (2026-11-17). The opt-in above says
 #: this suite may RUN, and CI sets it so the code-only checks still happen. This
 #: one says a real browser window may OPEN, and only a person at a desk sets it.
-#: They must be separate: the required `backend-shard` job sets the first AND
-#: installs Playwright's Chromium for test_browser_control_live.py, so "Playwright
-#: is installed" stopped being a safe stand-in for "a window is wanted" - the four
-#: guarded suites then really ran a browser in that job, and a Playwright page
-#: click timed out there. No CI job sets this one, and
+#: They must be separate: a required job must never be able to open a browser, and
+#: "Playwright is installed" was never a safe stand-in for "a window is wanted" -
+#: while the required `backend-shard` job installed Playwright for
+#: test_browser_control_live.py (2026-10-27 to 2026-11-17) all four guarded suites
+#: really ran a browser there, and a Playwright page click timed out in that job.
+#: That install is gone (a required job must not launch a browser); this switch
+#: stays, because the owner's PC DOES have Playwright and a desk run should still
+#: be able to watch the window. No CI job sets it, and
 #: backend/test_browser_test_guard.py fails if one ever does.
 REAL_BROWSER_ENV = "JARVIS_RUN_REAL_BROWSER"
 

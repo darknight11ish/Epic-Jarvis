@@ -47,23 +47,33 @@ WHAT IT PINS, with no browser started anywhere:
      so a NEW suite that imports it is noticed) and the one live suite's
      headless override. Whether any OTHER known importer launches visibly is
      not statically decidable from an import, and is not claimed.
-  5. THE CODE-ONLY HALVES STILL RUN IN CI, AND NO CI JOB MAY OPEN A BROWSER
-     (corrected 2026-11-17). The CI job that runs the backend sweep
-     (`backend-shard` since the job was sharded on 2026-11-13; `backend` before
-     that) and `backend-windows` both carry
+  5. THE CODE-ONLY HALVES STILL RUN IN CI, AND REQUIRED CI CANNOT LAUNCH A
+     BROWSER (corrected twice on 2026-11-17). The CI job that runs the backend
+     sweep (`backend-shard` since the job was sharded on 2026-11-13; `backend`
+     before that) and `backend-windows` both carry
      `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"`, so each suite runs its code
-     checks - the 441, in all. This item used to say "no runner installs a
-     Playwright browser, so the real-browser half prints SKIP ... playwright is
-     not installed" - and that became FALSE on 2026-10-27 (#925), when
-     `backend-shard` began installing Playwright's Chromium for
-     `test_browser_control_live.py`. With the opt-in set and a browser present,
-     all four suites really drove a browser in a REQUIRED job: measured on one
-     green run, 2026-11-17, 486 s / 117 s / 55 s / 12 s against sub-second for a
-     code-only suite, and a Playwright `Locator.click` timed out there once.
-     So the gate is now an explicit display switch, `JARVIS_RUN_REAL_BROWSER`,
-     which each suite asks for BEFORE it asks whether Playwright is installed,
-     and which NOTHING in ci.yml may set. Both halves of that are pinned here,
-     together with the install that makes it necessary.
+     checks - the 441, in all. The browser half moved twice in one day:
+       * this item used to say "no runner installs a Playwright browser, so the
+         real-browser half prints SKIP ... playwright is not installed". That
+         became FALSE on 2026-10-27 (#925), when `backend-shard` began installing
+         Playwright's Chromium for `test_browser_control_live.py`. With the
+         opt-in set and a browser present, all four suites really drove a
+         browser in a REQUIRED job: measured on one green run, 2026-11-17,
+         486 s / 117 s / 55 s / 12 s against sub-second for a code-only suite,
+         and a Playwright `Locator.click` timed out there once.
+       * the first fix gave the window its own switch, `JARVIS_RUN_REAL_BROWSER`,
+         asked for BEFORE `playwright_installed()`, which nothing in ci.yml sets.
+       * THE SECOND FIX, pinned here: the switch was not enough, because a guard
+         that relies on a browser being ABSENT cannot protect a job that
+         installs one - and "nothing sets the switch" is a promise, not a
+         mechanism. The install is GONE from the required sweep, so a required
+         backend job cannot even launch a browser. The one suite it served is
+         skipped BY NAME by `run_suites.py` when Playwright is absent (printed,
+         counted, and named in SKIPPED BY NAME - never `ok`, never a pass), and
+         runs for real in ci.yml's INFORMATIONAL `backend-browser-live` job.
+         `frontend-shard` is the one REQUIRED job that still installs a browser,
+         and must: its own page tests ARE browser tests. That exception is
+         written down in the test below, not hidden.
   6. THE CLI CANNOT START THE FLEET BY ACCIDENT. `run_suites.py --help` prints
      the usage and exits 0 without staging or running; a path-shaped or unknown
      argument (`backend/test_x.py`, a typo) fails and names the bare form
@@ -120,6 +130,22 @@ BROWSER_CONTROL_IMPORTERS = (
 #: `backend-shard` since 2026-11-13 (`backend` is the aggregator over it);
 #: `t_ci_keeps_the_code_only_checks` accepts either shape.
 CI_YML = HERE.parent / ".github" / "workflows" / "ci.yml"
+
+#: The REQUIRED backend jobs, which must not be able to launch a browser at all
+#: (2026-11-17). `backend` is the aggregator over the shards, `backend-windows`
+#: the other required backend half; none of the three may install Playwright.
+REQUIRED_BACKEND_JOBS = ("backend", "backend-shard", "backend-windows")
+
+#: THE ONLY ci.yml JOBS ALLOWED TO INSTALL PLAYWRIGHT, AND WHY EACH MUST.
+#: `frontend-shard` is REQUIRED and is a browser job by nature: every suite in
+#: jarvis-desktop/tests/ drives a headless Chromium through tests/uikit.mjs, so
+#: removing its browser would delete the tests, not protect anything. The rule
+#: this file enforces is about the BACKEND sweep, where a browser was accidental.
+#: `backend-browser-live` is INFORMATIONAL - no ruleset requires it - and is where
+#: test_browser_control_live.py really runs, because the required sweep may not
+#: install a browser. A THIRD name appearing here is a decision to let a browser
+#: into another job: make it deliberately, and say why in this tuple.
+PLAYWRIGHT_INSTALL_JOBS = {"frontend-shard", "backend-browser-live"}
 
 #: Every backend suite that drives jarvis_chatbot_web's visible window.
 GUARDED = ("test_chatbot_gemini.py", "test_chatbot_sites.py",
@@ -694,6 +720,48 @@ def _job_block(text: str, name: str) -> str:
     return "\n".join(lines[start:end])
 
 
+def _required_check_names() -> set:
+    """The check names `backend/jarvis_github.py` calls REQUIRED_CHECKS.
+
+    Read with `ast`, like every other pin in this file. The authority for
+    "required" is the repository RULESET (id 24677804, measured 2026-10-27:
+    rust, frontend, backend, backend-windows, credential-manager, powershell-5,
+    phone-unit-tests); this tuple is the code's own copy of that list, and it is
+    what every merge decision in the app is made from. A ci.yml job name absent
+    from it is therefore not a required check for the app's own merge gate.
+    """
+    tree = _tree(HERE / "jarvis_github.py")
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "REQUIRED_CHECKS"
+                and isinstance(node.value, (ast.Tuple, ast.List))):
+            return {e.value for e in node.value.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return set()
+
+
+def _job_blocks(text: str) -> dict:
+    """Every job under `jobs:`, name -> its lines (the same reader as `_job_block`)."""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.rstrip() == "jobs:"), 0)
+    names = [line.strip()[:-1] for line in lines[start:]
+             if re.match(r"^  [A-Za-z0-9_-]+:\s*$", line)]
+    return {name: _job_block(text, name) for name in names}
+
+
+def _job_code(block: str) -> str:
+    """A job's lines with its `#` comments removed - the YAML that actually RUNS.
+
+    A text search cannot answer "does this job install a browser" over the whole
+    block, because a comment is exactly where this project writes down what it
+    REMOVED ("the `playwright install --with-deps chromium` step is gone"). Step
+    names, `run:` bodies and `uses:` lines are kept; comment lines are not.
+    """
+    return "\n".join(line for line in block.splitlines()
+                     if not line.lstrip().startswith("#"))
+
+
 def t_ci_keeps_the_code_only_checks():
     if not CI_YML.is_file():
         check("ci.yml is where this test expects it", False, str(CI_YML))
@@ -730,34 +798,103 @@ def t_ci_keeps_the_code_only_checks():
               f"'{suite}'" in windows)
 
 
-def t_no_ci_job_may_open_a_browser():
-    """The invariant the 2026-11-17 defect broke, pinned in two halves.
+def t_no_required_backend_job_can_open_a_browser():
+    """The ruling of 2026-11-17: required CI must not even be ABLE to launch a browser.
 
-    A REQUIRED check must never be able to depend on Playwright. Two facts hold
-    that up together, and either alone would be misleading:
+    WHY THIS PIN FLIPPED, which is the reason it is written down instead of
+    reversed in silence. Until today this test demanded the OPPOSITE - that the
+    required sweep job DID install a Playwright browser, "so the guard rests on
+    the display switch, not on a package's absence". That was half a fix: it
+    protected the four visible-browser suites from a browser they no longer
+    needed to see, while leaving the browser installed in a REQUIRED job where
+    they could reach it. Measured on one green run (2026-11-17): 486 s, 117 s,
+    55 s and 12 s for suites whose code-only halves take under a second, and a
+    Playwright `Locator.click` timed out in that job once. A guard that depends
+    on a browser being absent cannot protect a job that installs one, so the
+    install left the required sweep the same day and this test now pins THAT.
 
-      * the required sweep job DOES install Playwright's Chromium and DOES set
-        the run opt-in, so the four suites' code-only halves keep running - and
-        "is Playwright installed?" is therefore not a guard;
-      * nothing in ci.yml sets the display switch, which is now the only thing
-        between a required job and a real Chromium window.
+    WHAT IS PINNED - four halves, because any one alone would be misleading:
+      * no REQUIRED backend job installs Playwright, so there is nothing to
+        launch (`backend`, `backend-shard`, `backend-windows`);
+      * the only jobs that DO install it are named in
+        `PLAYWRIGHT_INSTALL_JOBS`, and one of them is informational - so a new
+        job that installs a browser fails here until somebody writes down why;
+      * nothing in ci.yml sets `JARVIS_RUN_REAL_BROWSER`, the display switch;
+      * the one suite the removed install existed for is skipped BY NAME by
+        `run_suites.py` when its package is absent - printed, counted, named in
+        SKIPPED BY NAME, never `ok` - and ci.yml's informational
+        `backend-browser-live` job is what runs it for real.
 
-    If someone later removes the Playwright install, the first check fails and
-    sends them to this docstring rather than letting the guard quietly drift
-    back to depending on a package being absent.
+    WHAT IS NOT CLAIMED. `frontend-shard` is a REQUIRED job that installs a
+    browser and must: its own tests are browser tests. This rule is about the
+    backend sweep, where the browser was accidental and cost up to eight minutes
+    a suite. Making "no required job can launch a browser" literally true would
+    mean deleting the desktop page tests, which is not a fix.
     """
     if not CI_YML.is_file():
         check("ci.yml is where this test expects it", False, str(CI_YML))
         return
     text = CI_YML.read_text(encoding="utf-8")
-    shard = _job_block(text, "backend-shard")
-    check("the required sweep job really does install a Playwright browser - which "
-          "is why the display switch, not the browser's absence, has to be the guard",
-          "playwright install" in shard, (shard or "")[:500])
+    blocks = _job_blocks(text)
+    check("the ci.yml job reader found the jobs it must judge",
+          set(REQUIRED_BACKEND_JOBS) | PLAYWRIGHT_INSTALL_JOBS <= set(blocks),
+          sorted(blocks))
+    for name in REQUIRED_BACKEND_JOBS:
+        code = _job_code(blocks.get(name, ""))
+        check(f"ci.yml's `{name}` job does NOT install Playwright - a required job "
+              f"must not be able to launch a browser",
+              "playwright" not in code.lower(), code[:500])
+    installs = {name for name, block in blocks.items()
+                if "playwright" in _job_code(block).lower()}
+    check("the only jobs that install Playwright are the two named ones - "
+          "`frontend-shard` (REQUIRED, and its own tests ARE browser tests) and "
+          "`backend-browser-live` (INFORMATIONAL, the live backend suite); a third "
+          "means a browser was let into another job",
+          installs == PLAYWRIGHT_INSTALL_JOBS, sorted(installs))
+    # Comment lines are skipped here for the same reason `_job_code` skips them:
+    # the comments now RECORD the switch when they explain why nothing sets it
+    # ("JARVIS_RUN_REAL_BROWSER=1 is not set ..."), and a text pin that reads its
+    # own explanation as a violation is the shape this project has been bitten by.
     hits = [line.strip() for line in text.splitlines()
-            if re.search(re.escape(REAL_BROWSER) + r"\s*[:=]", line)]
+            if not line.lstrip().startswith("#")
+            and re.search(re.escape(REAL_BROWSER) + r"\s*[:=]", line)]
     check(f"nothing in ci.yml sets {REAL_BROWSER}, so no CI run can open a browser "
           f"window", not hits, hits)
+
+    live = blocks.get("backend-browser-live", "")
+    check("ci.yml has the informational `backend-browser-live` job and it runs the "
+          "one suite the removed install existed for",
+          "run_suites.py test_browser_control_live.py" in live, live[:600])
+    required = _required_check_names()
+    check("the required-check names were read out of backend/jarvis_github.py - a "
+          "silent empty set would make the next check vacuous",
+          bool(required) and "backend" in required, sorted(required))
+    check("... so that suite still runs for real on every push, in a job no ruleset "
+          "requires",
+          "playwright" in _job_code(live).lower()
+          and "backend-browser-live" not in required, live[:600])
+
+    # The runner's half: a named skip, not a started suite and not a pass. The
+    # package name is swapped for one that cannot exist so the branch is proved
+    # on a machine that HAS Playwright - which is where this suite runs.
+    check("run_suites.py maps the live suite to the module it really imports",
+          getattr(R, "NEEDS_PACKAGE", {}).get("test_browser_control_live.py")
+          == "playwright.sync_api", getattr(R, "NEEDS_PACKAGE", None))
+    saved = dict(getattr(R, "NEEDS_PACKAGE", {}))
+    try:
+        R.NEEDS_PACKAGE["test_browser_control_live.py"] = "jarvis_no_such_module_xyz"
+        got = R._suite_job(HERE / "test_browser_control_live.py", HERE, {})
+    finally:
+        R.NEEDS_PACKAGE.clear()
+        R.NEEDS_PACKAGE.update(saved)
+    check("a suite whose optional package is missing is reported `skip` - with the "
+          "package, the reason, and where it does run",
+          got["status"] == "skip" and "jarvis_no_such_module_xyz" in got["line"]
+          and "backend-browser-live" in got["line"], got)
+    check("... and it says out loud that a skip is not a pass",
+          "A skip is not a pass" in got["line"], got)
+    check("... and counts nothing at all: not a pass, not a failure",
+          got["counts"] == {"passed": 0, "skipped": 0, "failed": 0}, got["counts"])
 
 
 # ---------------------------------------------------------------------------
@@ -819,7 +956,7 @@ def main():
                t_the_browser_control_importer_set_is_pinned,
                t_one_opt_in_name_and_it_fails_closed,
                t_ci_keeps_the_code_only_checks,
-               t_no_ci_job_may_open_a_browser,
+               t_no_required_backend_job_can_open_a_browser,
                t_the_cli_cannot_start_the_fleet_by_accident):
         print(f"--- {fn.__name__} ---")
         try:

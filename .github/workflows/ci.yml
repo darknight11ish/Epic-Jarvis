@@ -306,7 +306,13 @@ jobs:
     #
     # AND NOTHING HERE MAY PASS BY SKIPPING (same evening, item 3): a suite
     # that exits 0 having passed no check is a FAILURE, with no allowlist. That
-    # is why Playwright is installed above. The voice suites
+    # is why Playwright WAS installed above from 2026-10-27 to 2026-11-17, and
+    # why it is not installed any more (the ruling below): a required job must
+    # not even be able to launch a browser. The one suite that install existed
+    # for, test_browser_control_live.py, is now skipped BY NAME by
+    # backend/run_suites.py - printed as `skip`, named in SKIPPED BY NAME, never
+    # counted as a pass - and runs for real in the informational
+    # `backend-browser-live` job. The voice suites
     # (test_speech, test_voice_contract, test_wakeword) need the three voice
     # packages from backend/requirements.txt, and test_chat_log needs
     # `cryptography` (chat history is encrypted); nothing else from it is needed,
@@ -356,6 +362,17 @@ jobs:
     # Playwright `Locator.click` timed out here once. The real gate is the
     # suites' own display switch, `JARVIS_RUN_REAL_BROWSER`, which NO job sets.
     # Do not add it: backend/test_browser_test_guard.py fails if you do.
+    #
+    # AND NO BROWSER IS INSTALLED HERE ANY MORE (2026-11-17, the other half of
+    # the same fix). The `playwright install --with-deps chromium` step added on
+    # 2026-10-27 for test_browser_control_live.py is gone, on the ruling that a
+    # required job must not even be able to launch a browser. This job now has
+    # neither a browser nor the display switch, so the four suites run their code
+    # halves and print one `SKIP the real-browser half: JARVIS_RUN_REAL_BROWSER=1
+    # is not set ...` line each - a skip that is SAID, not a pass. The removed
+    # suite is skipped by name by the runner here and runs for real in the
+    # informational `backend-browser-live` job. backend/test_browser_test_guard.py
+    # pins that no required backend job installs Playwright.
     env:
       JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"
     steps:
@@ -437,23 +454,26 @@ jobs:
       # exactly, the version backend/requirements.lock pins for Python 3.12
       # (its golden numbers are backend/decks_fsrs_golden.json).
       - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
-      # PLAYWRIGHT IS INSTALLED HERE NOW, FOR ONE SUITE (2026-10-27, the
-      # partner test-health corrections). backend/run_suites.py fails any suite
-      # that exits 0 having PASSED nothing, and this job used to be green while
-      # test_browser_control_live.py printed one `SKIP: playwright is not
-      # installed` line and proved nothing: it was named on a `ZERO_CHECK_ALLOWED`
-      # list, and that list is gone. The suite drives the real Playwright
-      # actions against pages Python's own http.server serves on 127.0.0.1 -
-      # nothing touches the internet - so the honest fix is to install the
-      # package and the browser rather than excuse the skip. The same two
-      # commands as the frontend job's Playwright step (ci.yml, "Install
-      # Playwright's Chromium"), because the browser cache is the same shape.
-      # A machine that cannot install it now FAILS that one suite with this
-      # message, instead of counting a skip as a pass.
-      - name: Install Playwright's Chromium (backend/test_browser_control_live.py)
-        run: |
-          python -m pip install --disable-pip-version-check playwright
-          python -m playwright install --with-deps chromium
+      # PLAYWRIGHT IS NOT INSTALLED HERE ANY MORE (removed 2026-11-17). It was
+      # added on 2026-10-27 (the partner test-health corrections) because
+      # backend/run_suites.py fails any suite that exits 0 having PASSED nothing,
+      # and test_browser_control_live.py used to print one `SKIP: playwright is
+      # not installed` line here and prove nothing - it had been excused by name
+      # on a `ZERO_CHECK_ALLOWED` list, and that list was gone. Installing the
+      # package and the browser was the honest fix for a code-only job.
+      #
+      # WHAT IT COST, measured 2026-11-17: with a browser present AND this job's
+      # JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1, the four visible-browser suites
+      # really drove Chromium in a REQUIRED job - 486 s, 117 s, 55 s and 12 s on
+      # one green run, against sub-second for their code-only halves - and a
+      # Playwright `Locator.click` timed out here once. The ruling is that
+      # required CI must not even be able to launch a browser, so the install is
+      # gone. The suite is NOT dropped: run_suites.py skips it BY NAME here (a
+      # `skip` line plus its name in the run's SKIPPED BY NAME line - never an
+      # `ok`, never a `passed` count), and the informational
+      # `backend-browser-live` job installs Playwright and runs it for real on
+      # every push. It still needs its 66 checks run somewhere; that job is where.
+      #
       # THE CHECKER THAT CATCHES A SKIP COUNTED AS A PASS (2026-10-27, the
       # partner test-health corrections, item 2). tools/check_vacuous_checks.py
       # has run in the `audit` job since the five checkers were wired, and
@@ -726,6 +746,72 @@ jobs:
             echo "::error::the owner-file suites did not report themselves as SKIPPED"; exit 1; }
           exit "$status"
 
+  # THE ONE SUITE THAT NEEDS A REAL BROWSER, IN A JOB THAT IS NOT REQUIRED
+  # (2026-11-17, the other half of the browser ruling).
+  #
+  # WHY IT EXISTS. backend/test_browser_control_live.py drives the real
+  # Playwright actions and the real CDP page reader against small pages Python's
+  # own http.server serves on 127.0.0.1 - nothing touches the internet. It needs
+  # `playwright` AND a Chromium build, and the required `backend-shard` job
+  # installed both for it from 2026-10-27 to 2026-11-17. That install was
+  # removed on the ruling that required CI must not even be able to launch a
+  # browser: with a browser present, and `backend-shard` setting
+  # JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 for the four visible-browser suites,
+  # those four really drove Chromium in a required job (486 s / 117 s / 55 s /
+  # 12 s on one green run) and a Playwright `Locator.click` timed out there once.
+  #
+  # WHAT IS NOT DROPPED. The live suite still runs on every push, for real, here
+  # - and this job is INFORMATIONAL: none of the ruleset's seven required checks
+  # is named here, so a red `backend-browser-live` can never hold a merge. That
+  # is the whole trade: the coverage stays, the gate goes.
+  #
+  # HOW IT STAYS HONEST. `run_suites.py` skips a suite BY NAME - printed as
+  # `skip`, never an `ok` - when the optional package it needs is not installed.
+  # Here the package IS installed, so the suite really runs, and it is run
+  # THROUGH the runner so its zero-check rule applies: a browser download that
+  # broke would leave the suite passing nothing, which the runner reports as a
+  # FAIL (and the grep below catches the skip line as well). A green line from
+  # this job means 66 checks really ran against a real Chromium.
+  backend-browser-live:
+    name: backend-browser-live
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # The same two commands the frontend job uses for its own page tests, and
+      # the same ones `backend-shard` used to carry. `--with-deps` needs the
+      # runner's passwordless sudo, which the frontend job already relies on.
+      - name: Install Playwright's Chromium (backend/test_browser_control_live.py)
+        run: |
+          python -m pip install --disable-pip-version-check playwright
+          python -m playwright install --with-deps chromium
+      - name: The live browser-control suite, against a real Chromium
+        # Through the runner, so the zero-check rule is what decides: a suite
+        # that passes nothing is a FAILURE, here as everywhere else.
+        run: |
+          set +e
+          python backend/run_suites.py test_browser_control_live.py 2>&1 | tee "$RUNNER_TEMP/live.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### backend-browser-live - test_browser_control_live.py"
+            echo ""
+            echo "INFORMATIONAL: no ruleset requires this job, so it never holds a merge."
+            echo "Playwright and a Chromium were installed, so this suite really ran."
+            echo ""
+            echo '```'
+            grep -E '^(ok |FAIL |skip |SKIPPED|[0-9]+ passed)' "$RUNNER_TEMP/live.txt" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # A SKIP IS NEVER A PASS, and here a skip would also mean the install
+          # just above did not work. Demand the runner's own `ok` line.
+          grep -q '^ok    test_browser_control_live.py' "$RUNNER_TEMP/live.txt" || {
+            echo "::error::the live suite did not run (a skip is not a pass) - see the log"; exit 1; }
+          exit "$status"
+
   backend-windows:
     # The Windows half of the backend job above. CI ran the backend suites on
     # Ubuntu only, which is why about fifteen of them turned out to assume
@@ -900,10 +986,11 @@ jobs:
     # code-only halves run and the browser half prints one SKIP line.
     #
     # CORRECTED 2026-11-17: this used to add "No Playwright browser is installed
-    # on a runner". That was true of this job and still is, but it was never a
-    # guard - the Ubuntu `backend-shard` job does install one now, and the
-    # suites rely on the display switch, not on a browser's absence. Nothing in
-    # this workflow sets that switch.
+    # on a runner". That was true of this job and still is - and, since the same
+    # day, true of every other required job too: the Ubuntu `backend-shard`
+    # job's Playwright install (2026-10-27 to 2026-11-17) is gone, so no required
+    # job can launch a browser. What stops a window is the suites' display
+    # switch, not a browser's absence. Nothing in this workflow sets that switch.
     env:
       JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"
     defaults:
@@ -1013,7 +1100,15 @@ jobs:
             'test_brain_reads.py',
             'test_briefing.py',
             'test_browser_control.py',
-            'test_browser_control_live.py',
+            # 'test_browser_control_live.py' is NOT in this list (2026-11-17). It
+            # needs Playwright and a Chromium build, which this job does not
+            # install, so its `SKIP: playwright is not installed` line exited 0
+            # and the loop below - which reads the exit code - printed "Every
+            # backend suite in this job passed on Windows." That is a whole-suite
+            # skip counted as a pass, the exact shape the opt-in above exists to
+            # stop, and naming it here could only ever produce it again. It runs
+            # for real in the informational `backend-browser-live` job. Put the
+            # name back here only together with an install step for this job.
             'test_browser_engine.py',
             'test_calendar.py',
             'test_calendar_link.py',

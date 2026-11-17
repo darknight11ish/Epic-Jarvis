@@ -6531,8 +6531,10 @@ $skipped = @()
 # themselves, and the CI jobs set it so those suites' code-only checks still
 # run. What stops a window there is the suites' OWN second switch,
 # JARVIS_RUN_REAL_BROWSER, which no CI job sets - not the absence of a
-# browser: since 2026-10-27 the Ubuntu backend job installs Playwright's
-# Chromium for another suite, and these four really drove it until 2026-11-17.
+# browser: the Ubuntu backend job installed Playwright's Chromium for another
+# suite from 2026-10-27 to 2026-11-17 (it no longer does - a required job must
+# not launch a browser), and these four really drove it until the second switch
+# existed.
 # Counting that as "a backend file or a package is not there" printed a false
 # reason on every update, so the two are kept apart and reported in their own
 # words.
