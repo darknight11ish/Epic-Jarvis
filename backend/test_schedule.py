@@ -632,7 +632,12 @@ NOT_OURS = [
     "check the oven", "wake me up when september ends",
     "I have to do my taxes", "what should I add to my list", "the timer on my oven is broken",
     "my alarm didn't go off this morning", "what's the best way to remember things",
-    "remind me to", "stop", "cancel", "add it to my to-do list",
+    "remind me to", "cancel", "add it to my to-do list",
+    # "stop" is deliberately NOT here any more (2026-11-16): it is now the
+    # stop-everything intent (jarvis_quick._STOP_EVERYTHING, the same action
+    # the tray's "Stop everything" reaches). It must still never be a
+    # SCHEDULER intent, which the check below keeps proving.
+
     # A CLAIM, not a command: the model's words must not set a reminder of
     # their own (the same 2026-10-27 bug, the other direction), and an offer
     # is not one either.
@@ -685,6 +690,12 @@ def t_near_misses_go_to_the_model():
     for text in NOT_OURS:
         got = Q.match(text, now)
         check(f"to the model: {text!r}", got is None, got and (got.name, got.f))
+    # "stop" left that list on 2026-11-16 because it is a REAL intent now (stop
+    # everything). It still must not be read by any scheduler grammar: the
+    # stop-everything intent is the only one allowed to claim it.
+    got = Q.match("stop", now)
+    check("'stop' is the stop-everything intent, never the scheduler's",
+          got is not None and got.name == "stop_all", got and (got.name, got.f))
     check("English only, and said so", Q.LANGUAGES == ("English",))
 
 

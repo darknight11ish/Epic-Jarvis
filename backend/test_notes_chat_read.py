@@ -121,11 +121,12 @@ def main():
           and '"Alpha" (first alpha line)' in r.reply,
           f"got {getattr(r, 'reply', None)!r}")
     check("several: asks which one instead of guessing",
-          r is not None and r.reply.endswith("Tell me which one to read."))
+          r is not None and r.reply.endswith(
+              "Say the folder and the note's name, so one is chosen."))
     r = ask("what notes do I have")
     check("list: 'what notes do I have' answers the same list",
           r is not None and r.reply.startswith("You have 5 notes.")
-          and "Tell me which one to read." in r.reply,
+          and "Say the folder and the note's name, so one is chosen." in r.reply,
           f"got {getattr(r, 'reply', None)!r}")
 
     # --- 3. none match: plain no-match, and the vault is named. ------------
