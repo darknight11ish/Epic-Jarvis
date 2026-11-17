@@ -8891,6 +8891,20 @@ def think_asked_for(request) -> bool:
 # line - can be measured by what it costs each turn, not guessed. An Ollama
 # that does not know the field ignores it (unknown JSON fields are skipped)
 # and nothing is recorded.
+#
+# THE SAME CHUNK CARRIES THE MODEL'S OWN ANSWER COUNT (R7, 2026-11-16).
+# `usage.completion_tokens` is how many tokens the model read back as its
+# answer. It is the number a cloud answer's cost is worked out from
+# (`jarvis_chatbot_api.cost_of`'s completion term) and the number
+# `jarvis_speed` already prefers when a relayed stream carries one - but the
+# chat loop re-writes the stream the app sees, so this turn's own usage never
+# reaches that meter. Unread here, a turn recorded what its prompt cost and
+# never what its answer produced, and the speed row fell back to counting
+# content pieces: two different numbers for one thing. Both wires deliver it
+# in this one key - `/v1/chat/completions` as `usage.completion_tokens`,
+# Ollama's native reply as `eval_count`, which `_native_as_chunk` maps into it
+# - so `_read_chunk` reads both wires with one line. An answer that carries no
+# count records None, never 0: an unknown said as an unknown.
 PROMPT_USAGE = {"stream_options": {"include_usage": True}}
 
 # --------------------------------------------------------------------------
@@ -8957,15 +8971,19 @@ def dropped_prompt_note(sent_tokens: Optional[int],
 
 
 def _note_prompt_use(prompt_tokens: Optional[int], cached_tokens: Optional[int],
-                     rounds: int) -> None:
-    """Hand one turn's prompt totals to the speed record. Never raises: it
-    is bookkeeping and must never cost an answer."""
-    if prompt_tokens is None and cached_tokens is None:
+                     completion_tokens: Optional[int], rounds: int) -> None:
+    """Hand one turn's prompt and answer totals to the speed record. Never
+    raises: it is bookkeeping and must never cost an answer.
+
+    `completion_tokens` is the model's own count of what it read back for this
+    turn, summed over the rounds - None when no round carried one, which is
+    recorded as unknown rather than as 0 (R7, 2026-11-16)."""
+    if prompt_tokens is None and cached_tokens is None and completion_tokens is None:
         return
     try:
         import jarvis_speed
         jarvis_speed.note_prompt(prompt_tokens=prompt_tokens, cached_tokens=cached_tokens,
-                                 rounds=rounds)
+                                 completion_tokens=completion_tokens, rounds=rounds)
     except Exception:
         pass
 
@@ -14071,6 +14089,11 @@ class _Round:
         # when Ollama did not say (an older Ollama sends no cached count).
         self.prompt_tokens: Optional[int] = None
         self.cached_tokens: Optional[int] = None
+        # How many tokens the model read back as this request's answer - the
+        # same answer's `usage.completion_tokens`, which the native wire sends
+        # as `eval_count` (R7, 2026-11-16). Numbers only; None when the answer
+        # carried no count, which stays an unknown and never becomes a 0.
+        self.completion_tokens: Optional[int] = None
 
     def add_calls(self, deltas) -> None:
         """Tool calls as they arrive. Ollama sends each call whole in one
@@ -14124,6 +14147,10 @@ def _native_as_chunk(obj: dict) -> dict:
         `dropped_prompt_note` reads to tell the owner the model was handed only
         the end of a long conversation, and the number the speed row records -
         so the native wire must carry it, exactly as the /v1 wire did.
+      * `eval_count` becomes `usage.completion_tokens`, for the same reason
+        (R7, 2026-11-16): it is the model's own count of its answer, and the
+        number the turn records and the cost of an answer is worked out from.
+        `_read_chunk` reads both wires through that one key.
     """
     msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
     delta: dict = {}
@@ -14176,10 +14203,16 @@ def _read_chunk(obj: dict, rnd: _Round, on_text: Callable[[str], None]) -> None:
         pt = usage.get("prompt_tokens")
         details = usage.get("prompt_tokens_details")
         ct = details.get("cached_tokens") if isinstance(details, dict) else None
+        # The model's own count of its answer (R7, 2026-11-16): `usage.
+        # completion_tokens` on the /v1 wire, and Ollama's `eval_count` on the
+        # native one, which `_native_as_chunk` has already put in this key.
+        done = usage.get("completion_tokens")
         if isinstance(pt, int) and not isinstance(pt, bool) and pt >= 0:
             rnd.prompt_tokens = pt
         if isinstance(ct, int) and not isinstance(ct, bool) and ct >= 0:
             rnd.cached_tokens = ct
+        if isinstance(done, int) and not isinstance(done, bool) and done >= 0:
+            rnd.completion_tokens = done
     choice = (obj.get("choices") or [{}])[0] or {}
     delta = choice.get("delta") or choice.get("message") or {}
     text = delta.get("content")
@@ -16750,8 +16783,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     created = int(time.time())
     finish: Optional[str] = None
     rounds = 0
-    # Ollama's prompt counts, summed over this turn's rounds (PROMPT_USAGE).
-    prompt_use: dict = {"prompt": None, "cached": None}
+    # Ollama's prompt counts and the model's answer count, summed over this
+    # turn's rounds (PROMPT_USAGE). `completion` is the model's own count of
+    # what it read back - None when no round carried one, and then it is said
+    # as unknown, never as 0 (R7, 2026-11-16).
+    prompt_use: dict = {"prompt": None, "cached": None, "completion": None}
     # This turn's biggest prompt and what the model said it read of it - see
     # dropped_prompt_note. `tokens` is Jarvis's own estimate of what it sent.
     sent_use: dict = {"tokens": 0, "read": None}
@@ -17083,7 +17119,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             before = "".join(held)
             if before.strip() and not _spending_words_problem(before, watch.newest_raw):
                 emit(before)
-        for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
+        for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens),
+                         ("completion", rnd.completion_tokens)):
             if got is not None:
                 prompt_use[key] = (prompt_use[key] or 0) + got
         # What this round SENT, against what the model said it read (see
@@ -17714,7 +17751,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # Numbers only, to the speed record (PROMPT_USAGE). Before
         # jarvis_hud's own speed.finish(), which writes the row.
         if not private:
-            _note_prompt_use(prompt_use["prompt"], prompt_use["cached"], rounds)
+            _note_prompt_use(prompt_use["prompt"], prompt_use["cached"],
+                             prompt_use["completion"], rounds)
         # Struggle signal (a) continued: every broken tool call this turn
         # (check_call, counted in watch.bad by _one_call's `watch.broken`) -
         # "the model's own output came out malformed". Then, whatever this
@@ -17794,7 +17832,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "claimed_undone": claimed_undone,
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
-            "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
+            "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"],
+            # The model's own count of what it read back this turn, or None
+            # when no round carried one - unknown, never 0 (R7, 2026-11-16).
+            "completion_tokens": prompt_use["completion"]}
 
 
 def answer_here(messages: list, model: str, *, ollama_url: str,
