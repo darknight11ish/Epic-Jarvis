@@ -838,6 +838,31 @@ def t_an_announcement_after_a_tool_gets_one_nudge():
         AG.TOOLS["append_logseq_journal"].execute = real_journal
 
 
+def t_a_long_file_read_is_a_numbered_slice_with_the_next_range():
+    """2026-11-16, the Q4 file-read fix: `_run_file_read` no longer hands back
+    a byte slice whose middle `_tool_content` drops. It returns numbered lines
+    and a `more` footer saying which range to ask for next, and that footer is
+    still there after `_tool_content` (the slice is sized to fit under it)."""
+    import tempfile
+    folder = Path(tempfile.mkdtemp(prefix="jarvis-read-slice-"))
+    path = folder / "long.txt"
+    with open(path, "w", encoding="utf-8") as f:
+        for i in range(1, 1201):
+            f.write(f"line {i:04d} of the file\n")
+    result = AG._run_file_read({"path": str(path)})
+    seen = json.loads(AG._tool_content({AG.OUTSIDE_FIELD: AG.OUTSIDE_LABEL, **result}))
+    check("the model sees numbered lines, not a cut middle",
+          bool(seen.get("content")) and seen["content"].startswith("1: line 0001"),
+          (seen.get("content") or "")[:60])
+    check("... the real total line count is named", seen.get("total_lines") == 1200,
+          seen.get("total_lines"))
+    check("... the footer says which range to ask for next",
+          "start_line=" in (seen.get("more") or ""), seen.get("more"))
+    check("... and the whole answer is still inside the tool-content cap",
+          len(AG._tool_content({AG.OUTSIDE_FIELD: AG.OUTSIDE_LABEL, **result}))
+          <= AG._MAX_TOOL_CONTENT_CHARS, len(seen.get("content") or ""))
+
+
 if __name__ == "__main__":
     for fn in (t_a_small_result_is_unchanged,
                t_one_long_text_keeps_its_start_and_end,
@@ -847,6 +872,7 @@ if __name__ == "__main__":
                t_what_cannot_be_shortened_falls_back_to_the_old_note,
                t_shortening_cannot_make_a_chat_marker,
                t_the_eval_sees_the_same_shortening,
+               t_a_long_file_read_is_a_numbered_slice_with_the_next_range,
                t_under_half_nothing_changes,
                t_past_half_older_results_are_cleared,
                t_a_cleared_result_stays_cleared_the_same_way,
