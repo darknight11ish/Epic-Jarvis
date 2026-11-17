@@ -1918,6 +1918,23 @@ def t_the_gate_is_asked_before_the_socket_opens():
           (reply, len(SRV.requests)))
 
 
+def t_the_egress_checker_is_wired():
+    """A checker that no workflow runs is green this morning and worthless the
+    moment it stops being green, because nothing tells anyone - which is the
+    shape this whole change exists to end. So both halves are proved here: the
+    `audit` job names the checker, and the checker really exits 0 on this
+    tree. (`audit` gates no merge by design; a red one is still a signal about
+    main's own state.)"""
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    check("CI runs tools/check_egress_gate.py", "tools/check_egress_gate.py" in ci)
+    ran = subprocess.run([sys.executable, str(REPO / "tools" / "check_egress_gate.py")],
+                         cwd=str(REPO), capture_output=True, text=True)
+    check("tools/check_egress_gate.py exits 0 on this tree", ran.returncode == 0,
+          (ran.stdout or "") + (ran.stderr or ""))
+    check("... and it says every cloud host mention is accounted for",
+          "name one of the six cloud hosts" in (ran.stdout or ""), ran.stdout)
+
+
 def t_shipped_and_documented():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("shipped: in _where.SHIPPED and apply-patches.ps1",

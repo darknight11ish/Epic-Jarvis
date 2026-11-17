@@ -2079,6 +2079,24 @@ jobs:
       - name: The screen feature's safety rules hold
         run: python3 ../../tools/check_screen_safety.py
       # ---------------------------------------------------------------------
+      # ONE MORE SCANNER: every way out names the one egress gate.
+      #
+      # Jarvis is local-first, not local-only: six named cloud hosts can carry
+      # a request off this PC, and until 2026-11-16 each sender decided for
+      # itself whether it was allowed to. That decision now lives in ONE place
+      # (`backend/jarvis_egress_gate.py`, asked by `check_egress`), and this
+      # walks every .py under backend/, jarvis-backend/ and tools/ that names
+      # one of the six hosts: it must either name `check_egress` in the same
+      # file or be on the checker's ALLOWED list with a written reason. The
+      # senders still owed belong to the second lane (`jarvis_search.py`, the
+      # HUD) and are listed there, so that lane cannot miss them. An unlisted
+      # host name fails with the file and line, rather than being a warning a
+      # fast reader scrolls past - which is exactly how six providers and four
+      # senders came to have their own rules in the first place.
+      # ---------------------------------------------------------------------
+      - name: Every path to a cloud service asks the one egress gate
+        run: python3 ../../tools/check_egress_gate.py
+      # ---------------------------------------------------------------------
       # THE TWO FEATURE DIRECTORY WRITERS, EACH WITH ITS OWN --check STEP.
       #
       # Both apps draw a Settings directory that indexes every feature, and
