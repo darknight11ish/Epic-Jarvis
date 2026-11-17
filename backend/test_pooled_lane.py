@@ -203,6 +203,22 @@ class Engine:
         return self.names().index(name)
 
 
+class PauseClaimsSuccess(Engine):
+    """A pause step that answers `ok` while the everyday model is resident.
+
+    The race the 2026-11-17 live answer opened: the lane model is back (or
+    never left) while the step that unloads it says it paused everything.
+    """
+
+    def pause_lanes(self):
+        self.calls.append(("pause",))
+        self.lane_rows[int(BC.LANES[0].port)] = [
+            {"name": BC.LANES[0].model, "context_length": BC.LANES[0].ctx,
+             "size": 100, "size_vram": 100}]
+        return {"ok": True, "why": "", "unloaded": ["qwen3.5:9b @11436"],
+                "still": [], "proof": ["port 11436: qwen3.5:9b is not loaded"]}
+
+
 # ---------------------------------------------------------------------------
 #   The lane itself
 # ---------------------------------------------------------------------------
@@ -397,21 +413,7 @@ def t_a_pause_that_claims_success_is_checked_against_every_lane():
     the everyday model is resident again; the start must read each lane's own
     `/api/ps` and refuse, because otherwise the 30B would load beside it.
     """
-
-    class ClaimsSuccess(Engine):
-        """The race in one class: the model comes back while the pause says it
-        paused everything."""
-
-        def pause_lanes(self):
-            self.calls.append(("pause",))
-            self.lane_rows[int(BC.LANES[0].port)] = [
-                {"name": BC.LANES[0].model, "context_length": BC.LANES[0].ctx,
-                 "size": 100, "size_vram": 100}]
-            return {"ok": True, "why": "", "unloaded": ["qwen3.5:9b @11436"],
-                    "still": [],
-                    "proof": ["port 11436: qwen3.5:9b is not loaded"]}
-
-    eng = ClaimsSuccess()
+    eng = PauseClaimsSuccess()
     code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
     check("a pause that claims success while a model is loaded is refused (409)",
           code == 409 and body["ok"] is False, (code, body))
@@ -449,6 +451,101 @@ def t_a_failed_start_puts_the_everyday_lane_back():
           eng.rows == [] and body.get("pooled_clear") is True, (eng.rows, body))
     check("... and the restore it saw is named, never assumed",
           bool(body.get("restored")) and body.get("not_restored") == [], body)
+
+
+def t_the_owners_click_refuses_and_the_chat_road_still_cards():
+    """THE TWO ROADS, on the same lying pause (2026-11-17). The live failure was
+    measured on the apps' own preset control, which applies through
+    `jarvis_presets.apply_preset(..., owner_ui=True)` and starts this lane with
+    `_OwnerPressed` instead of the card (#1336). That road must refuse in the
+    live words, load nothing and put the lanes back. The same preset asked for
+    in chat (`apply_from_body`) must still raise the lane's ONE `switch_model`
+    card, and a denied card must load nothing.
+    """
+
+    class Denied:
+        allowed = False
+        outcome = "denied"
+        reason = "you said no"
+
+    class FakeGate:
+        def __init__(self):
+            self.calls = []
+
+        def check(self, action, detail, prompt=""):
+            self.calls.append((action, detail, prompt))
+            return Denied()
+
+    class FakeGateModule:
+        def __init__(self, gate):
+            self.check = gate.check
+
+    gate = FakeGate()
+    saved_gate = sys.modules.get("jarvis_gate")
+    saved_engine, saved_owner = L._engine, P._OwnerPressed
+    pressed, touched = [], []
+
+    class Recording:
+        allowed = True
+        outcome = "approved"
+        reason = "the owner pressed this preset in one of the apps"
+
+        def __init__(self):
+            pressed.append(1)
+
+    eng = PauseClaimsSuccess()
+    eng2 = Engine()
+    sys.modules["jarvis_gate"] = FakeGateModule(gate)
+    P._OwnerPressed = Recording
+    try:
+        L._engine = lambda engine=None: eng
+        code, out = P.apply_preset(
+            "coding", owner_ui=True,
+            active_url=lambda: "http://127.0.0.1:11436",
+            set_active_url=lambda url: touched.append(("set_url", url)) or True,
+            read_choice=lambda: "general",
+            write_choice=lambda preset: touched.append(("write", preset)) or True,
+            rollback_model=lambda: {"ok": True},
+            stop_pooled=lambda: {"ok": True, "ran": False, "reason": ""})
+        click_gate_calls = list(gate.calls)
+        click_pressed = len(pressed)
+        click_calls, click_lanes, click_rows = (list(eng.calls), eng.lane_models(),
+                                                list(eng.rows))
+        gate.calls.clear()
+        L._engine = lambda engine=None: eng2
+        code2, out2 = P.apply_from_body({"preset": "coding"})
+        chat_gate_calls, chat_calls = list(gate.calls), list(eng2.calls)
+    finally:
+        if saved_gate is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = saved_gate
+        L._engine, P._OwnerPressed = saved_engine, saved_owner
+    check("a Coding click whose pause is not proved refuses (503) in the live "
+          "words, and says nothing changed",
+          code == 503 and out.get("changed") is False
+          and "did not pause" in str(out.get("error", ""))
+          and "qwen3.5:9b on port 11436" in str(out.get("error", ""))
+          and "nothing was changed" in str(out.get("error", "")), (code, out))
+    check("... the click road used the owner's own press, never a card: it "
+          "raised no approval gate at all",
+          click_pressed == 1 and click_gate_calls == [],
+          (click_pressed, click_gate_calls))
+    check("... nothing was loaded, the everyday model is still there and "
+          "nothing is left on the pooled port",
+          not any(name == "load" for name in [c[0] for c in click_calls])
+          and click_lanes == ["qwen3.5:9b", "qwen3:8b"] and click_rows == [],
+          (click_calls, click_lanes, click_rows))
+    check("... the model, the chat lane and the chosen preset were not touched",
+          touched == [], touched)
+
+    check("the same Coding request from chat still raises exactly ONE "
+          "switch_model card",
+          code2 == 409 and out2.get("outcome") == "denied"
+          and [c[0] for c in chat_gate_calls] == ["switch_model"],
+          (code2, out2, chat_gate_calls))
+    check("... and a denied card loads and unloads nothing on either lane",
+          [c[0] for c in chat_calls] == ["ps"], (chat_calls, out2))
 
 
 def t_a_restore_that_races_is_retried_and_proved():
@@ -1191,6 +1288,7 @@ def main() -> int:
                t_a_task_running_refuses_before_the_card,
                t_a_lane_that_will_not_pause_stops_the_whole_start,
                t_a_pause_that_claims_success_is_checked_against_every_lane,
+               t_the_owners_click_refuses_and_the_chat_road_still_cards,
                t_a_failed_start_puts_the_everyday_lane_back,
                t_a_restore_that_races_is_retried_and_proved,
                t_a_load_that_spills_is_undone_and_the_lanes_come_back,
