@@ -1312,6 +1312,24 @@ def t_every_write_declares_and_names_its_tier():
         check(f"the carded action {action} resolves to ask",
               GH.tier_for_action(action) == "ask",
               GH.WRITE_ACTION_TOOLS.get(action))
+    # ... and the declaration AGREES with the gate's own source of truth, in BOTH
+    # shipped settings copies. Without this, the card could say "ask" while
+    # `[autonomy.tiers]` said something else and the test would still pass.
+    try:
+        import tomllib
+    except ImportError:                      # Python < 3.11
+        import tomli as tomllib              # type: ignore
+    for toml_path in TOMLS:
+        tiers = tomllib.loads(toml_path.read_text(encoding="utf-8"))["autonomy"]["tiers"]
+        for tool in ACTION_TOOLS:
+            check(f"{toml_path.parent.name}/{toml_path.name}: the gate resolves "
+                  f"{tool} to its declared tier",
+                  tiers.get(tool) == GH.write_tier(tool),
+                  (tiers.get(tool), GH.write_tier(tool)))
+        check(f"{toml_path.name}: the gate resolves the fix write stage to its "
+              f"declared tier",
+              tiers.get(GH.ACTION_FIX_WRITE) == GH.tier_for_action(GH.ACTION_FIX_WRITE),
+              tiers.get(GH.ACTION_FIX_WRITE))
 
     # 2. THE CARD NAMES ITS OWN TIER, in the plain words a beginner reads. A
     #    "refuse" sentence is never on a card: a refused intent never gets one.
