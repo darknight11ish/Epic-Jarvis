@@ -38,6 +38,11 @@ WHAT IT DOES, IN PLAIN WORDS
      name on each), and the quiz no longer counts as "verified".
 
 THE RULES IT KEEPS (each has a test in test_quiz_cloud.py)
+  * Before the socket opens, ONE egress question is asked
+    (jarvis_egress_gate.check_egress): a loopback address is always allowed; a
+    cloud address needs the standing cloud switch ON, Lockdown off and the
+    monthly cap for that service not reached. A refusal is shown in the gate's
+    own words as "egress_blocked", and nothing is sent (2026-11-16).
   * The card comes BEFORE any network call, one per request, never a standing
     permission. Anything but a person's yes sends nothing.
   * What is sent is built ONCE, before the card; the card shows that exact
@@ -170,6 +175,9 @@ CLASSES = {
                           "changed."),
     "cloud_timeout": (200, "The cloud service took too long to answer. Your marks were not "
                            "changed."),
+    # Refused by the one egress gate (jarvis_egress_gate.py) before any socket
+    # opened: the gate's own sentence goes in {why}, and nothing was sent.
+    "egress_blocked": (200, "{why} Your marks were not changed."),
 }
 
 
@@ -221,6 +229,24 @@ def _api():
         return jarvis_chatbot_api
     except Exception:
         raise CloudError("service_missing")
+
+
+def _egress_refusal(url: str, payload, surface: str) -> str:
+    """The egress gate's sentence when this quiz must not leave, else "".
+
+    THE ONE QUESTION BEFORE THE SOCKET OPENS (2026-11-16): may these words
+    leave this PC? `jarvis_egress_gate.check_egress` answers with a Decision;
+    a refusal's plain words are returned so the request can show them instead
+    of pretending the cloud answered. A gate that cannot be loaded is itself a
+    refusal - nothing is sent when the check cannot run.
+    """
+    try:
+        import jarvis_egress_gate as gate
+        decision = gate.check_egress("jarvis_quiz_cloud", url, payload, surface)
+    except Exception:
+        return ("Nothing was sent: Jarvis could not check whether this quiz may leave "
+                "this PC, so it kept it here.")
+    return "" if decision.allowed else decision.words
 
 
 def default_private_reason(texts: list) -> str:
@@ -564,8 +590,12 @@ def _exchange(r: dict, lane: dict, message: str) -> tuple:
     """(reply text, cost words). The one network conversation, through the chatbot
     driver's own adapter. Raises the adapter's ApiUnavailable (plain words)."""
     api = _api()
+    preset = api.PRESETS[lane["id"]]
     factory = _dep("adapter", lambda preset, model: api.ApiChatbot(preset, model))
-    ad = factory(api.PRESETS[lane["id"]], lane["model"])
+    ad = factory(preset, lane["model"])
+    why = _egress_refusal(api.request_url(preset), message, "quiz_cloud")
+    if why:
+        raise CloudError("egress_blocked", why=why)
     limit = _STATE.get("reply_seconds") or REPLY_SECONDS
     deadline = time.monotonic() + limit
     reply = None
@@ -640,7 +670,7 @@ def _decide(r: dict, exp: dict, lane: dict, message: str) -> None:
         reply, cost = _exchange(r, lane, message)
         marks = parse_marks(reply, [row["n"] for row in exp["answered"]])
     except CloudError as e:
-        return _fail(r, e.code)
+        return _fail(r, e.code, e.message)
     except Exception as exc:
         # The chatbot driver's ApiUnavailable carries plain words that never hold
         # the key or the provider's own text; anything else is said generally.
