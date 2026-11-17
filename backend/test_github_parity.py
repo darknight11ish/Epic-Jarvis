@@ -90,6 +90,7 @@ import shutil
 import sys
 import tempfile
 import traceback
+import urllib.parse
 from pathlib import Path
 
 # A temp config dir BEFORE any backend import: jarvis_gate opens an approval
@@ -164,12 +165,17 @@ class Routed:
 
     `routes` is `(needle, (status, body))`, first match wins; an address no
     route names is a 404, which is GitHub's answer for a thing that is not
-    there either.
+    there either - EXCEPT the two addresses the target gate owns (2026-11-17):
+    a repository root and a branch are answered as existing unless the test
+    names them in `missing` / `missing_branches`, because `run()` now resolves
+    what a request names before it sends anything (Q5).
     """
 
-    def __init__(self, routes=()):
+    def __init__(self, routes=(), missing=(), missing_branches=()):
         self.routes = list(routes)
         self.calls = []
+        self.missing = {str(m).lower() for m in missing}
+        self.missing_branches = {str(b) for b in missing_branches}
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
         self.calls.append({"method": method, "url": url,
@@ -177,7 +183,32 @@ class Routed:
         for needle, answer in self.routes:
             if needle in url:
                 return answer
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         return 404, "{}"
+
+    def target_answer(self, url):
+        """The gate's own answer for a repository root or a branch, or None."""
+        root = _repo_root(url)
+        if root is not None:
+            if root.lower() in self.missing:
+                return 404, "{}"
+            return 200, json.dumps({"full_name": root,
+                                    "permissions": {"push": True}})
+        branch = _branch_name(url)
+        if branch is not None:
+            if branch in self.missing_branches:
+                return 404, "{}"
+            return 200, json.dumps({"name": branch})
+        return None
+
+    def after_target(self):
+        """The calls after the target gate's own leading reads."""
+        calls = list(self.calls)
+        while calls and self.target_answer(calls[0]["url"]) is not None:
+            calls.pop(0)
+        return calls
 
     def urls(self):
         return [c["url"] for c in self.calls]
@@ -187,6 +218,24 @@ class Routed:
 
     def writes(self):
         return [c for c in self.calls if c["method"] not in ("GET", "HEAD")]
+
+
+#: `owner/name` for exactly a repository root under api.github.com, else None.
+_REPO_ROOT = re.compile(r"^https://api\.github\.com/repos/([^/?#]+/[^/?#]+)$")
+
+#: The branch name for a branch read, else None (a branch name may hold "/").
+_BRANCH_READ = re.compile(r"^https://api\.github\.com/repos/[^/?#]+/[^/?#]+"
+                          r"/branches/(.+)$")
+
+
+def _repo_root(url: str):
+    found = _REPO_ROOT.match(str(url or "").split("?")[0])
+    return found.group(1) if found else None
+
+
+def _branch_name(url: str):
+    found = _BRANCH_READ.match(str(url or "").split("?")[0])
+    return urllib.parse.unquote(found.group(1)) if found else None
 
 
 class FakeGit:

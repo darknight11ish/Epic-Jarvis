@@ -70,18 +70,52 @@ def check(name, cond, detail=""):
 
 
 class Fake:
-    """A stand-in for `_default_fetch`: records every call, answers by rule."""
+    """A stand-in for `_default_fetch`: records every call, answers by rule.
 
-    def __init__(self, status=200, body="[]"):
+    A repository root and a branch are answered by `target_answer` BEFORE
+    `status`/`body`: since 2026-11-17 `run()` resolves what a request names
+    before it sends anything (the Q5 target gate), and those two reads are not
+    the answer this fake is modelling. `missing` and `missing_branches` give
+    those names GitHub's real 404.
+    """
+
+    def __init__(self, status=200, body="[]", missing=(), missing_branches=()):
         self.status = status
         self.body = body
         self.calls = []
+        self.missing = {str(m).lower() for m in missing}
+        self.missing_branches = {str(b) for b in missing_branches}
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
         self.calls.append({"method": method, "url": url,
                            "headers": dict(headers or {}),
                            "body": body, "timeout": timeout})
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         return self.status, self.body
+
+    def target_answer(self, url):
+        """The gate's own answer for a repository root or a branch, or None."""
+        root = _repo_root(url)
+        if root is not None:
+            if root.lower() in self.missing:
+                return 404, "{}"
+            return 200, json.dumps({"full_name": root,
+                                    "permissions": {"push": True}})
+        branch = _branch_name(url)
+        if branch is not None:
+            if branch in self.missing_branches:
+                return 404, "{}"
+            return 200, json.dumps({"name": branch})
+        return None
+
+    def after_target(self):
+        """The calls after the target gate's own leading reads."""
+        calls = list(self.calls)
+        while calls and self.target_answer(calls[0]["url"]) is not None:
+            calls.pop(0)
+        return calls
 
     def urls(self):
         return [c["url"] for c in self.calls]
@@ -90,8 +124,8 @@ class Fake:
 class Routed(Fake):
     """A `Fake` that answers by URL substring, first match wins."""
 
-    def __init__(self, routes):
-        super().__init__()
+    def __init__(self, routes, missing=(), missing_branches=()):
+        super().__init__(missing=missing, missing_branches=missing_branches)
         self.routes = list(routes)
 
     def __call__(self, method, url, *, headers=None, body=None, timeout=None):
@@ -103,7 +137,28 @@ class Routed(Fake):
                 if callable(answer):
                     return answer(self.calls[-1])
                 return answer
+        answer = self.target_answer(url)
+        if answer is not None:
+            return answer
         return 404, "{}"
+
+
+#: `owner/name` for exactly a repository root under api.github.com, else None.
+_REPO_ROOT = re.compile(r"^https://api\.github\.com/repos/([^/?#]+/[^/?#]+)$")
+
+#: The branch name for a branch read, else None (a branch name may hold "/").
+_BRANCH_READ = re.compile(r"^https://api\.github\.com/repos/[^/?#]+/[^/?#]+"
+                          r"/branches/(.+)$")
+
+
+def _repo_root(url: str):
+    found = _REPO_ROOT.match(str(url or "").split("?")[0])
+    return found.group(1) if found else None
+
+
+def _branch_name(url: str):
+    found = _BRANCH_READ.match(str(url or "").split("?")[0])
+    return found.group(1) if found else None
 
 
 class FakeLog:
