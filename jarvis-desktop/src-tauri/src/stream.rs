@@ -927,6 +927,17 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // A background job changed (backend jarvis_jobs.py's `_emit`): `{"id",
+        // "state", "progress", "label", "note", "tainted"}` and nothing else -
+        // a label and a state, never the result and never the params. Every
+        // state is fanned out below, where the Brain's Work tab re-reads the
+        // list on it; on `done` or `failed` the owner is also TOLD, on its own
+        // task, because a job usually ends while he is in another app and a
+        // Work tab he has to open is not a notification (toast_job_done).
+        "job" if matches!(event.data["state"].as_str(), Some("done" | "failed")) => {
+            tauri::async_runtime::spawn(toast_job_done(app.clone(), event.data.clone()));
+        }
+
         // A focus session has a line to say (backend/focus.patch):
         // `{"state": "callout", "seq"}` - a number, never words. The sound is
         // fetched from THIS PC only and played by the Jarvis bar
@@ -1000,6 +1011,74 @@ async fn toast_handoff(app: AppHandle, data: serde_json::Value) {
         )
     };
     crate::commands::notify(&app, &title, &body);
+}
+
+/// Tells the owner a background job ENDED (backend jarvis_jobs.py, 2026-11-16;
+/// the owner's ask: "send me notifications when I ask on task that takes a
+/// while").
+///
+/// The frame is the module's own smallest copy - `{id, state, progress,
+/// label, note, tainted}` - and this reads `id`, `state` and `label` and
+/// **not** `note`, which used to carry a failure's error text (the PC no
+/// longer sends it; see `jarvis_jobs._finish`). Nothing here reads the
+/// result or the params: they never travel.
+///
+/// It is [`crate::notifications::Kind::Other`] on purpose. The owner was
+/// never offered a switch for "a job finished", so there is none to honour,
+/// and quiet hours leave it alone for the same reason they leave that kind
+/// alone: this module names the four kinds that may wait, and a job he
+/// started and is waiting on is not one of them.
+async fn toast_job_done(app: AppHandle, data: serde_json::Value) {
+    if !crate::notifications::may_post(&app, crate::notifications::Kind::Other) {
+        return;
+    }
+    let Some(id) = data["id"].as_str().filter(|s| !s.is_empty()) else {
+        return;
+    };
+    let state = data["state"].as_str().unwrap_or_default();
+    let label = data["label"].as_str().unwrap_or_default().trim();
+    let locked = crate::commands::toast_privacy_on(&app);
+    let (title, body) = job_done_words(label, state, locked);
+    // A Windows toast, tagged so a re-announcement replaces its own. On a
+    // platform this app does not ship for, the same words through the one
+    // plain door the other toasts use.
+    #[cfg(windows)]
+    crate::winrt_toast::notify_job_done(&app, &title, &body, id);
+    #[cfg(not(windows))]
+    crate::commands::notify(&app, &title, &body);
+}
+
+/// What a finished job's toast says: the job's own label and its state,
+/// never its result and never its error. Pure, so it is tested without a
+/// window - the shape `commands::failure_body` uses for the same reason.
+///
+/// A locked screen (App lock on, or the private lists hidden) gets only the
+/// KIND of thing: a job's label is the owner's own words, and a toast is
+/// the one surface that can be read over a shoulder. That is the same rule
+/// the handoff toast follows two functions up.
+pub(crate) fn job_done_words(label: &str, state: &str, locked: bool) -> (String, String) {
+    let finished = state == "done";
+    if locked {
+        return (
+            "Atlas".to_string(),
+            if finished {
+                "A background job finished.".to_string()
+            } else {
+                "A background job stopped.".to_string()
+            },
+        );
+    }
+    let title = if label.is_empty() {
+        "A background job".to_string()
+    } else {
+        label.to_string()
+    };
+    let body = if finished {
+        "Finished. Open Work to see what it found."
+    } else {
+        "Stopped. Open Work to see what went wrong."
+    };
+    (title, body.to_string())
 }
 
 /// The state out of an `activity` event. Two shapes: the state at the top
@@ -2268,6 +2347,79 @@ mod hud_raise_tests {
         assert!(
             source.contains(&absolute),
             "the silence deadline must be absolute, or the beat restarts it"
+        );
+    }
+
+    /// A finished job's toast says the label and the state, and never the
+    /// result, the params or an error (2026-11-16). The words are pure, so the
+    /// rule holds without a window; the phone's own JVM suite holds the same
+    /// rule on the other side (`BackgroundJobsTest.kt`).
+    #[test]
+    fn a_finished_job_toast_says_its_label_and_state_and_nothing_else() {
+        assert_eq!(
+            super::job_done_words("read the repo", "done", false),
+            (
+                "read the repo".to_string(),
+                "Finished. Open Work to see what it found.".to_string()
+            )
+        );
+        assert_eq!(
+            super::job_done_words("read the repo", "failed", false),
+            (
+                "read the repo".to_string(),
+                "Stopped. Open Work to see what went wrong.".to_string()
+            )
+        );
+        // No label on the row (an older PC, or a bare job): still says what ended.
+        assert_eq!(
+            super::job_done_words("", "done", false).0,
+            "A background job"
+        );
+        // App lock or the private lists hidden: the KIND of thing only, never
+        // the owner's own label - a toast is read over a shoulder.
+        assert_eq!(
+            super::job_done_words("read the private repo", "done", true),
+            (
+                "Atlas".to_string(),
+                "A background job finished.".to_string()
+            )
+        );
+        assert_eq!(
+            super::job_done_words("read the private repo", "failed", true).1,
+            "A background job stopped."
+        );
+        for (title, body) in [
+            super::job_done_words("x", "done", false),
+            super::job_done_words("x", "failed", false),
+            super::job_done_words("x", "done", true),
+        ] {
+            let all = format!("{title} {body}");
+            assert!(!all.contains("result"), "{all}");
+            assert!(!all.contains("http"), "{all}");
+        }
+    }
+
+    /// And the event really reaches it: a `job` frame in a terminal state
+    /// spawns the toast, and a progress tick does not. A source pin, because
+    /// the arm needs a running `AppHandle` to execute - the same shape the
+    /// queue's own wiring test uses, and the reason `jarvis_jobs.py`'s
+    /// docstring says "a test of a function is not a test of its wiring".
+    /// Each needle is concatenated so this test's own text cannot satisfy it.
+    #[test]
+    fn a_finished_job_event_spawns_the_toast_and_a_progress_tick_does_not() {
+        let source = include_str!("stream.rs");
+        let arm = concat!(
+            "\"job\" if matches!(event.data[\"state\"].as_str(), ",
+            "Some(\"done\" | \"failed\")) => {"
+        );
+        assert!(
+            source.contains(arm),
+            "the job event does not spawn the toast"
+        );
+        let spawn = ["toast_job_done(app.clone(), ", "event.data.clone())"].concat();
+        assert!(
+            source.contains(&spawn),
+            "the toast is not spawned with the event"
         );
     }
 }

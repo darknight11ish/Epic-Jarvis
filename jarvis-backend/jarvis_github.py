@@ -1289,6 +1289,132 @@ ISSUE_STATE_TOUCHES = (
     "opened it that it was closed, which the owner is shown first.")
 
 
+# --------------------------------------------------------------------------
+#   The tier every GitHub write declares, and the words its card uses to say it
+# --------------------------------------------------------------------------
+# GEMINI'S Q5 RULING, LAYER 1 (2026-11-16): "Every write/destructive tool and
+# intent MUST explicitly declare its tier (`ask` or `refuse`) rather than
+# falling through to `unknown`."
+#
+# This table IS that declaration, and it is the only one: the sentence a person
+# reads on the card and the checks in `backend/test_github_tools.py` both read
+# it, so the words and the rule cannot drift apart.
+#
+#   ask     a card, and nothing happens until a person says yes. The card says
+#           so in `TIER_WORDS["ask"]`.
+#   refuse  a standing ban, refused BEFORE a card exists - so there is never a
+#           card for anyone to approve, and the refusal answer carries
+#           `TIER_WORDS["refuse"]`.
+#
+# EVERY write tool has a row and EVERY destructive intent this module bans has
+# a row. A name with NO row does not answer "unknown": `write_tier()` raises,
+# the same fail-closed direction the gate takes for an action it does not know
+# (`jarvis_gate.py:73`, UNKNOWN_TIER, "ask" in the shipped config). A table
+# that guessed would be the hole this ruling closes.
+WRITE_TIERS = {
+    # The twelve write tools the owner can ask for. Each raises ONE card, and
+    # its own card says which tier it is.
+    "github_comment": "ask",
+    "github_open_issue": "ask",
+    "github_rerun_workflow": "ask",
+    "github_create_repo": "ask",
+    "github_merge_pr": "ask",
+    "github_fix_and_push": "ask",
+    "github_open_pr": "ask",
+    "github_workflow": "ask",
+    "github_issue_labels": "ask",
+    "github_edit_pr": "ask",
+    "github_pr_review": "ask",
+    "github_issue_state": "ask",
+    # The destructive intents, one row each. These are exactly the names
+    # `NEVER` holds above, so the declared tier and the ban are one fact rather
+    # than two that can drift: a banned verb is `refuse`, never a card.
+    "force_push": "refuse",
+    "squash_merge": "refuse",
+    "rebase_merge": "refuse",
+    "admin_bypass": "refuse",
+    "auto_merge": "refuse",
+    "bypass_required_checks": "refuse",
+    "push_to_main": "refuse",
+    "delete_repository": "refuse",
+    "close_repository": "refuse",
+    "delete_branch": "refuse",
+    "close_branch": "refuse",
+    "create_branch": "refuse",
+    "approve_pr": "refuse",
+    "edit_comment": "refuse",
+    "workflow_dispatch": "refuse",
+    "gist": "refuse",
+    "bulk_close": "refuse",
+}
+
+#: What each tier is, said plainly on the screen. These are the owner-facing
+#: sentences, not labels. `ask` is printed on the card itself; `refuse` has no
+#: card, so its sentence is what the refusal answer says instead (see
+#: `_check_review_event`, `plan_workflow` and the push's banned-flag check).
+TIER_WORDS = {
+    "ask": "This asks you first; nothing happens until you say yes.",
+    "refuse": "This is permanently banned on this PC, so no card can approve it.",
+}
+
+#: Every WRITE action this module can raise a card for, and the TOOL it is.
+#: Twelve rows are the tool's own name; `github_fix_write` is the "write" STAGE
+#: of `github_fix_and_push` (resolved by `jarvis_agent`'s `gate_lookup_name`),
+#: so it takes that one tool's tier. A READ (`github_inspect`) is deliberately
+#: absent: reads are card-free by the owner's 2026-11-10 23:00 decision, so a
+#: read has no write tier to name.
+WRITE_ACTION_TOOLS = {
+    ACTION_COMMENT: "github_comment",
+    ACTION_OPEN_ISSUE: "github_open_issue",
+    ACTION_RERUN: "github_rerun_workflow",
+    ACTION_CREATE_REPO: "github_create_repo",
+    ACTION_MERGE: "github_merge_pr",
+    ACTION_FIX_PUSH: "github_fix_and_push",
+    ACTION_FIX_WRITE: "github_fix_and_push",
+    ACTION_OPEN_PR: "github_open_pr",
+    ACTION_WORKFLOW: "github_workflow",
+    ACTION_ISSUE_LABELS: "github_issue_labels",
+    ACTION_EDIT_PR: "github_edit_pr",
+    ACTION_PR_REVIEW: "github_pr_review",
+    ACTION_ISSUE_STATE: "github_issue_state",
+}
+
+
+def write_tier(name: str) -> str:
+    """The declared tier of ONE GitHub write tool, or ONE destructive intent.
+
+    Answers only `"ask"` or `"refuse"`. A name this table does not know RAISES
+    rather than answering "unknown" (or guessing "ask"): a write whose tier
+    nobody declared is exactly the fall-through Gemini's Q5 ruling closed, and a
+    permission table that guesses is not a permission table.
+    """
+    tier = WRITE_TIERS.get(str(name or "").strip())
+    if tier is None:
+        raise GitHubError(
+            f"Jarvis has no declared tier for {name!r} on GitHub, so it refuses "
+            "rather than guess whether a person must be asked.")
+    return tier
+
+
+def tier_for_action(action: str) -> Optional[str]:
+    """The declared tier of one of this module's cards, or None for a READ.
+
+    Any action that is not a read and not a declared write raises: a card whose
+    tier nobody can name is the "unknown" this table exists to end. An action
+    declared `refuse` is refused by `describe()` BEFORE it builds any card text,
+    so a banned thing can never reach the screen as something to approve.
+    """
+    action = str(action or "")
+    if action == ACTION_INSPECT:
+        return None
+    tool = WRITE_ACTION_TOOLS.get(action)
+    if tool is None:
+        raise GitHubError(
+            f"Jarvis has no declared tier for the GitHub action {action!r}, so "
+            "it will not draw a card that cannot say what tier it is.")
+    return write_tier(tool)
+
+
 def describe(r: Request) -> str:
     """The approval card's words: what, where, and what changes.
 
@@ -1298,9 +1424,22 @@ def describe(r: Request) -> str:
     the one card that uses no token at all, so it says so instead of the token
     sentence: a card that claimed a token was spent on a local write would be
     false.
+
+    The LAST line names the card's own tier in plain words (`TIER_WORDS`), so a
+    card can never read like an ordinary request when it is something else: "This
+    asks you first; nothing happens until you say yes." A `refuse` tier never
+    reaches here - `tier_for_action` sends it back before any text is built - and
+    an action whose tier nobody declared raises rather than falling to "unknown".
     """
     if r is None:
         return "Jarvis wants to do something on GitHub."
+    # NO CARD WITHOUT A DECLARED TIER (Gemini's Q5 ruling, Layer 1, 2026-11-16):
+    # this function IS the card's text, so a `refuse` tier is refused HERE, where
+    # no card can be built for anyone to approve, and an undeclared action raises
+    # rather than falling through to "unknown".
+    tier = tier_for_action(r.action)
+    if tier == "refuse":
+        raise GitHubError(f"{r.what.rstrip()} {TIER_WORDS['refuse']}")
     lines = [r.what.rstrip()]
     if r.shows:
         lines.append("")
@@ -1357,6 +1496,9 @@ def describe(r: Request) -> str:
     elif r.action == ACTION_PR_REVIEW:
         lines.append("The APPROVE verdict is impossible here, on purpose: it is "
                      "refused by name before any card is shown.")
+    if tier:
+        lines.append("")
+        lines.append(TIER_WORDS[tier])
     return "\n".join(lines)
 
 
@@ -2211,9 +2353,9 @@ def _check_review_event(value) -> str:
     if event == "APPROVE":
         raise GitHubError(
             "Jarvis can never post an APPROVE review - a formal approval would "
-            "hand your own sign-off to the assistant, so it is permanently "
-            "banned. It can post a COMMENT review or a REQUEST_CHANGES review "
-            "instead; nothing was sent.")
+            "hand your own sign-off to the assistant. It can post a COMMENT "
+            "review or a REQUEST_CHANGES review instead; nothing was sent. "
+            + TIER_WORDS["refuse"])
     if event not in ("COMMENT", "REQUEST_CHANGES"):
         raise GitHubError(
             'A GitHub review has to be either a comment ("COMMENT") or a '
@@ -3186,7 +3328,8 @@ def plan_workflow(args: Optional[dict] = None) -> Request:
         raise GitHubError('Jarvis can do one of two things to an existing '
                           'workflow run: "cancel" a run that is still going, or '
                           '"rerun_failed" to run only the failed jobs of a '
-                          'finished run. It cannot dispatch a workflow.')
+                          'finished run. It cannot dispatch a workflow. '
+                          + TIER_WORDS["refuse"])
     tail = "cancel" if op == "cancel" else "rerun-failed-jobs"
     return Request(
         ACTION_WORKFLOW,
@@ -5214,7 +5357,8 @@ def _safe_push(parts: dict, worktree: str, git: Callable) -> tuple:
     banned = [a for a in command if str(a).lower() in BANNED_GIT_FLAGS]
     if banned:
         return ("That push would use a flag Jarvis never uses (" +
-                ", ".join(banned) + "), so nothing was pushed.", "")
+                ", ".join(banned) + "), so nothing was pushed. "
+                + TIER_WORDS["refuse"], "")
     return "", {"files": files, "command": command}
 
 

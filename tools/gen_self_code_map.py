@@ -554,9 +554,10 @@ SUBSYSTEMS = (
         "areas": ("backend",),
         "purpose": "The guards in front of the owner's private material: masking and "
                    "scrubbing secrets, spotting an injected instruction, the vault, the "
-                   "protected folders and the private-chat gate.",
+                   "protected folders, the private-chat gate, and the one egress gate "
+                   "that decides whether a request may leave this PC at all.",
         "modules": (
-            "jarvis_scrub", "jarvis_sensitive", "jarvis_injection",
+            "jarvis_egress_gate", "jarvis_scrub", "jarvis_sensitive", "jarvis_injection",
             "jarvis_content_risk", "jarvis_secrets", "jarvis_secret_rules",
             "jarvis_secret_handoff", "jarvis_secret_handoff_wiring", "jarvis_vault",
             "jarvis_protection", "jarvis_private_chat", "jarvis_private_view",
@@ -564,9 +565,10 @@ SUBSYSTEMS = (
             "jarvis_picture",
         ),
         "paths": (),
-        "key_modules": ("jarvis_scrub", "jarvis_injection", "jarvis_vault",
-                        "jarvis_private_chat"),
-        "tests": ("backend/test_scrub.py", "backend/test_injection_table.py",
+        "key_modules": ("jarvis_egress_gate", "jarvis_scrub", "jarvis_injection",
+                        "jarvis_vault", "jarvis_private_chat"),
+        "tests": ("backend/test_chatbot_api.py", "backend/test_scrub.py",
+                  "backend/test_injection_table.py",
                   "backend/test_vault.py", "backend/test_private_chat.py",
                   "backend/test_secrets.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/AT-REST-2026-10-18.md",
