@@ -1509,20 +1509,26 @@ def live_status() -> dict:
 
 
 # --------------------------------------------------------------------------
-#   A preset clicked in an app: the owner's own act (2026-11-09)
+#   A preset clicked in an app: the owner's own act (2026-11-09, widened 2026-11-16)
 # --------------------------------------------------------------------------
 #
 # THE OWNER'S ASK, 2026-11-09: *"if i manually click and change the preset for
 # jarvis, it shouldnt need a card"* and *"if i manually choose anything in the
 # jarvis app or deskstop program, and its something that i can easily click and
-# change back right away, it shouldnt need a card"*.
+# change back right away, it shouldnt need a card"*. He said it again on
+# 2026-11-16, about the one row this road still carded: *"when i change the
+# model on the jarvis app it still sends me an approval card. that shouldnt
+# happen if i manually press the preset change. only if i ask through chat"*.
 #
-# WHAT CHANGES. A local preset that is ONE model switch on one of the owner's
-# own lanes (`heavy_mode` is False) is applied AT ONCE when the request came
-# through `POST /api/work/apply` - the route only the two apps' own preset
-# controls call. The preset it replaced goes into a receipt (jarvis_receipts);
-# clicking that preset in the same menu switches straight back, and Undo is
-# offered on the receipt.
+# WHAT CHANGES. A local preset is applied AT ONCE when the request came through
+# `POST /api/work/apply` - the route only the two apps' own preset controls
+# call, after the server's origin and pairing-token checks. SINCE 2026-11-16
+# that includes the heavy presets (Coding and Medical): their pooled lane raises
+# ONE `switch_model` card on the carded road, and on this road it is started with
+# the press itself as the approval (`_start_lane_for_the_owner`,
+# `_OwnerPressed`). The preset it replaced goes into a receipt
+# (jarvis_receipts); clicking another preset in the same menu switches straight
+# back, and Undo is offered on the receipt for every local preset.
 #
 # THE MODEL PATH KEEPS ITS CARD, and nothing here is a flag a caller can put in
 # a request. The private `_apply_body(..., owner_ui=True)` is called from ONE
@@ -1530,8 +1536,9 @@ def live_status() -> dict:
 # never read for it. Everything else - `jarvis_model_knowledge.apply_preset`
 # (the spoken "use the X preset" command), `jarvis_settings_registry.
 # set_focus_preset` ("set the focus preset to X") and every direct Python
-# caller - goes through the public `apply_from_body`, which is still the
-# carded `jarvis_models.switch_to` (tier "ask", `switch_model`).
+# caller - goes through the public `apply_from_body`, which is still the carded
+# road: `jarvis_models.switch_to` (tier "ask", `switch_model`) on a named lane,
+# and the pooled lane's own `switch_model` card for a heavy one.
 #
 # WHY THE ROUTE IS ENOUGH TO KNOW IT WAS A SCREEN. The model never posts to its
 # own HTTP routes: a chat tool call reaches this module in-process. The route
@@ -1542,12 +1549,15 @@ def live_status() -> dict:
 # still reads it.
 #
 # THE REVERSIBLE BOUNDARY, and what stays carded:
-#   * a local, non-heavy preset -> no card. One click back, nothing is
-#     downloaded, nothing is deleted, nothing is spent.
-#   * Coding (heavy) -> STILL a card. Its apply unloads BOTH lane models and
-#     loads a 14.8 GB one for about half a minute; that is not "clicked and
-#     changed back right away", and the card is the warning before the first
-#     unload (`jarvis_model_lanes.start_pooled_lane`, its own card).
+#   * a local preset clicked in an app -> no card, heavy or not. One click back
+#     in the same menu, nothing is downloaded, nothing is deleted, nothing is
+#     spent. A heavy one pauses both lane models while its own model loads; the
+#     click back is applying another preset, which brings them back - and the
+#     card that used to ask *this exact question* is why the owner's press
+#     answers it instead of asking it a second time.
+#   * the SAME preset asked for in chat or by voice -> STILL a card, both kinds:
+#     `jarvis_models.switch_to` on a named lane, and the pooled lane's own
+#     `switch_model` card for Coding or Medical.
 #   * Cloud -> STILL a card. It chooses where the owner's words go
 #     (`apply_cloud`, `change_own_config`).
 #   * installs and downloads -> untouched; still `ask`.
@@ -1570,15 +1580,18 @@ def _current_model() -> str:
 def _restorable_preset(preset_id) -> bool:
     """Can this preset be put back by the same uncarded app click?
 
-    Only a local, non-heavy preset can: Coding raises the pooled lane's card
-    and Cloud raises `change_own_config`, and an Undo that raised a SECOND card
-    would be a different action wearing Undo's name. An unknown id (a hand-
-    edited file) is not restorable either; the receipt is still written.
+    Every LOCAL preset can, the heavy rows included since 2026-11-16: a heavy
+    preset clicked in an app is the owner's own click too, so the same click (or
+    this receipt's Undo) puts it back with no card. Cloud cannot: it raises
+    `change_own_config` on every road, and an Undo that raised a SECOND card
+    would be a different action wearing Undo's name. A pending preset has no
+    model yet, and an unknown id (a hand-edited file) is not restorable either;
+    the receipt is still written.
     """
     if not preset_id:
         return True                      # "no preset was chosen": restorable by hand
     p = by_id(preset_id)
-    return bool(p is not None and not p.heavy_mode and not p.pending)
+    return bool(p is not None and not p.pending)
 
 
 def _owner_before(previous_preset, previous_lane) -> Optional[dict]:
@@ -1643,9 +1656,10 @@ def _record_owner_preset(previous_preset, previous_lane, preset) -> str:
     Written BEFORE the switch (jarvis_receipts' own rule), so it exists even if
     the switch then fails - `_discard_owner_receipt` removes it in that case.
     Undo is pointed at the before snapshot only when the preset it replaced is
-    itself a local, non-heavy one (`_owner_before`): going back to Coding or
-    Cloud raises their own card, so the menu row is that way back, not Undo.
-    The receipt is written either way, so the change is always visible.
+    itself restorable (`_owner_before`): every local preset is, heavy or not,
+    since 2026-11-16 - the same uncarded click puts it back. Going back to Cloud
+    raises its own card, so the menu row is that way back, not Undo. The receipt
+    is written either way, so the change is always visible.
     """
     try:
         import jarvis_receipts
@@ -1749,6 +1763,59 @@ def _switch_for_the_owner(ref: str, why: str = "a preset clicked in an app") -> 
     return out
 
 
+class _OwnerPressed:
+    """The verdict a heavy preset's pooled lane gets from the owner's own click.
+
+    WHY NO CARD HERE. `jarvis_model_lanes.start_pooled_lane` normally raises ONE
+    `switch_model` card before it unloads anything, because it pauses both of the
+    owner's lane models for about half a minute. But the owner pressed this
+    preset in one of the two apps' own preset controls, and on 2026-11-16 he
+    ruled that press to be his own click: *"when i change the model on the
+    jarvis app it still sends me an approval card. that shouldnt happen if i
+    manually press the preset change. only if i ask through chat"*. So the press
+    IS the approval, in the shape a card's verdict has (`allowed`, `outcome`,
+    `reason`) - the same fields every caller of the gate reads.
+
+    NOTHING IS LOOSENED: the tier table still says `switch_model = "ask"`, the
+    chat and voice roads still raise that card inside the lane, and the only
+    route that can reach this verdict is `install()`'s POST wrapper, after its
+    origin and token checks. The card was not skipped - it was answered by the
+    act it exists to obtain.
+    """
+
+    allowed = True
+    outcome = "approved"
+    reason = "the owner pressed this preset in one of the apps"
+
+
+def _start_lane_for_the_owner(key: str, mode: str = ""):
+    """Start the preset's lane with NO card - the owner's own click. `(status, body)`.
+
+    The same start `_default_start_lane` performs, with the same `mode`, and the
+    same `(status, body)` answer. The ONE difference is the card: a heavy
+    preset's pooled lane normally raises its own `switch_model` card before it
+    unloads anything, and on this road it gets `_OwnerPressed` instead - the
+    press the app's preset control just recorded. The presets on a named lane
+    raise no card on either road, so they are started exactly as before, through
+    `_lane_starter` (every injected one-argument seam still works).
+
+    NOTHING HERE DOWNLOADS and nothing here picks a model: a heavy preset's
+    model is loaded by the lane and recorded afterwards by `_default_adopt`, on
+    this road too - `_switch_for_the_owner` is NOT used for it, because its
+    smoke test runs against the one-card everyday lane (see `_default_adopt`).
+    A lane that will not start answers the same plain words a carded start does
+    ("the three-card Ollama could not be started"), and the apply then rolls
+    back and says what it could not restore; a refused card cannot happen here,
+    because the press already said yes.
+    """
+    import jarvis_model_lanes
+    if str(key) == jarvis_model_lanes.POOLED_KEY:
+        return jarvis_model_lanes.start_pooled_lane(
+            gate=lambda *a, **k: _OwnerPressed(),
+            mode=str(mode or "coding"))
+    return _lane_starter(key, mode)
+
+
 def switch_model_for_the_owner(ref: str, why: str = "") -> dict:
     """The uncarded model switch, by the public name `jarvis_reversible_ui` uses.
 
@@ -1770,16 +1837,18 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
 
     `owner_ui=True` is set by ONE caller - this module's own route wrapper
     (`install()`), the road both apps' preset controls use. It means "the
-    owner clicked this", and on a local, non-heavy preset it applies with no
-    card, writing a receipt first. It is NOT read from a request body, and
-    every model/chat caller leaves it False and keeps the `switch_model` card.
+    owner clicked this", and a local preset applies with no card, writing a
+    receipt first - the heavy ones included since 2026-11-16, whose pooled lane
+    is started with the press as its approval (`_start_lane_for_the_owner`). It
+    is NOT read from a request body, and every model/chat caller leaves it False
+    and keeps the `switch_model` card.
 
     `preset_id == "cloud"` is its own branch (`apply_cloud`): it raises ONE
     `change_own_config` card for the service, writes the choice, and starts no
     lane and switches no model - so `start_lane`, `switch_model`,
-    `rollback_model` and `set_active_url` are never touched on it. A heavy
-    preset keeps its card too (the pooled lane's own, raised inside
-    `start_lane`), so `owner_ui` changes nothing on either branch.
+    `rollback_model` and `set_active_url` are never touched on it. Cloud is the
+    ONE row `owner_ui` cannot make cardless. A heavy preset keeps its card on
+    the CARDED road (the pooled lane's own, raised inside `start_lane`).
 
     Order: start the named lane if it is down -> switch the model (the ask card
     lives inside switch_model on the ordinary path) -> point chat at it ->
@@ -1800,7 +1869,11 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     `_default_adopt` (record the model that is already loaded, no second card,
     no smoke test on a single-card lane) rather than `_default_switch`. See
     `_default_adopt` for the whole argument. A card the owner denies leaves
-    NOTHING changed on this path: nothing has been unloaded yet.
+    NOTHING changed on this path: nothing has been unloaded yet. ON THE APP-CLICK
+    ROAD (`owner_ui=True`) that same start is given `_OwnerPressed` instead of
+    the card (`_start_lane_for_the_owner`) - the owner's own press is the
+    approval - while `switch_model` stays `_default_adopt` on BOTH roads: the
+    click changes the card, never the model path.
 
     Since 2026-11-09 the same road carries the Medical preset: `p.mode` is
     passed to `start_pooled_lane`, which loads `medgemma:27b` at 32,768 with
@@ -1834,18 +1907,26 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
         return 409, {"ok": False, "changed": False, "error": PENDING_LINE}
     heavy = bool(p.heavy_mode)
     # THE ONE CONDITION THAT MAKES A PRESET CLICK UNCARDED: the request came
-    # from the apps' own route (`owner_ui`) AND the apply is one model switch
-    # on an existing lane. Coding keeps the pooled lane's own card; Cloud
-    # returned above. See the section above `apply_preset`.
-    direct_owner = bool(owner_ui) and not heavy
-    start_lane = start_lane or _lane_starter
-    if direct_owner:
+    # from the apps' own route (`owner_ui`). Cloud returned above and still
+    # cards; every other row is the owner's own click, heavy or not. Since
+    # 2026-11-16 a heavy preset's lane is started with the press as its approval
+    # (`_start_lane_for_the_owner`), so no `jarvis_gate.check` is reached on this
+    # road. The MODEL road is unchanged by the click: a heavy preset still
+    # records through `_default_adopt` (the lane already loaded the model; a
+    # `switch_to` here would smoke-test a 14.8 GB model against the owner's
+    # one-card everyday lane - see its docstring). See the section above
+    # `apply_preset`.
+    direct_owner = bool(owner_ui)
+    start_lane = start_lane or (_start_lane_for_the_owner if direct_owner
+                                else _lane_starter)
+    if heavy:
+        if switch_model is None:
+            switch_model = lambda ref: _default_adopt(ref)
+    elif direct_owner:
         switch_model = (switch_for_owner or switch_model
                         or (lambda ref: _switch_for_the_owner(ref)))
     elif switch_model is None:
-        switch_model = (
-            (lambda ref: _default_adopt(ref)) if heavy
-            else (lambda ref: _default_switch(ref)))
+        switch_model = lambda ref: _default_switch(ref)
     active_url = active_url or _active_url
     set_active_url = set_active_url or _set_active_url
     read_choice = read_choice or choice
@@ -2026,9 +2107,11 @@ def _default_start_lane(key: str, mode: str = ""):
     "pooled" is not one of the PC's logon tasks: it is the ONE Ollama that sees
     all three cards, started here and stopped by the next apply that is not heavy
     (`_default_stop_pooled`). `jarvis_model_lanes.start_pooled_lane` raises the
-    ONE card for it, before it unloads anything. `mode` is the applied preset's
-    pooled mode (Medical today); "" keeps the coding lane every pre-wave-14
-    caller has always started.
+    ONE card for it, before it unloads anything - on the CARDED road; the
+    app-click road passes `_OwnerPressed` instead, because the press is the
+    approval (`_start_lane_for_the_owner`). `mode` is the applied preset's pooled
+    mode (Medical today); "" keeps the coding lane every pre-wave-14 caller has
+    always started.
     """
     import jarvis_model_lanes
     if str(key) == jarvis_model_lanes.POOLED_KEY:
@@ -2110,8 +2193,9 @@ def _default_adopt(ref: str):
     so the format lives in one place and cannot drift.
 
     NOTHING ELSE CALLS IT, it raises no card, and it is only reached from the
-    heavy-mode branch of `apply_preset` - after that card was approved and
-    after the model really loaded (a load that spills past this lane's one
+    heavy-mode branch of `apply_preset` - after the pooled lane's ONE card was
+    approved, OR after the owner's own preset click answered it on the app route
+    - and after the model really loaded (a load that spills past this lane's one
     measured allowance is undone before this runs). If the model steward on
     this PC cannot be read or written, this says so and the apply rolls
     everything back rather than pretending.
@@ -2193,7 +2277,9 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     owner's PC except what live_status() reports; it approves nothing: the
     cloud apply and the escalation switch raise their one change_own_config
     card. A LOCAL preset applied through this route is the owner's own click:
-    it applies at once, writes a receipt, and the model path keeps its card."""
+    it applies at once, writes a receipt, and starts a heavy preset's pooled
+    lane with that press as its approval - the model path keeps its card, and
+    the same preset asked for in chat still raises it."""
     # THE MANUAL-CLICK RULE'S MODEL SWITCH (Gemini Q2, 2026-11-09). A model
     # already on this PC, picked in either app's own model list, takes the same
     # uncarded road a preset click takes. `jarvis_reversible_ui.py` is the
@@ -2254,9 +2340,10 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         #
         # THIS IS THE ONLY PLACE `owner_ui=True` IS SET, and this route already
         # passed the server's origin and token checks above. It is what makes a
-        # local preset click apply at once; the body cannot ask for it, and
-        # every other caller of apply_from_body keeps the card. Cloud and the
-        # heavy Coding preset still card here (apply_preset decides).
+        # local preset click apply at once, the heavy ones included since
+        # 2026-11-16; the body cannot ask for it, and every other caller of
+        # apply_from_body keeps the card. Cloud still cards here (apply_preset
+        # decides), and so does the same preset asked for in chat.
         code, out = (escalate_from_body(body) if path == CLOUD_ESCALATE_PATH
                      else _apply_body(body, owner_ui=True))
         return self._send(code, out)
