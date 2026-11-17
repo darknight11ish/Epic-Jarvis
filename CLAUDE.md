@@ -70,16 +70,19 @@ desktop, an 8B model in Ollama on the same machine, a Tauri 2 desktop shell
 around it, and an Android companion reachable over Tailscale or NordVPN
 Meshnet (both private device-to-device networks, never a public tunnel).
 
-Hardware: both cards are installed and measured (2026-10-05): an RTX 2080
-Super 8 GB with the monitor, running the desktop, and an RTX 2060 12 GB with
-none, holding the everyday model. Both are Turing (compute 7.5), so both
-clear the cache and flash-attention floor. The 2060 is the second,
-larger-context lane. **The second card is installed but its features are not
-measured** - plan features with that lane in mind, but do not switch a feature
-on until *that feature* is measured; every feature that uses the second card
-keeps its own switch, off until the owner turns it on
-(`docs/MEASURED-2026-10-05-owner-pc.md`; `docs/MODEL-TOPOLOGY.md` has the
-numbers).
+Hardware: **three cards are installed and measured** - the two-card reading is
+kept as the dated record it is (2026-10-05), and the third card was installed
+and measured on 2026-11-07. **Measured 2026-10-05:** an RTX 2080 Super 8 GB
+with the monitor, running the desktop, and an RTX 2060 12 GB with none, holding
+the everyday model. **Measured live 2026-11-16:** RTX 2060 12 GB (index 0), and
+two RTX 2080 SUPER 8 GB cards (indexes 1 and 2). All are Turing (compute 7.5),
+so all clear the cache and flash-attention floor. The 2060 is the
+long-context lane; the extra 2080 SUPER is headless. **Do not switch a feature
+on until *that feature* is measured** - plan with the cards in mind, and every
+feature that uses an extra card keeps its own switch, off until the owner turns
+it on (`docs/MEASURED-2026-10-05-owner-pc.md`,
+`docs/MEASURED-2026-11-07-THREE-GPU.md`; `docs/MODEL-TOPOLOGY.md` has the live
+reading and the numbers).
 
 - `jarvis-desktop/` - the Tauri desktop app. Rust in `src-tauri/`, the windows
   in `src/`.
