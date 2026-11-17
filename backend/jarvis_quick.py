@@ -18156,8 +18156,20 @@ _NOTE_FAVOURITE = re.compile(
 #: read-back that makes pin and favourite usable, answered from the note's own
 #: front matter. Whole sentences only, so a sentence that merely mentions a pin
 #: ("add a pinned section") keeps its own path.
+#:
+#: THE FOLDER MAY BE NAMED BETWEEN THE NOTE AND THE FLAG (2026-11-17,
+#: field-tested). Two notes whose titles lowercase to the same string make the
+#: title alone ambiguous, and this matcher's own refusal tells the owner to "say
+#: the folder and the note's name" - so the shape it recommends has to reach it.
+#: Measured before the fix: "is my Workout Log note in Private & Shared/Workout
+#: pinned" matched NOTHING (the pattern required the flag straight after "note"),
+#: so the sentence fell through to the model, which answered that it could not
+#: see the owner's notes. The folder is optional here, so every sentence that
+#: worked before still matches exactly as it did; when it is present it becomes
+#: the resolver's own exact-path tier (`Private & Shared/Workout/Workout Log`).
 _NOTE_FLAG_QUESTION = re.compile(
-    r"is\s+(?:my\s+|the\s+|our\s+|this\s+)?(?P<name>.+?)\s+note\s+"
+    r"is\s+(?:my\s+|the\s+|our\s+|this\s+)?(?P<name>.+?)\s+note"
+    r"(?:\s+in\s+(?P<folder>.+?))?\s+"
     r"(?P<what>pinned|favourited|favorited|favourite|favorite)\s*\??$")
 #: A name that is only an article (or the literal noun) is not a name: "pin a
 #: note" means "which note?", never a note literally called "a" (2026-11-16,
@@ -18908,19 +18920,40 @@ def _run_note_flag(f: dict) -> Result:
     if _notes_hidden() or _notes_write_hidden():
         return Result(NOTES_READ_HIDDEN, "note_flag")
     name = str(f.get("name") or "").strip()
+    folder = str(f.get("folder") or "").strip().replace("\\", "/").strip("/")
     flag = str(f.get("flag") or "pinned")
     label = "pinned" if flag == "pinned" else "favourited"
     if not name:
         return Result('Which note? Say "is my Workout Log note ' + label + '?"',
                       "note_flag")
-    path, why, title = _find_note(name)
-    if path is None:
-        if why == "not_found":
-            return Result(_note_no_match(name), "note_flag")
-        return Result(why, "note_flag")
+    # A folder the sentence named is built into the same path the resolver's
+    # exact-path tier reads, so "is my Workout Log note in Private &
+    # Shared/Workout pinned" selects the note the folder names instead of
+    # asking again (2026-11-17, field-tested).
+    rel = name if not folder else folder + "/" + name
     try:
         import jarvis_notes_edit as E
         from urllib.parse import quote
+        row, why, _matches = E.find_name(rel)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"Your Obsidian vault could not be read "
+                      f"({type(exc).__name__}), so I did not read the note.",
+                      "note_flag")
+    if row is None:
+        if why == "ambiguous":
+            # Two notes, one title. The READ path's own chooser lists each
+            # candidate beside its folder and asks which; this used to repeat
+            # the WRITE path's "so nothing was changed" sentence, which is false
+            # about a read (a read never changes anything) and whose example was
+            # a write, so it told the owner to say a shape no read accepted.
+            return _note_choices_said(name)
+        if why == "not_found":
+            return Result(_note_no_match(name), "note_flag")
+        return Result("Your Obsidian vault could not be read just now, so I did "
+                      "not read the note.", "note_flag")
+    path = str(row.get("path") or "")
+    title = str(row.get("title") or "")
+    try:
         code, body = E.handle_read("path=" + quote(path, safe=""))
     except Exception as exc:                # noqa: BLE001 - said, never swallowed
         return Result(f"I could not read that note's properties "
@@ -19355,11 +19388,17 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
             return Intent("note_customize", fields)
     # "is my workout log note pinned?" / "... favourited?" (2026-11-16): the
     # read-back, from the note's own front matter. Read-only: no card, no write.
+    # A folder the sentence names ("... note in Private & Shared/Workout
+    # pinned") is CARRIED, never dropped: it is the one thing that tells two
+    # notes with the same title apart, and the matcher's own refusal tells the
+    # owner to say it (2026-11-17).
     m = _NOTE_FLAG_QUESTION.fullmatch(s)
-    if m and _note_name_given(m.group("name")):
+    if m:
         what = m.group("what").lower()
+        named = m.group("name").strip()
         return Intent("note_flag", {
-            "name": m.group("name").strip(),
+            "name": named if _note_name_given(named) else "",
+            "folder": (m.groupdict().get("folder") or "").strip(),
             "flag": "pinned" if what == "pinned" else _FAVOURITE_KEY})
     # A create-shaped sentence the title reader declined asks for the name; it
     # never becomes a file name, a daily note, or the stale "not built" refusal.

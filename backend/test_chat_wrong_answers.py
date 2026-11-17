@@ -878,6 +878,64 @@ def t_the_ambiguous_note_question_is_answerable():
           reply[:300])
 
 
+def t_the_flag_read_takes_the_folder_it_was_given():
+    """2026-11-17, field-tested: the flag read could not be told WHICH note.
+
+    Measured on the live install (FIELD-TEST-ALL-2026-11-17, Step 4 row 6):
+    "is my workout log note pinned" refused with "that name matches 2 notes ...
+    so nothing was changed" - false about a read, and it asked for a shape that
+    did not reach the matcher - and the sentence its own remedy recommended,
+    "is my Workout Log note in Private & Shared/Workout pinned", matched NO
+    intent at all, so the 8B model answered that it could not see the notes.
+
+    Two things are proved here: the folder the sentence names is carried into
+    the resolver's exact-path tier, and the ambiguity is answered by the READ
+    lane's own chooser (folder beside each candidate, the resolver's ask) rather
+    than by the write lane's "nothing was changed" sentence.
+    """
+    reset_vault()
+    write_note("Private & Shared/Workout/Workout Log.md",
+               "---\npinned: true\n---\nday one")
+    write_note("Notes/Workout log.md", "---\npinned: false\n---\nNov 15")
+    # The matcher now reaches the folder-qualified sentence at all.
+    got = Q.match("is my Workout Log note in Private & Shared/Workout pinned")
+    check("flag folder: the folder-qualified sentence is the read-back",
+          got is not None and got.name == "note_flag"
+          and got.f.get("name") == "Workout Log"
+          and got.f.get("folder") == "Private & Shared/Workout", got)
+    got = Q.match("is my Workout Log note in Private & Shared/Workout favourited")
+    check("flag folder: ... and the favourite spelling carries it too",
+          got is not None and got.name == "note_flag"
+          and got.f.get("flag") == "favorite"
+          and got.f.get("folder") == "Private & Shared/Workout", got)
+    # The plain question on the same two notes: the read lane's chooser, in
+    # read words, each candidate beside its folder.
+    gate = Gate()
+    set_gate(gate)
+    res = ask("is my workout log note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag folder: an ambiguous flag read says how many notes match",
+          res is not None and "matches 2 notes" in reply, reply[:300])
+    check("flag folder: ... it lists each candidate's folder",
+          '"Workout Log" in Private & Shared/Workout' in reply
+          and '"Workout log" in Notes' in reply, reply[:400])
+    check("flag folder: ... it never claims something was changed",
+          "nothing was changed" not in reply.lower(), reply[:400])
+    check("flag folder: ... and it asks in the resolver's own words",
+          reply.endswith("Say the folder and the note's name, so one is chosen."),
+          reply[-160:])
+    # The remedy that answer gives now works, and reads the RIGHT note.
+    res = ask("is my Workout Log note in Private & Shared/Workout pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag folder: the folder the answer asks for selects one note",
+          res is not None and res.intent == "note_flag"
+          and reply.startswith('Yes - "Workout Log" is pinned'), reply[:200])
+    check("flag folder: still no card and no write",
+          gate.calls == []
+          and read("Private & Shared/Workout/Workout Log.md")
+          .startswith("---\npinned: true"), gate.calls)
+
+
 # --------------------------------------------------------------------------
 # The records: jarvis_quick.py and its published twin
 # --------------------------------------------------------------------------
@@ -913,6 +971,7 @@ TESTS = [
     t_favourite_can_be_set_on_a_new_note,
     t_the_flags_are_read_back_from_the_note,
     t_the_ambiguous_note_question_is_answerable,
+    t_the_flag_read_takes_the_folder_it_was_given,
     t_the_second_card_free_claim_is_derived,
     t_the_twin_is_byte_identical,
 ]
