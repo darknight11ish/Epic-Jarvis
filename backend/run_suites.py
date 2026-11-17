@@ -17,7 +17,10 @@ each of the remaining three is still waiting for.) FOUR MORE SUITES ARE A
 SECOND, SEPARATE SKIP
 CLASS (2026-10-26, below): they are skipped by name even when their files are
 present, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set, because each
-starts a real, visible Chromium window. Every other suite must pass.
+starts a real, visible Chromium window. That variable says they may RUN; a
+SECOND one, JARVIS_RUN_REAL_BROWSER=1, says a window may OPEN, and no CI job
+sets it - the block above VISIBLE_BROWSER_SUITES says why the two had to split
+(2026-11-17). Every other suite must pass.
 
 THE BACKEND IT RUNS AGAINST. Not this folder: a temporary folder holding a
 copy of every module apply-patches.ps1 ships (backend/_where.py SHIPPED),
@@ -68,7 +71,8 @@ a second list to keep in step.
 The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
 The four visible-browser suites below are the exception: they are skipped by
-name even when present, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set.
+name even when present, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set -
+and even then they open a window only when JARVIS_RUN_REAL_BROWSER=1 is set too.
 
 AND FOUR SUITES ARE NOT RUN AT ALL UNLESS ASKED (2026-10-26).
 `test_chatbot_sites.py`, `test_chatbot_gemini.py`, `test_handoff.py` and
@@ -82,6 +86,16 @@ with its reason and starts none of them. Set
 `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1` to run them; each suite reads the same
 variable itself, so the runner and the suites cannot disagree, and either
 layer alone is enough to stop a window.
+
+THE WINDOW NEEDS ITS OWN SWITCH (2026-11-17): `JARVIS_RUN_REAL_BROWSER=1`.
+It had to be split from the opt-in above because the required `backend-shard`
+job sets that opt-in (to keep the 441 code-only checks) AND installs
+Playwright's Chromium for `test_browser_control_live.py` - so "Playwright is
+installed" stopped being a safe stand-in for "a window is wanted", and the four
+really ran a browser in a required job. With only the opt-in set they now run
+their code checks and print one `SKIP the real-browser half:
+JARVIS_RUN_REAL_BROWSER=1 is not set ...` line. No job in ci.yml sets it, and
+`backend/test_browser_test_guard.py` fails if one ever does.
 
     python3 backend/run_suites.py --jobs 14
 
@@ -314,6 +328,20 @@ VISIBLE_BROWSER_SUITES = {
     "test_handoff.py": "it opens a real, VISIBLE browser window (the hand-off page)",
     "test_support_widget.py": "it opens a real, VISIBLE browser window (a support chat)",
 }
+
+#: THE OPT-IN ABOVE IS NOT THE WINDOW SWITCH (2026-11-17). It says these suites
+#: may RUN; each suite's own `JARVIS_RUN_REAL_BROWSER=1` says a browser window may
+#: OPEN. They were one switch until the required `backend-shard` job began
+#: installing Playwright's Chromium for `test_browser_control_live.py`: that job
+#: sets the opt-in here to keep the four suites' 441 code-only checks, and
+#: "Playwright is installed" then stopped being a safe stand-in for "a window is
+#: wanted", so the four really ran a browser in a REQUIRED job. Measured on one
+#: green run, 2026-11-17: 486 s, 117 s, 55 s and 12 s - against sub-second for a
+#: code-only suite - and a Playwright `Locator.click` timed out in that job once.
+#: THIS RUNNER DOES NOT NEED THE WINDOW SWITCH: with only the opt-in set, each
+#: suite runs its code checks and prints one `SKIP the real-browser half:
+#: JARVIS_RUN_REAL_BROWSER=1 is not set ...` line. No job in ci.yml sets it, and
+#: backend/test_browser_test_guard.py fails if one ever does.
 
 #: THERE IS NO "MAY RUN NO CHECK" LIST ANY MORE (2026-10-27, the partner
 #: test-health corrections). This was `ZERO_CHECK_ALLOWED`: three suites that
@@ -1062,7 +1090,8 @@ A path is not a suite name: `backend/test_x.py` is refused, not ignored.
 `--shard` splits the sorted suite list by position, so every suite is in
 exactly one shard; a shard that would run no suite fails instead of passing.
 The four suites that open a real, VISIBLE browser window are skipped, with
-their reason, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set.
+their reason, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set, and they
+open no window unless JARVIS_RUN_REAL_BROWSER=1 is set as well.
 """
 
 

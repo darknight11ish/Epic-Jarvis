@@ -338,15 +338,24 @@ jobs:
     # suites that drive jarvis_chatbot_web's visible browser -
     # test_chatbot_sites.py, test_chatbot_gemini.py, test_handoff.py and
     # test_support_widget.py - refuse to start unless this is set, because on
-    # the owner's PC they open real Chromium windows. A CI runner has no
-    # Playwright browsers installed (this job does not install the package
-    # either), so with the opt-in set they run their CODE-ONLY halves and their
-    # browser halves print "SKIP the real-browser half: playwright is not
-    # installed" and exit 0 - exactly what they did before the guard. That is
-    # 441 checks (test_chatbot_sites 293, test_handoff 109, test_chatbot_gemini
-    # 29, test_support_widget 10, measured with browsers disabled by the #861
-    # review). Without this line the required backend job would silently lose
-    # all 441.
+    # the owner's PC they open real Chromium windows. With it set they run their
+    # CODE-ONLY halves, which is 441 checks (test_chatbot_sites 293,
+    # test_handoff 109, test_chatbot_gemini 29, test_support_widget 10, measured
+    # with browsers disabled by the #861 review). Without this line the required
+    # backend job would silently lose all 441.
+    #
+    # AND THIS LINE DOES NOT AUTHORISE A BROWSER (corrected 2026-11-17). It used
+    # to say "a CI runner has no Playwright browsers installed (this job does not
+    # install the package either), so ... the browser halves print SKIP ...
+    # playwright is not installed". That stopped being true further down, when
+    # the step that installs Playwright's Chromium for
+    # test_browser_control_live.py arrived (2026-10-27, #925): this job has since
+    # set the opt-in AND had a browser, so all four suites really drove Chromium
+    # in a REQUIRED job. Measured on one green run, 2026-11-17: 486 s, 117 s,
+    # 55 s and 12 s, against sub-second for their code-only halves - and a
+    # Playwright `Locator.click` timed out here once. The real gate is the
+    # suites' own display switch, `JARVIS_RUN_REAL_BROWSER`, which NO job sets.
+    # Do not add it: backend/test_browser_test_guard.py fails if you do.
     env:
       JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"
     steps:
@@ -886,9 +895,15 @@ jobs:
     # opt-in each would print one SKIPPED line and exit 0, and this job's
     # exit-code-only ending ("Every backend suite in this job passed on
     # Windows.") would still be printed - a whole-suite skip counted as a pass
-    # at job level, which is the finding the #861 review made. No Playwright
-    # browser is installed on a runner, so with it set only their code-only
-    # halves run and the browser halves skip exactly as before.
+    # at job level, which is the finding the #861 review made. With it set, and
+    # with the suites' own JARVIS_RUN_REAL_BROWSER switch unset, only their
+    # code-only halves run and the browser half prints one SKIP line.
+    #
+    # CORRECTED 2026-11-17: this used to add "No Playwright browser is installed
+    # on a runner". That was true of this job and still is, but it was never a
+    # guard - the Ubuntu `backend-shard` job does install one now, and the
+    # suites rely on the display switch, not on a browser's absence. Nothing in
+    # this workflow sets that switch.
     env:
       JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"
     defaults:

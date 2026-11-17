@@ -47,15 +47,23 @@ WHAT IT PINS, with no browser started anywhere:
      so a NEW suite that imports it is noticed) and the one live suite's
      headless override. Whether any OTHER known importer launches visibly is
      not statically decidable from an import, and is not claimed.
-  5. THE CODE-ONLY HALVES STILL RUN IN CI. The CI job that runs the backend
-     sweep (`backend-shard` since the job was sharded on 2026-11-13; `backend`
-     before that) and `backend-windows` both carry
-     `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"`; no runner installs a Playwright
-     browser, so each suite runs its code checks and its real-browser half
-     prints `SKIP the real-browser half: playwright is not installed` and exits
-     0 - the pre-guard behaviour, 441 checks in all. This file also pins that
-     each suite still has that browser-half gate, so the opt-in cannot silently
-     turn a CI run into a browser launch.
+  5. THE CODE-ONLY HALVES STILL RUN IN CI, AND NO CI JOB MAY OPEN A BROWSER
+     (corrected 2026-11-17). The CI job that runs the backend sweep
+     (`backend-shard` since the job was sharded on 2026-11-13; `backend` before
+     that) and `backend-windows` both carry
+     `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"`, so each suite runs its code
+     checks - the 441, in all. This item used to say "no runner installs a
+     Playwright browser, so the real-browser half prints SKIP ... playwright is
+     not installed" - and that became FALSE on 2026-10-27 (#925), when
+     `backend-shard` began installing Playwright's Chromium for
+     `test_browser_control_live.py`. With the opt-in set and a browser present,
+     all four suites really drove a browser in a REQUIRED job: measured on one
+     green run, 2026-11-17, 486 s / 117 s / 55 s / 12 s against sub-second for a
+     code-only suite, and a Playwright `Locator.click` timed out there once.
+     So the gate is now an explicit display switch, `JARVIS_RUN_REAL_BROWSER`,
+     which each suite asks for BEFORE it asks whether Playwright is installed,
+     and which NOTHING in ci.yml may set. Both halves of that are pinned here,
+     together with the install that makes it necessary.
   6. THE CLI CANNOT START THE FLEET BY ACCIDENT. `run_suites.py --help` prints
      the usage and exits 0 without staging or running; a path-shaped or unknown
      argument (`backend/test_x.py`, a typo) fails and names the bare form
@@ -92,8 +100,12 @@ from _where import BACKEND  # noqa: E402
 
 PASSED, FAILED, SKIPPED = [], [], []
 
-#: The one opt-in, as every file must spell it.
+#: The one opt-in, as every file must spell it. It says a suite may RUN.
 OPT_IN = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+#: The SECOND switch, the one that says a browser window may actually OPEN
+#: (2026-11-17). CI sets OPT_IN above; nothing in CI may set this one.
+REAL_BROWSER = "JARVIS_RUN_REAL_BROWSER"
 
 #: The backend suites that import `jarvis_browser_control` today. An IMPORTER
 #: set, never a launch claim: a suite reaches the module's visible launch
@@ -367,6 +379,49 @@ def _browser_half_self_skips(tree) -> bool:
             and any("real-browser half" in word for word in words))
 
 
+def _reads_the_window_switch(tree) -> bool:
+    """The suite has its own window reader, and it names REAL_BROWSER_ENV.
+
+    And it compares against the literal "1", the same fail-closed rule as the
+    opt-in - a half-typed "yes" must never open a window.
+    """
+    helper = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+                   and n.name == "real_browser_window_allowed"), None)
+    if helper is None:
+        return False
+    if not any(isinstance(n, ast.Name) and n.id == "REAL_BROWSER_ENV"
+               for n in ast.walk(helper)):
+        return False
+    return any(
+        isinstance(n, ast.Compare)
+        and any(isinstance(op, ast.Eq) for op in n.ops)
+        and any(isinstance(c, ast.Constant) and c.value == "1" for c in n.comparators)
+        for n in ast.walk(helper))
+
+
+def _window_gate_comes_first(tree) -> bool:
+    """main() asks for the WINDOW switch BEFORE it asks for Playwright.
+
+    Structural, and the order is the point: the browser-half skip is assigned
+    from `real_browser_window_allowed()`, and that call is on an earlier line
+    than the first `playwright_installed()` call. So "Playwright is installed",
+    which is the normal state of both the owner's PC and the required Ubuntu
+    job, can never by itself reach a launch.
+    """
+    main, _body, _guard = _main_and_guard(tree)
+    if main is None:
+        return False
+    window = [n for n in ast.walk(main)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+              and n.func.id == "real_browser_window_allowed"]
+    installed = [n for n in ast.walk(main)
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                 and n.func.attr == "playwright_installed"]
+    if not window or not installed:
+        return False
+    return min(n.lineno for n in window) < min(n.lineno for n in installed)
+
+
 def t_each_guarded_suite_is_guarded():
     for name in GUARDED:
         path = HERE / name
@@ -384,6 +439,14 @@ def t_each_guarded_suite_is_guarded():
         check(f"{name}: with the opt-in set the code checks run, and the "
               f"real-browser half self-skips when Playwright is missing",
               _browser_half_self_skips(tree))
+        window = _constant(tree, "REAL_BROWSER_ENV")
+        check(f"{name}: the window switch it reads is {REAL_BROWSER}",
+              window == REAL_BROWSER, repr(window))
+        check(f"{name}: it reads the window switch itself, and only \"1\" is one",
+              _reads_the_window_switch(tree))
+        check(f"{name}: the browser half asks for the window switch BEFORE it "
+              f"asks whether Playwright is installed",
+              _window_gate_comes_first(tree))
         if name == "test_chatbot_sites.py":
             SITES_GUARDED[0] = not problems
 
@@ -667,6 +730,36 @@ def t_ci_keeps_the_code_only_checks():
               f"'{suite}'" in windows)
 
 
+def t_no_ci_job_may_open_a_browser():
+    """The invariant the 2026-11-17 defect broke, pinned in two halves.
+
+    A REQUIRED check must never be able to depend on Playwright. Two facts hold
+    that up together, and either alone would be misleading:
+
+      * the required sweep job DOES install Playwright's Chromium and DOES set
+        the run opt-in, so the four suites' code-only halves keep running - and
+        "is Playwright installed?" is therefore not a guard;
+      * nothing in ci.yml sets the display switch, which is now the only thing
+        between a required job and a real Chromium window.
+
+    If someone later removes the Playwright install, the first check fails and
+    sends them to this docstring rather than letting the guard quietly drift
+    back to depending on a package being absent.
+    """
+    if not CI_YML.is_file():
+        check("ci.yml is where this test expects it", False, str(CI_YML))
+        return
+    text = CI_YML.read_text(encoding="utf-8")
+    shard = _job_block(text, "backend-shard")
+    check("the required sweep job really does install a Playwright browser - which "
+          "is why the display switch, not the browser's absence, has to be the guard",
+          "playwright install" in shard, (shard or "")[:500])
+    hits = [line.strip() for line in text.splitlines()
+            if re.search(re.escape(REAL_BROWSER) + r"\s*[:=]", line)]
+    check(f"nothing in ci.yml sets {REAL_BROWSER}, so no CI run can open a browser "
+          f"window", not hits, hits)
+
+
 # ---------------------------------------------------------------------------
 #   6. The CLI cannot start the whole fleet by accident
 # ---------------------------------------------------------------------------
@@ -726,6 +819,7 @@ def main():
                t_the_browser_control_importer_set_is_pinned,
                t_one_opt_in_name_and_it_fails_closed,
                t_ci_keeps_the_code_only_checks,
+               t_no_ci_job_may_open_a_browser,
                t_the_cli_cannot_start_the_fleet_by_accident):
         print(f"--- {fn.__name__} ---")
         try:

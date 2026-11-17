@@ -706,8 +706,12 @@ Four suites that open a real, VISIBLE browser window (`test_chatbot_sites.py`,
 `test_chatbot_gemini.py`, `test_handoff.py`, `test_support_widget.py`) are a
 second kind of skip: they are skipped by name, with the reason, on a default
 run unless `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1` is set, and a skip is never
-a pass. CI sets that opt-in so their code-only checks still run there (no CI
-runner has Playwright installed, so their browser halves skip as before).
+a pass. CI sets that opt-in so their code-only checks still run there, and the
+window itself needs a SECOND switch, `JARVIS_RUN_REAL_BROWSER=1`, which no CI
+job sets - so their browser halves skip there. (Corrected 2026-11-17: this used
+to say "no CI runner has Playwright installed". Since 2026-10-27 the Ubuntu
+backend job installs it for another suite, and these four really drove a real
+Chromium in a required job until the second switch was added.)
 
 **The runner is hermetic by default (2026-10-21, Ruling 11).** `backend/run_suites.py`
 now **ignores the ambient `JARVIS_BACKEND`** unless it is asked for explicitly: a plain run
