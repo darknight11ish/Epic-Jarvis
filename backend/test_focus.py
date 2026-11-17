@@ -935,7 +935,12 @@ def t_the_fast_path():
     check("... \"every thirty seconds\" is 30 seconds", got and got.f["seconds"] == 30, got)
     for text, want in (("remind me every 2 hours to stretch", "reminder_set"),
                        ("set a timer for 10 minutes", "timer_set"),
-                       ("stop", None), ("pause the timer", "timer_pause")):
+                       # "stop" is the stop-everything intent now (2026-11-16),
+                       # never the focus one: "stop focus" is the sentence that
+                       # ends the session, and the stop-everything path reaches
+                       # the focus stopper on its own. The check stays exact so a
+                       # bare "stop" can never be read as "stop focus".
+                       ("stop", "stop_all"), ("pause the timer", "timer_pause")):
         got = _q(text, w.e, now)
         check(f"during a session, other commands keep their meaning: {text!r}",
               (got is None and want is None) or (got is not None and got.name == want), got)
