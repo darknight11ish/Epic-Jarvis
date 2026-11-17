@@ -654,6 +654,27 @@ def t_undo_of_a_heavy_click_puts_the_previous_preset_back():
           (Path(TMP) / "presets-active-lane.json").read_text(encoding="utf-8"))
     check("... and Coding itself was never routed through the owner model switch",
           owner_switches == [], owner_switches)
+    # The other direction: on Coding, clicking General records Coding as the
+    # preset before, and Undo puts Coding back on the SAME click road.
+    eng2 = FakeBigCoder()
+    with SaveModules(jarvis_models=models, jarvis_gate=gate,
+                     jarvis_tripwire=FakeTripwire()), FakePooled(eng2):
+        drive_route({"preset": "coding"})
+        code2, out2, _calls2, _sw2 = drive_route({"preset": "general"})
+        receipt2 = R.get(out2.get("receipt_id", "")) or {}
+        back = restore_with_lane_stubs(out2.get("receipt_id", ""))
+    check("a General click made while Coding is on records Coding before it, "
+          "and says it can be undone",
+          code2 == 200 and out2.get("previous_preset") == "coding"
+          and (receipt2.get("before") or {}).get("preset") == "coding"
+          and R.is_undoable(receipt2) is True, (code2, receipt2))
+    check("... Undo puts Coding back with no card, on its pooled lane",
+          back.get("ok") is True and P.choice() == "coding"
+          and models.state.get("current") == P.by_id("coding").model
+          and json.loads((Path(TMP) / "presets-active-lane.json").read_text(
+              encoding="utf-8")).get("base_url") == "http://127.0.0.1:11450"
+          and gate.calls == [],
+          (back, P.choice(), models.state.get("current"), gate.calls))
 
 
 def t_the_chat_road_still_raises_the_pooled_lane_card():
