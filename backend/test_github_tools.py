@@ -1286,6 +1286,96 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
               action not in OC.SMALL_ACTIONS, sorted(OC.SMALL_ACTIONS))
 
 
+def t_every_write_declares_and_names_its_tier():
+    """Gemini's Q5 ruling, Layer 1 (2026-11-16): no GitHub write is `unknown`.
+
+    "Every write/destructive tool and intent MUST explicitly declare its tier
+    (`ask` or `refuse`) rather than falling through to `unknown`."
+
+    MEASURED BEFORE THIS TEST (the 2026-11-16 write-card audit): 12 of 12 write
+    tools raised a complete card and nothing was written - that half was already
+    right - but 0 of 12 named their tier, so a banned action and an ordinary one
+    read alike on the screen. The tier lived only in `[autonomy.tiers]`, where a
+    person never sees it. This pins the three halves that fix that: the
+    DECLARATION in `jarvis_github.WRITE_TIERS`, the SENTENCE the card carries,
+    and a banned intent being refused BEFORE any card exists.
+    """
+    # 1. THE DECLARATION. Every write tool has a row, and it is "ask".
+    for tool in ACTION_TOOLS:
+        check(f"{tool}: declares its own tier", tool in GH.WRITE_TIERS,
+              sorted(GH.WRITE_TIERS))
+        check(f"{tool}: ... and the tier is ask", GH.write_tier(tool) == "ask",
+              GH.WRITE_TIERS.get(tool))
+    # Every carded write ACTION resolves to that same declaration, including the
+    # fix tool's separate "write" stage (its own action, same tool's tier).
+    for action in GH.ACTIONS:
+        check(f"the carded action {action} resolves to ask",
+              GH.tier_for_action(action) == "ask",
+              GH.WRITE_ACTION_TOOLS.get(action))
+
+    # 2. THE CARD NAMES ITS OWN TIER, in the plain words a beginner reads. A
+    #    "refuse" sentence is never on a card: a refused intent never gets one.
+    for tool in ACTION_TOOLS:
+        _r, text = _card(tool)
+        check(f"{tool}: its card names its own tier",
+              GH.TIER_WORDS["ask"] in text, text[-180:])
+        check(f"{tool}: ... and it is not a refuse card",
+              GH.TIER_WORDS["refuse"] not in text, text[-180:])
+
+    # 3. NO FALL-THROUGH TO "unknown". An undeclared name is REFUSED, not
+    #    answered "unknown" and not guessed at "ask".
+    for undeclared in ("", "github_new_write", "unknown", "ask", "refuse"):
+        try:
+            GH.write_tier(undeclared)
+        except GH.GitHubError as exc:
+            check(f"{undeclared!r} has no declared tier, and is refused",
+                  "no declared tier" in str(exc), str(exc))
+        else:
+            check(f"{undeclared!r} has no declared tier, and is refused", False)
+    try:
+        GH.tier_for_action("github_unknown_write")
+    except GH.GitHubError:
+        check("an undeclared ACTION is refused before a card is drawn", True)
+    else:
+        check("an undeclared ACTION is refused before a card is drawn", False)
+
+    # 4. EVERY DESTRUCTIVE INTENT IS "refuse", and that set is the module's own
+    #    never-list - ONE fact, not two that can drift apart.
+    refuses = {name for name, tier in GH.WRITE_TIERS.items()
+               if tier == "refuse"}
+    check("the declared-refuse set is exactly the module's never-list",
+          refuses == set(GH.NEVER), sorted(refuses ^ set(GH.NEVER)))
+    check("every banned intent declares refuse",
+          all(GH.write_tier(name) == "refuse" for name in GH.NEVER),
+          sorted(n for n in GH.NEVER if GH.write_tier(n) != "refuse"))
+    check("every declared tier is ask or refuse, and nothing else",
+          set(GH.WRITE_TIERS.values()) == {"ask", "refuse"},
+          sorted(set(GH.WRITE_TIERS.values())))
+
+    # 5. FAIL-CLOSED: a "refuse" intent is refused BEFORE any card exists. The
+    #    card's text IS `describe()`'s answer, so if the tool's own planner
+    #    raises before `describe()` is called, there is no card text and nothing
+    #    for the gate to ask. This drives the SAME seam `prepare()` uses in a
+    #    real turn - not a hand-built Request and not merely the card's words.
+    built = []
+    real_describe = GH.describe
+    GH.describe = lambda req: built.append(req) or real_describe(req)
+    said = ""
+    try:
+        with _Token():
+            try:
+                AG.TOOLS["github_pr_review"].prepare(
+                    dict(ARGS["github_pr_review"], event="APPROVE"))
+            except GH.GitHubError as exc:
+                said = str(exc)
+    finally:
+        GH.describe = real_describe
+    check("an APPROVE review is refused before any card text is built",
+          said and built == [], (said, built))
+    check("... and the refusal names its tier out loud",
+          GH.TIER_WORDS["refuse"] in said, said)
+
+
 def t_a_file_read_shows_the_files_text_not_the_envelope():
     """DEF-042: the contents API answers in base64; the tool shows the FILE.
 
@@ -4162,6 +4252,7 @@ if __name__ == "__main__":
                    t_the_patch_applies_and_reverses_byte_for_byte,
                    t_the_gate_knows_the_ten_tools_and_six_actions,
                    t_every_tier_is_ask_and_the_tables_are_joined,
+                   t_every_write_declares_and_names_its_tier,
                    t_a_file_read_shows_the_files_text_not_the_envelope,
                    t_the_answer_is_bounded_and_unapproved_runs_send_nothing,
                    t_create_repo_is_one_carded_call_before_any_network,
