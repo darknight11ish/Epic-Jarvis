@@ -355,10 +355,11 @@ deleted as soon as it has been read, so they do not accumulate.
   gate's `_RISK` table HAS a row for `record_call` (added 2026-11-05):
   `("yes", "local", ...)` - a recording changes nothing on this PC, can be
   deleted again, and never leaves the machine. Before that row the gate treated
-  the action as unclassified and its card printed the generic "unclassified
-  action - treated as permanent and able to leave this PC"; **the second half of
-  that sentence was wrong for this action**, and it is the sentence the row
-  replaced. The tier is still `ask` - the row does not loosen it.
+  the action as unclassified and its card printed the generic warning, which at
+  the time read "treated as permanent and able to leave this PC"; **the second
+  half of that sentence was wrong for this action**, and it is the sentence the
+  row replaced. That generic line was itself reworded on 2026-11-17 so it no
+  longer claims either. The tier is still `ask` - the row does not loosen it.
 - **A repeated `seq` is accepted, not refused (2026-11-05).** A chunk whose `seq`
   is below the next one the recording needs is a retry of a chunk the PC
   already has - the phone died between the PC's 200 and its own `sent.txt`
