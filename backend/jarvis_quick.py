@@ -17970,8 +17970,16 @@ _NOTE_APPEND_PLAIN = re.compile(
 #: names the note FIRST and then says what happened, so the "that" is the
 #: separator and no colon or comma is needed. This shape is dated: the words go
 #: under a `## YYYY-MM-DD` heading (newest last), not into the file's tail.
+#:
+#: The `my|the` before the name is OPTIONAL (2026-11-17). The owner says "add
+#: to Field Test Groceries that I bought milk" - naming a note directly - and
+#: the required article made that sentence match nothing, so it fell to the
+#: model and nothing was written. What still keeps a non-note sentence out is
+#: the guard where this is used, and it is unchanged: the sentence says "note",
+#: or the name resolves to a note that exists, and `_list_owns_name` leaves
+#: "add to the shopping list that ..." to the named-list grammar.
 _NOTE_APPEND_TO_THAT = re.compile(
-    r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+(?:my|the)\s+"
+    r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+(?:(?:my|the)\s+)?"
     r"(?P<name>.+?)(?:\s+note)?\s+that\s+(?P<text>.+)$")
 _NOTE_TAG_ADD = re.compile(
     r"(?:add|put)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+(?:to|on)\s+"
