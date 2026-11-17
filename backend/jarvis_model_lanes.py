@@ -259,7 +259,9 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #      cards, and the two lane models it is about to pause;
 #   4. the pause is ANNOUNCED (event bus + audit log) BEFORE the first unload;
 #   5. the three-card server is started, BOTH lane models are unloaded and
-#      proved gone from `/api/ps`, and only then is the model loaded - at THIS
+#      proved gone from `/api/ps` - by the pause AND by a read of each lane's
+#      own `/api/ps` taken HERE, because a claimed pause is not a proved one
+#      (2026-11-17 live) - and only then is the model loaded - at THIS
 #      lane's own measured rung (49,152 tokens since 2026-11-07; 32,768 from
 #      2026-11-03 to 2026-11-07; 16,384 before that), with the spill that
 #      measurement accepted passed to `load_coder` as
@@ -267,9 +269,12 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #      one measured cap, or does not say how much it spilled, is unloaded again
 #      and every lane is put back. A caller that passes no allowance - every
 #      other one - still gets the zero-spill rule exactly as before;
-#   6. any failure AFTER the card puts back what it took: the lanes, the model
-#      and the server. `changed: false` is only ever said beside the restores
-#      that were really seen.
+#   6. ANY failure after the card puts back what it took, in the order the live
+#      PC of 2026-11-17 needed: the pooled model is unloaded and its server
+#      STOPPED FIRST, then both lane models are asked back, retried once, and
+#      only a restore the engine proved from `/api/ps` is reported. `changed:
+#      false` is only ever said beside the restores that were really seen, and a
+#      lane that did not come back is named plainly.
 #
 # WHY THE CARD CANNOT BE THE MODEL SWITCH ITSELF. `jarvis_models.switch_to`
 # runs the tripwire's smoke test AT `jarvis_models.OLLAMA` - the address of the
@@ -587,6 +592,183 @@ def pooled_card_text(*, mode: str = "coding", engine=None) -> str:
               "they were.")
 
 
+#: How many times the two lane models are asked back before an answer says a
+#: lane did not come back. TWO, not one. The live PC of 2026-11-17 is the
+#: reason: the first restore answered "qwen3.5:9b is not loaded on port 11436"
+#: while that lane was still settling the unload this start had just asked for,
+#: and the owner's own retry half a minute later applied cleanly. The second
+#: attempt is that retry, made inside the click; a lane that still stays down is
+#: named plainly, never claimed.
+LANE_RESTORE_ATTEMPTS = 2
+
+
+def _lane_field(lane, name, default=None):
+    """One field of a lane row (`jarvis_big_coder.Lane`), or a dict's key."""
+    if isinstance(lane, dict):
+        return lane.get(name, default)
+    return getattr(lane, name, default)
+
+
+def _lane_rows(engine) -> tuple:
+    """The two lane rows the engine owns, never a copy of the ports or models.
+
+    A stand-in engine in a suite may answer `LANES` itself; one that does not
+    gets the shipped list from `jarvis_big_coder`, which is the module that owns
+    the owner's own two lanes. Empty only when neither can be read, which no
+    shipped install can be.
+    """
+    rows = tuple(getattr(engine, "LANES", ()) or ())
+    if rows:
+        return rows
+    try:
+        import jarvis_big_coder
+        return tuple(getattr(jarvis_big_coder, "LANES", ()) or ())
+    except Exception:
+        return ()
+
+
+def _lane_address(lane) -> str:
+    """The lane's own `/api/ps` address, from the port its row carries."""
+    try:
+        port = int(_lane_field(lane, "port", 0) or 0)
+    except (TypeError, ValueError):
+        port = 0
+    return f"http://127.0.0.1:{port}"
+
+
+def _lane_rows_now(engine, lane):
+    """That lane's rows from `/api/ps`, or None when the lane did not answer."""
+    try:
+        return engine.ps(_lane_address(lane))
+    except Exception:
+        return None
+
+
+def _lanes_still_loaded(engine) -> tuple:
+    """([] proof, [still]) - read from each lane's `/api/ps` HERE.
+
+    THE DEFECT THIS CLOSES (2026-11-17, measured on the owner's PC at 02:3x,
+    source 02332ecc). The start asked `pause_lanes()` for the pause and took its
+    `ok` as the fact; the live answer was "the pooled lane did not start: ...
+    still loaded - qwen3.5:9b on port 11436". A model can be resident while the
+    step that unloads it says it is not, so the pause's own verdict is EVIDENCE,
+    not the answer: the same `/api/ps` the pause proves from is read here, per
+    lane, and `still` names what was seen. A lane that does not answer is NOT
+    "paused" - it is not proved either way, which is a refusal.
+    """
+    still, proof = [], []
+    for lane in _lane_rows(engine):
+        model = str(_lane_field(lane, "model", "") or "")
+        port = _lane_field(lane, "port", "?")
+        rows = _lane_rows_now(engine, lane)
+        if rows is None:
+            still.append(f"{model} on port {port} (the lane did not answer)")
+            proof.append(f"port {port}: no answer, so it is NOT proved paused")
+            continue
+        if engine.loaded_row(rows, model) is not None:
+            still.append(f"{model} on port {port}")
+            proof.append(f"port {port}: {model} is STILL loaded - the pause was "
+                         f"not real")
+            continue
+        proof.append(f"port {port}: {model} is not loaded - the lane is paused")
+    return proof, still
+
+
+def _put_lanes_back(engine) -> dict:
+    """Ask both lane models back, retried once, and answer what was proved.
+
+    {"ok", "restored", "not_restored", "proof", "why"}. `restored` is the proof
+    the engine's own restore gave from `/api/ps`; a restore that says a model
+    did NOT come back is never reported as done. The second attempt is the live
+    PC's own recovery (2026-11-17): the first restore can race a lane that is
+    still settling the unload this start asked for, and the owner's retry half
+    a minute later applied cleanly - the retry is made here instead of left to
+    him. A lane that still stays down is named, plainly.
+    """
+    lanes = _lane_rows(engine)
+    if not lanes:
+        return {"ok": True, "restored": [], "not_restored": [], "proof": [],
+                "why": ""}
+    ok, why = False, ""
+    proof, restored, not_restored = [], [], []
+    for _attempt in range(max(1, int(LANE_RESTORE_ATTEMPTS))):
+        try:
+            back = engine.restore_lanes()
+        except Exception as exc:
+            back = {"ok": False, "why": f"{type(exc).__name__}: {exc}"}
+        if not isinstance(back, dict):
+            back = {"ok": False}
+        if back.get("ok") is True:
+            ok = True
+            restored = [str(p) for p in (back.get("proof") or ()) if str(p)]
+            not_restored, why = [], ""
+            proof.extend(restored)
+            break
+        ok = False
+        not_restored = [str(w) for w in (back.get("wrong") or ()) if str(w)]
+        why = str(back.get("why") or "")
+        proof.extend(str(p) for p in (back.get("proof") or ()) if str(p))
+    return {"ok": ok, "restored": restored, "not_restored": not_restored,
+            "proof": proof, "why": why}
+
+
+def _undo_pooled_start(engine, *, profile: dict, port: int) -> dict:
+    """Put back everything a start that did not finish took, in the live order.
+
+    {"ok", "restored", "not_restored", "proof", "why", "pooled_clear"}
+
+    THE ORDER IS THE FIX (2026-11-17). The pooled model is unloaded and the
+    three-card server is STOPPED FIRST, before the two lane models are asked
+    back: the live failure answered "qwen3.5:9b is not loaded on port 11436"
+    while the server the start had just launched was still up and could still
+    hold what the restore needed. Only then are the lanes restored, retried and
+    checked (`_put_lanes_back`), and the answer carries only what was seen.
+    """
+    proof = []
+    try:
+        un = engine.unload_coder(port=port, mode=profile["key"])
+    except Exception as exc:
+        un = {"ok": False, "why": f"{type(exc).__name__}: {exc}"}
+    un = un if isinstance(un, dict) else {}
+    proof.extend(str(p) for p in (un.get("proof") or ()) if str(p))
+    pooled_clear = un.get("ok") is True
+    try:
+        engine.server_stop()
+    except Exception as exc:
+        proof.append(f"the three-card Ollama could not be stopped "
+                     f"({type(exc).__name__})")
+    back = _put_lanes_back(engine)
+    proof.extend(back["proof"])
+    not_restored = list(back["not_restored"])
+    why = "" if back["ok"] else back["why"]
+    if not pooled_clear:
+        not_restored.append(f"the pooled model on port {port}")
+        why = ((why + " ") if why else "") + (
+            f"the pooled model on port {port} may still be loaded")
+    return {"ok": not not_restored, "restored": back["restored"],
+            "not_restored": not_restored, "proof": proof, "why": why,
+            "pooled_clear": pooled_clear}
+
+
+def _start_refused(code: int, *, error: str, undo: dict, extra=None) -> tuple:
+    """A refused start in the shape every caller reads, naming what was seen.
+
+    "The answer names only the ones seen to work" is this module family's own
+    rule for a restore (silent-failure audit 2026-10-27, row 2): `restored` and
+    `not_restored` carry the engine's own proof, never an assumption, and the
+    error carries the restore's own sentence only when it has one.
+    """
+    body = {"ok": False, "changed": False, "running": False, "lane": POOLED_KEY,
+            "restored": list(undo.get("restored") or []),
+            "not_restored": list(undo.get("not_restored") or []),
+            "proof": list(undo.get("proof") or []),
+            "pooled_clear": bool(undo.get("pooled_clear"))}
+    body["error"] = str(error) + (" " + undo["why"] if undo.get("why") else "")
+    if extra:
+        body.update(extra)
+    return code, body
+
+
 def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                       tasks=None, mode: str = "coding") -> tuple:
     """Start the ONE three-card lane for a heavy preset. `(status, body)`.
@@ -598,6 +780,31 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
     exist so the whole order can be proved without a graphics card: `gate` is
     the approval, `engine` is `jarvis_big_coder` (a fake in the suites), and
     `tasks` says whether a multi-step job is running.
+
+    THE LIVE FAILURE THIS FIXES (2026-11-17, measured on the owner's PC at
+    02:3x, source 02332ecc). A Coding click on the apps' own route answered:
+    "the pooled lane did not start: Jarvis did not pause every model it must ...
+    still loaded - qwen3.5:9b on port 11436 ... The two models were not put back
+    exactly as they were: qwen3.5:9b is not loaded on port 11436". Two things
+    were wrong, and neither was the card:
+
+      * the start BELIEVED the pause step's own `ok`. The lane that was still
+        resident was named in that answer, but the code had no read of its own,
+        so a step that claimed a pause it did not achieve could let the 14.8 GB
+        model load beside a lane model. Each lane's `/api/ps` is now read HERE,
+        and a model still present refuses the start in plain words - the same
+        words the live answer used;
+      * a start that did not finish left the everyday lane DOWN. The restore ran
+        while the three-card server the start had just launched was still up,
+        and one attempt that did not come back was reported and dropped. The
+        undo now unloads the pooled model, stops that server FIRST, asks both
+        lanes back, retries once, and reports only what the engine proved from
+        `/api/ps`.
+
+    The uncarded click itself is unchanged: on the apps' own route the press is
+    the approval (`jarvis_presets._OwnerPressed`), and `apply_from_body` - chat
+    and voice - still raises this lane's one `switch_model` card. This function
+    is the same on both roads; only the `gate` it is handed differs.
     """
     eng = _engine(engine)
     try:
@@ -646,39 +853,67 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
 
     # THE ANNOUNCEMENT, before anything on either card is touched.
     eng.announce_pause(words)
-    srv = eng.server_start()
+    port = POOLED_PORT
+    try:
+        srv = eng.server_start()
+    except Exception as exc:
+        srv = {"ok": False,
+               "why": (f"the three-card Ollama could not be started "
+                       f"({type(exc).__name__})")}
+    srv = srv if isinstance(srv, dict) else {}
     if not srv.get("ok"):
-        return 503, {
-            "ok": False, "changed": False, "running": False, "lane": POOLED_KEY,
-            "error": (srv.get("why") or
+        # The engine's own server_start pauses the two lanes BEFORE it launches
+        # (2026-11-08), so this failure can already have unloaded them. Put them
+        # back: this used to answer and leave the everyday lane down.
+        undo = _undo_pooled_start(eng, profile=profile, port=port)
+        return _start_refused(
+            503,
+            error=str(srv.get("why") or
                       "the three-card Ollama could not be started"),
-        }
+            undo=undo)
     port = _port_of(srv.get("url"))
 
-    paused = eng.pause_lanes()
-    if not paused["ok"]:
-        back = eng.restore_lanes()
-        eng.server_stop()
-        out = {"ok": False, "changed": False, "running": False,
-               "lane": POOLED_KEY, "error": paused["why"],
-               "paused": paused["proof"], "restored": back["proof"]}
-        if not back["ok"]:
-            out["error"] = out["error"] + " " + back["why"]
-        return 409, out
+    # THE PAUSE IS ASKED ...
+    try:
+        paused = eng.pause_lanes()
+    except Exception as exc:
+        paused = {"ok": False, "why": f"{type(exc).__name__}: {exc}"}
+    paused = paused if isinstance(paused, dict) else {}
+    # ... AND PROVED HERE, from each lane's own /api/ps. The pause step's `ok`
+    # is evidence, not the verdict: the live failure was a model still resident
+    # while the start went on (2026-11-17), and the words below are the ones
+    # that answer used.
+    pause_proof, still = _lanes_still_loaded(eng)
+    if paused.get("ok") is not True or still:
+        why = str(paused.get("why") or "") if paused.get("ok") is not True else ""
+        if still:
+            why = ("Jarvis did not pause every model it must, so the big coding "
+                   "model was NOT started: still loaded - " + "; ".join(still)
+                   + ". Nothing was loaded, and what was unloaded is being put "
+                   "back.")
+        undo = _undo_pooled_start(eng, profile=profile, port=port)
+        return _start_refused(
+            409, error=(why or "the two lane models would not pause"), undo=undo,
+            extra={"paused": list(paused.get("proof") or []) + pause_proof,
+                   "still": still})
 
-    loaded = eng.load_coder(port=port, num_ctx=profile["num_ctx"],
-                            allow_spill=profile["spill_allowance"],
-                            mode=profile["key"])
-    if not loaded["ok"]:
-        eng.unload_coder(port=port, mode=profile["key"])
-        back = eng.restore_lanes()
-        eng.server_stop()
-        error = loaded["why"]
-        if not back["ok"]:
-            error = error + " " + back["why"]
-        return 503, {"ok": False, "changed": False, "running": False,
-                     "lane": POOLED_KEY, "error": error,
-                     "proof": loaded["proof"], "restored": back["proof"]}
+    try:
+        loaded = eng.load_coder(port=port, num_ctx=profile["num_ctx"],
+                                allow_spill=profile["spill_allowance"],
+                                mode=profile["key"])
+    except Exception as exc:
+        loaded = {"ok": False,
+                  "why": (f"{profile['model']} could not be loaded "
+                          f"({type(exc).__name__}: {exc})")}
+    loaded = loaded if isinstance(loaded, dict) else {}
+    if not loaded.get("ok"):
+        load_proof = [str(p) for p in (loaded.get("proof") or ()) if str(p)]
+        undo = _undo_pooled_start(eng, profile=profile, port=port)
+        return _start_refused(
+            503,
+            error=str(loaded.get("why") or
+                      f"the three-card Ollama did not load {profile['model']}"),
+            undo=undo, extra={"proof": load_proof + list(undo["proof"])})
 
     with _POOLED_LOCK:
         _POOLED.clear()
@@ -688,7 +923,9 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                         "model": profile["model"],
                         "num_ctx": profile["num_ctx"],
                         "owned": bool(srv.get("owned")),
-                        "proof": list(paused["proof"]) + list(loaded["proof"])})
+                        "proof": (list(paused.get("proof") or []) + pause_proof
+                                  + [str(p) for p in (loaded.get("proof") or ())
+                                     if str(p)])})
     _publish_pooled({"state": "running", "mode": profile["key"],
                      "model": profile["model"],
                      "num_ctx": profile["num_ctx"]})
@@ -702,7 +939,8 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                     f"{profile['num_ctx']:,} tokens. The two lane models are "
                     f"paused and come back when you stop it or apply another "
                     f"preset."),
-        "paused": paused["proof"], "proof": loaded["proof"],
+        "paused": list(paused.get("proof") or []) + pause_proof,
+        "proof": [str(p) for p in (loaded.get("proof") or ()) if str(p)],
     }
 
 
