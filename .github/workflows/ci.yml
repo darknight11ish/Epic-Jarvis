@@ -2088,10 +2088,13 @@ jobs:
       # walks every .py under backend/, jarvis-backend/ and tools/ that names
       # one of the six hosts: it must either name `check_egress` in the same
       # file or be on the checker's ALLOWED list with a written reason. The
-      # senders still owed belong to the second lane (`jarvis_search.py`, the
-      # HUD) and are listed there, so that lane cannot miss them. An unlisted
-      # host name fails with the file and line, rather than being a warning a
-      # fast reader scrolls past - which is exactly how six providers and four
+      # one sender still owed that spells a host is the second lane's
+      # `jarvis_search.py` (both copies), listed there so that lane cannot
+      # miss it. The HUD spells no host at all - it posts to whatever address
+      # the lane data hands it at runtime - which is the limit the checker's
+      # own docstring states a text check cannot see. An unlisted host name
+      # fails with the file and line, rather than being a warning a fast
+      # reader scrolls past - which is exactly how six providers and four
       # senders came to have their own rules in the first place.
       # ---------------------------------------------------------------------
       - name: Every path to a cloud service asks the one egress gate
