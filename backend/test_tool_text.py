@@ -61,7 +61,14 @@ MEASURED = ("calculator", "memory_search", "file_read", "shell_exec", "control_c
 #: spare. The tool sits in the "control" group and is only sent when that group
 #: is opened, never on every turn - see test_short_tool_list.py, whose own
 #: 1550/380 pins are unchanged by this and still pass.
-MEASURED_BUDGET = 2970
+#: RAISED 2970 -> 3050 on 2026-11-16, by the same rule, for one tool.
+#: `file_read` stopped returning a byte slice and now returns numbered line
+#: slices, so its description says so and its schema carries the two optional
+#: range fields (`start_line`, `lines`, the same names `project_read` uses).
+#: Measured on this tree with this module's own estimate_tokens rule: the
+#: sixteen read 3,023, so the old 2,970 had no room at all. 3,050 leaves 27
+#: tokens spare. Nothing else in the list grew.
+MEASURED_BUDGET = 3050
 PER_TOOL = 300
 #: Tools whose description deliberately carries the GitHub whole-surface sentence
 #: (2026-11-10). Named once, so a fourth one has to be looked at here too.

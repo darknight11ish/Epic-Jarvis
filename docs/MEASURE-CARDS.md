@@ -1,6 +1,6 @@
 # The graphics cards, measured: one line to run, and how to read it
 
-**Short version.** Paste one line (below). It reads your two cards and what
+**Short version.** Paste one line (below). It reads your graphics cards and what
 Ollama is doing with them, prints the answer in plain words, and **changes
 nothing** - it is safe while Jarvis is running. Its job is to answer the one
 question the documents have argued about since 2026-09-23: *is the model

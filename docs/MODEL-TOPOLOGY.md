@@ -1,16 +1,29 @@
 # What runs on the GPU, and how much context it gets
 
-RTX 2060 12 GB (no monitor; holds the everyday model) and RTX 2080 Super,
-8 GB (the monitor; runs the desktop), both Turing sm75. Ryzen 9 3900X.
-Windows 11.
+**Three graphics cards, measured live on this PC on 2026-11-16.**
+`nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader` read:
 
-**Both cards are installed and measured** (2026-10-05,
-[MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)): an RTX
-2060 12 GB with no monitor, which holds the everyday model, and the RTX 2080
-Super 8 GB, which has the monitor and runs the desktop. Everything below the
-next heading was worked out for the 2080 Super alone, before the second card
-went in; see [The planned second card](#the-planned-second-card-rtx-2060-12-gb)
-for what changes and for what is really measured.
+| index | card | memory |
+|---|---|---|
+| 0 | NVIDIA GeForce RTX 2060 | 12,288 MiB |
+| 1 | NVIDIA GeForce RTX 2080 SUPER | 8,192 MiB |
+| 2 | NVIDIA GeForce RTX 2080 SUPER | 8,192 MiB |
+
+The 2060 has no monitor and holds the everyday model. One 2080 SUPER has the
+monitor and runs the desktop; the other 2080 SUPER is headless. All three are
+Turing (compute capability 7.5), so all three clear the cache and
+flash-attention floor. Ryzen 9 3900X. Windows 11.
+
+**The two-card reading stays as the dated record it is.** Measured 2026-10-05
+([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)): the RTX
+2060 12 GB with no monitor held the everyday model, and the RTX 2080 Super
+8 GB had the monitor and ran the desktop. **The third card was installed and
+measured on 2026-11-07**
+([MEASURED-2026-11-07-THREE-GPU.md](MEASURED-2026-11-07-THREE-GPU.md)). The
+dated sections below keep the machine they were measured on; where one says
+"both cards" or "the second card", that is how many were installed then, not
+how many are installed now. [The planned second card](#the-planned-second-card-rtx-2060-12-gb)
+keeps that heading because the rest of the project links to it.
 
 Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.
@@ -49,6 +62,36 @@ second card" below); nothing else here has been rewritten from measurement.
 
 ---
 
+## The live reading: three cards, two ports, two context windows (2026-11-16)
+
+Read from the running PC on 2026-11-16, not calculated. This is the reading to
+use today; every section below keeps the date it was measured.
+
+- **Port 11436 is the everyday lane.** `GET http://127.0.0.1:11436/api/ps`
+  reported `qwen3.5:9b` loaded with **`ctx=196608`**. This is the lane Jarvis's
+  chat uses (`OLLAMA_URL`), and the lane the logon task `Jarvis Ollama -
+  Everyday model (RTX 2060)` starts with `-ContextLength 196608`.
+- **Port 11434 is Ollama's own default server,** a different process. The same
+  call there reported `qwen3.5:9b` with **`ctx=16384`**.
+- **Port 11450 is the pooled Coding lane,** and it answered nothing when this
+  was read because the lane was not running.
+- **The coding model installed is
+  `qwen3-coder-30b-a3b-ud-q3-k-xl:latest`.**
+
+**Both context numbers are real, and neither contradicts the other.** 196,608
+belongs to the everyday lane on 11436; 16,384 belongs to the default server on
+11434. They were measured in the same live reading, from each server's own
+`/api/ps`. A page that puts the two numbers side by side as though one must be
+wrong is describing two servers as one.
+
+The **2026-10-30** section below is the record of a day when both servers
+reported 16,384. The everyday lane was later loaded at 196,608 (recorded on
+2026-11-02, and measured again on 2026-11-16), while 11434 still takes the
+16,384 that `OLLAMA_CONTEXT_LENGTH` sets. That is why the number a page quotes
+depends on which port it is describing.
+
+---
+
 ## The deployed context, measured (2026-10-30)
 
 **The deployed context is 16,384 tokens, and it is measured on the owner's PC,
@@ -57,7 +100,8 @@ not calculated** ([MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.m
 PC's Ollama servers report `context_length: 16384` for the model they hold, and
 the runner's own command line carries `-c 16384`. At that size the everyday
 model (`qwen3.5:9b`) reports 5.40 GiB and the 12 GB card still had 3,815 MiB
-free, at 38-43 tokens/s.
+free, at 38-43 tokens/s. **This is the 2026-10-30 record, and it stays as that
+day's measurement; the live reading above is the one to use today.**
 
 This section used to say the deployed context was 4,096 and that nothing in the
 request chose it. **The second half is still right; the first is not.** A local
@@ -164,12 +208,14 @@ One time, in the environment — a Modelfile cannot express these:
 setx OLLAMA_KV_CACHE_TYPE q8_0; setx OLLAMA_KEEP_ALIVE -1; setx OLLAMA_CONTEXT_LENGTH 16384; Write-Host "Saved for new windows: close this one and Ollama, then start them again"
 ```
 
-`OLLAMA_CONTEXT_LENGTH=16384` is what makes the deployed window 16,384
+`OLLAMA_CONTEXT_LENGTH=16384` is what makes the default server's window 16,384
 (measured 2026-10-30; [MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.md)
 has the numbers and the exact undo). Without it Ollama picks 4,096 for a model
 whose own Modelfile names no `num_ctx`, which is the live everyday model
-(`qwen3.5:9b`). 16,384 is the largest size measured on this PC: at it the
-model takes 5.40 GiB and leaves 3,815 MiB of the 12 GB card free.
+(`qwen3.5:9b`). 16,384 is the largest size in that 2026-10-30 ladder: at it the
+model takes 5.40 GiB and leaves 3,815 MiB of the 12 GB card free. The everyday
+lane on 11436 is not limited by this variable - its logon task passes
+`-ContextLength 196608`, the window measured above.
 
 Then:
 

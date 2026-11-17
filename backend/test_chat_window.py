@@ -36,8 +36,11 @@ WHY IT CANNOT BE SILENT ANY MORE. Ollama drops the FRONT of a prompt that does
 not fit and answers anyway (see "When the model was not given the whole
 conversation" in jarvis_agent.py). Three things now say so instead:
 
-  * a turn whose own prompt is over the window it is about to name is told so,
-    in the app's words, before the request (WINDOW_OVERFLOW_LINE);
+  * a turn whose own prompt is over the window it is about to name gets ONE
+    aggressive re-trim - old tool results stubbed, earlier turns dropped, the
+    rules and the newest turn kept - and if even that does not fit it is
+    REFUSED before any request (WINDOW_OVERFLOW_REFUSAL). It is never warned
+    about and then sent anyway;
   * a lane that cannot say which window it is set to is TOLD so
     (POOLED_WINDOW_UNKNOWN_LINE) instead of guessed at; and
   * the existing after-the-fact guard still works - DROPPED_PROMPT_NOTE - which
@@ -206,6 +209,22 @@ def answer_text(streamed) -> str:
     return "".join(text)
 
 
+def error_text(streamed) -> str:
+    """The error sentence an app would show, or "" when none was sent."""
+    for line in b"".join(streamed).split(b"\n"):
+        line = line.strip()
+        if not line.startswith(b"data:"):
+            continue
+        try:
+            obj = json.loads(line[5:])
+        except ValueError:
+            continue
+        err = obj.get("error")
+        if isinstance(err, dict):
+            return str(err.get("message") or "")
+    return ""
+
+
 def a_turn(*, url: str = POOLED, tools=STACK, prompt_tokens=None, messages=None,
            announce=None, context_length=None, model: str = MODEL):
     """One REAL `run_local_turn`, every request faked. (out, [(url, payload)], what the app got)."""
@@ -274,7 +293,7 @@ def the_window_the_preset_names_is_the_window_the_turn_gets() -> None:
 #        when the prompt does not fit it
 # ---------------------------------------------------------------------------
 
-def a_prompt_over_the_named_window_is_said_before_it_is_sent() -> None:
+def a_prompt_over_the_named_window_is_refused_before_it_is_sent() -> None:
     noted: list = []
     real = P.lane_num_ctx
     # A pooled preset whose own window really is 8,192. The number the request
@@ -282,17 +301,21 @@ def a_prompt_over_the_named_window_is_said_before_it_is_sent() -> None:
     # not made big by this change.
     P.lane_num_ctx = lambda url: SMALL
     try:
-        out, calls, _ = a_turn(announce=noted.append, context_length=SMALL)
+        out, calls, streamed = a_turn(announce=noted.append, context_length=SMALL)
     finally:
         P.lane_num_ctx = real
-    payload = calls[0][1] if calls else {}
-    check("W2: a lane whose window really is 8,192 names 8,192",
-          (payload.get("options") or {}).get("num_ctx") == SMALL,
-          payload.get("options"))
     said = [str(line) for line in noted]
-    check("W2: ... and the app says the prompt does not fit that window",
-          any("does not fit" in line for line in said), said)
-    check("W2: ... and the answer still comes", out.get("answer") == "ok", out)
+    err = error_text(streamed)
+    check("W2: a prompt over the window it names is not sent at all",
+          not calls, [u for u, _ in calls])
+    check("W2: ... the turn carries no words of its own",
+          out.get("answer") == "", out.get("answer"))
+    check("W2: ... the app is told the prompt exceeds that window",
+          "Prompt exceeds the 8,192-token local window" in err, err)
+    check("W2: ... and what to do about it",
+          "Shorten the input" in err and "DeepSeek" in err, err)
+    check("W2: ... and no warn-then-send line is left",
+          not any("does not fit" in line for line in said), said)
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +378,7 @@ def main() -> int:
     print("-- W0/W1: the window the preset names --")
     the_window_the_preset_names_is_the_window_the_turn_gets()
     print("\n-- W2: a genuinely small window --")
-    a_prompt_over_the_named_window_is_said_before_it_is_sent()
+    a_prompt_over_the_named_window_is_refused_before_it_is_sent()
     print("\n-- W3: a truncated prompt is never silent --")
     a_truncated_prompt_is_never_silent()
     print("\n-- W4: a window nobody can name --")

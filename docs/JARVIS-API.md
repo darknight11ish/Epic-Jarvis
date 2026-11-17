@@ -35058,7 +35058,7 @@ own.
 
 **ONE RUN = one model + one setup + N repeats + one target lane.** A repeat
 asks Ollama one question, reads Ollama's own counters out of the reply, samples
-both graphics cards, and writes ONE row; the run then writes a second row with
+the graphics cards, and writes ONE row; the run then writes a second row with
 the setup and the median/min/max over its repeats. Every row goes to
 `~/.openjarvis/bench.jsonl` - a NEW file with its own allowlist, its own 500-run
 cap and a 2 MB ceiling. **`speed.jsonl` is never opened**: that file's promise
