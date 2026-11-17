@@ -1004,6 +1004,36 @@ def t_the_flag_read_names_every_candidate():
     check("flag names: a sentence with no note name asks which note",
           res is not None and reply.startswith("Which note?")
           and '"my"' not in reply, reply[:300])
+    # A note at the TOP of the vault must be selectable by the words the answer
+    # itself offers for it (2026-11-17, review: it was offered as a bare title
+    # and then every folder phrase refused it, including the vault's own name).
+    reset_vault()
+    write_note("Shopping.md", "---\npinned: true\n---\nmilk")
+    write_note("Notes/Shopping.md", "---\npinned: false\n---\neggs")
+    res = ask("is my Shopping note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a note at the top is offered as being at the top",
+          res is not None and '"Shopping" at the top of the vault' in reply
+          and '"Shopping" in Notes' in reply, reply[:400])
+    res = ask("is my Shopping note in Notes pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: ... the folder selects the note inside it",
+          res is not None and reply.startswith('No - "Shopping" is not pinned'),
+          reply[:300])
+    res = ask("is my Shopping note in root pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: ... and the word for the top selects the top one",
+          res is not None and reply.startswith('Yes - "Shopping" is pinned'),
+          reply[:300])
+    # Seven notes with one name: never claim more than is shown.
+    reset_vault()
+    for n in range(1, 8):
+        write_note(f"F{n}/Shopping.md", f"---\npinned: false\n---\nbag {n}")
+    res = ask("is my Shopping note pinned")
+    reply = str(res.reply if res is not None else "")
+    check("flag names: a long list says how many it actually showed",
+          res is not None and "matches 7 notes" in reply
+          and "I have shown the first 6." in reply, reply[:400])
     # Front matter that never closes is UNREADABLE, not 'pinned'.
     write_note("Broken.md", "---\npinned: true\nstill open")
     res = ask("is my broken note pinned")

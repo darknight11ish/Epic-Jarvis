@@ -18930,6 +18930,28 @@ def _note_flag_state(text: str, key: str):
     return None                          # opened and never closed: unreadable
 
 
+def _note_flag_root_names() -> set:
+    """The names a person gives the TOP of the vault, casefolded.
+
+    A note at the top has no folder of its own, so without these there is no
+    sentence that selects it - `_note_flag_choices_said` would offer it as one
+    of two candidates and then refuse every folder phrase for it (2026-11-17,
+    review: the answer asked for something that could not select one of its own
+    candidates). The words people actually use, plus the vault's own folder name
+    and its full path, because that is the folder a root note is literally in.
+    """
+    names = {"root", "top", "vault", "vault root", "the vault", "my vault"}
+    try:
+        import jarvis_notes_edit as NE
+        root = str(NE.chat_vault_root() or "").replace("\\", "/").strip("/")
+    except Exception:                       # noqa: BLE001 - a nicety, not a rule
+        root = ""
+    if root:
+        names.add(root.casefold())
+        names.add(root.rsplit("/", 1)[-1].casefold())
+    return {n for n in names if n}
+
+
 def _note_flag_folder_match(folder: str, path: str) -> bool:
     """True when `path` sits in the folder the sentence named, ignoring case.
 
@@ -18946,7 +18968,8 @@ def _note_flag_folder_match(folder: str, path: str) -> bool:
     rel = str(path or "").replace("\\", "/")
     have = rel.rsplit("/", 1)[0].casefold() if "/" in rel else ""
     if not have:
-        return False
+        # The note is at the TOP of the vault and has no folder of its own.
+        return want in _note_flag_root_names()
     # The folder itself, any folder UNDER it ("in Private & Shared" names the
     # note one level down), or its last segment ("in Workout").
     return (have == want or have.startswith(want + "/")
@@ -18977,9 +19000,15 @@ def _note_flag_choices_said(name: str, rows) -> Result:
         if title.lower().endswith(".md"):
             title = title[:-3]
         folder = rel.rsplit("/", 1)[0] if "/" in rel else ""
-        bits.append(f'"{title}" in {folder}' if folder else f'"{title}"')
+        # A note at the top is OFFERED as such, in the words that then select
+        # it: a bare title beside folders reads as if it too had a folder.
+        bits.append(f'"{title}" in {folder}' if folder
+                    else f'"{title}" at the top of the vault')
     said = (f'"{name}" matches {len(rows)} notes: ' + "; ".join(bits) + ". "
             + NOTE_CHOOSE_BY_FOLDER)
+    if len(rows) > len(bits):
+        # Never claim more than it shows (the read chooser's own sentence).
+        said += " I have shown the first {0}.".format(len(bits))
     return Result(said, "note_flag")
 
 
