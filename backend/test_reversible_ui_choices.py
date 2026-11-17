@@ -12,6 +12,12 @@ What this suite proves, in both directions:
     its trusted-UI route with ZERO `jarvis_gate.check()` calls, and writes the
     record that action normally writes (a `preset_apply` receipt for a preset;
     the model state and one switch-log entry for a model);
+  * the HEAVY presets are on the same list since 2026-11-16: their pooled
+    three-card lane is started with the press as its approval when the preset is
+    clicked, and with NO gate when the same preset is asked for in chat - so the
+    lane raises its own `switch_model` card there. This suite drives that one
+    seam; `backend/test_presets_owner_ui.py` drives the whole lane order with a
+    fake big-coder module;
   * the SAME action through the model/chat path still raises exactly ONE card.
     For `switch_model` that is the REAL shipped `jarvis_models.switch_to`,
     loaded from `jarvis-backend/` and driven with a recording gate - not a
@@ -309,6 +315,47 @@ def t_apply_preset_model_path_still_asks_one_card():
           gate.calls)
     check("... and writes no receipt, because the card is the record",
           len(after) == before, (before, len(after)))
+
+
+def t_the_two_preset_roads_meet_the_pooled_lane_differently():
+    """The heavy row, at the ONE seam the two roads differ on.
+
+    The pooled lane starts with a gate when a person clicked the preset (the
+    press IS the approval, 2026-11-16) and with NO gate when the same preset is
+    asked for in chat - so the lane raises its own `switch_model` card there.
+    This is the lane module's own contract, driven at its seam rather than
+    through a graphics card (`backend/test_presets_owner_ui.py` drives the whole
+    order with a fake big-coder module).
+    """
+    import jarvis_model_lanes as L
+    seen = []
+    real = L.start_pooled_lane
+    try:
+        L.start_pooled_lane = lambda **kw: (seen.append(kw),
+                                            (200, {"ok": True, "changed": True}))[1]
+        code, out = P._start_lane_for_the_owner("pooled")
+        owner_kw = dict(seen[-1]) if seen else {}
+        seen.clear()
+        P._default_start_lane("pooled")
+        carded_kw = dict(seen[-1]) if seen else {}
+    finally:
+        L.start_pooled_lane = real
+    verdict = None
+    gate = owner_kw.get("gate")
+    if callable(gate):
+        verdict = gate("switch_model", {"to": "a model", "why": "preset"},
+                       prompt="Switch the local model?")
+    check("an app-clicked heavy preset starts the pooled lane with a gate",
+          code == 200 and out.get("changed") is True and callable(gate),
+          (code, out, owner_kw))
+    check("... whose verdict allows and says the owner pressed it - no card asked",
+          verdict is not None and getattr(verdict, "allowed", False) is True
+          and getattr(verdict, "outcome", "") == "approved",
+          (getattr(verdict, "allowed", None), getattr(verdict, "outcome", None)))
+    check("... and it keeps the lane's coding mode when the preset names none",
+          owner_kw.get("mode") == "coding", owner_kw.get("mode"))
+    check("the carded road passes NO gate, so the lane raises its own card",
+          carded_kw and "gate" not in carded_kw, carded_kw)
 
 
 # --------------------------------------------------------------------------
@@ -658,6 +705,7 @@ def main() -> int:
     for fn in (t_the_list_is_exactly_the_two_wired_choices,
                t_apply_preset_ui_path_asks_nothing,
                t_apply_preset_model_path_still_asks_one_card,
+               t_the_two_preset_roads_meet_the_pooled_lane_differently,
                t_switch_model_ui_path_asks_nothing_and_records,
                t_switch_model_model_path_still_asks_exactly_one_card,
                t_the_switch_route_cannot_be_asked_for_no_card,
