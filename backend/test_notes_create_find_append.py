@@ -483,6 +483,74 @@ def t_append_under_an_existing_heading():
           len(gate.calls) == 1 and "## " + TODAY in got.reply, gate.calls)
 
 
+def t_an_append_to_a_named_note_needs_no_my_or_the():
+    """The owner names the note directly, so the article is optional (2026-11-17).
+
+    MEASURED ON THE LIVE INSTALL (SOURCE-COMMIT 02332ecc514c): "add to Field Test
+    Groceries that I bought milk" produced no fast-path intent, fell to the 30B
+    model for 66 s and answered "I can't directly add to Field Test Groceries,
+    as I don't have the capability to edit or update that specific list".
+    Nothing was written. The grammar required `my|the` before the name; the same
+    sentence with "my" ("add to my Field Test Groceries that ...") already
+    matched, so the miss was the article and nothing else.
+
+    What must NOT change is the guard that keeps a non-note sentence out: the
+    sentence says "note", or the name resolves to a note that exists, and a
+    named list keeps its own door. Every control below is asserted at the same
+    fast-path door, so a widened grammar that swallows one of them fails here.
+    """
+    reset_vault()
+    _write("Private & Shared/Field Test Groceries.md", "# Field Test Groceries\n")
+    _write("Private & Shared/Groceries.md", "# Groceries\n")
+    before_workout = read_bytes(WORKOUT_REL)
+    gate = Gate()
+    set_gate(gate)
+    got = ask("add to Field Test Groceries that I bought milk")
+    check("append-natural: 'add to <Note> that ...' is the append path",
+          got is not None and got.intent == "note_appended",
+          got.intent if got else "model")
+    said = read("Private & Shared/Field Test Groceries.md")
+    check("append-natural: the words land in THAT note, under today's heading",
+          "## " + TODAY in said and "- I bought milk" in said, repr(said))
+    check("append-natural: exactly ONE edit_vault_note card, naming that note",
+          len(gate.calls) == 1 and gate.calls[0][0] == "edit_vault_note"
+          and gate.calls[0][1].get("path") == "Private & Shared/Field Test Groceries.md",
+          gate.calls)
+    check("append-natural: the workout log keeps every byte",
+          read_bytes(WORKOUT_REL) == before_workout, "workout log changed")
+
+    # The controls, read at the fast-path door: each keeps the intent it had
+    # before the article became optional.
+    def intent_of(sentence):
+        found = Q.match(sentence, NOW)
+        return getattr(found, "name", None), (found.f if found else {})
+
+    name, fields = intent_of("add to my workout log that I ran 5k")
+    check("append-natural: 'add to my <note> that ...' is unchanged",
+          name == "note_append" and fields.get("name") == "workout log"
+          and fields.get("text") == "I ran 5k" and fields.get("dated") == TODAY,
+          (name, fields))
+    name, fields = intent_of("add milk to my groceries note")
+    check("append-natural: 'add X to my <note>' is unchanged",
+          name == "note_append" and fields == {"name": "groceries", "text": "milk"},
+          (name, fields))
+    name, fields = intent_of("add this to my notes")
+    check("append-natural: 'add this to my notes' is unchanged",
+          name == "note_append" and fields.get("name") == "notes", (name, fields))
+    name, _fields = intent_of("append to the shopping list: eggs")
+    check("append-natural: a named LIST keeps its own door",
+          name != "note_append", name)
+    for sentence in ("add to the timer that I need five minutes",
+                     "add to my focus session that I need quiet",
+                     "add to the shopping list that I need eggs",
+                     "delete my note called Groceries",
+                     "add a calendar event at 3",
+                     "add a to-do called milk"):
+        name, _fields = intent_of(sentence)
+        check(f"append-natural: {sentence!r} never becomes a note append",
+              name != "note_append", name)
+
+
 def t_append_to_an_older_day_stays_in_date_order():
     """A day with no heading keeps the file in date order, inserting one block."""
     reset_vault()
@@ -728,6 +796,7 @@ TESTS = [
     t_alias_resolution_with_no_other_context,
     t_append_under_a_new_heading,
     t_append_under_an_existing_heading,
+    t_an_append_to_a_named_note_needs_no_my_or_the,
     t_append_to_an_older_day_stays_in_date_order,
     t_collision_asks_and_never_overwrites,
     t_nothing_is_written_outside_the_vault,

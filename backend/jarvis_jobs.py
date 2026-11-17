@@ -52,6 +52,18 @@ decides it:
     a grant, so nothing NEW begins while he is away. Anything that does need
     a fresh yes waits for him.
 
+PRIORITY REORDERS AND GRANTS NOTHING (2026-11-16)
+`priority` is one integer on the row: -1 low, 0 normal (which is what every row
+written before this existed became), 2 urgent. It decides only the ORDER of
+jobs that are already due - `ORDER BY priority DESC, due` in `run_due()` - and
+it must never be read in `_claim`, `ctx.require()`, `_grant_step()` or
+`_freeze_caps()`: a job moved to the front is still exactly the job it was,
+with the same frozen capabilities, the same taint and the same right to park
+and ask. The one writer is `set_priority()`, and its one caller is the owner's
+own fixed-grammar sentence in `jarvis_quick.py`. There is no HTTP route and no
+model tool that reaches it, because neither a model nor a watched page may
+pull the owner's attention.
+
 THE TWO ROUTES, AND WHO ANSWERS A PARKED JOB (2026-10-30)
 Until this landed the queue had no way in and no way out: `create()` had no
 production caller, and a parked grant had no route that could answer it, so a
@@ -111,6 +123,13 @@ DB_PATH = Path(os.environ.get("JARVIS_JOBS_DB", _CFG_DIR / "jobs.db"))
 
 STATES = ("queued", "running", "waiting_approval", "done", "failed", "cancelled")
 TERMINAL = ("done", "failed", "cancelled")
+
+#: The three levels a job's priority can have, and the only values that can
+#: ever be stored: -1 low, 0 normal (the default every pre-existing row became),
+#: 2 urgent. Three, not four, because the owner's words produce exactly these
+#: and a level nothing can produce is a level nothing can explain.
+PRIORITY_LOW, PRIORITY_NORMAL, PRIORITY_URGENT = -1, 0, 2
+PRIORITIES = (PRIORITY_LOW, PRIORITY_NORMAL, PRIORITY_URGENT)
 
 
 def _cfg(key: str, default):
@@ -319,6 +338,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     heartbeat  REAL,
     attempts   INTEGER NOT NULL DEFAULT 0,
     cancel     INTEGER NOT NULL DEFAULT 0,
+    priority   INTEGER NOT NULL DEFAULT 0,  -- -1 low, 0 normal, 2 urgent
     result     TEXT,
     error      TEXT,
     delivered  REAL                    -- NULL until collect() takes it
@@ -339,13 +359,52 @@ CREATE TABLE IF NOT EXISTS job_grants (
 CREATE INDEX IF NOT EXISTS ix_grants ON job_grants(job_id, action, state);
 """
 
+#: Columns added after the first release, in the same idempotent shape the
+#: rest of this backend uses for an in-place schema change (`jarvis_goals.py`
+#: and `jarvis_chat_log.py` read `PRAGMA table_info` and add only what is
+#: missing): `CREATE TABLE IF NOT EXISTS` never alters a table that already
+#: exists, and the owner's jobs.db was made by a build that had no `priority`.
+#: This file had no ALTER before this one, so there is exactly one place here
+#: where a column can be added, and a fresh install needs no ALTER at all.
+_ADDED_COLUMNS = (
+    ("priority", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _add_missing_columns(c: sqlite3.Connection) -> None:
+    """Add the columns `_ADDED_COLUMNS` names that this database lacks."""
+    have = {row[1] for row in c.execute("PRAGMA table_info(jobs)").fetchall()}
+    for name, decl in _ADDED_COLUMNS:
+        if name in have:
+            continue
+        try:
+            # The name and declaration are this file's own constants, never
+            # anything off a request, which is why the interpolated SQL is safe.
+            c.execute(f"ALTER TABLE jobs ADD COLUMN {name} {decl}")
+        except sqlite3.OperationalError as exc:
+            # NARROW ON PURPOSE: a second PROCESS (the HUD proxy and
+            # OpenJarvis are separate) can win this same ALTER between the
+            # PRAGMA read and the write, and the loser's "duplicate column
+            # name" means the column is there - what was wanted. Everything
+            # else (`database is locked`, `no such table`) is a real problem
+            # and still raises; `jarvis_auto_learn._add_note_column` measured
+            # the same race on its own table and swallows only this sentence.
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+
+def _open(c: sqlite3.Connection) -> None:
+    """The schema for a new database, then the columns an older one lacks."""
+    c.executescript(_SCHEMA)
+    _add_missing_columns(c)
+
 
 def _init() -> None:
     global _inited
     with _INIT_LOCK:
         if _inited:
             return
-        _write(lambda c: c.executescript(_SCHEMA))
+        _write(_open)
         _write(_reclaim)
         _inited = True
         # WHAT A RESTART STILL OWES (2026-11-04, the restart card loss). The
@@ -1554,6 +1613,14 @@ def _park(job_id: str, action: str, reason: str) -> Optional[dict]:
     return row
 
 
+#: The queue's ONE order. `run_due()` and `queue_order()` both read this
+#: clause, so "which job runs next" cannot disagree with the tick that runs it.
+#: Higher priority first; equal priority keeps the `due` order every earlier
+#: build used, which is what makes a database of all-normal jobs behave exactly
+#: as it did before priority existed.
+_QUEUE_ORDER = "ORDER BY priority DESC, due"
+
+
 def run_due(now: Optional[float] = None, limit: Optional[int] = None) -> dict:
     """One tick. Runs every job that is due, in this thread, and returns what
     happened.
@@ -1567,6 +1634,12 @@ def run_due(now: Optional[float] = None, limit: Optional[int] = None) -> dict:
     testable - that when run_due returns, the tick is over. Cancellation
     still works mid-step, because cancel is a row the handler's context reads
     from another thread, not a flag in this one.
+
+    WHAT ORDER. Highest priority first, then `due` - the same `_QUEUE_ORDER`
+    clause `queue_order()` reads below, so the numbered list the owner moves
+    things by and the work a tick does cannot drift. `max_jobs_per_tick` still
+    caps how many jobs this tick takes, exactly as before: a priority changes
+    who goes first, never how many run.
     """
     _init()
     now = time.time() if now is None else now
@@ -1577,7 +1650,7 @@ def run_due(now: Optional[float] = None, limit: Optional[int] = None) -> dict:
             limit = 4
     due = _read("SELECT id FROM jobs WHERE cancel=0 AND due<=? "
                 " AND state IN ('queued','waiting_approval') "
-                "ORDER BY due LIMIT ?", (now, limit))
+                + _QUEUE_ORDER + " LIMIT ?", (now, limit))
     out = {"ran": 0, "done": [], "failed": [], "waiting": [], "cancelled": [],
            "skipped": []}
     for r in due:
@@ -1785,6 +1858,58 @@ def cancel(job_id: str, by: str = "hud") -> bool:
     return True
 
 
+def set_priority(job_id: str, priority: int, by: str = "owner") -> bool:
+    """Move ONE live job in the queue. True when its priority changed.
+
+    False - never an exception - for an id that is not there, a job that has
+    already ended, or a value that is not a whole number. That is the same
+    honest failure shape as `cancel()` and `get()`: the caller is deciding what
+    to tell the owner, and a function that raised here would turn "there is no
+    job 2" into a crash.
+
+    WHERE THE VALUE CAN LAND. Only the three levels exist, so anything above
+    urgent is urgent, anything below low is low, and a number in between is
+    normal. The clamp lives here and nowhere else, so no other code has to
+    trust a caller's range.
+
+    WHAT IT MAY TOUCH. Only the order of jobs that are already due: it never
+    makes a job run before its `due` time, never claims a row, never changes
+    `caps`, never answers a grant and never wakes the tick. A job moved to the
+    front is still exactly the job it was.
+
+    WHO CALLS THIS. The owner's own fixed-grammar sentence in `jarvis_quick.py`
+    is its ONLY caller, and that is how the rule "a MODEL may not reorder the
+    owner's attention" is enforced - there is no HTTP route, no model tool and
+    no handler-facing writer for this. `by` is written to the audit log, so a
+    future caller is visible rather than assumed. The label and params stay off
+    that log, exactly as in `create()`.
+    """
+    _init()
+    try:
+        value = int(priority)
+    except (TypeError, ValueError):
+        return False
+    if value >= PRIORITY_URGENT:
+        value = PRIORITY_URGENT
+    elif value <= PRIORITY_LOW:
+        value = PRIORITY_LOW
+    else:
+        value = PRIORITY_NORMAL                    # nothing between the levels
+
+    def _go(c: sqlite3.Connection):
+        cur = c.execute(
+            "UPDATE jobs SET priority=? WHERE id=? AND state NOT IN "
+            "('done','failed','cancelled')", (value, job_id))
+        if cur.rowcount == 0:
+            return None
+        return _fetch(c, job_id)
+    row = _write(_go)
+    if row is None:
+        return False
+    _audit("jobs.priority", {"id": job_id, "priority": value, "by": by})
+    return True
+
+
 # --------------------------------------------------------------------------
 #   Reading, and handing results on
 # --------------------------------------------------------------------------
@@ -1804,6 +1929,38 @@ def jobs(state: Optional[str] = None, limit: int = 200) -> list[dict]:
                      "LIMIT ?", (state, limit))
     else:
         rows = _read("SELECT * FROM jobs ORDER BY created DESC LIMIT ?", (limit,))
+    return [_row(r) for r in rows]
+
+
+def queue_order(limit: int = 6, due_only: bool = True) -> list[dict]:
+    """The queue in the order a tick takes it, as rows. Read-only.
+
+    ONE ORDER, TWO READERS. `run_due()` runs jobs in `_QUEUE_ORDER`; the chat
+    answer that says which job runs next, and the numbered list the owner moves
+    a job by, read the very same clause here. That is what stops the answer
+    from drifting away from what the tick really does.
+
+    `due_only` (the default) is exactly the tick's candidate set: not
+    cancelled, queued or parked, and already due. `due_only=False` is the
+    owner's list - the same order over every live job, including one whose time
+    has not come and one that is running now - which is what a numbered "what
+    jobs do I have" is built from.
+
+    No write, no event, no card: this changes nothing.
+    """
+    _init()
+    try:
+        limit = max(1, int(limit))
+    except (TypeError, ValueError):
+        limit = 6
+    states = ("'queued','waiting_approval'" if due_only
+              else "'queued','running','waiting_approval'")
+    sql = "SELECT * FROM jobs WHERE cancel=0 AND state IN (" + states + ") "
+    params: tuple = ()
+    if due_only:
+        sql += "AND due<=? "
+        params = (time.time(),)
+    rows = _read(sql + _QUEUE_ORDER + " LIMIT ?", params + (limit,))
     return [_row(r) for r in rows]
 
 

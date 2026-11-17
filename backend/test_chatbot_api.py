@@ -64,12 +64,19 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
     about the exact address the socket will open, BEFORE that socket: a
     refusal ends the conversation as `egress_blocked` in the gate's own words
     and nothing reaches the server, while a loopback endpoint still sends.
-  - THE CHECKER THAT KEEPS IT THAT WAY: `tools/check_egress_gate.py` fails if
-    any file under `backend/`, `jarvis-backend/` or `tools/` names one of the
-    six cloud hosts without asking the gate or being on its allow-list with a
-    written reason. This suite proves it is wired into CI's `audit` job and
-    that it exits 0 on this tree - a checker nobody runs is exactly the
-    failure the gate exists to prevent.
+  - THE CHECKER THAT KEEPS IT THAT WAY: `tools/check_egress_gate.py` is a
+    CENSUS of every file that names an outbound host: each mention must either
+    ask the gate or be on the allow-list with a written reason (and each
+    allow-list path also covers its byte-identical base copy). This suite
+    proves it is wired into CI's `audit` job and that it exits 0 on this tree -
+    a checker nobody runs is exactly the failure the gate exists to prevent.
+  - THE BROWSER EXCEPTION IS NAMED, NOT GENERAL (2026-11-16): a chatbot web
+    page has no API key and no monthly cap on this PC, so the gate takes ONE
+    claim, `no_money_cap`, and only from the caller named in
+    `NO_MONEY_CAP_CALLERS` (`jarvis_chatbot_web`), only for an address that
+    belongs to no service here, and never past Lockdown, the standing cloud
+    switch or a real cap. Driven below, including every way to try to take it
+    from somewhere else.
   - THE CLOUD ESCALATION LANE (docs/ACCOUNT-KEYS-DESIGN.md part C,
     2026-10-06): a lane name such as `jarvis-escalate` resolves to a real
     service and model through `cloud_lane()`; it is None - so nothing is sent
@@ -103,7 +110,7 @@ from _where import REPO, SHIPPED, require_shipped  # noqa: E402
 require_shipped("jarvis_chatbot.py", "jarvis_chatbot_api.py", "jarvis_token_store.py",
                 "jarvis_local_http.py", "jarvis_task_control.py", "jarvis_stop_all.py",
                 "jarvis_search.py", "jarvis_mail_mask.py", "rebuilt/jarvis_router.py",
-                "jarvis_egress_gate.py")
+                "jarvis_egress_gate.py", "jarvis_chatbot_web.py")
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.insert(1, str(HERE / "rebuilt"))
 
@@ -1918,6 +1925,92 @@ def t_the_gate_is_asked_before_the_socket_opens():
           (reply, len(SRV.requests)))
 
 
+def t_the_browser_exception_is_one_named_caller_and_nothing_more():
+    """The ONE named exception belongs to the browser, and only to the browser.
+
+    A chatbot website has no API key and no monthly money cap on this PC, so
+    the money question could never answer yes for it, and the owner's decision
+    - it may go out when the standing cloud switch is on and Lockdown is off -
+    would be unreachable. The gate therefore takes ONE claim, `no_money_cap`,
+    and this drives every edge of it: the named driver gets its yes under the
+    owner's conditions, with the claim on the record; Lockdown, the standing
+    switch and any REAL monthly cap still win; and no other caller can take it,
+    neither by claiming its own name nor by claiming the driver's.
+    """
+    import jarvis_chatbot_web as W
+    import jarvis_egress_gate as G
+    clean()
+    switch = _TMP / "escalate-cloud.json"
+    lockdown = _TMP / "lockdown.json"
+    page = "https://chat.example.invalid/some/chat"
+    driver = "jarvis_chatbot_web"
+
+    def ask(caller, claim, url=page):
+        return G.check_egress(caller, url, "hello there", "website",
+                              no_money_cap=claim)
+
+    try:
+        check("exactly one caller may claim it",
+              G.NO_MONEY_CAP_CALLERS == frozenset({driver}), G.NO_MONEY_CAP_CALLERS)
+
+        # The claim skips nothing, and the switch is asked first.
+        got = ask(driver, driver)
+        check("the browser's claim does not skip the standing cloud switch",
+              got.allowed is False and got.reason == G.ESCALATE_OFF
+              and got.no_money_cap == "", got)
+
+        # ... and Lockdown still wins with the switch already on.
+        switch.write_text(json.dumps({"on": True}), encoding="utf-8")
+        lockdown.write_text(json.dumps({"on": True}), encoding="utf-8")
+        got = ask(driver, driver)
+        check("... nor Lockdown, even with the switch on",
+              got.allowed is False and got.reason == G.LOCKDOWN
+              and got.no_money_cap == "", got)
+        lockdown.unlink()
+
+        # The owner's yes: switch on, Lockdown off, a page with nothing to cap.
+        got = ask(driver, driver)
+        check("the named driver, switch on and Lockdown off: allowed, and the "
+              "claim it took is on the record",
+              got.allowed is True and got.reason == G.ALLOWED and got.words == ""
+              and got.token == "" and got.no_money_cap == driver
+              and got.payload_chars == len("hello there"), got)
+
+        # Every way to take it from somewhere else is refused exactly as if the
+        # caller had never asked - including a caller claiming the driver's name.
+        for caller, claim in (("jarvis_search", "jarvis_search"),
+                              ("jarvis_search", driver),
+                              (driver, ""),
+                              ("jarvis_chatbot_api", driver),
+                              ("", driver)):
+            got = ask(caller, claim)
+            check(f"it cannot be taken by another caller (caller={caller!r}, "
+                  f"claim={claim!r})",
+                  got.allowed is False and got.reason == G.UNKNOWN_SERVICE
+                  and got.no_money_cap == "", got)
+
+        # A real cap is never bypassed: the named driver, against a service this
+        # PC does have settings for, still meets the money question.
+        got = ask(driver, driver, "https://api.deepseek.com/chat/completions")
+        check("... and it never bypasses a real monthly cap",
+              got.allowed is False and got.reason == G.MONEY_LIMIT
+              and got.no_money_cap == "" and "monthly money limit" in got.words, got)
+
+        # The driver really asks with its own name: its own helper says yes under
+        # the owner's conditions, and the gate's words are what stop it when the
+        # switch goes off - so the exception is wired, not merely defined.
+        check("the browser driver itself asks under its own name, and is allowed "
+              "under the owner's conditions",
+              W._egress_refusal(page, "hello there") == "",
+              W._egress_refusal(page, "hello there"))
+        switch.unlink()
+        why = W._egress_refusal(page, "hello there")
+        check("... and with the switch off the gate's own words are what stop it",
+              why.startswith("Nothing was sent") and "cloud switch" in why, why)
+    finally:
+        clean()
+
+
 def t_the_egress_checker_is_wired():
     """A checker that no workflow runs is green this morning and worthless the
     moment it stops being green, because nothing tells anyone - which is the
@@ -1931,8 +2024,10 @@ def t_the_egress_checker_is_wired():
                          cwd=str(REPO), capture_output=True, text=True)
     check("tools/check_egress_gate.py exits 0 on this tree", ran.returncode == 0,
           (ran.stdout or "") + (ran.stderr or ""))
-    check("... and it says every cloud host mention is accounted for",
-          "name one of the six cloud hosts" in (ran.stdout or ""), ran.stdout)
+    check("... and it says every outbound host mention is accounted for",
+          "name one of the" in (ran.stdout or "")
+          and "outbound hosts" in (ran.stdout or "")
+          and "allow-list" in (ran.stdout or ""), ran.stdout)
 
 
 def t_shipped_and_documented():

@@ -11916,6 +11916,31 @@ _JOBS_READ = re.compile(
     r"|what\s+jobs?\s+do\s+i\s+have\b.*"
     r"|(?:are|is)\s+there\s+(?:any\s+)?(?:background\s+)?jobs?\s+running\b.*"
     r"|what(?:'s| is)\s+running\s+in\s+the\s+background\b.*")
+# "which job runs next?" (2026-11-16): the one question about the queue that
+# only the queue itself can answer honestly, so it is answered from
+# `jarvis_jobs.queue_order()` - the same order `run_due()` takes jobs in.
+_JOBS_NEXT = re.compile(
+    r"which\s+(?:background\s+)?job\s+(?:runs?|is|goes|comes?|will\s+run)\s+"
+    r"(?:next|first)\b.*"
+    r"|what(?:'s| is)\s+next\s+in\s+(?:the\s+)?(?:background\s+)?jobs?\b.*")
+# "make job 2 urgent" / "do job 2 first" (2026-11-16): the owner's own sentence
+# moves ONE job. Whole sentences only, and the number is the position in the
+# numbered list the read answer gives. A label ("do the milk one first") is
+# deliberately NOT guessed at here - matching by a job's own words is its own
+# piece of work, and a guess would move the wrong job.
+_JOB_AT = r"(?:job\s*#?\s*|#\s*)"
+_JOBS_RAISE = re.compile(
+    r"(?:make|mark|set|put)\s+(?:the\s+)?" + _JOB_AT +
+    r"(\d{1,3})\s+(?:as\s+|to\s+)?(?:urgent|high|first|asap|now|top)\b.*"
+    r"|(?:bump|raise|hurry(?:\s+up)?|speed\s+up|push\s+up)\s+(?:the\s+)?"
+    + _JOB_AT + r"(\d{1,3})\b.*"
+    r"|(?:do|run|take)\s+(?:the\s+)?" + _JOB_AT +
+    r"(\d{1,3})(?:\s+(?:one|job))?\s+first\b.*")
+_JOBS_LOWER = re.compile(
+    r"(?:make|mark|set|put)\s+(?:the\s+)?" + _JOB_AT +
+    r"(\d{1,3})\s+(?:as\s+|to\s+)?(normal|low|later|last|whenever)\b.*"
+    r"|(?:lower|slow\s+down|deprioritise|deprioritize|don'?t\s+rush)\s+"
+    r"(?:the\s+)?" + _JOB_AT + r"(\d{1,3})\b.*")
 _ASKS_FIRST = re.compile(
     r"(?:what(?:'s| is)?\s+)?what\s+asks\s+first\b.*"
     r"|(?:explain|tell\s+me\s+about|describe)\s+what\s+asks\s+first\b.*")
@@ -12275,6 +12300,27 @@ def _honest_early(_text: str, s: str) -> Optional[Intent]:
     # The job list is really readable.
     if _JOBS_READ.fullmatch(s):
         return Intent("honest_state", {"shape": "jobs_read"})
+    # Which one runs next (2026-11-16) is the queue's own answer, not a guess.
+    if _JOBS_NEXT.fullmatch(s):
+        return Intent("honest_state", {"shape": "jobs_next"})
+    # Moving ONE job in the queue (2026-11-16), from the owner's own sentence.
+    # The number is the position in the numbered list "what jobs do i have"
+    # gave. This runs in the fixed grammar, before the model is asked anything;
+    # a MODEL has no route and no tool that reaches jarvis_jobs.set_priority().
+    m = _JOBS_RAISE.fullmatch(s)
+    if m:
+        return Intent("jobs_priority",
+                      {"position": int(next(g for g in m.groups() if g)),
+                       "value": 2})
+    m = _JOBS_LOWER.fullmatch(s)
+    if m:
+        # "normal" is level 0; low/later/last/whenever are level -1. The bare
+        # "lower job 2" alternative names no level, and lowering is always -1.
+        number = int(next(g for g in m.groups() if g and g.isdigit()))
+        level = next((g for g in m.groups() if g and not g.isdigit()), "")
+        return Intent("jobs_priority",
+                      {"position": number,
+                       "value": 0 if level == "normal" else -1})
     # The Settings answers whose words the feature grammar leaked or lost.
     # Only the bare page question: "tell me about what asks first" and the
     # other explain shapes belong to the feature list, which has the row.
@@ -12414,6 +12460,20 @@ def _run_protection_apply(f: dict) -> Result:
                   "protection_apply")
 
 
+#: The owner's word for each level `jarvis_jobs` can store (-1 low, 0 normal,
+#: 2 urgent). One map, so the list and the echo cannot describe the same number
+#: two different ways.
+_JOB_PRIORITY_WORDS = {-1: "low", 0: "normal", 2: "urgent"}
+
+
+def _priority_word(value) -> str:
+    """The owner's word for a job's priority, from the number on the row."""
+    try:
+        return _JOB_PRIORITY_WORDS.get(int(value), _JOB_PRIORITY_WORDS[0])
+    except (TypeError, ValueError):
+        return _JOB_PRIORITY_WORDS[0]
+
+
 def _run_honest_state(f: dict) -> Result:
     """The stateful reads: the protection list, the job list, the phone state."""
     shape = str(f.get("shape") or "")
@@ -12463,29 +12523,52 @@ def _run_honest_state(f: dict) -> Result:
     if shape == "jobs_read":
         try:
             import jarvis_jobs as J
-            rows = J.jobs()
+            rows = J.queue_order(200, due_only=False)
         except Exception:
             return Result("This PC could not read its background job list, so "
                           "nothing is shown. Nothing was changed.", "honest_state")
-        running = [row for row in rows
-                   if str(row.get("state") or "") in
-                   ("queued", "running", "waiting_approval")]
-        if not running:
-            if not rows:
-                words = "No background jobs right now."
-            else:
-                words = "No background jobs are running right now."
-            return Result(words, "honest_state")
+        if not rows:
+            return Result("No background jobs right now.", "honest_state")
         state_words = {"queued": "waiting to start", "running": "running",
                        "waiting_approval": "waiting for your approval"}
         parts = []
-        for row in running[:6]:
+        for i, row in enumerate(rows[:6], 1):
             label = str(row.get("label") or row.get("handler") or "a job")
             state = state_words.get(str(row.get("state")), str(row.get("state")))
-            parts.append(f"{label} ({state})")
-        noun = "job" if len(running) == 1 else "jobs"
-        return Result(f"{len(running)} background {noun}: " + "; ".join(parts) + ".",
-                      "honest_state")
+            parts.append(f"{i}. {label} ({state}, "
+                         f"{_priority_word(row.get('priority'))})")
+        noun = "job" if len(rows) == 1 else "jobs"
+        more = "" if len(rows) <= 6 else f" and {len(rows) - 6} more"
+        return Result(f"{len(rows)} background {noun}{more}, in the order they "
+                      "run: " + "; ".join(parts) + ".", "honest_state")
+    if shape == "jobs_next":
+        # The queue's own order, from the same clause the tick reads. If
+        # something is due, that is next; if nothing is due, say so rather than
+        # naming a job that will not run until its time comes.
+        try:
+            import jarvis_jobs as J
+            due = J.queue_order(1)
+            rows = J.queue_order(200, due_only=False)
+        except Exception:
+            return Result("This PC could not read its background job list, so "
+                          "nothing is shown. Nothing was changed.", "honest_state")
+        if due:
+            row = due[0]
+            label = str(row.get("label") or row.get("handler") or "a job")
+            return Result(
+                f"Next: {label} ({_priority_word(row.get('priority'))}). It runs "
+                "at the next background check, which can be up to 30 minutes "
+                "away.", "honest_state")
+        if not rows:
+            return Result("No background jobs right now.", "honest_state")
+        first = rows[0]
+        label = str(first.get("label") or first.get("handler") or "a job")
+        if str(first.get("state")) == "running":
+            return Result(f"{label} is running now. Nothing else is due yet.",
+                          "honest_state")
+        noun = "job is" if len(rows) == 1 else "jobs are"
+        return Result(f"Nothing is due yet. {len(rows)} {noun} waiting; "
+                      f"{label} is first in line.", "honest_state")
     if shape == "phone_state":
         try:
             import jarvis_devices as D
@@ -12495,6 +12578,66 @@ def _run_honest_state(f: dict) -> Result:
         return Result(_phone_state_words(state, str(f.get("topic") or "timer")),
                       "honest_state")
     return Result("That is not something I can read from chat here.", "honest_state")
+
+
+def _run_jobs_priority(f: dict) -> Result:
+    """Move ONE background job in the queue, from the owner's own sentence.
+
+    WHO MAY DO THIS, AND WHY IT IS CARDLESS. A priority change grants nothing:
+    it reorders work that was already allowed to run, changes no `caps`, starts
+    nothing, answers no card and never makes a job run before its time
+    (ARCHITECTURE.md, "Cardless by design"). The owner may do it; a MODEL may
+    not, and that is enforced by absence rather than by a check - there is no
+    HTTP route and no model tool that reaches `jarvis_jobs.set_priority()`,
+    and this fixed-grammar handler is its only caller.
+
+    The number is the position in the numbered list the read answer gives, and
+    the answer ECHOES THE LABEL it moved, because the list can shift between
+    the read and the write and the echo is how the owner sees it was the right
+    job. When the job is gone, nothing is changed and the answer says so.
+    """
+    try:
+        position = int(f.get("position") or 0)
+        value = int(f.get("value") or 0)
+    except (TypeError, ValueError):
+        position, value = 0, 0
+    if position < 1:
+        return Result("I need the job's number from the list: ask \"what jobs "
+                      "do I have\", then say \"make job 2 urgent\". Nothing "
+                      "was changed.", "jobs_priority")
+    try:
+        import jarvis_jobs as J
+        rows = J.queue_order(200, due_only=False)
+    except Exception:
+        return Result("This PC could not read its background job list, so "
+                      "nothing was changed.", "jobs_priority")
+    if position > len(rows):
+        return Result(f"There is no job {position} in the list right now, so "
+                      "nothing was changed. Ask \"what jobs do I have\" and use "
+                      "that number.", "jobs_priority")
+    row = rows[position - 1]
+    job_id = str(row.get("id") or "")
+    label = str(row.get("label") or row.get("handler") or "that job")
+    try:
+        changed = J.set_priority(job_id, value)
+    except Exception:
+        changed = False
+    if not changed:
+        return Result(f"Job {position}, {label!r}, has already ended, so there "
+                      "was nothing to move. Nothing was changed.",
+                      "jobs_priority")
+    if str(row.get("state") or "") == "running":
+        # It is already being worked on, so "it will be picked next" would be a
+        # false claim. The number still lands: it decides the order if this job
+        # parks and comes back.
+        return Result(
+            f"Job {position}, {label!r}, is running now, so it is not waiting "
+            f"for a turn. It is now {_priority_word(value)} for when it parks "
+            "and is picked up again.", "jobs_priority")
+    return Result(
+        f"Job {position}, {label!r}, is now {_priority_word(value)}. It will be "
+        "picked at the next background check, which can be up to 30 minutes "
+        "away.", "jobs_priority")
 
 
 def _general_off_items() -> list:
@@ -17970,8 +18113,16 @@ _NOTE_APPEND_PLAIN = re.compile(
 #: names the note FIRST and then says what happened, so the "that" is the
 #: separator and no colon or comma is needed. This shape is dated: the words go
 #: under a `## YYYY-MM-DD` heading (newest last), not into the file's tail.
+#:
+#: The `my|the` before the name is OPTIONAL (2026-11-17). The owner says "add
+#: to Field Test Groceries that I bought milk" - naming a note directly - and
+#: the required article made that sentence match nothing, so it fell to the
+#: model and nothing was written. What still keeps a non-note sentence out is
+#: the guard where this is used, and it is unchanged: the sentence says "note",
+#: or the name resolves to a note that exists, and `_list_owns_name` leaves
+#: "add to the shopping list that ..." to the named-list grammar.
 _NOTE_APPEND_TO_THAT = re.compile(
-    r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+(?:my|the)\s+"
+    r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+(?:(?:my|the)\s+)?"
     r"(?P<name>.+?)(?:\s+note)?\s+that\s+(?P<text>.+)$")
 _NOTE_TAG_ADD = re.compile(
     r"(?:add|put)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+(?:to|on)\s+"
@@ -28637,6 +28788,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_provider_choose(f)
     if n == "honest_state":
         return _run_honest_state(f)
+    if n == "jobs_priority":
+        # Moving ONE background job in the queue (2026-11-16). Cardless by
+        # design: it reorders work that was already allowed and grants nothing,
+        # so no card is raised. Deliberately NOT in READ_ONLY_INTENTS - it
+        # writes, so it must clear what "cancel that" would take back, exactly
+        # as every other mutation does.
+        return _run_jobs_priority(f)
     if n == "protection_apply":
         # A REAL change to the Protected from Jarvis list asked in chat
         # (2026-11-04): its own mutating intent, so a private chat refuses it

@@ -113,6 +113,13 @@ CI_YML = HERE.parent / ".github" / "workflows" / "ci.yml"
 GUARDED = ("test_chatbot_gemini.py", "test_chatbot_sites.py",
            "test_handoff.py", "test_support_widget.py")
 
+#: Suites that IMPORT `jarvis_chatbot_web` without being browser suites, and
+#: the only names each may use on it. `test_chatbot_api.py` drives the driver's
+#: own pure `_egress_refusal`; its `.open()` calls are the chatbot ADAPTER's,
+#: not a window. The completeness check proves this map's claim rather than
+#: trusting it: a name outside the set fails there.
+IMPORT_ONLY = {"test_chatbot_api.py": frozenset({"_egress_refusal"})}
+
 #: A Call attribute that starts a browser. The adapters' `open()` is what
 #: reaches jarvis_chatbot_web's own launch; the other two are the raw calls.
 LAUNCHES = {"open", "launch", "launch_persistent_context"}
@@ -161,6 +168,18 @@ def _importers(module: str) -> set:
                     a.name == module for a in node.names):
                 found.add(path.name)
     return found
+
+
+def _names_used_on(path, alias: str) -> set:
+    """Every attribute this file reads off `alias.` - `W._egress_refusal` -> {"_egress_refusal"}.
+
+    The completeness check uses it to prove that a suite importing the module
+    without being a browser suite touches nothing on it but the names its
+    `IMPORT_ONLY` row allows.
+    """
+    return {n.attr for n in ast.walk(_tree(path))
+            if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+            and n.value.id == alias}
 
 
 def _module_values(tree, name) -> list:
@@ -467,13 +486,25 @@ def t_the_runner_skips_them_by_name():
 
 def t_the_guarded_set_is_complete():
     importers = _importers("jarvis_chatbot_web")
+    # IMPORT-ONLY, AND PROVED (2026-11-17). A suite may import the module
+    # without being a browser suite: the only public way to drive that driver's
+    # own pure `_egress_refusal` is through it, and the one-gate work needed
+    # exactly that. `test_chatbot_api.py`'s own `.open()` calls are the chatbot
+    # ADAPTER's, not a window, which is why `LAUNCHES` cannot decide this on its
+    # own. So the exemption is a named map, and the check below proves its
+    # claim: that suite touches nothing on the module but `_egress_refusal`.
     check("the guarded list is exactly the backend suites that import "
           "jarvis_chatbot_web - the module whose visible launch THESE FOUR "
           "reach (not a backend-wide guarantee: jarvis_browser_control.py has "
           "its own visible default; its importer set and the live suite's "
           "headless override are pinned separately, and whether any other "
           "importer launches visibly is not statically decidable)",
-          importers == set(GUARDED), sorted(importers))
+          importers == set(GUARDED) | set(IMPORT_ONLY), sorted(importers))
+    uses = _names_used_on(HERE / "test_chatbot_api.py", "W")
+    check("the one suite that imports it without launching a browser uses "
+          "NOTHING on it but the driver's pure `_egress_refusal`",
+          "test_chatbot_api.py" in IMPORT_ONLY
+          and uses <= set(IMPORT_ONLY["test_chatbot_api.py"]), sorted(uses))
 
 
 # ---------------------------------------------------------------------------
