@@ -418,18 +418,30 @@ when that table has no row for the row's action. Since Gemini's Q2 ruling
 maximum friction**, not refused:
 
 - `reversible` is `"no"`, `reach` is `"outbound"`, so `swipe_ok` is `false` -
-  the worst case the table has. Nothing on any screen may let a swipe or a
-  single tap decide it.
-- `risk.why` is the warning, word for word: **`Unclassified action - treated as
-  permanent and able to leave this PC`**, and `notice.body` begins with the
-  same sentence and adds why ("nobody has written down what it does, so it is
-  given the worst case"). Both come from `jarvis_gate.UNCLASSIFIED_WARNING`, so
-  they cannot drift apart. **No new field**: the three clients already draw
-  `risk.why` (the desktop's `riskLine`, the HUD's `apprRiskLine`, the phone's
-  `ApprovalCard`), so the warning appears with no client change, and the phone
-  already shows its `UNCLASSIFIED` pill for `classified: false`.
-- `notice.weight` is `"heavy"` (it leaves the machine and cannot be undone), a
-  `deny_ok: true` and the usual `approve_ok: false`.
+  the worst case the table has, RECORDED for the gesture decision. That pair is
+  the gate's own fallback, never a claim about what the action does. Nothing on
+  any screen may let a swipe or a single tap decide it.
+- `risk.why` is the warning, word for word: **`Unclassified action - never runs
+  on its own, and a swipe cannot approve it`**, and `notice.body` begins with
+  the same sentence and adds why the fallback was chosen ("nobody has written
+  down what it does, so it is given the worst case"). Both come from
+  `jarvis_gate.UNCLASSIFIED_WARNING`, so they cannot drift apart. **The warning
+  line says what the GATE does**; it never says the action IS permanent or CAN
+  leave this PC. Until 2026-11-17 it did say that, and a note create told the
+  owner a note could leave this PC and could not be undone - neither of which a
+  notes route can do. The fallback record is unchanged, so nothing about
+  approval loosened. The reworded sentence is a base end-of-file override in
+  `jarvis-backend/jarvis_gate.py`, not an edit to
+  `backend/unknown-risk-approvable.patch`: that patch still adds the original
+  line and still reverses out of the published base byte for byte, and the
+  override's assignment runs at import and wins. **No new field**: the three
+  clients already draw `risk.why` (the desktop's `riskLine`, the HUD's
+  `apprRiskLine`, the phone's `ApprovalCard`), so the warning appears with no
+  client change, and the phone already shows its `UNCLASSIFIED` pill for
+  `classified: false`.
+- `notice.weight` is `"heavy"` (it is given the worst case, so it interrupts
+  rather than waiting to be found), a `deny_ok: true` and the usual
+  `approve_ok: false`.
 - The action is also forced to tier `"ask"` by `jarvis_gate.check()` whatever
   `[autonomy.tiers]` says, so an unclassified action can never run with nobody
   asked. `"never"` is stricter and is untouched.
@@ -447,7 +459,8 @@ maximum friction**, not refused:
   patch, so **no action that runs unattended is unclassified** any more. (The
   ninth of that shape, `lower_api_limit`, already had a row from
   `chatbot-limits.patch`.) `backend/test_gate_unknown_risk.py` fails a tree
-  where one is.
+  where one is. The notes editor's `edit_vault_note` got its row on 2026-11-17
+  (see section 170.5), so a note card no longer shows this warning either.
 
 **One card on every screen.** The Jarvis bar, the widget, the HUD page, the
 phone's card and its home-screen widget all show the label "Needs your OK",
@@ -31759,12 +31772,16 @@ so a client shows that instead of inventing its own.
   `jarvis-framework.toml` (`[autonomy.tiers]`, in both copies the repository
   ships). The app never approves anything; the owner does, on the existing
   Approve / Deny card.
-- **It is unclassified until a patch says otherwise.** Drop-in modules add no
-  patch and no gate-table row, and a `_RISK` row is written by patches, so the
-  gate has no risk line for `edit_vault_note` yet: it therefore **forces the
-  action to ask** whatever the settings file says, and the card carries the
-  gate's generic worst-case warning line. That is the safe side — the save can
-  never run unattended. A small follow-up patch can classify it properly.
+- **It is classified now (2026-11-17).** `edit_vault_note` has its own `_RISK`
+  row, `("yes", "local")`, in the published `jarvis-backend/jarvis_gate.py`,
+  added by the end-of-file `_RISK.update({...})` block (the one region no
+  earlier patch's hunk claims, because a drop-in module adds no patch). "Yes"
+  because the File Guardian copies the old bytes before they are replaced and
+  the write is refused if that copy cannot be made; "local" because no notes
+  route touches the network, a model or a token. The row does not decide the
+  tier - the shipped `"ask"` line above does, and it is unchanged. Before the
+  row the card carried the gate's generic unclassified warning, which said a
+  note could be permanent and leave this PC; neither is true.
 - **The File Guardian copies the note first.** Immediately after the owner's
   yes, and BEFORE the write, the module calls the existing
   `jarvis_notes.snapshot_vault_before_write()` — which is
@@ -31795,7 +31812,9 @@ so a client shows that instead of inventing its own.
   `install()` wrapping (origin and token refused, other paths reach the core,
   a second install does not double-wrap); and that `edit_vault_note` resolves
   to tier `"ask"` through the published gate's own tier reader for BOTH shipped
-  copies of the settings file.
+  copies of the settings file, and that its own risk row makes the gate call it
+  classified (`"yes"`/`"local"`) with its own sentence instead of the
+  unclassified warning.
 - **NOT proven here:** the live PC. These routes are built and proved in this
   repository; they are **not deployed by this change** (the live backend
   deploy is its own pass), so the owner's live apps do not show the editor
@@ -35868,10 +35887,11 @@ intent is `call_record`; a refusal is `call_record_refused`.
   the name (added 2026-11-05): `("yes", "local", ...)` - a recording changes
   nothing on this PC, can be deleted again, and nothing leaves it. Before that
   row the gate treated the action as unclassified and its card carried the
-  generic "unclassified action - treated as permanent and able to leave this
-  PC" warning, whose **second half was wrong for this action**. The row does
-  not loosen the tier: it stays `ask`. Deleting a recording is a second card of
-  its own, `delete_call_recording`, also `ask`.
+  generic warning, which at the time read "treated as permanent and able to
+  leave this PC" - and whose **second half was wrong for this action**. (That
+  sentence was reworded on 2026-11-17; it no longer claims either.) The row
+  does not loosen the tier: it stays `ask`. Deleting a recording is a second
+  card of its own, `delete_call_recording`, also `ask`.
 
 ### 188.5 Transcription and speaker labels
 

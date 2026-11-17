@@ -298,13 +298,15 @@ def unclassified(row: Optional[dict]) -> bool:
 
     Gemini's ruling of 2026-10-30 (Q2): such a card is NOT refused. The gate
     gives the action its worst case - permanent and outbound, so `is_risky` is
-    already True for it - and it now sends its own warning line, "Unclassified
-    action - treated as permanent and able to leave this PC". Those are written
-    words, so a Windows Hello prompt CAN name what it is asking about, and the
-    owner may approve it through the human check every risky card already needs
-    (this PC's Windows Hello, or the phone's own lock). Before this, a card
-    with no written title was refused outright (`UNLABELLED`) and could not be
-    approved by anybody - which bricked the app builder's card on 2026-10-30.
+    already True for it - and it sends its own warning line, "Unclassified
+    action - never runs on its own, and a swipe cannot approve it" (reworded
+    2026-11-17 so it says what the gate does, never what the action is). Those
+    are written words, so a Windows Hello prompt CAN name what it is asking
+    about, and the owner may approve it through the human check every risky
+    card already needs (this PC's Windows Hello, or the phone's own lock).
+    Before this, a card with no written title was refused outright
+    (`UNLABELLED`) and could not be approved by anybody - which bricked the
+    app builder's card on 2026-10-30.
 
     A row with no readable `risk` counts as unclassified, the same fail-closed
     default `is_risky` uses: a backend that did not say has not classified it.
@@ -1973,11 +1975,12 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         #
         # ONE EXCEPTION, and it is the one card that had no way out (Gemini's
         # ruling Q2, 2026-10-30): an action the gate has NOT classified. The
-        # gate now sends its own warning line for it - "Unclassified action -
-        # treated as permanent and able to leave this PC" - and a prompt built
-        # from that plus the action's quoted name says honestly what is being
-        # approved. Refusing it instead is what made the app builder's card
-        # unapprovable on the owner's PC while he was pressing Approve.
+        # gate sends its own warning line for it - "Unclassified action - never
+        # runs on its own, and a swipe cannot approve it", reworded 2026-11-17
+        # so it no longer claims the action itself is permanent - and a prompt
+        # built from that plus the action's quoted name says honestly what is
+        # being approved. Refusing it instead is what made the app builder's
+        # card unapprovable on the owner's PC while he was pressing Approve.
         if not has_written_title(action) and not unclassified(row):
             return 403, {"ok": False, "error": UNLABELLED, "owner_check": "unlabelled"}
         left = _time_left(row)

@@ -3378,3 +3378,67 @@ _RISK.update({
 _NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
     "send_file_to_phone",  # jarvis_send_file.py acts only on tier "ask": ONE card per file, and its own prepare_route refuses any other tier; a denial is about that one file, not a standing rule (2026-11-14)
 }
+
+# --------------------------------------------------------------------------
+#   The Obsidian notes editor's risk row (jarvis_notes_edit.py, 2026-11-17)
+# --------------------------------------------------------------------------
+# THE ROW IS HERE, AT THE END OF THE FILE, for the reason the `_RISK.update`
+# blocks above give: every line inside the `_RISK` literal is some earlier
+# patch's hunk context, and the very end of this file is the one region no
+# earlier patch's hunk claims. `_RISK.update` runs at import, before any
+# `check()` call, so the gate sees the row exactly as if it sat in the literal.
+#
+# WHY IT IS NEEDED. `edit_vault_note` is the one action the whole-vault editor
+# raises (jarvis_notes_edit.ACTION): a whole-note save, an append, a tag change
+# and a CARDED create. It had a tier line ("ask" in both shipped settings
+# copies) but no risk row, so `risk_for()` returned the unclassified fallback:
+# the action was forced to "ask" (safe, and still is - the tier does not
+# change) and its card carried the gate's generic unclassified warning, which
+# said the action was treated as permanent and able to leave this PC. Neither
+# half is true of a note: the routes touch no network, no model and no token, so
+# nothing can leave this PC, and a save is recoverable because the File Guardian
+# copies the old bytes first and the write is refused if that copy cannot be
+# made. A beginning developer reading the old card could not have told which of
+# those claims to believe, and a card that says something false about a file is
+# how a true card gets ignored.
+#
+# "yes" AND "local" is the pair the comparable file rows already carry:
+# `create_logseq_page` is ("yes", "local", "delete it and it is gone"), and the
+# two rows that are "hard" - `edit_joplin_note` and `edit_logseq_page` - say
+# the previous text is gone, which is exactly what the Guardian copy here
+# prevents. The consequence is a deliberate one and it is not a loosened tier:
+# the action still asks (the shipped tier line is untouched), but because the
+# row is now classified, a swipe may approve it and "What asks first" may offer
+# its switch - the ordinary treatment of a local, reversible change, instead of
+# the unclassified action's maximum friction.
+_RISK.update({
+    "edit_vault_note": ("yes", "local", "changes ONE note in your own Obsidian vault on this PC - a whole-note save, words added to the end, one tag, or one new note; the old text is copied by the File Guardian before it is replaced and a new note can be undone, so the change can be put back, and nothing is sent anywhere"),
+})
+
+# --------------------------------------------------------------------------
+#   What an unclassified action's card says (reworded 2026-11-17)
+# --------------------------------------------------------------------------
+# THE SENTENCE IS REPLACED HERE, AT THE END OF THE FILE, and NOT where it is
+# first defined. That definition sits inside `unknown-risk-approvable.patch`'s
+# own hunk, so editing it there would have to rewrite the patch whose post-image
+# the published base is - which the owner's 2026-11-14 ruling forbids for gate
+# content. The very end of the file is the one region no earlier patch's hunk
+# claims, the same region the `_RISK.update` blocks above use. Both names are
+# rebound at import, before any `check()` or `notice_for()` call, so the gate,
+# the card and the Windows Hello prompt all read the new line.
+#
+# WHY: the old line - "Unclassified action - treated as permanent and able to
+# leave this PC" - printed the gate's OWN worst-case record (`_UNKNOWN_RISK`:
+# reversible "no", reach "outbound") as if it were a fact about the action. A
+# note create raised it and told the owner a note could leave this PC and could
+# not be undone; the notes editor can do neither, and since 2026-11-17 that
+# action has its own row above. The RECORD is untouched - an unclassified action
+# is still "no"/"outbound", so `swipe_ok` is still False and `check()` still
+# forces it to "ask" - so nothing about approval loosened. Only the words
+# changed: they now say what actually happens (it never runs on its own, and no
+# swipe decides it) instead of asserting what is not known.
+UNCLASSIFIED_WARNING = ("Unclassified action - never runs on its own, and a "
+                        "swipe cannot approve it")
+_UNKNOWN_RISK = ("no", "outbound", UNCLASSIFIED_WARNING)
+
+

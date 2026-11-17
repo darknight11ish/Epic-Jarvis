@@ -281,8 +281,22 @@ def t_the_gate_tier_is_ask_in_both_shipped_copies():
     check("the published gate's own tier reader resolves edit_vault_note to ask",
           tiers.get("edit_vault_note") == "ask", tiers.get("edit_vault_note"))
     risk = GATE.risk_for("edit_vault_note")
-    check("the action is unclassified (so the gate FORCES it to ask)",
-          risk.get("classified") is False and risk.get("swipe_ok") is False, risk)
+    # 2026-11-17: the action has its own `_RISK` row now, added by the
+    # end-of-file `_RISK.update({...})` block in jarvis-backend/jarvis_gate.py.
+    # Before it, the gate treated the name as unclassified: it was forced to
+    # "ask" (safe) and its card carried the generic worst-case warning, which
+    # said a note could be permanent and leave this PC - neither is true.
+    check("the action is classified, with its own row (not the fallback)",
+          risk.get("classified") is True, risk)
+    check("... reversible, because the File Guardian copies the old bytes first",
+          risk.get("reversible") == "yes", risk)
+    check("... and local, because no notes route sends anything",
+          risk.get("reach") == "local", risk)
+    check("... and its sentence is its own, not the unclassified warning",
+          "Obsidian" in str(risk.get("why") or "")
+          and "permanent" not in str(risk.get("why") or ""), risk.get("why"))
+    check("... while the shipped tier is still ask (the row loosens nothing)",
+          tiers.get("edit_vault_note") == "ask", tiers.get("edit_vault_note"))
     check("the module asks under exactly the gate action name",
           E.ACTION == "edit_vault_note")
     check("the card words name the action", "edit_vault_note" in CW.TITLES

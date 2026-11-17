@@ -47,14 +47,12 @@ name **`edit_vault_note`**, whose tier line lives in the shipped
                  disk and the settings; no card, no write.
     card         jarvis_gate.check("edit_vault_note", detail, prompt=...) -
                  the ordinary card, the ordinary Approve / Deny words. The
-                 gate has no `_RISK` row for this name yet (a drop-in module
-                 cannot add one; risk rows are written by patches), so the
-                 gate does what it does with any unclassified action: it is
-                 FORCED to "ask" whatever the settings file says, and its card
-                 carries the generic worst-case warning line. That is the safe
-                 side: the write can never run unattended. Classifying it
-                 properly is a small follow-up patch, named in the section
-                 below.
+                 gate has its OWN `_RISK` row for this name (added 2026-11-17
+                 by the end-of-file `_RISK.update({...})` block in
+                 jarvis-backend/jarvis_gate.py; a drop-in module cannot add
+                 one), so its card says what a note change really is:
+                 reversible and local. The tier line above is what makes it
+                 ask - the row loosens nothing.
     run()        Writes, and only after a verdict whose `allowed` is True.
                  `approved` has no default of True anywhere in this module.
 
@@ -125,10 +123,12 @@ HONEST LIMITS
   - The routes are built and proved in this repository; they are NOT deployed
     to the owner's live PC by this change (the live backend deploy is its own
     pass), so the live apps do not show the editor until that deploy.
-  - `edit_vault_note` has no `_RISK` row until a patch adds one (see above),
-    so its card shows the gate's generic unclassified-action warning; the
-    tier itself is the shipped "ask" line in both copies of
-    `jarvis-framework.toml`.
+  - `edit_vault_note`'s risk row is in the published base, not in a patch
+    (2026-11-17): the end-of-file `_RISK.update({...})` block covers the whole
+    editor's action. It reaches a live install the way the Android builder's
+    rows do - `tools/repair_live_backend_gaps.py` - because a drop-in module
+    adds no patch. The tier itself is the shipped "ask" line in both copies of
+    `jarvis-framework.toml`, and the row does not change it.
   - `text` is decoded as UTF-8 with replacement characters for invalid bytes
     (a deliberate, stated policy: a note written by another editor in another
     encoding is still readable, and saving it writes valid UTF-8). The

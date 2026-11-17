@@ -267,8 +267,8 @@ def gate_module(rows):
         got = rows.get(str(action))
         if got is None:
             return {"reversible": "no", "reach": "outbound", "swipe_ok": False,
-                    "why": ("Unclassified action - treated as permanent and able to "
-                            "leave this PC"),
+                    "why": ("Unclassified action - never runs on its own, and a "
+                            "swipe cannot approve it"),
                     "classified": False}
         return {"reversible": got[0], "reach": got[1], "swipe_ok": got[0] == "yes",
                 "why": got[2], "classified": True}

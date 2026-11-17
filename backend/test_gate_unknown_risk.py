@@ -23,9 +23,9 @@ section 3, and `.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md`) is a DUAL RULE:
     `jarvis_gate.py` gives the action the worst case it has (reach "outbound",
     reversible "no" - so no swipe, on any screen), forces tier "ask" so it can
     never run unattended, prints ONE plain warning line on the card
-    ("Unclassified action - treated as permanent and able to leave this PC"),
-    and lets the owner approve it ONLY through the human check every risky card
-    already needs: Windows Hello on this PC, the phone's own lock/signature.
+    ("Unclassified action - never runs on its own, and a swipe cannot approve
+    it"), and lets the owner approve it ONLY through the human check every risky
+    card already needs: Windows Hello on this PC, the phone's own lock/signature.
     Nothing auto-approves, nothing bulk-approves, and a plain YES recorded
     without that check cannot run the action.
 
@@ -96,8 +96,9 @@ PS1 = REPO / "scripts" / "apply-patches.ps1"
 SHIPPED_TOML = BACKEND / "rebuilt" / "jarvis-framework.toml"
 BASE_GATE = BASE / "jarvis_gate.py"
 
-#: The warning line, word for word - the ruling's own words, in ASCII.
-WARNING = ("Unclassified action - treated as permanent and able to leave this PC")
+#: The warning line, word for word (reworded 2026-11-17, see section 2b).
+WARNING = ("Unclassified action - never runs on its own, and a swipe cannot "
+           "approve it")
 #: What the card said before this patch. It must be gone from the after-image.
 OLD_WARNING = "not classified, so treated as irreversible and outbound"
 
@@ -355,7 +356,13 @@ def t_the_patch_is_the_base_plus_this_change():
         return
     check("the pre-image is the owner's own words, with the old sentence",
           OLD_WARNING in pre)
-    check("... and it has none of the new warning", "UNCLASSIFIED_WARNING" not in pre)
+    # The owner's file before this patch had no warning constant of its own. The
+    # REWORDED sentence (2026-11-17) is added by the published base's end-of-file
+    # override, so it is legitimately present in the pre-image and this check
+    # asks the question it was always asking: the patch's OWN constant is new.
+    check("... and the patch's own warning constant is not in it",
+          'UNCLASSIFIED_WARNING = ("Unclassified action - treated as permanent'
+          not in pre)
     check("... and none of the eight rows",
           not [a for a in EXPECTED_EIGHT if f'    "{a}": (' in pre])
     after = BASE_GATE.read_text(encoding="utf-8")
@@ -442,6 +449,97 @@ def t_an_unclassified_action_is_given_the_worst_case_the_gate_has():
           "SECRET" not in n["body"] and "SECRET" not in n["title"])
     check("the same warning is what a card for a plugin action gets",
           G.risk_for("plugin_start:whatever")["why"] == WARNING)
+
+
+# ---------------------------------------------------------------------------
+# 2b. The warning says what HAPPENS, and does not pretend to know the action
+# ---------------------------------------------------------------------------
+# Reworded 2026-11-17. The old line - "treated as permanent and able to leave
+# this PC" - printed the gate's own worst-case assumption as if it were a fact
+# about the action. A note create raised it and told the owner a note could
+# leave this PC and could not be undone; the notes editor can do neither. The
+# worst-case RECORD did not change (section 2 still proves "no"/"outbound" and
+# no swipe); only the words changed, and these checks pin what they now say.
+
+def t_the_warning_says_what_happens_and_what_is_not_known():
+    G, OC, AF, why = modules()
+    check("the patched gate imports for the wording checks", G is not None, why)
+    if G is None:
+        return
+    set_policy({})
+    say = G.risk_for("some_new_action")["why"]
+    check("the warning says the action never runs with nobody asked",
+          "never runs on its own" in say, say)
+    check("... and that no swipe may decide it",
+          "swipe cannot approve it" in say, say)
+    check("... and it no longer calls the action permanent",
+          "permanent" not in say, say)
+    check("... and it no longer says the action can leave this PC",
+          "leave this PC" not in say, say)
+    body = G.notice_for({"action": "some_new_action"})["body"]
+    check("the card starts with the reworded warning", body.startswith(WARNING), body)
+    check("... and still says why the fallback was chosen",
+          "given the worst case" in body, body)
+    check("... and never claims the action itself is permanent or can leave",
+          "treated as permanent" not in body, body)
+    # The reword is a BASE end-of-file override, not an edit to the patch: the
+    # patch still adds the old constant (so the patch still reverses out of the
+    # base), and the last assignment wins at import.
+    src = BASE_GATE.read_text(encoding="utf-8")
+    check("the reword is a base end-of-file override, not a patch edit",
+          src.count("UNCLASSIFIED_WARNING = (") == 2
+          and src.rindex("UNCLASSIFIED_WARNING = (")
+          > src.rindex("_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {"),
+          src.count("UNCLASSIFIED_WARNING = ("))
+    # The gate still RECORDS the worst case, so nothing about approval changed.
+    check("the risk record is still the fail-closed one",
+          G.risk_for("some_new_action")["reversible"] == "no"
+          and G.risk_for("some_new_action")["reach"] == "outbound"
+          and G.risk_for("some_new_action")["swipe_ok"] is False,
+          G.risk_for("some_new_action"))
+
+
+# ---------------------------------------------------------------------------
+# 2c. The notes editor's action has its own row (2026-11-17)
+# ---------------------------------------------------------------------------
+# `edit_vault_note` (jarvis_notes_edit.ACTION) is the action the whole Obsidian
+# editor raises: a whole-note save, an append, a tag change and a carded create.
+# It had a tier line ("ask" in both shipped settings copies) and NO risk row, so
+# its card carried the unclassified warning above. The row lives in an
+# end-of-file `_RISK.update({...})` block, because every line inside the literal
+# is some earlier patch's hunk context.
+
+def t_the_notes_editor_action_has_its_own_row():
+    G, OC, AF, why = modules()
+    check("the patched gate imports for the notes-row checks", G is not None, why)
+    if G is None:
+        return
+    r = G.risk_for("edit_vault_note")
+    check("edit_vault_note is classified now", r["classified"] is True, r)
+    check("... reversible, because the File Guardian copies the old bytes first",
+          r["reversible"] == "yes", r)
+    check("... and local, because no notes route sends anything",
+          r["reach"] == "local", r)
+    check("... so a swipe may approve it, the ordinary treatment of a local "
+          "undoable change", r["swipe_ok"] is True, r)
+    check("... and its sentence is its own, not the unclassified warning",
+          r["why"] != WARNING and "Obsidian" in r["why"], r["why"])
+    n = G.notice_for({"action": "edit_vault_note"})
+    check("... and its card does not carry the unclassified line",
+          WARNING not in n["body"] and "Unclassified action" not in n["body"], n)
+    # The row is a deliberate, placed decision, not a fallback.
+    src = BASE_GATE.read_text(encoding="utf-8")
+    check("the row is NOT inside the _RISK literal",
+          "edit_vault_note" not in _risk_rows(src), sorted(_risk_rows(src))[:5])
+    check("... it is an end-of-file `_RISK.update({...})` block, the region no "
+          "patch's hunk claims",
+          '"edit_vault_note": ("yes", "local"' in src
+          and src.index('"edit_vault_note":')
+          > src.rindex("_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {"))
+    # The shipped tier is untouched by the row: it still asks.
+    tiers = _tiers_from_shipped()
+    check("... and the shipped tier is still ask (the row loosens nothing)",
+          tiers.get("edit_vault_note") == "ask", tiers.get("edit_vault_note"))
 
 
 # ---------------------------------------------------------------------------

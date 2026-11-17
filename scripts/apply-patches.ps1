@@ -2046,8 +2046,10 @@ $PATCHES = @(
     # no risk row for is no longer a dead end: it is given the worst case
     # (permanent, outbound), forced to tier "ask", and its card carries the
     # warning line "Unclassified action - treated as permanent and able to
-    # leave this PC"; the owner may still approve it with the human check every
-    # risky card already needs (Windows Hello here, the phone's own lock). It
+    # leave this PC" (the published base REWORDS that line at the end of the file
+    # on 2026-11-17, because it is this patch's own hunk); the owner may still
+    # approve it with the human check every risky card already needs (Windows
+    # Hello here, the phone's own lock). It
     # also gives the EIGHT actions that had an "auto" line and no row their rows
     # (calendar_read, email_read, notes_search, home_read, news_read,
     # page_read, github_read, docker_service_stop), so the forced "ask" changes
