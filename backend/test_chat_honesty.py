@@ -212,6 +212,8 @@ def t_off_app_only_and_unbuilt_sentences_have_their_shapes():
         ("what timer is on my phone", "phone_state", None),
         ("can you set a timer on my phone", "phone_state", None),
         ("what jobs are running?", "jobs_read", None),
+        ("which job runs next?", "jobs_next", None),
+        ("which job comes first?", "jobs_next", None),
     )
     for said, shape, extra in cases:
         name, fields = shape_of(said)
@@ -510,24 +512,118 @@ def t_the_job_list_is_read_from_the_real_list():
     except Exception:                            # pragma: no cover
         skip("the jobs module is absent here")
         return
-    old = J.jobs
+    old = J.queue_order
     try:
-        J.jobs = lambda *a, **k: []
+        J.queue_order = lambda *a, **k: []
         got = ask("what jobs are running?")
         check("no jobs says exactly that",
               got is not None and got.reply == "No background jobs right now.",
               got and got.reply)
-        J.jobs = lambda *a, **k: [
-            {"label": "Watch the repo", "state": "running"},
-            {"label": "Read the paper", "state": "waiting_approval"}]
+        # The list is read from `queue_order()`, not `jobs()`: the number the
+        # owner moves a job by is its place in the order the queue runs in
+        # (2026-11-16), so the fake is the queue's own read.
+        J.queue_order = lambda *a, **k: [
+            {"id": "b", "label": "Read the paper", "state": "waiting_approval",
+             "priority": 2},
+            {"id": "a", "label": "Watch the repo", "state": "running",
+             "priority": 0}]
         two = ask("what jobs are running?")
         reply = two.reply if two is not None else ""
-        check("running jobs are listed with their real states",
+        check("running jobs are numbered, with their real state and priority",
               "2 background jobs" in reply
-              and "Watch the repo (running)" in reply
-              and "Read the paper (waiting for your approval)" in reply, reply)
+              and "1. Read the paper (waiting for your approval, urgent)" in reply
+              and "2. Watch the repo (running, normal)" in reply, reply)
+        check("... and the answer says it is the order they run in",
+              "in the order they run" in reply, reply)
     finally:
-        J.jobs = old
+        J.queue_order = old
+
+
+def t_the_owner_moves_a_job_in_the_queue_by_number():
+    """THE FELT FEATURE (2026-11-16): "make job 2 urgent", through chat.
+
+    Driven through the REAL fast path and the REAL jobs store, not a stub: the
+    read answer numbers the queue, the write sentence resolves that number to
+    the job's id, `jarvis_jobs.set_priority()` writes the row, and the next
+    read and "which job runs next" both show the move. The echo names the label
+    because the list can shift between the read and the write.
+
+    BITE: take the `jobs_priority` branch out of `jarvis_quick.run()` and the
+    sentence falls through to the model; nothing is written and the echo checks
+    fail while the matcher checks stay green.
+    """
+    fresh_calendar()
+    try:
+        import jarvis_jobs as J
+    except Exception:                            # pragma: no cover
+        skip("the jobs module is absent here")
+        return
+    J.shutdown()
+    J.DB_PATH = Path(tempfile.mkdtemp(prefix="jarvis-jobs-priority-")) / "jobs.db"
+    J.register("priority_probe", lambda ctx, params: {"ok": True})
+    first = J.create("priority_probe", {}, label="watch the repo", when=0)
+    second = J.create("priority_probe", {}, label="read the paper", when=0)
+
+    said = ask("what jobs do i have")
+    reply = said.reply if said is not None else ""
+    check("the job list is numbered and names each job's priority",
+          "1. watch the repo (waiting to start, normal)" in reply
+          and "2. read the paper (waiting to start, normal)" in reply, reply)
+
+    moved = ask("make job 2 urgent")
+    check("the sentence moves the job and ECHOES the label it moved",
+          moved is not None
+          and "Job 2, 'read the paper', is now urgent" in moved.reply,
+          moved and moved.reply)
+    check("... and says the honest wait before it is picked",
+          moved is not None and "30 minutes" in moved.reply,
+          moved and moved.reply)
+    check("the store really changed, not only the sentence",
+          (J.get(second) or {}).get("priority") == 2, J.get(second))
+
+    nxt = ask("which job runs next")
+    check("which one runs next is read from the same order the tick uses",
+          nxt is not None and "Next: read the paper (urgent)" in nxt.reply,
+          nxt and nxt.reply)
+
+    # The urgent job is now number 1, so the ordinary one is number 2 - and the
+    # echo is what proves the number went to the job the owner meant.
+    low = ask("make job 2 low")
+    check("lowering is one sentence too, and the echo names the job it moved",
+          low is not None and "Job 2, 'watch the repo', is now low" in low.reply
+          and (J.get(first) or {}).get("priority") == -1, low and low.reply)
+
+    before = [(r["id"], r["priority"]) for r in J.jobs()]
+    none = ask("make job 9 urgent")
+    after = [(r["id"], r["priority"]) for r in J.jobs()]
+    check("a number that is not in the list changes nothing and says so",
+          none is not None and "no job 9" in none.reply and before == after,
+          (none and none.reply, before, after))
+
+    check("moving a job is a WRITE, so it is not taken for a read-only intent",
+          "jobs_priority" not in Q.READ_ONLY_INTENTS)
+
+    # A job that is ALREADY RUNNING is not "picked next", and the answer must
+    # not pretend it is. It is still moved, because the number decides the
+    # order if it parks and comes back. The urgent job is number 1, so the
+    # running one is number 2.
+    J._write(lambda c: c.execute(
+        "UPDATE jobs SET state='running' WHERE id=?", (first,)))
+    running = ask("make job 2 urgent")
+    check("a job that is already running is not promised a turn it cannot have",
+          running is not None and "is running now" in running.reply
+          and "picked up again" in running.reply
+          and "will be picked" not in running.reply, running and running.reply)
+    check("... and it was still moved, for when it comes back",
+          (J.get(first) or {}).get("priority") == 2, J.get(first))
+
+    # Matching a job by its own words ("do the milk one first") is its own
+    # piece of work: a guess here could move the wrong job, so the sentence is
+    # deliberately NOT claimed by this grammar.
+    fuzzy = Q.match("do the milk one first")
+    check("a job named by its words is not guessed at",
+          fuzzy is None or fuzzy.name != "jobs_priority",
+          fuzzy and (fuzzy.name, dict(fuzzy.f)))
 
 
 def t_the_phone_state_is_read_from_the_real_pairing():

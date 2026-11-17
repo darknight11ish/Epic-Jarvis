@@ -1149,6 +1149,7 @@ the tiers themselves are section 3 above.)
 |---|---|---|
 | **Appearance and layout** - the desktop's `theme` (`commands::set_theme`, the settings store's appearance class) and the big HUD's layout document (`hud_layout.rs` `set_hud_layout`) | Paint and arrangement only: no private material, no backend call, no outbound request, and changing it back is one press. | Rust's closed-world normaliser (`hud_layout::sanitise`) is the authority for the saved document and the page's normaliser is a second line; the layout write is its own appearance-class grant (`hud-layout-write`, owner-approved 2026-10-21, `capabilities/hud.json`), separate from the page's schedule grant, and the page holds no pairing token. |
 | **One job on the schedule** - pause, resume, delete, done, add time or snooze on ONE job, plus a ONE-OFF reminder/alarm/timer add (`jarvis_schedule` `act()` / the add route) | "Stopping only makes things quieter": one job's state, or one new item. There is no list form and no delete-all - clearing a named list stays the Brain window's, by Ruling 15. | The stale-link hold blocks ACTING while the event stream is stale (rule 4); the audit line carries ids, kinds and outcomes only, never the item's words; and a REPEATING add does raise its one `schedule_repeat` card at tier `ask`. |
+| **One background job's priority** - `jarvis_jobs.set_priority()` (2026-11-16), reached only by the owner's own fixed-grammar sentence in `jarvis_quick.py` ("make job 2 urgent", "do job 1 first", "lower job 2") | It reorders work that was already allowed to run: it grants nothing, starts nothing, answers no card, changes no capability set, and never makes a job run before its own `due` time. Changing it back is one sentence. | The level is clamped in one place, so nothing outside `-1`/`0`/`2` can be stored; a priority is read nowhere in `_claim`, `ctx.require()` or `_grant_step()`, so a parked job still parks and asks; the audit line is `jobs.priority` with the id, the level and `by`, never the label or the params; and a MODEL cannot reach it - no route and no tool was added (the owner's ruling, `decisions.d/2026-11-16-job-priority-is-the-owners.md`). |
 | **One local calendar event** - add, change or delete ONE event in Jarvis's own calendar (`jarvis_local_calendar` `handle_add`/`handle_act`, 2026-10-29) | The same reasoning as the row above, and the owner's 2026-10-29 decision: it writes one row on the owner's own PC, changes nothing outside it, and there is no list form, no delete-all and no bulk anything. | The same stale-link hold blocks ACTING where a surface draws it (rule 4); the three routes ride the server's existing origin and token checks with no new permission model; the audit line is `calendar.add` / `calendar.change` / `calendar.delete` with the id and outcome only, never the title, place or note; and the store is wall clock plus `tz`, never an epoch. |
 | **A ready-for-review marker** - Wave D-1's ready-for-review path (`Scheduler.propose_ready`, `jarvis_schedule.py`; JARVIS-API section 21) - the ruling calls this `suggest_done` | It completes nothing and changes no state: it only says "Jarvis's part is done - check it". | Only a to-do can be marked; the item stays `active`/`paused` until the owner's own `act("done")`, the one action that completes a task; the audit line is `schedule.ready` with ids, kind and a short reason only - never the item's words. |
 | **The next message's lane** - the big HUD's ONE Cloud button (the same lane switch the bar always had; `jarvis_hud.html`'s rail) | It routes one message: it approves nothing, sends nothing, stores nothing, and it marks nothing until `/api/status` says the proxy is up. | The server's own rule-1 refusals still apply: a turn touching private material never runs on a cloud lane (`jarvis_agent.local_model_refusal`; `_one_call` refuses it again before any card - section 4). |
@@ -5685,6 +5686,26 @@ they landed):
   plus ONE receipt (`jarvis_receipts.record`, tool name `jobs.tick`) for a tick
   that ran something. The receipt carries no label, no param and no error text:
   those are the owner's words and the audit log is not private.
+
+  **The ORDER is the owner's to steer, and a priority grants nothing
+  (2026-11-16).** Each row carries a `priority` integer - `-1` low, `0`
+  normal, `2` urgent - and `run_due()` selects with
+  `ORDER BY priority DESC, due`, so the highest goes first and equal
+  priorities keep exactly the `due` order every earlier build used. A column
+  added to a database that already exists is added in place by `_init()`
+  (`_ADDED_COLUMNS` + a `PRAGMA table_info` guard, the shape `jarvis_goals.py`
+  uses), because `CREATE TABLE IF NOT EXISTS` never alters a table that
+  exists. A priority is read NOWHERE else: `_claim`, `ctx.require()`,
+  `_grant_step()` and `_freeze_caps()` do not mention it, so a job moved to the
+  front keeps the same frozen capabilities and still parks and asks. It never
+  makes a job run before its `due` time either. `set_priority()` is the only
+  writer, and the owner's own fixed-grammar sentence in `jarvis_quick.py`
+  ("make job 2 urgent", "do job 1 first", "lower job 2", and "which job runs
+  next" for the read) is its only caller - no HTTP route and no model tool was
+  added, which is the owner's ruling recorded in
+  `decisions.d/2026-11-16-job-priority-is-the-owners.md`. The write is cardless
+  for the reasons in section 3's "Cardless by design" table, row "One
+  background job's priority".
 
   **THE GAP IS CLOSED (2026-10-30): the way in and the way out exist.** Until
   that day there was no route that CREATED a job and no route that answered a
