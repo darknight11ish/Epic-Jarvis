@@ -2,13 +2,17 @@
 
 Every check here runs against a FAKE `jarvis_big_coder`, so no graphics card,
 no Ollama and no model is touched. What is proved is the order (card -> pause
-announcement -> server -> pause -> load), the refusals in plain words, the
-restores on every failure, and that the preset apply uses this lane for the
-Coding row and only for it.
+announcement -> server -> pause -> a read of EACH lane's own `/api/ps` -> load),
+the refusals in plain words, the restores on every failure - including the two
+halves the 2026-11-17 live failure exposed: a pause's own `ok` is not proof
+that every lane model is gone, and a start that did not finish must put the
+everyday lane back - and that the preset apply uses this lane for the Coding
+row and only for it.
 
 The real numbers (tokens a second, VRAM on both cards, spill, cold load) are
 measured on the PC and recorded in `docs/MEASURED-2026-11-02-POOLED-LANE.md`;
-nothing here claims any of them.
+nothing here claims any of them. A real three-card load is NOT tested here:
+that needs the owner's three cards and is measured, not faked.
 """
 import json
 import os
@@ -31,6 +35,7 @@ FAILED, PASSED = [], []
 TMP = tempfile.mkdtemp(prefix="pooled-lane-")
 os.environ["OPENJARVIS_CONFIG_DIR"] = TMP
 
+import jarvis_big_coder as BC  # noqa: E402
 import jarvis_model_lanes as L  # noqa: E402
 import jarvis_presets as P  # noqa: E402
 
@@ -49,20 +54,40 @@ class Verdict:
 
 
 class Engine:
-    """A stand-in for `jarvis_big_coder`, recording the order of every call."""
+    """A stand-in for `jarvis_big_coder`, recording the order of every call.
+
+    `/api/ps` is answered PER PORT, as the owner's three servers answer: the
+    everyday lane on 11436, the Fast lane on 11435 and the pooled server on
+    11450. A fake that returned the same rows on every port could not show
+    whether a lane model was really still loaded - and that is the evidence the
+    lane now reads for itself before it loads anything (2026-11-17).
+    """
+
+    LANES = BC.LANES
 
     def __init__(self, *, server_ok=True, pause_ok=True, load_ok=True,
-                 restore_ok=True, unload_ok=True):
+                 restore_ok=True, unload_ok=True, lanes_loaded=False,
+                 server_pauses=True):
         self.calls = []
         self.rows = []
+        self.lane_rows = {int(lane.port): [] for lane in BC.LANES}
+        if lanes_loaded:
+            self.load_the_lanes()
         self.server_ok, self.pause_ok, self.load_ok = server_ok, pause_ok, load_ok
         self.restore_ok, self.unload_ok = restore_ok, unload_ok
+        self.server_pauses = server_pauses
         self.announced = ""
         self.card_kw = {}
 
     # --- what the lane reads -------------------------------------------------
     def ps(self, url):
         self.calls.append(("ps", url))
+        try:
+            port = int(str(url or "").rstrip("/").rsplit(":", 1)[-1])
+        except (TypeError, ValueError):
+            port = 0
+        if port in self.lane_rows:
+            return [dict(r) for r in self.lane_rows[port]]
         return [dict(r) for r in self.rows]
 
     def loaded_row(self, rows, model):
@@ -83,6 +108,21 @@ class Engine:
         return ["qwen3.5:9b at 196,608 tokens on the RTX 2060 (port 11436)",
                 "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (port 11435)"]
 
+    # --- the two lane models, as their own /api/ps would show them -----------
+    def load_the_lanes(self):
+        for lane in BC.LANES:
+            self.lane_rows[int(lane.port)] = [
+                {"name": lane.model, "context_length": lane.ctx,
+                 "size": 100, "size_vram": 100}]
+
+    def unload_the_lanes(self):
+        for lane in BC.LANES:
+            self.lane_rows[int(lane.port)] = []
+
+    def lane_models(self):
+        return [str((row or {}).get("name") or "")
+                for rows in self.lane_rows.values() for row in rows]
+
     # --- the actions ---------------------------------------------------------
     def announce_pause(self, words):
         self.calls.append(("announce", words))
@@ -90,6 +130,11 @@ class Engine:
 
     def server_start(self):
         self.calls.append(("server_start",))
+        if self.server_pauses and self.pause_ok:
+            # The real engine pauses both lanes BEFORE it launches the
+            # three-card server (2026-11-08), so a server that will not start
+            # can already have unloaded them. The fake keeps that order.
+            self.unload_the_lanes()
         return {"ok": self.server_ok, "url": L.pooled_url(), "owned": True,
                 "why": "" if self.server_ok else
                 "the both-cards Ollama did not answer within 30 seconds"}
@@ -97,6 +142,7 @@ class Engine:
     def pause_lanes(self):
         self.calls.append(("pause",))
         if self.pause_ok:
+            self.unload_the_lanes()
             return {"ok": True, "why": "", "unloaded": ["qwen3.5:9b @11436"],
                     "still": [], "proof": ["port 11436: qwen3.5:9b is not loaded"]}
         return {"ok": False, "unloaded": [],
@@ -139,6 +185,7 @@ class Engine:
     def restore_lanes(self):
         self.calls.append(("restore",))
         if self.restore_ok:
+            self.load_the_lanes()
             return {"ok": True, "why": "", "wrong": [],
                     "proof": ["port 11436: qwen3.5:9b ctx=196608 spill=0",
                               "port 11435: qwen3:8b ctx=16384 spill=0"]}
@@ -154,6 +201,22 @@ class Engine:
 
     def index(self, name):
         return self.names().index(name)
+
+
+class PauseClaimsSuccess(Engine):
+    """A pause step that answers `ok` while the everyday model is resident.
+
+    The race the 2026-11-17 live answer opened: the lane model is back (or
+    never left) while the step that unloads it says it paused everything.
+    """
+
+    def pause_lanes(self):
+        self.calls.append(("pause",))
+        self.lane_rows[int(BC.LANES[0].port)] = [
+            {"name": BC.LANES[0].model, "context_length": BC.LANES[0].ctx,
+             "size": 100, "size_vram": 100}]
+        return {"ok": True, "why": "", "unloaded": ["qwen3.5:9b @11436"],
+                "still": [], "proof": ["port 11436: qwen3.5:9b is not loaded"]}
 
 
 # ---------------------------------------------------------------------------
@@ -244,15 +307,20 @@ def t_the_order_is_card_then_announce_then_server_then_pause_then_load():
           "before the first unload",
           eng.names()[:4] == ["ps", "announce", "server_start", "pause"],
           eng.names())
-    check("the model is loaded only after both lanes are proved paused",
-          eng.names()[:5] == ["ps", "announce", "server_start", "pause", "load"],
-          eng.names())
+    check("the model is loaded only after BOTH lanes are proved paused - by a "
+          "read of each lane's own /api/ps, not by the pause step's word",
+          eng.names()[:4] == ["ps", "announce", "server_start", "pause"]
+          and eng.names()[4:6] == ["ps", "ps"] and eng.names()[6] == "load"
+          and [c[1] for c in eng.calls[4:6]] == ["http://127.0.0.1:11436",
+                                                 "http://127.0.0.1:11435"],
+          eng.calls)
     check("the load names the port, so it lands on the pooled server",
           ("load", 11450, L.POOLED_CTX, L.POOLED_SPILL_ALLOWANCE) in eng.calls,
           eng.calls)
     check("... and it passes the lane's ONE measured spill allowance, never a "
           "bare load that would get the zero-spill rule",
-          eng.calls[4] == ("load", 11450, L.POOLED_CTX, L.POOLED_SPILL_ALLOWANCE),
+          [c for c in eng.calls if c[0] == "load"]
+          == [("load", 11450, L.POOLED_CTX, L.POOLED_SPILL_ALLOWANCE)],
           eng.calls)
     check("the card was given this lane's own window and measured words, so it "
           "cannot describe the big-coder mode's load",
@@ -322,14 +390,209 @@ def t_a_task_running_refuses_before_the_card():
 
 
 def t_a_lane_that_will_not_pause_stops_the_whole_start():
-    eng = Engine(pause_ok=False)
+    eng = Engine(pause_ok=False, lanes_loaded=True)
     code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
     check("a lane that will not pause refuses (409) and names it",
           code == 409 and body["ok"] is False
           and "did not pause" in body["error"], (code, body))
-    check("... nothing is loaded", "load" not in eng.names(), eng.calls)
-    check("... the lanes are put back and the server is stopped",
-          eng.names()[-2:] == ["restore", "server_stop"], eng.calls)
+    check("... nothing is loaded on the pooled port", "load" not in eng.names(),
+          eng.calls)
+    check("... the pooled server is stopped BEFORE the lanes are asked back, "
+          "which is the order the live PC of 2026-11-17 needed",
+          eng.names()[-3:] == ["unload", "server_stop", "restore"], eng.calls)
+    check("... the everyday lane is exactly as it was (still loaded), and the "
+          "answer names only the restore it saw",
+          eng.lane_models() == ["qwen3.5:9b", "qwen3:8b"]
+          and bool(body.get("restored")) and body.get("not_restored") == [],
+          (eng.lane_models(), body))
+
+
+def t_a_pause_that_claims_success_is_checked_against_every_lane():
+    """THE HOLE THE LIVE FAILURE OPENED (2026-11-17, source 02332ecc): the start
+    took the pause step's `ok` as the fact. Here the pause answers `ok` while
+    the everyday model is resident again; the start must read each lane's own
+    `/api/ps` and refuse, because otherwise the 30B would load beside it.
+    """
+    eng = PauseClaimsSuccess()
+    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    check("a pause that claims success while a model is loaded is refused (409)",
+          code == 409 and body["ok"] is False, (code, body))
+    check("... in the live failure's own words, naming the model that was SEEN",
+          "did not pause" in str(body.get("error", ""))
+          and "qwen3.5:9b on port 11436" in str(body.get("error", "")),
+          body.get("error"))
+    check("... and the 30B is NOT loaded beside it", "load" not in eng.names(),
+          eng.calls)
+    check("... nothing is left on the pooled port, and the everyday lane is "
+          "exactly as it was",
+          eng.rows == [] and eng.lane_models() == ["qwen3.5:9b", "qwen3:8b"],
+          (eng.rows, eng.lane_models()))
+    check("... the answer carries the pause proof and the restore it saw",
+          bool(body.get("restored")) and body.get("not_restored") == []
+          and any("11436" in row for row in body.get("proof") or ()), body)
+
+
+def t_a_failed_start_puts_the_everyday_lane_back():
+    """THE OTHER LIVE HALF (2026-11-17): the everyday model was gone from 11436
+    after the failed click. The engine's own `server_start` pauses both lanes
+    BEFORE it launches, so a server that will not start has already unloaded
+    them - a failure path that used to answer and leave the lane down.
+    """
+    eng = Engine(server_ok=False, lanes_loaded=True)
+    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    check("a both-cards server that will not start refuses (503) in its own words",
+          code == 503 and "did not answer" in str(body.get("error", "")),
+          (code, body))
+    check("... nothing was loaded, and no second load happened",
+          "load" not in eng.names(), eng.calls)
+    check("... the two lane models are back on 11436 and 11435, seen in /api/ps",
+          eng.lane_models() == ["qwen3.5:9b", "qwen3:8b"], eng.lane_models())
+    check("... nothing is loaded on the pooled port, and the answer says so",
+          eng.rows == [] and body.get("pooled_clear") is True, (eng.rows, body))
+    check("... and the restore it saw is named, never assumed",
+          bool(body.get("restored")) and body.get("not_restored") == [], body)
+
+
+def t_the_owners_click_refuses_and_the_chat_road_still_cards():
+    """THE TWO ROADS, on the same lying pause (2026-11-17). The live failure was
+    measured on the apps' own preset control, which applies through
+    `jarvis_presets.apply_preset(..., owner_ui=True)` and starts this lane with
+    `_OwnerPressed` instead of the card (#1336). That road must refuse in the
+    live words, load nothing and put the lanes back. The same preset asked for
+    in chat (`apply_from_body`) must still raise the lane's ONE `switch_model`
+    card, and a denied card must load nothing.
+    """
+
+    class Denied:
+        allowed = False
+        outcome = "denied"
+        reason = "you said no"
+
+    class FakeGate:
+        def __init__(self):
+            self.calls = []
+
+        def check(self, action, detail, prompt=""):
+            self.calls.append((action, detail, prompt))
+            return Denied()
+
+    class FakeGateModule:
+        def __init__(self, gate):
+            self.check = gate.check
+
+    gate = FakeGate()
+    saved_gate = sys.modules.get("jarvis_gate")
+    saved_engine, saved_owner = L._engine, P._OwnerPressed
+    pressed, touched = [], []
+
+    class Recording:
+        allowed = True
+        outcome = "approved"
+        reason = "the owner pressed this preset in one of the apps"
+
+        def __init__(self):
+            pressed.append(1)
+
+    eng = PauseClaimsSuccess()
+    eng2 = Engine()
+    sys.modules["jarvis_gate"] = FakeGateModule(gate)
+    P._OwnerPressed = Recording
+    try:
+        L._engine = lambda engine=None: eng
+        code, out = P.apply_preset(
+            "coding", owner_ui=True,
+            active_url=lambda: "http://127.0.0.1:11436",
+            set_active_url=lambda url: touched.append(("set_url", url)) or True,
+            read_choice=lambda: "general",
+            write_choice=lambda preset: touched.append(("write", preset)) or True,
+            rollback_model=lambda: {"ok": True},
+            stop_pooled=lambda: {"ok": True, "ran": False, "reason": ""})
+        click_gate_calls = list(gate.calls)
+        click_pressed = len(pressed)
+        click_calls, click_lanes, click_rows = (list(eng.calls), eng.lane_models(),
+                                                list(eng.rows))
+        gate.calls.clear()
+        L._engine = lambda engine=None: eng2
+        code2, out2 = P.apply_from_body({"preset": "coding"})
+        chat_gate_calls, chat_calls = list(gate.calls), list(eng2.calls)
+    finally:
+        if saved_gate is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = saved_gate
+        L._engine, P._OwnerPressed = saved_engine, saved_owner
+    check("a Coding click whose pause is not proved refuses (503) in the live "
+          "words, and says nothing changed",
+          code == 503 and out.get("changed") is False
+          and "did not pause" in str(out.get("error", ""))
+          and "qwen3.5:9b on port 11436" in str(out.get("error", ""))
+          and "nothing was changed" in str(out.get("error", "")), (code, out))
+    check("... the click road used the owner's own press, never a card: it "
+          "raised no approval gate at all",
+          click_pressed == 1 and click_gate_calls == [],
+          (click_pressed, click_gate_calls))
+    check("... nothing was loaded, the everyday model is still there and "
+          "nothing is left on the pooled port",
+          not any(name == "load" for name in [c[0] for c in click_calls])
+          and click_lanes == ["qwen3.5:9b", "qwen3:8b"] and click_rows == [],
+          (click_calls, click_lanes, click_rows))
+    check("... the model, the chat lane and the chosen preset were not touched",
+          touched == [], touched)
+
+    check("the same Coding request from chat still raises exactly ONE "
+          "switch_model card",
+          code2 == 409 and out2.get("outcome") == "denied"
+          and [c[0] for c in chat_gate_calls] == ["switch_model"],
+          (code2, out2, chat_gate_calls))
+    check("... and a denied card loads and unloads nothing on either lane",
+          [c[0] for c in chat_calls] == ["ps"], (chat_calls, out2))
+
+
+def t_a_restore_that_races_is_retried_and_proved():
+    """THE LIVE RESTORE (2026-11-17): the first restore answered "qwen3.5:9b is
+    not loaded on port 11436" and the everyday lane stayed empty until
+    something reloaded it. The second attempt - the owner's own retry, made
+    inside the click - must be made, and the answer must carry only what it
+    proved.
+    """
+
+    class RacesOnce(Engine):
+        """First restore: the live answer and no models back. Second: they
+        come back, as the owner's retry half a minute later did."""
+
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self.restores = 0
+
+        def restore_lanes(self):
+            self.calls.append(("restore",))
+            self.restores += 1
+            if self.restores == 1:
+                return {"ok": False,
+                        "wrong": ["qwen3.5:9b is not loaded on port 11436"],
+                        "why": ("The two models were not put back exactly as they "
+                                "were: qwen3.5:9b is not loaded on port 11436. "
+                                "Start them from the Power screen, or restart "
+                                "Jarvis."),
+                        "proof": ["port 11436: qwen3.5:9b DID not come back"]}
+            self.load_the_lanes()
+            return {"ok": True, "why": "", "wrong": [],
+                    "proof": ["port 11436: qwen3.5:9b ctx=196608 spill=0",
+                              "port 11435: qwen3:8b ctx=16384 spill=0"]}
+
+    eng = RacesOnce(load_ok=False)
+    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    check("a start whose load fails is refused (503) in the model's words",
+          code == 503 and "spill" in str(body.get("error", "")), (code, body))
+    check("... the restore is asked a SECOND time when the first does not bring "
+          "the lanes back", eng.restores == 2, eng.calls)
+    check("... and the everyday model is back on 11436, seen in /api/ps",
+          eng.lane_models() == ["qwen3.5:9b", "qwen3:8b"], eng.lane_models())
+    check("... with nothing loaded on the pooled port",
+          eng.rows == [] and body.get("pooled_clear") is True, (eng.rows, body))
+    check("... and the answer claims the restore it SAW, never the failed one",
+          bool(body.get("restored")) and body.get("not_restored") == []
+          and "not put back" not in str(body.get("error", "")), body)
 
 
 def t_a_load_that_spills_is_undone_and_the_lanes_come_back():
@@ -338,19 +601,12 @@ def t_a_load_that_spills_is_undone_and_the_lanes_come_back():
     check("a load that spills is refused (503) in the model's own plain words",
           code == 503 and body["ok"] is False
           and "needs both cards" in body["error"], (code, body))
-    check("... it is unloaded again, both lanes are put back and the server stops",
-          eng.names()[-3:] == ["unload", "restore", "server_stop"], eng.calls)
+    check("... it is unloaded again, the server stops, and both lanes are put "
+          "back - in that order",
+          eng.names()[-3:] == ["unload", "server_stop", "restore"], eng.calls)
     check("... and the answer carries the proof of what was seen",
-          body["proof"] and body["restored"], body)
-
-
-def t_a_server_that_will_not_start_changes_nothing():
-    eng = Engine(server_ok=False)
-    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
-    check("a both-cards server that will not start refuses (503) in its own words",
-          code == 503 and "did not answer" in body["error"], (code, body))
-    check("... nothing was paused and nothing was loaded",
-          "pause" not in eng.names() and "load" not in eng.names(), eng.calls)
+          body["proof"] and body["restored"] and body.get("not_restored") == [],
+          body)
 
 
 def t_stop_puts_both_lanes_back_and_says_what_it_saw():
@@ -1031,8 +1287,11 @@ def main() -> int:
                t_a_gate_that_cannot_be_asked_fails_closed,
                t_a_task_running_refuses_before_the_card,
                t_a_lane_that_will_not_pause_stops_the_whole_start,
+               t_a_pause_that_claims_success_is_checked_against_every_lane,
+               t_the_owners_click_refuses_and_the_chat_road_still_cards,
+               t_a_failed_start_puts_the_everyday_lane_back,
+               t_a_restore_that_races_is_retried_and_proved,
                t_a_load_that_spills_is_undone_and_the_lanes_come_back,
-               t_a_server_that_will_not_start_changes_nothing,
                t_stop_puts_both_lanes_back_and_says_what_it_saw,
                t_stop_is_safe_when_nothing_is_running,
                t_a_lane_that_does_not_come_back_is_reported,

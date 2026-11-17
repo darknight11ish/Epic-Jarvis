@@ -81,7 +81,31 @@ WHAT THIS PROVES:
    ones written - no new verb is invented. This is the first production path
    that can park, which is what closes DEF-024 (field-test Matrix Row 22).
 
+9. **A job can be moved to the FRONT, and only the owner can move it
+   (2026-11-16).** The owner asked to "prioritize it through chat": one
+   integer on the row (-1 low, 0 normal, 2 urgent), `ORDER BY priority DESC,
+   due` in the one query `run_due()` reads, and `set_priority()` as the only
+   writer. The tests below prove the four things that matter: a fresh database
+   has the column and a job defaults to normal; a database written BEFORE the
+   column existed gains it in place and its rows become normal (the migration
+   the design called the only risky line); an urgent job created after two
+   ordinary due ones runs NEXT, not third, while equal priorities keep exactly
+   today's `due` order; and no model tool can reach the setter, because
+   `jarvis_agent.TOOLS` has none and `jarvis_jobs` has no route body for it.
+   They also prove the limits: a priority never makes a job run before its
+   `due` time, never widens `caps`, and a job parked on a capability still
+   parks and asks at priority 2.
+
 WHAT THIS SUITE DOES NOT PROVE, said out loud rather than implied:
+
+  * **A priority is visible in chat, not in either app.** The desktop Work tab
+    and the phone Work pane do not draw the field yet (a later PR); the data is
+    already on `GET /api/jobs`, because a new column flows through `_row()`.
+  * **"No model tool can set a priority" is an ABSENCE check.** It reads the
+    real tool registry (`jarvis_agent.TOOLS`) and the module's own names, and
+    it would not notice a model reaching a database file directly. In-process
+    Python is trusted code here, as the design says; the enforcement that
+    matters is that no route and no tool was added.
 
   * **Nothing here drives HTTP.** The two route bodies are module functions
     (`handle_create`, `handle_answer`), and the test calls those - the same
@@ -119,6 +143,7 @@ import ast
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -1391,6 +1416,306 @@ def t_no_job_body_reports_its_sentence_as_a_progress_fraction():
                     offenders.append((name, node.lineno))
     check("no watcher passes its progress sentence as the fraction",
           offenders == [], offenders)
+
+
+# --------------------------------------------------------------------------
+#   12. PRIORITY (2026-11-16): one job goes first, and only the owner moves it
+# --------------------------------------------------------------------------
+
+#: The `jobs` table exactly as the build before priority wrote it. A database
+#: made by that build is the owner's real upgrade path, and `CREATE TABLE IF
+#: NOT EXISTS` will never add a column to it - which is the whole reason the
+#: `_init()` migration exists.
+_OLD_JOBS_SCHEMA = """
+CREATE TABLE jobs (
+    id TEXT PRIMARY KEY, handler TEXT NOT NULL, params TEXT NOT NULL,
+    label TEXT NOT NULL, caps TEXT NOT NULL, tainted INTEGER NOT NULL,
+    state TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0, note TEXT,
+    due REAL NOT NULL, created REAL NOT NULL, started REAL, finished REAL,
+    heartbeat REAL, attempts INTEGER NOT NULL DEFAULT 0,
+    cancel INTEGER NOT NULL DEFAULT 0, result TEXT, error TEXT, delivered REAL);
+"""
+
+
+def _recorder():
+    """A handler that records the tags that ran, in the order they ran."""
+    ran = []
+
+    def body(ctx, params):
+        ran.append(params.get("tag"))
+        return {"ok": True}
+    return ran, body
+
+
+def t_a_fresh_database_has_the_priority_column_and_jobs_default_to_normal():
+    """The column, and the default that keeps every existing row's order.
+
+    BITE: drop `priority` from `_SCHEMA` and both checks fail; change the
+    default to anything but 0 and the second fails while the first stays green.
+    """
+    fresh()
+    cols = {row["name"] for row in J._read("PRAGMA table_info(jobs)")}
+    check("a fresh database is created with a priority column",
+          "priority" in cols, sorted(cols))
+    jid = J.create("route_probe", {}, label="a job")
+    check("a job created without a priority is normal (0), so today's order holds",
+          (J.get(jid) or {}).get("priority") == 0, J.get(jid))
+    J.register("priority_probe", lambda ctx, params: {"ok": True})
+    moved = J.create("priority_probe", {}, label="a job to move")
+    check("and set_priority is what changes it", J.set_priority(moved, 2) is True
+          and (J.get(moved) or {}).get("priority") == 2, J.get(moved))
+
+
+def t_an_older_database_gains_the_column_in_place_and_its_rows_are_normal():
+    """THE MIGRATION, on the shape the owner's PC really has.
+
+    `CREATE TABLE IF NOT EXISTS` never alters a table that already exists, so
+    the owner's jobs.db - written by a build that had no `priority` - keeps
+    working only if `_init()` adds the column in place. The database here is
+    made with the OLD schema, a row is inserted into it, and then the module is
+    allowed to open it for the first time.
+
+    BITE: remove the ALTER from `_add_missing_columns` and `J.get('old')`
+    raises `no such column: priority`; the row never becomes normal.
+    """
+    d = fresh()
+    conn = sqlite3.connect(str(d / "jobs.db"))
+    conn.executescript(_OLD_JOBS_SCHEMA)
+    conn.execute("INSERT INTO jobs (id,handler,params,label,caps,tainted,"
+                 " state,due,created) VALUES ('old','route_probe','{}',"
+                 " 'an old job','[]',0,'queued',?,?)", (time.time(), time.time()))
+    conn.commit()
+    conn.close()
+    row = J.get("old") or {}
+    check("a database written before priority existed opens", row.get("id") == "old", row)
+    check("its existing row became normal, so nothing was reordered by upgrading",
+          row.get("priority") == 0, row)
+    check("the column is really on the table, not only in the module",
+          "priority" in {r["name"] for r in J._read("PRAGMA table_info(jobs)")},
+          [r["name"] for r in J._read("PRAGMA table_info(jobs)")])
+    check("and the migrated row can be moved like any other",
+          J.set_priority("old", 2) and (J.get("old") or {}).get("priority") == 2,
+          J.get("old"))
+
+
+def t_equal_priority_keeps_todays_due_order_exactly():
+    """BEHAVIOUR-PRESERVING: a queue of normal jobs runs as it always did.
+
+    Every job here is left at the default, so the only sort key that can decide
+    anything is `due` - which is what every earlier build ordered by. Create
+    order is deliberately NOT due order, so a query that forgot `due` fails.
+
+    BITE: change `_QUEUE_ORDER` to `ORDER BY priority DESC` alone and this fails.
+    """
+    fresh()
+    ran, body = _recorder()
+    J.register("recorder", body)
+    t0 = time.time()
+    for tag, offset in (("third", 3), ("first", 1), ("second", 2)):
+        J.create("recorder", {"tag": tag}, label=tag, when=t0 + offset)
+    J.run_due(now=t0 + 10)
+    check("with every job normal, the queue still runs in due order",
+          ran == ["first", "second", "third"], ran)
+
+
+def t_an_urgent_job_created_last_runs_next_not_third():
+    """THE THING THE OWNER ASKED FOR, end to end through `run_due()`.
+
+    Two ordinary jobs are already due; the urgent one is created LAST and is
+    due last of the three. A tick with one slot must pick the urgent one, not
+    the one whose time came first.
+
+    BITE: revert the query to `ORDER BY due` and the tick runs the ordinary job
+    first, which is the whole feature failing.
+    """
+    fresh()
+    ran, body = _recorder()
+    J.register("recorder", body)
+    t0 = time.time()
+    J.create("recorder", {"tag": "ordinary one"}, label="ordinary one", when=t0)
+    J.create("recorder", {"tag": "ordinary two"}, label="ordinary two", when=t0 + 1)
+    urgent = J.create("recorder", {"tag": "the urgent one"},
+                      label="the urgent one", when=t0 + 2)
+    check("the job really is at the back before it is moved",
+          [r["label"] for r in J.queue_order(6, due_only=False)][-1]
+          == "the urgent one",
+          [r["label"] for r in J.queue_order(6, due_only=False)])
+    check("and set_priority reports that it moved it", J.set_priority(urgent, 2), urgent)
+    J.run_due(now=t0 + 10, limit=1)
+    check("a job raised after two ordinary ones runs NEXT, not third",
+          ran == ["the urgent one"], ran)
+    J.run_due(now=t0 + 20)
+    check("the ordinary jobs keep their own due order behind it",
+          ran == ["the urgent one", "ordinary one", "ordinary two"], ran)
+
+
+def t_the_cap_runs_ordinary_jobs_and_does_not_starve_the_default_priority():
+    """`max_jobs_per_tick` is untouched, and a normal job still gets its turn.
+
+    Five normal jobs are due and the shipped cap is four, so the fifth waits
+    for the next tick - and then runs, with nothing new arriving. Priority is
+    not a starvation machine in the ordinary case.
+
+    BITE: raise or drop the LIMIT and the first check fails; skip the tail of
+    the queue and the fifth job never runs.
+    """
+    fresh()
+    ran, body = _recorder()
+    J.register("recorder", body)
+    cap = max(1, int(J._cfg("max_jobs_per_tick", 4)))
+    t0 = time.time()
+    for i in range(cap + 1):
+        J.create("recorder", {"tag": f"job {i}"}, label=f"job {i}", when=t0 + i)
+    first = J.run_due(now=t0 + 10)
+    check(f"one tick still takes exactly the cap ({cap}) of due jobs",
+          first["ran"] == cap and len(ran) == cap, (first, ran))
+    J.run_due(now=t0 + 20)
+    check("the job the cap left behind runs on the next tick, not never",
+          len(ran) == cap + 1 and ran[-1] == f"job {cap}", ran)
+    check("and nothing is left queued",
+          [r["state"] for r in J.jobs()].count("queued") == 0,
+          [r["state"] for r in J.jobs()])
+
+
+def t_priority_never_makes_a_job_run_before_its_own_time():
+    """A bump is not a time machine: `due<=?` is still the filter.
+
+    BITE: drop `due<=?` from the queue query (a tempting "urgent means now")
+    and this urgent job runs an hour early.
+    """
+    fresh()
+    ran, body = _recorder()
+    J.register("recorder", body)
+    t0 = time.time()
+    jid = J.create("recorder", {"tag": "tomorrow"}, label="tomorrow",
+                   when=t0 + 3600)
+    J.set_priority(jid, 2)
+    out = J.run_due(now=t0 + 10)
+    check("an urgent job whose time has not come is still not selected",
+          out["ran"] == 0 and ran == [], (out, ran))
+    check("it is still queued, waiting for its own time",
+          (J.get(jid) or {}).get("state") == "queued", J.get(jid))
+
+
+def t_an_urgent_job_still_parks_and_asks_instead_of_widening():
+    """Priority is not an approval. The owner's rule 4 still holds at level 2.
+
+    BITE: read the priority anywhere in `_claim`, `ctx.require()` or
+    `_grant_step()` - the shape this test exists to forbid - and the job acts
+    without a grant.
+    """
+    fresh()
+    acted = {"yes": False}
+
+    def body(ctx, params):
+        ctx.require(PROBE_ACTION)
+        acted["yes"] = True
+        return {"ok": True}
+
+    J.register("urgent_needs_a_yes", body)
+    jid = J.create("urgent_needs_a_yes", {}, label="urgent but unauthorised",
+                   caps=[])
+    J.set_priority(jid, 2)
+    J.run_due(now=time.time())
+    row = J.get(jid) or {}
+    check("an urgent job that needs a fresh yes still parks",
+          row.get("state") == "waiting_approval", row.get("state"))
+    check("and it did not act", acted["yes"] is False, dict(acted))
+    grants = J.pending_grants(jid)
+    check("one pending grant, unspent: priority is worth exactly nothing here",
+          len(grants) == 1 and grants[0]["state"] == "pending"
+          and grants[0]["used"] is None, grants)
+    check("its frozen capability set is still empty",
+          row.get("caps") == [], row.get("caps"))
+
+
+def t_only_the_three_levels_can_ever_be_stored():
+    """The clamp lives in one place and no fourth level can exist.
+
+    BITE: delete the clamp and asking for 99 stores 99, which no answer or UI
+    knows how to describe.
+    """
+    fresh()
+    J.register("level_probe", lambda ctx, params: {"ok": True})
+    jid = J.create("level_probe", {}, label="a level probe")
+    for asked, want, why in ((99, 2, "above urgent is urgent"),
+                             (-99, -1, "below low is low"),
+                             (1, 0, "a number between the levels is normal"),
+                             (2, 2, "urgent is urgent"),
+                             (-1, -1, "low is low"),
+                             (0, 0, "normal is normal")):
+        J.set_priority(jid, asked)
+        got = (J.get(jid) or {}).get("priority")
+        check(f"asking for {asked}: {why} ({got})", got == want, got)
+    check("every stored priority is one of the three known levels",
+          all(r["priority"] in J.PRIORITIES for r in J.jobs()),
+          [(r["label"], r["priority"]) for r in J.jobs()])
+
+
+def t_setting_priority_on_an_unknown_or_ended_job_returns_false_and_changes_nothing():
+    """The same honest failure shape as `cancel()` and `get()`: False, no raise.
+
+    BITE: raise on a missing id (or `UPDATE` without the terminal-state guard)
+    and one of these turns into a crash or a lie about a finished job.
+    """
+    fresh()
+    ran, body = _recorder()
+    J.register("recorder", body)
+    before = J.jobs()
+    check("an id that is not there returns False",
+          J.set_priority("no-such-job", 2) is False)
+    check("... and changes nothing at all", J.jobs() == before, len(J.jobs()))
+
+    jid = J.create("recorder", {"tag": "done"}, label="a job that ends")
+    J.run_due(now=time.time() + 60)
+    check("the job really ended", (J.get(jid) or {}).get("state") == "done",
+          J.get(jid))
+    check("moving a job that has already ended returns False",
+          J.set_priority(jid, 2) is False)
+    check("... and leaves its row exactly as it was",
+          (J.get(jid) or {}).get("priority") == 0, J.get(jid))
+
+    live = J.create("recorder", {}, label="still queued")
+    check("a value that is not a number returns False rather than raising",
+          J.set_priority(live, "urgent") is False
+          and (J.get(live) or {}).get("priority") == 0, J.get(live))
+
+
+def t_no_model_tool_can_move_a_job_in_the_queue():
+    """THE POLICY (2026-11-16): the owner moves a job; a MODEL does not.
+
+    Raising a job's priority is the owner's act. The model's whole vocabulary
+    is `jarvis_agent.TOOLS`, so if no tool there is about jobs or priority, and
+    `jarvis_jobs` exposes no route body for the setter, then there is no model
+    path to `set_priority()` at all - the absence is the enforcement, and the
+    fixed grammar in `jarvis_quick.py` is the one caller.
+
+    WHAT THIS CANNOT SEE, said plainly: it reads the real registry, not a
+    sandbox. A model that could open the database file would bypass it, and
+    in-process Python is trusted code - the design's own risk note. What it
+    DOES catch is the realistic mistake: somebody adding a tool or a route for
+    it later and forgetting that the owner ruled against it.
+    """
+    try:
+        import jarvis_agent as A
+    except Exception as exc:                        # not installed here
+        skip(f"the model tool registry could not be imported ({type(exc).__name__})")
+        return
+    tools = getattr(A, "TOOLS", {})
+    names = sorted(tools)
+    check("the model's tool list is not empty, so this check is not vacuous",
+          len(names) > 0, len(names))
+    hits = [n for n in names if "priorit" in n.lower() or "job" in n.lower()]
+    check("no tool the model can call is about jobs or priority", not hits, hits)
+    said = " ".join(str(tools[n]) for n in names).lower()
+    check("and no tool's own description offers to move a job's priority",
+          "job priority" not in said and "prioritise" not in said
+          and "prioritize" not in said, hits)
+    check("jarvis_jobs exposes no route body that could set one from HTTP",
+          not hasattr(J, "handle_set_priority")
+          and not hasattr(J, "handle_priority")
+          and not hasattr(J, "handle_move_job"),
+          [n for n in dir(J) if "priorit" in n.lower() or "move" in n.lower()])
 
 
 # --------------------------------------------------------------------------
