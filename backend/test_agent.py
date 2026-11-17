@@ -468,41 +468,53 @@ def t_an_unknown_tool_name_is_refused_not_guessed():
           "no such tool" in tool_msg["content"], repr(tool_msg))
 
 
-def t_file_read_caps_by_bytes_not_characters():
-    """Text-mode `open(...).read(N)` caps CHARACTERS, not bytes, while the
-    constant and the tool's contract both claim bytes. A file that is
-    mostly multi-byte UTF-8 could return up to ~4x the stated cap. Written
-    with a real temp file because the bug is specifically about how many
-    bytes actually get read off disk, which a fake can't stand in for."""
+def t_file_read_returns_numbered_lines_and_the_next_range():
+    """The Q4 fix (2026-11-16): a long file is a numbered slice, not a cut
+    middle. The old tool returned up to 200,000 bytes from the front and
+    `_tool_content` kept its first and last 1,500 characters, so the model
+    never saw the end of the file and had no argument to ask for the rest.
+    Written with real temp files: the behaviour is about bytes on disk.
+    """
     import tempfile, os
-    real_cap = AG._MAX_FILE_READ_BYTES
-    AG._MAX_FILE_READ_BYTES = 10
-    try:
-        # Each "€" is 3 bytes in UTF-8 - 5 of them is 15 bytes, comfortably
-        # over the 10-byte cap, but only 5 characters, comfortably under a
-        # char-based one.
-        text = "€" * 5
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False,
-                                          encoding="utf-8") as f:
-            f.write(text)
-            path = f.name
-        try:
-            out = AG._run_file_read({"path": path})
-        finally:
-            os.unlink(path)
-        # 5 "€" is 15 bytes but only 5 characters - under the old text-mode
-        # `.read(cap + 1)` bug, reading a 5-character file never even hits an
-        # 11-CHARACTER cap, so it would come back whole with truncated=False
-        # despite being 1.5x the intended 10-BYTE budget. The fix must catch
-        # that on bytes.
-        check("a multi-byte-heavy file is truncated once BYTES exceed the cap, "
-              "not left whole because it has few CHARACTERS",
-              out["truncated"] is True, repr(out))
-        check("the truncated content is genuinely shorter than the original, "
-              "not the whole file returned anyway",
-              out["content"] != text, repr(out))
-    finally:
-        AG._MAX_FILE_READ_BYTES = real_cap
+    folder = tempfile.mkdtemp(prefix="jarvis-read-slice-")
+    small = os.path.join(folder, "small.txt")
+    with open(small, "w", encoding="utf-8") as f:
+        f.write("alpha\nbeta\ngamma\n")
+    got = AG._run_file_read({"path": small})
+    check("a small file comes back as numbered lines",
+          got["ok"] is True
+          and got["content"].splitlines() == ["1: alpha", "2: beta", "3: gamma"],
+          repr(got))
+    check("... and says it is the whole file",
+          got["truncated"] is False and got["total_lines"] == 3 and "more" not in got,
+          repr(got))
+
+    big = os.path.join(folder, "big.txt")
+    with open(big, "w", encoding="utf-8") as f:
+        for i in range(1, 1201):
+            f.write(f"line {i:04d}\n")
+    got = AG._run_file_read({"path": big})
+    shown = got["content"].splitlines()
+    check("a long file is truncated and says so", got["truncated"] is True,
+          repr(got)[:300])
+    check("... the slice is numbered from line 1",
+          bool(shown) and shown[0] == "1: line 0001", shown[:1])
+    check("... it says the real total and which range to ask for next",
+          got["total_lines"] == 1200 and "start_line=" in (got.get("more") or ""),
+          (got["total_lines"], got.get("more")))
+    check("... and the whole result stays inside the tool-content cap",
+          len(AG._tool_content(got)) <= AG._MAX_TOOL_CONTENT_CHARS,
+          len(AG._tool_content(got)))
+
+    got = AG._run_file_read({"path": big, "start_line": 601, "lines": 3})
+    check("a range read starts at the line asked for",
+          got["content"].splitlines()[0] == "601: line 0601", repr(got)[:300])
+    check("... and names the next range",
+          "start_line=604" in (got.get("more") or ""), got.get("more"))
+
+    got = AG._run_file_read({"path": big, "start_line": "later"})
+    check("a bad range is refused in words, not raised",
+          got["ok"] is False and "start_line" in got["error"], repr(got))
 
 
 def t_file_read_rejects_reserved_windows_device_names():
@@ -537,6 +549,85 @@ def t_tool_content_never_slices_a_json_string_mid_structure():
           out[:200])
     check("the safe fallback itself stays under the cap",
           len(out) <= AG._MAX_TOOL_CONTENT_CHARS, len(out))
+
+
+def t_a_prompt_over_the_pooled_window_is_refused_not_sent():
+    """Architect Q4, 2026-11-16: "warn and send anyway" had to go.
+
+    The old path announced WINDOW_OVERFLOW_LINE and sent the request, so
+    Ollama dropped the front of the prompt - Jarvis's rules and the start of
+    the chat. The trimmed prompt is still over an 8,192 window here, so the
+    turn must end with the plain refusal and make NO request at all.
+    """
+    streamed, sent = [], []
+    real = AG._pooled_turn_window
+    AG._pooled_turn_window = lambda url: (True, 8192)
+    try:
+        with NoRealIO():
+            out = AG.run_local_turn(
+                [{"role": "user", "content": "word " * 8000}],
+                "qwen3:8b", ollama_url="http://127.0.0.1:11450",
+                stream_out=streamed.append,
+                open_stream=lambda url, payload: sent.append((url, payload)) or FakeStream([]),
+                lane_choice=None, enabled_tools=set(),
+                record_chain=lambda s: None,
+                on_step=lambda s: None, context_length=8192)
+    finally:
+        AG._pooled_turn_window = real
+    blob = b"".join(streamed).decode("utf-8", "replace")
+    check("a prompt still over the pooled window sends no request at all",
+          not sent, sent)
+    check("... the turn carries no words of its own",
+          out.get("answer") == "", out.get("answer"))
+    check("... the app is told the prompt exceeds the window",
+          "Prompt exceeds the 8,192-token local window" in blob, blob[-400:])
+    check("... and what to do about it",
+          "Shorten the input" in blob and "DeepSeek" in blob, blob[-400:])
+
+
+def t_a_long_chat_over_the_window_is_trimmed_once_then_sent():
+    """The other half of Q4: one aggressive re-trim, then send if it fits.
+
+    The lane's own window is 8,192, but the turn's budget is built from
+    49,152, so the ordinary trimmer leaves a long chat over the window the
+    request will really name. The re-trim must drop the earlier turns, keep
+    the rules first, say what was left out, and send a prompt that fits.
+    """
+    streamed, noted = [], []
+    real = AG._pooled_turn_window
+    AG._pooled_turn_window = lambda url: (True, 8192)
+    messages = [{"role": "user", "content": "x" * 20_000},
+                {"role": "assistant", "content": "y" * 20_000},
+                {"role": "user", "content": "x" * 15_000},
+                {"role": "assistant", "content": "y" * 15_000},
+                {"role": "user", "content": "hi"}]
+    opener, calls = scripted_stream([{"choices": [{"message": {"content": "ok"}}]}])
+    try:
+        with NoRealIO():
+            out = AG.run_local_turn(
+                messages, "qwen3:8b", ollama_url="http://127.0.0.1:11450",
+                stream_out=streamed.append, open_stream=opener,
+                announce=noted.append, lane_choice=None,
+                enabled_tools=set(),
+                record_chain=lambda s: None, on_step=lambda s: None,
+                context_length=49152)
+    finally:
+        AG._pooled_turn_window = real
+    payload = calls[0] if calls else {}
+    sent_messages = payload.get("messages") or []
+    check("a prompt that fits after ONE re-trim is sent, not refused",
+          bool(calls), calls)
+    check("... its estimate is inside the window the request names",
+          AG.estimate_tokens(sent_messages) <= 8192,
+          AG.estimate_tokens(sent_messages))
+    check("... the rules are still the first message",
+          bool(sent_messages) and sent_messages[0].get("role") == "system",
+          sent_messages[:1])
+    check("... it carries fewer earlier turns than the caller sent",
+          len(sent_messages) < len(messages), (len(sent_messages), len(messages)))
+    check("... and the app is told earlier turns were left out",
+          any("earlier turns" in str(line) for line in noted), noted)
+    check("... and the answer still arrives", out.get("answer") == "ok", out)
 
 
 def t_every_tool_resolves_to_a_real_jarvis_gate_action():
@@ -1683,9 +1774,11 @@ if __name__ == "__main__":
                t_arguments_already_a_dict_does_not_crash_the_loop,
                t_arguments_as_a_json_scalar_does_not_crash_the_loop,
                t_an_unknown_tool_name_is_refused_not_guessed,
-               t_file_read_caps_by_bytes_not_characters,
+               t_file_read_returns_numbered_lines_and_the_next_range,
                t_file_read_rejects_reserved_windows_device_names,
                t_tool_content_never_slices_a_json_string_mid_structure,
+               t_a_prompt_over_the_pooled_window_is_refused_not_sent,
+               t_a_long_chat_over_the_window_is_trimmed_once_then_sent,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
                t_github_search_resolves_to_an_ask_tier_in_the_shipped_config,
                t_this_run_can_read_the_shipped_tier_table,

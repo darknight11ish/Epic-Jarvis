@@ -1,17 +1,22 @@
-# Hardware profiles: any 8 GB card, up to two cards and 24 GB
+# Hardware profiles: any 8 GB card, any pair of cards up to 24 GB
 
 **Status: built 2026-09-25 (section 7 says what, and where the build differs
-from this design).** Written 2026-09-24. **Measured 2026-10-05:** both cards are
-installed - the 12 GB card as GPU 0, holding the everyday model, and the
-2080 SUPER as GPU 1, running the desktop. The model is **100% on the card**
-with nothing spilling to the processor, and its context is 4,096 while 16,384
+from this design).** Written 2026-09-24. **Measured 2026-10-05:** both cards were
+installed then - the 12 GB card as GPU 0, holding the everyday model, and the
+2080 SUPER as GPU 1, running the desktop. The model was **100% on the card**
+with nothing spilling to the processor, and its context was 4,096 while 16,384
 fits with room to spare
 ([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md);
 re-measure with `scripts\measure-cards.ps1`, described in
-[MEASURE-CARDS.md](MEASURE-CARDS.md)). **Every other memory figure here is still
-*calculated, not measured*** until the Hardware screen's Measure has a row for
-it (section 4.7) - no setup has been chosen on the owner's PC, and nothing
-changes there until one is, one approval card at a time.
+[MEASURE-CARDS.md](MEASURE-CARDS.md)). **Updated 2026-11-16:** the owner's PC
+now has three cards (the RTX 2060 12 GB and two RTX 2080 SUPER 8 GB;
+[docs/MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md) has the live reading). This page's
+design still covers one card and any pair, and the dated measurements below
+that describe two cards are the 2026-10-05 state kept as the dated record.
+**Every other memory figure here is still *calculated, not measured*** until
+the Hardware screen's Measure has a row for it (section 4.7) - no setup has
+been chosen on the owner's PC, and nothing changes there until one is, one
+approval card at a time.
 
 ---
 
@@ -636,11 +641,15 @@ and the other features go there, biggest useful first.
 **Placement, in order:**
 
 1. **Chat** on the fastest card (4.1). Model and context by preset (4.4).
-   The chat card's Ollama is the everyday one on port 11434.
-2. **With two cards**, the other card runs a second Ollama (port 11435,
-   pinned by id, `OLLAMA_VULKAN=0`, `OLLAMA_MAX_LOADED_MODELS=1`) - as today.
-   Its lanes take turns there, one model at a time, as today. It gets a
-   long-context model only if that gives **more** context than chat has.
+   The chat card's Ollama is the everyday lane on port 11436
+   ([MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md)); Ollama's own default server on
+   11434 is a separate one.
+2. **With a second card**, that card runs a second Ollama (port 11435 by
+   default, pinned by id, `OLLAMA_VULKAN=0`, `OLLAMA_MAX_LOADED_MODELS=1`).
+   Its lanes take turns there, one model at a time. It gets a long-context
+   model only if that gives **more** context than chat has. A third card would
+   repeat the same rule; on this PC, which now has three, the third is used by
+   the Coding preset's pooled lane on 11450 ([MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md)).
 3. **With one card**, lanes go **inside the everyday Ollama**, beside chat,
    only if both the real budget and Ollama's gate pass (4.2). Otherwise
    pictures are offered **by swapping**: a picture question unloads chat,
@@ -719,8 +728,9 @@ How to read it:
 
 #### One card
 
-**8 GB** (room 5.57 GiB) - *the single-card case; the owner's PC is two cards
-now, and the model runs on the 12 GB one (measured 2026-10-05)*
+**8 GB** (room 5.57 GiB) - *the single-card case. The owner's PC had two cards
+on 2026-10-05, when the model was measured running on the 12 GB one; it has had
+three since 2026-11-07 ([MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md)).*
 
 | Preset | Chat | Long context | Pictures | Memory | Off, and why |
 |---|---|---|---|---|---|
@@ -943,7 +953,7 @@ Generated from `backend/fixtures/hardware_cases.json` - the planner's own output
 | Smartest answers (rec.) | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | off | `███████████████░` 3.44 + 2.18 = 5.62 / 6 |
 | Most features | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (6 GB card, by swapping with chat) | `████████████████` 3.66 + 2.18 = 5.84 / 6 |
 
-**8 GB - the single-card case; the owner's PC is two cards now** (`one_8gb`)
+**8 GB - the single-card case; the owner's PC has three cards now** (`one_8gb`)
 
 | Preset | Chat | Long context | Pictures | Memory |
 |---|---|---|---|---|

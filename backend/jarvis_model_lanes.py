@@ -139,7 +139,7 @@ So: no card, and no new tier line either. The owner's own instruction of
 the apps is how he finds out it was used.
 
 THE POOLED LANE IS THE ONE EXCEPTION, and it is the opposite argument
-(2026-11-02). Starting the Coding preset's both-card lane UNLOADS the owner's
+(2026-11-02). Starting the Coding preset's three-card lane UNLOADS the owner's
 two models and then makes the 30B the model chat uses, so it raises ONE
 `switch_model` card - the same action and the same `from`/`to`/`why` detail
 `jarvis_models.switch_to` sends - BEFORE it unloads anything, and a denied card
@@ -229,19 +229,19 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #   The pooled three-card lane (the Coding preset's heavy mode)
 # ---------------------------------------------------------------------------
 #
-# WHAT IT IS. The two lanes above are the owner's own logon tasks: one Ollama
-# per card, each pinned to its card by the task itself. The Coding preset's
+# WHAT IT IS. The two lanes above are the owner's own logon tasks: each is one
+# Ollama pinned to its own card by the task itself. The Coding preset's
 # model is `qwen3-coder-30b-a3b-ud-q3-k-xl`, measured at 14,813 MiB of
 # GPU-resident memory against a 12,288 MiB card and an 8,192 MiB card - so it
-# fits NEITHER lane, at any context. There is no third logon task and there
-# must not be one: a pooled lane is only ever wanted for one model while the
-# owner is coding, and a task that starts with Windows would hold both cards
-# against the two lanes the assistant actually runs on.
+# fits NEITHER single-card lane, at any context. There is no third logon task
+# and there must not be one: a pooled lane is only ever wanted for one model
+# while the owner is coding, and a task that starts with Windows would hold all
+# three cards against the two lanes the assistant actually runs on.
 #
 # So the pooled lane is the ONE Ollama this PC starts on demand, on its own
-# port, with NO card pin at all - which is what lets the engine see both cards
-# - and it is started by the apply the owner approved, not by a task. This
-# module does not hand-roll the server, the pause, the load or the restore:
+# port, with NO card pin at all - which is what lets the engine see all three
+# cards - and it is started by the apply the owner approved, not by a task.
+# This module does not hand-roll the server, the pause, the load or the restore:
 # `jarvis_big_coder.py` already owns every one of those, measured and proved
 # from `/api/ps`, and it is reused here exactly as it is. What is new is the
 # LANE: a key, a port, a state, and a start and a stop in the same shape as
@@ -255,13 +255,14 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #      under it would break it);
 #   3. ONE card, action `switch_model` - the SAME action and the SAME detail
 #      `jarvis_models.switch_to` raises, so the owner reads the same card he
-#      reads for any other model change. It names the model, both cards, and
-#      the two lane models it is about to pause;
+#      reads for any other model change. It names the model, all three
+#      cards, and the two lane models it is about to pause;
 #   4. the pause is ANNOUNCED (event bus + audit log) BEFORE the first unload;
-#   5. the both-cards server is started, BOTH lane models are unloaded and
+#   5. the three-card server is started, BOTH lane models are unloaded and
 #      proved gone from `/api/ps`, and only then is the model loaded - at THIS
-#      lane's own measured rung (32,768 tokens since 2026-11-03; 16,384 before
-#      it), with the spill that measurement accepted passed to `load_coder` as
+#      lane's own measured rung (49,152 tokens since 2026-11-07; 32,768 from
+#      2026-11-03 to 2026-11-07; 16,384 before that), with the spill that
+#      measurement accepted passed to `load_coder` as
 #      `allow_spill`. A load that comes up at another context, spills past this
 #      one measured cap, or does not say how much it spilled, is unloaded again
 #      and every lane is put back. A caller that passes no allowance - every
