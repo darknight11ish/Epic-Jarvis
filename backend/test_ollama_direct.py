@@ -256,6 +256,68 @@ def _auth(source, api):
     return lambda extra=None: _with_api(api, lambda: ns["_auth_headers"](extra))
 
 
+def _completions_block():
+    """(the REAL cloud `_completions_url`, compilable on its own, where it came
+    from) - or (None, why this run cannot have it).
+
+    `BACKEND`'s own jarvis_hud.py when this run has one - the owner's install,
+    or a file beside backend/ - and otherwise the patch stack's own text for it
+    (`backend/_stack.py` walks every patch apply-patches.ps1 applies). The cloud
+    lane's resolution is newer than the published base's copy, so the stack is
+    the only source that holds it in a clone; the file is the only source that
+    can say what a real install runs.
+    """
+    path = BACKEND / "jarvis_hud.py"
+    if path.is_file():
+        src, where = path.read_text(encoding="utf-8"), str(path)
+    else:
+        src, log = _stack.stand_in("jarvis_hud.py")
+        if src is None:
+            return None, ("the patch stack could not build jarvis_hud.py: "
+                          + "; ".join(log[-2:]))
+        where = "the patch stack's own text for jarvis_hud.py"
+    start = "def _completions_url(lane: str, body: dict) -> str:"
+    end = "\n\n        # A rate-limited lane"
+    try:
+        block = src[src.index(start):src.index(end)]
+    except ValueError:
+        return None, (f"jarvis_hud.py ({where}) does not hold the cloud "
+                      "`_completions_url` - the text this run reads is older "
+                      "than the lane resolution")
+    try:
+        compile(block, "<cloud _completions_url>", "exec")
+    except SyntaxError as exc:
+        return None, f"the cloud `_completions_url` in {where} does not compile: {exc}"
+    return block, where
+
+
+def t_a_lane_whose_key_read_came_back_empty_is_answered_here():
+    """Rule 3, one narrow seam: a lane's address and its key are TWO reads.
+
+    `lane_state()` asks `cloud_lane()` - whose `ready_for()` reads whether a key
+    is SAVED - and then `lane_key()`, which reads the key itself. The two reads
+    can disagree: the lane is ready, the key comes back empty, and the resolved
+    state then carries a provider's address with no key. `_auth_headers()`
+    falls back to Jarvis's own pairing token when its state's key is empty, so
+    using that address would send THIS PC's token to a public provider. No key
+    must therefore mean no address: this PC answers instead, exactly as it
+    already does for a lane it cannot pay for.
+    """
+    block, where = _completions_block()
+    if block is None:
+        return skip(where)
+    api = FakeApi(key="")
+    ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "local_model": LOCAL,
+          "body": {"model": LANE},
+          "active_ollama_url": lambda: "http://127.0.0.1:11434"}
+    _with_api(api, lambda: exec(compile(block, "<cloud _completions_url>", "exec"), ns))
+    url = _with_api(api, lambda: ns["_completions_url"](LANE, ns["body"]))
+    check("a provider lane whose key read came back empty is not sent to the provider",
+          url != DEEPSEEK_URL, url)
+    check("... this PC answers it instead, as it does for a lane it cannot pay for",
+          url == "http://127.0.0.1:11434/v1/chat/completions", url)
+
+
 def t_local_lane_goes_to_ollama():
     if missing("jarvis_hud.py"):
         return skip(explain())
@@ -482,6 +544,7 @@ if __name__ == "__main__":
                t_a_cloud_lane_goes_to_the_service_behind_it,
                t_a_lane_that_cannot_be_paid_for_is_answered_locally,
                t_the_request_uses_the_lane_key_not_the_pairing_token,
+               t_a_lane_whose_key_read_came_back_empty_is_answered_here,
                t_the_bytes_on_the_wire_name_the_services_model,
                t_a_local_turn_is_completely_unchanged_by_that,
                t_the_model_is_put_on_a_body_the_helper_owns,

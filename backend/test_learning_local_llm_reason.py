@@ -121,6 +121,14 @@ import _gitapply  # noqa: E402
 import _stack  # noqa: E402
 import jarvis_auto_learn as A  # noqa: E402
 
+# THE BASE'S OWN MODULES ARE IMPORTABLE BESIDE IT. `jarvis-backend/jarvis_extract.py`
+# is executed WHOLE below, and it now imports `jarvis_models` - the one loopback
+# check for OLLAMA_URL it shares with the model steward and the HUD. Without this
+# the exec raises ModuleNotFoundError before a single check. Appended AFTER the
+# `jarvis_memory` import above on purpose: that module must still resolve exactly
+# as it did (the rebuilt copy), and an earlier append would have shadowed it.
+sys.path.append(str(REPO / "jarvis-backend"))
+
 PASSED, FAILED = [], []
 PATCH_NAME = "learning-extract-reason.patch"
 PROMPT_SENTINEL = "PROMPT-SENTINEL-9f3a-do-not-record"

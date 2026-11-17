@@ -38,6 +38,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from jarvis_models import ollama_url_on_this_pc
+
 try:
     import jarvis_recall
     import jarvis_router
@@ -71,7 +73,7 @@ _PUMP = None
 HUD_PORT = int(os.environ.get("JARVIS_HUD_PORT", "4719"))
 JARVIS_URL = os.environ.get("JARVIS_URL", "http://127.0.0.1:8000")
 PROXY_URL = os.environ.get("LITELLM_URL", "http://127.0.0.1:4000")
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+OLLAMA_URL = ollama_url_on_this_pc()
 
 # Set this once you put an api_key in [server.auth] in config.toml. Without
 # it the assistant's HTTP server runs with NO authentication at all, which

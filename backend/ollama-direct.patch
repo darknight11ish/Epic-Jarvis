@@ -22,7 +22,7 @@
      return headers
  
  
-@@ -2842,6 +2852,55 @@
+@@ -2842,6 +2852,59 @@
              "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
          )
  
@@ -53,7 +53,11 @@
 +                _state = _api.lane_state(lane if lane != local_model else "")
 +            except Exception:
 +                _state = {}
-+            if _state.get("url"):
++            # A provider's address and key come from ONE call, but the key is
++            # a SECOND read of Credential Manager and can come back empty.
++            # `_auth_headers` would then fall back to Jarvis's own pairing
++            # token, so no key means no address: this PC answers instead.
++            if _state.get("url") and _state.get("key"):
 +                body["model"] = _state["model"]
 +                # 2026-11-03, the blank-cloud-answer fix. A service whose
 +                # hidden reasoning is billed INSIDE max_tokens (DeepSeek today;
@@ -78,7 +82,7 @@
          # A rate-limited lane should step down, not surface a 429 to the user.
          # jarvis_router.degrade() has always described that chain; nothing
          # ever called it, so the documented behaviour did not exist. Try the
-@@ -2851,7 +2893,7 @@
+@@ -2851,7 +2897,7 @@
              body = dict(payload); body["model"] = lane
              return urllib.request.urlopen(
                  urllib.request.Request(
@@ -87,7 +91,7 @@
                      data=json.dumps(body).encode("utf-8"),
                      headers=_auth_headers({"Content-Type": "application/json"}),
                      method="POST",
-@@ -2990,9 +3032,15 @@
+@@ -2990,9 +3036,15 @@
              return
          except Exception as exc:
              try:

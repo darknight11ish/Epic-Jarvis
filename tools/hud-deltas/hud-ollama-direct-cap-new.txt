@@ -1,4 +1,4 @@
-            if _state.get("url"):
+            if _state.get("url") and _state.get("key"):
                 body["model"] = _state["model"]
                 # 2026-11-03, the blank-cloud-answer fix. A service whose
                 # hidden reasoning is billed INSIDE max_tokens (DeepSeek today;

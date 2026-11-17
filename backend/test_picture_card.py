@@ -582,12 +582,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     three.js (2026-10-27), the shared invoke-budget asset's three STATIC_ASSETS
     lines added 2026-10-28, the 16 history-purge route lines added 2026-11-04,
     and the 26-line `/api/deny` note block 2026-11-06's PR 2 added to that
-    same route). 396 lines sit before this anchor now - 26 more than the 323
+    same route). 398 lines sit before this anchor now - 26 more than the 323
     this pin was last measured at plus the 47 the memory-latch change of
-    2026-11-17 added to the HUD above it, and both are lines the HUD gained, so
-    the generated number moved by the lines added, not by anything the patch
-    does. The committed patch says `@@ -6591,3 +6591,25 @@` and the generator
-    derives `@@ -6987,3 +6987,25 @@`. Both files are 29 lines and line 3 is the
+    2026-11-17 added to the HUD above it, plus the 2 that PR #1330's own
+    ollama-URL change added to `jarvis-backend/jarvis_hud.py`. All three are
+    lines the HUD gained, so the generated number moved by the lines added, not
+    by anything the patch does. The committed patch says `@@ -6591,3 +6591,25 @@` and the generator
+    derives `@@ -6989,3 +6989,25 @@`. Both files are 29 lines and line 3 is the
     only difference. That made CI red on EVERY branch, including ones that never
     touch this patch - while the 143-patch rehearsal passed with the stale
     number, which is the proof it applies.
@@ -628,13 +629,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     check("the committed patch's header is the stale one this was measured on",
           committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
     check("the generated header is the one this was measured on",
-          generated[2] == b"@@ -6987,3 +6987,25 @@", generated[2])
+          generated[2] == b"@@ -6989,3 +6989,25 @@", generated[2])
 
     ok, summary, why = gen.check(have, want)
     check("the committed patch PASSES the semantic check even though its hunk "
-          "header is 396 lines stale", ok, why)
+          "header is 398 lines stale", ok, why)
     check("... and the skew is reported, not swallowed",
-          ok and "396 line(s)" in (summary or ""), summary)
+          ok and "398 line(s)" in (summary or ""), summary)
 
     def must_fail(label, bad):
         ok, summary, why = gen.check(bad, want)
