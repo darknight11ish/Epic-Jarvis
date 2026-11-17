@@ -57,7 +57,7 @@ os.environ.setdefault("JARVIS_APPROVAL_TIMEOUT", "2.0")
 from _where import require_shipped  # noqa: E402
 
 require_shipped("jarvis_notes.py", "jarvis_agent.py", "jarvis_note_capture.py",
-                "jarvis_quick.py", "jarvis_notes_edit.py", "jarvis_gate.py",
+                "jarvis_quick.py", "jarvis_notes_edit.py",
                 "jarvis_tellme.py", "jarvis_email.py", "rebuilt/jarvis_router.py")
 
 import jarvis_agent as A  # noqa: E402
