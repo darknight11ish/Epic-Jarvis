@@ -16640,7 +16640,7 @@ onEvent((frame) => {
   updateMenuVisibility();
   const visible = visibleTabOrder();
   const landing = visible.includes("memory") ? "memory" : (visible[0] || "memory");
-  const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
+  const place = takeAnyPlace() || (location.hash ? location.hash.replace(/^#/, "") : "");
   if (!(await showPlace(place))) await showView(landing);
 })();
 
@@ -16782,7 +16782,10 @@ $("btn-rail-hidden-menus")?.addEventListener("click", () => {
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("brain-place", (event) => {
     const place = event && event.payload;
-    if (place === HISTORY_PLACE || place === TUTORIALS_PLACE) goToPlace(place);
+    // "work" (2026-11-16): "Open Work" on a background job's finished toast.
+    // It is `VIEWS.work`, so `showPlace` needs no new branch - only the name
+    // here, or an already-open Brain would ignore the click.
+    if (place === HISTORY_PLACE || place === TUTORIALS_PLACE || place === "work") goToPlace(place);
   });
 }
 

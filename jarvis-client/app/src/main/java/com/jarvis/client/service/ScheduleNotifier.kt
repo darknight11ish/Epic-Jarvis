@@ -361,6 +361,82 @@ object ScheduleNotifier {
     }
 
     /**
+     * A background job that ENDED (2026-11-16), on the same channel as a
+     * reminder ([SCHEDULE_CHANNEL_ID], "Reminders and timers") because that is
+     * the one the owner already allows for "Jarvis has something to tell me",
+     * and on its own notification id ([NotificationIds.JOB_DONE]) because
+     * [posted] reconciles that channel's job-keyed posts against
+     * `GET /api/schedule`, and a background job is not in that list - sharing
+     * the number would let the next schedule read cancel this notice.
+     *
+     * WHAT IT SAYS: the job's label and its state, and never the result, the
+     * params or the error text ([com.jarvis.client.net.Jobs.notification]).
+     * While App lock or "Hide memory lists" is on, [lockScreen] is the only
+     * thing a locked phone shows, and it names the kind of thing and nothing
+     * about the job itself.
+     *
+     * The TAG is `Jobs.doneKey(jobId, state)`, so a replayed event after a
+     * reconnect - or the PC's durable outbox re-announcing after a restart -
+     * REPLACES this notice instead of posting a second one, even across an app
+     * restart (Android keys a notification by tag and id).
+     *
+     * @return whether Android actually took it: false when POST_NOTIFICATIONS
+     *   is not granted, or Android refused. Nothing that reports a job reads
+     *   this (the same rule [post] states); a notice that could not be shown
+     *   must not change what the app says about the job.
+     */
+    fun postJobDone(
+        context: Context,
+        jobId: String,
+        state: String,
+        title: String,
+        text: String,
+        lockScreen: String,
+    ): Boolean {
+        if (!allowed(context)) {
+            Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a finished job is not shown")
+            return false
+        }
+        val tag = com.jarvis.client.net.Jobs.doneKey(jobId, state)
+        val n = NotificationCompat.Builder(context, SCHEDULE_CHANNEL_ID)
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            // A status line, never an alarm: it does not ring, does not repeat
+            // and is not ongoing. The owner did not ask to be woken.
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(locked(context, lockScreen))
+            .setAutoCancel(true)
+            .setContentIntent(openWork(context, tag))
+            .build()
+        return runCatching {
+            NotificationManagerCompat.from(context).notify(tag, NotificationIds.JOB_DONE, n)
+        }
+            .onFailure { Log.w(TAG, "could not post the notice for a finished job", it) }
+            .isSuccess
+    }
+
+    /**
+     * The one action a finished job's notice has: tapping it opens the app at
+     * its Work pane, where the result already is and was never sent here. It
+     * answers nothing and approves nothing - the same navigation-only shape
+     * every other tap-through in this file has.
+     */
+    private fun openWork(context: Context, tag: String): PendingIntent =
+        PendingIntent.getActivity(
+            context,
+            tag.hashCode(),
+            Intent(context, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_OPEN_WORK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+    /**
      * The one that keeps ringing. Still never a full-screen intent, and still
      * the lock-screen rule: a locked phone shows only [lockScreen]. Its
      * button is Stop - it silences and removes this notification and does

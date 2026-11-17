@@ -260,6 +260,13 @@ class MainActivity : FragmentActivity() {
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
     private val openBriefingRequested = mutableStateOf(false)
 
+    /**
+     * A finished background job's notification was tapped - see [readWorkIntent].
+     * The Work pane, where the result already is; the notice never carried it.
+     * Consumed once.
+     */
+    private val openWorkRequested = mutableStateOf(false)
+
     /** The calendar widget's tap opened the Calendar screen - see [readCalendarIntent]. */
     private val openCalendarRequested = mutableStateOf(false)
 
@@ -1010,6 +1017,7 @@ class MainActivity : FragmentActivity() {
         readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readWorkIntent(intent)
         readCalendarIntent(intent)
         // Only on a fresh start: a rotation hands back the SAME launch intent,
         // and must not start a look's two minutes again.
@@ -1061,6 +1069,7 @@ class MainActivity : FragmentActivity() {
         readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readWorkIntent(intent)
         readCalendarIntent(intent)
         readLookIntent(intent)
         readShortcutQuestionIntent(intent)
@@ -1108,6 +1117,18 @@ class MainActivity : FragmentActivity() {
     private fun readBriefingIntent(intent: Intent?) {
         if (intent?.action != ACTION_OPEN_BRIEFING) return
         openBriefingRequested.value = true
+    }
+
+    /**
+     * A finished background job's notification was tapped: open the Work pane,
+     * where the result already is. The notice carried the job's label and its
+     * state and nothing else - no result, no params - so this is navigation,
+     * not a delivery. `singleTask`, so the `onNewIntent` half is needed too,
+     * same as [readBriefingIntent].
+     */
+    private fun readWorkIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_WORK) return
+        openWorkRequested.value = true
     }
 
     /**
@@ -2622,6 +2643,16 @@ class MainActivity : FragmentActivity() {
             openBriefingRequested.value = false
             nav.resetTo(Screen.HOME)
             nav.go(Screen.BRAIN)
+        }
+
+        // A finished job's notification: the Work pane, where the result is.
+        // The notice itself said only the label and the state, so this takes
+        // him to the answer rather than rendering it in a place the OS stores.
+        LaunchedEffect(openWorkRequested.value) {
+            if (!openWorkRequested.value) return@LaunchedEffect
+            openWorkRequested.value = false
+            nav.resetTo(Screen.HOME)
+            nav.go(Screen.INBOX)
         }
 
         // The calendar widget's tap: the Calendar screen itself (Back goes
@@ -5900,6 +5931,15 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
         const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
+
+        /**
+         * Fired by a finished background job's notification
+         * ([com.jarvis.client.service.ScheduleNotifier.postJobDone]): open the
+         * Work pane, where the result is. Navigation only - the notification
+         * carried the job's label and state and never its words, and nothing
+         * here collects, answers or approves anything.
+         */
+        const val ACTION_OPEN_WORK = "com.jarvis.client.action.OPEN_WORK"
 
         /**
          * Fired by the calendar widget's tap ([com.jarvis.client.widget.CalendarWidget]):

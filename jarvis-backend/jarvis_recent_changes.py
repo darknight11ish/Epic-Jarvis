@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    "A pilot that makes one Rust command's JavaScript binding generated instead of hand-written",
+    'GitHub research now sends one repository search per language, because the single query it used to send was answered with zero repositories every time',
+    'The recent-changes generator writes and checks its published twin, so the documented refresh can produce a green pull request',
+    'The Python half of `THIRD-PARTY-NOTICES.txt` is generated and checked now, so it can no longer go stale silently (`tools/gen_notices.py --python`, 2026-11-16)',
     'One plan card per job, and trusted mode, are designed and written down',
-    "The PC's eight notification settings now have one home in Settings, and the voice-check card stops saying its setting twice",
-    "The phone's Hardware plate stops saying nothing above it is measured",
-    'Three phone paragraphs stop re-telling what the screen already shows',
-    "The Hardware screen's two remaining false sentences are fixed: the answer after choosing a setup no longer promises an approval card for every step, and the Details list no longer calls its own measured line calculated",
 )
 
 

@@ -124,6 +124,7 @@ import sys
 import tempfile
 import time
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -1174,6 +1175,118 @@ def t_a_second_require_does_not_inherit_a_spent_grant():
           and second[0]["id"] != first[0]["id"],
           {"state": (J.get(jid) or {}).get("state"), "grants": second})
     check("and it did not run past the second question", asks["passed"] == 1, asks)
+
+
+# --------------------------------------------------------------------------
+#   9. A job that ENDED announces itself, and never its words (2026-11-16)
+# --------------------------------------------------------------------------
+
+#: A result and a param carrying words no announcement may ever show. If one
+#: of these appears in a published frame, `_row_payload`'s smallest-copy rule
+#: has been widened and the notification the phone builds could carry the
+#: owner's own material to a lock screen.
+ANNOUNCE_RESULT = "the private answer this job found"
+ANNOUNCE_PARAM = "the private words that were asked for"
+ANNOUNCE_LABEL = "read the repo"
+
+
+def _recording_bus():
+    """A stand-in for `jarvis_events`, which is not in this repository.
+
+    `_emit()` imports the bus by name at call time, so putting a module in
+    `sys.modules` is exactly what it will import: nothing in `jarvis_jobs.py`
+    is monkeypatched, and the REAL `_finish()` -> durable outbox -> `_emit()`
+    path runs unmodified. The same technique the route rehearsal below uses
+    for a patched `jarvis_hud.py`: fake the boundary, never the subject.
+    """
+    class _Bus:
+        def __init__(self):
+            self.frames = []
+
+        def publish(self, kind, payload):
+            self.frames.append((kind, dict(payload)))
+
+    module = types.ModuleType("jarvis_events")
+    module.BUS = _Bus()
+    return module
+
+
+def t_a_finished_job_announces_itself_and_never_its_words():
+    """THE FEATURE, proved from the real finish path.
+
+    The owner asked (2026-11-16) to be told when a job he started and is
+    waiting on ends: "send me notifications when I ask on task that takes a
+    while". `_finish()` already writes the terminal state, writes the
+    completion notice to the durable outbox BEFORE anything is said, and then
+    publishes ONE `job` event - which is what a phone or the desktop hears.
+
+    This is deliberately not a test of a helper. The jobs are created the way
+    a route creates them, `run_due()` (the body of `tick()`, which the
+    engine's own heartbeat calls) runs them to the end, and the only fake is
+    the event bus, which lives outside this repository. What is asserted is
+    the frame a client receives.
+
+    BITE, both halves:
+      * add `result` or `params` to `_row_payload()` and the key-set check
+        fails, because the frame would carry the owner's words;
+      * delete the `_emit_entry`/`_emit` call from `_finish()` and the
+        announcement check fails while every other test in this suite stays
+        green - the "test of a function is not a test of its wiring" shape this
+        suite's own docstring was written about.
+    """
+    fresh()
+    real = sys.modules.get("jarvis_events")
+    fake = _recording_bus()
+    sys.modules["jarvis_events"] = fake
+
+    def body(ctx, params):
+        # A progress tick and then a result: only the result is secret.
+        ctx.progress(0.5, "halfway")
+        return {"answer": ANNOUNCE_RESULT}
+
+    def blows_up(ctx, params):
+        raise RuntimeError(ANNOUNCE_RESULT)
+
+    J.register("announce_a_job", body)
+    J.register("announce_a_failure", blows_up)
+    try:
+        jid = J.create("announce_a_job", {"asked": ANNOUNCE_PARAM},
+                       label=ANNOUNCE_LABEL, caps=[])
+        failed = J.create("announce_a_failure", {}, label=ANNOUNCE_LABEL, caps=[])
+        J.run_due()
+    finally:
+        if real is None:
+            sys.modules.pop("jarvis_events", None)
+        else:
+            sys.modules["jarvis_events"] = real
+
+    frames = [(kind, payload) for kind, payload in fake.BUS.frames if kind == "job"]
+    done = [p for _, p in frames if p.get("id") == jid and p.get("state") == "done"]
+    check("the finish path published a job frame for the finished job",
+          len(done) == 1, frames)
+    frame = done[0] if done else {}
+    check("it carries the job's own label and its state",
+          frame.get("label") == ANNOUNCE_LABEL and frame.get("state") == "done",
+          frame)
+    check("and nothing wider: a label and a state, never the result or the params",
+          set(frame) == {"id", "state", "progress", "label", "note", "tainted"},
+          sorted(frame))
+    check("no published frame carries the result or the param words",
+          ANNOUNCE_RESULT not in json.dumps(frames)
+          and ANNOUNCE_PARAM not in json.dumps(frames), frames)
+    check("the result really is on the row, so this is a completion and not an empty one",
+          (J.get(jid) or {}).get("result") == {"answer": ANNOUNCE_RESULT},
+          (J.get(jid) or {}).get("result"))
+    check("progress reaches the bus too, so a pane can draw it (a running frame)",
+          any(p.get("state") == "running" and "progress" in p for _, p in frames),
+          frames)
+    broke = [p for _, p in frames if p.get("id") == failed and p.get("state") == "failed"]
+    check("a job that failed announces its own end, with the same smallest copy",
+          len(broke) == 1 and broke[0].get("label") == ANNOUNCE_LABEL
+          and broke[0].get("state") == "failed", broke)
+    check("a failed job's announcement names no error text of its own beyond `note`",
+          broke and set(broke[0]) == {"id", "state", "progress", "label", "note", "tainted"},
+          sorted(broke[0]) if broke else broke)
 
 
 # --------------------------------------------------------------------------

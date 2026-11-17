@@ -333,10 +333,18 @@ def t_install_wires_only_the_apply_route():
     # The route must answer through the REAL apply, so its two external steps
     # are faked here: the pooled lane's start (no graphics card in a test) and
     # the model record. Nothing else is stubbed - the body parsing, the apply
-    # itself and the answer are the shipped code.
+    # itself and the answer are the shipped code. The pooled start is faked on
+    # the LANE MODULE, because a Coding click reaches it through
+    # `_start_lane_for_the_owner` (the owner's press is the approval since
+    # 2026-11-16) and never through `_default_start_lane`; leaving it real would
+    # ask this machine's port 11450 (and, with the lane down, really load the
+    # 30B - measured 2026-11-16, CI caught it as a 503).
+    import jarvis_model_lanes as L
     real_start, real_adopt = P._default_start_lane, P._default_adopt
+    real_pooled = L.start_pooled_lane
     P._default_start_lane = lambda key: (200, {"ok": True, "changed": True})
     P._default_adopt = lambda ref: {"ok": True, "ref": ref}
+    L.start_pooled_lane = lambda **kw: (200, {"ok": True, "changed": True})
     try:
         P.install(H, origin_ok=lambda h: True, token_ok=lambda h: True,
                   read_body=lambda h: json.dumps({"preset": "coding"}).encode())
@@ -344,6 +352,7 @@ def t_install_wires_only_the_apply_route():
         got = h.do_POST()
     finally:
         P._default_start_lane, P._default_adopt = real_start, real_adopt
+        L.start_pooled_lane = real_pooled
     check("the install wraps POST /api/work/apply, through the real apply",
           got == 200 and seen and seen[-1][1].get("changed") is True
           and seen[-1][1].get("preset", {}).get("id") == "coding", (got, seen))

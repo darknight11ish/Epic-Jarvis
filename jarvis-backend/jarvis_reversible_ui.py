@@ -13,8 +13,12 @@ nothing else.
 WHAT "REVERSIBLE" MEANS HERE, and it means ALL of this or the action is not on
 the list:
 
-  * ONE CLICK BACK. The owner can put it back from the same screen, straight
-    away, without waiting for a model to answer.
+  * ONE CLICK BACK. The owner can put it back from the same screen with another
+    click, and nothing waits for a model to answer. (A heavy preset's click
+    loads its model for about half a minute and pauses the two lane models; the
+    click back restores them. The 2026-11-16 ruling covers it because the press
+    is the same choice the card asked about, and the card is still raised when
+    the same preset is asked for in chat.)
   * ALREADY HERE. It uses something already installed on this PC. Nothing is
     downloaded or installed.
   * NO LOSS. Nothing is deleted, moved out of a backup, or forgotten.
@@ -36,15 +40,22 @@ is forwarded untouched to the handler that already owned it.
 REVERSIBLE_UI_CHOICES - what may be uncarded, and the ONE model/chat path that
 still asks for each (the evidence the fence has two sides):
 
-  * `apply_preset` - one local preset is one model switch on a lane the owner
+  * `apply_preset` - one local preset is one model choice on a lane the owner
     already has. Clicking another preset (or the receipt's Undo) puts it back.
-    The app road is `POST /api/work/apply` -> `jarvis_presets.install()` ->
-    `_apply_body(..., owner_ui=True)` (`jarvis_presets.py:2055`). The model
-    path is `jarvis_presets.apply_from_body` -> `_apply_body(...,
-    owner_ui=False)` (`jarvis_presets.py:1978`) -> `jarvis_models.switch_to`
-    (`jarvis_presets.py:1901`) -> the `switch_model` card
-    (`jarvis-backend/jarvis_models.py:1174`); its callers are
-    `jarvis_model_knowledge.apply_preset` and
+    Since 2026-11-16 that includes the HEAVY rows (Coding and Medical): their
+    pooled three-card lane pauses both lane models while the chosen one loads,
+    another preset brings them back, and the press ANSWERS the one card that
+    start raises instead of asking it a second time. The app road is
+    `POST /api/work/apply` -> `jarvis_presets.install()` ->
+    `_apply_body(..., owner_ui=True)` (`jarvis_presets.py:2348`), which starts a
+    heavy preset's lane through `_start_lane_for_the_owner` with `_OwnerPressed`
+    as the gate (`jarvis_presets.py:1791`). The model path is
+    `jarvis_presets.apply_from_body` -> `_apply_body(..., owner_ui=False)`
+    (`jarvis_presets.py:2253`): a named lane reaches `jarvis_models.switch_to`
+    (`jarvis_presets.py:2175`) -> the `switch_model` card
+    (`jarvis-backend/jarvis_models.py:1174`), and a heavy preset reaches the
+    pooled lane's own `switch_model` card (`jarvis_model_lanes.py:634`); its
+    callers are `jarvis_model_knowledge.apply_preset` and
     `jarvis_settings_registry.set_focus_preset`.
 
   * `switch_model` - choosing a model the PC already has. The previous model
@@ -156,18 +167,26 @@ SWITCH_ROUTE = "/api/models/switch"
 #: else in this program turns a card off for a name in this mapping.
 REVERSIBLE_UI_CHOICES: Mapping[str, Mapping[str, str]] = {
     "apply_preset": {
-        "reason": ("One local preset is one model switch on a lane this PC "
+        "reason": ("One local preset is one model choice on a lane this PC "
                    "already has. The preset rail and the receipt's Undo are "
                    "both one click, and nothing is downloaded, deleted or "
-                   "spent."),
+                   "spent. The heavy rows (Coding and Medical) pause both lane "
+                   "models while their model loads; applying another preset "
+                   "brings them back, and the press answers the one card that "
+                   "start raises (2026-11-16)."),
         "ui_road": ("POST /api/work/apply -> jarvis_presets.install() -> "
-                    "_apply_body(..., owner_ui=True) (jarvis_presets.py:2055)"),
+                    "_apply_body(..., owner_ui=True) (jarvis_presets.py:2348); "
+                    "a heavy preset's pooled lane is started by "
+                    "_start_lane_for_the_owner with _OwnerPressed as its gate "
+                    "(jarvis_presets.py:1791)"),
         "model_path_asks": (
             "jarvis_presets.apply_from_body -> _apply_body(..., "
-            "owner_ui=False) (jarvis_presets.py:1978) -> "
-            "jarvis_models.switch_to (jarvis_presets.py:1901) -> the "
-            "switch_model card (jarvis-backend/jarvis_models.py:1174); "
-            "callers jarvis_model_knowledge.apply_preset and "
+            "owner_ui=False) (jarvis_presets.py:2253) -> a named lane through "
+            "jarvis_models.switch_to (jarvis_presets.py:2175) -> the "
+            "switch_model card (jarvis-backend/jarvis_models.py:1174); a heavy "
+            "preset through the pooled lane's own switch_model card "
+            "(jarvis_model_lanes.py:634). Callers "
+            "jarvis_model_knowledge.apply_preset and "
             "jarvis_settings_registry.set_focus_preset"),
     },
     "switch_model": {
