@@ -294,11 +294,13 @@ def render(document: dict) -> str:
         "",
         _table(rows),
         "",
-        f"Counts: **{scorecard.get('passed', 0)} PASS**, "
-        f"**{scorecard.get('failed', 0)} FAIL**, "
-        f"**{scorecard.get('blocked', 0)} BLOCKED**, "
-        f"**{scorecard.get('not_run', 0)} NOT-RUN**. "
-        f"Cloud spend measured across the rows that ran: "
+        "Counts across these 13 scored rows: "
+        f"**{sum(1 for row in rows if row.get('status') == 'PASS')} PASS**, "
+        f"**{sum(1 for row in rows if row.get('status') == 'FAIL')} FAIL**, "
+        f"**{sum(1 for row in rows if row.get('status') == 'BLOCKED')} BLOCKED**, "
+        f"**{sum(1 for row in rows if row.get('status') == 'NOT-RUN')} NOT-RUN**. "
+        f"The three T5 rows are not scored: they are listed in section 6 and are "
+        f"BLOCKED too. Cloud spend measured across the rows that ran: "
         f"**${scorecard.get('cloud_dollars_measured', 0.0):.6f}**.",
         "",
         "A note on the speed columns: `tokens` is `speed.jsonl`'s own field and it "
