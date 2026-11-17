@@ -63,6 +63,13 @@ downloaded somewhere, point Playwright at it:
     PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_gemini.py
 On Linux with no screen, it starts Xvfb (a pretend screen) if there is one:
 the adapter never runs headless, and neither does this test.
+
+THE WINDOW ITSELF NEEDS A SECOND SWITCH (2026-11-17). The opt-in above decides
+whether this suite RUNS; `REAL_BROWSER_ENV` (`JARVIS_RUN_REAL_BROWSER`) decides
+whether a browser window may OPEN. That is what lets a CI job keep the code-only
+checks without ever starting a browser - which `backend-shard` did by accident
+after it began installing Playwright for another suite. No job in ci.yml sets
+it, and backend/test_browser_test_guard.py fails if one ever does.
 """
 from __future__ import annotations
 
@@ -941,6 +948,31 @@ def visible_browser_tests_allowed(env=None) -> bool:
     return str(env.get(VISIBLE_BROWSER_ENV) or "").strip() == "1"
 
 
+#: THE SECOND SWITCH, FOR THE WINDOW ITSELF (2026-11-17). The opt-in above says
+#: this suite may RUN, and CI sets it so the code-only checks still happen. This
+#: one says a real browser window may OPEN, and only a person at a desk sets it.
+#: They must be separate: a required job must never be able to open a browser, and
+#: "Playwright is installed" was never a safe stand-in for "a window is wanted" -
+#: while the required `backend-shard` job installed Playwright for
+#: test_browser_control_live.py (2026-10-27 to 2026-11-17) all four guarded suites
+#: really ran a browser there, and a Playwright page click timed out in that job.
+#: That install is gone (a required job must not launch a browser); this switch
+#: stays, because the owner's PC DOES have Playwright and a desk run should still
+#: be able to watch the window. No CI job sets it, and
+#: backend/test_browser_test_guard.py fails if one ever does.
+REAL_BROWSER_ENV = "JARVIS_RUN_REAL_BROWSER"
+
+
+def real_browser_window_allowed(env=None) -> bool:
+    """True only when the operator has explicitly asked for the window itself.
+
+    Exactly "1", like the opt-in above: anything else fails closed, so a
+    half-typed value can never put a browser on a screen.
+    """
+    env = os.environ if env is None else env
+    return str(env.get(REAL_BROWSER_ENV) or "").strip() == "1"
+
+
 def main():
     xvfb = None
     served = [False]
@@ -964,7 +996,10 @@ def main():
                 traceback.print_exc()
                 check(f"{fn.__name__} ran without crashing", False, repr(exc))
         skip = ""
-        if not G.playwright_installed():
+        if not real_browser_window_allowed():
+            skip = (f"{REAL_BROWSER_ENV}=1 is not set, so this run opened no "
+                    f"browser window (the code checks above still ran)")
+        elif not G.playwright_installed():
             skip = "playwright is not installed"
         else:
             xvfb, skip = _screen()

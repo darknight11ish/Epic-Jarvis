@@ -286,10 +286,14 @@ def t_a_zero_check_suite_fails_even_when_its_skip_is_legitimate():
     and reported them as NO-CHECKS - "neither ok nor skip", counted in no list,
     and NOT failing the run. In the required `backend` job that made
     test_browser_control_live.py a green line under a suite that had run
-    nothing, every push, because that job never installed Playwright. The three
-    exemptions are gone (2026-10-27, partner corrections item 3): the rule is
-    `passed == 0` is a FAILURE, and the fix for a missing package is to install
-    it - which the required job now does for all three."""
+    nothing, every push, because that job did not install Playwright then. The
+    three exemptions are gone (2026-10-27, partner corrections item 3): the rule
+    is `passed == 0` is a FAILURE, and the fix for a missing package is to
+    install it - which the required job does for cryptography and Pillow.
+    Playwright became the exception on 2026-11-17: a REQUIRED job must not even
+    be able to launch a browser, so its install left the required job and the one
+    suite that needs it is skipped BY NAME by the runner instead (the control
+    below pins that this is a printed, counted, named skip - never a pass)."""
     check("the allowlist is gone, not merely emptied",
           not hasattr(R, "ZERO_CHECK_ALLOWED"), dir(R))
     name = "test_pillow_pictures.py"
@@ -315,14 +319,24 @@ def t_a_zero_check_suite_fails_even_when_its_skip_is_legitimate():
     check("...and not as a suite skipped by name", skipped == [], skipped)
 
 
-def t_the_real_sweep_fails_a_zero_check_suite_whatever_its_name():
-    """CONTROL, end to end with REAL suite files: both zero-check shapes fail.
+def t_the_real_sweep_fails_a_zero_check_suite_and_skips_the_browser_one_by_name():
+    """CONTROL, end to end with REAL suite files: the zero-check rule still bites,
+    and the one suite that needs an uninstalled browser package is SKIPPED BY NAME.
 
-    No git means test_apps.py skips everything and exits 0. Shadowing playwright
-    makes test_browser_control_live.py do the same - and that one USED to be
-    exempt by name, so this is the case that changed: it now fails the sweep
-    too. Both are run through the real `run_suites.py`, not through a helper,
-    because the exit code is what CI reads."""
+    No git means test_apps.py skips every check and exits 0, and that still FAILS
+    the sweep - the rule the 2026-10-27 corrections introduced, proved against a
+    real suite file rather than a stubbed one.
+
+    Shadowing playwright (a package on PYTHONPATH whose own `__init__` raises)
+    makes test_browser_control_live.py unable to run. Until 2026-11-17 it was
+    STARTED and the zero-check rule failed it, because the required
+    `backend-shard` job installed Playwright for it. That install is gone - a
+    required job must not even be able to launch a browser - so the runner now
+    skips this one suite BY NAME when the package is absent, and the checks below
+    pin the difference that matters: the skip is PRINTED with its reason, it
+    counts as a skip, the run's SKIPPED BY NAME line names it, and it is never
+    `ok` and never a pass. Both runs go through the real `run_suites.py`, not a
+    helper, because the exit code is what CI reads."""
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
                PATH="")
     for key in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
@@ -340,6 +354,16 @@ def t_the_real_sweep_fails_a_zero_check_suite_whatever_its_name():
     check("and the run's own failed list names it",
           "failed: test_apps.py" in out, out[-1200:])
 
+    # The package probe itself, both ways - a module that is always present and
+    # one that never is - so the skip below cannot be keyed on a typo.
+    check("package_missing() says a module that is there is there",
+          R.package_missing("json") is False, R.package_missing("json"))
+    check("package_missing() says a module that is not there is missing",
+          R.package_missing("jarvis_no_such_module_xyz") is True)
+    check("the suite is listed against the module it actually imports",
+          R.NEEDS_PACKAGE.get("test_browser_control_live.py") == "playwright.sync_api",
+          R.NEEDS_PACKAGE)
+
     work = Path(tempfile.mkdtemp(prefix="jarvis-fake-playwright-"))
     try:
         (work / "playwright").mkdir()
@@ -352,14 +376,22 @@ def t_the_real_sweep_fails_a_zero_check_suite_whatever_its_name():
             cwd=HERE, env=shadowed, capture_output=True, text=True, timeout=900,
             encoding="utf-8", errors="replace")
         out = (r.stdout or "") + (r.stderr or "")
-        check("a suite whose Playwright is missing ALSO fails the sweep now "
-              "(it used to be exempt by name)",
-              r.returncode != 0, (r.returncode, out[-1200:]))
-        check("its line is a FAIL, not an ok line and not NO-CHECKS",
-              "FAIL  test_browser_control_live.py" in out
-              and "NO-CHECKS" not in out
-              and "ok    test_browser_control_live.py" not in out, out[-1200:])
-        check("and the run's failed list names it", "failed:" in out, out[-1200:])
+        check("a named skip for a missing browser package is not a failure",
+              r.returncode == 0, (r.returncode, out[-1200:]))
+        check("the suite is printed as `skip` with the package and the reason",
+              "skip  test_browser_control_live.py" in out
+              and "needs the optional 'playwright' package" in out, out[-1200:])
+        check("... and says out loud that a skip is not a pass",
+              "A skip is not a pass" in out, out[-1200:])
+        check("... and names where it DOES run, so the coverage is findable",
+              "backend-browser-live" in out, out[-1200:])
+        check("it is never `ok` - the shape that made this suite a lie before",
+              "ok    test_browser_control_live.py" not in out, out[-1200:])
+        check("it is never counted as a FAIL either - nothing ran, so nothing failed",
+              "FAIL  test_browser_control_live.py" not in out, out[-1200:])
+        named = [line for line in out.splitlines() if line.startswith("SKIPPED BY NAME")]
+        check("the run's SKIPPED BY NAME line names it, where the totals are",
+              len(named) == 1 and "test_browser_control_live.py" in named[0], named)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

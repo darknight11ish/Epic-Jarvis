@@ -6530,9 +6530,16 @@ $skipped = @()
 # A WHOLE-SUITE OPT-OUT IS NOT A MISSING FILE (2026-10-26, review of #861).
 # Four suites open a real, VISIBLE browser window and print one SKIPPED
 # sentence unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set; they read that
-# themselves, and the CI jobs set it where no browser can start. Counting that
-# as "a backend file or a package is not there" printed a false reason on
-# every update, so the two are kept apart and reported in their own words.
+# themselves, and the CI jobs set it so those suites' code-only checks still
+# run. What stops a window there is the suites' OWN second switch,
+# JARVIS_RUN_REAL_BROWSER, which no CI job sets - not the absence of a
+# browser: the Ubuntu backend job installed Playwright's Chromium for another
+# suite from 2026-10-27 to 2026-11-17 (it no longer does - a required job must
+# not launch a browser), and these four really drove it until the second switch
+# existed.
+# Counting that as "a backend file or a package is not there" printed a false
+# reason on every update, so the two are kept apart and reported in their own
+# words.
 # Proven/Unproven is unchanged: either kind of skip still means NOT fully
 # proven.
 $skippedVisible = @()
