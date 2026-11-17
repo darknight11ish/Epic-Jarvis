@@ -130,6 +130,7 @@ model-recommendations.patch	model-recommendations/d4b957c.patch	d4b957c1602c1798
 no-expiry-cards.patch	no-expiry-cards/0712359.patch	07123594c31eff25ac0ab2a4ec693740eef602cc	2026-10-23T15:49:55-07:00	feat(gate): only pairing, an approval key and a restore may never expire (rescue #4, Q1)
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
+ollama-direct.patch	ollama-direct/e7a461b.patch	e7a461ba97a9f8c9ddccfb892ed87b48a0bea692	2026-11-03T13:09:04-08:00	fix(cloud): escalate an ordinary turn, and answer a blank cloud reply on this PC (2026-11-03)
 ollama-direct.patch	ollama-direct/310c72a.patch	310c72a179c13c9d87cdc23a5a35a649d45233fc	2026-10-06T23:58:10-07:00	the cloud lane asks the service's model, not its own lane name
 ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again
 ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340d566ef05	2026-10-06T20:32:34-07:00	The cloud lane gets a real transport, and DeepSeek is behind it

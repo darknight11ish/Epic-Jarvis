@@ -38,8 +38,9 @@ from contextlib import closing
 from typing import Any, Callable, Optional
 
 import jarvis_memory as M
+from jarvis_models import ollama_url_on_this_pc
 
-OLLAMA = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+OLLAMA = ollama_url_on_this_pc().rstrip("/")
 
 
 def _cfg(key: str, default):

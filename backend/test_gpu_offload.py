@@ -282,6 +282,107 @@ def t_it_is_surfaced():
           "a banner on the healthy path is noise on every visit")
 
 
+def t_the_model_address_is_this_pc_or_refused():
+    """`OLLAMA_URL` is a model address only when it names this PC.
+
+    The chat, the learner and the notes all promise the model is on this
+    machine, and three files read that one variable to keep the promise:
+    `jarvis_models.OLLAMA`, `jarvis_extract.OLLAMA` and `jarvis_hud.OLLAMA_URL`
+    all call one function now, so the promise is checked instead of assumed. A
+    value naming any other host is refused: this PC's loopback address is used
+    instead, and one plain sentence says what was wrong.
+
+    The first checks pin what must NOT change - unset, empty and loopback are
+    byte-for-byte what they were - and the rest prove the refusal.
+    """
+    import contextlib
+    import importlib.util
+    import io
+    import os
+
+    target = BASE / "jarvis_models.py"
+    if BASE is None or not target.is_file():
+        check("the model address is checked at the one place it is read",
+              False, f"no jarvis_models.py to read under {BASE}")
+        return
+    saved = os.environ.get("OLLAMA_URL")
+    loaded = [0]
+
+    def load(value):
+        """The real module imported fresh with `OLLAMA_URL` set to `value`,
+        so the module-level read is what is being tested, not a copy of it."""
+        if value is None:
+            os.environ.pop("OLLAMA_URL", None)
+        else:
+            os.environ["OLLAMA_URL"] = value
+        loaded[0] += 1
+        name = f"jarvis_models_url_check_{loaded[0]}"
+        spec = importlib.util.spec_from_file_location(name, str(target))
+        module = importlib.util.module_from_spec(spec)
+        said = io.StringIO()
+        # `@dataclass` in the module looks its class's module up in
+        # sys.modules while the class is built, so the copy must be there
+        # before it executes - exactly as a plain `import` leaves it.
+        sys.modules[name] = module
+        try:
+            with contextlib.redirect_stderr(said):
+                spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(name, None)
+        return module, said.getvalue()
+
+    try:
+        mod, said = load(None)
+        check("unset still means the loopback default",
+              mod.OLLAMA == "http://127.0.0.1:11434", mod.OLLAMA)
+        check("... and says nothing to the owner", said == "", said)
+
+        mod, said = load("")
+        check("an empty value stays empty, exactly as it was",
+              mod.OLLAMA == "", repr(mod.OLLAMA))
+        check("... and is not reported as a remote address", said == "", said)
+
+        for value, want in (
+                ("http://127.0.0.1:11436/", "http://127.0.0.1:11436"),
+                ("http://localhost:11434", "http://localhost:11434"),
+                ("http://[::1]:11434", "http://[::1]:11434"),
+                ("HTTP://LOCALHOST:11434", "HTTP://LOCALHOST:11434")):
+            mod, said = load(value)
+            check(f"a loopback value is used exactly as given ({value})",
+                  mod.OLLAMA == want, mod.OLLAMA)
+            check(f"... and nothing is said about {value}", said == "", said)
+
+        default = "http://127.0.0.1:11434"
+        for value, host in (
+                ("http://192.168.1.9:11434", "192.168.1.9"),
+                ("https://ollama.example.com", "ollama.example.com"),
+                ("http://127.0.0.1@evil.example.com/", "evil.example.com"),
+                ("not a url", "")):
+            mod, said = load(value)
+            check(f"a value naming another host is refused ({value})",
+                  mod.OLLAMA == default, mod.OLLAMA)
+            line = said.strip()
+            check(f"... and the refusal names OLLAMA_URL and what was wrong ({value})",
+                  line.startswith("! OLLAMA_URL is") and "refused" in line
+                  and (host in line if host else "host" in line), line)
+            check(f"... in one plain line, not a traceback ({value})",
+                  line and "\n" not in line and line.endswith("."), line)
+
+        mod, _said = load(None)
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said):
+            first = mod.ollama_url_on_this_pc("http://10.0.0.5:11434")
+            second = mod.ollama_url_on_this_pc("http://10.0.0.5:11434")
+        check("the same bad value is refused every time and said once",
+              first == second == default
+              and said.getvalue().count("OLLAMA_URL is") == 1, said.getvalue())
+    finally:
+        if saved is None:
+            os.environ.pop("OLLAMA_URL", None)
+        else:
+            os.environ["OLLAMA_URL"] = saved
+
+
 def main():
     for fn in (t_all_on_the_gpu, t_all_on_the_cpu, t_partial_spill,
                t_the_worst_model_wins, t_nothing_loaded, t_it_never_raises,
@@ -291,6 +392,7 @@ def main():
                t_an_unreachable_chat_lane_is_said_plainly,
                t_nothing_loaded_on_the_chat_lane,
                t_it_resolves_the_one_source_and_never_guesses,
+               t_the_model_address_is_this_pc_or_refused,
                t_it_is_surfaced):
         print(f"\n--- {fn.__name__} ---")
         try:

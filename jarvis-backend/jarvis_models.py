@@ -51,6 +51,7 @@ import json
 import math
 import os
 import re
+import sys
 import threading
 import time
 import urllib.error
@@ -67,8 +68,62 @@ except Exception:                                    # pragma: no cover
     fw = None
     _CFG_DIR = Path(os.path.expanduser("~/.openjarvis"))
 
+#: Where the local model is when the owner has not named an address.
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+
+#: The only host names that mean "the model on this PC".
+OLLAMA_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+#: Values already refused, so one bad variable is not three lines at boot:
+#: jarvis_models, jarvis_extract and jarvis_hud all read it at import.
+_REFUSED_OLLAMA_URLS = set()
+
+
+def ollama_url_on_this_pc(raw=None):
+    """`OLLAMA_URL`, but only when it names this PC.
+
+    The conversation, the facts the learner extracts and the notes it writes
+    are all meant to stay on this machine, and that is only true while the
+    address is loopback. This is the ONE place the variable is read: a value
+    naming any other host is refused, the loopback default is used instead,
+    and one plain sentence on stderr says what was wrong with it.
+
+    Three things must not change, and do not:
+      * unset returns the loopback default, as `os.environ.get`'s own
+        default did;
+      * empty returns empty, which is what all three call sites already did
+        with it (a value that is already useless is not made different here);
+      * a loopback value is returned exactly as given, so callers keep their
+        own `.rstrip("/")` and the address is byte-for-byte today's.
+
+    `raw` exists so a test can ask about a value without setting the
+    environment; every caller passes nothing.
+    """
+    if raw is None:
+        raw = os.environ.get("OLLAMA_URL")
+    if raw is None:
+        return DEFAULT_OLLAMA_URL
+    value = str(raw)
+    if not value.strip():
+        return value
+    try:
+        host = (urllib.parse.urlsplit(value.strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        host = ""
+    if host in OLLAMA_LOOPBACK_HOSTS:
+        return value
+    if value not in _REFUSED_OLLAMA_URLS:
+        _REFUSED_OLLAMA_URLS.add(value)
+        said = (f"its host {host!r} is not this PC" if host
+                else "it does not name a host")
+        print(f"  ! OLLAMA_URL is {value!r}, and {said}, so it was refused "
+              f"and {DEFAULT_OLLAMA_URL} is used instead (it must be "
+              f"127.0.0.1, localhost or ::1).", file=sys.stderr)
+    return DEFAULT_OLLAMA_URL
+
+
 CACHE = Path(os.environ.get("JARVIS_MODEL_CACHE", _CFG_DIR / "model-catalog.json"))
-OLLAMA = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+OLLAMA = ollama_url_on_this_pc().rstrip("/")
 UA = "jarvis-model-steward/1.0 (personal, non-commercial)"
 _LOCK = threading.RLock()
 
