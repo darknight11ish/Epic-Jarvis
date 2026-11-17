@@ -125,6 +125,13 @@ GATE = "check_egress"
 #: fixtures and its transport is replaced; a production sender the audit found
 #: is listed only with the honest reason that it is not wired yet.
 ALLOWED = {
+    # A SUITE, not a sender (2026-11-17). test_speed_record.py builds a fake
+    # usage record in order to price one answer: the host and url are fixture
+    # STRINGS that are never opened, and the request itself is stubbed. #1337
+    # added them after this census landed, which is why main went red.
+    "backend/test_speed_record.py":
+        "a suite; its host and URL are fixture strings on a fake usage record, and no "
+        "socket is opened",
     # ------------------------------------------------------------------
     # Production senders the audit found and this round did NOT wire.
     # Each waits for the lane that owns it, and says so plainly: a "not

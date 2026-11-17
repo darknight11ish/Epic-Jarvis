@@ -837,6 +837,82 @@ fn try_notify_fired(
 /// [`remove_fired`] can take exactly that one away.
 const SCHEDULE_GROUP: &str = "jarvis-schedule";
 
+/// The group a finished background job's toast is put in, tagged with its job
+/// id: a second notice for the SAME job and state replaces this one (the PC's
+/// durable outbox re-announces a completion after a crash, and that must not
+/// stack two toasts for one job).
+const JOB_DONE_GROUP: &str = "jarvis-jobs";
+
+/// The action a finished job's toast offers, and the marker its body click
+/// carries: both open the Brain at its Work tab, where the result already is.
+/// One string, because the button and the click must ask for the same thing.
+const OPEN_WORK_MARKER: &str = "jarvis-openwork:";
+
+/// The words on that button. It navigates; it collects, answers and approves
+/// nothing.
+const OPEN_WORK_LABEL: &str = "Open Work";
+
+/// Tells the owner a background job ENDED (backend jarvis_jobs.py `_emit`,
+/// 2026-11-16), with the job's own label and its state and nothing else - no
+/// result, no params, no error text ([`crate::stream::job_done_words`] makes
+/// the words, and it is pure so it is tested without a window).
+///
+/// ONE action, "Open Work", plus the body's own marker: both ask for the
+/// Brain's Work tab, which is where `GET /api/jobs` already puts the answer.
+/// Nothing here can collect, re-run or approve anything, and the toast never
+/// renders the words of the work - the rule this whole module was written
+/// around.
+///
+/// Tagged by job id in its own group ([`JOB_DONE_GROUP`]) rather than by
+/// [`tag_as_job`], so taking a schedule toast away can never take this one.
+pub fn notify_job_done(app: &AppHandle, title: &str, body: &str, id: &str) {
+    if is_uninstalled_build() {
+        crate::commands::notify(app, title, body);
+        return;
+    }
+    if let Err(e) = try_notify_job_done(title, body, id) {
+        crate::logfile::log(&format!(
+            "[jarvis] a finished job's toast failed, falling back to a plain one: {e}"
+        ));
+        crate::commands::notify(app, title, body);
+    }
+}
+
+fn try_notify_job_done(title: &str, body: &str, id: &str) -> windows::core::Result<()> {
+    let xml = job_done_xml(title, body);
+    let doc = XmlDocument::new()?;
+    doc.LoadXml(&HSTRING::from(xml))?;
+    let toast = ToastNotification::CreateToastNotification(&doc)?;
+    toast.SetTag(&HSTRING::from(id))?;
+    toast.SetGroup(&HSTRING::from(JOB_DONE_GROUP))?;
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(AUMID))?;
+    notifier.Show(&toast)
+}
+
+/// The XML of a finished job's toast: two lines of words and one Open Work
+/// action. No Snooze and no Stop - nothing is ringing, so there is nothing to
+/// silence, and Android's own notice for the same event carries no button
+/// either (it is tapped through).
+fn job_done_xml(title: &str, body: &str) -> String {
+    format!(
+        r#"<toast activationType="foreground" launch="{marker}">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>{title}</text>
+      <text>{body}</text>
+    </binding>
+  </visual>
+  <actions>
+    <action content="{label}" arguments="{marker}" activationType="foreground"/>
+  </actions>
+</toast>"#,
+        marker = OPEN_WORK_MARKER,
+        title = escape_xml(title),
+        body = escape_xml(body),
+        label = OPEN_WORK_LABEL,
+    )
+}
+
 fn tag_as_job(toast: &ToastNotification, id: &str) -> windows::core::Result<()> {
     toast.SetTag(&HSTRING::from(id))?;
     toast.SetGroup(&HSTRING::from(SCHEDULE_GROUP))
@@ -998,6 +1074,10 @@ pub(crate) enum ToastOpen {
     /// An approval's card id. Bring Jarvis forward AND open that card, through
     /// the same command Settings' "Open the card" button calls.
     Card(String),
+    /// A finished background job's toast (2026-11-16): the Brain, on its Work
+    /// tab - the pane that already reads `GET /api/jobs`, where the result is.
+    /// Navigation only; nothing is collected and nothing is approved.
+    Work,
 }
 
 /// The longest card id a launch argument may name - the same cap
@@ -1028,6 +1108,12 @@ pub(crate) fn open_request_from_argv(argv: &[String]) -> Option<ToastOpen> {
         if rest.is_empty() {
             // The marker on its own: a toast that names no card.
             return Some(ToastOpen::Window);
+        }
+        // A finished job's toast (2026-11-16). One fixed word, no id: the
+        // Work tab shows every job, so nothing here names one - and that is
+        // why this cannot be mistaken for a card id.
+        if rest == "work:" {
+            return Some(ToastOpen::Work);
         }
         let id = rest.strip_prefix(':')?;
         // `jarvis-openjob:` lands here with "job:..." and is refused by the
@@ -1062,6 +1148,11 @@ pub(crate) fn open_from_toast(app: &AppHandle, request: &ToastOpen) {
             Some(id.clone()),
             Some(CARD_TARGET.to_string()),
         ),
+        // "Open Work" on a finished job's toast: the same door the tray's
+        // History row and the HUD's own navigation use, and the same App lock
+        // - `show_brain_at` asks it, so a locked PC still gets the lock screen
+        // first. The place must be one `windows::BRAIN_PLACES` accepts.
+        ToastOpen::Work => crate::windows::show_brain_at(app, "work"),
     };
     if let Err(e) = opened {
         // Logged, not toasted: a toast about a toast that could not open is
@@ -1801,5 +1892,90 @@ mod tests {
     /// This file's own text, for the pin above.
     fn src_of_self() -> &'static str {
         include_str!("winrt_toast.rs")
+    }
+
+    // ------------------- a finished background job's toast (2026-11-16) ----
+
+    /// The toast says the two lines of words and offers ONE action, "Open
+    /// Work" - no Snooze, no Stop, nothing that acts. The words themselves are
+    /// made in `stream::job_done_words`; this holds the shape.
+    #[test]
+    fn a_finished_job_toast_offers_one_open_work_and_nothing_else() {
+        let xml = job_done_xml("read the repo", "Finished. Open Work to see what it found.");
+        assert!(xml.contains("<text>read the repo</text>"), "{xml}");
+        assert!(
+            xml.contains("<text>Finished. Open Work to see what it found.</text>"),
+            "{xml}"
+        );
+        assert_eq!((xml.matches("<action ").count()), 1, "{xml}");
+        assert!(
+            xml.contains(&format!(
+                r#"<action content="{OPEN_WORK_LABEL}" arguments="{OPEN_WORK_MARKER}" activationType="foreground"/>"#
+            )),
+            "{xml}"
+        );
+        assert!(
+            xml.contains(&format!(r#"launch="{OPEN_WORK_MARKER}""#)),
+            "{xml}"
+        );
+        for banned in [OPEN_PREFIX, "Snooze", "Stop", "jarvis-approval"] {
+            assert!(
+                !xml.contains(banned),
+                "a job toast contains {banned}: {xml}"
+            );
+        }
+        // The owner's own words are escaped, never parsed as markup.
+        let escaped = job_done_xml("a <b> label", "and <i> words");
+        assert!(escaped.contains("a &lt;b&gt; label"), "{escaped}");
+    }
+
+    /// A click on that toast's body, or its Open Work button, is read as a
+    /// WORK request - and the other markers keep the meanings they had.
+    #[test]
+    fn a_work_click_is_read_from_the_launch_arguments() {
+        assert_eq!(
+            open_request_from_argv(&[OPEN_WORK_MARKER.to_string()]),
+            Some(ToastOpen::Work)
+        );
+        assert_eq!(
+            open_request_from_argv(&["--flag".to_string(), OPEN_WORK_MARKER.to_string()]),
+            Some(ToastOpen::Work)
+        );
+        // The markers that are not this one are unchanged.
+        assert_eq!(
+            open_request_from_argv(&[OPEN_TOAST_PREFIX.to_string()]),
+            Some(ToastOpen::Window)
+        );
+        assert_eq!(
+            open_request_from_argv(&[format!("{OPEN_TOAST_PREFIX}:a1")]),
+            Some(ToastOpen::Card("a1".to_string()))
+        );
+        assert_eq!(
+            open_request_from_argv(&[format!("{OPEN_PREFIX}s0123456789")]),
+            None,
+            "a reminder's Open button is not a body click"
+        );
+        assert_eq!(
+            open_request_from_argv(&[format!("{OPEN_WORK_MARKER}x")]),
+            None,
+            "only the exact Work marker opens Work"
+        );
+    }
+
+    /// And the place it asks for is one `windows::BRAIN_PLACES` accepts, or
+    /// `show_brain_at` would refuse every Open Work click in silence.
+    #[test]
+    fn the_open_work_place_is_one_the_brain_window_accepts() {
+        assert!(
+            crate::windows::BRAIN_PLACES.contains(&"work"),
+            "windows.rs's closed place list does not carry \"work\": {:?}",
+            crate::windows::BRAIN_PLACES
+        );
+        // And the page knows the name: it is a view in brain.js's own table.
+        let brain_js = include_str!("../../src/brain.js");
+        assert!(
+            brain_js.contains("work: { title: \"Work\""),
+            "brain.js has no \"work\" view for the place to land on"
+        );
     }
 }

@@ -85,6 +85,13 @@ _NUMBER_FIELDS = {
     # 2026-09-26): summed over the answer's requests to the model, and how
     # many requests that was (note_prompt)
     "cached_tokens", "prompt_rounds",
+    # the MODEL'S OWN count of what it read back, from
+    # `usage.completion_tokens` (which is Ollama's `eval_count`), summed over
+    # the answer's requests to the model (note_prompt). The same figure
+    # `tokens` carries when the model reported one, kept under its own name so
+    # the speed record and the cost of an answer read ONE number. Absent -
+    # never 0 - when no answer carried one (R7, 2026-11-16).
+    "completion_tokens",
     # one speed measurement of one model (measure())
     "probes", "load_ms",
     # one model switch (SwitchSpeed)
@@ -350,15 +357,18 @@ class Meter:
             if t:
                 self.ollama = t
 
-    def note_prompt(self, *, prompt_tokens=None, cached_tokens=None, rounds=None) -> None:
+    def note_prompt(self, *, prompt_tokens=None, cached_tokens=None,
+                    completion_tokens=None, rounds=None) -> None:
         """The chat tool loop's own count (jarvis_agent.PROMPT_USAGE): the
-        prompt tokens of every request this answer made to the model, and
-        how many of them Ollama reused instead of reading again. The loop
-        re-writes the stream the client sees, so those counts never pass
-        through feed(). Numbers only; anything else is ignored."""
+        prompt tokens of every request this answer made to the model, how many
+        of them Ollama reused instead of reading again, and how many tokens the
+        model read back as its answers. The loop re-writes the stream the
+        client sees, so those counts never pass through feed(). Numbers only;
+        anything else is ignored."""
         def num(v):
             return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
         self.noted = {"prompt_tokens": num(prompt_tokens), "cached_tokens": num(cached_tokens),
+                      "completion_tokens": num(completion_tokens),
                       "prompt_rounds": num(rounds)}
 
     # -- the row -------------------------------------------------------------
@@ -394,6 +404,18 @@ class Meter:
             tokens, source = self.usage_tokens, "usage"
             if gen_s and gen_s >= 0.05:
                 tps = self.usage_tokens / gen_s
+        elif (self.noted or {}).get("completion_tokens"):
+            # THE CHAT TOOL LOOP'S OWN TOTAL (R7, 2026-11-16). The model's own
+            # `usage.completion_tokens`/`eval_count`, summed over this answer's
+            # requests and handed over by note_prompt(). It is the MODEL's
+            # figure, not one counted here, so it is called "usage" exactly
+            # like one a relayed stream carried - and it is the same number the
+            # cost of the answer is worked out from, instead of the content
+            # pieces counted below. (The pieces stay the fallback: they are the
+            # only thing there is when the model reports nothing.)
+            tokens, source = self.noted["completion_tokens"], "usage"
+            if gen_s and gen_s >= 0.05:
+                tps = tokens / gen_s
         elif self.deltas:
             tokens, source = self.deltas, "deltas"
             if gen_s and gen_s >= 0.05 and self.deltas >= 2:
@@ -418,6 +440,12 @@ class Meter:
             "cached_tokens": (self.cached_tokens if self.cached_tokens is not None
                               else (self.noted or {}).get("cached_tokens")),
             "prompt_rounds": (self.noted or {}).get("prompt_rounds"),
+            # The model's own count of what it read back, under its own name -
+            # the same figure `tokens` carries when the model reported one, and
+            # None when it reported none. Never 0 as a stand-in for "unknown":
+            # a 0 here is a number the model sent, and an unknown is said as an
+            # unknown (R7, 2026-11-16).
+            "completion_tokens": tokens if source in ("ollama", "usage") else None,
         })
 
     def finish(self, model: Optional[str] = None, *, tools: Optional[bool] = None,
@@ -491,16 +519,17 @@ def start(model: str = "", *, tools: bool = False) -> Optional[Meter]:
         return None
 
 
-def note_prompt(*, prompt_tokens=None, cached_tokens=None, rounds=None) -> bool:
-    """jarvis_agent's prompt counts for the answer being timed on this
-    thread (Meter.note_prompt). False, and nothing kept, when no answer is
+def note_prompt(*, prompt_tokens=None, cached_tokens=None,
+                completion_tokens=None, rounds=None) -> bool:
+    """jarvis_agent's prompt and answer counts for the answer being timed on
+    this thread (Meter.note_prompt). False, and nothing kept, when no answer is
     being timed here. Never raises."""
     try:
         m = getattr(_current, "meter", None)
         if m is None or m._done:
             return False
         m.note_prompt(prompt_tokens=prompt_tokens, cached_tokens=cached_tokens,
-                      rounds=rounds)
+                      completion_tokens=completion_tokens, rounds=rounds)
         return True
     except Exception:
         return False

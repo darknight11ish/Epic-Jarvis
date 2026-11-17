@@ -191,30 +191,39 @@ def t_prompt_reuse_is_recorded():
     # totals through note_prompt(), then the hook's finish().
     with NoNetwork():
         m = S.start("jarvis-primary")
-        ok = S.note_prompt(prompt_tokens=4200, cached_tokens=3900, rounds=2)
+        ok = S.note_prompt(prompt_tokens=4200, cached_tokens=3900,
+                           completion_tokens=310, rounds=2)
         m.feed(sse(["Done", "."]))
         row = m.finish(log=log, gpu=lambda n: None, background=False)
     check("note_prompt() reaches the answer being timed on this thread", ok is True)
     check("... and its row has the turn's prompt, reused and request counts",
           row and row.get("prompt_tokens") == 4200 and row.get("cached_tokens") == 3900
           and row.get("prompt_rounds") == 2, row)
+    check("... and the model's own completion count, under its own name (R7)",
+          row and row.get("completion_tokens") == 310
+          and row.get("tokens") == 310 and row.get("token_source") == "usage", row)
     check("after finish, nothing is being timed here: note_prompt() keeps nothing",
-          S.note_prompt(prompt_tokens=1, cached_tokens=1, rounds=1) is False)
+          S.note_prompt(prompt_tokens=1, cached_tokens=1, completion_tokens=1,
+                        rounds=1) is False)
     m2 = S.start("x")
-    S.note_prompt(prompt_tokens="a secret sentence", cached_tokens=-4, rounds=True)
+    S.note_prompt(prompt_tokens="a secret sentence", cached_tokens=-4,
+                  completion_tokens=-1, rounds=True)
     m2.feed(sse(["ok", "ay"]))
     bad = m2.finish(log=log, gpu=lambda n: None, background=False)
     check("anything but a whole number is dropped, never written",
           bad and "prompt_tokens" not in bad and "cached_tokens" not in bad
-          and "prompt_rounds" not in bad, bad)
+          and "completion_tokens" not in bad and "prompt_rounds" not in bad, bad)
     raw = log.path.read_text(encoding="utf-8")
     check("no words in the file", "secret" not in raw and "there" not in raw)
 
 
 def t_the_tool_loop_asks_for_and_hands_over_prompt_reuse():
     """jarvis_agent asks Ollama for the usage chunk on every streamed round,
-    sums prompt and reused tokens over the turn's rounds, returns them, and
-    hands them to the answer being timed on this thread."""
+    sums the prompt, reused AND completion counts over the turn's rounds,
+    returns them, and hands them to the answer being timed on this thread - so
+    the speed record and the cloud cost of an answer read ONE number, and an
+    answer that carries no count is recorded as unknown rather than as 0 (R7,
+    2026-11-16)."""
     require_shipped("jarvis_agent.py")
     import jarvis_agent as AG
 
@@ -236,44 +245,62 @@ def t_the_tool_loop_asks_for_and_hands_over_prompt_reuse():
                 "model": "m", "choices": [{"index": 0, "delta": delta,
                                            "finish_reason": finish}]}
 
-    def body(chunks, prompt, cached):
+    def body(chunks, prompt, cached, completion=None):
+        """One streamed round ending in the usage chunk PROMPT_USAGE asks for.
+        `completion` left None is an answer that carries no such count at all -
+        the shape an older Ollama, or a service that omits it, sends."""
+        usage = {"prompt_tokens": prompt,
+                 "prompt_tokens_details": {"cached_tokens": cached}}
+        if completion is not None:
+            usage["completion_tokens"] = completion
         lines = [json.dumps(c) for c in chunks]
-        lines.append(json.dumps({"id": "c1", "choices": [], "usage": {
-            "prompt_tokens": prompt, "completion_tokens": 3,
-            "prompt_tokens_details": {"cached_tokens": cached}}}))
+        lines.append(json.dumps({"id": "c1", "choices": [], "usage": usage}))
         return ("".join(f"data: {x}\n\n" for x in lines) + "data: [DONE]\n\n").encode()
 
+    # Two rounds, so a total that is right by luck from one round cannot pass:
+    # 3 + 4 = 7 completion tokens, 3000 + 3100 prompt tokens.
     rounds = [
         body([chunk({"role": "assistant", "tool_calls": [{"id": "t1", "index": 0,
               "type": "function", "function": {"name": "calculator",
                                                "arguments": "{\"expression\": \"2+2\"}"}}]}),
-              chunk({}, "tool_calls")], 3000, 0),
+              chunk({}, "tool_calls")], 3000, 0, completion=3),
         body([chunk({"role": "assistant", "content": "It is 4."}), chunk({}, "stop")],
-             3100, 2990),
+             3100, 2990, completion=4),
     ]
-    sent = []
-
-    def opener(url, payload):
-        sent.append(payload)
-        return Fake(rounds[len(sent) - 1])
+    # The same one-round answer from a model that reports no completion count.
+    quiet = body([chunk({"role": "assistant", "content": "It is 4."}),
+                  chunk({}, "stop")], 3100, 0)
 
     def allow(*_a, **_k):
         class _Ok:
             allowed, reason, outcome, tier = True, "approved", "approved", "auto"
         return _Ok()
 
+    def one_turn(bodies):
+        """A whole real turn, wired as jarvis_hud.py wires it: what the app is
+        sent is fed to the meter, and the meter's row is what gets written."""
+        sent = []
+
+        def opener(url, payload):
+            sent.append(payload)
+            return Fake(bodies[len(sent) - 1])
+
+        log = tmplog()
+        meter = S.start("m")
+        turn = AG.run_local_turn(
+            [{"role": "user", "content": "what is 2+2"}], "m",
+            ollama_url="http://127.0.0.1:1", stream_out=meter.feed, gate_check=allow,
+            open_stream=opener, context_length=4096, lane_choice=None,
+            model_waking=lambda u, m: False, manner=None)
+        row = meter.finish(log=log, gpu=lambda n: None, background=False)
+        return sent, turn, row, log
+
     real_rec, real_pub = AG._record_chain, AG._publish_step
     AG._record_chain = lambda steps: None
     AG._publish_step = lambda step: None
     try:
-        meter = S.start("m")
-        turn = AG.run_local_turn(
-            [{"role": "user", "content": "what is 2+2"}], "m",
-            # As jarvis_hud.py wires it: what the app is sent is fed to the meter.
-            ollama_url="http://127.0.0.1:1", stream_out=meter.feed, gate_check=allow,
-            open_stream=opener, context_length=4096, lane_choice=None,
-            model_waking=lambda u, m: False, manner=None)
-        row = meter.finish(log=tmplog(), gpu=lambda n: None, background=False)
+        sent, turn, row, log = one_turn(rounds)
+        quiet_sent, quiet_turn, quiet_row, quiet_log = one_turn([quiet])
     finally:
         AG._record_chain, AG._publish_step = real_rec, real_pub
     check("every streamed round asks Ollama for the usage chunk",
@@ -281,10 +308,72 @@ def t_the_tool_loop_asks_for_and_hands_over_prompt_reuse():
                                  for p in sent), [p.get("stream_options") for p in sent])
     check("the turn returns its prompt and reused tokens, summed over its rounds",
           turn.get("prompt_tokens") == 6100 and turn.get("cached_tokens") == 2990, turn)
+    check("... and the model's own completion count, summed over the same rounds",
+          turn.get("completion_tokens") == 7, turn.get("completion_tokens"))
     check("... and the speed row gets them, with the number of requests",
           row and row.get("prompt_tokens") == 6100 and row.get("cached_tokens") == 2990
           and row.get("prompt_rounds") == 2, row)
+    check("the speed row carries that one completion number, not a count of pieces",
+          row and row.get("completion_tokens") == 7 and row.get("tokens") == 7
+          and row.get("token_source") == "usage", row)
+    check("... and speed.jsonl itself keeps it, under its own name",
+          bool(log.tail()) and log.tail()[0].get("completion_tokens") == 7, log.tail())
     check("the answer itself is unchanged", turn.get("answer") == "It is 4.", turn)
+
+    # THE CLOUD COST PATH READS THE SAME ROW. Meter.finish() hands it to
+    # jarvis_chatbot_api.note_answer_spend, whose completion term becomes
+    # cost_of(pid, model, prompt_tokens, completion_tokens). The lane is stubbed
+    # exactly as test_cloud_spend.py stubs it: a real local turn is never
+    # priced, because a local lane has no service to charge.
+    import jarvis_chatbot_api as API
+    seen = []
+    real_last, real_record = API.last_lane_state, API.record_spend
+
+    def spy(pid, model, pt, ct, **kw):
+        seen.append((pid, model, pt, ct, kw))
+        return 0.0
+
+    try:
+        API.last_lane_state = lambda: {"lane": "jarvis-escalate", "pid": "openai_api",
+                                       "model": "gpt-5-mini", "host": "api.openai.com",
+                                       "url": "https://api.openai.com/v1/chat/completions",
+                                       "key": "", "cap": 0, "problem": ""}
+        API.record_spend = spy
+        if row:
+            API.note_answer_spend(row)
+    finally:
+        API.last_lane_state, API.record_spend = real_last, real_record
+    check("the cost path prices the same completion count the record kept",
+          len(seen) == 1 and seen[0][3] == 7 == row.get("completion_tokens")
+          and seen[0][3] == turn.get("completion_tokens"), seen)
+    check("... and the same prompt count", bool(seen) and seen[0][2] == 6100, seen)
+    check("... and records it as exact, because the model reported it",
+          bool(seen) and seen[0][4].get("guessed") is False, seen)
+
+    # A MODEL THAT REPORTS NO COUNT: unknown is said as unknown, never 0.
+    check("a turn whose answer carries no completion count records None",
+          quiet_turn.get("completion_tokens") is None, quiet_turn.get("completion_tokens"))
+    check("... the speed row leaves the field out rather than writing 0",
+          quiet_row and "completion_tokens" not in quiet_row, quiet_row)
+    check("... and speed.jsonl has no 0 standing in for the unknown",
+          bool(quiet_log.tail()) and "completion_tokens" not in quiet_log.tail()[0],
+          quiet_log.tail())
+    check("... while its speed figure says plainly that this PC counted pieces",
+          quiet_row and quiet_row.get("token_source") == "deltas"
+          and quiet_row.get("tokens") == 1, quiet_row)
+
+    # THE OTHER WIRE says the same thing under another name: Ollama's NATIVE
+    # reply carries `eval_count`, which `_native_as_chunk` puts into
+    # `usage.completion_tokens` - the one key `_read_chunk` reads. So a pooled
+    # lane's round and a /v1 round record the same number.
+    rnd = AG._Round()
+    AG._read_chunk(AG._native_as_chunk({
+        "message": {"role": "assistant", "content": "It is 4."}, "done": True,
+        "done_reason": "stop", "prompt_eval_count": 3100, "eval_count": 11}),
+        rnd, lambda _t: None)
+    check("Ollama's native eval_count lands in the same record as usage.completion_tokens",
+          rnd.completion_tokens == 11 and rnd.prompt_tokens == 3100,
+          (rnd.prompt_tokens, rnd.cached_tokens, rnd.completion_tokens))
 
 
 def t_reuse_share_on_the_screens():

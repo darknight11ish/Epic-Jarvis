@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Are both graphics cards fitted, is the model really on the 12 GB one, and is
+  Are the graphics cards fitted, is the model really on the 12 GB one, and is
   a whole card left over for longer conversations? Reads only.
 
 .DESCRIPTION

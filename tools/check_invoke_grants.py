@@ -134,6 +134,7 @@ DYNAMIC_BELOW = {
     ("sky-feed.js", "c"): "the feed's own (c, a) => TAURI.core.invoke(c, a); the caller passes a literal.",
     ("jarvis_hud.html", "c"): "the HUD relays the face modules' calls through this arrow; the page holds hud-link.",
     ("hud-history.js", "command"): "the History sidebar's invoke(command, args) wrapper; its only caller passes the literal hud_history_act.",
+    ("tauri-api-core.js", "command"): "the stand-in for @tauri-apps/api/core: one `invoke(command, args, options)` that forwards straight to window.__TAURI__.core.invoke. Its whole job is to take a name it does not know, and the names are the generated bindings in bindings.js and hotkeys-bindings.js, read as literals by this script. Before 2026-11-16 nothing called it; the set_hotkeys binding pilot is its first caller, and it turned the audit job red on main until this line existed.",
 }
 
 

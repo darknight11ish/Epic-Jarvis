@@ -879,7 +879,14 @@ pub fn show_brain(app: &AppHandle) -> Result<(), String> {
 /// palette's Help row already opens - so the first-run card now points at help
 /// that really exists. Navigation only: `open_fix_place` still changes no
 /// setting and approves nothing.
-pub(crate) const BRAIN_PLACES: [&str; 2] = ["history", "tutorials"];
+///
+/// `"work"` is the third (2026-11-16): "Open Work" on a background job's
+/// finished toast, and the body click on the same toast. It is `VIEWS.work` in
+/// `brain.js` - the tab that already reads `GET /api/jobs` - so the answer a
+/// job produced is where the owner lands, and the toast that told him it ended
+/// never carried a word of it. Navigation only, and App lock is asked by
+/// [`show_brain`] exactly as for the other two.
+pub(crate) const BRAIN_PLACES: [&str; 3] = ["history", "tutorials", "work"];
 
 /// The event an open Brain hears a place by.
 pub(crate) const BRAIN_PLACE_EVENT: &str = "brain-place";

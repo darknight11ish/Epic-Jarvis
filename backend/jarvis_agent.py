@@ -201,7 +201,21 @@ def _run_memory_search(args: dict) -> dict:
     return {"ok": True, "facts": [{"id": h.get("id"), "text": h.get("text")} for h in hits]}
 
 
-_MAX_FILE_READ_BYTES = 200_000
+#: A whole-file read shows this many numbered lines, and a range read defaults
+#: to it; a model can never ask for more than _FILE_READ_MAX_LINES at once. The
+#: same defaults `jarvis_project_read` uses, so the two file doors read alike.
+_FILE_READ_LINES = 400
+_FILE_READ_MAX_LINES = 2_000
+#: The most characters of numbered lines one answer carries. Smaller than
+#: `_MAX_TOOL_CONTENT_CHARS` on purpose: the JSON around it (the path, the
+#: counts and the "more" footer) must fit too, or `_tool_content`'s shortening
+#: would cut the very footer that says which range to ask for next.
+_FILE_READ_SLICE_CHARS = 6_000
+#: A file bigger than this is not counted line by line (the same rule and
+#: number `jarvis_project_read` uses): counting means reading every byte, and
+#: the answer says the exact total is unknown rather than spending a whole read
+#: on a number.
+_FILE_READ_COUNT_BYTES = 64 * 1024 * 1024
 
 # Windows reserves these names (with or without an extension, in any
 # directory) as legacy device files, not ordinary files - CON in particular
@@ -331,6 +345,167 @@ def _protected_path(path: str) -> bool:
     return protected_name(low.rsplit("/", 1)[-1])
 
 
+# --------------------------------------------------------------------------
+#   file_read: numbered lines, and the range to ask for next (2026-11-16)
+# --------------------------------------------------------------------------
+#
+# THE DEFECT THIS REPLACES. file_read used to return up to 200,000 bytes from
+# the START of a file; `_tool_content` then kept the first and last characters
+# of that slice, so the "end" the model saw was the end of the first 200,000
+# bytes - never the end of the file - and nothing said how to read the rest
+# (the tool had no range argument). A model reading a 1,020,029-byte file was
+# handed three thousand characters of it and no way to name the next part.
+#
+# NOW the answer is a numbered line slice: "1: ...", "2: ...", with
+# `truncated`, `start_line`, `end_line`, `total_lines`, and a `more` footer
+# saying exactly which range to ask for next. `start_line` and `lines` are the
+# same arguments, with the same defaults (400, at most 2,000), as the shipped
+# `project_read` tool, so a coding model that knows one door knows the other.
+
+_FILE_READ_BAD_RANGE = (
+    "A line range needs two whole numbers of 1 or more: start_line, the first "
+    "line to show, and lines, how many lines to show (at most {cap:,}) - so "
+    "nothing was read.")
+
+
+def _file_line_args(args: dict) -> tuple:
+    """`(first, count, why)` from start_line/lines; `why` "" is fine.
+
+    `(1, _FILE_READ_LINES, "")` is the whole-file read. A range value that is
+    not a whole number of 1 or more is refused in one sentence, never raised.
+    """
+    start = args.get("start_line")
+    lines = args.get("lines")
+    if start is None and lines is None:
+        return 1, _FILE_READ_LINES, ""
+    if start is None:
+        first = 1
+    else:
+        if isinstance(start, bool) or not isinstance(start, int) or start < 1:
+            return None, None, _FILE_READ_BAD_RANGE.format(cap=_FILE_READ_MAX_LINES)
+        first = start
+    if lines is None:
+        return first, _FILE_READ_LINES, ""
+    if isinstance(lines, bool) or not isinstance(lines, int) or lines < 1:
+        return None, None, _FILE_READ_BAD_RANGE.format(cap=_FILE_READ_MAX_LINES)
+    return first, min(lines, _FILE_READ_MAX_LINES), ""
+
+
+def _each_file_line(path: str):
+    """`(number, text, bytes_taken)` for every line, in order, streamed.
+
+    Read in binary chunks, so a very long file is never loaded whole. A Windows
+    CRLF counts as one line and its CR is dropped from the text; a last piece
+    with no newline is still a line. The same rules `jarvis_project_read` uses,
+    so a line number means the same thing in both tools.
+    """
+    number = 0
+    pending = b""
+    with open(path, "rb") as fh:
+        while True:
+            chunk = fh.read(65536)
+            if not chunk:
+                break
+            pending += chunk
+            start = 0
+            while True:
+                cut = pending.find(b"\n", start)
+                if cut < 0:
+                    break
+                number += 1
+                text = pending[start:cut].decode("utf-8", "replace")
+                if text.endswith("\r"):
+                    text = text[:-1]
+                yield number, text, cut + 1 - start
+                start = cut + 1
+            pending = pending[start:]
+    if pending:
+        number += 1
+        yield number, pending.decode("utf-8", "replace"), len(pending)
+
+
+def _count_file_lines(path: str) -> tuple:
+    """`(total, known)`: the real line count, or None when too big to count.
+
+    Counting means reading every byte, so a file over `_FILE_READ_COUNT_BYTES`
+    is not counted and the footer says the exact total is unknown rather than
+    guessing one.
+    """
+    try:
+        if os.path.getsize(path) > _FILE_READ_COUNT_BYTES:
+            return None, False
+    except OSError:
+        return None, False
+    total = 0
+    last = b"\n"
+    try:
+        with open(path, "rb") as fh:
+            while True:
+                chunk = fh.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += chunk.count(b"\n")
+                last = chunk[-1:]
+    except OSError:
+        return None, False
+    if last not in (b"", b"\n"):
+        total += 1
+    return total, True
+
+
+def _slice_file_lines(path: str, first: int, count: int) -> dict:
+    """The numbered lines a read returns, and whether more follow.
+
+    At most `count` lines and `_FILE_READ_SLICE_CHARS` characters of text. A
+    single line longer than that whole budget is the one case where a piece of
+    one line is shown (`cut_one`), because a line range cannot split a line.
+    """
+    pieces, used, last = [], 0, first - 1
+    more = cut_one = False
+    iterator = _each_file_line(path)
+    for number, text, _size in iterator:
+        if number < first:
+            continue
+        piece = f"{number}: {text}"
+        if used + len(piece) + 1 > _FILE_READ_SLICE_CHARS:
+            if not pieces:
+                room = max(0, _FILE_READ_SLICE_CHARS - len(f"{number}: "))
+                pieces.append(f"{number}: {text[:room]}")
+                last = number
+                cut_one = True
+            more = True
+            break
+        pieces.append(piece)
+        used += len(piece) + 1
+        last = number
+        if len(pieces) >= count:
+            more = next(iterator, None) is not None
+            break
+    return {"content": "\n".join(pieces), "start_line": first,
+            "end_line": last, "more": more, "cut_one": cut_one}
+
+
+def _file_read_more(first: int, last: int, total, known: bool,
+                    cut_one: bool) -> str:
+    """The ONE `more` line: what was withheld, and the range to ask for next."""
+    if last < first:
+        if known:
+            return (f"The file has {total:,} lines; start_line {first:,} is past "
+                    f"its end, so nothing was shown.")
+        return (f"start_line {first:,} is past the end of this very big file, so "
+                f"nothing was shown.")
+    nxt = last + 1
+    if cut_one:
+        return (f"Line {last:,} alone is longer than one answer may carry, so only "
+                f"its start is shown; ask for start_line={nxt} to read on.")
+    if known:
+        return (f"Showing lines {first:,}\u2013{last:,} of {total:,}. The rest is "
+                f"not shown; ask for the next range with start_line={nxt} and "
+                f"lines={_FILE_READ_MAX_LINES:,}.")
+    return (f"Showing lines {first:,}\u2013{last:,}; this file is too big to count "
+            f"every line, so ask for the next range with start_line={nxt}.")
+
+
 def _run_file_read(args: dict) -> dict:
     path = str(args.get("path", ""))
     if _is_reserved_windows_name(path):
@@ -376,25 +551,34 @@ def _run_file_read(args: dict) -> dict:
         _said = _P.path_refusal(real)
         if _said:
             return {"ok": False, "error": _said}
+    first, count, why = _file_line_args(args or {})
+    if why:
+        return {"ok": False, "error": why}
     path = real
     try:
-        # Binary, capped by actual bytes read, then decoded - not text mode
-        # capped by .read(N), which caps CHARACTERS. A file that is mostly
-        # multi-byte UTF-8 (CJK, emoji) could otherwise return up to ~4x
-        # _MAX_FILE_READ_BYTES despite the name and the cap both claiming
-        # bytes. A cut mid-character at the boundary decodes as U+FFFD via
-        # errors="replace", which is fine for a preview truncation point.
-        with open(path, "rb") as f:
-            raw = f.read(_MAX_FILE_READ_BYTES + 1)
+        size = os.path.getsize(path)
+        part = _slice_file_lines(path, first, count)
+        total, known = _count_file_lines(path)
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
-    truncated = len(raw) > _MAX_FILE_READ_BYTES
-    content = raw[:_MAX_FILE_READ_BYTES].decode("utf-8", errors="replace")
-    # "Where this came from" (I42, jarvis_sources.py): the REAL resolved
-    # path this call actually opened - never the model's own `path` argument
+    truncated = bool(part["more"])
+    # "Where this came from" (I42, jarvis_sources.py): the REAL resolved path
+    # this call actually opened - never the model's own `path` argument
     # verbatim, which a symlink or a `..` could make different from what was
-    # really read.
-    return {"ok": True, "content": content, "truncated": truncated, "path": path}
+    # really read. The numbered slice says which lines these are, and `more`
+    # names the range to ask for next, so the model can tell what it has not
+    # seen instead of guessing from a cut-off middle.
+    result = {"ok": True, "content": part["content"], "truncated": truncated,
+              "path": path, "bytes": size,
+              "start_line": part["start_line"],
+              "end_line": part["end_line"],
+              "total_lines": total if known else None}
+    if truncated or part["end_line"] < part["start_line"]:
+        # A range past the end of the file shows nothing: say so, rather than
+        # handing back an empty string with no explanation.
+        result["more"] = _file_read_more(first, part["end_line"], total, known,
+                                         part["cut_one"])
+    return result
 
 
 def _prepare_project_read(args: dict):
@@ -5452,9 +5636,19 @@ TOOLS: dict = {
         instead={"notes_search": "For the owner's own notes, use notes_search.",
                  "web_search": "For the public web, use web_search."}),
     "file_read": Tool(
-        "file_read", "Read a local text file.",
+        "file_read",
+        "Read a local text file. A long file comes back as numbered lines and a "
+        "note saying which range to ask for next; add start_line and lines to "
+        "read another range.",
         {"type": "object", "properties": {
-            "path": {"type": "string"}}, "required": ["path"]},
+            "path": {"type": "string"},
+            "start_line": {"type": "integer",
+                           "description": "optional: the first line to show, "
+                                          "counting from 1 (default 1)"},
+            "lines": {"type": "integer",
+                      "description": "optional: how many lines to show "
+                                     "(default 400, at most 2000)"}},
+         "required": ["path"]},
         lambda args: (None, f"Read the file: {args.get('path', '')}"),
         lambda args, state, **_: _run_file_read(args)),
     SANDBOX_TOOL: Tool(
@@ -8891,6 +9085,20 @@ def think_asked_for(request) -> bool:
 # line - can be measured by what it costs each turn, not guessed. An Ollama
 # that does not know the field ignores it (unknown JSON fields are skipped)
 # and nothing is recorded.
+#
+# THE SAME CHUNK CARRIES THE MODEL'S OWN ANSWER COUNT (R7, 2026-11-16).
+# `usage.completion_tokens` is how many tokens the model read back as its
+# answer. It is the number a cloud answer's cost is worked out from
+# (`jarvis_chatbot_api.cost_of`'s completion term) and the number
+# `jarvis_speed` already prefers when a relayed stream carries one - but the
+# chat loop re-writes the stream the app sees, so this turn's own usage never
+# reaches that meter. Unread here, a turn recorded what its prompt cost and
+# never what its answer produced, and the speed row fell back to counting
+# content pieces: two different numbers for one thing. Both wires deliver it
+# in this one key - `/v1/chat/completions` as `usage.completion_tokens`,
+# Ollama's native reply as `eval_count`, which `_native_as_chunk` maps into it
+# - so `_read_chunk` reads both wires with one line. An answer that carries no
+# count records None, never 0: an unknown said as an unknown.
 PROMPT_USAGE = {"stream_options": {"include_usage": True}}
 
 # --------------------------------------------------------------------------
@@ -8957,15 +9165,19 @@ def dropped_prompt_note(sent_tokens: Optional[int],
 
 
 def _note_prompt_use(prompt_tokens: Optional[int], cached_tokens: Optional[int],
-                     rounds: int) -> None:
-    """Hand one turn's prompt totals to the speed record. Never raises: it
-    is bookkeeping and must never cost an answer."""
-    if prompt_tokens is None and cached_tokens is None:
+                     completion_tokens: Optional[int], rounds: int) -> None:
+    """Hand one turn's prompt and answer totals to the speed record. Never
+    raises: it is bookkeeping and must never cost an answer.
+
+    `completion_tokens` is the model's own count of what it read back for this
+    turn, summed over the rounds - None when no round carried one, which is
+    recorded as unknown rather than as 0 (R7, 2026-11-16)."""
+    if prompt_tokens is None and cached_tokens is None and completion_tokens is None:
         return
     try:
         import jarvis_speed
         jarvis_speed.note_prompt(prompt_tokens=prompt_tokens, cached_tokens=cached_tokens,
-                                 rounds=rounds)
+                                 completion_tokens=completion_tokens, rounds=rounds)
     except Exception:
         pass
 
@@ -9285,6 +9497,44 @@ def compact_messages(messages: list, budget: int, *, question: str = "") -> list
         return kept
 
 
+#: How much of the window one aggressive re-trim aims at when a prompt still
+#: estimates over it (`_retrim_for_window`). 60% leaves room for the estimator
+#: being optimistic - measured 2.25x under-count on dense code, 2026-11-16 -
+#: without deleting the rules or the question, which are what must survive.
+RETRIM_TO_WINDOW_RATIO = 0.6
+
+
+def _retrim_for_window(messages: list, window: int) -> list:
+    """One aggressive trim for a prompt that estimates bigger than its window.
+
+    RUN ONCE, BEFORE THE REQUEST IS REFUSED (architect Q4, 2026-11-16). The
+    normal trimmer has already run by the time this is called, so what is left
+    is the rules, the newest turn, and whatever did not fit the estimate. This
+    does the two cheap things that keep a long chat answerable without touching
+    either of those:
+
+      * every tool result except the newest becomes the plain `CLEARED_RESULT`
+        stub (the model is told an earlier result was cleared, not given half
+        of one); and
+      * `fit_messages` fits what remains to 60% of the window.
+
+    `fit_messages` never drops a system message or the newest user turn, so if
+    those alone are still over the window this returns them unchanged and the
+    caller refuses the turn with plain words. Nothing here is a warning: it is
+    a trim that really happens once, and the caller only sends if the result
+    fits.
+    """
+    newest_tool = max((i for i, m in enumerate(messages) if _role(m) == "tool"),
+                      default=-1)
+    stubbed = []
+    for i, message in enumerate(messages):
+        if i != newest_tool and _role(message) == "tool":
+            stubbed.append({**message, "content": CLEARED_RESULT})
+        else:
+            stubbed.append(message)
+    return fit_messages(stubbed, max(1, int(window * RETRIM_TO_WINDOW_RATIO)))
+
+
 # --------------------------------------------------------------------------
 #   Plain words when Ollama cannot answer
 # --------------------------------------------------------------------------
@@ -9420,10 +9670,10 @@ def _tool_content(result: dict) -> str:
     """A tool's result, as the JSON string fed back to the model - always
     valid JSON, never a byte-slice of one. `json.dumps(result)[:N]` can cut
     off mid-string or mid-structure (an open quote, an unclosed brace), and
-    a large result is not a hypothetical here: file_read alone can return
-    up to 200,000 characters of content, far past any per-message budget.
-    A model reading a hand-mangled JSON fragment as "the tool's answer" is a
-    worse failure than an honest, valid, short note that it was too big.
+    a large result is not a hypothetical here: a file read can carry many
+    lines of a long file, far past any per-message budget. A model reading a
+    hand-mangled JSON fragment as "the tool's answer" is a worse failure than
+    an honest, valid, short note that it was too big.
 
     A result over the limit is SHORTENED, not dropped ("Smarter answers",
     2026-09-28): the same JSON shape, each long text cut to its first and
@@ -9431,11 +9681,13 @@ def _tool_content(result: dict) -> str:
     (_KEEP_EACH_END), and - only if that is not enough - each long list cut
     to its first and last items. Keys, numbers, true/false and the outside-
     text label (OUTSIDE_FIELD) stay as they are; a "shortened" note says
-    what happened. Every cut is made on the decoded values and the whole is
-    encoded again, so the JSON is always whole. Only when even that does not
-    fit (a result made of thousands of tiny keys) is the old short note sent
-    instead. The full text stays in this answer's memory only; it is never
-    written anywhere."""
+    what happened. `file_read` keeps itself under this limit by returning a
+    numbered line slice with a `more` footer (see `_run_file_read`), so its
+    footer survives; this generic path is for every other tool. Every cut is
+    made on the decoded values and the whole is encoded again, so the JSON is
+    always whole. Only when even that does not fit (a result made of thousands
+    of tiny keys) is the old short note sent instead. The full text stays in
+    this answer's memory only; it is never written anywhere."""
     full = json.dumps(result, ensure_ascii=False)
     if len(full) <= _MAX_TOOL_CONTENT_CHARS:
         return full
@@ -9892,7 +10144,8 @@ _OWN_FLAG_WHY = {
 }
 
 #: How much of one result is scanned for flags and kept for shaped_by. A
-#: file_read can return 200,000 characters.
+#: file read returns a numbered line slice (its own budget keeps it well under
+#: this); other tools can answer with much more.
 _MAX_SCAN_CHARS = 250_000
 
 #: The newest message's provenance values that are not the owner's own words
@@ -14071,6 +14324,11 @@ class _Round:
         # when Ollama did not say (an older Ollama sends no cached count).
         self.prompt_tokens: Optional[int] = None
         self.cached_tokens: Optional[int] = None
+        # How many tokens the model read back as this request's answer - the
+        # same answer's `usage.completion_tokens`, which the native wire sends
+        # as `eval_count` (R7, 2026-11-16). Numbers only; None when the answer
+        # carried no count, which stays an unknown and never becomes a 0.
+        self.completion_tokens: Optional[int] = None
 
     def add_calls(self, deltas) -> None:
         """Tool calls as they arrive. Ollama sends each call whole in one
@@ -14124,6 +14382,10 @@ def _native_as_chunk(obj: dict) -> dict:
         `dropped_prompt_note` reads to tell the owner the model was handed only
         the end of a long conversation, and the number the speed row records -
         so the native wire must carry it, exactly as the /v1 wire did.
+      * `eval_count` becomes `usage.completion_tokens`, for the same reason
+        (R7, 2026-11-16): it is the model's own count of its answer, and the
+        number the turn records and the cost of an answer is worked out from.
+        `_read_chunk` reads both wires through that one key.
     """
     msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
     delta: dict = {}
@@ -14176,10 +14438,16 @@ def _read_chunk(obj: dict, rnd: _Round, on_text: Callable[[str], None]) -> None:
         pt = usage.get("prompt_tokens")
         details = usage.get("prompt_tokens_details")
         ct = details.get("cached_tokens") if isinstance(details, dict) else None
+        # The model's own count of its answer (R7, 2026-11-16): `usage.
+        # completion_tokens` on the /v1 wire, and Ollama's `eval_count` on the
+        # native one, which `_native_as_chunk` has already put in this key.
+        done = usage.get("completion_tokens")
         if isinstance(pt, int) and not isinstance(pt, bool) and pt >= 0:
             rnd.prompt_tokens = pt
         if isinstance(ct, int) and not isinstance(ct, bool) and ct >= 0:
             rnd.cached_tokens = ct
+        if isinstance(done, int) and not isinstance(done, bool) and done >= 0:
+            rnd.completion_tokens = done
     choice = (obj.get("choices") or [{}])[0] or {}
     delta = choice.get("delta") or choice.get("message") or {}
     text = delta.get("content")
@@ -15781,18 +16049,25 @@ POOLED_WINDOW_UNKNOWN_LINE = (
     "run at Ollama's own smaller one and the start of the chat may not have "
     "been read. Re-applying the preset fixes it.")
 
-#: Said, once per turn, when this turn's own prompt is bigger than the window
-#: it is about to name. Ollama drops the FRONT of such a prompt and answers
-#: anyway (see "When the model was not given the whole conversation"), so this
-#: says it BEFORE the request rather than waiting for a ratio to notice it
-#: afterwards - the measured 9,794-against-8,192 truncation is too small a
-#: shortfall for that ratio, which is why the window itself is the check now.
-WINDOW_OVERFLOW_LINE = (
-    "This turn's prompt is about {sent:,} tokens and this lane's window is "
-    "{ctx:,}, so it does not fit: Ollama drops the start of a prompt this long "
-    "and answers anyway, which means the earliest part of this chat may not "
-    "have been read. Start a new conversation, or ask again in a shorter "
-    "message.")
+#: The plain sentence the turn ends with when its prompt is still bigger than
+#: the window it is about to name, AFTER one aggressive re-trim. Ollama drops
+#: the FRONT of such a prompt - Jarvis's rules and the start of the chat - and
+#: answers anyway, so the turn is refused before any request rather than sent
+#: and damaged (architect Q4, 2026-11-16; WINDOW_OVERFLOW_LINE used to warn and
+#: send anyway, which is the defect this replaces). What is left at this point
+#: is the rules plus the current turn plus the tool schemas: trimming any of
+#: those would delete the thing the fix exists to protect.
+WINDOW_OVERFLOW_REFUSAL = (
+    "Prompt exceeds the {ctx:,}-token local window, even after leaving out "
+    "earlier turns and old tool results. Shorten the input, chunk the file, or "
+    "escalate to DeepSeek.")
+
+#: Said in the activity line once when `_retrim_for_window` really did leave
+#: something out, so the shorter prompt is not silent either.
+WINDOW_TRIMMED_LINE = (
+    "This chat is longer than the local window, so earlier turns and old tool "
+    "results were left out of this request. The rules and your newest message "
+    "were kept.")
 
 
 def native_chat_body(body: dict, num_ctx: int) -> dict:
@@ -16715,9 +16990,28 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # the question looks (2026-10-06; the idea is OpenJarvis's complexity
         # router). Bounded - see jarvis_router.tokens_for_turn - and it can
         # never take the room below the configured floor nor above twice it,
-        # so the prompt's own budget is safe. An app that sends max_tokens
-        # always gets exactly what it asked for.
+        # so the prompt's own budget is safe.
         opts["max_tokens"] = _tokens_for_turn(messages, DEFAULT_MAX_TOKENS)
+    # A CLIENT'S OWN max_tokens CANNOT COLLAPSE THE PROMPT BUDGET (architect Q4,
+    # 2026-11-16). `budget()` subtracts this from the window, so an app asking
+    # for a huge answer would leave the prompt its 512-token floor and nothing
+    # left to trim without deleting the question - exactly how a turn ends up
+    # over the window with the rules at the front. The cap is one quarter of the
+    # lane's window and never more than 8,192, whichever is smaller; when the
+    # window cannot be read, the 8,192 cap still applies. The local-model check
+    # is asked first so this adds no request to another machine.
+    try:
+        _refused_here = bool(local_model_refusal(cur["url"], cur["model"]))
+    except Exception:                                             # noqa: BLE001
+        _refused_here = False
+    _max_tokens_cap = 8192
+    if not _refused_here:
+        try:
+            _ctx_now = cur["ctx"] or _context_length(cur["url"], cur["model"])
+            _max_tokens_cap = min(_max_tokens_cap, max(1, int(_ctx_now) // 4))
+        except Exception:                                         # noqa: BLE001
+            pass
+    opts["max_tokens"] = min(int(opts["max_tokens"]), _max_tokens_cap)
 
     def chat_url() -> str:
         return f"{cur['url']}/v1/chat/completions"
@@ -16750,8 +17044,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     created = int(time.time())
     finish: Optional[str] = None
     rounds = 0
-    # Ollama's prompt counts, summed over this turn's rounds (PROMPT_USAGE).
-    prompt_use: dict = {"prompt": None, "cached": None}
+    # Ollama's prompt counts and the model's answer count, summed over this
+    # turn's rounds (PROMPT_USAGE). `completion` is the model's own count of
+    # what it read back - None when no round carried one, and then it is said
+    # as unknown, never as 0 (R7, 2026-11-16).
+    prompt_use: dict = {"prompt": None, "cached": None, "completion": None}
     # This turn's biggest prompt and what the model said it read of it - see
     # dropped_prompt_note. `tokens` is Jarvis's own estimate of what it sent.
     sent_use: dict = {"tokens": 0, "read": None}
@@ -16795,10 +17092,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # F2 (2026-11-09): a failed pooled preload is said once per turn, not once
     # per round; POOLED_PRELOAD_LAST keeps the record either way.
     preload_note = {"said": False}
-    # THE WINDOW (2026-11-15): the pool's unknown-window and prompt-does-not-fit
-    # lines are said once per TURN too, not once per round - a tool round must
-    # not repeat an alarm the owner has already read.
-    window_note = {"said": False, "unknown": False}
+    # THE WINDOW (2026-11-15): the pool's unknown-window line is said once per
+    # TURN, not once per round - a tool round must not repeat an alarm the
+    # owner has already read. (A prompt over the window is not a line any more:
+    # it refuses the turn, see WINDOW_OVERFLOW_REFUSAL.)
+    window_note = {"unknown": False}
 
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
@@ -16918,20 +17216,37 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     announce(POOLED_WINDOW_UNKNOWN_LINE)
                 except Exception:
                     pass
-        if _native and not window_note["said"]:
-            # Would this round's own prompt fit the window it is about to name?
+        if _native:
+            # WOULD THIS ROUND'S PROMPT FIT THE WINDOW IT IS ABOUT TO NAME?
             # Ollama drops the FRONT of a prompt that does not, and answers
-            # anyway, so the check is made here - before the request - rather
-            # than left to the after-the-fact ratio, which a 9,794-against-8,192
-            # shortfall is deliberately too small to call.
-            _sent_est = (estimate_tokens(sent_messages)
-                         + estimate_tokens(offer["schemas"] or []))
+            # anyway. So a prompt that estimates over the window gets ONE
+            # aggressive re-trim here - old tool results stubbed, earlier turns
+            # dropped, the rules and the newest turn kept - and if even that
+            # does not fit, the turn is REFUSED before the request. The old
+            # WINDOW_OVERFLOW_LINE announced the loss and sent the request
+            # anyway, which described the damage instead of preventing it.
+            # Only the schemas the request really offers are counted: with
+            # tools off they are not in the payload and must not refuse a turn.
+            def _estimate_this_request() -> int:
+                return (estimate_tokens(sent_messages)
+                        + (estimate_tokens(offer["schemas"] or [])
+                           if offer_tools else 0))
+
+            _sent_est = _estimate_this_request()
             if _sent_est > int(_window):
-                window_note["said"] = True
+                sent_messages = _retrim_for_window(sent_messages, int(_window))
+                body = chat_body(cur["model"], sent_messages, opts,
+                                 offer["schemas"] if offer_tools else None,
+                                 spoken=watch.spoken, question=question_text,
+                                 role="everyday", ollama_url=base_url,
+                                 per_turn=think_per_turn)
+                _sent_est = _estimate_this_request()
+                if _sent_est > int(_window):
+                    raise UpstreamError(WINDOW_OVERFLOW_REFUSAL.format(
+                        ctx=int(_window)))
                 if announce is not None:
                     try:
-                        announce(WINDOW_OVERFLOW_LINE.format(sent=int(_sent_est),
-                                                             ctx=int(_window)))
+                        announce(WINDOW_TRIMMED_LINE)
                     except Exception:
                         pass
         stripper = _ThinkStripper()
@@ -17083,7 +17398,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             before = "".join(held)
             if before.strip() and not _spending_words_problem(before, watch.newest_raw):
                 emit(before)
-        for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
+        for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens),
+                         ("completion", rnd.completion_tokens)):
             if got is not None:
                 prompt_use[key] = (prompt_use[key] or 0) + got
         # What this round SENT, against what the model said it read (see
@@ -17714,7 +18030,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # Numbers only, to the speed record (PROMPT_USAGE). Before
         # jarvis_hud's own speed.finish(), which writes the row.
         if not private:
-            _note_prompt_use(prompt_use["prompt"], prompt_use["cached"], rounds)
+            _note_prompt_use(prompt_use["prompt"], prompt_use["cached"],
+                             prompt_use["completion"], rounds)
         # Struggle signal (a) continued: every broken tool call this turn
         # (check_call, counted in watch.bad by _one_call's `watch.broken`) -
         # "the model's own output came out malformed". Then, whatever this
@@ -17794,7 +18111,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "claimed_undone": claimed_undone,
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
-            "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
+            "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"],
+            # The model's own count of what it read back this turn, or None
+            # when no round carried one - unknown, never 0 (R7, 2026-11-16).
+            "completion_tokens": prompt_use["completion"]}
 
 
 def answer_here(messages: list, model: str, *, ollama_url: str,

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b1547d74c5d4a8751cf36ccca8624e6ff32da081",
- "built_at": "2026-11-16T10:00:32-08:00",
+ "ref": "682f3d3471604d9e4a9b65e4936d56951232ed11",
+ "built_at": "2026-11-16T17:40:47-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -71,12 +71,13 @@
     "backend/jarvis_card_summary.py",
     "backend/jarvis_card_words.py",
     "backend/jarvis_claims.py",
+    "backend/jarvis_grants.py",
     "backend/jarvis_ledger.py",
     "backend/jarvis_limits.py",
     "backend/jarvis_owner_check.py",
     "backend/jarvis_receipts.py"
    ],
-   "file_count": 9,
+   "file_count": 10,
    "key_modules": [
     {
      "path": "backend/jarvis_asks_first.py",
@@ -2537,6 +2538,7 @@
     "jarvis-desktop/src-tauri/src/backend_update.rs",
     "jarvis-desktop/src-tauri/src/backup.rs",
     "jarvis-desktop/src-tauri/src/big_coder.rs",
+    "jarvis-desktop/src-tauri/src/bin/export_bindings.rs",
     "jarvis-desktop/src-tauri/src/brain.rs",
     "jarvis-desktop/src-tauri/src/brain/auto_learn.rs",
     "jarvis-desktop/src-tauri/src/brain/briefing.rs",
@@ -2667,6 +2669,7 @@
     "jarvis-desktop/src/backup-settings.js",
     "jarvis-desktop/src/barge-in.js",
     "jarvis-desktop/src/big-coder-settings.js",
+    "jarvis-desktop/src/bindings.js",
     "jarvis-desktop/src/board.css",
     "jarvis-desktop/src/brain.css",
     "jarvis-desktop/src/brain.html",
@@ -2750,6 +2753,7 @@
     "jarvis-desktop/src/history-import.js",
     "jarvis-desktop/src/history-tags.js",
     "jarvis-desktop/src/history-view.js",
+    "jarvis-desktop/src/hotkeys-bindings.js",
     "jarvis-desktop/src/hud-actions.js",
     "jarvis-desktop/src/hud-edit.js",
     "jarvis-desktop/src/hud-history.js",
@@ -2865,6 +2869,8 @@
     "jarvis-desktop/src/style.css",
     "jarvis-desktop/src/support.js",
     "jarvis-desktop/src/sw.js",
+    "jarvis-desktop/src/tauri-api-core.d.ts",
+    "jarvis-desktop/src/tauri-api-core.js",
     "jarvis-desktop/src/theme.css",
     "jarvis-desktop/src/thinking-module.js",
     "jarvis-desktop/src/thinking-settings.js",
@@ -3245,9 +3251,10 @@
     "jarvis-desktop/tests/widget-board.mjs",
     "jarvis-desktop/tests/wiki.mjs",
     "jarvis-desktop/tests/youtube.mjs",
+    "jarvis-desktop/tsconfig.bindings.json",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1256,
+   "file_count": 1262,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -3801,6 +3808,7 @@
     "backend/test_attention_settings_route.py",
     "backend/test_auto_learn.py",
     "backend/test_auto_router.py",
+    "backend/test_awareness_gaps.py",
     "backend/test_awareness_sanity_gate.py",
     "backend/test_backoff_rule.py",
     "backend/test_backup.py",
@@ -3847,6 +3855,7 @@
     "backend/test_chat_stream_contract.py",
     "backend/test_chat_tags.py",
     "backend/test_chat_window.py",
+    "backend/test_chat_wrong_answers.py",
     "backend/test_chatbot.py",
     "backend/test_chatbot_api.py",
     "backend/test_chatbot_compare.py",
@@ -3969,6 +3978,7 @@
     "backend/test_google_calendar.py",
     "backend/test_gpu_memory.py",
     "backend/test_gpu_offload.py",
+    "backend/test_grants.py",
     "backend/test_grow_bridge.py",
     "backend/test_habits.py",
     "backend/test_handoff.py",
@@ -4090,6 +4100,7 @@
     "backend/test_notes_edit.py",
     "backend/test_notes_read_search.py",
     "backend/test_notes_rename_move.py",
+    "backend/test_notes_resolve.py",
     "backend/test_notes_smart_create.py",
     "backend/test_notes_surgical.py",
     "backend/test_notes_write.py",
@@ -4133,6 +4144,7 @@
     "backend/test_personality_creator.py",
     "backend/test_phone_app_allowlist.py",
     "backend/test_phone_app_launch.py",
+    "backend/test_phone_fact_answers.py",
     "backend/test_phone_facts.py",
     "backend/test_phone_notifications.py",
     "backend/test_phone_reset_voice.py",
@@ -4405,7 +4417,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 703,
+   "file_count": 708,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4750,6 +4762,7 @@
     "changelog.d/2026-11-15-github-robustness.md",
     "changelog.d/2026-11-15-github-tools-by-chat.md",
     "changelog.d/2026-11-15-gmail-answer.md",
+    "changelog.d/2026-11-15-grant-engine.md",
     "changelog.d/2026-11-15-hardware-lane-words.md",
     "changelog.d/2026-11-15-history-menu-export-copy.md",
     "changelog.d/2026-11-15-measure-line-and-audit-doc.md",
@@ -4767,14 +4780,26 @@
     "changelog.d/2026-11-15-recent-changes-regenerated-on-main.md",
     "changelog.d/2026-11-15-self-code-map-snapshot.md",
     "changelog.d/2026-11-15-which-commit-each-piece-came-from.md",
+    "changelog.d/2026-11-16-audit-invoke-shim-allowlisted.md",
+    "changelog.d/2026-11-16-awareness-gaps.md",
+    "changelog.d/2026-11-16-chat-six-wrong-answers.md",
     "changelog.d/2026-11-16-def078-ci-run-count.md",
+    "changelog.d/2026-11-16-def079-amended.md",
     "changelog.d/2026-11-16-desktop-hardware-copy-truth.md",
     "changelog.d/2026-11-16-github-off-tool-card-in-place.md",
+    "changelog.d/2026-11-16-github-trust-probe.md",
     "changelog.d/2026-11-16-hardware-backend-claims-truth.md",
+    "changelog.d/2026-11-16-loaded-model-not-askable.md",
+    "changelog.d/2026-11-16-notes-resolver-tiers.md",
     "changelog.d/2026-11-16-phone-copy-says-it-once.md",
+    "changelog.d/2026-11-16-phone-fact-answers.md",
     "changelog.d/2026-11-16-phone-hardware-closing-line.md",
     "changelog.d/2026-11-16-phone-one-home-for-pc-notification-rows.md",
     "changelog.d/2026-11-16-plan-card-and-trusted-mode-design.md",
+    "changelog.d/2026-11-16-python-notices-generator.md",
+    "changelog.d/2026-11-16-recent-changes-twin-written.md",
+    "changelog.d/2026-11-16-research-search-both-languages.md",
+    "changelog.d/2026-11-16-specta-hotkeys-pilot.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -5007,8 +5032,14 @@
     "decisions.d/2026-11-15-recent-changes-regenerated-on-main.md",
     "decisions.d/2026-11-15-self-code-map-out-of-pull-requests.md",
     "decisions.d/2026-11-15-source-commit-beside-version.md",
+    "decisions.d/2026-11-15-trusted-cap-per-action.md",
+    "decisions.d/2026-11-16-awareness-gaps.md",
+    "decisions.d/2026-11-16-favourite-own-property.md",
     "decisions.d/2026-11-16-github-off-tool-card-in-place.md",
+    "decisions.d/2026-11-16-notes-resolver-tier-order.md",
     "decisions.d/2026-11-16-phone-copy-says-it-once.md",
+    "decisions.d/2026-11-16-phone-fact-answers.md",
+    "decisions.d/2026-11-16-research-one-query-per-language.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5514,7 +5545,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 1068,
+   "file_count": 1087,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5920,6 +5951,7 @@
     "tools/gen_work_cases.py",
     "tools/gen_work_presets.py",
     "tools/gen_youtube_cases.py",
+    "tools/github_trust_probe.py",
     "tools/hud-deltas/auto-learn-extract-eof-new.txt",
     "tools/hud-deltas/auto-learn-extract-eof-old.txt",
     "tools/hud-deltas/auto-learn-extract-intake-new.txt",
@@ -6028,6 +6060,7 @@
     "tools/pretend_linux.py",
     "tools/reconcile_live_backend.py",
     "tools/repair_live_backend_gaps.py",
+    "tools/requirements-dev.txt",
     "tools/reseal_live_install.py",
     "tools/roll_changelog.py",
     "tools/roll_decisions.py",
@@ -6050,7 +6083,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 512,
+   "file_count": 514,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6356,6 +6389,7 @@
     "jarvis-backend/jarvis_github.py",
     "jarvis-backend/jarvis_goals.py",
     "jarvis-backend/jarvis_google_calendar.py",
+    "jarvis-backend/jarvis_grants.py",
     "jarvis-backend/jarvis_habits.py",
     "jarvis-backend/jarvis_handoff.py",
     "jarvis-backend/jarvis_handoff_front.py",
@@ -6574,7 +6608,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 342,
+   "file_count": 343,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6604,116 +6638,116 @@
  ],
  "recent_commits": [
   {
-   "sha": "b1547d74c5d4a8751cf36ccca8624e6ff32da081",
+   "sha": "682f3d3471604d9e4a9b65e4936d56951232ed11",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1312 from darknight11ish/feat/notes-create-find-append-2026-11-16"
+   "subject": "Merge pull request #1322 from darknight11ish/fix/wrong-answers-2026-11-16"
   },
   {
-   "sha": "589ba099021565d4090a1de638cd93ac76d91eae",
+   "sha": "7f5d3de9cdff230ee600b9c9be42404f48e14a9c",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1306 from darknight11ish/fix/history-menu-export-copy-2026-11-15"
+   "subject": "Merge pull request #1325 from darknight11ish/fix/audit-invoke-shim-2026-11-16"
   },
   {
-   "sha": "ca467c69ebc63299ac076f939a2b4c97db9325af",
+   "sha": "199afd04db62e30f42ef6464ffeb61021943b6ef",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1303 from darknight11ish/docs/plan-card-and-trusted-mode-2026-11-16"
+   "subject": "test(focus): bare 'stop' is the stop-everything intent, never the focus one"
   },
   {
-   "sha": "8ca52b33832a114f67fb485173eafbd99a223182",
+   "sha": "8250869ad428c3a753e05aa6d35f61130bf9b9f5",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1313 from darknight11ish/chore/generated-files-refresh-2026-11-16"
+   "subject": "tools: the invoke-grants check accepts the tauri-api-core shim"
   },
   {
-   "sha": "35b9a21a6049be00e842547872db27a44ff01266",
+   "sha": "4dd144d5e034b66b17adfb341f7e88df7c4c4005",
    "date": "2026-11-16",
-   "subject": "chore(records): regenerate the map and the recent-changes module for main"
+   "subject": "Merge pull request #1323 from darknight11ish/fix/research-search-two-queries-2026-11-16"
   },
   {
-   "sha": "072125b5a66ad7cd9fd663bbd8aba8848bb68538",
+   "sha": "dd543f3bdf31d41413b55ef848f43c33701e8d72",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1310 from darknight11ish/fix/hardware-backend-claims-truth-2026-11-16"
+   "subject": "fix(notes): make the ambiguous-note question answerable, and fix the red stop near-miss"
   },
   {
-   "sha": "e209efe06993200cd78a11ad9f626074e6c1de85",
+   "sha": "61276a7b8e1a695695d63b58813d44b02fb9550e",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1309 from darknight11ish/fix/desktop-hardware-copy-truth-2026-11-16"
+   "subject": "docs(decisions): record the unauthenticated rate-limit cost of two searches"
   },
   {
-   "sha": "e6650f5afe081cdc678fc2e99e84a9d04a5a7cea",
+   "sha": "b93cec42fe9f7f68e2f7de7509ed9ad51d2908f8",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1305 from darknight11ish/fix/phone-hardware-copy-truth-2026-11-16"
+   "subject": "Merge origin/main into fix/research-search-two-queries-2026-11-16"
   },
   {
-   "sha": "8c049762e294b15e57f6cc9a67c54ddddf915364",
+   "sha": "a5b369843f99e675f5b5803292de9c086726dcf2",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1307 from darknight11ish/fix/phone-copy-says-it-once-2026-11-16"
+   "subject": "fix(research): one GitHub search per language, because OR answers nothing"
   },
   {
-   "sha": "9aa2d10172fd73d716341dee6001c98fec1fe47f",
+   "sha": "7c3c58736c48c7ebddc2960e33e91c3853d93fe3",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1304 from darknight11ish/fix/phone-one-home-for-pc-notifications-2026-11-16"
+   "subject": "Merge pull request #1321 from darknight11ish/docs/def079-amended-2026-11-16"
   },
   {
-   "sha": "8bd8ac435b672001124a8e6264fc4f7e66ddaefb",
+   "sha": "e15d673b07e717143aa733488bc8e37077d4d58b",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1299 from darknight11ish/fix/planned-note-resolves-2026-11-15"
+   "subject": "fix(chat): ask which note only when the name is an article, not a pronoun"
   },
   {
-   "sha": "e97c06fd608d5f1ca9804e924140f6b84cfaac99",
+   "sha": "8858a2db8d09cea7439ec2313f13c26c2dd5b1d6",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1300 from darknight11ish/fix/def078-ci-run-count-2026-11-16"
+   "subject": "Merge pull request #1319 from darknight11ish/chore/specta-hotkeys-pilot-2026-11-16"
   },
   {
-   "sha": "9ff5ce424f78152d3882e737843b1f839b79a18e",
+   "sha": "171dec14cf822d8ccb98e295b96a12845ebe6813",
    "date": "2026-11-16",
-   "subject": "Merge pull request #1301 from darknight11ish/feat/github-off-switch-card-2026-11-16"
+   "subject": "fix(chat): six measured wrong answers on the fast path, and one false card claim"
   },
   {
-   "sha": "992f65f7ed43610cf461535375ea72657e9a4237",
+   "sha": "3a3dc36556c524859405ce4a2456487fd3df137c",
    "date": "2026-11-16",
-   "subject": "fix(hardware): the backend stops promising a card per step and denying its measured line"
+   "subject": "docs(register): close DEF-079 by deployment, file DEF-080 for the sentence it leaves"
   },
   {
-   "sha": "cc7e84136acfd49375bf44a327d271eddabde6ce",
+   "sha": "d589e4d56122f01bd0d85bce890403c4da315c27",
    "date": "2026-11-16",
-   "subject": "fix(notes): create from a sentence, find by frontmatter alias, append dated"
+   "subject": "feat(notes): one resolver, tiered, with the vault's daily-note settings (#1320)"
   },
   {
-   "sha": "f90f6fb805e783c132c35cd77a6ff9aaea30b558",
+   "sha": "92d38c34d4882e0c866bfe6fef92b0e8f3b518b1",
    "date": "2026-11-16",
-   "subject": "fix(desktop): the Hardware copy stops denying its own measured lines"
+   "subject": "fix(parity): an npm specifier is not a route, and paste comes back through specta"
   },
   {
-   "sha": "4bae67f8e70e250fc9b7249dc35f673373bef457",
+   "sha": "dd416d380f01d5f60516ee3fbb3e937fd5612f0b",
    "date": "2026-11-16",
-   "subject": "fix(phone): three paragraphs say it once and point at the screen"
+   "subject": "feat(grants): the plan-card and trusted-mode engine, wired to nothing (#1308)"
   },
   {
-   "sha": "70b0f8a3e50bedf7be52f260296ea3dfa6de1762",
+   "sha": "299e8b436ef031b109d840ca29cc9f2a91e8b03e",
    "date": "2026-11-16",
-   "subject": "fix(hud): normal-size History menu icons, plus Export and Copy on every chat"
+   "subject": "chore: refresh the generated files and make their twin a checked output (#1316)"
   },
   {
-   "sha": "a4fb82f6418c23bb6d905d9d41eb27f22cf94fac",
+   "sha": "8e3fe4754e978c8f0321e5bb7a85b8c816de7d3d",
    "date": "2026-11-16",
-   "subject": "fix(phone): say measured, not dated, for the focus-preset costs"
+   "subject": "fix(chat): answer the two phone questions from the phone's own facts (#1318)"
   },
   {
-   "sha": "0e0d08f3a80799c52ad1ae379f2e6d59ea2c1532",
+   "sha": "5e566013979164556c6103cb01cd05b842361a73",
    "date": "2026-11-16",
-   "subject": "fix(phone): the Hardware plate's closing line stops denying its measured lines"
+   "subject": "fix(chat): four awareness answers read this PC instead of the model (#1311)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1459
+   "files": 1465
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1264
+   "files": 1270
   },
   {
    "path": "jarvis-client/",
@@ -6728,22 +6762,22 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 354
+   "files": 355
   },
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 324
+   "files": 337
   },
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 268
+   "files": 270
   },
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 234
+   "files": 240
   },
   {
    "path": "videos/",
@@ -6827,8 +6861,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5950,
-  "covered": 5467,
+  "tracked_files": 5984,
+  "covered": 5501,
   "excluded": 483,
   "subsystems": 27
  },

@@ -1482,7 +1482,14 @@ def _finish(job_id: str, state: str, result: Any = None,
         _audit("jobs.finished", {"id": job_id, "state": row["state"],
                                  "handler": row.get("handler"),
                                  "attempts": row.get("attempts")})
-        note = error[:120] if error else ""
+        # THE ANNOUNCEMENT CARRIES NO ERROR TEXT (2026-11-16). This used to be
+        # `error[:120]`, and a handler's exception text is arbitrary: a probe in
+        # `test_jobs.py` raised `RuntimeError(<the words of the result>)`, which
+        # put the owner's own material into the one frame this module says may
+        # hold only a label and a state. The error is untouched on the row's
+        # `error` column and reaches both Work panes through `GET /api/jobs`;
+        # the event says only WHICH job ended and how.
+        note = ""
         # A COMPLETION NOTICE nobody was told about is the other half of the
         # restart defect: written down first, published second, settled third,
         # so a crash leaves one pending entry rather than silence. A cancelled

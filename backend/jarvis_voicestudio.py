@@ -105,10 +105,10 @@ from pathlib import Path
 
 #: Where VoiceStudio's backend listens when `tools/voicestudio_sidecar.ps1`
 #: starts it. 11439 is the next free number in Jarvis's own local block
-#: (11434 everyday, 11435 second card, 11436 third card, 11437 picture
-#: reader) and is NOT VoiceStudio's own 3900 default, so the owner's own
-#: VoiceStudio window can run beside it without a collision (RESULTS.md
-#: section 2 measured 127.0.0.1:11439 only; no 0.0.0.0/LAN socket).
+#: (11434 Ollama's default server, 11435 the coding lane, 11436 the everyday
+#: lane, 11437 the picture reader) and is NOT VoiceStudio's own 3900 default, so
+#: the owner's own VoiceStudio window can run beside it without a collision
+#: (RESULTS.md section 2 measured 127.0.0.1:11439 only; no 0.0.0.0/LAN socket).
 HOST = "127.0.0.1"
 PORT = 11439
 BASE_URL = f"http://{HOST}:{PORT}"
@@ -116,9 +116,11 @@ BASE_URL = f"http://{HOST}:{PORT}"
 #: Jarvis's own local services. `_base()` REFUSES every one of them, so a
 #: later edit cannot quietly point this client at a model lane and ask it to
 #: unload something. The numbers are the ones docs/MODEL-TOPOLOGY.md and
-#: docs/JARVIS-API.md give: 11434 everyday Ollama, 11435 the second card,
-#: 11436 the third card, 11437 the picture reader, 11450 the pooled coder.
-#: 11439 is VoiceStudio's and nobody else's.
+#: docs/JARVIS-API.md give and `jarvis_presets.LANES`/`jarvis_model_lanes.LANES`
+#: use: 11434 Ollama's default server, 11435 the coding lane (also the
+#: second-card lane's own default), 11436 the everyday lane, 11437 the picture
+#: reader, 11450 the pooled coding lane. 11439 is VoiceStudio's and nobody
+#: else's.
 JARVIS_LANE_PORTS = (11434, 11435, 11436, 11437, 11450)
 
 #: The switch. Off in the shipped template; see the module docstring.
@@ -927,8 +929,9 @@ def stop(timeout: float = 10.0, base: str = None) -> dict:
     restart). Idempotent, and never raises for "not running".
 
     It unloads by the ids `/model/loaded` reports as `unloadable`, over the
-    one socket to 11439. It cannot touch an Ollama lane: those are 11434,
-    11435 and 11436, and no code path here builds an id of its own.
+    one socket to 11439. It cannot touch an Ollama lane: those are the five in
+    `JARVIS_LANE_PORTS` (11434, 11435, 11436, 11437, 11450), and no code path
+    here builds an id of its own.
     """
     loaded = model_loaded(timeout=timeout, base=base)
     if loaded.get("running") is False:
