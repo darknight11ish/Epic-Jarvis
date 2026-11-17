@@ -3459,12 +3459,14 @@ def chat_read_choices(text: str) -> tuple:
 
     "read my notes" names no title, and a title that matches several notes names
     more than one - both are answered by asking which, never by guessing. Each
-    row carries the note's real `title` and `start`: its first non-empty line,
-    the same bytes `handle_read` returns, cut to CHAT_START_CHARS so a long
-    paragraph cannot flood the answer. With `text` empty every note is a
-    candidate; otherwise title matching is `chat_find_notes`' own rule (exact
-    first, then merely contains) so the two answers cannot disagree about what
-    "Welcome" matches.
+    row carries the note's real `title`, its `folder` - the one fact that tells
+    two notes lowercasing to the same title apart, and the same folder
+    `jarvis_notes.resolve_note`'s exact-path tier accepts - and `start`: its
+    first non-empty line, the same bytes `handle_read` returns, cut to
+    CHAT_START_CHARS so a long paragraph cannot flood the answer. With `text`
+    empty every note is a candidate; otherwise title matching is
+    `chat_find_notes`' own rule (exact first, then merely contains) so the two
+    answers cannot disagree about what "Welcome" matches.
 
     Nothing here reads a file outside the vault or a dot-folder: it goes through
     `_chat_notes_meta`/`_chat_read`, the same two readers the editor routes use.
@@ -3491,7 +3493,8 @@ def chat_read_choices(text: str) -> tuple:
                 if line:
                     start = line[:CHAT_START_CHARS]
                     break
-        rows.append({"title": str(note.get("title") or ""), "start": start})
+        rows.append({"title": str(note.get("title") or ""), "start": start,
+                     "folder": os.path.dirname(str(note.get("path") or ""))})
     return 200, {"ok": True, "choices": rows, "count": len(matches),
                  "truncated": len(matches) > len(rows)}
 
