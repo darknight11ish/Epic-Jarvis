@@ -31,6 +31,29 @@ WHAT IT DECIDES
     non-loopback address without reading any setting.
   * A non-loopback address that belongs to no service this PC has settings for
     is refused: its money cap cannot be read, so the answer cannot be yes.
+  * ONE NAMED EXCEPTION: a web page with nothing to cap (2026-11-16). The
+    browser chatbot drivers type into a company's own web page. There is no API
+    key and no monthly money cap on this PC for such a page, so the money
+    question above can never answer yes and those drivers would be refused for
+    ever. The owner's decision: they may go out when the standing cloud switch
+    is ON and Lockdown is OFF - the switch being on is their yes - because a
+    web page has no money to cap. A caller may therefore pass
+    `no_money_cap="<its own name>"`, a claim that says "there is no money to cap
+    here". It is deliberately narrow:
+      - accepted ONLY from the callers named in NO_MONEY_CAP_CALLERS (today
+        exactly one: jarvis_chatbot_web, the module every website driver sends
+        through), and only when the claim is that caller's own name;
+      - consulted ONLY where the address belongs to no service this PC has
+        settings for - the one case the money question cannot answer at all. It
+        can never bypass a real monthly cap;
+      - it skips neither Lockdown nor the standing switch: both run first,
+        every time, and a refusal from either still wins;
+      - a caller that is not named, or that claims under another caller's name,
+        is refused exactly as it was before.
+    It is written down here, and in decisions.d/2026-11-16-egress-second-round.md,
+    so the next reader cannot mistake it for a general bypass. If this shape is
+    ever needed by a second kind of caller, that is a new decision, not a new
+    name in the list.
 
 FAIL CLOSED, AND WHAT "CLOSED" MEANS HERE
 Closed means REFUSED. A missing switch file is off; an unreadable or corrupt
@@ -69,6 +92,14 @@ UNKNOWN_SERVICE = "unknown_service"
 BAD_TARGET = "bad_target"
 CONFIG_UNREADABLE = "config_unreadable"
 
+#: The ONE callers allowed to claim `no_money_cap`. A browser chatbot driver
+#: reaches a company's own web page: no API key, no monthly cap, and no service
+#: settings on this PC for it. Only the shared adapter in
+#: `jarvis_chatbot_web.py` asks with this claim (it is the module every website
+#: driver sends through); a caller not named here is refused exactly as if it
+#: had never asked. Adding a name here is a decision, not an edit.
+NO_MONEY_CAP_CALLERS = frozenset({"jarvis_chatbot_web"})
+
 #: A refusal's plain words when the module itself could not finish the check.
 _CANNOT_READ = ("Nothing was sent: Jarvis could not read the cloud settings on this PC, "
                 "and it never sends anything when it cannot check.")
@@ -82,6 +113,8 @@ class Decision:
     is the sentence a person can read ("" when the answer is yes). A refusal
     also carries `token` = "EGRESS_BLOCKED:<reason>". The rest is the record
     of what was asked, kept so a caller can log or show it without guessing.
+    `no_money_cap` is the accepted claim (the caller that said "there is no
+    money to cap here"), and is "" when no such exception was taken.
     """
 
     allowed: bool
@@ -91,6 +124,7 @@ class Decision:
     surface: str = ""
     target: str = ""
     payload_chars: int = 0
+    no_money_cap: str = ""
 
     @property
     def token(self) -> str:
@@ -156,13 +190,23 @@ def _money_refusal(pid: str, chars: int, **where) -> Optional[Decision]:
 
 
 def check_egress(caller, target_url, payload, surface,
-                 local_only: Optional[bool] = None) -> Decision:
+                 local_only: Optional[bool] = None,
+                 no_money_cap: str = "") -> Decision:
     """May this request leave this PC? A Decision; never an exception.
 
     `caller` and `surface` are names for the record ("jarvis_chatbot_api",
     "quiz_cloud"); `target_url` is the exact address the sender is about to
     open; `payload` is what would be sent (only its size is read);
     `local_only=True` means the caller already knows the words must stay here.
+
+    `no_money_cap` is the ONE named exception (see the module docstring): pass
+    your own caller name to claim "this address has no money to cap here" - it
+    is the browser drivers' way past a money question that can never answer
+    yes for a company's web page. It is accepted only from a caller named in
+    NO_MONEY_CAP_CALLERS and only when it equals `caller`, it is consulted only
+    where the address belongs to no service this PC has settings for, and it
+    skips neither Lockdown nor the standing switch. A caller not named there is
+    refused exactly as it would be without the claim.
 
     The order below is the order a person would ask:
       1. Is this PC itself (loopback)? Then yes, always.
@@ -223,6 +267,14 @@ def check_egress(caller, target_url, payload, surface,
         except Exception:
             return _refuse(CONFIG_UNREADABLE, _CANNOT_READ, **where)
         if pid is None:
+            # A web page the browser drivers use has no service settings here and
+            # so no cap to read: the ONE named claim may answer that question in
+            # its place. It is accepted only from the caller it names; any other
+            # caller, or a host that does not claim it, is refused as before.
+            claim = str(no_money_cap or "")
+            if claim and claim == caller and claim in NO_MONEY_CAP_CALLERS:
+                where["no_money_cap"] = claim
+                return Decision(True, ALLOWED, "", **where)
             return _refuse(UNKNOWN_SERVICE,
                            "Nothing was sent: Jarvis has no cloud service settings for "
                            f"{host}, so it cannot check whether this may leave the PC.",

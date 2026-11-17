@@ -29,6 +29,15 @@ Exa, Tavily, Brave or DeepSeek:
     nothing", a 401/402/429/408/5xx each gets its own plain words, its 128
     character query bound refuses before any socket, and no key is a
     readable refusal with no socket;
+  - THE EGRESS GATE (2026-11-16): every keyed search asks
+    `jarvis_egress_gate.check_egress` about the exact address the socket is
+    about to open, before the key is resolved. A production address is
+    refused in the gate's own words, as the state `egress_blocked`, with
+    nothing sent - and the standing cloud switch and the monthly cap decide
+    it, so Tavily, Exa and Brave (no cap on this PC) say so honestly while
+    DeepSeek Search sends with the switch on and a limit set. A loopback
+    address still sends without the switch, and the local SearXNG search
+    does not go through the gate at all;
   - the keys: Credential Manager names match the desktop's, no route takes a
     key, and the owner's command line never echoes one;
   - DuckDuckGo: ddgs with backend="duckduckgo" ONLY; a ddgs without that
@@ -80,7 +89,8 @@ sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("jarvis_search.py", "jarvis_agent.py", "jarvis_quick.py",
-                "jarvis_local_http.py", "jarvis_scrub.py", "rebuilt/jarvis_router.py")
+                "jarvis_local_http.py", "jarvis_scrub.py", "rebuilt/jarvis_router.py",
+                "jarvis_egress_gate.py")
 
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.append(str(HERE / "rebuilt"))
@@ -135,6 +145,44 @@ def reset(**settings):
         p.write_text(json.dumps(base), encoding="utf-8")
 
 
+def gate_switch(*, escalate=None, lockdown=None) -> None:
+    """The standing cloud switch and Lockdown, in THIS suite's temp folder.
+
+    `None` removes the file (absent reads as off), True/False writes it. The
+    egress gate reads these two files; without them every non-loopback search
+    is refused, which is what the gate's own test below proves - so that test
+    is the one that points the switch on, and puts it back in a `finally`.
+    """
+    cfg = _TMP / "config"
+    cfg.mkdir(parents=True, exist_ok=True)
+    for name, value in (("escalate-cloud.json", escalate), ("lockdown.json", lockdown)):
+        p = cfg / name
+        if value is None:
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+        else:
+            p.write_text(json.dumps({"on": bool(value)}), encoding="utf-8")
+
+
+def gate_money(*, limit=5.0, spent=0.0, remove=False) -> None:
+    """The chatbot money file the gate reads, in THIS suite's temp folder."""
+    import jarvis_chatbot_api as API
+    p = API.money_path()
+    if remove:
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
+        return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    months = {API.month_key(): {"deepseek_api": {"dollars": spent}}} if spent else {}
+    p.write_text(json.dumps({"version": 1, "limits": {"deepseek_api": limit},
+                             "prices": {}, "months": months}), encoding="utf-8")
+
+
+
 class FakeStore:
     """Credential Manager, in memory: target -> value."""
     DATA: dict = {}
@@ -155,15 +203,36 @@ class FakeStore:
 WS._STORE_FACTORY = FakeStore
 
 
+def _is_this_pc(host) -> bool:
+    """True for an address on this PC itself: 127.0.0.0/8, ::1, localhost."""
+    h = str(host or "").strip().strip("[]").lower()
+    return h == "localhost" or h.endswith(".localhost") or h.startswith("127.") or h == "::1"
+
+
 class NoSockets:
-    """Every way out of this process made to fail, and counted."""
+    """Every way out of this process made to fail, and counted.
+
+    `tried` is every attempt, whatever its address. `leaving` is the subset
+    that would have LEFT this PC - everything that is not loopback - because
+    that is what "nothing is sent" means: a connection to 127.0.0.1 is this PC
+    talking to itself. The distinction is not cosmetic (2026-11-16): on the
+    owner's PC, and not on CI (which has no graphics card), an answer that
+    CHANGES something also runs the change journal, which reads the local
+    model's own /api/ps on 127.0.0.1. That read is not a search going anywhere,
+    and counting it as a send made this guard report one that never happened.
+    """
 
     def __enter__(self):
         self.tried = []
+        self.leaving = []
         self.saved = (socket.socket.connect, socket.create_connection)
 
         def refuse(*a, **k):
+            addr = next((c for c in list(a) + list(k.values())
+                         if isinstance(c, tuple) and c and isinstance(c[0], str)), None)
             self.tried.append(a[:1])
+            if addr is None or not _is_this_pc(addr[0]):
+                self.leaving.append(addr)
             raise AssertionError("a socket was opened")
         socket.socket.connect = refuse
         socket.create_connection = refuse
@@ -922,6 +991,149 @@ def t_deepseek_parser_errors_and_no_key():
     FakeStore.DATA.clear()
 
 
+# --------------------------------------------------------------------------
+#   4b. The egress gate: every keyed search asks it before the socket
+# --------------------------------------------------------------------------
+
+def t_the_egress_gate_decides_before_the_socket():
+    """`jarvis_egress_gate.check_egress` is asked in `_send`, about the exact
+    address the socket is about to open, BEFORE the key is resolved.
+
+    Proves both directions, because a gate that refuses everything is as wrong
+    as one that lets everything through: a production address is refused in
+    the gate's own words with nothing sent and the state `egress_blocked`,
+    while a loopback address (and a DeepSeek Search that has a real cap) still
+    sends. It also records the honest consequence of asking the money question
+    the same way the other senders do: Tavily, Exa and Brave have no monthly
+    cap on this PC, so they are refused until they get one.
+    """
+    calls = []
+
+    # The real contract is (Request, local) -> (status, body bytes).
+    def hook(req, *, local=False):
+        calls.append(req.full_url)
+        return 200, json.dumps({"results": [{"title": "T", "url": "https://t.example/1",
+                                              "content": "snippet"}],
+                                "summary": "s"}).encode()
+
+    try:
+        # 1. The switch is off: the production address is refused, in the gate's
+        #    own words, before the HTTP hook could be reached.
+        gate_switch(escalate=False)
+        reset(provider="tavily")
+        FakeStore.DATA[WS.KEY_TARGETS["tavily"]] = FAKE_TAVILY
+        WS._HTTP = hook
+        out = WS.run(WS.plan("walking boots"), approved=True)
+        check("with the cloud switch off a production search is refused as "
+              "egress_blocked, in the gate's own words",
+              out["ok"] is False and out["state"] == "egress_blocked"
+              and out["error"].startswith("Nothing was sent")
+              and "cloud switch" in out["error"], out)
+        check("... the socket hook was never called, so nothing was sent",
+              calls == [], calls)
+        check("... the refusal carries no key", FAKE_TAVILY not in json.dumps(out))
+        check("... and the last-test record says the egress gate refused it",
+              (WS.last_test("tavily") or {}).get("state") == "egress_blocked",
+              WS.last_test("tavily"))
+
+        # 2. The switch is on, but Tavily has no monthly cap on this PC: the
+        #    gate's money question has nothing to read, so the answer is still no.
+        gate_switch(escalate=True)
+        calls.clear()
+        out = WS.run(WS.plan("walking boots"), approved=True)
+        check("with the switch on, a provider with no cap is refused and named",
+              out["ok"] is False and out["state"] == "egress_blocked"
+              and "no cloud service settings" in out["error"]
+              and "api.tavily.com" in out["error"], out)
+        check("... and still nothing was sent", calls == [], calls)
+
+        # 3. A loopback address is this PC talking to itself: allowed with even
+        #    the switch off, and the search really goes.
+        gate_switch(escalate=False)
+        reset(provider="tavily")
+        body = json.dumps({"results": [{"title": "T", "url": "https://t.example/1",
+                                        "content": "snippet"}]}).encode()
+        seen = []
+        with_cloud = _with_cloud("tavily", {"/search": (200, {}, body)},
+                                 lambda srv: (WS.run(WS.plan("walking boots"), approved=True),
+                                              srv.seen))
+        out, seen = with_cloud
+        check("a loopback address still sends, with the switch off",
+              out["ok"] is True and len(seen) == 1, (out, seen))
+
+        # 4. DeepSeek Search is in the money file's services: with the switch on
+        #    and a limit set, the gate says yes and the search really goes.
+        gate_switch(escalate=True)
+        gate_money(limit=5.0)
+        reset(provider="deepseek")
+        FakeStore.DATA[WS.KEY_TARGETS["deepseek"]] = FAKE_DEEPSEEK
+        calls.clear()
+        WS._HTTP = hook
+        out = WS.run(WS.plan("walking boots"), approved=True)
+        check("DeepSeek Search, switch on and a limit set: the gate allows it and "
+              "the one POST goes",
+              out["ok"] is True and calls == [WS.DEEPSEEK_URL], (out, calls))
+    finally:
+        WS._HTTP = None
+        gate_switch()
+        gate_money(remove=True)
+        FakeStore.DATA.clear()
+        reset()
+
+
+def t_a_socket_that_would_leave_this_pc_still_fails():
+    """The guard the keyless check above leans on is itself measured here.
+
+    `NoSockets` refuses every connection, so this makes two by hand and catches
+    the refusal: the remote one must be recorded as LEAVING this PC and the
+    loopback one must not. Without this, a guard that quietly counted nothing
+    would make "nothing was sent" pass for the wrong reason - the failure mode
+    that hid a real send on 2026-11-15's review, one instrument over.
+    """
+    with NoSockets() as guard:
+        for addr in (("api.exa.ai", 443), ("127.0.0.1", 11436)):
+            try:
+                socket.create_connection(addr)
+            except AssertionError:
+                pass
+    check("the guard counts a remote attempt as leaving this PC, and a loopback "
+          "one as not",
+          guard.leaving == [("api.exa.ai", 443)] and len(guard.tried) == 2,
+          (guard.tried, guard.leaving))
+
+
+def t_the_egress_gate_loader_is_a_refusal():
+    """A gate that cannot be loaded is itself a refusal: `_send` returns the
+    gate's "could not check" sentence and nothing reaches the HTTP hook. The
+    gate is imported inside `_egress_refusal`, so a broken import is proved by
+    hiding the module from the import system for the length of one call."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_gate(name, *a, **k):
+        if name == "jarvis_egress_gate":
+            raise ImportError("the gate is not here")
+        return real_import(name, *a, **k)
+
+    calls = []
+    reset(provider="tavily")
+    FakeStore.DATA[WS.KEY_TARGETS["tavily"]] = FAKE_TAVILY
+    WS._HTTP = lambda req, *, local=False: (calls.append(req.full_url)
+                                            or (200, b'{"results": []}'))
+    builtins.__import__ = no_gate
+    try:
+        out = WS.run(WS.plan("walking boots"), approved=True)
+    finally:
+        builtins.__import__ = real_import
+        WS._HTTP = None
+        FakeStore.DATA.clear()
+        reset()
+    check("a gate that cannot be loaded refuses, in plain words, with nothing sent",
+          out["ok"] is False and out["state"] == "egress_blocked"
+          and "could not check" in out["error"] and calls == [], (out, calls))
+
+
 def t_the_keys_stay_on_the_pc():
     rs = (REPO / "jarvis-desktop" / "src-tauri" / "src" / "token_store.rs").read_text(encoding="utf-8")
     for pid, target in WS.KEY_TARGETS.items():
@@ -1607,8 +1819,8 @@ def t_which_search_without_the_model():
     # really does send one search for the fixed test word - the switch's own
     # words are what is under test here, so the test result is stubbed as
     # working. t_choosing_a_provider_tests_it_first_and_keeps_the_old_one
-    # proves the refusing half; the no-socket guarantee is kept where it can
-    # be, and checked just below with a key that is missing.
+    # proves the refusing half; the nothing-is-sent guarantee is kept where it
+    # can be, and checked just below with a key that is missing.
     real_test = WS.live_test
     WS.live_test = lambda provider, *, s=None: {"ok": True, "results": 5,
                                                 "provider": provider, "tested": True}
@@ -1619,11 +1831,30 @@ def t_which_search_without_the_model():
     check("\"use DuckDuckGo for web search\" switches, and says so",
           WS.settings()["provider"] == "duckduckgo" and "DuckDuckGo" in r.reply, r.reply)
     FakeStore.DATA.clear()
-    with NoSockets() as ns:
-        r = Q.answer("use exa for web search", sched=_Sched())
+    # "Not tested" has to mean the ONE function that sends a search was never
+    # entered, and that nothing was sent anywhere off this PC - not that this
+    # process opened no socket at all. An answer that changes something also
+    # runs the change journal, which on the owner's PC (two graphics cards; CI
+    # has none) reads the local model's own /api/ps on loopback. That read is
+    # this PC talking to itself, so the guard records it in `ns.tried` and NOT
+    # in `ns.leaving`; the assertion below is the one that matters.
+    sends = []
+
+    def no_send(*a, **k):
+        sends.append(a)
+        raise AssertionError("a search was sent")
+
+    real_send = WS._send
+    WS._send = no_send
+    try:
+        with NoSockets() as ns:
+            r = Q.answer("use exa for web search", sched=_Sched())
+    finally:
+        WS._send = real_send
     check("a provider whose key is missing is not tested, so nothing is sent",
-          WS.settings()["provider"] == "exa" and not ns.tried and "No Exa key" in r.reply,
-          (r.reply, ns.tried))
+          WS.settings()["provider"] == "exa" and not ns.leaving and not sends
+          and "No Exa key" in r.reply,
+          (r.reply, ns.leaving, len(sends), ns.tried))
     body = {"messages": [{"role": "user", "content": "use brave for web search",
                           "provenance": "pasted"}]}
     check("only the owner's own words switch it (a pasted one goes to the model)",
@@ -1840,6 +2071,9 @@ if __name__ == "__main__":
                t_the_searxng_address_is_the_owners_own, t_tavily_key_goes_only_to_tavily,
                t_exa_key_goes_only_to_exa, t_brave_key_goes_only_to_brave,
                t_deepseek_parser_errors_and_no_key,
+               t_the_egress_gate_decides_before_the_socket,
+               t_the_egress_gate_loader_is_a_refusal,
+               t_a_socket_that_would_leave_this_pc_still_fails,
                t_the_keys_stay_on_the_pc,
                t_duckduckgo_only_and_paced, t_settings_and_the_card_to_ask_less,
                t_the_picture_says_what_the_last_live_test_said,

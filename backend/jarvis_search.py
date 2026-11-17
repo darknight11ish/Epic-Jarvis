@@ -94,6 +94,15 @@ WHAT GOES OVER THE NETWORK, AND HOW
     Whether primp also uses the Windows system proxy is NOT checked here.
   - Every response is read up to MAX_BODY bytes; a longer one is refused.
     Every request has a TIMEOUT. Redirects are refused.
+  - THE EGRESS GATE (2026-11-16): every keyed search asks
+    `jarvis_egress_gate.check_egress` about the exact address it is about to
+    open, BEFORE the key is resolved or the socket opens. A refusal sends
+    nothing and comes back as the state `egress_blocked` in the gate's own
+    words. The standing cloud switch and Lockdown decide, and so does the
+    monthly money cap for the service the address belongs to - so a provider
+    with no cap on this PC (today Tavily, Exa and Brave; SearXNG is on this PC
+    and DeepSeek Search has the DeepSeek API's cap) is refused until it has
+    one. The local SearXNG search does not go through the gate.
   - SearXNG gets ONE bounded preflight before the search itself (2026-10-18):
     one request to its own address with PREFLIGHT_TIMEOUT (1 s). A container
     that is not there - or a Docker proxy that accepts the port and then
@@ -295,7 +304,7 @@ ASK_EVERY_TIME_DETAIL = (
 STATES = ("works", "not_running", "json_off", "key_missing", "key_refused",
           "quota_used", "rate_limited", "not_installed", "no_results", "timeout",
           "not_allowed", "blocked", "failed", "secret", "settings_damaged", "empty",
-          "turned_off")
+          "turned_off", "egress_blocked")
 
 
 # --------------------------------------------------------------------------
@@ -633,6 +642,7 @@ _TEST_STATES = {
     "not_installed": "the ddgs package is not installed",
     "key_missing": "no key is saved on this PC",
     "turned_off": "web search is switched off",
+    "egress_blocked": "the egress gate refused it, so nothing was sent",
 }
 
 
@@ -1233,6 +1243,30 @@ def _vault_handle(provider: str, key: str) -> str:
     return key
 
 
+def _egress_refusal(req) -> str:
+    """The egress gate's sentence when this request must not leave, else "".
+
+    THE ONE QUESTION BEFORE THE SOCKET OPENS (2026-11-16): may these words
+    leave this PC? `jarvis_egress_gate.check_egress` answers with a Decision,
+    asked about the exact address the socket is about to open. `local_only` is
+    not passed (so it stays False): a web search is not email, files,
+    credentials or stored memory, and rule 1 does not apply to it. The standing
+    cloud switch and Lockdown still decide, and so does the monthly cap for the
+    service the address belongs to - a keyed provider with no cap on this PC is
+    refused, exactly like any other address whose cost cannot be read. A gate
+    that cannot even be loaded is itself a refusal: nothing is sent when the
+    check cannot run.
+    """
+    try:
+        import jarvis_egress_gate as gate
+        decision = gate.check_egress("jarvis_search", req.full_url, req.data or b"",
+                                     "web_search")
+    except Exception:
+        return ("Nothing was sent: Jarvis could not check whether this search may leave "
+                "this PC, so it kept it on this PC.")
+    return "" if decision.allowed else decision.words
+
+
 def _send(req, *, local: bool, service_host: str = ""):
     """The ONE line that sends. The real value of any vault handle in the
     request's headers is put in here and nowhere else, and only for the host
@@ -1248,7 +1282,18 @@ def _send(req, *, local: bool, service_host: str = ""):
     Read and written through jarvis_vault's own header view, because urllib
     keeps its headers in TWO dicts and `Request.add_unredirected_header` writes
     to the one `Request.headers` does not show - so a substitution done any
-    other way can read back the handle and look as if it worked."""
+    other way can read back the handle and look as if it worked.
+
+    The egress gate is asked FIRST, before any credential is resolved or any
+    socket opens: a refused search raises `SearchError("egress_blocked", ...)`
+    carrying the gate's own sentence, and the key is never even put into the
+    header. `local=True` is the SearXNG search on this PC, which the gate never
+    needs to see.
+    """
+    if not local:
+        why = _egress_refusal(req)
+        if why:
+            raise SearchError("egress_blocked", why)
     v = _vault()
     if v is not None:
         try:

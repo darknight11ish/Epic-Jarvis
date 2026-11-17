@@ -76,6 +76,18 @@ WHAT IT TOUCHES AND READS (per site)
   * The only address it opens by itself is the site's new-chat address.
     _goto_here() refuses any other host. A sign-in page is reached only by
     the OWNER clicking "Sign in" in the window.
+  * THE EGRESS GATE (2026-11-16). The window reaches a company's own web page,
+    with no API key and no monthly money cap on this PC for it. The owner's
+    decision: it may go out when the standing cloud switch is ON and Lockdown
+    is OFF - the switch being on is their yes. So the site's own address (in
+    _goto_here) and every message (in send) ask
+    jarvis_egress_gate.check_egress FIRST, with the gate's one named
+    `no_money_cap` claim: "there is no money to cap here", claimed by this
+    module's own name. A refusal stops the navigation or the message before
+    anything is typed, in the gate's own words; nothing is sent. The claim
+    skips neither the switch nor Lockdown and cannot bypass a real cap - the
+    gate's docstring says exactly what it is, and why it is not a general
+    bypass.
 
 WHEN A SITE CHANGES
 Every selector is in that site's ONE table, SELECTORS, with fallbacks. They
@@ -500,6 +512,33 @@ class _Worker:
 #   The adapter every website shares
 # ============================================================================
 
+def _egress_refusal(url: str, text: str) -> str:
+    """The egress gate's sentence when this must not leave, else "".
+
+    THE ONE QUESTION BEFORE THIS MODULE OPENS THE SITE (2026-11-16): may the
+    browser reach this company's page, and may these words be typed into it?
+    `jarvis_egress_gate.check_egress` answers with a Decision. The claim
+    `no_money_cap` is this module's name and means what it says - a company's
+    web page has no API key and no monthly cap on this PC, so the gate's money
+    question has nothing to read. The gate accepts it only from the caller named
+    in its NO_MONEY_CAP_CALLERS, only for an address that belongs to no service
+    this PC has settings for, and it skips neither Lockdown nor the standing
+    cloud switch (the owner's decision: the switch being on is their yes).
+
+    A gate that cannot even be loaded is itself a refusal: nothing is typed
+    when the check cannot run.
+    """
+    try:
+        import jarvis_egress_gate as gate
+        decision = gate.check_egress("jarvis_chatbot_web", url, text, "chatbot_web",
+                                     local_only=False,
+                                     no_money_cap="jarvis_chatbot_web")
+    except Exception:
+        return ("Nothing was sent: Jarvis could not check whether this may leave this "
+                "PC, so it kept it on this PC.")
+    return "" if decision.allowed else decision.words
+
+
 class WebAdapter(CB.Adapter):
     """A chatbot website, in a window the owner can see. A site file makes a
     subclass that sets SITE (and id, name, host from it).
@@ -564,6 +603,12 @@ class WebAdapter(CB.Adapter):
         text = str(text or "")
         if not text.strip():
             raise ValueError("nothing to send")
+        # The gate is asked before the message is even handed to the browser
+        # thread: a refusal must end the conversation in its own words, with
+        # nothing typed into the page (see _egress_refusal).
+        why = _egress_refusal(self.start_url, text)
+        if why:
+            raise WebUnavailable(why)
         budget = len(text) * self.type_delay_ms / 1000.0 + SENT_WAIT + 60
         self._call(lambda: self._send_here(text), budget)
 
@@ -651,6 +696,11 @@ class WebAdapter(CB.Adapter):
             raise PermissionError(f"Jarvis's {self.site.name} window only opens "
                                   f"{', '.join(self.chat_hosts)} by itself, not "
                                   f"{host or 'that address'}")
+        # Reaching the site IS the request leaving this PC, so the gate is asked
+        # here too, not only on send: with the switch off no page is opened.
+        why = _egress_refusal(url, "")
+        if why:
+            raise WebUnavailable(why)
         self._page.goto(url, wait_until="domcontentloaded")
 
     def _close_here(self) -> None:
