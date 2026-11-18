@@ -2079,6 +2079,14 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _self_github(s)
     if got is not None:
         return got
+    # The owner's own GitHub READS, answered from GitHub's own answer with no
+    # model (2026-11-18). After the self-knowledge answers, so "what's your CI
+    # status?" keeps answering about Jarvis's own runs; before the accounts and
+    # settings grammar, because "which pull requests..." must not be read as a
+    # settings sentence.
+    got = _self_github_reads(s)
+    if got is not None:
+        return got
     got = _self_accounts(s)
     if got is not None:
         return got
@@ -15330,6 +15338,152 @@ def _self_github(s: str) -> Optional[Intent]:
             r"(?:please\s+)?(?:comment|open|create|file|re-?run|rerun)\b)", s):
         return Intent("github_self", {"shape": "action"})
     return None
+
+
+# --------------------------------------------------------------------------
+#   The owner's own READ-ONLY GitHub questions, answered with no model
+#   (2026-11-18, the owner's ruling after the live battery)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED FAILURE. On the live PC, 2026-11-18 17:57Z, eight GitHub
+# questions were asked and NONE of the answers the owner should have had came
+# out: one turn did call `github_list` and was refused the bare repository
+# name, seven turns called no tool at all, and "what is the latest commit on
+# main in Epic-Jarvis?" was answered with a false denial ("I don't have direct
+# access to your GitHub repositories"). A 9B model is measurably unreliable at
+# choosing a tool for these (the project's own settings-tool measurement, 0 of
+# 21 calls before its description said to call it); the deterministic lane
+# already answers the GitHub SELF-knowledge questions with no model, and these
+# are the same kind of question about data this PC can read itself.
+#
+# WHAT DECIDED THE SHAPE. (1) ONLY when the read row is really card-free
+# (`github_inspect` at "auto"), because these answers make a GitHub read with
+# no model in the loop and must never go round a card the owner put back - when
+# it asks, `_self_github_reads` returns None and the model's tool path raises
+# the card as before. (2) ONLY when a token is saved, so a PC with no GitHub
+# keeps its old path and its connect answer. (3) The reads go through
+# `jarvis_github`'s OWN planners and `run()`, so the token goes only to
+# api.github.com, the Q5 target check still runs, and the answer can only
+# repeat what GitHub's own answer said - never a guess. (4) They are reads, so
+# their names are in READ_ONLY_INTENTS.
+#
+# NOT INCLUDED, deliberately: the open-defect count. It reads a local file
+# (`docs/defect-register.tsv`) and another lane is giving it its own
+# deterministic answer this wave - two doors for one question would drift.
+_GITHUB_MY_PRS = re.compile(
+    r"(?:(?:what|which|show|list|tell\s+me)\s+(?:me\s+)?(?:are\s+|is\s+)?"
+    r"(?:my|the|all\s+(?:the|my))\s+(?:open\s+)?(?:pull\s*requests?|prs?)\b.*"
+    r"|(?:which|what)\s+(?:open\s+)?(?:pull\s*requests?|prs?)\s+(?:are\s+)?"
+    r"(?:ready\s+to\s+merge|open|waiting|unmerged|need(?:s)?\s+merging)\b.*"
+    r"|(?:what|which)\s+(?:open\s+)?(?:pull\s*requests?|prs?)\s+"
+    r"(?:do\s+i\s+have|are\s+mine)\b.*)\s*\??")
+_GITHUB_PR_CHECKS = re.compile(
+    r"(?:what|which|how)\b.*\b(?:failing|failed|wrong|broken|checks?|ci|status|"
+    r"running|pending|queued|green)\b.*\b(?:pull\s*request|pr)\s*#?(?P<n>\d{1,7})\b.*"
+    r"|(?:what|which)\b.*\b(?:pull\s*request|pr)\s*#?(?P<n2>\d{1,7})\b.*\b(?:"
+    r"failing|failed|checks?|ci|status|running|pending)\b.*")
+_GITHUB_MAIN_COMMIT = re.compile(
+    r"(?:(?:what|which)\s+(?:is|was)?\s*(?:the\s+)?latest\s+commit\b.*"
+    r"|(?:what|which)\s+(?:is|was)?\s*(?:the\s+)?last\s+commit\b.*"
+    r"|latest\s+commit\b.*)\bmain\b.*")
+_GITHUB_UNMERGED = re.compile(
+    r"(?:(?:which|what|are\s+there)\s+branches?\b.*\b(?:unmerged|not\s+merged|"
+    r"open|unpushed|unfinished)\b.*"
+    r"|(?:unmerged|not\s+merged)\s+(?:work|branches?)\b.*)\s*\??")
+
+
+def _github_reads_are_free() -> bool:
+    """True only when a GitHub READ really raises no card on this PC.
+
+    The tier is the shipped `github_inspect` row: "auto" when the owner has
+    left the reads card-free (the default), "ask" when the switchable "Read
+    your GitHub" row has put the card back. A tier that cannot be read is
+    treated as asking: a deterministic answer must never go round a card.
+    """
+    try:
+        import jarvis_framework
+        return str(jarvis_framework.action_tier("github_inspect")) == "auto"
+    except Exception:                        # noqa: BLE001 - unreadable asks
+        return False
+
+
+def _self_github_reads(s: str) -> Optional[Intent]:
+    """The owner's own GitHub READS, answered from jarvis_github with no model.
+
+    Whole-sentence shapes only. `None` whenever this PC cannot answer them
+    safely: no module, no token, or the read card switched back on - then the
+    sentence keeps its old path (the model, whose tool raises the card).
+    """
+    GH = _github_module()
+    if GH is None:
+        return None
+    shape, fields = None, {}
+    if _GITHUB_PR_CHECKS.search(s):
+        m = _GITHUB_PR_CHECKS.search(s)
+        number = (m.groupdict().get("n") or m.groupdict().get("n2") or "").strip()
+        if number:
+            shape, fields = "pr", {"number": number}
+    if shape is None and _GITHUB_MAIN_COMMIT.search(s):
+        shape = "main"
+    if shape is None and _GITHUB_UNMERGED.search(s):
+        shape = "unmerged"
+    if shape is None and _GITHUB_MY_PRS.search(s):
+        shape = "pulls"
+    if shape is None:
+        return None
+    try:
+        if not GH.connected():
+            return None
+    except Exception:                        # noqa: BLE001 - unknown is not yes
+        return None
+    if not _github_reads_are_free():
+        return None
+    return Intent("github_own_read", {"shape": shape, **fields})
+
+
+def _run_github_own_read(f: dict, peer=None, local=None) -> Result:
+    """Answer one owner GitHub read from GitHub's own answer, in plain words.
+
+    Nothing here is a guess: the plan and the request are `jarvis_github`'s,
+    `run()` performs the Q5 target check first, and anything that is not a
+    clean answer is said as the module said it - or, when it cannot answer,
+    said plainly rather than filled in by the model.
+    """
+    name = "github_own_read"
+    GH = _github_module()
+    if GH is None:
+        return Result(GITHUB_MISSING, name)
+    try:
+        repo = str(GH.OWN_REPO)
+        shape = str(f.get("shape") or "")
+        if shape == "pr":
+            plan = GH.plan_ci({"repo": repo, "pr": str(f.get("number") or "")})
+        elif shape == "main":
+            # The read Jarvis HAS that names a commit on a branch: the newest
+            # CI run on it, which carries its head commit.
+            plan = GH.plan_ci({"repo": repo, "branch": "main"})
+        else:                                # pulls, and unmerged's own list
+            plan = GH.plan_list({"scope": "pulls", "repo": repo})
+        out = GH.run(plan, approved=True)
+    except Exception as exc:                 # noqa: BLE001 - said, never guessed
+        return Result(f"I tried to read your GitHub ({type(exc).__name__}) and it "
+                      f"did not answer, so I will not guess. Nothing was changed.",
+                      name)
+    if not isinstance(out, dict) or out.get("ok") is not True:
+        why = str((out or {}).get("error") or "").strip() or "GitHub did not answer."
+        return Result("I could not read your GitHub, so I will not guess: " + why,
+                      name)
+    text = str(out.get("text") or "").strip()
+    if shape == "main":
+        text = (f"From the newest CI run on main in {repo} - the read Jarvis has "
+                f"that names a commit: " + text)
+    elif shape == "unmerged":
+        text = (f"The unmerged work on {repo} is in these open pull requests; a "
+                f"branch with no pull request is not something this read can see. "
+                + text)
+    else:
+        text = text + f" (read from {repo})"
+    return Result(text, name)
 
 
 #: The account-shaped questions, answered from jarvis_accounts - the same
@@ -30321,6 +30475,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_connected(intent)
     if n == "github_self":
         return _run_github_self(f, peer=peer, local=local)
+    # The owner's own GitHub READS, no model (2026-11-18): the read itself is a
+    # fixed GET at the card-free `github_inspect` tier, and `_run_github_own_read`
+    # says GitHub's own answer rather than letting the model paraphrase it.
+    if n == "github_own_read":
+        return _run_github_own_read(f)
     # The turn after a connect-card save (2026-11-08, the owner's GitHub-token
     # honesty report): answered ONLY from the host's recorded test receipt and
     # the feature guide's own capability words - no model, no network, no card.
@@ -31258,6 +31417,12 @@ READ_ONLY_INTENTS = frozenset({
     # off, so it can clear "cancel that" only by what the card later does - the
     # answer itself writes nothing.
     "github_self", "accounts_answer",
+    # The owner's own GitHub READS (2026-11-18): open pull requests, one pull
+    # request's checks/failures, the newest run on main, and the unmerged work.
+    # Each is a fixed GET through jarvis_github (card-free at its own "auto"
+    # tier; when the owner puts the read card back the deterministic answer does
+    # not run at all), so none changes GitHub and none may clear "cancel that".
+    "github_own_read",
     # The four-way internet answer (2026-11-09): it reads jarvis_reach's own rows
     # and whether a GitHub token is saved, raises no card and opens no socket, so
     # it must not take away what "cancel that" undoes.
