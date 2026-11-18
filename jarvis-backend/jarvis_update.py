@@ -16,9 +16,10 @@ and `.NEEDS_A_PERSON`. This module does not add a second name: it raises the
 same card, under the same action, with the same written words
 (`jarvis_card_words`: "update Jarvis, then restart it"). What changed is only
 WHERE the card may be answered - `jarvis_owner_check.PC_ONLY_ACTIONS` no longer
-holds it, exactly as `raise_api_limit` was taken out on 2026-10-11 for the
-owner's "let the phone raise it too, with its own fingerprint". The two halves
-of the old rule both remain, and neither is weakened:
+holds it, exactly as the chatbot spending-limit card was taken out on
+2026-10-11 for the owner's "let the phone raise it too, with its own
+fingerprint". The two halves of the old rule both remain, and neither is
+weakened:
 
   * ON THE PC it still asks Windows Hello, because `is_risky` sends every
     unclassified-and-outbound card there, and this one is outbound (it fetches
@@ -63,7 +64,10 @@ work has to outlive that process: `helper_main()` runs in its own detached
 process (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP on Windows), writes
 `update-state.json` as it goes, and leaves a final `done` or `failed` there. The
 status route reads that file back - after the restart it caused - so the phone
-gets the real ending rather than a guess.
+gets the real ending rather than a guess. Both children - the helper, and the
+updater script the helper runs - get `child_env()`: an allowlist of the names
+they actually read, never a copy of this process's environment, so the pairing
+token cannot ride along into a process nothing watches.
 
 ONE UPDATE AT A TIME, IN THREE PLACES. A second request refuses cleanly:
 
@@ -1060,6 +1064,43 @@ def _finish_request(pid: str, outcome: str, **extra) -> dict:
 #   The detached helper - the only part that survives the restart
 # --------------------------------------------------------------------------
 
+#: The only names the updater's children are given beyond the OS basics
+#: `jarvis_child_env.inherited()` already carries (PATH, SystemRoot, TEMP,
+#: USERPROFILE, ProgramFiles, ...). Every one is read by this module or by the
+#: programs it starts: `JARVIS_BACKEND`, `JARVIS_REPO`, `JARVIS_CONFIG_DIR` and
+#: `OPENJARVIS_CONFIG_DIR` here and in `scripts/update-jarvis.ps1`;
+#: `JARVIS_FRAMEWORK_TOML` and `GIT_CEILING_DIRECTORIES` in
+#: `scripts/apply-patches.ps1`; `PYTHONIOENCODING` because the script's output
+#: is read as text. The pairing token is NOT here and never will be - which is
+#: the whole point of building the environment instead of copying this one.
+CHILD_ENV_NAMES = (
+    "JARVIS_BACKEND", "JARVIS_REPO", "JARVIS_CONFIG_DIR",
+    "OPENJARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
+    "GIT_CEILING_DIRECTORIES", "PYTHONIOENCODING",
+)
+
+
+def child_env() -> dict:
+    """The environment both children are started with - an allowlist, not a copy.
+
+    A detached helper (and the updater script it runs) outlives the backend that
+    started it and nothing watches it, so a copy of this process's environment
+    would hand the pairing token (`HUD_TOKEN`/`JARVIS_TOKEN`) to a long-lived
+    child. `jarvis_child_env.inherited()` starts from nothing, copies only the
+    OS names a program needs to start and find its files plus `CHILD_ENV_NAMES`
+    by name, and drops even an allowed name that looks like a secret. That is
+    the same allowlist every other program Jarvis starts is given.
+
+    `PATCHER_ENV` is set because the suite sweep the updater runs belongs to
+    this update and must not refuse because of the lock this helper holds.
+    """
+    import jarvis_child_env
+    env = jarvis_child_env.inherited(names=CHILD_ENV_NAMES)
+    env[PATCHER_ENV] = "1"
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    return env
+
+
 def helper_argv(*, state: Path, script: Path, backend: Path,
                 from_version: str = "", to_version: str = "") -> list:
     """The child's whole command line, built here and nowhere else.
@@ -1107,14 +1148,8 @@ def _start_helper(doc: dict) -> Optional[str]:
     argv = helper_argv(state=state_path(), script=Path(script), backend=Path(backend),
                        from_version=str(doc.get("from") or ""),
                        to_version=str(doc.get("to") or ""))
-    env = os.environ.copy()
-    # The suite sweep the patcher runs must not refuse because of the lock this
-    # helper is holding: it belongs to the update that is running.
-    env[PATCHER_ENV] = "1"
-    env.setdefault("PYTHONIOENCODING", "utf-8")
     kwargs = {
         "cwd": str(backend),
-        "env": env,
         "close_fds": True,
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
@@ -1126,7 +1161,9 @@ def _start_helper(doc: dict) -> Optional[str]:
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
     else:
         kwargs["start_new_session"] = True
-    proc = subprocess.Popen(argv, **kwargs)
+    # `env=` is written out here, not hidden in `kwargs`: the child is given
+    # `child_env()`'s allowlist, never this process's environment.
+    proc = subprocess.Popen(argv, env=child_env(), **kwargs)
     # The child writes its own pid into the state as its first act. Recording
     # the spawn here too means a status read in that gap sees "starting" rather
     # than "nothing", and a child that dies before writing is still visible.
@@ -1338,12 +1375,12 @@ def helper_main(argv=None) -> int:
                      from_version=args.from_version,
                      to_version=args.to_version, request_id=request_id)
         beat.start()
-        env = os.environ.copy()
-        env[PATCHER_ENV] = "1"
-        env.setdefault("PYTHONIOENCODING", "utf-8")
+        # The same allowlist the detached helper itself was given: the script
+        # needs PATH and the settings named in `CHILD_ENV_NAMES`, and nothing
+        # else this process inherited (`HUD_TOKEN` included) rides along.
         proc = subprocess.Popen(
             _updater_argv(Path(args.script), Path(args.backend)),
-            cwd=str(args.backend), env=env,
+            cwd=str(args.backend), env=child_env(),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace", bufsize=1,
             creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0)

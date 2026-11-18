@@ -92,6 +92,12 @@ POSITION_PIN_CEILING: dict[str, int] = {
     "backend/test_chatbot_routes.py": 1,
     "backend/test_cloud_say_yes.py": 1,
     "backend/test_obscura.py": 2,
+    # 2026-11-18: the phone-authorized update's suite landed with seven position
+    # pins of its own (its source-text structure assertions and its
+    # docstring-stripping reads). Recorded debt measured by `--measure` on the
+    # day it landed - not an approval, and the ratchet only turns DOWN from
+    # here, so rewriting those seven to walk `ast` lowers this number.
+    "backend/test_phone_authorized_update.py": 7,
     "backend/test_security_pc.py": 1,
     "backend/test_stop_all.py": 1,
     "backend/test_tasks.py": 1,

@@ -887,6 +887,102 @@ def t_the_helper_argv_is_fixed_and_owned_by_this_module():
                         "--from", "0.2.456", "--to", "0.2.460"], child)
 
 
+def t_no_child_of_the_updater_is_given_the_pairing_token():
+    """A sentinel token in this process's environment must not reach a child.
+
+    `_start_helper` used to copy `os.environ` and hide the copy inside a
+    `**kwargs` dict, so the detached helper - which outlives the backend and is
+    watched by nobody - started holding the pairing token (`HUD_TOKEN` /
+    `JARVIS_TOKEN`). The environment is built from an allowlist now; this proves
+    it on the helper, on the updater script it runs, and on a REAL child asked
+    what it can see.
+    """
+    src = (HERE / "jarvis_update.py").read_text(encoding="utf-8")
+    secrets = {
+        "HUD_TOKEN": "sentinel-hud-token-31c0",
+        "JARVIS_TOKEN": "sentinel-jarvis-token-31c0",
+        "OPENAI_API_KEY": "sentinel-api-key-31c0",
+        "JOPLIN_TOKEN": "sentinel-joplin-token-31c0",
+    }
+    saved = {name: os.environ.get(name) for name in secrets}
+    seen = {"calls": []}
+
+    class FakePopen:
+        """Stands in for `subprocess.Popen`, remembering what it was handed."""
+
+        def __init__(self, argv, **kwargs):
+            seen["calls"].append({"argv": list(argv), "kwargs": kwargs})
+            self.argv, self.stdout, self.pid = list(argv), [], os.getpid()
+
+        def wait(self, timeout=None):
+            return 0
+
+        def poll(self):
+            return 0
+
+    real_popen = U.subprocess.Popen
+    os.environ.update(secrets)
+    try:
+        allowed = U.child_env()
+        U.subprocess.Popen = FakePopen
+        clean_files()
+        try:
+            why = U._start_helper({
+                "script": str(Path("C:/fake/repo/scripts/update-jarvis.ps1")),
+                "backend": str(Path("C:/fake/backend")),
+                "from": "0.2.456", "to": "0.2.460",
+                "request_id": "req-sentinel"})
+            helper_code = U.helper_main([
+                "--state", str(U.state_path()),
+                "--script", str(Path("C:/fake/repo/scripts/update-jarvis.ps1")),
+                "--backend", str(Path("C:/fake/backend"))])
+        finally:
+            U.subprocess.Popen = real_popen
+            clean_files()
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    check("no copy of this process's environment is built anywhere",
+          "os.environ.copy()" not in src,
+          [l.strip() for l in src.splitlines() if "os.environ.copy" in l])
+    calls = seen["calls"]
+    check("both children are started with env= written where a reader sees it",
+          len(calls) == 2 and all("env" in c["kwargs"] for c in calls), len(calls))
+    check("the detached helper was started", why is None, why)
+    check("... and the updater script ran to its own ending", helper_code == 0,
+          helper_code)
+    for call in calls:
+        env = call["kwargs"].get("env") or {}
+        label = Path(call["argv"][0]).name if call["argv"] else "child"
+        for name, value in secrets.items():
+            check(f"{label}: the child's environment drops {name}",
+                  name not in env, sorted(env))
+            check(f"{label}: ... and carries none of that value",
+                  all(value not in str(v) for v in env.values()))
+        check(f"{label}: ... while keeping the settings the updater reads",
+              env.get("JARVIS_CONFIG_DIR") == os.environ.get("JARVIS_CONFIG_DIR")
+              and env.get(U.PATCHER_ENV) == "1", sorted(env))
+
+    # The dict is what the module builds; a REAL process is what a child is.
+    probe = "import json, os; print(json.dumps(dict(os.environ)))"
+    done = U.subprocess.run([sys.executable, "-c", probe], env=allowed,
+                            capture_output=True, text=True, timeout=120)
+    check("a real child started with child_env() exits cleanly",
+          done.returncode == 0, (done.returncode, (done.stderr or "")[-300:]))
+    can_see = json.loads(done.stdout or "{}")
+    for name, value in secrets.items():
+        check(f"a real child cannot see {name}", name not in can_see)
+        check(f"... nor its value", value not in (done.stdout or ""))
+    check("... and it does get the settings the updater reads",
+          can_see.get("JARVIS_CONFIG_DIR") == os.environ.get("JARVIS_CONFIG_DIR")
+          and can_see.get(U.PATCHER_ENV) == "1",
+          can_see.get("JARVIS_CONFIG_DIR"))
+
+
 def t_the_locks_are_shared_and_never_stolen():
     clean_files()
     now = __import__("time").time()
@@ -1105,6 +1201,7 @@ if __name__ == "__main__":
             t_the_status_and_the_request_cannot_disagree,
             t_a_finished_update_is_reported_from_the_state_file,
             t_the_helper_argv_is_fixed_and_owned_by_this_module,
+            t_no_child_of_the_updater_is_given_the_pairing_token,
             t_the_locks_are_shared_and_never_stolen,
             t_a_liveness_probe_never_ends_the_process_it_asks_about,
             t_the_helper_refuses_to_run_beside_another_update,
