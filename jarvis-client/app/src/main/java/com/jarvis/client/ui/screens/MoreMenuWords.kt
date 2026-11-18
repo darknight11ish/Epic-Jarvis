@@ -142,26 +142,31 @@ internal object MoreMenuWords {
     const val PRESETS_DETAIL = "In Brain, under Hardware"
 
     /**
-     * "Attach a file" (2026-10-29; the ONE way to send a document OR a photo
-     * since 2026-11-01, when the separate Photo row went). A document is one
-     * PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, read on the
-     * owner's PC within the question it is sent with. A photo picked here
-     * goes down its own picture path, exactly as the Photo row did. No new
-     * permission, no upload route and no switch.
+     * "Attach a file" (2026-10-29; the ONE way to send a document, a recording
+     * OR a photo since 2026-11-01, when the separate Photo row went; recordings
+     * since 2026-11-18, the owner's ".m4a will not attach" report). A document
+     * is one PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, read on
+     * the owner's PC within the question it is sent with; a RECORDING (WAV,
+     * MP3, M4A, AAC, FLAC, OGG, OPUS or WMA) is transcribed on the same PC by
+     * the same reader `my_files` uses, and the phone never transcribes
+     * anything. A photo picked here goes down its own picture path, exactly as
+     * the Photo row did. No new permission, no upload route and no switch.
      */
     const val FILE = "Attach a file"
 
     /**
      * Under "Attach a file": what really happens to it, so the row is not
      * mistaken for an upload that is kept somewhere. Every kind and every
-     * cap is named - the documents' 2.5 MB is `AttachFile.MAX_BYTES`, and the
-     * photo's 1.5 MB is `ChatPicture.MAX_JPEG_BYTES`, which the phone shrinks
-     * the photo to fit rather than a limit on what may be picked. The chip
-     * above the box says the rest (the outside-text sentence).
+     * cap is named - documents and recordings' 2.5 MB is `AttachFile.MAX_BYTES`,
+     * and the photo's 1.5 MB is `ChatPicture.MAX_JPEG_BYTES`, which the phone
+     * shrinks the photo to fit rather than a limit on what may be picked. The
+     * chip above the box says the rest (the outside-text sentence).
      */
     const val FILE_DETAIL =
-        "PDF, Word, Excel, PowerPoint, text, Markdown, CSV or a photo. " +
-            "A document up to 2.5 MB; a photo is shrunk to fit 1.5 MB. Read on your PC."
+        "PDF, Word, Excel, PowerPoint, text, Markdown, CSV, a recording " +
+            "(WAV, MP3, M4A, AAC, FLAC, OGG, OPUS or WMA) or a photo. " +
+            "A document or a recording up to 2.5 MB; a photo is shrunk to fit 1.5 MB. " +
+            "Read on your PC."
 
     /** The Notifications key while phone notifications are on and one was captured. */
     const val NOTIFICATIONS = "Notifications"

@@ -13938,8 +13938,10 @@ def with_picture_text(messages: list, *, keep_picture: bool,
 # The owner's decision, 2026-10-29: "file attachment in chat", both apps at once,
 # and the design's recommended defaults - a 2,500,000-byte raw cap, 12,000
 # characters of text to the model, no approval card (reusing `read_files_readonly`
-# for a card only when that row says ask), nothing written to disk, no new route,
-# images still on the picture path, no audio or video, no new Settings switch.
+# for a card only when that row says ask), one private decode copy for a RECORDING
+# that is removed before the read returns, no new route, images still on the
+# picture path, a recording read by the one audio reader (jarvis_media_read,
+# 2026-11-18) and never by the document converter, no new Settings switch.
 #
 # THE SHAPE, and it is the apps' wiring contract (docs/JARVIS-API.md, "A file in
 # a chat"): the newest user message carries a sibling field, never a content part -
@@ -18225,6 +18227,25 @@ def _schedule_refusal_line(text: str, steps: list) -> str:
         return ""
 
 
+def _surface_claim_line(text: str, steps: list) -> str:
+    """The correction line for an answer that says something was shown, opened
+    or sent when no tool in this answer did it (jarvis_claims.surface_correction),
+    or "".
+
+    THE OWNER'S PHONE REPORT OF 2026-11-18, in his own words: Jarvis told him
+    "it's on your screen" about something it had not put on screen. That is a
+    claim like any other - the reply must be backed by what actually happened
+    in the turn - so it is corrected by the same postscript list as the
+    nothing-done line and the scheduler-refusal line, never by a second
+    mechanism. A missing or broken jarvis_claims.py adds nothing: it never
+    fails an answer."""
+    try:
+        import jarvis_claims
+        return jarvis_claims.surface_correction(text, steps)
+    except Exception:
+        return ""
+
+
 # --------------------------------------------------------------------------
 #   Claims an answer cannot back: a search, the feature guide's contents, a
 #   calculation, or a setting that "is not available" (D1c, D2, D5, D7 - the
@@ -18889,6 +18910,15 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
         line = ""
     if line:
         kinds.append(("schedule", line))
+    # 2026-11-18, the phone report: "It's on your screen." with nothing put
+    # there. The same shape as the two lines above - a claim the turn's own
+    # steps cannot back gets one plain correction at the end of the answer.
+    try:
+        line = _surface_claim_line(text, list(steps or ()))
+    except Exception:
+        line = ""
+    if line:
+        kinds.append(("claim", line))
     words = str(owner_words or getattr(watch, "newest_own_words", "") or "")
     try:
         # The conversation id rides along so the approval-claim check can read

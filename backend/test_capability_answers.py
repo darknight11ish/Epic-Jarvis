@@ -43,12 +43,16 @@ means None, and the model answers exactly as before.
 
 WHAT THIS SUITE CHECKS
 
-  1. the 10 owner trap sentences, with the row each one must resolve to (or,
-     for the two "send a file from my phone to my PC" sentences, that it still
-     falls through: since 2026-11-06 the catalogue HAS a phone document door
-     and the two upload-documents sentences resolve to it, but these two name
-     a generic "file" and no door word, so the matcher declines rather than
-     guessing);
+  1. the owner trap sentences, with the row each one must resolve to. TWO OF
+     THEM CHANGED ON 2026-11-18: "Can I send a file from my phone to my PC?"
+     must now be answered by `document-from-phone`, not fall through. Since
+     2026-11-15 that row's aliases include "send a file from my phone to my pc"
+     and "send a photo from my phone to my pc", so the catalogue has the door -
+     the matcher was returning None because the highest-scoring row was the
+     OPPOSITE-direction `file-from-pc` and it gave up instead of taking the
+     honest one. The owner's own sentence of that day, "Can you send a file for
+     me to my PC?", is in the list too (it needed a second fix: "can you ..."
+     was never a capability lead); see `t_the_owner_s_phone_file_question`;
   2. the 25 availability questions from the measured run: the 19 that name a
      row must resolve to it and quote its words, and the 6 that name none must
      keep falling through - the measured reach is pinned, never silently
@@ -60,7 +64,7 @@ WHAT THIS SUITE CHECKS
      never `reminder_sound`, and a real distress sentence must not be claimed;
   5. no false confidence: 10 sentences outside the catalogue still reach the
      model (None from the fast path);
-  6. every one of the 179 rows produces an answer built from that row alone -
+  6. every catalogue row produces an answer built from that row alone -
      its own what/where quoted verbatim, its own surface sentence, a denial
      phrase nowhere - and every row the matcher names is a real catalogue row;
   7. it is read-only: `capability_answer` is in READ_ONLY_INTENTS (a private
@@ -105,17 +109,29 @@ FAILED, PASSED = [], []
 #: `document-from-phone` (they used to land on `documents`, which is the
 #: PC-side read - the opposite direction), and the Notion/Android sentence now
 #: resolves to `notion-import`, whose new aliases name exactly that door,
-#: instead of falling through. The two "send a file from my phone to my PC"
-#: sentences still fall through: "file" with no door word does not clear the
-#: matcher's threshold, so the model answers as before.
+#: instead of falling through.
+#:
+#: THE TWO "SEND A FILE FROM MY PHONE TO MY PC" SENTENCES LEFT THIS PENDING
+#: STATE ON 2026-11-18. They used to fall through, correctly, while the
+#: catalogue had one file row: the only file row described the PC sending TO
+#: the phone, so the matcher declined rather than answer backwards (the model's
+#: own denial of this class was measured on 2026-11-06). Two things changed
+#: since: on 2026-11-15 the phone->PC row gained the aliases "send a file from
+#: my phone to my pc" and "send a photo from my phone to my pc", and the
+#: owner's own phone ask of 2026-11-18 was "Can you send a file for me to my
+#: PC?" - answered "I can't send files directly" with those steps in the
+#: catalogue. So they must resolve now, and the owner's exact words are the
+#: fixture (both first and last entries below). The PC->phone direction still
+#: answers its own row: see `t_the_thresholds_decline_rather_than_guess`.
 TRAPS = (
+    ("Can you send a file for me to my PC?", "document-from-phone"),
     ("Can I open and import my Notion notes as a markdown file and can you "
      "process it in the Android app and send it to the main Jarvis?",
      "notion-import"),
     ("Can I upload documents from my phone through the app and have you "
      "process them?", "document-from-phone"),
     ("Can I import a Notion export from my phone?", "notion-import"),
-    ("Can I send a file from my phone to my PC?", None),
+    ("Can I send a file from my phone to my PC?", "document-from-phone"),
     ("Can I open and import my Notion notes as a markdown file and can you "
      "process it in the Android app and send it to the main Jarvis please?",
      "notion-import"),
@@ -123,7 +139,7 @@ TRAPS = (
      "document-from-phone"),
     ("Can I import a Notion export from my phone into my vault?",
      "notion-import"),
-    ("Can I send a file from my phone to my PC wirelessly?", None),
+    ("Can I send a file from my phone to my PC wirelessly?", "document-from-phone"),
     # This one used to name two features and no single row. Since #1203 the
     # Notion row's aliases include "process my notion notes in the android app",
     # so it names that one door exactly and must be answered from it.
@@ -367,9 +383,70 @@ def t_the_owner_trap_sentences():
               not any(d in low for d in DENIALS), res.reply[:200])
         check(f"... inventing no app or route: {name}",
               not any(i in low for i in INVENTED), res.reply[:200])
-    # The measured report needs at least six of the ten answered without a model.
-    check("at least 6 of the 10 traps are answered without the model",
+    # The measured report needs at least six of the traps answered without a model.
+    check("at least 6 of the traps are answered without the model",
           resolved >= 6, f"{resolved} answered")
+
+
+# --------------------------------------------------------------------------
+#   1b. the owner's phone report of 2026-11-18, verbatim
+# --------------------------------------------------------------------------
+def t_the_owner_s_phone_file_question():
+    """The owner asked, on the phone: "Can you send a file for me to my PC?"
+
+    Jarvis answered "I can't send files directly, but I can help you move files
+    between your phone and PC. Would you like me to show you how to do that?" -
+    while the catalogue carried the exact steps (`where` on `document-from-
+    phone`) and, since 2026-11-15, the alias "send a file from my phone to my
+    pc". TWO causes, pinned separately here so fixing one cannot hide the other:
+
+      * "can you ..." was never a capability lead. `_CAP_LEAD` takes "can i",
+        "do you have", "how do i" and so on, but NOT "can you" - that is the
+        shape the owner uses to ask Jarvis to DO things, and
+        `backend/test_chat_honesty.py` pins that a writing request keeps its
+        own path. So on this sentence the tail was empty and the catalogue was
+        never consulted at all; the question went to the model.
+      * with a lead that DOES match ("Can I send a file from my phone to my
+        PC?") the resolver still returned None: `file-from-pc` - whose own id
+        says "file from pc" - scored highest, the direction rule rejected it,
+        and `_cap_resolve` gave up instead of taking the direction-correct
+        `document-from-phone`.
+
+    Both are answered from the catalogue now, with the row's own words and its
+    own steps, and the measured denial is gone.
+    """
+    said = "Can you send a file for me to my PC?"
+    res, intent = _answer(said)
+    check("the owner's exact sentence is answered from the catalogue",
+          _row_of(intent) == "document-from-phone", _row_of(intent))
+    row = BY_ID["document-from-phone"]
+    if res is not None:
+        check("... with the row's own what quoted verbatim",
+              _quote(row, "what") in res.reply, res.reply[:200])
+        check("... and its own steps (where) quoted verbatim",
+              _quote(row, "where") in res.reply, res.reply[:240])
+        check("... naming the phone's own Settings door",
+              "Settings, Folders Jarvis may look in, then Send a file from your "
+              "phone" in res.reply, res.reply[:280])
+        check("... and never the model's measured denial",
+              not any(d in res.reply.lower() for d in DENIALS), res.reply[:200])
+    # The measured words ARE a catalogue alias now, so the matcher names the
+    # door from the source rather than from a phrase in this file.
+    check("the owner's measured words are a catalogue alias",
+          any("send a file for me to my pc" in str(a)
+              for a in row.get("aliases") or ()), row.get("aliases"))
+    # Cause 2 on its own, with a lead the old matcher already took.
+    res2, intent2 = _answer("Can I send a file from my phone to my PC?")
+    check("the 'can I' form resolves to the same door",
+          _row_of(intent2) == "document-from-phone", _row_of(intent2))
+    check("... and never to the opposite-direction PC door",
+          _row_of(intent2) != "file-from-pc", _row_of(intent2))
+    # The direction the real tool DOES cover keeps its own path: send_file_to_phone
+    # is a real tool that raises its one card, so a "can you" sentence toward the
+    # phone must not be claimed by the catalogue lane.
+    check("the PC-to-phone direction keeps its own path",
+          Q.match("Can you send a file to my phone?") is None,
+          Q.match("Can you send a file to my phone?"))
 
 
 def t_the_phone_door_and_a_pc_only_row_are_both_said_plainly():
@@ -600,11 +677,18 @@ def t_the_thresholds_decline_rather_than_guess():
           Q._cap_resolve("can I drive a car") is None
           and Q._cap_resolve("how do I learn to play guitar") is None
           and Q._cap_resolve("can I use my phone as a webcam") is None)
-    # The direction rule, on its own: the catalogue's one file row describes
-    # the PC sending TO the phone, so it cannot answer "from my phone".
-    check("an opposite-direction row is not claimed",
-          Q._cap_resolve("Can I send a file from my phone to my PC?") is None)
-    check("... and the same row still answers its own direction",
+    # The direction rule, ON ITS OWN (2026-11-18): the catalogue now has TWO
+    # file rows - `file-from-pc` (PC -> phone) and `document-from-phone` (phone
+    # -> this PC) - so a "from my phone" question must be answered by the phone
+    # door and never by the PC one, which its own id words ("file from pc")
+    # score highest for. Before this, a direction-wrong winner made
+    # `_cap_resolve` return None and the question went to the model.
+    resolved = Q._cap_resolve("Can I send a file from my phone to my PC?")
+    got = (resolved or {}).get("id")
+    check("the phone door answers a from-my-phone question",
+          got == "document-from-phone", got)
+    check("... never the opposite-direction PC door", got != "file-from-pc", got)
+    check("... and the PC door still answers its own direction",
           _row_of(Q.match(
               "Do you have a feature that sends one file from my PC to my "
               "phone? Answer in one sentence.")) == "file-from-pc")
@@ -645,6 +729,7 @@ def t_the_measured_report_quote_is_reproduced():
 
 def main():
     for fn in (t_the_owner_trap_sentences,
+               t_the_owner_s_phone_file_question,
                t_the_phone_door_and_a_pc_only_row_are_both_said_plainly,
                t_the_measured_availability_questions,
                t_the_measured_howto_questions,

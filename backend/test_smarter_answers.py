@@ -863,6 +863,80 @@ def t_a_long_file_read_is_a_numbered_slice_with_the_next_range():
           <= AG._MAX_TOOL_CONTENT_CHARS, len(seen.get("content") or ""))
 
 
+# --------------------------------------------------------------------------
+#   6. a claim that something was shown, opened or sent (2026-11-18)
+# --------------------------------------------------------------------------
+# THE OWNER'S PHONE REPORT. Asked to send a file to his PC, Jarvis denied the
+# catalogue's own feature, and a later answer told him "it's on your screen"
+# about something no tool had put there. That is a claim like any other, so it
+# is checked against the turn's own tool steps - the same shape as
+# `unbacked_claim` and `schedule_correction` above, and corrected by ONE line
+# through the same `postscript_lines` list, never a second mechanism.
+def t_a_screen_or_sent_claim_needs_the_turn_to_back_it():
+    check("the owner's own words are corrected when nothing showed anything",
+          CL.surface_correction("It's on your screen.", [])
+          == CL.SHOWN_OPENED_CLAIM_CORRECTION,
+          CL.surface_correction("It's on your screen.", []))
+    check("... and a real showing tool backs it",
+          CL.surface_correction(
+              "It's on your screen.",
+              [{"tool": "retirement_whatif", "ran": True, "ok": True}]) == "")
+    check("an opened claim with no opening tool is corrected",
+          CL.surface_correction("I've opened it on your screen.", [])
+          == CL.SHOWN_OPENED_CLAIM_CORRECTION,
+          CL.surface_correction("I've opened it on your screen.", []))
+    check("... and a real opening tool backs it",
+          CL.surface_correction(
+              "I've opened it on your screen.",
+              [{"tool": "control_computer", "ran": True, "ok": True}]) == "")
+    check("a sent claim with no sending tool is corrected",
+          CL.surface_correction("It's been sent.", []) == CL.SENT_CLAIM_CORRECTION,
+          CL.surface_correction("It's been sent.", []))
+    check("... and a real sending tool backs it",
+          CL.surface_correction(
+              "It's been sent.",
+              [{"tool": "send_email", "ran": True, "ok": True}]) == "")
+    check("a refused or failed tool backs nothing",
+          CL.surface_correction(
+              "It's been sent.",
+              [{"tool": "send_email", "ran": True, "ok": False}])
+          == CL.SENT_CLAIM_CORRECTION)
+    # A wrong correction after a true sentence is worse than a missed one
+    # (jarvis_claims' own rule): a question, an offer, a future sentence and
+    # anything done earlier are all left alone.
+    for text in ("Is it on your screen?",
+                 "Would you like me to put it on your screen?",
+                 "I'll put it on your screen.",
+                 "It's already on your screen.",
+                 "I have sent it.",
+                 "The file has been sent."):
+        check(f"not a bare-pronoun claim: {text!r}",
+              CL.surface_correction(text, []) == "",
+              CL.surface_correction(text, []))
+    check("one claim in a longer answer is still caught",
+          CL.surface_correction(
+              "I can't send files directly, but I can help you move files. "
+              "It's on your screen.", []) == CL.SHOWN_OPENED_CLAIM_CORRECTION)
+
+
+def t_the_phone_screen_claim_gets_the_line_in_a_turn():
+    """The same claim through the real local turn: the model's words are sent,
+    then one plain correction line, and no undone-action claim is reported."""
+    res, blob = _turn("It's on your screen.")
+    text = TA.answer_text([blob])
+    check("the turn ends with the screen-claim correction",
+          text.startswith("It's on your screen")
+          and text.endswith(CL.SHOWN_OPENED_CLAIM_CORRECTION), text)
+    check("... and it is not reported as an undone action claim",
+          res["claimed_undone"] is False, res["claimed_undone"])
+    wired = AG.postscript_lines(
+        "It's on your screen.",
+        [{"tool": "retirement_whatif", "ran": True, "ok": True}])
+    check("... while a turn that really showed something gets no line",
+          not any(line == CL.SHOWN_OPENED_CLAIM_CORRECTION
+                  for _kind, line in wired), wired)
+
+
 if __name__ == "__main__":
     for fn in (t_a_small_result_is_unchanged,
                t_one_long_text_keeps_its_start_and_end,
@@ -900,7 +974,9 @@ if __name__ == "__main__":
                t_an_honest_reminder_answer_gets_no_correction,
                t_an_identical_consecutive_tool_call_is_not_run_twice,
                t_the_announcement_detector_is_conservative,
-               t_an_announcement_after_a_tool_gets_one_nudge):
+               t_an_announcement_after_a_tool_gets_one_nudge,
+               t_a_screen_or_sent_claim_needs_the_turn_to_back_it,
+               t_the_phone_screen_claim_gets_the_line_in_a_turn):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
