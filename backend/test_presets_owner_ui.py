@@ -745,12 +745,12 @@ def t_a_pooled_lane_that_will_not_start_changes_nothing():
 
 
 def t_every_named_lane_preset_click_is_still_uncarded():
-    """The eight presets on a named lane: unchanged - no card, a receipt, its lane."""
+    """The six presets on a named lane: unchanged - no card, a receipt, its lane."""
     named = [p for p in P.PRESETS if not p.heavy_mode]
-    check("there are eight presets on a named lane today",
+    check("there are six presets on a named lane today (Reflective Coach and "
+          "Pictures & Screens moved to the pooled lane on 2026-11-18)",
           [p.id for p in named] == ["general", "general_uncensored", "agentic_vision",
-                                    "fast", "reflect", "pictures", "documents",
-                                    "browser"],
+                                    "fast", "documents", "browser"],
           [p.id for p in named])
     for p in named:
         gate = Gate()
@@ -844,9 +844,10 @@ def t_every_preset_on_the_contract_is_covered():
              for kw in call.keywords if kw.arg == "gate"]
     check("the owner lane start is the ONLY place a gate is passed to the pooled "
           "lane", bool(gated))
-    check("Coding and Medical are the two heavy presets today, so they are the two "
-          "the click rule covers",
-          [p.id for p in P.PRESETS if p.heavy_mode] == ["coding", "medical"]
+    check("Coding, Reflective Coach, Pictures & Screens and Medical are the four heavy "
+          "presets today, so they are the four the click rule covers",
+          [p.id for p in P.PRESETS if p.heavy_mode]
+          == ["coding", "reflect", "pictures", "medical"]
           and len(P.PRESETS) == 10,
           [p.id for p in P.PRESETS if p.heavy_mode])
 

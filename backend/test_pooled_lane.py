@@ -262,9 +262,10 @@ def t_the_lane_is_the_one_big_coder_owns():
           P.LANES["pooled"]["port"] == L.POOLED_PORT
           and P.LANES["pooled"]["card"] == L.POOLED["card"]
           and P.LANES["pooled"]["words"] == L.POOLED["words"], P.LANES["pooled"])
-    check("the Coding preset is on the pooled lane and is one of the two heavy rows",
+    check("the Coding preset is on the pooled lane and is one of the four heavy rows",
           P.by_id("coding").lane == "pooled"
-          and [p.id for p in P.PRESETS if p.heavy_mode] == ["coding", "medical"],
+          and [p.id for p in P.PRESETS if p.heavy_mode]
+          == ["coding", "reflect", "pictures", "medical"],
           [p.id for p in P.PRESETS if p.heavy_mode])
 
 

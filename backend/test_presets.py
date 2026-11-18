@@ -155,9 +155,17 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
     check("the everyday rows are placed on the card with the most VRAM (the 2060), "
           "not on index 0 by luck",
           three["general"]["card_index"] == 0
-          and three["reflect"]["card_index"] == 0
-          and three["documents"]["card_index"] == 0,
+          and three["documents"]["card_index"] == 0
+          and three["browser"]["card_index"] == 0,
           {k: v["card_index"] for k, v in three.items()})
+    check("2026-11-18: the two moved rows are on the POOLED lane in the 3-GPU plan - "
+          "the all-three-cards words, never a single-card role",
+          three["reflect"]["card"] == three["pictures"]["card"]
+          == three["coding"]["card"] == three["medical"]["card"]
+          == f"all the cards (pooled lane, port {P.POOLED_PLAN_PORT})"
+          and "HEAVY MODE" in three["reflect"]["note"]
+          and "HEAVY MODE" in three["pictures"]["note"],
+          {k: three[k]["card"] for k in ("reflect", "pictures", "coding", "medical")})
     check("Fast goes to the card nvidia-smi says has the MONITOR - index 2 here, "
           "which is not the index the old table used",
           three["fast"]["card_index"] == 2, three["fast"])
@@ -258,7 +266,7 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
           "note opens with, so the two fields cannot disagree",
           all(row["note"].startswith(row["card"])
               for row in two["by_gpu_count"]["3"].values()
-              if row["preset"] not in ("coding", "medical")),
+              if P.by_id(row["preset"]).lane != "pooled"),
           {k: (v["card"], v["note"]) for k, v in two["by_gpu_count"]["3"].items()})
     check("the pooled lane's port is ONE number, pinned to the two modules that "
           "own it rather than typed three times",
@@ -349,6 +357,58 @@ def t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane():
           rows["agentic_vision"])
 
 
+def t_every_pooled_preset_carries_a_measured_dict():
+    """2026-11-18: a preset that takes all three cards must not be a guess.
+
+    `heavy_mode` is a real cost - the everyday lane is paused while the model
+    loads - so every pooled row has to carry the numbers that decision was made
+    from: a decode rate, the loaded size, the spill it really measured, its cold
+    load and a `source` saying where those came from. The row's own `mode` must
+    also be a row `pooled_modes()` publishes, at the same model and window, or
+    the lane would load a model the preset never named.
+    """
+    pooled = [p for p in P.PRESETS if p.lane == "pooled"]
+    check("four presets take all three cards today: Coding, Reflective Coach, "
+          "Pictures & Screens and Medical",
+          [p.id for p in pooled] == ["coding", "reflect", "pictures", "medical"],
+          [p.id for p in pooled])
+    check("... every one of them is heavy_mode",
+          all(p.heavy_mode for p in pooled),
+          [(p.id, p.heavy_mode) for p in pooled])
+    check("... and every one carries a measured dict, never an empty guess",
+          all(isinstance(p.measured, dict) and p.measured for p in pooled),
+          [(p.id, p.measured) for p in pooled])
+    required = ("tok_s", "size_gib", "spill_gib", "cold_load_s", "source")
+    check("... with the figures a three-card decision needs in EVERY pooled row: "
+          + ", ".join(required),
+          all(all(k in p.measured for k in required) for p in pooled),
+          [(p.id, sorted(p.measured)) for p in pooled])
+    check("... and each source names the date it was measured, so no number here is "
+          "an unattributable estimate",
+          all(re.search(r"20\d\d-\d\d-\d\d", p.measured["source"]) for p in pooled),
+          [(p.id, p.measured.get("source")) for p in pooled])
+    modes = {m["key"]: m for m in P.pooled_modes()}
+    named = [p for p in pooled if p.mode]
+    check("three of the four name their own pooled mode, and Coding keeps the lane's "
+          "own default",
+          [p.id for p in named] == ["reflect", "pictures", "medical"]
+          and P.by_id("coding").mode == "", [p.id for p in named])
+    check("... every named mode is a row pooled_modes() publishes, at the SAME model "
+          "and window the preset row states",
+          all(p.mode in modes and modes[p.mode]["model"] == p.model
+              and modes[p.mode]["num_ctx"] == p.context for p in named),
+          [(p.id, p.mode) for p in named])
+    check("... so no preset can point at a mode the lane would refuse to load",
+          all(m["needs_cards"] == 3 for m in P.pooled_modes()))
+    moved = (P.by_id("reflect"), P.by_id("pictures"))
+    check("... and both moved rows quote their own numbers in plain words, not only "
+          "in a dict the owner never sees",
+          all(str(p.measured["tok_s"]) in p.cost for p in moved)
+          and all(str(p.measured["size_gib"]) in p.cost for p in moved)
+          and all("all three cards" in p.heavy_words for p in moved),
+          [(p.id, p.cost) for p in moved])
+
+
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
     check("exactly ten presets, in the owner's order",
@@ -434,15 +494,44 @@ def main() -> int:
           "accepts pictures" in av["cost"])
 
     caps = {pid: P.by_id(pid) for pid in ("reflect", "pictures", "documents", "browser")}
-    check("the four capability rows are all qwen3.5:9b on the 2060 (the long-context card)",
-          [(p.model, p.lane, p.context) for p in caps.values()]
-          == [("qwen3.5:9b", "main", 196608), ("qwen3.5:9b", "main", 32768),
-              ("qwen3.5:9b", "main", 196608), ("qwen3.5:9b", "main", 196608)])
-    check("... only the row whose window was measured carries measured figures",
-          caps["pictures"].measured is None
-          and caps["reflect"].measured["tok_s"] == 44.9
-          and caps["documents"].measured["tok_s"] == 44.9
+    check("the two capability rows that stayed on one card are still qwen3.5:9b on the "
+          "2060 (the long-context card)",
+          [(caps[k].model, caps[k].lane, caps[k].context)
+           for k in ("documents", "browser")]
+          == [("qwen3.5:9b", "main", 196608), ("qwen3.5:9b", "main", 196608)],
+          [(caps[k].model, caps[k].lane, caps[k].context)
+           for k in ("documents", "browser")])
+    check("... and both keep the General setup's measured figures",
+          caps["documents"].measured["tok_s"] == 44.9
           and caps["browser"].measured["tok_s"] == 44.9)
+    check("2026-11-18: Reflective Coach moved to the measured gemma4-26b-a4b pooled "
+          "mode - all three cards, heavy mode, its own 32,768-token window",
+          caps["reflect"].model == "gemma4:26b-a4b-it-qat"
+          and caps["reflect"].lane == "pooled" and caps["reflect"].heavy_mode is True
+          and caps["reflect"].mode == "gemma4-26b-a4b"
+          and caps["reflect"].context == 32768,
+          (caps["reflect"].model, caps["reflect"].lane, caps["reflect"].mode))
+    check("... with the 2026-11-09 bench receipt copied, the measured spill included "
+          "and never rounded away",
+          caps["reflect"].measured["tok_s"] == 49.26
+          and caps["reflect"].measured["size_gib"] == 15.5
+          and caps["reflect"].measured["spill_gib"] == 0.68
+          and caps["reflect"].measured["cold_load_s"] == 52.0,
+          caps["reflect"].measured)
+    check("2026-11-18: Pictures & Screens moved to the measured qwen3-vl-30b-a3b "
+          "pooled mode - all three cards, heavy mode, its own 32,768-token window",
+          caps["pictures"].model == "qwen3-vl:30b-a3b-instruct"
+          and caps["pictures"].lane == "pooled" and caps["pictures"].heavy_mode is True
+          and caps["pictures"].mode == "qwen3-vl-30b-a3b"
+          and caps["pictures"].context == 32768,
+          (caps["pictures"].model, caps["pictures"].lane, caps["pictures"].mode))
+    check("... with the 2026-11-09 bench receipt copied, including the 2.24 GiB spill "
+          "it really measured",
+          caps["pictures"].measured["tok_s"] == 33.1
+          and caps["pictures"].measured["size_gib"] == 19.88
+          and caps["pictures"].measured["spill_gib"] == 2.24
+          and caps["pictures"].measured["cold_load_s"] == 54.8,
+          caps["pictures"].measured)
     check("Reflective Coach is a model choice only, never a therapist claim",
           "not a therapist" in caps["reflect"].worse
           and "no therapy record" in caps["reflect"].worse)
@@ -464,15 +553,18 @@ def main() -> int:
     check("... and it is appended LAST, so the nine older rows keep their order",
           P.PRESET_IDS[-1] == "medical" and len(P.PRESETS) == 10, P.PRESET_IDS)
     modes = P.pooled_modes()
-    check("pooled_modes(): three named rows - Medical from its Preset row, and two "
-          "measured candidates nothing points at",
+    check("pooled_modes(): three named rows - Medical from its Preset row, and the two "
+          "measured candidates Reflective Coach and Pictures & Screens now apply",
           [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "qwen3-vl-30b-a3b"]
           and modes[0]["model"] == med.model and modes[0]["num_ctx"] == med.context
           and [m["num_ctx"] for m in modes] == [32768, 32768, 32768]
           and all(m["needs_cards"] == 3 for m in modes), modes)
-    check("... no preset points at either candidate: availability, not a default change",
-          all(m["model"] not in {p.model for p in P.PRESETS} for m in modes[1:])
-          and modes[1]["spill_allowance"] > 0 and modes[2]["spill_allowance"] > 0,
+    check("... the two candidates are exactly the models the two moved presets run, "
+          "and each row keeps the measured spill allowance its bench row gave it",
+          modes[1]["model"] == P.by_id("reflect").model
+          and modes[2]["model"] == P.by_id("pictures").model
+          and modes[1]["spill_allowance"] == round(0.68 * 1024 ** 3)
+          and modes[2]["spill_allowance"] == round(2.24 * 1024 ** 3),
           [m["model"] for m in modes])
     rec3 = P.recommendations()["by_gpu_count"]["3"]
     check("every preset has a 3-GPU recommendation row (the id-keyed GPU dicts cover the catalogue)",
@@ -574,6 +666,7 @@ def main() -> int:
           rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 45.6
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
 
+    t_every_pooled_preset_carries_a_measured_dict()
     t_three_gpu_rows_name_the_cards_by_role_not_by_index()
     t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane()
     t_the_live_route_matches_the_generated_contract()
