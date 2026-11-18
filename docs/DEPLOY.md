@@ -98,6 +98,32 @@ py -3 tools/reconcile_live_backend.py --backend-path "<live backend folder>" --a
 Exit codes: 0 success, 1 a plug-in or route probe failed, 2 refused before
 writing.
 
+**The lane-launcher preflight (2026-11-18) - the two-step deploy.** Before it
+plans anything, the deploy compares the repository's lane table
+(`backend/jarvis_presets.py`'s `LANES`) with the cards this PC's logon tasks
+really grant, and the repository's tracked copy of the launcher
+(`scripts/start-lane.ps1`) with the file those tasks run. A disagreement
+**refuses the run, exit 2, in the dry run too** - a plan this machine cannot
+serve is not a plan - and prints **"2-step deploy: update the lane task"** with
+the exact task (for example `Jarvis Ollama - Everyday model (RTX 2060)`) and
+the exact `-GpuUuid` value it should carry (for a three-card lane, the three
+card UUIDs, comma-separated). That is the failure the 2026-11-18 change
+produced: the repository said the everyday lane ran across all three cards, CI
+was green, and the machine's logon task passes **one** `-GpuUuid`, so loading on
+11436 grew the RTX 2060 and the other two cards by nothing. Step 1 is the
+backend deploy; step 2 is updating that task in Task Scheduler and restarting
+Jarvis - the preflight never changes the task itself. An absent live launcher (a
+fresh machine, a CI runner) is reported as **"not checked: no live launcher on
+this machine"**, which is neither a pass nor a failure;
+`--allow-lane-launcher-mismatch` is the explicit override that deploys the
+backend and says out loud that the disagreement is NOT fixed.
+`tools/check_lane_launcher.py` is the same check on its own: a bare run does all
+four comparisons, `--repo-only` is the half CI can prove (the lane table against
+the tracked logon tasks, no machine read), and a drift found by a bare run prints
+both files, both line numbers and both lines. `backend/test_check_lane_launcher.py`
+proves the checks can fail; `backend/test_reconcile_live_backend.py` proves the
+deploy refuses on a disagreement and continues on "not checked".
+
 **Verified on 2026-10-20 (Area 12, no `--apply`).** Dry run against the live
 backend folder: exit 0, **0 refusals**, `$SHIPPED` 218 files all unchanged, 188
 of 189 HUD patch/file deltas already present (the one to insert is DEF-002's

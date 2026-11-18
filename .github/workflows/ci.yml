@@ -2184,6 +2184,20 @@ jobs:
         run: python3 ../../tools/check_feature_list.py
       - name: The model lanes and the models they name agree
         run: python3 ../../tools/check_lanes.py
+      # The launcher that decides a lane's cards lives on the owner's PC, not in
+      # this repository, so the live comparison cannot run here (it prints
+      # "not checked: no live launcher on this machine" and that is neither a
+      # pass nor a failure). What this runner CAN prove is the repository half:
+      # the tracked copy's record of the logon tasks against the LANES table in
+      # backend/jarvis_presets.py. On 2026-11-18 a pull request changed that
+      # table to "all three cards" while the tracked task passes one -GpuUuid;
+      # this step is the visible red for that shape, and
+      # backend/test_check_lane_launcher.py is the required-backend-job gate on
+      # the same comparison. The live half is checked at the desk by the deploy
+      # preflight (tools/reconcile_live_backend.py) and by this tool with no
+      # --repo-only. Read-only: it reads files and prints; it changes no task.
+      - name: The tracked lane launcher agrees with the repository's lane table
+        run: python3 ../../tools/check_lane_launcher.py --repo-only
       - name: The phone's settings registry matches the PC's
         run: python3 ../../tools/check_registry_phone.py
       - name: The screen feature's safety rules hold
