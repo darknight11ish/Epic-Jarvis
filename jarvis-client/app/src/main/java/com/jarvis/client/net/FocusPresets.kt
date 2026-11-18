@@ -42,6 +42,16 @@ import kotlinx.serialization.json.put
  * Nothing is automatic ([Apply.auto] must be false), nothing is posted while
  * the link is stale, and a success never means the switch happened - the
  * caller re-reads the list.
+ *
+ * THE MEASURED SPEED IS ON THE ROW, NOT BEHIND A TAP (the owner's ask,
+ * 2026-11-17). It lives inside each preset's existing `measured` object:
+ * `tok_s` is the number, `tok_s_on` the day it was measured (`2026-11-17`) and
+ * `tok_s_note` the PC's own sentence about the measurement. A PC that has not
+ * been updated yet sends `tok_s` alone, and the row still draws the number with
+ * no day and no note - the shipped shape must never read as "not measured". A
+ * missing or null `tok_s` IS not measured: never 0 and never a pass.
+ * [speedLine] is the row's own words and [speedSpoken] the same line as words
+ * for a screen reader.
  */
 object FocusPresets {
 
@@ -60,6 +70,16 @@ object FocusPresets {
     const val WHY = "What it is for:"
     const val COST = "What it costs:"
     const val WORSE = "What it is worse at:"
+    /** The row's unit; the short form the owner asked to see (`38.1 tok/s`). */
+    const val TOK_S = "tok/s"
+    /**
+     * The row's honest answer when the contract has no number - a missing
+     * field and an explicit null are the same thing here, never 0 and never a
+     * pass. [speedSpoken] says it in words for a screen reader.
+     */
+    const val NOT_MEASURED = "Speed: not measured"
+    /** [NOT_MEASURED] spoken out, so a screen reader hears a sentence. */
+    const val NOT_MEASURED_SPOKEN = "Speed not measured."
     const val MODELS = "Model and card:"
     const val HELPER = "Second worker:"
     const val PENDING = "Being prepared"
@@ -103,7 +123,22 @@ object FocusPresets {
 
     data class Helper(val model: String, val lane: Lane, val context: Int?)
 
-    data class Measured(val tokensPerSecond: Double?, val sizeGib: Double?, val vramGib: Double?, val spillGib: Double?)
+    /**
+     * A preset's measured numbers, from the one nested `measured` object.
+     * [tokensPerSecond] is `measured.tok_s` - null means NOT measured, so a
+     * missing field and an explicit null are the same answer (never 0 and
+     * never a pass). [measuredOn] is `measured.tok_s_on` and [note] is
+     * `measured.tok_s_note`; both stay null on a PC that has not been updated
+     * yet, and the number is drawn then with no day and no note.
+     */
+    data class Measured(
+        val tokensPerSecond: Double?,
+        val sizeGib: Double?,
+        val vramGib: Double?,
+        val spillGib: Double?,
+        val measuredOn: String? = null,
+        val note: String? = null,
+    )
 
     /**
      * The ONE action for this preset, exactly as the contract names it. [route]
@@ -206,14 +241,7 @@ object FocusPresets {
                     val helperLane = parseLane(h.obj("lane")) ?: return@let null
                     Helper(h.str("model").orEmpty(), helperLane, h.int("context"))
                 },
-                measured = o.obj("measured")?.let { m ->
-                    Measured(
-                        tokensPerSecond = m.double("tok_s"),
-                        sizeGib = m.double("size_gib"),
-                        vramGib = m.double("vram_gib"),
-                        spillGib = m.double("spill_gib"),
-                    )
-                },
+                measured = parseMeasured(o),
                 pending = o.bool("pending") ?: false,
                 heavyMode = o.bool("heavy_mode") ?: false,
                 heavyWords = o.str("heavy_words").orEmpty(),
@@ -329,6 +357,53 @@ object FocusPresets {
             (h.context?.let { n -> ", ${"%,d".format(n)} tokens" }.orEmpty())
     }
 
+    /**
+     * The row's visible measured speed: "38.1 tok/s - measured 2026-11-17", or
+     * [NOT_MEASURED]. The day is drawn only when the contract names it, so an
+     * older PC's nested `measured.tok_s` still shows its number.
+     */
+    fun speedLine(preset: Preset): String {
+        val measured = preset.measured ?: return NOT_MEASURED
+        val tokens = measured.tokensPerSecond ?: return NOT_MEASURED
+        val speed = String.format(java.util.Locale.UK, "%.1f %s", tokens, TOK_S)
+        val on = measured.measuredOn?.trim().orEmpty()
+        return if (on.isEmpty()) speed else "$speed - measured $on"
+    }
+
+    /**
+     * The same line as a screen reader should HEAR it: the unit spelled out in
+     * words and the day in words ("Measured 38.1 tokens per second on 17
+     * November 2026"), with the PC's own [Measured.note] after it. The visible
+     * "38.1 tok/s" would be read as "38 point 1 tok slash s"; this sentence is
+     * not. A preset nobody measured gets [NOT_MEASURED_SPOKEN].
+     */
+    fun speedSpoken(preset: Preset): String {
+        val measured = preset.measured ?: return NOT_MEASURED_SPOKEN
+        val tokens = measured.tokensPerSecond ?: return NOT_MEASURED_SPOKEN
+        val speed = String.format(java.util.Locale.UK, "%.1f tokens per second", tokens)
+        val on = spellDay(measured.measuredOn)
+        val head = if (on == null) "Measured $speed" else "Measured $speed on $on"
+        val note = measured.note?.trim().orEmpty()
+        return if (note.isEmpty()) "$head." else "$head. $note"
+    }
+
+    /**
+     * "2026-11-17" -> "17 November 2026", so a screen reader says a day instead
+     * of "two thousand twenty-six dash eleven dash seventeen". Anything that
+     * is not an ISO day is said exactly as it came; blank is null.
+     */
+    fun spellDay(iso: String?): String? {
+        val text = iso?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        return try {
+            java.time.LocalDate.parse(text).format(
+                java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy", java.util.Locale.UK),
+            )
+        } catch (_: java.time.format.DateTimeParseException) {
+            text
+        }
+    }
+
     /** What the PC answered to the one apply POST, in its own words when it gives any. */
     fun replyLine(code: Int, body: JsonObject?): String = when (code) {
         200 -> body?.str("words") ?: body?.str("message") ?: body?.str("line")
@@ -356,6 +431,32 @@ object FocusPresets {
     }
 
     // ------------------------------------------------------------------ json ----
+
+    /**
+     * The measured block from the ONE contract shape: every value lives inside
+     * the preset's `measured` object (the same object that already carries
+     * `size_gib`, `vram_gib` and `spill_gib`). `tok_s` is the number,
+     * `tok_s_on` the day it was measured and `tok_s_note` the PC's own sentence
+     * about it; the last two are optional, and the shipped PC sends `tok_s`
+     * alone, which still renders as a number (no day, no note). A missing or
+     * null `tok_s` is NOT measured - a zero, a negative or a non-finite number
+     * is no measurement either - so the row can never draw an invented 0.
+     */
+    private fun parseMeasured(o: JsonObject): Measured? {
+        val m = o.obj("measured") ?: return null
+        val tokens = m.double("tok_s")?.takeIf { it.isFinite() && it > 0.0 }
+        val measuredOn = m.str("tok_s_on")?.trim()?.takeIf { it.isNotEmpty() }
+        val note = m.str("tok_s_note")?.trim()?.takeIf { it.isNotEmpty() }
+        val sizeGib = m.double("size_gib")
+        val vramGib = m.double("vram_gib")
+        val spillGib = m.double("spill_gib")
+        if (tokens == null && sizeGib == null && vramGib == null && spillGib == null &&
+            measuredOn == null && note == null
+        ) {
+            return null
+        }
+        return Measured(tokens, sizeGib, vramGib, spillGib, measuredOn, note)
+    }
 
     private fun parseLane(o: JsonObject?): Lane? = o?.let {
         Lane(
