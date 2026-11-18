@@ -906,6 +906,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # _RISK row and no _TOOL_ACTIONS line, so it rewrites nothing this
              # patch wrote. It sits immediately before activity-turn-guard.patch,
              # which stays the last core patch before plugin-loader.patch.
+             # local-model-guard.patch (2026-11-18): ONE hunk in jarvis_hud.py -
+             # the `use_tools` line in do_POST, rewritten so a local turn whose saved
+             # model cannot run on this lane is answered LOCALLY, by the model the lane
+             # is configured for (jarvis_router's own fallback). It touches
+             # jarvis_gate.py not at all, so it rewrites nothing this patch wrote, and
+             # it sits immediately before plugin-loader.patch, the last entry of all.
+             "local-model-guard.patch",
              "skill-scan-wiring.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "

@@ -1001,6 +1001,13 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # hunks, ALL in jarvis_skills.py, and no hunk in
                                 # jarvis_gate.py or jarvis_hud.py, so it rewrites
                                 # nothing devices.patch wrote.
+                                # local-model-guard.patch (2026-11-18): ONE hunk in jarvis_hud.py -
+                                # the `use_tools` line in do_POST, rewritten so a local turn whose saved
+                                # model cannot run on this lane is answered LOCALLY, by the model the lane
+                                # is configured for (jarvis_router's own fallback). It touches
+                                # jarvis_gate.py not at all, so it rewrites nothing this patch wrote, and
+                                # it sits immediately before plugin-loader.patch, the last entry of all.
+                                "local-model-guard.patch",
                                 "skill-scan-wiring.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])

@@ -663,13 +663,17 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
     # skill-scan-wiring.patch (wave 13, 2026-11-09) is the third: it is a
     # jarvis_skills.py-only patch registered before activity-turn-guard (its
     # hunks do not touch jarvis_gate.py or the HUD), so it joins the list here.
+    # local-model-guard.patch (2026-11-18) is the fourth: ONE hunk in
+    # jarvis_hud.py only (the `use_tools` line), appended immediately before
+    # the loader, and it touches no gate row and no route.
     check("... with only the patches written after this one between it and "
           "the loader",
           "phone-apps.patch" in order
           and order[order.index("phone-apps.patch") + 1] == "bench.patch"
           and order[order.index("bench.patch") + 1:]
           == ["packs-tamper-on-load.patch", "skill-scan-wiring.patch",
-              "activity-turn-guard.patch", "plugin-loader.patch"],
+              "activity-turn-guard.patch", "local-model-guard.patch",
+              "plugin-loader.patch"],
           order[-4:])
     # handsfree.patch (2026-11-04, hands-free mode) is NOT appended after this
     # patch. Its three `jarvis_gate.py` rows are ONE end-of-file hunk, and it is

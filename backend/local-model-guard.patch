@@ -1,0 +1,25 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -5359,7 +5359,21 @@ def _auth_headers(extra: dict | None = None) -> dict:
+             _agent_ok = hasattr(jarvis_agent, "content_type")
+         except Exception:
+             _agent_ok = False
+-        use_tools = (lane == local_model
++        # local-model-guard.patch (2026-11-18): a local turn whose SAVED model
++        # cannot run on this lane comes back from jarvis_router.choose() naming
++        # the model the lane IS configured for, with inject_memory=True - every
++        # local decision carries that, and no cloud decision ever does (the
++        # router's own promise: "cloud turns get your raw question and nothing
++        # else"). inject_memory is the signal rather than a new Decision flag:
++        # it already means "this turn is answered on this PC by the local
++        # model", and a second flag would be a second thing to keep in step
++        # with it. Without this line use_tools is False for that turn, so it
++        # falls to the plain relay below - which resolves a lane name it does
++        # not know through jarvis_chatbot_api.lane_service(), and an unknown
++        # name falls back to a CLOUD provider (measured 2026-11-18). A private
++        # prompt must never reach that; a router-only fallback would have been
++        # a privacy hole, not a fix.
++        use_tools = ((lane == local_model or decision.inject_memory)
+                      and _agent_ok)
+         if _crisis_turn and lane != local_model and _agent_ok:
+             # cloud-honesty.patch (2026-10-28, the AI-safety audit's H1 and
