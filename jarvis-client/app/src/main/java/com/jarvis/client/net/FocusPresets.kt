@@ -376,6 +376,14 @@ object FocusPresets {
      * November 2026"), with the PC's own [Measured.note] after it. The visible
      * "38.1 tok/s" would be read as "38 point 1 tok slash s"; this sentence is
      * not. A preset nobody measured gets [NOT_MEASURED_SPOKEN].
+     *
+     * The NOTE is the PC's own sentence and is also the tooltip a human reads,
+     * so it is allowed to carry the compact unit ("... two runs read 40.3-51.2
+     * tok/s ..."). Speech never may, so the replacement is applied to the WHOLE
+     * returned line, not only to the head this function builds: a note a future
+     * PR adds, or one the backend composes, cannot reach a screen reader as
+     * "tok slash s" (the real fixture's Coding note did exactly that; a required
+     * check caught it, 2026-11-18).
      */
     fun speedSpoken(preset: Preset): String {
         val measured = preset.measured ?: return NOT_MEASURED_SPOKEN
@@ -384,7 +392,8 @@ object FocusPresets {
         val on = spellDay(measured.measuredOn)
         val head = if (on == null) "Measured $speed" else "Measured $speed on $on"
         val note = measured.note?.trim().orEmpty()
-        return if (note.isEmpty()) "$head." else "$head. $note"
+        val line = if (note.isEmpty()) "$head." else "$head. $note"
+        return line.replace(TOK_S, "tokens per second")
     }
 
     /**
