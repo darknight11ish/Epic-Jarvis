@@ -1529,7 +1529,9 @@ def t_the_cloud_lane_resolves_to_a_real_service():
     `jarvis-critic` went with it, because all three mapped to this one service
     and the difference was a label and a model name, never a route. The
     second check below is the bite that keeps them gone: a table that grew a
-    second entry back would fail it.
+    second entry back would fail it. Since 2026-11-18 they, and every other
+    name the table does not know, name NO service: `lane_service()` fails
+    closed.
     """
     clean()
     point_all(limit=5.0)
@@ -1542,17 +1544,17 @@ def t_the_cloud_lane_resolves_to_a_real_service():
     check("jarvis-escalate is DeepSeek's cheap current model",
           API.lane_service("jarvis-escalate") == ("deepseek_api", "deepseek-flash"),
           API.lane_service("jarvis-escalate"))
-    check("the two lanes that went (critic, bulk) resolve only as the default - "
-          "no table entry of their own",
+    check("the two lanes that went (critic, bulk) name no service at all - "
+          "not in the table, and fail closed",
           "jarvis-critic" not in API.CLOUD_LANES and "jarvis-bulk" not in API.CLOUD_LANES
           and API.lane_service("jarvis-critic") == API.lane_service("jarvis-vision")
-          == ("deepseek_api", "deepseek-flash"),
-          (API.lane_service("jarvis-critic"), API.lane_service("jarvis-bulk")))
-    check("a lane name nobody here knows still means something real, not nothing",
-          API.lane_service("jarvis-vision")[0] == API.DEFAULT_LANE[0]
-          and ORIGINAL[API.DEFAULT_LANE[0]].base_url == DEEPSEEK_URL
-          and API.price_of(API.DEFAULT_LANE[0], API.lane_service("jarvis-vision")[1]),
-          API.lane_service("jarvis-vision"))
+          == API.lane_service("jarvis-bulk") == ("", ""),
+          (API.lane_service("jarvis-critic"), API.lane_service("jarvis-bulk"),
+           API.lane_service("jarvis-vision")))
+    check("a lane name nobody here knows names no service and no model",
+          API.lane_service("jarvis-vision") == ("", "")
+          and API.lane_service("qwen3.5:9b") == ("", ""),
+          (API.lane_service("jarvis-vision"), API.lane_service("qwen3.5:9b")))
     # The owner's own [chatbot] model line still wins: the lane asks the
     # module rather than keeping a second copy of the default.
     CFG["deepseek_api_model"] = "deepseek-v4-pro"
@@ -1726,6 +1728,92 @@ def t_lane_state_is_the_one_thing_the_hud_asks():
           and API.lane_status()["ready"] == []
           and all(r["why"] for r in API.lane_status()["lanes"]), API.lane_status())
     API.lane_state("")
+    clean()
+
+
+# ==========================================================================
+#   8b. A lane name that is not a cloud lane names NO service (2026-11-18)
+# ==========================================================================
+
+def t_an_unknown_lane_name_has_no_cloud_service():
+    """FAIL CLOSED (2026-11-18, the owner's ruling). `lane_service()` used to
+    map any name it did not know to DEFAULT_LANE (or the chosen provider), so
+    `lane_service("qwen3.5:9b")` answered ("deepseek_api", "deepseek-flash") -
+    a lane field holding a local model's name could have sent a private turn
+    to a cloud service. Only a name in CLOUD_LANES now names a service; the
+    empty name (the local signal) and every other name get ("", "").
+    """
+    clean()
+    check("the empty lane name is the local signal: no service and no model",
+          API.lane_service("") == ("", ""), API.lane_service(""))
+    check("a local model's name is not a cloud lane",
+          API.lane_service("qwen3.5:9b") == ("", ""),
+          API.lane_service("qwen3.5:9b"))
+    check("an old degrade_chain entry that is not in the table is not a cloud lane",
+          API.lane_service("jarvis-vision") == ("", ""),
+          API.lane_service("jarvis-vision"))
+    check("each REAL cloud lane still names its own service and model",
+          all(API.lane_service(name) == got for name, got in API.CLOUD_LANES.items()),
+          {n: API.lane_service(n) for n in API.CLOUD_LANES})
+    # A chosen provider must not pull an unknown name into the cloud: the
+    # fallback that used to do exactly that is what was removed.
+    import jarvis_presets as P
+    real = P.cloud_chosen
+    try:
+        P.cloud_chosen = lambda: "mistral_api"
+        check("... and a provider chosen in the Presets menu does not turn an "
+              "unknown lane name into that provider",
+              API.lane_service("qwen3.5:9b") == ("", "")
+              and API.lane_service("jarvis-vision") == ("", ""),
+              (API.lane_service("qwen3.5:9b"), API.lane_service("jarvis-vision")))
+        check("... while a real lane still follows the chosen provider (unchanged)",
+              API.lane_service("jarvis-escalate")
+              == ("mistral_api", API.PRESETS["mistral_api"].model),
+              API.lane_service("jarvis-escalate"))
+    finally:
+        P.cloud_chosen = real
+    check("no choice recorded: the real lane is the table's own DeepSeek default",
+          API.lane_service("jarvis-escalate") == ("deepseek_api", "deepseek-flash"),
+          API.lane_service("jarvis-escalate"))
+
+
+def t_a_private_turn_cannot_get_a_cloud_url_from_an_unknown_name():
+    """The whole reason `lane_service()` must fail closed: the HUD's request
+    builder (`jarvis_hud.py`, added by `ollama-direct.patch`) asks
+    `lane_state(lane)` for the address it will open, and sends to the LOCAL
+    endpoint only when that answer comes back with no url and no key. With a
+    key saved and money left, a lane name that is not a cloud lane must still
+    come back with no address, no key and no model - so the turn cannot leave
+    this PC. A real lane is the control that proves the cloud path itself is
+    live, so the safe answer cannot be a test that never had a cloud at all.
+    """
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    real = API.PRESETS["deepseek_api"]
+    try:
+        API.point_at("deepseek_api", DEEPSEEK_URL)
+        control = API.lane_state("jarvis-escalate")
+    finally:
+        API.PRESETS["deepseek_api"] = real
+    check("control: a real cloud lane DOES resolve an address and a key",
+          control["url"] == DEEPSEEK_URL + "/chat/completions" and control["key"] == KEY,
+          control)
+    for name in ("qwen3.5:9b", "jarvis-vision", "local", ""):
+        st = API.lane_state(name)
+        check(f"a private turn named {name!r} gets no cloud address, key or model",
+              st["url"] == "" and st["key"] == "" and st["pid"] == ""
+              and st["model"] == "", st)
+    st = API.lane_state("qwen3.5:9b")
+    check("... and the answer says why, in the module's own words",
+          st["problem"] == API.LANE_UNKNOWN.format(lane="qwen3.5:9b"), st)
+    check("... and no cloud lane is offered for that name, and no key is read",
+          API.cloud_lane("qwen3.5:9b") is None and API.lane_key("qwen3.5:9b") is None,
+          (API.cloud_lane("qwen3.5:9b"), API.lane_key("qwen3.5:9b")))
+    check("... so the HUD's own send decision (url AND key) can only pick the local endpoint",
+          not (st.get("url") and st.get("key")), st)
+    check("the empty lane still clears the thread - the local signal, unchanged",
+          API.lane_state("") == API.NO_LANE_STATE, API.lane_state(""))
     clean()
 
 

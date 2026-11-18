@@ -27146,10 +27146,16 @@ cloud row (`lane_status`), the one `change_own_config` card's words
 company and key state instead of hard-wired DeepSeek). A chosen Mistral, OpenAI,
 Groq, xAI or OpenRouter therefore can never send to DeepSeek - and a chosen
 provider whose key is not saved keeps the old behaviour: no lane is offered, and
-the PC's own sentence says why. A lane name this module does not know resolves
-to the chosen service too (one cloud service per PC), and only to
-`DEFAULT_LANE` while no choice is recorded. **There is no Anthropic service in
-this tree**; the six are openai, deepseek, mistral, xai, openrouter and groq.
+the PC's own sentence says why. **A lane name this module does not know names NO
+service (2026-11-18, the owner's ruling that `lane_service` must fail closed)**:
+it used to resolve to the chosen service, or to `DEFAULT_LANE` while no choice
+was recorded, so a lane field holding a local model's name could have sent a
+private turn to a cloud service. It now returns `("", "")` - no service, no
+model - and `lane_state` hands the caller no address and no key, so the turn is
+answered on this PC. `DEFAULT_LANE` is the default for the empty name and for a
+real lane while no choice is recorded, never a destination for an unknown name.
+**There is no Anthropic service in this tree**; the six are openai, deepseek,
+mistral, xai, openrouter and groq.
 
 **The fixed chat answers: see the six, and change the choice.**
 `cloud_provider_list` (READ-ONLY) answers "which cloud providers can I use?",
@@ -27174,7 +27180,9 @@ Tests: `backend/test_options_understanding.py` (the chosen-provider proof for
 all six patched in memory, the key answer naming the chosen provider, the chat
 door's `change_own_config` card and its refusal-before-card, and
 reach/card/answer/lane agreement after a chosen Mistral),
-`backend/test_chatbot_api.py` (the lane's transport).
+`backend/test_chatbot_api.py` (the lane's transport, and the fail-closed proof
+added 2026-11-18: an unknown lane name means `("", "")` and a private turn
+cannot obtain a cloud URL from it).
 
 **Q7 P0 - the privacy backstop is harder to get past (2026-11-07).**
 `jarvis_router._PRIVATE_TERMS` gains home address, street address, mailing
