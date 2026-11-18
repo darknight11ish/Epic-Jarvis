@@ -1322,16 +1322,23 @@ def lane_num_ctx(url=None) -> Optional[int]:
 def probe_refusal(model, url=None) -> str:
     """Why a tripwire probe of `model` at `url` must NOT be sent, or "".
 
-    Two refusals, and both are the A2 defect:
-      * a POOLED model at a lane that is not the pooled lane (read: the everyday
-        lane). It cannot fit one card; asking is how the 74%-on-GPU / 26%-on-CPU
-        duplicate the owner photographed gets made;
-      * a lane whose window cannot be established, because the request would
-        then load the model at Ollama's own default instead of the lane's.
+    ONE refusal, and it is the proven harm (DEF-088, the A2 field test): a
+    POOLED model at a lane that is not the pooled lane (read: the everyday
+    lane). It cannot fit one card, and asking is how the duplicate copy the
+    owner photographed - 74% on the GPU, 26% on the CPU - gets made.
 
-    "" means the probe may be sent, and `lane_num_ctx` will answer the window it
-    must name. Never raises - a caller with no answer gets a sentence, never an
-    exception.
+    A lane whose WINDOW cannot be established is deliberately NOT a refusal.
+    Refusing there would silently stop the smoke test on every install whose
+    chat lane is not one of this PC's two named lane ports (`OLLAMA_URL` unset
+    means 11434, which is every fresh clone and every CI run) - and a guard
+    that quietly disables a check is worse than the gap it closes. `_probe_asker`
+    names the window WHENEVER it can be established (a `LANES` row, the applied
+    pooled preset, or `/api/ps`), which is every lane this program knows; for an
+    address it does not know, it sends `main`'s own request rather than one that
+    names a guessed window. What it never does is go silent.
+
+    "" means the probe may be sent. Never raises - a caller with no answer gets
+    a sentence, never an exception.
     """
     name = str(model or "").strip()
     where = str(url or OLLAMA).rstrip("/")
@@ -1347,10 +1354,6 @@ def probe_refusal(model, url=None) -> str:
         if not pooled_here:
             return (f"{name} is a pooled three-card model and {where} is not the "
                     f"pooled lane, so it was not asked to load it")
-    if lane_num_ctx(where) is None:
-        return (f"the window this lane serves could not be established for {where}, "
-                f"so {name} was not probed - a request that names no window loads "
-                f"at Ollama's own default instead of the lane's")
     return ""
 
 
@@ -1448,28 +1451,30 @@ def _probe_asker(ref: Optional[str], *, url=None, num_ctx=None):
     whether the model works at all, and a model that needs ninety seconds to
     say "Paris" has already told you something.
 
-    IT NAMES THE WINDOW (DEF-088, 2026-11-18). `options.num_ctx` is the lane's
-    own number - `lane_num_ctx` for `url`, or the caller's `num_ctx` - because a
-    request that names none loads at Ollama's own default (8,192 on this PC) and
-    replaces the window the lane was configured for. `jarvis_big_coder.load`
-    (:470-477) records the same finding as "the trap". A window that cannot be
-    established RAISES instead of sending: `jarvis_tripwire.run` records the
-    failed probe, and nothing is loaded. That is why the callers ask
-    `probe_refusal` first - a skip is reported, not lost.
+    IT NAMES THE WINDOW WHENEVER IT CAN (DEF-088, 2026-11-18). `options.num_ctx`
+    is the lane's own number - `lane_num_ctx` for `url`, or the caller's
+    `num_ctx` - because a request that names none lets Ollama pick, and on this
+    PC that pick was 8,192 for the pooled model that then spilled 3.76 GB.
+    `jarvis_big_coder.load` (:470-477) records the same finding as "the trap".
+
+    WHEN THE WINDOW CANNOT BE ESTABLISHED the request is sent WITHOUT the field
+    rather than not sent. That is deliberate: the only addresses it happens for
+    are ones this program does not know as a lane (`OLLAMA_URL` unset means
+    11434) or a lane holding nothing, and a tripwire that stopped running there
+    would be a check disabled by a guard - worse than the gap it closes. Naming
+    a GUESSED window would be worse still: it would force a downgrade instead of
+    leaving Ollama's own configured default in charge. `probe_refusal` is what
+    refuses, and it refuses only the pooled-model-on-the-wrong-lane harm.
     """
     where = str(url or OLLAMA).rstrip("/")
     window = int(num_ctx) if num_ctx is not None else lane_num_ctx(where)
 
     def ask(prompt: str) -> str:
-        if not window:
-            raise RuntimeError(
-                f"the window for {where} could not be established, so this probe "
-                f"was not sent: a request that names no num_ctx would load the "
-                f"model at Ollama's own default")
+        options = {"temperature": 0.0, "num_predict": 200}
+        if window:
+            options["num_ctx"] = int(window)
         body = {"model": ref or os.environ.get("JARVIS_LOCAL_MODEL", "qwen3:8b"),
-                "prompt": prompt, "stream": False,
-                "options": {"temperature": 0.0, "num_predict": 200,
-                            "num_ctx": int(window)}}
+                "prompt": prompt, "stream": False, "options": options}
         req = urllib.request.Request(
             f"{where}/api/generate", data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json"})

@@ -1881,13 +1881,29 @@ def _lane_not_checked(url: str, model: str, min_ctx=None) -> dict:
 
 
 def _verify_lane_for_this_process():
-    """The reader an ordinary apply uses: the real one on the owner's PC.
+    """The reader an ordinary apply uses: the REAL one, in the real HUD process.
 
-    `backend/_where.py` sets JARVIS_SUITE_RUNNING for every suite, and a suite
-    must not open a socket to 11436 or read a green line as a check it never
-    made. The same marker `_warm_on_startup` uses for the same reason.
+    Three things decide it, and none of them trusts the caller:
+
+      * `JARVIS_SUITE_RUNNING` - `backend/_where.py` sets it for every suite
+        that imports the checkout's helpers;
+      * the process is running `jarvis_hud.py` - the same test
+        `_warm_on_startup` uses for the same reason, and it is what catches a
+        suite that does NOT import `_where` (measured 2026-11-18:
+        `backend/test_reversible_ui_choices.py` loads the base's model steward
+        directly, never sets the marker, and a lane read there answered with the
+        owner's LIVE 11435 - "it is holding qwen3:8b, not qwen3.5:4b" - so the
+        apply failed against a lane the suite never meant to touch);
+      * anything else is not the backend, and gets the honest "not checked".
+
+    A suite that wants to prove the reader passes `verify_lane=_default_verify_lane`
+    itself, with a fake lane of its own (backend/test_preset_switch_lane_guard.py).
     """
     if os.environ.get("JARVIS_SUITE_RUNNING"):
+        return _lane_not_checked
+    main = sys.modules.get("__main__")
+    name = os.path.basename(str(getattr(main, "__file__", "") or "")).lower()
+    if name != "jarvis_hud.py":
         return _lane_not_checked
     return _default_verify_lane
 

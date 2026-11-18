@@ -275,19 +275,28 @@ def t_an_empty_lane_is_not_a_failure():
           lane_check.get("ok") is True and lane_check.get("loaded") == [], lane_check)
 
 
-def t_a_probe_that_cannot_name_a_window_is_never_sent():
+def t_an_unknown_window_does_not_silently_switch_the_tripwire_off():
+    """A guard must never disable the smoke test where it cannot know better.
+
+    A lane whose window cannot be established is NOT refused: the request goes
+    out WITHOUT `num_ctx` - exactly what `main` sent - rather than not going out
+    at all. Refusing here would stop the tripwire on every install whose chat
+    lane is not one of the two named lane ports (`OLLAMA_URL` unset means
+    11434), and a check disabled by a guard is worse than the gap it closes.
+    Naming a guessed window would be worse still, so the field is simply absent.
+    """
     LANE.ps_rows = []
-    refusal = M.probe_refusal(EVERYDAY, LANE.url)
-    check("an unknown window refuses the probe", "window" in refusal, refusal)
+    check("an unknown window is NOT a refusal",
+          M.probe_refusal(EVERYDAY, LANE.url) == "", M.probe_refusal(EVERYDAY, LANE.url))
     LANE.posts = []
     ask = M._probe_asker(EVERYDAY, url=LANE.url)
-    raised = False
-    try:
-        ask("What is the capital of France?")
-    except Exception:
-        raised = True
-    check("...and no request is sent at all",
-          raised and LANE.generate_posts() == [], LANE.generate_posts())
+    answer = ask("What is the capital of France?")
+    bodies = LANE.generate_posts()
+    check("...the probe still runs, so the check is not silently gone",
+          answer == "Paris" and len(bodies) == 1, (answer, len(bodies)))
+    check("...and it names no window rather than a guessed one",
+          "num_ctx" not in ((bodies[0].get("options") or {}) if bodies else {}),
+          bodies[0].get("options") if bodies else None)
 
 
 def t_the_pooled_model_is_refused_by_name_and_the_everyday_one_is_not():
@@ -333,7 +342,7 @@ TESTS = (t_a_pooled_outgoing_model_is_never_probed_on_the_everyday_lane,
          t_a_lane_holding_the_wrong_model_fails_the_apply,
          t_the_right_model_with_spill_or_a_smaller_window_fails_too,
          t_an_empty_lane_is_not_a_failure,
-         t_a_probe_that_cannot_name_a_window_is_never_sent,
+         t_an_unknown_window_does_not_silently_switch_the_tripwire_off,
          t_the_pooled_model_is_refused_by_name_and_the_everyday_one_is_not,
          t_the_carded_model_road_has_the_same_guard,
          t_the_default_reader_is_real_on_the_pc_and_an_honest_skip_in_a_suite)
