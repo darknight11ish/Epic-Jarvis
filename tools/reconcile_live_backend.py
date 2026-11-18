@@ -26,6 +26,23 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        (TOOL-1, 2026-10-24). `--allow-worktree-mismatch` is the explicit override for
        tests and exotic checkouts.
 
+    0b. LANE LAUNCHER PREFLIGHT. Before anything is planned, the run calls
+       `tools/check_lane_launcher.py`: the repository's tracked copy of the lane
+       launcher against the file this PC's logon tasks really run, the tracked
+       logon task table against Task Scheduler, the tracked GPU block against
+       `nvidia-smi -L`, and the repository's lane table
+       (`backend/jarvis_presets.py`'s `LANES`) against the cards the tracked
+       tasks grant. A DISAGREEMENT REFUSES THE RUN (exit 2, nothing written) and
+       prints "2-step deploy: update the lane task" with the exact task and the
+       exact `-GpuUuid` value it should carry. This is the 2026-11-18 failure:
+       a pull request changed the everyday lane's card to "all three cards", CI
+       was green, and the machine's logon task passed ONE `-GpuUuid`, so loading
+       on 11436 grew one card and the other two by nothing. A one-step deploy
+       that leaves the machine unable to serve the model the repository names is
+       the thing this refuses. An ABSENT live launcher (a fresh machine, a CI
+       runner) is NOT CHECKED - neither a pass nor a failure - and does not
+       refuse; `--allow-lane-launcher-mismatch` is the explicit override.
+
     1. SHIPPED SYNC. Reads the authoritative `$SHIPPED` and `$PATCHES` lists out of
        `scripts/apply-patches.ps1` **at `--ref`**
        (`git show <ref>:scripts/apply-patches.ps1`), never the working tree's copy,
@@ -303,6 +320,44 @@ BEFORE_SOCKET = "    # Before the main socket, so the banner lists every address
 #: `tools/hud-deltas/`, extracted from the base and the live file, so this tool
 #: carries bytes rather than a paraphrase.
 _DELTA_DIR = Path(__file__).resolve().parent / "hud-deltas"
+
+
+#: The sibling check that refuses a one-step deploy when the repository's lane
+#: table and this PC's logon tasks disagree about which cards a lane may use.
+LANE_GUARD = "check_lane_launcher.py"
+
+
+def load_lane_guard():
+    """The sibling lane-launcher checker module, or None when it is not here.
+
+    Loaded by path, not imported: `tools/` is not a package, and a checkout from
+    before this guard existed must be reported ("not checked"), not crash the
+    deploy. The module is registered in sys.modules because its `@dataclass`
+    definitions look their own module up there.
+    """
+    path = Path(__file__).resolve().parent / LANE_GUARD
+    if not path.is_file():
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("jarvis_lane_launcher_guard", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def lane_launcher_preflight(repo: Path):
+    """(verdict or None, why-none). A broken checker is "not checked", never a pass."""
+    guard = load_lane_guard()
+    if guard is None:
+        return None, (f"tools/{LANE_GUARD} is not in this checkout - a checkout older "
+                      f"than 2026-11-18 cannot run the lane-launcher check")
+    try:
+        return guard.preflight(repo_root=repo), ""
+    except Exception as exc:  # noqa: BLE001 - a checker crash must not hide
+        return None, f"the checker could not run ({exc})"
 
 
 def _delta_lines(name: str) -> tuple:
@@ -3465,7 +3520,9 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
                probe_client: Optional[Callable] = None,
                token_reader: Optional[Callable] = None,
                plugin_runner: Optional[Callable] = None,
-               stamp: Optional[str] = None) -> int:
+               stamp: Optional[str] = None,
+               allow_lane_launcher_mismatch: bool = False,
+               lane_preflight: Optional[Callable] = None) -> int:
     out = out or print
     repo = Path(repo)
     live = Path(live)
@@ -3506,6 +3563,49 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         except Refused as exc:
             out(f"REFUSED: {exc}")
             return 2
+
+    # 0b. LANE LAUNCHER PREFLIGHT. The repository's lane table must agree with the
+    #     cards this PC's logon tasks really grant, and the tracked launcher must
+    #     agree with the live file. This runs BEFORE the plan so a disagreement
+    #     refuses both the dry run and the apply: a plan the machine cannot serve
+    #     is not a plan. An absent live launcher is NOT CHECKED (fresh machine, CI
+    #     runner) and does not refuse; the override is explicit and loud.
+    verdict, verdict_why = (None, "")
+    if lane_preflight is not None:
+        verdict = lane_preflight()
+        out("")
+        out("LANE LAUNCHER PREFLIGHT (injected for this run - read-only):")
+    else:
+        verdict, verdict_why = lane_launcher_preflight(repo)
+        if verdict is None:
+            out("")
+            out(f"LANE LAUNCHER PREFLIGHT: not checked - {verdict_why}")
+            out("        This is NOT a pass: the lane launcher on this PC was not "
+                "compared with the repository.")
+        else:
+            out("")
+            out("LANE LAUNCHER PREFLIGHT (read-only: tracked copy vs this PC, "
+                "lane table vs the logon tasks):")
+    if verdict is not None:
+        for line in verdict.lines():
+            out(line)
+        if verdict.failed:
+            out("")
+            for line in verdict.two_step_lines():
+                out(line)
+            out("")
+            if allow_lane_launcher_mismatch:
+                out("--allow-lane-launcher-mismatch is set: continuing, and the "
+                    "disagreement above is NOT fixed.")
+            else:
+                out("REFUSED: the repository describes a lane this PC's logon task "
+                    "cannot start, so a one-step deploy would leave the machine "
+                    "unable to serve what the repository names.")
+                out("Nothing was written. Do step 2 above (update the lane task), "
+                    "restart Jarvis, and run this deploy again - or pass "
+                    "--allow-lane-launcher-mismatch to deploy the backend without "
+                    "changing the task.")
+                return 2
 
     # 1. Plan the shipped sync. The lists come from the ref, like every module's bytes.
     try:
@@ -3755,6 +3855,11 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--allow-worktree-mismatch", action="store_true",
                         help="run even when HEAD is not the commit --ref names "
                              "(tests and exotic checkouts; the default refuses)")
+    parser.add_argument("--allow-lane-launcher-mismatch", action="store_true",
+                        help="deploy the backend even when the repository's lane "
+                             "table and this PC's logon task disagree about a lane's "
+                             "cards (the default refuses with the '2-step deploy' "
+                             "message; the disagreement is NOT fixed by this)")
     parser.add_argument("--base-url", default="",
                         help="live server base URL for the probes (default: from HUD_PORT)")
     parser.add_argument("--rollback", default="",
@@ -3771,7 +3876,9 @@ def main(argv: Optional[list] = None) -> int:
         return run_deploy(repo, Path(ns.backend_path).expanduser(), apply=bool(ns.apply),
                           ref=ns.ref, skip_plugins=bool(ns.skip_plugins),
                           base_url=ns.base_url,
-                          allow_worktree_mismatch=bool(ns.allow_worktree_mismatch))
+                          allow_worktree_mismatch=bool(ns.allow_worktree_mismatch),
+                          allow_lane_launcher_mismatch=bool(
+                              ns.allow_lane_launcher_mismatch))
     except Refused as exc:
         print(f"REFUSED: {exc}")
         return 2
