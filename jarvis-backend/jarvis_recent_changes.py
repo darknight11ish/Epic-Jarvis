@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    'A note edit is classified, stays at `ask`, and the unclassified warning now says what actually happens',
-    'Three surgical defects the audits found: a natural append sentence, a progress note and a missing import',
-    'The front page was audited against the tree, and six claims had gone stale',
-    'A Coding click that cannot prove its pause now refuses and puts both lane models back, instead of leaving the everyday lane empty',
-    'A note\'s "is it pinned" question can now take the folder it was asked about',
+    'A preset switch can no longer load the pooled model on the everyday lane, and a preset no longer answers "applied" without reading the lane',
+    'Reflective Coach and Pictures & Screens now run on all three graphics cards',
+    'The phone can ask Jarvis to update itself, and ONE card decides',
+    'Every shipped module asks the one lane resolver for its Ollama address',
+    "Two defects from the 2026-11-17/18 field test: a reply that says an approval card was raised when none exists (DEF-089), and the egress fence's `local_only` reason that no live turn can reach (DEF-090)",
 )
 
 
