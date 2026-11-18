@@ -23,45 +23,62 @@ pooled rows). They replace the five "work setups" in jarvis_work.py (decision
 
 Every measured number below is from
 .dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it),
-except the everyday 26B figures, which were measured on this PC on 2026-11-17/18
-for the owner's 2026-11-18 decision; `measured is None` means NOT measured for
-that model - never a guess.
+except the everyday 26B's speed and memory, which were measured on this PC on
+2026-11-17 (`.dsh-scratch/wave21/preset-truth/REPORT.md`, every raw row in
+rows.jsonl beside it) for the owner's 2026-11-18 decision; `measured is None`
+means NOT measured for that model - never a guess.
 
 Lanes (this PC, 2026-11-18):
-  main    ALL THREE cards, port 11436 - the everyday lane, the ONLY always-on
-          lane. Since 2026-11-18 it holds gemma4:26b-a4b-it-qat at 196,608
-          tokens: measured on this PC on 2026-11-17/18 at 17.50 GiB loaded,
-          16.58 GiB in the cards' memory, 0.92 GiB spilled, 46.10 tokens a
-          second (a real-answer control at 32,768 read 45.66) and a 56.5 s cold
-          load.
-  pooled  all three cards, port 11450 - the heavy presets' own lane, started on
-          demand (2026-11-02). It carries ONE heavy model at a time and pauses
-          the everyday lane first; bringing the everyday 26B back afterwards
-          costs about 57 seconds.
+  main    ONE card (the RTX 2060), port 11436 - the everyday lane and the only
+          always-on lane. It serves the 9B long-window rows (Documents & Notes
+          and Browser & Forms at 196,608 tokens) and the short-window ones
+          (Agentic + Vision and Fast at 16,384). A heavy preset pauses it.
+  pooled  ALL THREE cards, port 11450 - the heavy presets' own lane, started on
+          demand (2026-11-02). Since 2026-11-18 it carries General's 26B, and
+          it also carries Coding, Reflective Coach, Pictures & Screens and
+          Medical. It loads ONE model at a time and pauses the everyday lane
+          first; bringing the everyday 9B back afterwards costs a reload.
 
-There is NO second single-card lane since 2026-11-18. The coding lane on port
-11435 (`qwen3:8b` at 16,384) is RETIRED, because the everyday model now needs
-every card: the owner's words are "i dont need a separate coding lane on any
+General IS A HEAVY ROW (2026-11-18, and this is the decision worth reading).
+The owner chose `gemma4:26b-a4b-it-qat` at a 32,768-token window on quality, and
+that model needs all three cards. The everyday lane on 11436 is pinned by its
+Windows logon task to the single 12 GB RTX 2060, so putting the 26B there would
+guarantee a spill into system RAM (measured live on 2026-11-18: 15.8 GB resident
+with only 9.1 GB on the card). The pooled lane on 11450 already sees all three
+cards, so General names IT - the owner gets the model he chose with no change to
+his PC. General is therefore `heavy_mode=True, mode="gemma4-26b-a4b"`, the same
+measured pooled mode Reflective Coach uses; that mode's own window is 32,768 and
+its own measured spill allowance is 0.68 GiB, which the apply's lane read-back
+now uses. Measured on this PC on 2026-11-17 ON THAT LANE at 32,768 tokens:
+15.50 GiB loaded with 0.68 GiB (4.4%) spilled into system memory, 25.4 tokens a
+second (the LOW end of two runs that read 25.4-36.5) and a 49.9 s cold load. The
+196,608-token version of the same model was measured at 2.385 GiB spilled and
+21.2 tokens a second, which is why that window is not offered.
+
+The everyday lane is NOT retired, because it is still what serves the two
+presets that need the long window: Documents & Notes and Browser & Forms keep
+`qwen3.5:9b` at 196,608 tokens on the 2060. The 11435 coding lane is RETIRED
+(2026-11-18) - the owner's words are "i dont need a separate coding lane on any
 preset. each preset should be dedicated to one preset local ai model." Every
-preset below names exactly one model and exactly one lane, and the Fast row
-moved from the retired coding lane to the everyday lane.
+preset below names exactly one model and exactly one lane, the Fast row moved
+from the retired coding lane to the everyday lane, and ONE preset's model is
+loaded at a time: a preset switch ends the previous one first, and because no
+other preset needs the cards reserved, any preset may use all three.
 
-Coding is the FIRST of the FOUR heavy rows, and since 2026-11-02 it has a lane
-that can really hold it: a 14.8 GB model fits neither card alone, so its lane is
-ONE Ollama on
-its own port with all three cards visible (`jarvis_model_lanes.start_pooled_lane`),
-started by the apply and stopped by the next apply that is not heavy. The cost
-is stated in the preset's own words and on the card: the everyday model is
-paused while it runs and comes back when it is stopped.
+The 32,768-token window and the model are the owner's 2026-11-18 choice, taken
+on quality rather than speed: a blind battery of eight tasks scored this model
+22/24, the 12B 21/24, the 35B 21/24 and the old everyday 9B last at 19/24 with
+the only app-breaking failure in the run
+(`.dsh-scratch/wave21/quality-battery/REPORT.md`).
 
-2026-11-18: Reflective Coach and Pictures & Screens joined that heavy road, each
-naming its own measured pooled mode (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`), so
-deliberate thinking and pictures use all three cards instead of one. Those are
-the rows where a slow, all-card model is worth the wait: a pooled start costs a
-measured 31-55 s cold load and pauses the everyday lane, so the everyday driver
-(General) stays on the always-on lane - as the 26B across all three cards at
-196,608, not as a pooled row - and Fast stays on that lane too, where a short
-answer costs no lane start.
+Coding is the FIRST of the heavy rows that predate General, and since 2026-11-02
+it has a lane that can really hold it: a 14.8 GB model fits neither card alone,
+so its lane is ONE Ollama on its own port with all three cards visible
+(`jarvis_model_lanes.start_pooled_lane`), started by the apply and stopped by
+the next apply that is not heavy. The cost is stated in each preset's own words
+and on the card: the everyday model is paused while it runs and comes back when
+it is stopped. 2026-11-18 also added Reflective Coach and Pictures & Screens to
+that road, each naming its own measured pooled mode.
 """
 from __future__ import annotations
 
@@ -77,11 +94,11 @@ EVIDENCE = (".dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md",
             ".dsh-scratch/android-verify/MODEL-STRATEGY-2026-10-10.md")
 
 LANES = {
-    # The only always-on lane, and since 2026-11-18 it is ALL THREE CARDS: the
-    # everyday model is `gemma4:26b-a4b-it-qat` at 196,608 tokens, measured on
-    # this PC at 17.50 GiB loaded / 16.58 GiB in video memory, which no single
-    # card can hold. `card` says "all three cards" because there is no single
-    # card it lives on; the logon task's card wiring is the deploy step.
+    # The only always-on lane, and it is ONE card: the RTX 2060 at port 11436
+    # runs the 9B long-window rows (Documents & Browser at 196,608 tokens) and
+    # the short-window rows (Agentic + Vision and Fast at 16,384). General's 26B
+    # needs all three cards, so it is NOT here - it names the pooled lane below,
+    # which is why a heavy preset pauses this one while it runs.
     "main": {"key": "main", "card": "all three cards", "port": 11436,
              "words": "the everyday lane"},
     # The heavy presets' own lane: ONE Ollama that sees ALL THREE cards, started
@@ -173,18 +190,21 @@ MEDICAL_MEASURED_WORDS = (
     "cards' memory, 0 B spilled, a 46.8 s cold load and 9.27 tokens a second "
     "(11.1 on the measured ~150-word explanation, 7.89 on the four-token answer)")
 
-#: The two measured pooled candidates, from the 2026-11-09 bench rows (spill
-#: included, never trimmed). Until 2026-11-18 they were availability only and no
-#: preset pointed at them; now Reflective Coach applies `gemma4-26b-a4b` and
-#: Pictures & Screens applies `qwen3-vl-30b-a3b`, so the numbers live here ONCE
-#: and `pooled_modes()` republishes them rather than the rows keeping a copy.
-#: `gemma4:26b-a4b-it-qat` is ALSO the General preset's model since 2026-11-18,
-#: but on the everyday lane at 196,608 tokens: this 32,768-token pooled row is a
-#: different load and General does not apply it.
+#: The two measured pooled modes, from the 2026-11-09 bench rows (spill included,
+#: never trimmed). They were availability only until 2026-11-18; since then
+#: Reflective Coach AND General apply `gemma4-26b-a4b` (General is a heavy row on
+#: the pooled lane - see the module docstring), and Pictures & Screens applies
+#: `qwen3-vl-30b-a3b`. The numbers live here ONCE and `pooled_modes()`
+#: republishes them, so the applied card, the lane row and the preset cannot
+#: drift. The 26B sentence is the 2026-11-17 live re-measurement of the SAME
+#: load (same model, 32,768 tokens, all three cards), because that run's 25.4
+#: low end is what the preset rows quote; the 2026-11-09 receipt's 49.26 was a
+#: different run of the same row and is kept in `docs/MODEL-TOPOLOGY.md`.
 GEMMA4_26B_MEASURED_WORDS = (
-    "measured on this PC on 2026-11-09: 15.5 GiB loaded with 0.68 GiB (4.4%) "
-    "spilled into system memory, 96% in the cards' memory, a 52.0 s cold load "
-    "and 49.26 tokens a second")
+    "measured on this PC on 2026-11-17 at 32,768 tokens across all three "
+    "cards: 15.50 GiB loaded with 0.68 GiB (4.4%) spilled into system memory, "
+    "25.4-36.5 tokens a second (the LOW end is the figure the row shows) and a "
+    "49.9 s cold load")
 QWEN3_VL_30B_MEASURED_WORDS = (
     "measured on this PC on 2026-11-09: 19.88 GiB loaded with 2.24 GiB (11.2%) "
     "spilled into system memory, 89% in the cards' memory, a 54.8 s cold load "
@@ -195,41 +215,47 @@ PRESETS = (
         id="general", title="General", focus="everyday questions, writing, life admin",
         what="The everyday preset: questions, writing, checking things, your own "
              "paperwork - one balanced setup instead of a separate admin preset. "
-             "Since 2026-11-18 it is the 26B model across all three cards at the "
-             "same full window.",
-        cost="gemma4:26b-a4b-it-qat runs across all three cards and holds 196,608 "
-             "tokens there: 17.50 GiB loaded, 16.58 GiB in the cards' memory and "
-             "0.92 GiB spilled into system memory. It writes at 46.10 tokens a "
-             "second (a real-answer control at 32,768 read 45.66) and takes about "
-             "57 seconds to load cold. On two cards the same window spilled 6.37 "
-             "GiB and fell to 15.75-16.76 tokens a second, which is why it needs "
-             "all three. Measured on this PC on 2026-11-17/18.",
-        worse="It fills all three cards, so every heavy preset that is applied "
-              "afterwards pauses it, and returning to General costs its cold load "
-              "(about 57 seconds). `ollama show` reports completion, vision, tools "
-              "and thinking and a real 573M-parameter image projector, so pictures "
-              "and tools are not lost - but its picture quality and its general, "
-              "tool-calling and vision rubric results are NOT measured on this PC, "
-              "so nothing here claims them. It thinks before it answers, so a short "
-              "answer allowance can cut it off before it speaks.",
-        model="gemma4:26b-a4b-it-qat", lane="main", context=196608,
+             "Since 2026-11-18 it is the 26B model at a 32,768-token window on the "
+             "pooled three-card lane: the owner chose it on quality, after a blind "
+             "battery of eight tasks scored it 22/24, the best of the four tried.",
+        cost="HEAVY MODE: it needs all three cards at once as ONE pooled lane (port "
+             "11450) and pauses the everyday 9B model while it loads. Measured on "
+             "this PC on 2026-11-17 on that lane at 32,768 tokens: 15.50 GiB "
+             "resident, 14.82 GiB in the cards' memory and 0.68 GiB spilled into "
+             "system memory, 25.4 tokens a second (two runs read 25.4-36.5, the low "
+             "end is shown) and a 49.9 s cold load.",
+        worse="It fills all three cards, so a preset that is not heavy stops its lane "
+              "and brings the everyday 9B back; returning to General costs its cold "
+              "load (about 50 seconds). The everyday lane is paused while it runs, so "
+              "a chat arriving then waits for the switch. `ollama show` reports "
+              "completion, vision, tools and thinking and a real 573M-parameter image "
+              "projector, so pictures and tools are not lost - but its picture quality "
+              "and its general, tool-calling and vision rubric results are NOT "
+              "measured on this PC, so nothing here claims them. It thinks before it "
+              "answers, so a short answer allowance can cut it off before it speaks.",
+        model="gemma4:26b-a4b-it-qat", lane="pooled", context=32768,
+        heavy_mode=True, mode="gemma4-26b-a4b",
+        heavy_words="This preset needs all three cards at once as one pooled lane on "
+                    "port 11450. While it runs, the everyday 9B is paused - it comes "
+                    "back, proved from the model list, when you apply a preset that "
+                    "is not heavy. Loading it takes about 50 seconds.",
         prompt="balanced", diet="balanced",
-        measured={"tok_s": 46.10, "tok_s_control_32k": 45.66,
-                  "size_gib": 17.50, "vram_gib": 16.58, "spill_gib": 0.92,
-                  "cold_load_s": 56.5, "context_measured": 196608,
-                  "two_card_tok_s": [15.75, 16.76], "two_card_spill_gib": 6.37,
+        measured={"tok_s": 25.4, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "15.50 GiB, 0.68 GiB spill, all three cards, "
+                                "32,768 context; two runs read 25.4-36.5, the low "
+                                "end is shown",
+                  "size_gib": 15.501, "vram_gib": 14.820, "spill_gib": 0.681,
+                  "cold_load_s": 49.9, "context_measured": 32768,
                   "capabilities": ["completion", "vision", "tools", "thinking"],
                   "vision_projector_params": 573000000,
-                  "source": "measured on this PC on 2026-11-17/18 across all three "
-                            "cards at 196,608 tokens: 17.50 GiB loaded, size_vram "
-                            "16.58 GiB, 0.92 GiB spilled, 46.10 tok/s thinking-token "
-                            "throughput; the real-answer control at a 32,768-token "
-                            "window read 45.66 tok/s; cold load 56.5 s. The same "
-                            "window on two cards measured 16.52 GiB with 6.37 GiB "
-                            "spilled at 15.75-16.76 tok/s, which is why all three "
-                            "cards are required. /api/show reports completion, "
-                            "vision, tools and thinking and a real 573M-parameter "
-                            "image projector (projector_type gemma4v, "
+                  "source": "the 2026-11-17 live run (preset-truth REPORT.md, the "
+                            "reflect_pooled rows) measured the same model, window and "
+                            "cards this preset asks for: 15.501 GiB resident, 14.820 "
+                            "GiB in the cards' memory, 0.681 GiB (4.4%) spilled, "
+                            "25.4-36.5 tok/s (the low end is shown) and a 49.9 s cold "
+                            "load, on the pooled three-card lane. /api/show reports "
+                            "completion, vision, tools and thinking and a real "
+                            "573M-parameter image projector (projector_type gemma4v, "
                             "clip.has_vision_encoder true)"},
         words=("everyday", "general", "quick question", "writing", "admin",
                "paperwork", "letter", "statement", "form", "tax", "email", "inbox"),
@@ -280,7 +306,7 @@ PRESETS = (
              "docs/MEASURED-2026-11-07-THREE-GPU.md.",
         worse="Applying it makes it the model chat uses, so the everyday 26B is NOT "
               "resident while it runs - it comes back when you apply another "
-              "preset, and that switch costs its cold load (about 57 seconds since "
+              "preset, and that switch costs its cold load (about 50 seconds since "
               "2026-11-18). It is "
               "not a quick helper: it takes all three cards for as long as it is on, "
               "and nothing else can be loaded beside it. Measured about 59 tokens a "
@@ -290,7 +316,7 @@ PRESETS = (
         heavy_words="This preset needs all three cards at once as one pooled lane. While "
                     "it runs, the everyday model is paused - it comes "
                     "back, proved from the model list, when you apply another preset, "
-                    "and that reload takes about 57 seconds. "
+                    "and that reload takes about 50 seconds. "
                     "Loading it takes about half a minute.",
         tools=("code", "files"),
         measured={"tok_s": 83.8, "rubric": "6/6 coding rubric", "size_gib": 16.2,
@@ -370,7 +396,7 @@ PRESETS = (
               "short prompts were only called broadly correct rather than scored. "
               "Chosen for waiting less, not for care. The 26B does not fit beside it "
               "on the same three cards, so switching back to General costs the "
-              "everyday model's cold load (about 57 seconds).",
+              "everyday model's cold load (about 50 seconds).",
         model="qwen3.5:4b", lane="main", context=16384,
         prompt="fast", diet="fast",
         measured={"tok_s": 77.1, "size_gib": 3.16, "vram_gib": 4.15, "spill_gib": 0.0,
@@ -554,8 +580,9 @@ def pooled_modes() -> tuple:
     those two; now Reflective Coach applies the first and Pictures & Screens the
     second, so their measured row is the ONE copy the preset and the lane both
     read rather than two numbers that can drift. `gemma4:26b-a4b-it-qat` is also
-    the General preset's model since 2026-11-18, on the everyday lane at 196,608
-    tokens - a different load from this 32,768-token pooled row.
+    the General preset's model since 2026-11-18, at the SAME 32,768-token window
+    but on the everyday lane (11436) rather than this pooled one (11450); only
+    one preset's model is loaded at a time, so the two rows never share a machine.
     Read by `jarvis_model_lanes` and `jarvis_big_coder` through lazy imports.
     Never raises; `()` when the Medical row is absent (a trimmed backend).
     """
@@ -569,7 +596,7 @@ def pooled_modes() -> tuple:
         {"key": "gemma4-26b-a4b", "label": "Gemma 4 26B A4B",
          "model": "gemma4:26b-a4b-it-qat", "num_ctx": 32768,
          "measured_words": GEMMA4_26B_MEASURED_WORDS,
-         "spill_allowance": round(0.68 * 1024 ** 3), "needs_cards": 3},
+         "spill_allowance": round(0.681 * 1024 ** 3), "needs_cards": 3},
         {"key": "qwen3-vl-30b-a3b", "label": "Qwen3-VL 30B A3B",
          "model": "qwen3-vl:30b-a3b-instruct", "num_ctx": 32768,
          "measured_words": QWEN3_VL_30B_MEASURED_WORDS,
@@ -1453,23 +1480,17 @@ def is_pooled_model(model) -> bool:
     copy (74% GPU / 26% CPU) the owner photographed. The comparison strips the
     ":latest" tag Ollama reports (Q6b, measured live 2026-11-09).
 
-    ONE EXEMPTION, AND IT IS A FACT ABOUT THE PRESETS, NOT A LOOPHOLE
-    (2026-11-18). The SAME tag can now be both the everyday preset's model - on
-    the everyday lane, at that preset's window - and a pooled mode's model - on
-    11450, at a smaller window: `gemma4:26b-a4b-it-qat` is General's model at
-    196,608 and Reflective Coach's pooled model at 32,768. A name alone can no
-    longer answer "is this pooled?", and the everyday model must never be
-    refused on its own lane. So a model that a preset ON THE EVERYDAY LANE names
-    is not refused: that preset is the claim that this model runs there. It does
-    not widen anything - no preset names the pooled coder on the everyday lane,
-    and the pooled 30B is still refused exactly as before.
+    NO EXEMPTION, AND THAT IS DELIBERATE (2026-11-18). Earlier that day General
+    named `gemma4:26b-a4b-it-qat` on the everyday lane, and this function had to
+    exempt a tag that a preset on the everyday lane named. External review then
+    ruled the lane wrong: General is a HEAVY row on the pooled lane now (see the
+    module docstring), so the 26B is a pooled model like the coder and the
+    picture model, and the exemption went with the reason for it. The everyday
+    lane must refuse every pooled model again, including General's own.
     """
     name = _bare_model(model)
     if not name:
         return False
-    for preset in PRESETS:
-        if preset.lane == "main" and _bare_model(preset.model) == name:
-            return False
     try:
         import jarvis_big_coder as big
         if _bare_model(getattr(big, "MODEL", "")) == name:
@@ -1858,7 +1879,8 @@ def _switch_for_the_owner(ref: str, why: str = "a preset clicked in an app") -> 
     #     record said `qwen3.5:9b`.
     #   * the lane's window may be unknown. A probe that names no `num_ctx`
     #     loads at Ollama's own default (8,192 here) and throws away the window
-    #     the lane was configured for (196,608 on 11436), so it is not sent.
+    #     the lane was configured for (32,768 for General on 11436), so it is not
+    #     sent.
     #
     # SKIPPING is chosen over "probe it on the pooled lane's own address",
     # deliberately. By the time this runs on the app-click road, `apply_preset`
@@ -1983,7 +2005,8 @@ def switch_model_for_the_owner(ref: str, why: str = "") -> dict:
     return _switch_for_the_owner(ref, why=why or "a model picked in an app")
 
 
-def _lane_not_checked(url: str, model: str, min_ctx=None) -> dict:
+def _lane_not_checked(url: str, model: str, min_ctx=None,
+                      allow_spill: int = 0) -> dict:
     """The answer a TEST SUITE gets when it did not inject a lane reader.
 
     `ok` stays True so an apply that is being driven for some other purpose is
@@ -2025,7 +2048,30 @@ def _verify_lane_for_this_process():
     return _default_verify_lane
 
 
-def _default_verify_lane(url: str, model: str, min_ctx=None) -> dict:
+def _preset_spill_allowance(p) -> int:
+    """Bytes of spill THIS preset's own measurement allows on its lane, or 0.
+
+    A HEAVY preset runs on the pooled lane, and a pooled mode's row carries the
+    spill that mode was measured with (`pooled_modes()` -> `spill_allowance`:
+    General/Reflective Coach 0.68 GiB, Pictures & Screens 2.24 GiB, Coding and
+    Medical 0). The apply's lane read-back is the only place that number has a
+    say, and it is read from the ONE mode row rather than typed again here.
+    Every preset that is not heavy keeps the zero-spill rule.
+    """
+    if not getattr(p, "heavy_mode", False):
+        return 0
+    mode = str(getattr(p, "mode", "") or "")
+    for row in pooled_modes():
+        if mode and str(row.get("key") or "") == mode:
+            try:
+                return max(0, int(row.get("spill_allowance") or 0))
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _default_verify_lane(url: str, model: str, min_ctx=None,
+                         allow_spill: int = 0) -> dict:
     """Read the lane's own `/api/ps` and say what it REALLY holds. Never raises.
 
     {"ok", "checked", "why", "proof", "loaded"} - the shape an app can show, and
@@ -2035,13 +2081,22 @@ def _default_verify_lane(url: str, model: str, min_ctx=None) -> dict:
     WHAT COUNTS AS A FAILURE, and why an EMPTY lane is not one:
       * a model that is NOT the one this preset names -> failure. That is the A2
         defect exactly: the record said `qwen3.5:9b`, the lane served the coder.
-      * the named model with ANY CPU spill -> failure: it cannot answer at speed,
-        and the spill was the second half of what the owner saw.
+      * the named model with MORE CPU spill than this preset's own measured
+        allowance -> failure: it cannot answer at speed, and the spill was the
+        second half of what the owner saw. The allowance is 0 for every
+        non-heavy preset (the everyday lane's 9B fits); a heavy preset gets the
+        spill its own pooled mode was measured with (`_preset_spill_allowance`),
+        so General's measured 0.681 GiB does not fail its own apply while a
+        worse load still does.
       * the named model at a window SMALLER than `min_ctx` (the preset's own
         declared context) -> failure. A named lane's chat turns carry no
         `options.num_ctx` (`jarvis_agent.chat_body`), so whatever window the
         last load left behind IS the window chat runs at - 8,192 instead of
-        196,608 is the same defect wearing different numbers.
+        32,768 is the same defect wearing different numbers.
+      * the named model PLUS another model on the same lane -> failure. The
+        owner's rule is one preset's model at a time (2026-11-18); a second
+        model left resident is the previous preset not ended, and the apply
+        must not claim success for it.
       * a lane that does not answer at all -> failure: nothing was proved, and
         "could not tell" is never a pass.
       * the lane holding NOTHING -> NOT a failure. The apply records which model
@@ -2066,13 +2121,31 @@ def _default_verify_lane(url: str, model: str, min_ctx=None) -> dict:
         return {"ok": False, "checked": True, "loaded": names,
                 "why": f"it is holding {', '.join(names)}, not {model}",
                 "proof": f"{where}: loaded {', '.join(names)}"}
+    # THE OWNER'S RULE, WITH TEETH (2026-11-18): only ONE preset's model may be
+    # loaded at a time. The named model being present is not enough - a second
+    # model left resident beside it means a preset switch did not end the
+    # previous one, and the apply must not answer ok for that. This is the read
+    # that can see it: /api/ps is the machine's own list, never a remembered
+    # flag. A lane that holds nothing is fine (checked above), so this only
+    # fails the real two-model state.
+    others = [name for name in names
+              if _bare_model(name) != _bare_model(model)]
+    if others:
+        return {"ok": False, "checked": True, "loaded": names,
+                "why": (f"it is holding {', '.join(others)} as well as {model}; "
+                        "only one preset's model may be loaded at a time, so the "
+                        "previous preset was not ended first"),
+                "proof": f"{where}: loaded {', '.join(names)}"}
     spill = big.spill_bytes(row)
     ctx = row.get("context_length")
     proof = (f"{where}: {model} ctx={ctx} size={row.get('size')} "
              f"size_vram={row.get('size_vram')} spill={spill}")
-    if spill is None or int(spill) > 0:
+    if spill is None or int(spill) > int(allow_spill or 0):
+        allowed = (f", past the {int(allow_spill)} B this preset's own measurement "
+                   f"allows" if allow_spill else "")
         return {"ok": False, "checked": True, "loaded": names,
-                "why": f"{model} came back with {spill} B spilled out of video memory",
+                "why": (f"{model} came back with {spill} B spilled out of video "
+                        f"memory{allowed}"),
                 "proof": proof}
     try:
         ctx_n = int(ctx) if ctx is not None else None
@@ -2112,19 +2185,23 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     Order: start the named lane if it is down -> switch the model (the ask card
     lives inside switch_model on the ordinary path) -> READ THE LANE BACK and
     refuse unless it shows the preset's model at the preset's window with no
-    spill (DEF-088; `verify_lane`, and `_default_verify_lane` says what counts as
-    proof) -> point chat at it -> save the chosen preset.
+    spill BEYOND THAT PRESET'S OWN MEASURED ALLOWANCE (DEF-088; `verify_lane`,
+    and `_default_verify_lane` says what counts as proof) -> point chat at it
+    -> save the chosen preset.
     The lane start is BEFORE the card on purpose: a lane that is down cannot
     answer the switch's is_installed read, so switch-first is not possible.
     That means a card the owner DENIES leaves the started lane RUNNING (it
     starts no model and switches nothing) - stated here and in JARVIS-API
     section 145 rather than claiming nothing happens before the card.
 
-    THE CODING PRESET IS THE ONE HEAVY ROW, and since 2026-11-02 its lane
-    exists. Its model is 14.8 GB against a 12 GB card and an 8 GB card, so it
-    cannot run on either named lane; its lane is "pooled"
-    (`jarvis_model_lanes.start_pooled_lane`), ONE Ollama on its own port with
-    all three cards visible. That start raises the ONE `switch_model` card ITSELF,
+    THE HEAVY ROWS ARE General, Coding, Reflective Coach, Pictures & Screens
+    and Medical, and since 2026-11-02 their lane exists. General joined them on
+    2026-11-18: its model needs all three cards, and the everyday lane is
+    pinned to one 12 GB card, so pointing it there was ruled out. A heavy
+    preset's model cannot run on either named single-card lane; its lane is
+    "pooled" (`jarvis_model_lanes.start_pooled_lane`), ONE Ollama on its own
+    port with all three cards visible. That start raises the ONE `switch_model`
+    card ITSELF,
     before it unloads anything, because the pause has to be announced before
     the first unload - which is why the heavy path's `switch_model` is
     `_default_adopt` (record the model that is already loaded, no second card,
@@ -2138,13 +2215,17 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
 
     Since 2026-11-09 the same road carries the Medical preset: `p.mode` is
     passed to `start_pooled_lane`, which loads `medgemma:27b` at 32,768 with
-    the same one card.
+    the same one card. General joined that road on 2026-11-18 with its own
+    measured mode `gemma4-26b-a4b` (the same pooled row Reflective Coach uses),
+    and `_preset_spill_allowance(p)` passes that mode's measured spill to the
+    lane read-back - so General's 0.681 GiB is allowed by its own measurement
+    and a worse load still fails.
 
-    The other direction matters too: a preset that is NOT heavy needs the two
-    lanes back, so applying one ENDS the pooled lane first (it unloads the 30B
-    and puts both models back exactly as they were). If it cannot end it, the
-    apply refuses in plain words rather than trying to load a model on a card
-    the heavy one is still holding.
+    The other direction matters too: a preset that is NOT heavy needs the
+    everyday lane back, so applying one ENDS the pooled lane first (it unloads
+    the heavy model and puts the everyday 9B back exactly as it was). If it
+    cannot end it, the apply refuses in plain words rather than trying to load a
+    model on a card the heavy one is still holding.
 
     The contract lane key is "main" (both apps' fixture says so); the model
     starter calls that same lane "everyday" - `_default_start_lane` translates
@@ -2337,16 +2418,21 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     # model record and the choice - and on 2026-11-17 that reported success
     # while port 11436 was loading the pooled coder at 8,192 tokens (the A2
     # field test, DEF-088). The lane now has to show the model this preset
-    # names, at or above the window it names, with no spill, or the apply rolls
-    # back and says what it saw; see `_default_verify_lane` for exactly what
-    # counts as proof and why an EMPTY lane is not a failure. The seam exists so
-    # a suite can inject a fake lane instead of a socket: the default is the real
-    # reader on the owner's PC and an honest "not checked" inside a suite.
+    # names, at or above the window it names, within the spill its own
+    # measurement allows, or the apply rolls back and says what it saw; see
+    # `_default_verify_lane` for exactly what counts as proof and why an EMPTY
+    # lane is not a failure. The seam exists so a suite can inject a fake lane
+    # instead of a socket: the default is the real reader on the owner's PC and
+    # an honest "not checked" inside a suite. `allow_spill` is the preset's own
+    # measured allowance (`_preset_spill_allowance`): 0 for everything that is
+    # not heavy, the pooled mode's measured spill for a heavy row.
     verify_lane = verify_lane or _verify_lane_for_this_process()
+    allow_spill = _preset_spill_allowance(p)
     lane_check: dict = {}
     try:
         lane_check = verify_lane(target_lane, p.model,
-                                 int(getattr(p, "context", 0) or 0) or None) or {}
+                                 int(getattr(p, "context", 0) or 0) or None,
+                                 allow_spill=int(allow_spill)) or {}
     except Exception as exc:
         lane_check = {"ok": False,
                       "why": (f"the lane could not be read "
@@ -2977,12 +3063,22 @@ def _row(p: Preset, index: int, cards: list, measured: bool,
 
 
 def recommendations() -> dict:
-    """The 1-, 2- and 3-GPU rows for every preset.
+    """The 1-, 2- and 3-GPU rows for every preset, and the 3-card plan.
 
-    The measured 2-GPU mapping is the agreed one (General/Coding/Agentic+Vision
-    on the 2060, Fast on the 2080 SUPER). 1- and 3-GPU layouts are reasoned,
-    not measured: every row there says best_effort_not_tested. A pending preset
-    is never recommended (pending=True comes through and no figure is given).
+    ONE PRESET'S MODEL AT A TIME (the owner's rule, 2026-11-18). Every preset
+    names one model on one lane, and applying a different preset ends the
+    previous model first - nothing is left resident "just in case". Because no
+    preset has to keep a card free for another preset, any preset may use all
+    three cards where its model warrants it: the everyday lane (port 11436) and
+    the on-demand pooled lane (port 11450) both see all three. The old
+    one-lane-per-GPU layout this screen used to describe is GONE - it is the
+    text that kept the retired 11435 lane looking necessary.
+
+    A row's `measured` flag is the preset's own receipt (`p.measured`), never a
+    layout claim: the 26B's figures were taken on this PC across all three
+    cards, so a one- or two-card row that cannot hold it says
+    best_effort_not_tested in words instead. A pending preset is never
+    recommended (pending=True comes through and no figure is given).
     """
     cards = _detected_cards()["cards"]
     by = {}
@@ -2997,157 +3093,145 @@ def recommendations() -> dict:
                 rows[p.id] = _row(p, 0, cards, False, True,
                                   "one card: reasoned, not measured on this PC")
             elif n == 2:
-                if p.id == "fast":
-                    rows[p.id] = _row(p, 1, cards, p.measured is not None,
-                                      p.measured is None,
-                                      "the agreed 2-GPU mapping: Fast on the fast card")
-                elif p.lane == "pooled":
-                    # The Coding preset became the 30B coding model on the
-                    # pooled lane on 2026-11-02. "main model on the 2060" is
-                    # its 2-GPU answer no more: it pauses both lanes and takes
-                    # all three cards. The measured figures below are its own
-                    # (`p.measured`), so only the words were stale.
+                if p.lane == "pooled":
                     rows[p.id] = _row(p, 0, cards, p.measured is not None,
                                       p.measured is None,
                                       f"HEAVY MODE: {p.model} on "
-                                      "the pooled lane (port 11450) across ALL THREE cards, "
-                                      "started on demand; it pauses the other lanes' "
-                                      "models while it runs",
-                                      card_text="all three cards (pooled lane, port 11450)")
+                                      f"the pooled lane (port {POOLED_PLAN_PORT}) across "
+                                      "ALL THREE cards, started on demand; it pauses "
+                                      "the everyday model while it runs",
+                                      card_text=(f"all three cards (pooled lane, port "
+                                                 f"{POOLED_PLAN_PORT})"))
                 else:
                     rows[p.id] = _row(p, 0, cards, p.measured is not None,
                                       p.measured is None,
-                                      "the agreed 2-GPU mapping: main model on the 2060")
+                                      "the everyday lane: all the cards this PC has, "
+                                      "one preset's model at a time")
             else:
-                # CONFIRMED PLAN (owner, 2026-10-18): three RTX cards, no GTX 1080
-                # for compute. THE RULE IS HYBRID (settled 2026-11-04): every
-                # everyday preset keeps ONE lane per GPU, and only the Coding
-                # preset's heavy mode pools the cards. The text here used to say
-                # "lane-per-GPU, never one model split across three cards", which
-                # stopped being true on 2026-11-02 when Coding became
-                # qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane - a model
-                # physically too big for one card, by design.
+                # 2026-11-18: one preset's model loaded at a time. The everyday
+                # lane (ONE card on this PC) carries the long-window 9B rows and
+                # the short-window ones; the pooled lane (all three cards) carries
+                # every heavy row, General's 26B included, and pauses the everyday
+                # model while it runs.
                 roles = _card_roles(cards)
                 everyday = _role_words(cards, roles, "main")
-                display = _role_words(cards, roles, "display")
-                headless = _role_words(cards, roles, "headless")
-                pooled = (f"qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane (port "
-                          f"{POOLED_PLAN_PORT}) across ALL the cards: it is too big for "
-                          f"one card, so applying this preset pauses the other lanes' "
-                          f"models, starts that lane, and stops it again when another "
-                          f"preset is applied")
-                idx = {"general": roles["main"], "general_uncensored": roles["main"],
-                       "coding": roles["main"],
-                       "fast": roles["display"], "agentic_vision": roles["main"],
-                       "reflect": roles["main"], "pictures": roles["main"],
-                       "documents": roles["main"], "browser": roles["main"],
-                       "medical": roles["main"]}[p.id]
+                pooled_card = (f"all the cards (pooled lane, port "
+                               f"{POOLED_PLAN_PORT})")
                 note = {
-                    "general": f"{everyday}: main chat/everyday, 196,608 window",
-                    "general_uncensored": f"{everyday}: main chat/everyday, 196,608 window",
-                    "coding": pooled,
-                    "fast": f"{display}: display + Fast/Live lane, qwen3.5:4b",
-                    "agentic_vision": f"{everyday}: Agentic+Vision, qwen3.5:9b with images",
+                    "general": (f"{p.model} on ONE pooled lane (port "
+                                f"{POOLED_PLAN_PORT}) across ALL the cards at "
+                                f"{p.context:,} tokens: HEAVY MODE, it pauses the "
+                                f"everyday model while it runs"),
+                    "general_uncensored": (f"{everyday}: main chat / everyday "
+                                           f"uncensored, {p.context:,} window"),
+                    "coding": (f"{p.model} on ONE pooled lane (port "
+                               f"{POOLED_PLAN_PORT}) across ALL the cards: it is "
+                               f"too big for one card, so applying this preset "
+                               f"pauses the everyday model, starts that lane, and "
+                               f"stops it again when another preset is applied"),
+                    "fast": f"{everyday}: Fast, qwen3.5:4b, {p.context:,} window",
+                    "agentic_vision": (f"{everyday}: Agentic+Vision, qwen3.5:9b "
+                                       f"with images, {p.context:,} window"),
                     "reflect": (f"{p.model} on ONE pooled lane (port "
                                 f"{POOLED_PLAN_PORT}) across ALL the cards at "
                                 f"{p.context:,} tokens: HEAVY MODE, it pauses the "
-                                f"other lanes' models while it runs"),
+                                f"everyday model while it runs"),
                     "pictures": (f"{p.model} on ONE pooled lane (port "
                                  f"{POOLED_PLAN_PORT}) across ALL the cards at "
                                  f"{p.context:,} tokens: HEAVY MODE, it pauses the "
-                                 f"other lanes' models while it runs"),
-                    "documents": f"{everyday}: Documents & Notes, qwen3.5:9b, 196,608 window",
-                    "browser": f"{everyday}: Browser & Forms, qwen3.5:9b, 196,608 window",
+                                 f"everyday model while it runs"),
+                    "documents": (f"{everyday}: Documents & Notes, qwen3.5:9b, "
+                                  f"{p.context:,} window"),
+                    "browser": (f"{everyday}: Browser & Forms, qwen3.5:9b, "
+                                f"{p.context:,} window"),
                     "medical": (f"medgemma:27b on ONE pooled lane (port "
-                                f"{POOLED_PLAN_PORT}) across ALL the cards at 32,768 "
-                                f"tokens: HEAVY MODE, it pauses the other lanes' models "
-                                f"while it runs"),
+                                f"{POOLED_PLAN_PORT}) across ALL the cards at "
+                                f"{p.context:,} tokens: HEAVY MODE, it pauses the "
+                                f"everyday model while it runs"),
                 }[p.id]
                 role_text = {
-                    "general": everyday,
+                    "general": pooled_card,
                     "general_uncensored": everyday,
-                    "coding": (f"all the cards (pooled lane, port "
-                               f"{POOLED_PLAN_PORT})"),
-                    "fast": display,
-                    # The EVERYDAY card, because that is where this row's `idx`
-                    # puts it: Agentic+Vision needs about 7.00 GiB and a headless
-                    # 8 GB card has 6.65 GiB free, so the placement moved off the
-                    # headless lane (origin/main, 2026-11-05). Naming `headless`
-                    # here would print a card the row no longer uses.
+                    "coding": pooled_card,
+                    "fast": everyday,
                     "agentic_vision": everyday,
-                    "reflect": (f"all the cards (pooled lane, port "
-                                f"{POOLED_PLAN_PORT})"),
-                    "pictures": (f"all the cards (pooled lane, port "
-                                 f"{POOLED_PLAN_PORT})"),
+                    "reflect": pooled_card,
+                    "pictures": pooled_card,
                     "documents": everyday,
                     "browser": everyday,
-                    "medical": (f"all the cards (pooled lane, port "
-                                f"{POOLED_PLAN_PORT})"),
+                    "medical": pooled_card,
                 }[p.id]
-                # EVERY row names its card by ROLE. `_row()`'s fallback is
-                # `f"card {index}"` - an array position the owner cannot see -
-                # and the 2-card PC hit it on Agentic+Vision ("card 2") while
-                # that row's own note said the headless card was not installed
-                # yet (fixed 2026-11-05). The Coding row keeps the pooled
-                # lane's own words, which are already a role, not a position.
-                rows[p.id] = _row(p, idx, cards, False, True, note,
+                # `card_index` is the first card of the lane (the everyday
+                # card), kept for the apps that sort by position; the `card`
+                # TEXT is what names where the model really runs - General's
+                # heavy row says the pooled lane on all three cards, and a
+                # named-lane row names the one everyday card it is loaded on.
+                # `_row()`'s fallback is `f"card {index}"` - an array position
+                # the owner cannot see - so no row is left to it.
+                rows[p.id] = _row(p, roles["main"], cards, False, True, note,
                                   card_text=role_text)
         by[str(n)] = rows
     roles = _card_roles(cards)
     return {"by_gpu_count": by,
-            "basis": ("the agreed 2-GPU mapping is measured; 1 and 3 GPUs are "
-                      "best effort and labelled as not tested"),
+            "basis": ("one preset's model is loaded at a time; every heavy preset, "
+                      "General included, needs the pooled lane's three cards, so "
+                      "one- and two-card layouts are reasoned and labelled, never "
+                      "claimed as measured"),
             "three_gpu_plan": {
                 "confirmed": True,
-                # One line, two halves, in the order the owner meets them: the
-                # everyday shape first, then the on-demand heavy one that is the
-                # only exception. "lane per GPU" is kept deliberately - it is
-                # what the everyday half IS - so the pin in test_presets.py that
-                # has always guarded it still guards something true.
-                "layout": ("everyday presets keep one lane per GPU (the everyday "
-                           "lane, the monitor card's lane and the headless card's "
-                           f"lane); only the on-demand heavy mode pools the "
-                           f"cards on port {POOLED_PLAN_PORT} - Coding, Reflective "
-                           f"Coach, Pictures & Screens and Medical - and each "
-                           f"pauses the other lanes' models while it runs. Agentic "
-                           f"+ Vision stays on the "
-                           "everyday card, not the headless one: the 9B weights plus "
-                           "the vision projector need about 7.00 GiB and an 8 GB card "
-                           "with no monitor has 6.65 GiB free, so there is no window "
-                           "at which it fits a headless card"),
+                # The owner's rule, in the order the owner meets it: the one
+                # model, then the all-three-cards consequence. The old sentence
+                # here said "everyday presets keep one lane per GPU" - it is the
+                # text that kept the retired second lane looking necessary, so
+                # it is replaced rather than reworded.
+                "layout": ("ONE preset's model is loaded at a time: applying "
+                           "another preset ends the previous one first, so no "
+                           "preset has to keep a card free for another. The "
+                           "everyday lane (port 11436) is ONE card on this PC and "
+                           "serves the 9B rows - Documents & Notes and Browser & "
+                           "Forms at 196,608 tokens, Fast and Agentic + Vision at "
+                           f"16,384. The pooled lane (port {POOLED_PLAN_PORT}) "
+                           "sees ALL THREE cards and carries every heavy preset - "
+                           "General's 26B at 32,768, Coding, Reflective Coach, "
+                           "Pictures & Screens and Medical - and it pauses the "
+                           "everyday model while it runs, because no preset has to "
+                           "keep a card free for another. So any preset may use all "
+                           "three cards where its model warrants it. There is no "
+                           "one-lane-per-GPU split any more."),
                 "cards": [
-                    {"role": "everyday lane: main chat / everyday, 196,608 tokens",
+                    {"role": ("everyday lane: ONE card (the RTX 2060), port 11436 - "
+                              "the 9B long-window rows at 196,608; Fast and "
+                              "Agentic + Vision at 16,384"),
                      "card": _role_words(cards, roles, "main"), "context": 196608},
-                    # The role line follows the fact too: when the monitor is
-                    # on the everyday card, this is the Fast/Live lane on
-                    # another card, not a "monitor card's lane" (2026-11-05).
-                    {"role": (("Fast/Live lane (the monitor is on the everyday "
-                               "card): display + Fast/Live, 16,384 tokens")
-                              if roles.get("monitor_on_main") else
-                              "monitor card's lane: display + Fast/Live, 16,384 tokens"),
-                     "card": _role_words(cards, roles, "display"), "context": 16384},
-                    {"role": "headless card's lane: no 9B lane fits - Agentic+Vision "
-                             "needs about 7.00 GiB against 6.65 GiB free, so it stays "
-                             "on the everyday card",
-                     "card": _role_words(cards, roles, "headless"), "context": 16384},
+                    {"role": ("pooled lane, started on demand: all three cards, "
+                              f"port {POOLED_PLAN_PORT} - General's 26B at 32,768, "
+                              "Coding, Reflective Coach, Pictures & Screens and "
+                              "Medical; it pauses the everyday model while it runs"),
+                     "card": f"all three cards (pooled lane, port {POOLED_PLAN_PORT})",
+                     "context": 32768},
                 ],
-                "heavy_pooled": (f"on demand, the heavy presets pause those three lanes "
-                                 f"and load ONE model on the same pooled lane on port "
-                                 f"{POOLED_PLAN_PORT} across all the cards: Coding "
+                "heavy_pooled": (f"on demand, a heavy preset pauses the everyday "
+                                 f"model and loads ONE model on the pooled lane on "
+                                 f"port {POOLED_PLAN_PORT} across all the cards: "
+                                 f"General (gemma4:26b-a4b-it-qat at 32,768), Coding "
                                  f"(qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), "
                                  f"Medical (medgemma:27b at 32,768), Reflective Coach "
                                  f"(gemma4:26b-a4b-it-qat at 32,768) and Pictures & "
-                                 f"Screens (qwen3-vl:30b-a3b-instruct at 32,768). Each "
-                                 f"is too big for one card, which is why a heavy preset "
-                                 f"splits one model across the cards; every preset that "
-                                 f"is not heavy keeps one lane per GPU."),
+                                 f"Screens (qwen3-vl-30b-a3b-instruct at 32,768). "
+                                 f"Each is too big for one card, which is why a heavy "
+                                 f"preset splits one model across the cards; every "
+                                 f"preset that is not heavy runs on the one everyday "
+                                 f"lane, one model at a time."),
                 "link_note": ("the third card likely sits on the B550 chipset through an "
                               "M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs "
-                              "loading time, not a lane; each lane keeps its own model."),
+                              "loading time, not a lane: the everyday model is loaded "
+                              "once across all three cards, so the link is paid at "
+                              "load, not per token."),
                 "future_not_a_preset": ("Qwen3.8-27B pooled to 28 GB across cards is a future "
                                         "'max quality' experiment only; it is not a preset and "
                                         "no figure is claimed until it is measured."),
             }}
+
 
 def by_id(preset_id) -> Optional[Preset]:
     return _BY_ID.get(str(preset_id or ""))

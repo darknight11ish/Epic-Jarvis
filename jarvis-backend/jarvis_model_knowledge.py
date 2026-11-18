@@ -185,10 +185,12 @@ def bench_for(model) -> Optional[dict]:
     2026-11-18: a preset row may carry a `measured` dict with NO rate in it -
     Agentic + Vision records latency only - and it must not hide a later row's
     real tokens a second. Before the everyday preset moved off qwen3.5:9b the
-    General row came first and this never showed; now it does, and the true
-    figure (44.9 at 196,608) lives in the Reflective/Documents/Browser rows. So
-    a row WITH a rate wins, and a rate-less row is still returned when no row
-    has one, because its latency and its words are measured facts too."""
+    General row came first and this never showed; now the 9B's rate-less
+    Agentic + Vision row would, and the true figure (44.9 at 196,608) lives in
+    the Documents/Browser rows. So a row WITH a rate wins, and a rate-less row
+    is still returned when no row has one, because its latency and its words
+    are measured facts too. General's own 26B row carries its 2026-11-17 rate
+    (25.4 tok/s, the low end of two runs), so it is never the rate-less case."""
     ref = str(model or "")
     rows = benchmarks()
     row = rows.get(ref)

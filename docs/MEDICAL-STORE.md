@@ -46,10 +46,12 @@ Three small things that share one subject:
 
    It is a checker, not a medical review and not a diagnosis.
 
-3. **A client for a small local medical model.** MedGemma 1.5 4B runs on your
-   RTX 2080 SUPER in a lane of its own. It can read a lab row and say "this
-   looks odd", or "I cannot tell". It is never the authority on anything, and
-   it can never change what the checker found.
+3. **A client for the local model the PC has chosen.** It asks whichever model
+   is current, on the lane chat uses, and can read a lab row and say "this looks
+   odd", or "I cannot tell". It is never the authority on anything, and it can
+   never change what the checker found. (The old separate MedGemma lane on
+   `:11435` is retired - 2026-11-18 - and this client names neither a model nor
+   a port any more; see "The medical model client" below.)
 
 There is **no screen** for any of this yet - not on the desktop, not on the
 phone. It is a library, and a library is what tonight's slice could finish
@@ -127,10 +129,12 @@ before trusting the rest.
   how many rows) and never the words of a record or a question;
 - the 30-minute health latch on every read and every write, failing closed:
   if the latch cannot be set, nothing is opened and nothing is written;
-- the local MedGemma lane client, with a calm fallback to your main local model
-  (`:11436`) when the lane is down. Its request timeout is **120 seconds**, not
-  the 25 it first shipped with: measured on 2026-10-24, one answer took 28.35 s,
-  so 25 s was cutting the model off and showing you the fallback instead;
+- the local model client, which resolves the current model and the chat lane at
+  call time (no model and no port are typed in it) and falls back calmly when
+  the lane is down or no model is chosen. Its request timeout is **120
+  seconds**, not the 25 it first shipped with: measured on 2026-10-24, one
+  answer from the 4B model took 28.35 s, so 25 s was cutting the model off and
+  showing you the fallback instead;
 - the offline FHIR R4 structural checker and its plain-English summary.
 
 **NOT built tonight** - do not expect these, and do not let a future summary
@@ -162,65 +166,46 @@ imply them:
 
 ---
 
-## The medical model lane
+## The medical model client
 
-MedGemma 1.5 4B is installed in Ollama as **`medgemma1.5:4b-it-q4_K_M`**.
-`medgemma:4b` is the older 1.0 model - do not use that tag.
+The medical reader is a thin client for **whichever local model the PC has
+chosen**, on the lane chat uses. It names no model and no port any more
+(2026-11-18): it asks `jarvis_models.current_model()` for the model and
+`jarvis_presets.active_chat_url()` (falling back to
+`jarvis_models.ollama_url_on_this_pc()`) for the lane, then reads that model's
+window from the preset row that names it, or from the shipped lane row. If the
+window cannot be named the model is **not asked** - a request that names no
+window reloads the model at Ollama's own default and throws away the size the
+lane was set to, which is the DEF-088 rule this project keeps.
 
-- **Lane address:** `http://127.0.0.1:11435` (loopback only; the module refuses
-  any other host).
-- **Model store:** `D:\Jarvis Models\Ollama\store`, shared by all the lanes.
-- **Your main local model** is on `:11436` (`qwen3.5:9b`). `:11434` is a third,
-  empty server.
-- **Measured:** 100% GPU on the RTX 2080 SUPER, 16,384 context,
-  `size_vram` 2,817,953,626 bytes. The primary model never moved when this lane
-  was started.
+**The old separate medical lane on `:11435` is RETIRED (2026-11-18).** It ran
+`medgemma1.5:4b-it-q4_K_M` (not `medgemma:4b`, the older 1.0 model) on the RTX
+2080 SUPER at 16,384 context, measured 2026-10-24 at 100% GPU,
+`size_vram` 2,817,953,626 bytes. The lane retirement ("i dont need a separate
+coding lane on any preset") would have broken this module's default silently -
+a down lane only reads as "not running" - so the hard-coded model and port were
+removed the same day and it asks the resolvers instead.
 
-### Start the lane (one line, copy-ready)
+**What that means in words:** apply the Medical Expert preset and the current
+model is `medgemma:27b` on the pooled lane at 32,768, so the medical reader asks
+that. Apply another preset and it asks that preset's model. No model of its own
+is installed, started or downloaded by this module.
 
-The lane does **not** survive a reboot. This starts it again, on the 2080 SUPER
-only, without touching the other two lanes:
-
-```powershell
-$env:OLLAMA_HOST='127.0.0.1:11435'; $env:OLLAMA_MODELS='D:\Jarvis Models\Ollama\store'; $env:OLLAMA_KEEP_ALIVE='5m'; $env:OLLAMA_CONTEXT_LENGTH='16384'; $env:OLLAMA_KV_CACHE_TYPE='q8_0'; $env:OLLAMA_VULKAN='false'; $env:CUDA_DEVICE_ORDER='PCI_BUS_ID'; $env:CUDA_VISIBLE_DEVICES='1'; Start-Process 'C:\Users\pcadmin\AppData\Local\Programs\Ollama\ollama.exe' -ArgumentList 'serve' -WindowStyle Hidden
-```
-
-Those `$env:` lines affect only that shell and the process it starts. The
-`CUDA_DEVICE_ORDER` line is not optional: without it, `CUDA_VISIBLE_DEVICES=1`
-points at the **wrong** card on this PC (measured 2026-10-24).
-
-If the model itself is ever missing, pull it into the lane:
-
-```powershell
-$env:OLLAMA_HOST='127.0.0.1:11435'; ollama pull medgemma1.5:4b-it-q4_K_M
-```
-
-### Check the lane is up
-
-```powershell
-Invoke-RestMethod 'http://127.0.0.1:11435/api/tags' | Select-Object -ExpandProperty models | Select-Object name, size
-Invoke-RestMethod 'http://127.0.0.1:11435/api/ps'
-Invoke-RestMethod 'http://127.0.0.1:11436/api/ps'
-```
-
-What you should see: the first shows `medgemma1.5:4b-it-q4_K_M`; the second
-shows it loaded after a question, 100% GPU at 16,384 context; the third still
-shows `qwen3.5:9b` untouched.
-
-From Python, the module does the same check in 0.2 seconds and never opens a
-real socket outside this PC:
+From Python (no socket outside this PC; the resolver reads state files):
 
 ```python
 import jarvis_medical_advocate as M
 M.lane_status()
 # {'available': True,
-#  'lane_url': 'http://127.0.0.1:11435',
-#  'model': 'medgemma1.5:4b-it-q4_K_M',
-#  'note': 'The local medical model is running on this PC. ...'}
+#  'lane_url': 'http://127.0.0.1:11436',
+#  'model': 'gemma4:26b-a4b-it-qat',
+#  'note': 'The local model is running on this PC. ...'}
 ```
 
-If the lane is down, `lane_status()` returns `available: False` and a calm note
-that names your main local model (`:11436`). It does not raise.
+If the chosen model is not installed on that lane, `available: False` and a calm
+note says that; if no model is chosen at all, it says that instead. It does not
+raise. `consult_local_medgemma()` returns the fallback rather than asking a
+model whose window cannot be named.
 
 ---
 

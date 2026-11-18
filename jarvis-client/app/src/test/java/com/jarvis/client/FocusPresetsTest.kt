@@ -205,13 +205,23 @@ class FocusPresetsTest {
         // is caught here rather than silently reworded on the phone alone.
         assertEquals("General", view.preset("general")!!.title)
         assertEquals("everyday questions, writing, life admin", view.preset("general")!!.focus)
-        // The everyday model moved on 2026-11-18: the owner's "each preset
-        // should be dedicated to one preset local ai model" put the 26B on the
-        // everyday lane, and that lane is all three cards now.
+        // 2026-11-18, after external review: the owner chose the 26B at a
+        // 32,768-token window, and it runs on the POOLED lane because the
+        // everyday lane on 11436 is pinned to one 12 GB card - a 15.5 GiB
+        // model there would spill. So General is a heavy preset now.
         assertEquals("gemma4:26b-a4b-it-qat", view.preset("general")!!.model)
+        assertEquals("pooled", view.preset("general")!!.lane.key)
         assertEquals("all three cards", view.preset("general")!!.lane.card)
-        assertEquals("the everyday lane", view.preset("general")!!.lane.words)
-        assertEquals(196608, view.preset("general")!!.context)
+        assertEquals("one model across all three cards",
+            view.preset("general")!!.lane.words)
+        assertEquals(32768, view.preset("general")!!.context)
+        assertTrue("General is a heavy preset on the pooled lane",
+            view.preset("general")!!.heavyMode)
+        // The contract's own rule: lane_start = lane != "main". General's lane is
+        // "pooled" now, so applying it starts that on-demand lane - this is the
+        // assertion that moved with the lane.
+        assertTrue("applying General starts the pooled lane on demand",
+            view.preset("general")!!.apply.laneStart)
     }
 
     @Test

@@ -108,12 +108,16 @@ def t_default_unchanged_without_a_call():
 def t_general_success_one_card_and_order():
     d = Deps()
     code, out = apply({"preset": "general"}, d)
-    check("general applies through one start, one switch, one lane write, one choice",
+    check("general applies through one pooled-lane start, one switch, one lane "
+          "write, one choice",
           code == 200 and out["changed"] is True
           and [c[0] for c in d.calls] == ["start", "switch", "set_url", "choice"], d.calls)
-    check("the one switch is the preset's model on the main lane",
+    check("the start is the POOLED lane in General's own measured mode - the "
+          "everyday lane's one card cannot hold the 26B",
+          d.calls[0] == ("start", "pooled", "gemma4-26b-a4b"), d.calls)
+    check("the one switch is the preset's model, and chat moves to :11450",
           d.calls[1] == ("switch", P.by_id("general").model)
-          and d.calls[2] == ("set_url", "http://127.0.0.1:11436"), d.calls)
+          and d.calls[2] == ("set_url", "http://127.0.0.1:11450"), d.calls)
     check("the chosen preset is persisted", d.choice == "general")
 
 

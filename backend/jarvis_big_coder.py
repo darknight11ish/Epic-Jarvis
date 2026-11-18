@@ -29,13 +29,14 @@ THE OWNER'S DECISION, WHICH THIS FILE IMPLEMENTS AND DOES NOT RE-LITIGATE
      the everyday lane, its model and its context, and the sentence goes out
      before the first unload.
   4. When the mode ends, the everyday lane comes back EXACTLY as it was:
-     11436 gemma4:26b-a4b-it-qat at 196608 across ALL THREE cards, with the
-     measured 0.92 GiB of spill allowed and no more. That is PROVED from
-     /api/ps - model, context and spill within that allowance - and a lane
-     that does not come back is reported as a failure rather than glossed
-     over. Since 2026-11-18 there is ONE always-on lane: the coding lane on
-     11435 (`qwen3:8b` at 16384) is RETIRED, so nothing here pauses or
-     restores a second lane.
+     11436 qwen3.5:9b at 196608 on the RTX 2060, with zero spill. That is
+     PROVED from /api/ps - model, context and spill - and a lane that does
+     not come back is reported as a failure rather than glossed over. Since
+     2026-11-18 there is ONE always-on lane: the coding lane on 11435
+     (`qwen3:8b` at 16384) is RETIRED, so nothing here pauses or restores a
+     second lane. General's 26B is NOT on this lane - it is a heavy preset on
+     the pooled lane (port 11450), because the everyday lane is pinned to the
+     single 12 GB RTX 2060 and a 15.50 GiB model there would spill.
 
 REUSE, NOT A SECOND SUPERVISOR
 
@@ -137,9 +138,10 @@ class Lane(NamedTuple):
     uuid: str
     why: str
     #: Bytes of that lane's load this code will accept outside video memory.
-    #: 0 is the rule every earlier lane kept. The everyday 26B is the first
-    #: lane with a MEASURED spill at its own window (0.92 GiB, 2026-11-17/18),
-    #: so it carries that number here rather than a second constant.
+    #: 0 is the rule for the everyday lane, as it always was: 11436 holds the
+    #: 9B at 196,608 and it fits the 2060. (A HEAVY preset's measured spill is
+    #: allowed by the pooled lane's own mode row, not here, because General's
+    #: 26B runs on 11450 now - see `jarvis_presets`.)
     spill_allowance: int = 0
 
 
@@ -148,13 +150,14 @@ class Lane(NamedTuple):
 #: owner's words are "i dont need a separate coding lane on any preset. each
 #: preset should be dedicated to one preset local ai model." - so this tuple
 #: holds one entry and nothing here pauses, restores or starts a second lane.
-#: `uuid` is empty on purpose: there is no single card to pin, because since
-#: 2026-11-18 the everyday model needs all three cards (the same window on two
-#: cards spilled 6.37 GiB and fell to 15.75-16.76 tok/s). The wiring of the
-#: logon task that starts this lane is the deploy step, not this module's.
+#: It is the RTX 2060 at 11436 and it still exists because Documents & Notes
+#: and Browser & Forms keep the 9B at 196,608 tokens there. General's 26B is a
+#: HEAVY preset on the pooled lane (11450), not on this one: the 2060 cannot
+#: hold 15.50 GiB, and external review ruled on 2026-11-18 that it must not be
+#: pointed here.
 LANES = (
-    Lane(11436, "gemma4:26b-a4b-it-qat", 196608, "all three cards", "",
-         "the everyday lane", round(0.92 * 1024 ** 3)),
+    Lane(11436, "qwen3.5:9b", 196608, "RTX 2060",
+         "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee", "the everyday lane"),
 )
 
 
@@ -941,10 +944,9 @@ def restore_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
         if ctx is not None and ctx != lane.ctx:
             wrong.append(f"{lane.model} came back at {ctx}, not {lane.ctx}, on port "
                          f"{lane.port}")
-        # 0 is the old rule: any spill is a failed restore. The everyday 26B
-        # carries its own MEASURED 0.92 GiB here (2026-11-17/18), so it comes
-        # back to the window it was measured at rather than being refused for
-        # the spill that measurement recorded.
+        # 0 is the rule the everyday lane keeps: the 9B at 196,608 fits the
+        # 2060 with no spill, so any spill is a failed restore. A heavy preset's
+        # measured allowance lives on the pooled lane's own mode row instead.
         if spill is None or spill > lane.spill_allowance:
             wrong.append(f"{lane.model} came back with spill ({spill} B, allowed "
                          f"{lane.spill_allowance} B) on port {lane.port}")

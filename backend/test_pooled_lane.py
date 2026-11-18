@@ -280,10 +280,11 @@ def t_the_lane_is_the_one_big_coder_owns():
           P.LANES["pooled"]["port"] == L.POOLED_PORT
           and P.LANES["pooled"]["card"] == L.POOLED["card"]
           and P.LANES["pooled"]["words"] == L.POOLED["words"], P.LANES["pooled"])
-    check("the Coding preset is on the pooled lane and is one of the four heavy rows",
+    check("the Coding preset is on the pooled lane and is one of the FIVE heavy "
+          "rows - General joined them on 2026-11-18",
           P.by_id("coding").lane == "pooled"
           and [p.id for p in P.PRESETS if p.heavy_mode]
-          == ["coding", "reflect", "pictures", "medical"],
+          == ["general", "coding", "reflect", "pictures", "medical"],
           [p.id for p in P.PRESETS if p.heavy_mode])
 
 
@@ -836,7 +837,7 @@ def t_medical_applies_through_the_pooled_lane_in_its_own_mode():
 
 def t_a_non_heavy_apply_leaves_a_pooled_lane_that_is_not_running_alone():
     d = Apply(pooled_running=False)
-    code, out = apply(d, "general")
+    code, out = apply(d, "documents")
     check("a preset that is not heavy asks the pool to stop, and does nothing "
           "when it was not running",
           code == 200 and ("stop_pooled",) in d.calls
@@ -846,9 +847,9 @@ def t_a_non_heavy_apply_leaves_a_pooled_lane_that_is_not_running_alone():
 
 def t_leaving_the_pooled_lane_stops_it_before_the_new_model():
     d = Apply(pooled_running=True)
-    code, out = apply(d, "general")
-    check("applying General while Coding is on ENDS the pooled lane FIRST, then "
-          "starts the everyday lane",
+    code, out = apply(d, "documents")
+    check("applying a non-heavy preset while Coding is on ENDS the pooled lane "
+          "FIRST, then starts the everyday lane",
           code == 200 and d.calls[:2] == [("stop_pooled",), ("start", "main")],
           (code, d.calls))
     check("... and chat moves back to the everyday lane", d.lane.endswith(":11436"),
@@ -857,7 +858,7 @@ def t_leaving_the_pooled_lane_stops_it_before_the_new_model():
 
 def t_a_pooled_lane_that_will_not_stop_refuses_the_new_preset():
     d = Apply(pooled_running=True, stop_ok=False)
-    code, out = apply(d, "general")
+    code, out = apply(d, "documents")
     check("if the big coding model will not stop, the apply refuses (503) and "
           "says the cards are still held",
           code == 503 and "still holding both cards" in out["error"], (code, out))
@@ -957,7 +958,7 @@ def t_the_heavy_path_uses_adopt_and_the_others_use_the_model_switch():
         coding = list(seen)
         seen.clear()
         d2 = Apply(pooled_running=False)
-        code2, out2 = P.apply_preset("general", start_lane=d2.start,
+        code2, out2 = P.apply_preset("documents", start_lane=d2.start,
                                      active_url=d2.get_url,
                                      set_active_url=d2.set_url,
                                      read_choice=d2.read_choice,
@@ -971,7 +972,7 @@ def t_the_heavy_path_uses_adopt_and_the_others_use_the_model_switch():
           "single-card smoke test",
           code == 200 and coding == [("adopt", MODEL)], (code, coding))
     check("a preset that is not heavy still goes through the model switch",
-          code2 == 200 and general == [("switch", P.by_id("general").model)],
+          code2 == 200 and general == [("switch", P.by_id("documents").model)],
           (code2, general))
 
 

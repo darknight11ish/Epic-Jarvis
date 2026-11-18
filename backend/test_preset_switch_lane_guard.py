@@ -56,7 +56,8 @@ sys.path.insert(0, str(HERE))
 
 # --- a fake lane first, so OLLAMA_URL can name it before anything imports ----
 CODER = "qwen3-coder-30b-a3b-ud-q3-k-xl"
-EVERYDAY = "gemma4:26b-a4b-it-qat"   # the General preset's model since 2026-11-18
+EVERYDAY = "qwen3.5:9b"             # the everyday lane's long-window model
+GENERAL = "gemma4:26b-a4b-it-qat"   # General's model - on the POOLED lane since 2026-11-18
 SECOND = "qwen3:8b"        # the retired coding lane's model, still in the fake's /api/tags
 LANE_CTX = 196608          # the everyday lane's window (jarvis_big_coder.LANES)
 LIVE_PORTS = (11434, 11435, 11436, 11450)
@@ -76,8 +77,8 @@ class FakeLane:
     def __init__(self):
         self.posts = []
         self.ps_rows = []
-        self.tags = [{"name": CODER}, {"name": EVERYDAY}, {"name": SECOND},
-                     {"name": "qwen3.5:4b"}]
+        self.tags = [{"name": CODER}, {"name": EVERYDAY}, {"name": GENERAL},
+                     {"name": SECOND}, {"name": "qwen3.5:4b"}]
         self.requests = 0
         outer = self
 
@@ -193,13 +194,19 @@ def _seed(current=CODER, previous=EVERYDAY):
             pass
 
 
-def _apply_general(ps_rows, current=CODER):
-    """Drive the real app-click road for `general` against the fake lane."""
+def _apply_documents(ps_rows, current=CODER):
+    """Drive the real app-click road for `documents` against the fake lane.
+
+    A NON-heavy preset on the everyday lane: `documents` keeps the 9B at
+    196,608 there. General is a HEAVY preset on the pooled lane since
+    2026-11-18, so the everyday-lane read-back is exercised through the row
+    that still runs on that lane.
+    """
     LANE.ps_rows = list(ps_rows)
     LANE.posts = []
     _seed(current=current)
     return P.apply_preset(
-        "general", owner_ui=True,
+        "documents", owner_ui=True,
         start_lane=lambda key, mode="": (200, {"ok": True, "changed": False}),
         stop_pooled=lambda: {"ok": True, "ran": False},
         verify_lane=P._default_verify_lane)
@@ -210,7 +217,7 @@ def _apply_general(ps_rows, current=CODER):
 # --------------------------------------------------------------------------
 
 def t_a_pooled_outgoing_model_is_never_probed_on_the_everyday_lane():
-    code, out = _apply_general([_row(EVERYDAY, LANE_CTX)])
+    code, out = _apply_documents([_row(EVERYDAY, LANE_CTX)])
     bodies = LANE.generate_posts()
     asked = [b.get("model") for b in bodies]
     check("the apply succeeds on the ordinary road", code == 200 and out.get("ok") is True,
@@ -264,7 +271,7 @@ def t_the_window_comes_from_the_lane_not_from_a_default():
 
 
 def t_a_lane_holding_the_wrong_model_fails_the_apply():
-    code, out = _apply_general([_row(CODER, 8192, spill=3_762_835_946)])
+    code, out = _apply_documents([_row(CODER, 8192, spill=3_762_835_946)])
     error = str(out.get("error") or "")
     check("a lane holding the wrong model is a FAILURE, not ok",
           code >= 400 and out.get("ok") is False and out.get("changed") is False,
@@ -272,7 +279,8 @@ def t_a_lane_holding_the_wrong_model_fails_the_apply():
     check("the failure names what the lane really held", CODER in error, error)
     check("the model record is rolled back, not left saying success",
           M._read_state().get("current") == CODER, M._read_state())
-    check("the chosen preset is not left at general", P.choice() != "general", P.choice())
+    check("the chosen preset is not left at documents",
+          P.choice() != "documents", P.choice())
 
 
 def t_the_right_model_with_spill_or_a_smaller_window_fails_too():
@@ -286,8 +294,38 @@ def t_the_right_model_with_spill_or_a_smaller_window_fails_too():
           small.get("ok") is False and "8192" in str(small.get("why")), small)
 
 
+def t_a_second_presets_model_resident_is_a_failed_apply():
+    """THE OWNER'S RULE OF 2026-11-18, WITH TEETH.
+
+    "Only one preset's model may be loaded at a time. Applying a different
+    preset ends the previous one first; nothing is left resident 'just in
+    case'." A future change that let two presets' models sit resident together
+    - a switch that stops unloading the previous model, or a lane read-back
+    that accepts a second model beside the preset's own - would make this
+    fail, and the apply must refuse instead of answering ok.
+
+    This does NOT claim Ollama's behaviour: the fake lane simply reports what
+    `/api/ps` would say, and the REAL `_default_verify_lane` is the reader, so
+    the property proved is OUR apply path's, not the engine's.
+    """
+    previous = SECOND    # another preset's model, left resident on the lane
+    code, out = _apply_documents([_row(EVERYDAY, LANE_CTX), _row(previous, LANE_CTX)])
+    error = str(out.get("error") or "")
+    check("two presets' models resident at once is a FAILURE, never ok",
+          code >= 400 and out.get("ok") is False and out.get("changed") is False,
+          (code, error))
+    check("... and the failure names the model it wanted, the one already there, "
+          "and the rule that was broken",
+          EVERYDAY in error and previous in error
+          and "one preset's model" in error, error)
+    check("... the model record is rolled back, not left saying success",
+          M._read_state().get("current") == CODER, M._read_state())
+    check("... and the chosen preset is not left at documents",
+          P.choice() != "documents", P.choice())
+
+
 def t_an_empty_lane_is_not_a_failure():
-    code, out = _apply_general([])
+    code, out = _apply_documents([])
     lane_check = out.get("lane_check") or {}
     check("a lane holding nothing is a successful apply",
           code == 200 and out.get("ok") is True, (code, out.get("error")))
@@ -320,12 +358,47 @@ def t_an_unknown_window_does_not_silently_switch_the_tripwire_off():
 
 
 def t_the_pooled_model_is_refused_by_name_and_the_everyday_one_is_not():
-    refusal = M.probe_refusal(CODER, "http://127.0.0.1:11436")
-    check("the guard is the pooled-model rule, in plain words", "pooled" in refusal,
-          refusal)
-    check("the everyday model is still allowed on the everyday lane",
+    for model in (CODER, GENERAL):
+        refusal = M.probe_refusal(model, "http://127.0.0.1:11436")
+        check(f"the guard refuses the pooled model {model} on the everyday lane",
+              "pooled" in refusal, refusal)
+    check("the everyday lane's own 9B is still allowed there",
           M.probe_refusal(EVERYDAY, "http://127.0.0.1:11436") == "",
           M.probe_refusal(EVERYDAY, "http://127.0.0.1:11436"))
+
+
+def t_a_heavy_presets_own_measured_spill_is_allowed_by_its_own_measurement():
+    """The lane read-back must allow a heavy row's own measured spill - and no more.
+
+    General runs on the pooled lane, and that mode was measured with 0.681 GiB
+    spilled. A verify that refused ANY spill would fail General's own, correctly
+    measured load; one that accepted anything would let a worse load through.
+    The allowance is the pooled mode row's own number, read by
+    `_preset_spill_allowance`, never a second constant.
+    """
+    general = P.by_id("general")
+    allow = P._preset_spill_allowance(general)
+    check("General is a heavy preset and its allowance is the pooled mode's "
+          "measured 0.681 GiB",
+          general.heavy_mode and general.lane == "pooled"
+          and allow == round(0.681 * 1024 ** 3),
+          (general.heavy_mode, general.lane, allow))
+    check("... while a preset that is not heavy keeps the zero-spill rule",
+          P._preset_spill_allowance(P.by_id("documents")) == 0,
+          P._preset_spill_allowance(P.by_id("documents")))
+    measured = round(0.681 * 1024 ** 3)
+    LANE.ps_rows = [_row(GENERAL, 32768, spill=measured)]
+    allowed = P._default_verify_lane(LANE.url, GENERAL, 32768, allow_spill=allow)
+    check("... so General's measured spill does not fail its own lane read-back",
+          allowed.get("ok") is True, allowed)
+    LANE.ps_rows = [_row(GENERAL, 32768, spill=int(allow) + 1024 * 1024)]
+    worse = P._default_verify_lane(LANE.url, GENERAL, 32768, allow_spill=allow)
+    check("... and a load past that measured allowance still fails",
+          worse.get("ok") is False and "allows" in str(worse.get("why")), worse)
+    LANE.ps_rows = [_row(GENERAL, 32768, spill=measured)]
+    unvetted = P._default_verify_lane(LANE.url, GENERAL, 32768)
+    check("... and with no allowance it is a failure, as every non-heavy row is",
+          unvetted.get("ok") is False, unvetted)
 
 
 def t_the_carded_model_road_has_the_same_guard():
@@ -361,9 +434,11 @@ TESTS = (t_a_pooled_outgoing_model_is_never_probed_on_the_everyday_lane,
          t_the_window_comes_from_the_lane_not_from_a_default,
          t_a_lane_holding_the_wrong_model_fails_the_apply,
          t_the_right_model_with_spill_or_a_smaller_window_fails_too,
+         t_a_second_presets_model_resident_is_a_failed_apply,
          t_an_empty_lane_is_not_a_failure,
          t_an_unknown_window_does_not_silently_switch_the_tripwire_off,
          t_the_pooled_model_is_refused_by_name_and_the_everyday_one_is_not,
+         t_a_heavy_presets_own_measured_spill_is_allowed_by_its_own_measurement,
          t_the_carded_model_road_has_the_same_guard,
          t_the_default_reader_is_real_on_the_pc_and_an_honest_skip_in_a_suite)
 

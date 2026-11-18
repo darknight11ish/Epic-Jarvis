@@ -93,8 +93,8 @@ def t_every_preset_agrees_with_the_lane_that_serves_it():
     """2026-11-18: a preset may not move without the lane moving with it.
 
     The owner's decision is "each preset should be dedicated to one preset
-    local ai model", and the everyday model is `gemma4:26b-a4b-it-qat` at
-    196,608 tokens on the ONE everyday lane. `jarvis_big_coder.LANES` is the
+    local ai model", and the everyday model is `gemma4:26b-a4b-it-qat` at a
+    32,768-token window on the ONE everyday lane. `jarvis_big_coder.LANES` is the
     table that really pauses and restores that lane (port 11436), so it is the
     authority here: this test fails when a preset's `lane`/`model` and that
     table disagree in EITHER direction - a preset moved onto a lane the
@@ -123,7 +123,7 @@ def t_every_preset_agrees_with_the_lane_that_serves_it():
     check("... a preset whose model moved without the lane is CAUGHT",
           bool(_lane_disagreements([moved_model], BC.LANES, BC)),
           _lane_disagreements([moved_model], BC.LANES, BC))
-    moved_window = dataclasses.replace(gen, context=32768)
+    moved_window = dataclasses.replace(gen, context=196608)
     check("... a preset whose window moved without the lane is CAUGHT",
           bool(_lane_disagreements([moved_window], BC.LANES, BC)),
           _lane_disagreements([moved_window], BC.LANES, BC))

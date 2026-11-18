@@ -13,8 +13,10 @@ The 2060 has no monitor. One 2080 SUPER has the monitor and runs the desktop;
 the other 2080 SUPER is headless. All three are Turing (compute capability
 7.5), so all three clear the cache and flash-attention floor. Ryzen 9 3900X.
 Windows 11. **Since 2026-11-18 the everyday model is
-`gemma4:26b-a4b-it-qat` at 196,608 tokens across ALL THREE cards** - it no
-longer fits the 2060 alone, which is the live reading below.
+`gemma4:26b-a4b-it-qat` at a 32,768-token window across ALL THREE cards** - it
+no longer fits the 2060 alone, which is the live reading below. The window is
+the owner's choice on quality, not a speed compromise; the measured reason is
+in that section.
 
 **The two-card reading stays as the dated record it is.** Measured 2026-10-05
 ([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)): the RTX
@@ -64,38 +66,60 @@ second card" below); nothing else here has been rewritten from measurement.
 
 ---
 
-## The live reading: ONE everyday lane across all three cards (2026-11-18)
+## The live reading: two lanes, and General runs on the pooled one (2026-11-18)
 
 **The owner's decision, in their own words:** *"i dont need a separate coding
 lane on any preset. each preset should be dedicated to one preset local ai
-model."* From 2026-11-18 there is **one always-on lane and no second
-single-card lane**:
+model."* From 2026-11-18 there is **one always-on lane, no second single-card
+lane, and General is a heavy preset on the pooled lane**:
 
-- **Port 11436 is the everyday lane, and it now sees ALL THREE cards.** It
-  holds `gemma4:26b-a4b-it-qat` at **196,608 tokens**.
-- **Port 11450 is the pooled heavy lane** (Coding, Medical), unchanged: one
-  Ollama with no card pin, started on demand, with the everyday lane paused
-  first.
+- **Port 11436 is the everyday lane and it is ONE card** (the RTX 2060, pinned
+  by its Windows logon task). It is NOT retired: it still serves the presets
+  that need it - **Documents & Notes and Browser & Forms keep `qwen3.5:9b` at
+  196,608 tokens** - and the short-window rows (Agentic + Vision and Fast at
+  16,384). A heavy preset pauses it while it runs.
+- **Port 11450 is the pooled lane, and it sees ALL THREE cards.** It carries
+  **General - `gemma4:26b-a4b-it-qat` at a 32,768-token window** - and the other
+  heavy presets (Coding, Reflective Coach, Pictures & Screens, Medical), one
+  model at a time. Applying General starts that lane on demand.
 - **Port 11435 is retired.** The coding lane (`qwen3:8b` at 16,384) is no
-  longer started or restored by this repository's code, and no preset names
-  it. The Fast preset moved onto the everyday lane at 16,384.
+  longer started or restored by this repository's code, and no preset names it.
+  Fast moved onto the everyday lane at 16,384.
 
-**Measured on this PC on 2026-11-17/18, across all three cards at 196,608
-tokens:**
+**Why General is on the pooled lane, and not the everyday one.** It was tried
+the other way first and it is wrong on this machine: the everyday logon task pins
+11436 to the single 12 GB RTX 2060, so a 15.50 GiB model there **guarantees
+spill into system RAM** - measured live on 2026-11-18, the lane held the 26B at
+15.8 GB resident with only 9.1 GB on the card. The pooled lane already sees all
+three cards, so pointing General at it gives the owner the model he chose with
+**no change to his PC**. General is therefore `heavy_mode=True, mode
+"gemma4-26b-a4b"`, the same measured pooled mode Reflective Coach uses.
+
+**Measured on this PC on 2026-11-17, on the pooled lane, across all three cards
+at 32,768 tokens.** The run is `.dsh-scratch/wave21/preset-truth/REPORT.md`;
+every raw row is `rows.jsonl` beside it:
 
 | What | Measured |
 |---|---:|
-| Loaded | **17.50 GiB** |
-| In the cards' memory (`size_vram`) | **16.58 GiB** |
-| Spilled into system memory | **0.92 GiB** |
-| Writing speed (thinking-token throughput) | **46.10 tok/s** |
-| Same model, a real-answer control at a 32,768-token window | **45.66 tok/s** |
-| Cold load | **56.5 s** |
+| Resident (`size`) | **15.501 GiB** |
+| In the cards' memory (`size_vram`) | **14.820 GiB** |
+| Spilled into system memory | **0.681 GiB** (4.4%) |
+| Writing speed, two runs | **25.4-36.5 tok/s; 25.4 (the low end) is the preset's figure** |
+| Cold load | **49.9 s** |
 
-**Why all three cards: the same window on TWO cards spilled 6.37 GiB and fell
-to 15.75-16.76 tok/s.** That two-card figure is the measured reason the
-everyday model needs all three cards - it is not a preference, and it is why
-the separate single-card coding lane could not survive.
+**The earlier 196,608-token headline did not reproduce.** It claimed 0.92 GiB
+spilled and 46.10 tok/s across all three cards. The 2026-11-17 run measured the
+same model at 196,608 across the pool at **17.501 GiB loaded, 2.385 GiB
+spilled and 21.2 tok/s** - so that window is not what ships, and the old
+figures are not repeated anywhere as a claim.
+
+**Why this model: quality, not speed.** A blind eight-task battery run on this
+PC on 2026-11-17 scored `gemma4:26b-a4b-it-qat` **22/24**, `gemma4:12b-it-qat`
+21/24, `qwen3.5:35b-a3b` 21/24, and the old everyday `qwen3.5:9b` last at
+**19/24** with the only app-breaking failure in the whole run (it produced no
+tool call for a two-effect instruction).
+`.dsh-scratch/wave21/quality-battery/REPORT.md` holds the scores and
+transcripts.
 
 **What `/api/show` reports:** `completion`, `vision`, `tools` and `thinking`,
 plus a real 573M-parameter image projector (`projector_type gemma4v`,
@@ -108,26 +132,16 @@ rubric results**. The capability list says the model *can* accept pictures and
 call tools; it says nothing about how well. The General preset's own `worse`
 line in `jarvis_presets.PRESETS` says the same in the app.
 
-**What has NOT happened yet: the live machine.** This change is code and
-documentation. The logon task `Jarvis Ollama - Everyday model (RTX 2060)`
-still starts 11436 pinned to the 2060 alone (`CUDA_VISIBLE_DEVICES=<2060
-uuid>`), and one 12 GB card cannot hold 17.50 GiB - on two cards the same
-window already spilled 6.37 GiB. Re-wiring that task to all three cards is the
-deploy step, deliberately not done from this change. Until it is done, the
-everyday lane cannot hold the measured load.
-
 **What the code does today.** `jarvis_presets.LANES` has `main` (port 11436,
-"all three cards") and `pooled` (11450); `jarvis_big_coder.LANES` has ONE
-entry, so its pause and restore only ever touch 11436 and nothing tries to
-start a second lane; `backend/test_presets_lanes.py` fails if a preset's
-`lane`/`model` and `jarvis_big_coder.LANES` disagree in either direction.
-
-**The measured 0.92 GiB of spill is allowed on restore.**
-`jarvis_big_coder.restore_lanes` refuses more than a lane's own measured
-allowance; the everyday lane carries `round(0.92 * 1024 ** 3)` bytes, so the
-model comes back to the window it was measured at instead of being refused for
-the spill that measurement recorded. Every other caller keeps the original
-zero-spill rule.
+the RTX 2060) and `pooled` (11450, all three cards); `jarvis_big_coder.LANES`
+has ONE entry - the everyday 9B at 196,608 on the 2060, so its pause and
+restore only ever touch 11436 and nothing tries to start a second single-card
+lane; `backend/test_presets_lanes.py` fails if the presets and that lane row
+disagree in either direction. A heavy preset's measured spill is allowed by its
+own pooled mode row (`_preset_spill_allowance`), so General's measured 0.681 GiB
+does not fail its own apply while a worse load still does. The retired medical
+client no longer types the 11435 lane or a model: it asks
+`jarvis_models.current_model()` and the lane table at call time.
 
 ---
 
@@ -1496,3 +1510,24 @@ global environment, and Jarvis's own Ollama children are unaffected either way
 because each sets its own card (the everyday lane by UUID, the pooled Coding
 lane by removing the variable so it sees all cards, the picture reader by `-1`).
 Rollback is the three commands above, not a registry edit.
+
+---
+
+## The rule: one preset's model at a time, and any preset may use all three (2026-11-18)
+
+**Only one preset's model may be loaded at a time.** Applying a different
+preset ends the previous one first - the pooled lane is stopped and proved
+unloaded, or the outgoing model is replaced on the same lane - and nothing is
+left resident "just in case".
+
+**Because no preset has to keep a card's memory free for another preset, any
+preset may use all three cards** where its model warrants it - by naming the
+pooled lane that sees them. That is the consequence that makes the rule useful
+rather than restrictive: General's 26B and the other heavy presets pool all
+three cards on demand, while the one-card everyday lane keeps the 9B
+long-window rows.
+
+**The older design reserved one model per card so several could run at once.**
+The dated sections of this page still describe that layout because they are
+the record of the machine they measured; this rule replaces it, and the
+2026-11-18 live reading above is the current shape.

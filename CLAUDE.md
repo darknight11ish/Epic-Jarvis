@@ -101,6 +101,18 @@ reading and the numbers).
   that. See the module's own README before assuming anything else in it is
   safe to copy over verbatim.
 
+## One preset's model at a time
+
+**Added 2026-11-18.** Only one preset's model may be loaded at a time: applying
+a different preset ends the previous one first, and nothing is left resident
+"just in case". Because no preset has to keep its own card's memory free for
+another preset, any preset may use all three cards where its model warrants it -
+that is the consequence that makes the rule useful rather than restrictive. The
+older design reserved one model per card so several could run at once, and the
+dated sections of `docs/MODEL-TOPOLOGY.md` still describe that layout because
+they are the record of the machine they measured; this rule replaces it.
+
+
 ## The five rules that are not negotiable
 
 1. Anything touching email, files, credentials or stored memory stays on the

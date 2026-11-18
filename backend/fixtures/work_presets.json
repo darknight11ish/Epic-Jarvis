@@ -8,17 +8,17 @@
       "id": "general",
       "title": "General",
       "focus": "everyday questions, writing, life admin",
-      "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset. Since 2026-11-18 it is the 26B model across all three cards at the same full window.",
-      "cost": "gemma4:26b-a4b-it-qat runs across all three cards and holds 196,608 tokens there: 17.50 GiB loaded, 16.58 GiB in the cards' memory and 0.92 GiB spilled into system memory. It writes at 46.10 tokens a second (a real-answer control at 32,768 read 45.66) and takes about 57 seconds to load cold. On two cards the same window spilled 6.37 GiB and fell to 15.75-16.76 tokens a second, which is why it needs all three. Measured on this PC on 2026-11-17/18.",
-      "worse": "It fills all three cards, so every heavy preset that is applied afterwards pauses it, and returning to General costs its cold load (about 57 seconds). `ollama show` reports completion, vision, tools and thinking and a real 573M-parameter image projector, so pictures and tools are not lost - but its picture quality and its general, tool-calling and vision rubric results are NOT measured on this PC, so nothing here claims them. It thinks before it answers, so a short answer allowance can cut it off before it speaks.",
+      "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset. Since 2026-11-18 it is the 26B model at a 32,768-token window on the pooled three-card lane: the owner chose it on quality, after a blind battery of eight tasks scored it 22/24, the best of the four tried.",
+      "cost": "HEAVY MODE: it needs all three cards at once as ONE pooled lane (port 11450) and pauses the everyday 9B model while it loads. Measured on this PC on 2026-11-17 on that lane at 32,768 tokens: 15.50 GiB resident, 14.82 GiB in the cards' memory and 0.68 GiB spilled into system memory, 25.4 tokens a second (two runs read 25.4-36.5, the low end is shown) and a 49.9 s cold load.",
+      "worse": "It fills all three cards, so a preset that is not heavy stops its lane and brings the everyday 9B back; returning to General costs its cold load (about 50 seconds). The everyday lane is paused while it runs, so a chat arriving then waits for the switch. `ollama show` reports completion, vision, tools and thinking and a real 573M-parameter image projector, so pictures and tools are not lost - but its picture quality and its general, tool-calling and vision rubric results are NOT measured on this PC, so nothing here claims them. It thinks before it answers, so a short answer allowance can cut it off before it speaks.",
       "model": "gemma4:26b-a4b-it-qat",
       "lane": {
-        "key": "main",
+        "key": "pooled",
         "card": "all three cards",
-        "port": 11436,
-        "words": "the everyday lane"
+        "port": 11450,
+        "words": "one model across all three cards"
       },
-      "context": 196608,
+      "context": 32768,
       "helper": null,
       "policy": {
         "prompt": "balanced",
@@ -26,18 +26,14 @@
         "tools": []
       },
       "measured": {
-        "tok_s": 46.1,
-        "tok_s_control_32k": 45.66,
-        "size_gib": 17.5,
-        "vram_gib": 16.58,
-        "spill_gib": 0.92,
-        "cold_load_s": 56.5,
-        "context_measured": 196608,
-        "two_card_tok_s": [
-          15.75,
-          16.76
-        ],
-        "two_card_spill_gib": 6.37,
+        "tok_s": 25.4,
+        "tok_s_on": "2026-11-17",
+        "tok_s_note": "15.50 GiB, 0.68 GiB spill, all three cards, 32,768 context; two runs read 25.4-36.5, the low end is shown",
+        "size_gib": 15.501,
+        "vram_gib": 14.82,
+        "spill_gib": 0.681,
+        "cold_load_s": 49.9,
+        "context_measured": 32768,
         "capabilities": [
           "completion",
           "vision",
@@ -45,16 +41,16 @@
           "thinking"
         ],
         "vision_projector_params": 573000000,
-        "source": "measured on this PC on 2026-11-17/18 across all three cards at 196,608 tokens: 17.50 GiB loaded, size_vram 16.58 GiB, 0.92 GiB spilled, 46.10 tok/s thinking-token throughput; the real-answer control at a 32,768-token window read 45.66 tok/s; cold load 56.5 s. The same window on two cards measured 16.52 GiB with 6.37 GiB spilled at 15.75-16.76 tok/s, which is why all three cards are required. /api/show reports completion, vision, tools and thinking and a real 573M-parameter image projector (projector_type gemma4v, clip.has_vision_encoder true)"
+        "source": "the 2026-11-17 live run (preset-truth REPORT.md, the reflect_pooled rows) measured the same model, window and cards this preset asks for: 15.501 GiB resident, 14.820 GiB in the cards' memory, 0.681 GiB (4.4%) spilled, 25.4-36.5 tok/s (the low end is shown) and a 49.9 s cold load, on the pooled three-card lane. /api/show reports completion, vision, tools and thinking and a real 573M-parameter image projector (projector_type gemma4v, clip.has_vision_encoder true)"
       },
       "pending": false,
-      "heavy_mode": false,
-      "heavy_words": "",
+      "heavy_mode": true,
+      "heavy_words": "This preset needs all three cards at once as one pooled lane on port 11450. While it runs, the everyday 9B is paused - it comes back, proved from the model list, when you apply a preset that is not heavy. Loading it takes about 50 seconds.",
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
         "apply_route": "/api/work/apply",
-        "lane_start": false,
+        "lane_start": true,
         "auto": false
       }
     },
@@ -110,7 +106,7 @@
       "focus": "code, files, debugging, multi-step work",
       "what": "For writing and fixing code, reading a project, and long tool-driven coding jobs: the 30B coding model on ONE lane that sees all three cards, started on demand by this apply.",
       "cost": "HEAVY MODE: it fills ALL THREE GPUs (16.17 GiB of video memory here, with the same q8_0 cache the everyday lane uses, and nothing pushed into system RAM) and pauses the everyday model while it works, for about 32 s on a cold load. Measured 2026-11-07 at 49,152 tokens on all three cards: 83.8 tokens a second after a 900-word prompt, prompt ~1,644 tokens a second, zero CPU spill. The same-night two-card control (same q8_0 cache) at 32,768 tokens read 60.6 tokens a second with a 69.6 s cold load; the 2026-11-03 shipped record used the default f16 cache and read 80.4 at a 36.0 s load, so it is not a like-for-like baseline. Against the control the three-card window is about 38% faster; against the older record the gain is small - the real change is the 16,384-token wider window with zero spill and no spill allowance. The older figures (76.2 tok/s at 28,672; 80.4 at 32,768 with 323.5 MiB spilled) are kept in docs/MEASURED-2026-11-07-THREE-GPU.md.",
-      "worse": "Applying it makes it the model chat uses, so the everyday 26B is NOT resident while it runs - it comes back when you apply another preset, and that switch costs its cold load (about 57 seconds since 2026-11-18). It is not a quick helper: it takes all three cards for as long as it is on, and nothing else can be loaded beside it. Measured about 59 tokens a second at 65,536 tokens, so the wider window is not offered.",
+      "worse": "Applying it makes it the model chat uses, so the everyday 26B is NOT resident while it runs - it comes back when you apply another preset, and that switch costs its cold load (about 50 seconds since 2026-11-18). It is not a quick helper: it takes all three cards for as long as it is on, and nothing else can be loaded beside it. Measured about 59 tokens a second at 65,536 tokens, so the wider window is not offered.",
       "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
       "lane": {
         "key": "pooled",
@@ -141,7 +137,7 @@
       },
       "pending": false,
       "heavy_mode": true,
-      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday model is paused - it comes back, proved from the model list, when you apply another preset, and that reload takes about 57 seconds. Loading it takes about half a minute.",
+      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday model is paused - it comes back, proved from the model list, when you apply another preset, and that reload takes about 50 seconds. Loading it takes about half a minute.",
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -208,7 +204,7 @@
       "focus": "the quickest short answers",
       "what": "The quickest preset: qwen3.5:4b at the 16,384-token window it is for, on the everyday lane. Since 2026-11-18 there is no separate fast card: applying it makes qwen3.5:4b the model chat uses, and going back to General asks the lane for the everyday 26B again.",
       "cost": "Measured 2026-10-10 on an RTX 2080 SUPER: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token window (the file is 3.16 GB on disk). Since 2026-11-18 the everyday lane spans all three cards, so that figure is the model's measurement on this PC rather than a fresh one for the lane; this row keeps the 16,384-token window it is for.",
-      "worse": "The small model: fastest measured writer here, and the bench's three short prompts were only called broadly correct rather than scored. Chosen for waiting less, not for care. The 26B does not fit beside it on the same three cards, so switching back to General costs the everyday model's cold load (about 57 seconds).",
+      "worse": "The small model: fastest measured writer here, and the bench's three short prompts were only called broadly correct rather than scored. Chosen for waiting less, not for care. The 26B does not fit beside it on the same three cards, so switching back to General costs the everyday model's cold load (about 50 seconds).",
       "model": "qwen3.5:4b",
       "lane": {
         "key": "main",
@@ -462,17 +458,8 @@
   ],
   "hardware": {
     "detected": {
-      "count": 1,
-      "cards": [
-        {
-          "index": 0,
-          "name": "NVIDIA GeForce RTX 2080 SUPER",
-          "vram_gib": 8.0,
-          "uuid": "GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313",
-          "pci_id": "0000:05:00.0",
-          "monitor": null
-        }
-      ],
+      "count": 0,
+      "cards": [],
       "source": "jarvis_hardware.detect()"
     },
     "questionnaire": {
@@ -504,8 +491,8 @@
           "preset": "general",
           "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
-          "context": 196608,
+          "card": "card 0",
+          "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
@@ -515,7 +502,7 @@
           "preset": "general_uncensored",
           "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -526,7 +513,7 @@
           "preset": "coding",
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 49152,
           "tok_s": null,
           "measured": false,
@@ -537,7 +524,7 @@
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 16384,
           "tok_s": null,
           "measured": false,
@@ -548,7 +535,7 @@
           "preset": "fast",
           "model": "qwen3.5:4b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 16384,
           "tok_s": null,
           "measured": false,
@@ -559,7 +546,7 @@
           "preset": "reflect",
           "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 32768,
           "tok_s": null,
           "measured": false,
@@ -570,7 +557,7 @@
           "preset": "pictures",
           "model": "qwen3-vl:30b-a3b-instruct",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 32768,
           "tok_s": null,
           "measured": false,
@@ -581,7 +568,7 @@
           "preset": "documents",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -592,7 +579,7 @@
           "preset": "browser",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 196608,
           "tok_s": null,
           "measured": false,
@@ -603,7 +590,7 @@
           "preset": "medical",
           "model": "medgemma:27b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 32768,
           "tok_s": null,
           "measured": false,
@@ -616,23 +603,23 @@
           "preset": "general",
           "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
-          "context": 196608,
-          "tok_s": 46.1,
+          "card": "all three cards (pooled lane, port 11450)",
+          "context": 32768,
+          "tok_s": 25.4,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: main model on the 2060"
+          "note": "HEAVY MODE: gemma4:26b-a4b-it-qat on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         },
         "general_uncensored": {
           "preset": "general_uncensored",
           "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 196608,
           "tok_s": 45.6,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: main model on the 2060"
+          "note": "the everyday lane: all the cards this PC has, one preset's model at a time"
         },
         "coding": {
           "preset": "coding",
@@ -643,29 +630,29 @@
           "tok_s": 83.8,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the other lanes' models while it runs"
+          "note": "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         },
         "agentic_vision": {
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 16384,
           "tok_s": null,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: main model on the 2060"
+          "note": "the everyday lane: all the cards this PC has, one preset's model at a time"
         },
         "fast": {
           "preset": "fast",
           "model": "qwen3.5:4b",
-          "card_index": 1,
-          "card": "card 1",
+          "card_index": 0,
+          "card": "card 0",
           "context": 16384,
           "tok_s": 77.1,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: Fast on the fast card"
+          "note": "the everyday lane: all the cards this PC has, one preset's model at a time"
         },
         "reflect": {
           "preset": "reflect",
@@ -676,7 +663,7 @@
           "tok_s": 49.26,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: gemma4:26b-a4b-it-qat on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the other lanes' models while it runs"
+          "note": "HEAVY MODE: gemma4:26b-a4b-it-qat on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         },
         "pictures": {
           "preset": "pictures",
@@ -687,29 +674,29 @@
           "tok_s": 33.1,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: qwen3-vl:30b-a3b-instruct on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the other lanes' models while it runs"
+          "note": "HEAVY MODE: qwen3-vl:30b-a3b-instruct on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         },
         "documents": {
           "preset": "documents",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 196608,
           "tok_s": 44.9,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: main model on the 2060"
+          "note": "the everyday lane: all the cards this PC has, one preset's model at a time"
         },
         "browser": {
           "preset": "browser",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER",
+          "card": "card 0",
           "context": 196608,
           "tok_s": 44.9,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: main model on the 2060"
+          "note": "the everyday lane: all the cards this PC has, one preset's model at a time"
         },
         "medical": {
           "preset": "medical",
@@ -720,7 +707,7 @@
           "tok_s": 9.27,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: medgemma:27b on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the other lanes' models while it runs"
+          "note": "HEAVY MODE: medgemma:27b on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         }
       },
       "3": {
@@ -728,23 +715,23 @@
           "preset": "general",
           "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
-          "context": 196608,
+          "card": "all the cards (pooled lane, port 11450)",
+          "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: main chat/everyday, 196,608 window"
+          "note": "gemma4:26b-a4b-it-qat on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
         },
         "general_uncensored": {
           "preset": "general_uncensored",
           "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
+          "card": "a card this PC has not detected",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: main chat/everyday, 196,608 window"
+          "note": "a card this PC has not detected: main chat / everyday uncensored, 196,608 window"
         },
         "coding": {
           "preset": "coding",
@@ -755,29 +742,29 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane (port 11450) across ALL the cards: it is too big for one card, so applying this preset pauses the other lanes' models, starts that lane, and stops it again when another preset is applied"
+          "note": "qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane (port 11450) across ALL the cards: it is too big for one card, so applying this preset pauses the everyday model, starts that lane, and stops it again when another preset is applied"
         },
         "agentic_vision": {
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
+          "card": "a card this PC has not detected",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Agentic+Vision, qwen3.5:9b with images"
+          "note": "a card this PC has not detected: Agentic+Vision, qwen3.5:9b with images, 16,384 window"
         },
         "fast": {
           "preset": "fast",
           "model": "qwen3.5:4b",
-          "card_index": 1,
-          "card": "the second 2080 SUPER (not installed yet)",
+          "card_index": 0,
+          "card": "a card this PC has not detected",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "the second 2080 SUPER (not installed yet): display + Fast/Live lane, qwen3.5:4b"
+          "note": "a card this PC has not detected: Fast, qwen3.5:4b, 16,384 window"
         },
         "reflect": {
           "preset": "reflect",
@@ -788,7 +775,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "gemma4:26b-a4b-it-qat on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the other lanes' models while it runs"
+          "note": "gemma4:26b-a4b-it-qat on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
         },
         "pictures": {
           "preset": "pictures",
@@ -799,29 +786,29 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "qwen3-vl:30b-a3b-instruct on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the other lanes' models while it runs"
+          "note": "qwen3-vl:30b-a3b-instruct on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
         },
         "documents": {
           "preset": "documents",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
+          "card": "a card this PC has not detected",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Documents & Notes, qwen3.5:9b, 196,608 window"
+          "note": "a card this PC has not detected: Documents & Notes, qwen3.5:9b, 196,608 window"
         },
         "browser": {
           "preset": "browser",
           "model": "qwen3.5:9b",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
+          "card": "a card this PC has not detected",
           "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB: Browser & Forms, qwen3.5:9b, 196,608 window"
+          "note": "a card this PC has not detected: Browser & Forms, qwen3.5:9b, 196,608 window"
         },
         "medical": {
           "preset": "medical",
@@ -832,33 +819,28 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "medgemma:27b on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the other lanes' models while it runs"
+          "note": "medgemma:27b on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
         }
       }
     },
-    "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested",
+    "basis": "one preset's model is loaded at a time; every heavy preset, General included, needs the pooled lane's three cards, so one- and two-card layouts are reasoned and labelled, never claimed as measured",
     "three_gpu_plan": {
       "confirmed": true,
-      "layout": "everyday presets keep one lane per GPU (the everyday lane, the monitor card's lane and the headless card's lane); only the on-demand heavy mode pools the cards on port 11450 - Coding, Reflective Coach, Pictures & Screens and Medical - and each pauses the other lanes' models while it runs. Agentic + Vision stays on the everyday card, not the headless one: the 9B weights plus the vision projector need about 7.00 GiB and an 8 GB card with no monitor has 6.65 GiB free, so there is no window at which it fits a headless card",
+      "layout": "ONE preset's model is loaded at a time: applying another preset ends the previous one first, so no preset has to keep a card free for another. The everyday lane (port 11436) is ONE card on this PC and serves the 9B rows - Documents & Notes and Browser & Forms at 196,608 tokens, Fast and Agentic + Vision at 16,384. The pooled lane (port 11450) sees ALL THREE cards and carries every heavy preset - General's 26B at 32,768, Coding, Reflective Coach, Pictures & Screens and Medical - and it pauses the everyday model while it runs, because no preset has to keep a card free for another. So any preset may use all three cards where its model warrants it. There is no one-lane-per-GPU split any more.",
       "cards": [
         {
-          "role": "everyday lane: main chat / everyday, 196,608 tokens",
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
+          "role": "everyday lane: ONE card (the RTX 2060), port 11436 - the 9B long-window rows at 196,608; Fast and Agentic + Vision at 16,384",
+          "card": "a card this PC has not detected",
           "context": 196608
         },
         {
-          "role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
-          "card": "the second 2080 SUPER (not installed yet)",
-          "context": 16384
-        },
-        {
-          "role": "headless card's lane: no 9B lane fits - Agentic+Vision needs about 7.00 GiB against 6.65 GiB free, so it stays on the everyday card",
-          "card": "the headless 2080 SUPER (not installed yet)",
-          "context": 16384
+          "role": "pooled lane, started on demand: all three cards, port 11450 - General's 26B at 32,768, Coding, Reflective Coach, Pictures & Screens and Medical; it pauses the everyday model while it runs",
+          "card": "all three cards (pooled lane, port 11450)",
+          "context": 32768
         }
       ],
-      "heavy_pooled": "on demand, the heavy presets pause those three lanes and load ONE model on the same pooled lane on port 11450 across all the cards: Coding (qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), Medical (medgemma:27b at 32,768), Reflective Coach (gemma4:26b-a4b-it-qat at 32,768) and Pictures & Screens (qwen3-vl:30b-a3b-instruct at 32,768). Each is too big for one card, which is why a heavy preset splits one model across the cards; every preset that is not heavy keeps one lane per GPU.",
-      "link_note": "the third card likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane; each lane keeps its own model.",
+      "heavy_pooled": "on demand, a heavy preset pauses the everyday model and loads ONE model on the pooled lane on port 11450 across all the cards: General (gemma4:26b-a4b-it-qat at 32,768), Coding (qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), Medical (medgemma:27b at 32,768), Reflective Coach (gemma4:26b-a4b-it-qat at 32,768) and Pictures & Screens (qwen3-vl-30b-a3b-instruct at 32,768). Each is too big for one card, which is why a heavy preset splits one model across the cards; every preset that is not heavy runs on the one everyday lane, one model at a time.",
+      "link_note": "the third card likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane: the everyday model is loaded once across all three cards, so the link is paid at load, not per token.",
       "future_not_a_preset": "Qwen3.8-27B pooled to 28 GB across cards is a future 'max quality' experiment only; it is not a preset and no figure is claimed until it is measured."
     }
   }

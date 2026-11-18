@@ -21,8 +21,8 @@ what holds it:
   5. at NO point are the model and a lane model resident together (the trace
      below is checked step by step, not just at the end);
   6. stopping puts the everyday lane back EXACTLY: 11436
-     gemma4:26b-a4b-it-qat at 196608 across all three cards, with its measured
-     0.92 GiB of spill allowed and no more, proved from /api/ps - right model,
+     qwen3.5:9b at 196608 on the RTX 2060, with zero spill, proved from
+     /api/ps - right model,
      right context, spill within the allowance;
   7. a lane that does not come back is REPORTED as a failure, never glossed.
 

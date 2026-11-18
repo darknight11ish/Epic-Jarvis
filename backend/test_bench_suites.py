@@ -1064,8 +1064,8 @@ def t_no_preset_default_is_changed_by_this_work():
     check("the General preset runs the 26B the owner chose on 2026-11-18",
           general is not None and general.model == "gemma4:26b-a4b-it-qat",
           getattr(general, "model", None))
-    check("the General preset's window is unchanged",
-          int(general.context) == 196608, getattr(general, "context", None))
+    check("the General preset's window is the 32,768 the owner chose on 2026-11-18",
+          int(general.context) == 32768, getattr(general, "context", None))
     check("the pairs are only candidates, not presets",
           all(p["candidate"] not in {pr.model for pr in P.PRESETS}
               for p in B.PROMOTION_PAIRS))
