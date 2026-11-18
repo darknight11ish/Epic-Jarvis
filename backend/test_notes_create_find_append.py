@@ -45,6 +45,22 @@ with a fake gate - no model, no network, no owner's file, no real card:
    only ever ADDS bytes at one offset (a true append when the block is last).
 7. THE RECORDS AGREE. The two changed modules have byte-identical published
    twins, and docs/JARVIS-API.md section 170.12 documents all of it.
+8. THE OWNER'S TWO 2026-11-18 SENTENCES, verbatim. "Can you make a note for me
+   called Mood Log and have this be one of my favorite notes?" creates exactly
+   `Mood Log.md` with `favorite: true` (the name is never the sentence's tail).
+   "Can you add to the mood log and make a note for today and put today's date
+   and say that I'm feeling okay, kind of tired, played a little too much
+   poker, didn't know when to call it quits, disappointed, but y" finds the
+   existing Mood Log case-insensitively, adds a dated entry under TODAY from
+   the clock, and keeps every comma and clause of the owner's words as content.
+   A name that is genuinely absent still fails with the same "nothing was
+   written" sentence and creates nothing. Both readers cut a name at ONE named
+   boundary list (`_NOTE_NAME_BOUNDARIES`), which is what each sentence needed.
+   The other direction is pinned too: "and" is not a boundary by itself
+   ("Salt and Pepper" keeps it; "Poker and Mood and pin it" names "Poker and
+   Mood" and pins it; "add to my Notes and Ideas that ..." appends to that
+   note), and "It is favourited." is said only when `favorite: true` is really
+   in the file, never on a refused create.
 """
 from __future__ import annotations
 
@@ -143,6 +159,33 @@ SENTENCE_AS_NAME = ("Workout Log, pin it, and add using todays date that i used 
                     "the punching bag")
 CREATE_SENTENCE = ("create a new note called Workout Log, pin it, and add using "
                    "todays date that i used the punching bag")
+#: THE OWNER'S TWO MEASURED SENTENCES (2026-11-18), verbatim. The second is
+#: quoted as far as the report carries it - the live conversation was cut at
+#: "but y" - so that is the fixture. The first created a file named with the
+#: whole tail of the sentence and set no favourite; the second answered "I
+#: could not find a note called \"mood log and make a note for today and put
+#: today's date and say\"" and wrote nothing.
+OWNER_MOOD_SENTENCE = (
+    "Can you make a note for me called Mood Log and have this be one of my "
+    "favorite notes?")
+OWNER_MOOD_APPEND = (
+    "Can you add to the mood log and make a note for today and put today's date "
+    "and say that I'm feeling okay, kind of tired, played a little too much "
+    "poker, didn't know when to call it quits, disappointed, but y")
+#: The owner's words that are CONTENT: every comma, and the "didn't know when
+#: to call it quits, disappointed" clause, belong to the entry - they are not
+#: further instructions and must be written unchanged.
+MOOD_TEXT = (
+    "I'm feeling okay, kind of tired, played a little too much poker, didn't "
+    "know when to call it quits, disappointed, but y")
+#: An existing Mood Log, as the owner's vault would hold it: yesterday's one
+#: entry. The append must add TODAY's heading below it and keep every byte.
+MOOD_NOTE = """# Mood Log
+
+## 2026-11-15
+
+- A good day.
+"""
 DAILY = "2026-11-15.md"
 DAILY_TEXT = "daily sentinel\n"
 
@@ -731,7 +774,280 @@ def t_both_apps_get_the_same_answer():
 
 
 # --------------------------------------------------------------------------
-# 11. RECORDS
+# 11. THE OWNER'S TWO 2026-11-18 SENTENCES
+# --------------------------------------------------------------------------
+def t_the_owner_names_a_note_and_favourites_it_in_one_sentence():
+    """"Can you make a note for me called Mood Log and have this be one of my
+    favorite notes?" - the owner's own sentence, verbatim.
+
+    MEASURED BEFORE THE FIX (2026-11-18): the reply said "Created Mood Log and
+    have this be one of my favorite notes.md ...", so the NAME was the whole
+    tail of the sentence and no favourite was set. The name did not stop at
+    "and have this ..." because `_NOTE_NAME_BOUNDARIES` had no rule for it, and
+    the favourite was said as a description ("have this be one of my favorite
+    notes") rather than the "favourite it" verb the reader knew.
+
+    Now the name ends at the first boundary and the description sets the SAME
+    separate `favorite` front-matter property the store already writes for
+    "favourite it" - no new field, no new route, no card.
+    """
+    reset_vault(alias_note=False, collision=False)
+    before = rel_files()
+    gate = Gate()
+    set_gate(gate)
+    got = ask(OWNER_MOOD_SENTENCE)
+    check("owner-2026-11-18 create: the sentence is the create fast path",
+          got is not None and got.intent == "note_created",
+          got.intent if got else "model")
+    new = sorted(rel_files() - before)
+    check("owner-2026-11-18 create: exactly ONE note is made", len(new) == 1, new)
+    if len(new) != 1:
+        return
+    check("owner-2026-11-18 create: the note is named exactly Mood Log",
+          new[0] == "Mood Log.md", new)
+    check("owner-2026-11-18 create: the NAME never carries the rest of the sentence",
+          "have this" not in new[0] and "favorite" not in new[0], new)
+    made = read(new[0])
+    check("owner-2026-11-18 create: the note's own front matter says favorite: true",
+          "favorite: true" in made, repr(made))
+    check("owner-2026-11-18 create: the reply names the file AND says it is favourited",
+          "Mood Log.md" in got.reply and "favourited" in got.reply, got.reply)
+    check("owner-2026-11-18 create: NO card was asked (a NEW note stays card-free)",
+          gate.calls == [], gate.calls)
+    parsed = Q.match(OWNER_MOOD_SENTENCE, NOW)
+    check("owner-2026-11-18 create: parsed title 'Mood Log', favourite True, no body",
+          parsed is not None and parsed.name == "note_create"
+          and parsed.f.get("name") == "Mood Log"
+          and parsed.f.get("favorite") is True
+          and parsed.f.get("text") == "",
+          (getattr(parsed, "name", None), getattr(parsed, "f", None)))
+    # The favourite said as a description, in the nearest ways of saying it:
+    # each names the note Mood Log and sets the same property, and none of them
+    # leaks into the name.
+    for phrase in ("and have this be one of my favorite notes",
+                   "and make this one of my favourites",
+                   "and make it a favorite"):
+        parsed_desc = Q.match("make a note called Mood Log " + phrase, NOW)
+        check(f"owner-2026-11-18 create: {phrase!r} names Mood Log, favourited",
+              parsed_desc is not None and parsed_desc.name == "note_create"
+              and parsed_desc.f.get("name") == "Mood Log"
+              and parsed_desc.f.get("favorite") is True,
+              (getattr(parsed_desc, "name", None),
+               getattr(parsed_desc, "f", None)))
+
+
+def t_the_owner_appends_to_the_existing_mood_log():
+    """The owner's second sentence, verbatim (quoted to "but y", where the live
+    conversation was cut).
+
+    MEASURED BEFORE THE FIX (2026-11-18): "I could not find a note called
+    \"mood log and make a note for today and put today's date and say\" in your
+    Obsidian vault. Nothing was written ...". The append matcher's name ran
+    through two instructions and stopped at the "that"; no clause boundary cut
+    it at "and make a note for today".
+
+    Now the name stops at "and make", "mood log" resolves to Mood Log.md
+    case-insensitively, the dated entry uses TODAY from the turn's clock, and
+    the owner's words - every comma, and the "didn't know when to call it
+    quits, disappointed" clause - are the entry's body, never instructions.
+    """
+    reset_vault(alias_note=False, collision=False)
+    _write("Mood Log.md", MOOD_NOTE)
+    E._reset_for_tests()
+    before_bytes = read_bytes("Mood Log.md")
+    files_before = rel_files()
+    gate = Gate()
+    set_gate(gate)
+    got = ask(OWNER_MOOD_APPEND)
+    check("owner-2026-11-18 append: the sentence is the append fast path",
+          got is not None and got.intent == "note_appended",
+          got.intent if got else "model")
+    check("owner-2026-11-18 append: no second note was created (append, not create)",
+          rel_files() == files_before, sorted(rel_files()))
+    after = read_bytes("Mood Log.md")
+    check("owner-2026-11-18 append: every old byte is still there, in order",
+          after.startswith(before_bytes), "old bytes are not a prefix")
+    check("owner-2026-11-18 append: ONE new '## TODAY' heading, newest last",
+          after.count(b"## " + TODAY.encode()) == 1
+          and after.rfind(b"## 2026-11-15") < after.rfind(b"## " + TODAY.encode()),
+          repr(after))
+    check("owner-2026-11-18 append: the owner's words are the entry, commas and all",
+          ("- " + MOOD_TEXT).encode() in after, repr(after[-260:]))
+    check("owner-2026-11-18 append: the instructions are NOT the entry's words",
+          b"make a note for today" not in after
+          and b"put today's date" not in after, repr(after[-260:]))
+    check("owner-2026-11-18 append: exactly ONE edit_vault_note card, naming Mood Log.md",
+          len(gate.calls) == 1 and gate.calls[0][0] == "edit_vault_note"
+          and gate.calls[0][1].get("path") == "Mood Log.md", gate.calls)
+    check("owner-2026-11-18 append: the reply names the file and the heading",
+          got is not None and "Mood Log.md" in got.reply
+          and "## " + TODAY in got.reply, got.reply if got else "")
+    parsed = Q.match(OWNER_MOOD_APPEND, NOW)
+    check("owner-2026-11-18 append: parsed name 'mood log', words intact, dated TODAY",
+          parsed is not None and parsed.name == "note_append"
+          and parsed.f.get("name") == "mood log"
+          and parsed.f.get("text") == MOOD_TEXT
+          and parsed.f.get("dated") == TODAY,
+          (getattr(parsed, "name", None), getattr(parsed, "f", None)))
+    # The date is TODAY FROM THE CLOCK: the same sentence on another day files
+    # under that day, so no word of the sentence is being read as a date.
+    other = time.mktime(time.strptime("2026-12-24 09:00:00", "%Y-%m-%d %H:%M:%S"))
+    parsed_other = Q.match(OWNER_MOOD_APPEND, other)
+    check("owner-2026-11-18 append: the heading date comes from the CLOCK",
+          parsed_other is not None and parsed_other.f.get("dated") == "2026-12-24",
+          getattr(parsed_other, "f", None))
+
+
+def t_a_genuinely_missing_note_still_fails_honestly():
+    """The fix must NOT mean "create it whenever the search fails".
+
+    The same shape as the owner's second sentence, with a name that is really
+    not in the vault: it fails with the SAME "nothing was written" sentence,
+    asks no card and writes no file - it does not create a second note.
+    """
+    reset_vault(alias_note=False, collision=False)
+    _write("Mood Log.md", MOOD_NOTE)
+    E._reset_for_tests()
+    files_before = rel_files()
+    before_bytes = read_bytes("Mood Log.md")
+    gate = Gate()
+    set_gate(gate)
+    sentence = ("Can you add to the mood diary and make a note for today and put "
+                "today's date and say that I'm feeling okay, kind of tired, "
+                "disappointed, but y")
+    got = ask(sentence)
+    check("owner-2026-11-18 missing: a name that is not there is REFUSED",
+          got is not None and got.intent == "note_append_refused",
+          got.intent if got else "model")
+    check("owner-2026-11-18 missing: the answer is the same honest sentence",
+          got is not None
+          and got.reply == Q.NOTE_NOT_FOUND_SAID.format(name="mood diary"),
+          got.reply if got else "")
+    check("owner-2026-11-18 missing: NOTHING was written and no card was asked",
+          rel_files() == files_before and read_bytes("Mood Log.md") == before_bytes
+          and gate.calls == [], (sorted(rel_files()), gate.calls))
+
+
+def t_both_name_readers_share_one_boundary_list():
+    """ONE list of boundaries, used by the create reader and the append cut.
+
+    The owner's two sentences need two different boundaries ("and have this
+    ..." for the create, "and make a note ..." for the append); both live in
+    `_NOTE_NAME_BOUNDARIES`, and both readers cut at it, so the next person
+    adds a boundary once instead of writing a second extractor.
+    """
+    probe = "mood log and make a note for today"
+    check("owner-2026-11-18 one-list: the CREATE reader and the APPEND cut agree",
+          Q._note_title_and_rest(probe)[0] == "mood log"
+          and Q._note_append_name(probe) == "mood log",
+          (Q._note_title_and_rest(probe), Q._note_append_name(probe)))
+    check("owner-2026-11-18 one-list: the list is one named tuple of rules",
+          isinstance(Q._NOTE_NAME_BOUNDARIES, tuple)
+          and len(Q._NOTE_NAME_BOUNDARIES) >= 5,
+          len(Q._NOTE_NAME_BOUNDARIES))
+    # The rules the owner's two sentences depend on are both in that one list.
+    for phrase in ("and have this be one of my favorite notes",
+                   "and make a note for today"):
+        check(f"owner-2026-11-18 one-list: {phrase!r} is a boundary",
+              any(rx.search("mood log " + phrase) for rx in Q._NOTE_NAME_BOUNDARIES),
+              phrase)
+
+
+def t_an_and_inside_a_name_is_still_a_name():
+    """A boundary is decided by what FOLLOWS the "and", never by "and" alone.
+
+    A 2026-11-17 corpus measured these families as already passing, and the new
+    "and make/create"/"and have this" rules must not eat a real note name.
+    "Salt and Pepper" is quoted in the boundary list's own comment; the other
+    two are the owner's families where a second, real instruction follows a
+    name that itself contains "and".
+    """
+    # 1. A bare "and" inside a name stays in the name.
+    reset_vault(alias_note=False, collision=False)
+    set_gate(Gate())
+    parsed = Q.match("make a note called Salt and Pepper", NOW)
+    check("and-name: 'Salt and Pepper' keeps its and in the parsed name",
+          parsed is not None and parsed.name == "note_create"
+          and parsed.f.get("name") == "Salt and Pepper",
+          (getattr(parsed, "name", None), getattr(parsed, "f", None)))
+    got = ask("make a note called Salt and Pepper")
+    check("and-name: ... and the file is named Salt and Pepper.md",
+          got is not None and got.intent == "note_created"
+          and "Salt and Pepper.md" in rel_files(), sorted(rel_files()))
+
+    # 2. A name with "and", then a REAL instruction: cut at the instruction.
+    reset_vault(alias_note=False, collision=False)
+    set_gate(Gate())
+    parsed = Q.match("make a note called Poker and Mood and pin it", NOW)
+    check("and-name: 'Poker and Mood and pin it' names 'Poker and Mood', pinned",
+          parsed is not None and parsed.name == "note_create"
+          and parsed.f.get("name") == "Poker and Mood"
+          and parsed.f.get("pinned") is True,
+          (getattr(parsed, "name", None), getattr(parsed, "f", None)))
+    got = ask("make a note called Poker and Mood and pin it")
+    check("and-name: ... and the file is Poker and Mood.md with pinned: true",
+          got is not None and got.intent == "note_created"
+          and "Poker and Mood.md" in rel_files()
+          and "pinned: true" in read("Poker and Mood.md"), sorted(rel_files()))
+
+    # 3. An APPEND whose note's own name contains "and".
+    reset_vault(alias_note=False, collision=False)
+    _write("Notes and Ideas.md", "# Notes and Ideas\n")
+    E._reset_for_tests()
+    gate = Gate()
+    set_gate(gate)
+    parsed = Q.match("add to my Notes and Ideas that I should call the bank", NOW)
+    check("and-name: the append's name is 'Notes and Ideas'",
+          parsed is not None and parsed.name == "note_append"
+          and parsed.f.get("name") == "Notes and Ideas"
+          and parsed.f.get("text") == "I should call the bank",
+          (getattr(parsed, "name", None), getattr(parsed, "f", None)))
+    got = ask("add to my Notes and Ideas that I should call the bank")
+    check("and-name: ... and it appends to that note with one card",
+          got is not None and got.intent == "note_appended"
+          and "I should call the bank" in read("Notes and Ideas.md")
+          and len(gate.calls) == 1
+          and gate.calls[0][1].get("path") == "Notes and Ideas.md",
+          (getattr(got, "intent", None), gate.calls))
+
+
+def t_the_favourite_claim_matches_the_written_property():
+    """No claimed effect without the effect (the DEF-089 class).
+
+    "It is favourited." may only be said when `favorite: true` is really in the
+    new file, and a refused create must not claim it at all. The favourite is
+    ONE property, and it is not `pinned`.
+    """
+    # 1. The created path: the claim and the bytes agree.
+    reset_vault(alias_note=False, collision=False)
+    set_gate(Gate())
+    made = ask(OWNER_MOOD_SENTENCE)
+    text = read("Mood Log.md")
+    check("favourite honesty: the reply claims it AND the bytes carry it",
+          made is not None and "It is favourited." in made.reply
+          and text.count("favorite: true") == 1,
+          (getattr(made, "reply", None), repr(text)))
+    check("favourite honesty: no second property is invented (pin stays separate)",
+          "pinned" not in text and "tags:" not in text, repr(text))
+
+    # 2. A refused create (the note already exists) claims nothing and writes
+    #    nothing - the same honesty the 2026-11-18 bug report demands.
+    reset_vault(alias_note=False, collision=False)
+    _write("Mood Log.md", MOOD_NOTE)
+    E._reset_for_tests()
+    before = read_bytes("Mood Log.md")
+    set_gate(Gate())
+    refused = ask(OWNER_MOOD_SENTENCE)
+    check("favourite honesty: a refused create does not claim a favourite",
+          refused is not None and refused.intent == "note_create_refused"
+          and "favourit" not in refused.reply.lower(),
+          (getattr(refused, "intent", None), getattr(refused, "reply", None)))
+    check("favourite honesty: ... and the existing note is byte-unchanged",
+          read_bytes("Mood Log.md") == before, "note changed")
+
+
+# --------------------------------------------------------------------------
+# 12. RECORDS
 # --------------------------------------------------------------------------
 def _same_text(a: Path, b: Path) -> bool:
     try:
@@ -805,6 +1121,12 @@ TESTS = [
     t_hidden_lists_still_guard_the_same_writes,
     t_there_is_no_daily_note_fallback,
     t_both_apps_get_the_same_answer,
+    t_the_owner_names_a_note_and_favourites_it_in_one_sentence,
+    t_the_owner_appends_to_the_existing_mood_log,
+    t_a_genuinely_missing_note_still_fails_honestly,
+    t_both_name_readers_share_one_boundary_list,
+    t_an_and_inside_a_name_is_still_a_name,
+    t_the_favourite_claim_matches_the_written_property,
     t_twins_and_docs_agree,
 ]
 
