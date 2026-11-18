@@ -1200,6 +1200,161 @@ def install(ref: str, on_progress: Optional[Callable[[dict], None]] = None,
 
 
 # --------------------------------------------------------------------------
+#   Where a probe may be sent, and at what window (DEF-088, 2026-11-18)
+# --------------------------------------------------------------------------
+#
+# THE INCIDENT THIS CLOSES, measured on the live install 2026-11-17 (the A2
+# field test, docs/defect-register.tsv DEF-088). Applying `coding` then
+# `general` reported success, and afterwards port 11436 - the everyday lane, one
+# 12 GB card - was holding the POOLED 14.44 GB coder at Ollama's 8,192 default,
+# 3.76 GB of it spilled to the CPU, while `model-state.json` said
+# `current: qwen3.5:9b`. The cause was the tripwire: `_probe_asker` posted to
+# `OLLAMA` (11436) for whichever model it was handed, with no `num_ctx`, and
+# nothing checked that the model could run there or that the window was the
+# lane's. `jarvis_presets.is_pooled_model` already says in its own docstring
+# that "the everyday lane must never be asked to load one of these"; these three
+# helpers are that rule and the window rule, in the module that sends the
+# request, so no caller can send a probe that loads the wrong model on the wrong
+# card at the wrong window.
+
+def _port_of(url) -> Optional[int]:
+    """The loopback port a lane URL names, or None. Never raises."""
+    try:
+        parts = urllib.parse.urlsplit(str(url or "").strip())
+        if (parts.hostname or "").lower().rstrip(".") not in OLLAMA_LOOPBACK_HOSTS:
+            return None
+        port = int(parts.port or 0)
+        return port if 0 < port < 65536 else None
+    except Exception:
+        return None
+
+
+def _lane_rows() -> tuple:
+    """`jarvis_big_coder.LANES` - the two lanes and the window each SERVES.
+
+    Lazy, and empty rather than raising: this module is imported by the
+    backend's start-up banner and by suites that run without the others beside
+    them. The same rows `jarvis_big_coder.restore_lanes` reloads at, so a probe
+    and a restore can never disagree about a lane's window.
+    """
+    try:
+        import jarvis_big_coder
+        return tuple(getattr(jarvis_big_coder, "LANES", ()) or ())
+    except Exception:
+        return ()
+
+
+def is_pooled_model(model) -> bool:
+    """Is this a model only the three-card lane can hold?
+
+    `jarvis_presets.is_pooled_model` is the ONE hand-written predicate for that
+    question; this asks it rather than keeping a second list, and falls back to
+    `jarvis_big_coder`'s own mode table only when the presets module is absent.
+    """
+    name = str(model or "").strip()
+    if not name:
+        return False
+    try:
+        import jarvis_presets
+        return bool(jarvis_presets.is_pooled_model(name))
+    except Exception:
+        pass
+    bare = name[:-7] if name.endswith(":latest") else name
+    try:
+        import jarvis_big_coder
+        for mode in getattr(jarvis_big_coder, "MODES", ()) or ():
+            other = str(getattr(mode, "model", "") or "")
+            other = other[:-7] if other.endswith(":latest") else other
+            if other == bare:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def lane_num_ctx(url=None) -> Optional[int]:
+    """The window the lane at `url` is CONFIGURED to serve, or None. Never raises.
+
+    Three answers, in the order that cannot be fooled by the lane's CURRENT
+    state:
+      1. a `jarvis_big_coder.LANES` row for that port - the owner's two lanes,
+         the same number `restore_lanes` reloads them at (11436 = 196,608,
+         11435 = 16,384);
+      2. the pooled lane (11450): the window the APPLIED preset names, from
+         `jarvis_presets.pooled_num_ctx` - 49,152 for Coding, 32,768 for
+         Medical;
+      3. whatever `/api/ps` reports, and only when every loaded row agrees on
+         one window - the live truth for a lane this repository has never seen.
+    None means "cannot be established", and a caller must then send NOTHING:
+    the whole point is that a request naming no `num_ctx` loads at Ollama's own
+    default (8,192 here) and throws away the window the lane was configured for.
+    """
+    where = str(url or OLLAMA).rstrip("/")
+    port = _port_of(where)
+    if port:
+        for lane in _lane_rows():
+            try:
+                if int(getattr(lane, "port", 0) or 0) == port:
+                    ctx = int(getattr(lane, "ctx", 0) or 0)
+                    return ctx if ctx > 0 else None
+            except (TypeError, ValueError):
+                continue
+    try:
+        import jarvis_presets
+        if jarvis_presets.is_pooled_lane(where):
+            ctx = jarvis_presets.pooled_num_ctx()
+            return int(ctx) if ctx else None
+    except Exception:
+        pass
+    try:
+        import jarvis_big_coder
+        rows = jarvis_big_coder.ps(where)
+        seen = {int(r.get("context_length") or 0) for r in (rows or ())
+                if r.get("context_length")}
+        if len(seen) == 1:
+            ctx = seen.pop()
+            return ctx if ctx > 0 else None
+    except Exception:
+        pass
+    return None
+
+
+def probe_refusal(model, url=None) -> str:
+    """Why a tripwire probe of `model` at `url` must NOT be sent, or "".
+
+    Two refusals, and both are the A2 defect:
+      * a POOLED model at a lane that is not the pooled lane (read: the everyday
+        lane). It cannot fit one card; asking is how the 74%-on-GPU / 26%-on-CPU
+        duplicate the owner photographed gets made;
+      * a lane whose window cannot be established, because the request would
+        then load the model at Ollama's own default instead of the lane's.
+
+    "" means the probe may be sent, and `lane_num_ctx` will answer the window it
+    must name. Never raises - a caller with no answer gets a sentence, never an
+    exception.
+    """
+    name = str(model or "").strip()
+    where = str(url or OLLAMA).rstrip("/")
+    if not name:
+        return "no model was named to probe"
+    if is_pooled_model(name):
+        pooled_here = False
+        try:
+            import jarvis_presets
+            pooled_here = bool(jarvis_presets.is_pooled_lane(where))
+        except Exception:
+            pooled_here = False
+        if not pooled_here:
+            return (f"{name} is a pooled three-card model and {where} is not the "
+                    f"pooled lane, so it was not asked to load it")
+    if lane_num_ctx(where) is None:
+        return (f"the window this lane serves could not be established for {where}, "
+                f"so {name} was not probed - a request that names no window loads "
+                f"at Ollama's own default instead of the lane's")
+    return ""
+
+
+# --------------------------------------------------------------------------
 #   Switch, and the way back
 # --------------------------------------------------------------------------
 
@@ -1210,6 +1365,12 @@ def switch_to(ref: str, why: str = "") -> dict:
     spend bandwidth and disk; approving a switch is agreeing to change which
     model reads your email. Bundling them would let the second decision ride
     in on the first.
+
+    The tripwire runs on both sides of the swap and both probes go through
+    `probe_refusal` first (DEF-088): the outgoing model is not asked for when it
+    is a pooled one, and neither probe is sent when the lane's window cannot be
+    named. A skipped probe is REPORTED as unavailable with the reason, never as
+    a pass.
     """
     try:
         ref = safe_ref(ref)
@@ -1237,11 +1398,15 @@ def switch_to(ref: str, why: str = "") -> dict:
     # Record how the OUTGOING model answers the probes, before it stops being
     # the one in use. After the swap there is nothing left to compare against:
     # you cannot ask the model you just replaced how it would have answered.
+    baseline_skip = ""
     try:
-        import jarvis_tripwire
-        jarvis_tripwire.baseline(_probe_asker(cur), cur or "previous")
+        baseline_skip = (probe_refusal(cur, OLLAMA) if cur
+                         else "there was no previous model to record")
+        if not baseline_skip:
+            import jarvis_tripwire
+            jarvis_tripwire.baseline(_probe_asker(cur), cur)
     except Exception:
-        pass
+        baseline_skip = ""
 
     st["previous"] = cur
     st["current"] = ref
@@ -1259,28 +1424,54 @@ def switch_to(ref: str, why: str = "") -> dict:
     # A smoke test, not an evaluation. It catches a model that is broken -
     # answering in another language, looping, unable to emit JSON - which is
     # what a bad swap actually looks like. It cannot tell you the new one is
-    # better and does not claim to.
-    try:
-        import jarvis_tripwire
-        out["tripwire"] = jarvis_tripwire.after_swap(_probe_asker(ref), ref)
-    except Exception as exc:
-        out["tripwire"] = {"available": False, "reason": str(exc)}
+    # better and does not claim to. `baseline_skip` is NOT inherited: that
+    # sentence was about the OUTGOING model, and this probe is about the one
+    # that was just switched in, which may well be an ordinary single-card model
+    # even when the old one was pooled.
+    after_skip = probe_refusal(ref, OLLAMA)
+    if after_skip:
+        out["tripwire"] = {"available": False, "model": ref,
+                           "reason": after_skip}
+    else:
+        try:
+            import jarvis_tripwire
+            out["tripwire"] = jarvis_tripwire.after_swap(_probe_asker(ref), ref)
+        except Exception as exc:
+            out["tripwire"] = {"available": False, "reason": str(exc)}
     return out
 
 
-def _probe_asker(ref: Optional[str]):
-    """A one-shot caller for the tripwire, pinned to one model.
+def _probe_asker(ref: Optional[str], *, url=None, num_ctx=None):
+    """A one-shot caller for the tripwire, pinned to one model AND one window.
 
     Short timeout and a low temperature on purpose: these probes are about
     whether the model works at all, and a model that needs ninety seconds to
     say "Paris" has already told you something.
+
+    IT NAMES THE WINDOW (DEF-088, 2026-11-18). `options.num_ctx` is the lane's
+    own number - `lane_num_ctx` for `url`, or the caller's `num_ctx` - because a
+    request that names none loads at Ollama's own default (8,192 on this PC) and
+    replaces the window the lane was configured for. `jarvis_big_coder.load`
+    (:470-477) records the same finding as "the trap". A window that cannot be
+    established RAISES instead of sending: `jarvis_tripwire.run` records the
+    failed probe, and nothing is loaded. That is why the callers ask
+    `probe_refusal` first - a skip is reported, not lost.
     """
+    where = str(url or OLLAMA).rstrip("/")
+    window = int(num_ctx) if num_ctx is not None else lane_num_ctx(where)
+
     def ask(prompt: str) -> str:
+        if not window:
+            raise RuntimeError(
+                f"the window for {where} could not be established, so this probe "
+                f"was not sent: a request that names no num_ctx would load the "
+                f"model at Ollama's own default")
         body = {"model": ref or os.environ.get("JARVIS_LOCAL_MODEL", "qwen3:8b"),
                 "prompt": prompt, "stream": False,
-                "options": {"temperature": 0.0, "num_predict": 200}}
+                "options": {"temperature": 0.0, "num_predict": 200,
+                            "num_ctx": int(window)}}
         req = urllib.request.Request(
-            f"{OLLAMA}/api/generate", data=json.dumps(body).encode(),
+            f"{where}/api/generate", data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=45) as r:
             return json.loads(r.read().decode()).get("response", "")

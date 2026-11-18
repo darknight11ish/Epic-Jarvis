@@ -1728,12 +1728,38 @@ def _switch_for_the_owner(ref: str, why: str = "a preset clicked in an app") -> 
         return {"ok": True, "ref": ref, "unchanged": True,
                 "reason": "already the current model"}
     # The outgoing model's answers, before it stops being the one in use - the
-    # same reason `switch_to` records this baseline first.
+    # same reason `switch_to` records this baseline first. TWO THINGS CAN MAKE
+    # THAT REQUEST UNSAFE, and `probe_refusal` checks both before anything is
+    # sent (DEF-088, the A2 field test of 2026-11-17):
+    #
+    #   * the outgoing model may be a POOLED (three-card) model. After a heavy
+    #     preset that is exactly what the record says, and `_probe_asker` talks
+    #     to `jarvis_models.OLLAMA` - the everyday lane, ONE 12 GB card. Asking
+    #     it for a 14.44 GB model is the duplicate copy the owner photographed
+    #     (74% on the card / 26% on the CPU): a `general` apply then reported
+    #     success while port 11436 served the coder at 8,192 tokens and the
+    #     record said `qwen3.5:9b`.
+    #   * the lane's window may be unknown. A probe that names no `num_ctx`
+    #     loads at Ollama's own default (8,192 here) and throws away the window
+    #     the lane was configured for (196,608 on 11436), so it is not sent.
+    #
+    # SKIPPING is chosen over "probe it on the pooled lane's own address",
+    # deliberately. By the time this runs on the app-click road, `apply_preset`
+    # has already STOPPED that server, so there is nothing there to ask and
+    # nothing left to compare against; and a probe aimed at the pooled address
+    # would still load a stale name there, while a skip cannot load the wrong
+    # model on the wrong card even when the pooled lane is DOWN. The skip is
+    # reported below, so the app shows a reason instead of a smoke test of
+    # nothing.
     probe = None
+    baseline_skip = ""
     try:
-        probe = M._probe_asker(cur)
-        import jarvis_tripwire
-        jarvis_tripwire.baseline(probe, cur or "previous")
+        baseline_skip = (M.probe_refusal(cur) if cur
+                         else "there was no previous model to record")
+        if not baseline_skip:
+            import jarvis_tripwire
+            probe = M._probe_asker(cur)
+            jarvis_tripwire.baseline(probe, cur)
     except Exception:
         probe = None
     now = time.time()
@@ -1754,12 +1780,24 @@ def _switch_for_the_owner(ref: str, why: str = "a preset clicked in an app") -> 
     out = {"ok": True, "ref": ref, "previous": cur, "no_card": True,
            "revert_with": "the model's own rollback",
            "reason": f"local lane now uses {ref}"}
-    try:
-        import jarvis_tripwire
-        out["tripwire"] = jarvis_tripwire.after_swap(
-            probe or M._probe_asker(ref), ref)
-    except Exception as exc:
-        out["tripwire"] = {"available": False, "reason": str(exc)}
+    # The smoke test asks the model that was just switched IN - never the one it
+    # replaced (DEF-088). `probe or M._probe_asker(ref)` read like a fallback,
+    # but `probe` is a function and therefore always truthy, so the "after"
+    # screen answered about the OLD model and filed the result under the new
+    # model's name. `baseline_skip` is deliberately NOT reused here: that
+    # sentence was about the outgoing model, and a pooled outgoing model says
+    # nothing about whether `ref` may run on this lane.
+    after_skip = M.probe_refusal(ref)
+    if after_skip:
+        out["tripwire"] = {"available": False, "model": ref,
+                           "reason": after_skip}
+    else:
+        try:
+            import jarvis_tripwire
+            out["tripwire"] = jarvis_tripwire.after_swap(
+                M._probe_asker(ref), ref)
+        except Exception as exc:
+            out["tripwire"] = {"available": False, "reason": str(exc)}
     return out
 
 
@@ -1828,11 +1866,99 @@ def switch_model_for_the_owner(ref: str, why: str = "") -> dict:
     return _switch_for_the_owner(ref, why=why or "a model picked in an app")
 
 
+def _lane_not_checked(url: str, model: str, min_ctx=None) -> dict:
+    """The answer a TEST SUITE gets when it did not inject a lane reader.
+
+    `ok` stays True so an apply that is being driven for some other purpose is
+    not turned into a failure by a decision it never made, and `checked` is
+    False so nothing can read that line as a lane that was verified. A suite
+    that wants to prove the reader passes `verify_lane=_default_verify_lane`
+    itself, with a fake lane of its own (backend/test_preset_switch_lane_guard.py).
+    """
+    return {"ok": True, "checked": False, "loaded": [], "why": "",
+            "proof": ("not checked: this process is a test suite, so the lane was "
+                      "not read - this is NOT a pass for the lane")}
+
+
+def _verify_lane_for_this_process():
+    """The reader an ordinary apply uses: the real one on the owner's PC.
+
+    `backend/_where.py` sets JARVIS_SUITE_RUNNING for every suite, and a suite
+    must not open a socket to 11436 or read a green line as a check it never
+    made. The same marker `_warm_on_startup` uses for the same reason.
+    """
+    if os.environ.get("JARVIS_SUITE_RUNNING"):
+        return _lane_not_checked
+    return _default_verify_lane
+
+
+def _default_verify_lane(url: str, model: str, min_ctx=None) -> dict:
+    """Read the lane's own `/api/ps` and say what it REALLY holds. Never raises.
+
+    {"ok", "checked", "why", "proof", "loaded"} - the shape an app can show, and
+    the check `apply_preset` needs before it may answer `ok` (DEF-088: a preset
+    apply reported success while port 11436 held the pooled coder at 8,192).
+
+    WHAT COUNTS AS A FAILURE, and why an EMPTY lane is not one:
+      * a model that is NOT the one this preset names -> failure. That is the A2
+        defect exactly: the record said `qwen3.5:9b`, the lane served the coder.
+      * the named model with ANY CPU spill -> failure: it cannot answer at speed,
+        and the spill was the second half of what the owner saw.
+      * the named model at a window SMALLER than `min_ctx` (the preset's own
+        declared context) -> failure. A named lane's chat turns carry no
+        `options.num_ctx` (`jarvis_agent.chat_body`), so whatever window the
+        last load left behind IS the window chat runs at - 8,192 instead of
+        196,608 is the same defect wearing different numbers.
+      * a lane that does not answer at all -> failure: nothing was proved, and
+        "could not tell" is never a pass.
+      * the lane holding NOTHING -> NOT a failure. The apply records which model
+        chat should use; Ollama loads it on the next turn at the lane's own
+        window. Red-flagging that would fail the most ordinary apply there is.
+    """
+    import jarvis_big_coder as big
+    where = str(url or "").rstrip("/")
+    rows = big.ps(where)
+    if rows is None:
+        return {"ok": False, "checked": True, "loaded": [],
+                "why": f"the lane at {where} did not answer, so what it holds is not known",
+                "proof": f"{where}: no answer from /api/ps"}
+    names = [str(row.get("name") or "") for row in rows if row.get("name")]
+    row = big.loaded_row(rows, model)
+    if row is None:
+        if not names:
+            return {"ok": True, "checked": True, "loaded": [],
+                    "why": "",
+                    "proof": (f"{where}: nothing is loaded there, so the next turn "
+                              f"loads {model} - no other model was left on the lane")}
+        return {"ok": False, "checked": True, "loaded": names,
+                "why": f"it is holding {', '.join(names)}, not {model}",
+                "proof": f"{where}: loaded {', '.join(names)}"}
+    spill = big.spill_bytes(row)
+    ctx = row.get("context_length")
+    proof = (f"{where}: {model} ctx={ctx} size={row.get('size')} "
+             f"size_vram={row.get('size_vram')} spill={spill}")
+    if spill is None or int(spill) > 0:
+        return {"ok": False, "checked": True, "loaded": names,
+                "why": f"{model} came back with {spill} B spilled out of video memory",
+                "proof": proof}
+    try:
+        ctx_n = int(ctx) if ctx is not None else None
+    except (TypeError, ValueError):
+        ctx_n = None
+    if min_ctx and ctx_n is not None and ctx_n < int(min_ctx):
+        return {"ok": False, "checked": True, "loaded": names,
+                "why": (f"{model} is loaded at {ctx_n} tokens, smaller than the "
+                        f"{int(min_ctx)} this preset names"),
+                "proof": proof}
+    return {"ok": True, "checked": True, "loaded": names, "why": "",
+            "proof": proof}
+
+
 def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  switch_model=None, switch_for_owner=None, owner_ui=False,
                  active_url=None, set_active_url=None,
                  read_choice=None, write_choice=None, rollback_model=None,
-                 stop_pooled=None) -> tuple:
+                 stop_pooled=None, verify_lane=None) -> tuple:
     """Apply ONE preset: after the owner's card, or at once for an app click.
 
     `owner_ui=True` is set by ONE caller - this module's own route wrapper
@@ -1851,8 +1977,10 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     the CARDED road (the pooled lane's own, raised inside `start_lane`).
 
     Order: start the named lane if it is down -> switch the model (the ask card
-    lives inside switch_model on the ordinary path) -> point chat at it ->
-    save the chosen preset.
+    lives inside switch_model on the ordinary path) -> READ THE LANE BACK and
+    refuse unless it shows the preset's model at the preset's window with no
+    spill (DEF-088; `verify_lane`, and `_default_verify_lane` says what counts as
+    proof) -> point chat at it -> save the chosen preset.
     The lane start is BEFORE the card on purpose: a lane that is down cannot
     answer the switch's is_installed read, so switch-first is not possible.
     That means a card the owner DENIES leaves the started lane RUNNING (it
@@ -2071,6 +2199,28 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
         return rollback(f"the model switch did not happen: "
                         f"{(switched or {}).get('reason', 'refused')}")
     switched_ok = True
+    # THE LANE IS READ BACK BEFORE ANYTHING IS WRITTEN OR CLAIMED. This apply
+    # used to answer `ok, changed` on the strength of two FILE writes - the
+    # model record and the choice - and on 2026-11-17 that reported success
+    # while port 11436 was loading the pooled coder at 8,192 tokens (the A2
+    # field test, DEF-088). The lane now has to show the model this preset
+    # names, at or above the window it names, with no spill, or the apply rolls
+    # back and says what it saw; see `_default_verify_lane` for exactly what
+    # counts as proof and why an EMPTY lane is not a failure. The seam exists so
+    # a suite can inject a fake lane instead of a socket: the default is the real
+    # reader on the owner's PC and an honest "not checked" inside a suite.
+    verify_lane = verify_lane or _verify_lane_for_this_process()
+    lane_check: dict = {}
+    try:
+        lane_check = verify_lane(target_lane, p.model,
+                                 int(getattr(p, "context", 0) or 0) or None) or {}
+    except Exception as exc:
+        lane_check = {"ok": False,
+                      "why": (f"the lane could not be read "
+                              f"({type(exc).__name__}: {exc})")}
+    if not isinstance(lane_check, dict) or lane_check.get("ok") is not True:
+        why = (lane_check or {}).get("why") or "the lane did not show the model"
+        return rollback(f"the lane did not come back with {p.model}: {why}")
     # Both forward writes are checked AND held: an exception here used to
     # escape `apply_preset` (a 500 the caller could only show as an opaque
     # failure) instead of rolling back and saying what happened.
@@ -2096,6 +2246,9 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  "lane": dict(p.lane_info), "base_url": target_lane,
                  "model": p.model, "switched": switched,
                  "previous_preset": previous_preset,
+                 # What the lane was seen to hold before this apply answered ok
+                 # (DEF-088). `checked: false` is the suite's honest "not read".
+                 "lane_check": lane_check,
                  # "" on every carded path; an app click leaves the receipt the
                  # owner can see in GET /api/receipts and undo from there.
                  "receipt_id": receipt_id}
