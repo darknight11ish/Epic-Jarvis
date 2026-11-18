@@ -12,6 +12,15 @@ edition = "2021"
 # below move together or not at all.
 rust-version = "1.90"
 build = "build.rs"
+# TWO binaries, so the app has to be named. `main.rs` builds the app
+# (`jarvis-desktop`), and the 2026-11-16 bindings pilot added
+# `src/bin/export_bindings.rs`, which Cargo auto-discovers as a second `[[bin]]`.
+# `tauri build` refuses to guess which one is the app without this line: the
+# first Desktop release run that got past `npm ci` (2026-11-18) died with
+# "failed to find main binary, make sure you have a `package > default-run` in
+# the Cargo.toml file". The exporter is run as
+# `cargo run --bin export_bindings`; this line does not touch it.
+default-run = "jarvis-desktop"
 
 # `main.rs` is a two-line shim over this library so the same orchestration code
 # can be reused by integration tests and future mobile entry points.
