@@ -178,11 +178,12 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # The five repo-taking tools the 2026-11-18 REPO_ARG_HINT
                    # sentence pushed over the 300 default, measured on this tree
                    # with this module's own rule: github_pr_review 347,
-                   # github_list 337, github_workflow 314, github_issue_labels
-                   # 310, github_pr_detail 304. Paid only when the `github`
-                   # group is opened, never on every turn.
+                   # github_list 337, github_workflow 314, github_pr_detail
+                   # 304. github_issue_labels and github_read_file are pinned
+                   # with the full-name measurement below. Paid only when the
+                   # `github` group is opened, never on every turn.
                    "github_pr_review": 360, "github_list": 400,
-                   "github_workflow": 330, "github_issue_labels": 320,
+                   "github_workflow": 330,
                    "github_pr_detail": 360,
                    # 2026-11-18, the SAME sentence plus a measured call trigger:
                    # the live 17:57 battery got no GitHub tool call for "what is
