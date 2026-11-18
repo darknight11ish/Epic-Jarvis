@@ -216,8 +216,11 @@ def t_the_request_raises_one_card_under_the_action_that_exists():
           seen and seen[0]["detail"].get("leaves_this_pc") is True, seen)
     check("the card carries no field a command, path or version could ride in",
           seen and set(seen[0]["detail"]) == {
-              "text", "from", "to", "what", "leaves_this_pc", "script",
-              "backend", "raised_by"}, sorted(seen[0]["detail"]) if seen else None)
+              "text", "from", "to", "what", "leaves_this_pc", "raised_by"},
+          sorted(seen[0]["detail"]) if seen else None)
+    check("... and the module's own script path is not on the card either",
+          seen and "script" not in seen[0]["detail"]
+          and "backend" not in seen[0]["detail"])
     check("the update starts only after the approval: the helper saw one doc",
           len(helper.calls) == 1, helper.calls)
     check("the helper was given the script and the backend this module resolved",

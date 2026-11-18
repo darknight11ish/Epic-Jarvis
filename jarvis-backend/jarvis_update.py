@@ -987,9 +987,9 @@ def _decide(pid: str, *, gate: Callable, spawn_helper: Optional[Callable]) -> No
               # does leave this PC - the same public read the app's own check
               # already makes.
               "leaves_this_pc": True,
-              "script": script, "backend": backend,
-              # Nothing about the request is repeated here: there is no field in
-              # it to repeat.
+              # No path and no argument here: the child's command line is built
+              # in `_start_helper` from the staged request, so nothing a card
+              # shows can become something that runs.
               "raised_by": "phone"}
     try:
         verdict = gate(ACTION, detail, text)
