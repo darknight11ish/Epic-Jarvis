@@ -40551,3 +40551,104 @@ turn's route-detail keys unchanged; a cloud turn still escalating, including
 when the saved local model is pooled; the pooled lane untouched; the unknown
 lane name resolving to a cloud provider; and the patched HUD's own
 `use_tools`/`is_cloud` expressions evaluated for each case.
+## 229. The hybrid/cloud settings, from chat: the questions answered from the PC's files, the changes through their own cards (2026-11-18)
+
+The owner asked to be able to ask his PC, from the phone's chat, what the
+hybrid/cloud settings ARE and to change them: *"i should be able to ask jarvis
+through chat on phone to change the provider and adjust these particular
+settings and get clarity."*
+
+`backend/jarvis_cloud_settings.py` is a NEW MODULE shipped whole (no patch of
+its own; jarvis_quick.py's fast path calls it). It does two jobs, and this
+section is the contract for both. It adds **no route**, **no file writer** and
+**no second mechanism**: every change below calls the door the setting already
+has.
+
+### 229.1 The questions, answered from three files and never from a model
+
+The fast path (`/api/chat`, so the same answer on the PC and on the phone)
+claims these shapes before the model and answers them with fixed local words:
+
+| What the owner asks | What is read |
+|---|---|
+| "which cloud provider am I using?" / "what cloud provider am I using?" / "am I on cloud?" / "am I using the cloud?" | `<settings>/cloud-choice.json` (`jarvis_presets.CLOUD_CHOICE_FILE`, written by the Presets Cloud row's own apply) |
+| "is escalation on?" / "will you send things to the cloud by yourself?" / "is cloud escalation on?" | `<settings>/escalate-cloud.json` (`jarvis_presets.CLOUD_ESCALATE_FILE`; absent, unreadable or corrupt reads as OFF) |
+| "what's my cap?" / "what is my spending limit?" | `<settings>/chatbot/api-money.json` - the `limits` table through `jarvis_chatbot_api.limit_of` |
+| "how much have I spent this month?" / "how much have I spent?" | the same file's `months` ledger through `jarvis_chatbot_api.spent_of`/`month_key`; this month's total and answer count, plus any earlier month the ledger holds |
+| "what does escalation actually do?" / "what can go to the cloud?" / "what is the standing switch?" | the switch file, plus the fixed refusal rule the router enforces |
+
+Every answer NAMES the file it read and when that file was last saved (for
+example "Read from chatbot\api-money.json (saved 31 Oct 2026)"), so a sentence
+can be checked instead of trusted. Every answer is read fresh on the call - no
+cache, no model, no guess. The questions are marked read-only
+(`READ_ONLY_INTENTS`) and are also answered in a private chat
+(`_PRIVATE_DETERMINISTIC_READS`), because they read the PC's own settings and
+write nothing.
+
+**When a file is missing the answer says "not set up" in plain words and what
+that means**, never an empty or confident sentence:
+
+- no `cloud-choice.json`: the cloud service is not set up, there is no cloud
+  path at all, and every answer is written by the model on this PC;
+- no `escalate-cloud.json`: escalation is off - no switch has been saved - so
+  every cloud turn waits for the owner's yes;
+- no `chatbot\api-money.json`: no cap is set up and no paid cloud service can
+  be used; a chosen service with no cap is said to be NOT used at all, because a
+  missing cap is not "unlimited".
+
+"What escalation actually does" always carries the refusal list the router's
+gates enforce: email, files, notes, credentials, stored memory, a picture, the
+screen, a private question, a pasted secret and a conversation that has already
+read text from outside this PC never go to the cloud, and Lockdown, every
+privacy check and the monthly cap still run first.
+
+### 229.2 The changes: the doors that already exist, one card, nothing before a yes
+
+| What the owner asks | The door it calls | The card |
+|---|---|---|
+| "turn escalation on" / "start escalating" / "switch the cloud switch on" (and the new OFF spellings) | `jarvis_presets.cloud_escalate(on=...)` - the exact function the Presets Cloud row's switch calls | ON: ONE `change_own_config` card, tier `ask`, and nothing written before the yes. OFF: instant and cardless - the existing rule. ON with no cloud service chosen is refused BEFORE a card. |
+| "set my cap to $5" / "raise my cap to $50" / "lower my cap to $5" / "set my DeepSeek cap to $5" | `jarvis_chatbot_limits.change({"action": "raise_limit", "service": <short>, "dollars": N})` - the exact function behind `POST /api/chatbot/money` | The cap module decides the direction from the amount against the cap it already holds: an amount ABOVE today's cap raises ONE `raise_api_limit` card (tier `ask`; Windows Hello on the PC or the asking phone's own fingerprint) and writes nothing before the yes; an amount at or below it only spends less, so it applies at once with no card. No cap is ever approved here. |
+| "change my cloud provider to <a name this PC does not know>" | the module refuses it with the list read from `jarvis_chatbot_api.PRESETS` | no card, no write |
+| provider changes for a KNOWN service ("switch to openrouter", "use mistral as my cloud provider") | the existing cloud-provider door in `jarvis_quick.py`, which calls `jarvis_presets.apply_cloud` - the Presets Cloud row's ONE card | unchanged; the new module deliberately leaves those sentences to it, so two doors never compete for one sentence |
+
+`jarvis_presets.apply_cloud` remains reachable through our module's
+`set_provider()` too: it refuses a name this PC does not know (and names the
+six), refuses a service that cannot be used yet BEFORE any card, and writes
+`cloud-choice.json` only after the card's yes.
+
+**Nothing is written before an approval card's yes on any path**, and the change
+answer is built from the door's own returned body - so a denied or timed-out
+card is reported as "not changed" and a waiting card is never reported as on.
+
+### 229.3 Honest limits
+
+- **The money cap is the one people ask about**: it is readable from chat, and
+  it IS changeable from chat because the route already existed - the chat path
+  reuses `jarvis_chatbot_limits.change`, the same door as
+  `POST /api/chatbot/money`. Raising a cap from the phone still needs that
+  phone's signed approval (the existing rule); lowering one needs nothing.
+- **A missing save is not the same as an unreadable one**: "not set up" (no
+  file) and "cannot be read" (a file that is there but broken) are different
+  sentences, because deleting a file forgets a setting while a broken one
+  must not read as off-and-nothing-happened.
+- **No key is ever read**: the module never calls
+  `jarvis_chatbot_api.key_saved` or Windows Credential Manager, and no answer
+  contains a key or a fragment of one.
+- **The two apps need no client change**: the answers and the cards ride
+  `/api/chat`, so the phone gets them wherever it already has chat.
+
+### 229.4 Proof
+
+`backend/test_cloud_settings_chat.py` - the suite this section rests on. It
+runs over a temporary settings folder (never the owner's real files) with the
+REAL `jarvis_quick.py`, `jarvis_cloud_settings.py`, `jarvis_presets.py`,
+`jarvis_chatbot_api.py` and `jarvis_chatbot_limits.py`: every question shape in
+each state (file present/absent/broken), the exact evidence sentences, "not set
+up" and what it means, the refusal list; the older doors keeping their own
+sentences; the switch ON raising exactly ONE `change_own_config` card and
+writing nothing when denied, OFF instant and cardless; an unknown provider
+refused with the PRESETS list and no card; `set_provider` writing
+`cloud-choice.json` only after an approved card; the cap raise raising exactly
+ONE `raise_api_limit` card and leaving the money file alone when denied; the
+lowering instant and cardless; and no key store being touched - proved with a runtime spy on
+`jarvis_chatbot_api.key_saved`, not by reading the module's source.

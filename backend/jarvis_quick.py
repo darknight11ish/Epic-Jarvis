@@ -1436,6 +1436,21 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if _STOP_EVERYTHING.fullmatch(s):
         return Intent("stop_all")
 
+    # --- the hybrid/cloud settings, asked plainly (2026-11-18) ---------------
+    # The owner's own words for the three things he keeps asking about, read
+    # from THIS PC's files and answered in a second: which cloud service is
+    # chosen ("which cloud provider am I using?", "am I on cloud?"), the
+    # standing switch ("is escalation on?", "will you send things to the cloud
+    # by yourself?"), the money ("what's my cap?", "how much have I spent this
+    # month?") and what the switch does ("what does escalation actually do?").
+    # Every change it accepts ("turn escalation on", "set my cap to $5") goes
+    # through the door that setting already has, so this adds no route and no
+    # write of its own. Read only: `_run_cloud_settings` reads the three files;
+    # the change intent raises the setting's own card.
+    got = _cloud_settings_prompt(s, text)
+    if got is not None:
+        return got
+
     # --- the cloud/API honesty questions (2026-10-31) -----------------------
     # These come before the feature answers: the owner asked the local model
     # and got "I have no connection to any external API" while the Cloud
@@ -11720,6 +11735,81 @@ def _run_cloud_provider_choose(f: dict) -> Result:
         return Result("The cloud provider could not be changed on this PC.",
                       "cloud_provider_choose")
     return Result(_cloud_choose_words(code, body, company), "cloud_provider_choose")
+
+
+# --- the hybrid/cloud settings in the owner's own words (2026-11-18) --------
+# ONE block for both jobs, and `jarvis_cloud_settings` is where the rules live:
+#
+#   * the QUESTIONS (which service is chosen, is escalation on, what the cap
+#     is and what was spent this month, what the switch actually does and what
+#     it still refuses) are answered from cloud-choice.json,
+#     escalate-cloud.json and chatbot\api-money.json, naming the file read and
+#     when it was last saved. No model, no guess, and a missing file is said as
+#     "not set up" with what that means.
+#   * the CHANGES call the door each setting already has, and nothing else:
+#     `jarvis_presets.apply_cloud` for the service (the Presets Cloud row's ONE
+#     change_own_config card), `jarvis_presets.cloud_escalate` for the switch
+#     (ON is one card, OFF is instant), and `jarvis_chatbot_limits.change` for
+#     the monthly cap (the same door `POST /api/chatbot/money` uses: a raise is
+#     one card at tier ask, a lowering is instant). Nothing is written before
+#     a card's yes, and this path approves nothing.
+#
+# A provider name this PC does not know is refused with the list read from
+# `jarvis_chatbot_api.PRESETS`. A name it DOES know is left to the older
+# cloud-provider door above, which already raises the same one card - the two
+# doors do not compete for one sentence.
+
+def _cloud_settings_prompt(s: str, text: str) -> Optional[Intent]:
+    """The hybrid/cloud settings sentence, or None (see jarvis_cloud_settings)."""
+    try:
+        import jarvis_cloud_settings as CS
+    except Exception:                                       # noqa: BLE001
+        return None
+    try:
+        got = CS.prompt(s, text)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if not got:
+        return None
+    fields = {k: v for k, v in got.items() if k != "intent"}
+    return Intent(str(got.get("intent") or CS.ANSWER), fields)
+
+
+def _run_cloud_settings(f: dict) -> Result:
+    """The fixed answer, read fresh from the PC's own files. No card, no write."""
+    try:
+        import jarvis_cloud_settings as CS
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud settings are not set up on this PC, so I cannot "
+                      "read them.", "cloud_settings")
+    return Result(CS.answer(str(f.get("shape") or "")), "cloud_settings")
+
+
+def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
+    """One change, through its own door. The reply is the door's own body.
+
+    The words are built by `jarvis_cloud_settings.change_words` from the body
+    the door returned, so a refused or timed-out card is never reported as a
+    change and a waiting card is never reported as on.
+    """
+    try:
+        import jarvis_cloud_settings as CS
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud settings are not set up on this PC, so nothing was "
+                      "changed.", "cloud_settings_change")
+    kind = str(f.get("kind") or "")
+    provider = str(f.get("provider") or "")
+    if kind == "provider":
+        status, body = CS.set_provider(provider)
+    elif kind == "escalation":
+        status, body = CS.set_escalation(f.get("on") is True)
+    elif kind == "cap":
+        status, body = CS.set_cap(f.get("dollars"), provider=provider,
+                                  peer=peer, local=local)
+    else:
+        return Result("Nothing was changed.", "cloud_settings_change")
+    return Result(CS.change_words(kind, status, body, provider=provider),
+                  "cloud_settings_change")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -29180,6 +29270,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_provider_ask()
     if n == "cloud_provider_choose":
         return _run_cloud_provider_choose(f)
+    # The hybrid/cloud settings in the owner's own words (2026-11-18). The
+    # QUESTIONS read the PC's own three files (no model, no card, no write);
+    # the CHANGE calls the door the setting already has (the Presets Cloud
+    # row's card, the switch's own rule, or the money route's cap card), so it
+    # is deliberately NOT in READ_ONLY_INTENTS - it can raise a card and can
+    # change a setting.
+    if n == "cloud_settings":
+        return _run_cloud_settings(f)
+    if n == "cloud_settings_change":
+        return _run_cloud_settings_change(f, peer=peer, local=local)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "jobs_priority":
@@ -30337,6 +30437,14 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # is what invented the change in the trap in the first place.
     "phone_read_aloud_refused", "cloud_escalation_rule",
     "phone_memory_aloud_command",
+    # The hybrid/cloud settings QUESTIONS (2026-11-18): each answer is built
+    # from this PC's own cloud-choice.json, escalate-cloud.json and
+    # chatbot\api-money.json, with no secret, no model and no write (the module
+    # never touches Credential Manager), so a private chat gets the real state
+    # rather than a model's guess. The CHANGE (`cloud_settings_change`) is
+    # deliberately NOT here: it changes a setting or raises a card, and a
+    # private chat refuses that like every action.
+    "cloud_settings",
     # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
     # own hardware and answers in its module's fixed words - nothing written.
     "model_recommender",
@@ -30426,6 +30534,12 @@ READ_ONLY_INTENTS = frozenset({
     # they may not take away what "cancel that" would undo.
     "phone_read_aloud_refused", "cloud_escalation_rule",
     "phone_memory_aloud_command",
+    # The hybrid/cloud settings QUESTIONS (2026-11-18): they read the PC's own
+    # three settings files (cloud-choice, escalate-cloud, chatbot\api-money)
+    # and change nothing, so none may take away what "cancel that" would undo.
+    # The CHANGE (`cloud_settings_change`) is deliberately absent - it changes
+    # a setting or raises a card.
+    "cloud_settings",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
