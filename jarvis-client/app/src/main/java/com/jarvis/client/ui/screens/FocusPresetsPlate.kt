@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -260,6 +262,20 @@ private fun FocusPresetList(
         }
         Gap(2)
         Text(FocusPresets.modelLine(p), style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        // The owner's ask (2026-11-17): a preset's measured speed is ON the row,
+        // closed, with no tap, no expand control and no "use this" menu - and a
+        // preset nobody measured says so instead of showing 0. The visible line
+        // keeps the short "44.9 tok/s" form; the screen reader is given the same
+        // line as words (the unit spelled out, the day in words, the PC's note),
+        // because "tok/s" would otherwise be read "tok slash s" (2026-11-17).
+        Text(
+            FocusPresets.speedLine(p),
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+            modifier = Modifier.clearAndSetSemantics {
+                contentDescription = FocusPresets.speedSpoken(p)
+            },
+        )
         if (hasDetail) {
             Quiet(
                 if (show) "Hide why" else "Why this one",

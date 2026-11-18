@@ -367,7 +367,9 @@ def run(*, lane=None, main_url: Optional[str] = None, folder: Optional[Path] = N
         clock: Callable[[], float] = time.time) -> dict:
     """The whole test. Returns what results.json holds."""
     folder = folder or photos_dir()
-    main_url = (main_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
+    import jarvis_models
+    main_url = (main_url or jarvis_models.ollama_url_on_this_pc()
+                or "http://127.0.0.1:11434").rstrip("/")
     if lane is None:
         try:
             import jarvis_second_card

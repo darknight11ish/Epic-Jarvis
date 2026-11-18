@@ -1194,8 +1194,8 @@ def t_installed_info_reads_the_everyday_ollama():
         stub.tags = [{"name": "other:1", "digest": "x"}]
         check("not in the list: False", SP.installed_info("minicpm-v4.6", fresh=True)[0] is False)
         os.environ["OLLAMA_URL"] = "http://192.168.1.9:11434"
-        check("an Ollama that is not on this PC is never asked: None",
-              SP.installed_info("minicpm-v4.6", fresh=True) == (None, ""))
+        check("an Ollama that is not on this PC is refused to this PC's own address",
+              SP.main_url() == "http://127.0.0.1:11434", SP.main_url())
         os.environ["OLLAMA_URL"] = "http://127.0.0.1:1"
         check("an Ollama that is not running: None", SP.installed_info("q:1", fresh=True)
               == (None, ""))

@@ -32259,6 +32259,31 @@ write when the block belongs at the end). `POST /api/notes/append` accepts an
 optional `"dated": "YYYY-MM-DD"` for this; without it the route appends to the
 end as it always has. The answer names the file and the heading it used.
 
+**A name ends at the first instruction boundary (added 2026-11-18).** Two of the
+owner's live sentences handed Jarvis a name made of the sentence's tail:
+"make a note for me called Mood Log and have this be one of my favorite notes"
+created a file named with the whole tail and set no favourite, and "add to the
+mood log and make a note for today and put today's date and say that ..." asked
+whether a note called "mood log and make a note for today and put today's date
+and say" existed. Both readers now cut the NAME at ONE named list of boundaries,
+`_NOTE_NAME_BOUNDARIES` in `backend/jarvis_quick.py` - a comma, "and
+add/put/write/say/use/set/pin/favourite/make/create", "and have this ...",
+"pin/unpin", "with/saying/containing", and "using/dated today" - and the same
+list is used by the create reader and by the append reader's name cut, so a
+sentence that still swallows a clause is fixed once and never with a second
+extractor. A bare "and" is still not a boundary ("Salt and Pepper").
+
+The favourite said as a description - "and have this be one of my favorite
+notes", "and make this one of my favourites" - sets the SAME separate
+`favorite: true` front-matter property that "favourite it" already writes;
+`pinned` and `favorite` stay different properties. The append's words after
+"that" are the entry verbatim: the commas and the "didn't know when to call it
+quits, disappointed" clause are CONTENT, not further instructions, and the date
+heading is TODAY from the turn's clock, never a date read out of the sentence.
+A name that is genuinely not in the vault still answers "I could not find a note
+called ... Nothing was written" and creates nothing - the fix never turns a
+failed lookup into a create.
+
 **What this does NOT do (said plainly).** It does not create aliases, edit
 frontmatter other than the note's own `aliases` read, patch headings, blocks or
 properties, or build a search index - those are later phases. The chat path is
@@ -32269,7 +32294,12 @@ endpoint, and no app rebuild is needed.
 temporary vault with a fake gate: the owner's exact sentence, the plain create,
 the sentence-as-filename refusal, alias resolution with no other context, the
 new and existing date headings (and an older day), the collision, vault
-boundaries, one card per append, and that the existing bytes are untouched.
+boundaries, one card per append, and that the existing bytes are untouched. It
+also pins the owner's two 2026-11-18 sentences verbatim - the create that names
+the note AND asks for a favourite, the append that names Mood Log and then says
+"make a note for today and put today's date and say that ...", the genuinely
+missing name that still fails honestly, and that both name readers share the
+one boundary list.
 
 The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical.
 

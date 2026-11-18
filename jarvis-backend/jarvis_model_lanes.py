@@ -1235,10 +1235,10 @@ _SETTING_FILE: Optional[str] = None
 # ---------------------------------------------------------------------------
 
 def _hud_ollama_url() -> str:
-    """`OLLAMA_URL` as the backend resolves it, or "" when nothing can say.
+    """`OLLAMA_URL` as the backend resolves it, or "" when it is empty.
 
     Read from `jarvis_hud` when it is importable, because that module is what
-    the chat itself uses (its own `OLLAMA_URL` line), and from the environment
+    the chat itself uses (its own `OLLAMA_URL` line), and from the one resolver
     otherwise. A separate copy of the address is exactly how the desktop's
     health probe came to ask the wrong port (2026-10-13), so there is one.
     """
@@ -1249,7 +1249,8 @@ def _hud_ollama_url() -> str:
             return str(url)
     except Exception:
         pass
-    return os.environ.get("OLLAMA_URL") or ""
+    import jarvis_models
+    return jarvis_models.ollama_url_on_this_pc() or ""
 
 
 def port_of(url: str) -> Optional[int]:

@@ -28,6 +28,23 @@ BACKEND = ROOT / "backend"
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+#: THIS RUN MUST NOT WRITE BYTECODE INTO THE PUBLISHED BASE. The append below is what makes
+#: `jarvis_models.py` importable from `jarvis-backend/`, and importing it with bytecode on
+#: drops a `jarvis-backend/__pycache__/` folder beside it - which `backend/
+#: test_base_matches_repo.py` refuses ("no private, generated or superseded file is in the
+#: base"). `backend/test_handoff.py` runs this script as `sys.executable gen_handoff_cases.py
+#: --check` with no `-B`, so a plain run really would drop it.
+sys.dont_write_bytecode = True
+#: `jarvis_models.py` is one of the owner's own files: his backend folder has it and this
+#: repository's `backend/` never does (`.gitignore` refuses it), while the published base
+#: (`jarvis-backend/`) carries it. `jarvis_chatbot` asks it for the one Ollama address
+#: (2026-11-18), so a clone's `python tools/...` run needs it importable; APPENDED, so a real
+#: copy beside the modules still wins. Without this the generated route code stops on
+#: `ModuleNotFoundError: No module named 'jarvis_models'` in `_default_main_lane`.
+if not (BACKEND / "jarvis_models.py").is_file():
+    _base_models = ROOT / "jarvis-backend"
+    if _base_models.is_dir() and str(_base_models) not in sys.path:
+        sys.path.append(str(_base_models))
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-handoff-cases-"))
 _fw = types.ModuleType("jarvis_framework")
 _fw.CONFIG_DIR = _TMP
