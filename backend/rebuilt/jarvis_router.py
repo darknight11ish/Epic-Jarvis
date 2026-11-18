@@ -943,6 +943,24 @@ def degrade(lane: str, lanes: Optional[list] = None,
     otherwise the caller's own `lanes` list, and local is always the floor -
     checked FIRST, unconditionally, before `chain` or `lanes` is even read.
 
+    A CONFIG CAN NAME A LANE THAT NO LONGER EXISTS, AND THAT IS NOT A LANE.
+    The chain is an owner's file and outlives the code that wrote it: on the
+    owner's PC it still read `["jarvis-escalate", "jarvis-bulk",
+    "jarvis-critic"]` long after the 2026-10-27 decision collapsed the three
+    cloud lanes into one, and the patcher never overwrites an existing config
+    line (backend/_apply_toml_tiers.py repairs it now, and the repository's own
+    copy has been right since that decision). A stale name in this chain was
+    not a harmless label: `jarvis_chatbot_api.lane_service()` maps a name it
+    does not know to the CHOSEN service, so one 429 stepped the relay through
+    two more real requests to the same provider under names that are not lanes
+    - and the lane that finally answered was not in the caller's `lanes` list,
+    so `jarvis_hud` did not count the call against the budget either. So the
+    chain is FILTERED to names this module can actually serve - the cloud
+    lane(s) `cloud_lanes()` keeps from the caller's list, plus the local model
+    as the floor - before it is walked. A name that is dropped was going to be
+    refused by `cloud_lanes()` anyway; dropping it here means the refusal lands
+    on the next REAL lane, and the bottom is local.
+
     THAT ORDERING IS THE FIX. It used to be checked last: `order` was built
     from `chain` or `lanes`, and if `lane` (already equal to `local`) happened
     to appear inside that list with something after it, the walk returned
@@ -960,7 +978,15 @@ def degrade(lane: str, lanes: Optional[list] = None,
     local = local_model or "local"
     if lane == local:
         return None
-    chain = list(_cfg("budget", "degrade_chain", []) or [])
+    # The names this call can actually reach: the ONE cloud lane (or none) from
+    # the caller's own list, plus the local floor. A `[budget] degrade_chain`
+    # entry outside this set names a lane that does not exist any more; walking
+    # to it used to mean a real request to the chosen provider under a name that
+    # is not a lane (see the docstring). It is dropped, never substituted.
+    serviceable = set(cloud_lanes(lanes))
+    serviceable.add(local)
+    chain = [str(n or "") for n in (_cfg("budget", "degrade_chain", []) or [])]
+    chain = [n for n in chain if n in serviceable]
     order = chain if lane in chain else list(lanes or [])
 
     # Seen lanes are skipped, so a chain that lists a lane twice - or a

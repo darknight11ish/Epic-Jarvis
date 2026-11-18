@@ -5157,8 +5157,8 @@ function demoGraph(){
   const link = (a,b,kind="") => l.push({source:a,target:b,kind});
 
   add("core","Atlas","core",{weight:6});
-  ["qwen3:8b","jarvis-escalate","jarvis-critic","jarvis-bulk"].forEach((m,i)=>{
-    add("model:"+m,m,"model",{weight:3,meta:i?"cloud lane · via proxy":"local · ollama"});
+  ["qwen3:8b","jarvis-escalate"].forEach((m,i)=>{
+    add("model:"+m,m,"model",{weight:3,meta:i?"cloud lane · the service you chose":"local · ollama"});
     link("core","model:"+m,"runs");
   });
 

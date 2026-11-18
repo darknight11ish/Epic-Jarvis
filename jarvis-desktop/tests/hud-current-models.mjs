@@ -356,7 +356,7 @@ await check("the routes come from the page's own #lanes buttons and click them",
   assert.ok(section.includes('button.setAttribute("aria-pressed", row.pressed ? "true" : "false");'),
     "the pressed state is not the page's own");
   // The panel carries NO lane names: the only list is #lanes.
-  for (const name of ["jarvis-escalate", "jarvis-critic", "jarvis-bulk", '"auto"', '"local"']) {
+  for (const name of ["jarvis-escalate", '"auto"', '"local"']) {
     assert.equal(section.includes(name), false,
       `the panel copied a lane into itself: ${name}`);
   }

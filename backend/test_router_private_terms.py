@@ -49,7 +49,7 @@ except ImportError:  # Python < 3.11
 
 FAILED, PASSED = [], []
 SKIPPED = []
-LANES = ["jarvis-escalate", "jarvis-bulk"]
+LANES = ["jarvis-escalate"]
 # Long and clause-heavy, so the complexity gate alone would escalate it - the
 # private gate is the only thing that can keep these local.
 PAD = (", explain in detail and compare the trade-offs step by step, "
