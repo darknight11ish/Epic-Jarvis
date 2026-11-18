@@ -3,7 +3,7 @@
 The owner's feature list, as data: 183 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5fb80f3a0d85c52fb73250550e8431c2486e969ba2e21c8b650d7e1236a6c255); the apps' Features pages read their own
+`features/features.json` (sha256 38f358e15d650f42c9e2b7c9df13af4889017ddd82cd91d59b8b8bc7455ccc0b); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5fb80f3a0d85c52fb73250550e8431c2486e969ba2e21c8b650d7e1236a6c255"
+SOURCE_SHA256 = "38f358e15d650f42c9e2b7c9df13af4889017ddd82cd91d59b8b8bc7455ccc0b"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -904,7 +904,7 @@ FEATURES = (
         "asks": "One approval card on the PC before anything lands, naming the file, its size and the folder. While it waits the phone says \"Sent to your PC - approve the card on your PC\"; a no, a timeout or a dropped link writes nothing.",
         "limit": "One file at a time, of any type, up to 2 GB. A known document is found by name and read when you ask, exactly as a desktop file; a photo or an unfamiliar type is stored only - it is never opened, run, converted, indexed or shown to a model on this path. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
         "surface": "both",
-        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc", "send a photo from my phone to my pc"],
+        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc", "send a photo from my phone to my pc", "send a file for me to my pc"],
         "covers": [],
     },
     {
