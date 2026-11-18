@@ -19620,20 +19620,24 @@ def _github_repo_call(call: dict, every: dict, watch) -> dict:
     the tool layer fills it from the owner's OWN newest words, through the same
     `jarvis_github.repo_from_words` resolver.
 
-    Bounded on purpose. Only a GitHub tool whose own schema has a `repo` field
-    is touched; only when that field is absent or blank (a repository the model
-    did pass is the planner's to validate, exactly as before); and only from
-    `watch.newest_own_words`, which is the newest message's words ONLY when
-    they are the owner's own (typed or spoken) - never a pasted or clipboard
-    caption, never an earlier turn's message, never a setting or a guess. A
-    foreign repository named in those words is NOT filled in (the resolver
-    returns ""), so its ask/refusal stays exactly as it was.
+    Bounded on purpose. It applies to the READ tools ONLY (`GITHUB_READ_TOOLS`):
+    reads may assume the owner's own repository, WRITES may not (the owner's
+    2026-11-18 ruling 5.2 and decision #1348) - a write must name its target in
+    full, because a change built from an assumed repository is worse than a
+    question, and its planner keeps that rule. Only when `repo` is absent or
+    blank (a repository the model did pass is the planner's to validate,
+    exactly as before); and only from `watch.newest_own_words`, which is the
+    newest message's words ONLY when they are the owner's own (typed or spoken)
+    - never a pasted or clipboard caption, never an earlier turn's message,
+    never a setting or a guess. A foreign repository named in those words is NOT
+    filled in (the resolver returns ""), so its ask/refusal stays exactly as it
+    was.
     """
     fn = call.get("function") if isinstance(call, dict) else None
     if not isinstance(fn, dict):
         return call
     name = str(fn.get("name") or "")
-    if name not in GITHUB_TOOLS or name not in every:
+    if name not in GITHUB_READ_TOOLS or name not in every:
         return call
     raw = fn.get("arguments")
     if isinstance(raw, str):

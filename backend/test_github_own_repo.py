@@ -79,6 +79,7 @@ require_shipped("jarvis_agent.py", "jarvis_github.py")
 
 import jarvis_agent as AG  # noqa: E402
 import jarvis_github as GH  # noqa: E402
+import jarvis_quick as Q  # noqa: E402
 
 PASSED, FAILED = [], []
 
@@ -291,8 +292,20 @@ def t_the_owners_own_repository_is_named_in_his_own_words():
     sentence = "What are my open pull requests on Epic-Jarvis?"
     check("the owner's exact sentence resolves to the full name",
           GH.repo_from_words(sentence) == OWN, GH.repo_from_words(sentence))
-    check("... and _check_repo returns it, so no planner can ask",
-          GH._check_repo("Epic-Jarvis") == OWN, GH._check_repo("Epic-Jarvis"))
+    check("... and a READ _check_repo returns it, so no read planner can ask",
+          GH._check_repo("Epic-Jarvis", read=True) == OWN,
+          GH._check_repo("Epic-Jarvis", read=True))
+    # Ruling 5.2 / decision #1348: the WRITE check keeps the strict rule.
+    try:
+        GH._check_repo("Epic-Jarvis")
+    except GH.GitHubError as exc:
+        check("... while a WRITE check keeps the strict owner/name rule",
+              str(exc) == ('Jarvis needs a repository named like "owner/name" '
+                           "(letters, numbers, dot, dash and underscore only)."),
+              str(exc))
+    else:
+        check("... while a WRITE check keeps the strict owner/name rule", False,
+              "the write check accepted a bare name")
     # A FULL name that is not the owner's is never replaced by his.
     check("a foreign full name is left exactly as typed",
           GH.repo_from_words(FOREIGN) == "", GH.repo_from_words(FOREIGN))
@@ -309,23 +322,25 @@ def t_the_owners_own_repository_is_named_in_his_own_words():
 
 
 # --------------------------------------------------------------------------
-#   2. Every repository-naming planner gets the FULL name from the bare one
+#   2. Every READ planner gets the FULL name from the bare one; writes do NOT
 # --------------------------------------------------------------------------
 
-#: One row per planner that names a repository (2026-11-18: 15 of them; the
-#: fix-and-push and open-a-PR stages are checked below, because their prepare
-#: stages touch a local folder/GitHub by design).
-PLANS = {
+#: Ruling 5.2 / decision #1348 (2026-11-18): READS may assume the owner's own
+#: repository; WRITES may not. These are the five read-only planners.
+READ_PLANS = {
     "github_list": (GH.plan_list, {"scope": "pulls"}),
     "github_list(issues)": (GH.plan_list, {"scope": "issues"}),
     "github_read_file": (GH.plan_read_file, {"path": "README.md"}),
     "github_ci_status": (GH.plan_ci, {"branch": "main"}),
+    "github_pr_scan": (GH.plan_scan_prs, {}),
+    "github_pr_detail": (GH.plan_pr_detail, {"number": "7"}),
+}
+#: ... and the nine WRITE planners, which keep exactly today's strict rule.
+WRITE_PLANS = {
     "github_comment": (GH.plan_comment,
                        {"number": "7", "body": "Thanks - done."}),
     "github_open_issue": (GH.plan_open_issue, {"title": "The tray icon stays"}),
     "github_rerun_workflow": (GH.plan_rerun, {"run_id": "9"}),
-    "github_pr_scan": (GH.plan_scan_prs, {}),
-    "github_pr_detail": (GH.plan_pr_detail, {"number": "7"}),
     "github_merge_pr": (GH.plan_merge_pr,
                         {"number": "7", "head_sha": HEAD_SHA, "title": "Fix",
                          "base_ref": "main"}),
@@ -339,18 +354,22 @@ PLANS = {
     "github_issue_state": (GH.plan_issue_state,
                            {"number": "7", "action": "close", "title": "T"}),
 }
+_BARE_NEEDS_OWNER = ('Jarvis needs a repository named like "owner/name" '
+                     "(letters, numbers, dot, dash and underscore only).")
 
 
-def t_a_bare_owner_name_reaches_every_github_planner():
-    """The bare name is resolved by every planner, not only the chat path.
+def t_a_bare_owner_name_reaches_every_read_planner():
+    """READS resolve the bare owner name; WRITES keep today's strict refusal.
 
-    BEFORE THIS CHANGE: every one of these raised `GitHubError` on
-    "Epic-Jarvis", because `_check_repo` demanded `owner/name`.
+    BEFORE THIS CHANGE: the read planners raised `GitHubError` on
+    "Epic-Jarvis" (the measured live failure). AFTER the 2026-11-18 ruling this
+    is READ-ONLY behaviour: a write with a bare name must NOT be resolved -
+    decision #1348, because a change built from an assumed repository is worse
+    than a question.
     """
-    for label, (planner, extra) in PLANS.items():
-        args = dict(extra, repo="Epic-Jarvis")
+    for label, (planner, extra) in READ_PLANS.items():
         try:
-            r = planner(args)
+            r = planner(dict(extra, repo="Epic-Jarvis"))
         except Exception as exc:                  # noqa: BLE001 - reported below
             check(f"{label}: the bare name plans the owner's repository", False,
                   f"raised {type(exc).__name__}: {exc}")
@@ -358,9 +377,28 @@ def t_a_bare_owner_name_reaches_every_github_planner():
         check(f"{label}: the bare name plans the owner's repository",
               r.repo == OWN and all(OWN in u or "/repos/" not in u for u in r.urls()),
               (r.repo, r.urls()))
-    # The two stages whose prepare() then reads a folder/GitHub: the FIRST
-    # thing they do is resolve the repository, so with the bare name they get
-    # past that and refuse about the folder (a different, honest failure).
+    for label, (planner, extra) in WRITE_PLANS.items():
+        try:
+            planner(dict(extra, repo="Epic-Jarvis"))
+        except GH.GitHubError as exc:
+            check(f"{label}: a WRITE with a bare name is refused, never assumed",
+                  str(exc) == _BARE_NEEDS_OWNER, str(exc))
+        except Exception as exc:                  # noqa: BLE001 - reported below
+            check(f"{label}: a WRITE with a bare name is refused, never assumed",
+                  False, f"raised {type(exc).__name__}: {exc}")
+        else:
+            check(f"{label}: a WRITE with a bare name is refused, never assumed",
+                  False, "it accepted the bare name")
+        # The SAME write with the full name still plans, of course.
+        try:
+            r = planner(dict(extra, repo=OWN))
+        except Exception as exc:                  # noqa: BLE001 - reported below
+            check(f"{label}: the FULL name still plans the write", False, repr(exc))
+            continue
+        check(f"{label}: the FULL name still plans the write", r.repo == OWN,
+              r.repo)
+    # The two stages whose prepare() then reads a folder/GitHub are WRITES too:
+    # with the bare name they are refused on the NAME, before the folder.
     for label, planner, args in (
             ("github_open_pr", GH.plan_open_pr,
              {"base": "main", "branch": "jarvis/new-feature"}),
@@ -369,15 +407,14 @@ def t_a_bare_owner_name_reaches_every_github_planner():
         try:
             planner(dict(args, repo="Epic-Jarvis"))
         except GH.GitHubError as exc:
-            words = str(exc)
-            check(f"{label}: the bare name is resolved before the folder is read",
-                  "owner/name" not in words, words[:200])
-        except Exception as exc:                  # noqa: BLE001 - network etc
-            check(f"{label}: the bare name is resolved before the folder is read",
+            check(f"{label}: a write stage refuses the bare name as before",
+                  str(exc) == _BARE_NEEDS_OWNER, str(exc)[:200])
+        except Exception as exc:                  # noqa: BLE001 - reported below
+            check(f"{label}: a write stage refuses the bare name as before",
                   False, f"raised {type(exc).__name__}: {exc}")
         else:
-            check(f"{label}: the bare name is resolved before the folder is read",
-                  True)
+            check(f"{label}: a write stage refuses the bare name as before",
+                  False, "it accepted the bare name")
 
 
 # --------------------------------------------------------------------------
@@ -558,16 +595,17 @@ def t_every_github_tool_with_a_repository_says_it_may_be_bare():
 
 
 # --------------------------------------------------------------------------
-#   6. A write's card shows the full name; a read's plan is otherwise unchanged
+#   6. Writes stay strict; a write's card names the FULL repository it was given
 # --------------------------------------------------------------------------
 
-def t_a_write_card_names_the_full_repository():
-    """Every path benefits: a WRITE planned from the bare name shows the full one.
+def t_a_write_card_names_the_repository_it_was_given():
+    """A WRITE keeps decision #1348: full name only, and the card shows it.
 
-    The card is where a wrong repository would be visible, and this is why the
-    resolution is safe for writes: the resolved name is what the card shows and
-    what `run()` then checks against GitHub (Q5). BEFORE THIS CHANGE: the same
-    prepare raised instead of producing a card.
+    The owner's 2026-11-18 ruling 5.2: "keep the strict target refusal for WRITE
+    tools when owner/repo is ambiguous - reads may assume the owner's own
+    repository; writes may not." So the bare name is refused with today's words
+    (previous test), and a write planned from the FULL name still produces its
+    card naming exactly that repository.
     """
     cases = {
         "github_comment": {"number": "7", "body": "Thanks - done."},
@@ -579,18 +617,16 @@ def t_a_write_card_names_the_full_repository():
     }
     with _Token():
         for name, extra in cases.items():
-            args = dict(extra, repo="Epic-Jarvis")
             try:
-                r, text = AG.TOOLS[name].prepare(args)
+                r, text = AG.TOOLS[name].prepare(dict(extra, repo=OWN))
             except Exception as exc:              # noqa: BLE001 - reported
-                check(f"{name}: the bare name becomes a card", False,
+                check(f"{name}: the full name becomes a card", False,
                       f"raised {type(exc).__name__}: {exc}")
                 continue
-            check(f"{name}: the bare name becomes a card",
+            check(f"{name}: the full name becomes a card",
                   r.repo == OWN and OWN in text, (r.repo, text[:160]))
-            check(f"{name}: nothing about the owner's name was asked",
-                  'owner/name"' not in text and "needs a repository" not in text,
-                  text[:200])
+            check(f"{name}: the card names the repository it will act on",
+                  "owner/name" not in text or OWN in text, text[:200])
 
 
 def t_a_read_plan_is_unchanged_apart_from_the_name():
@@ -615,7 +651,137 @@ def t_a_read_plan_is_unchanged_apart_from_the_name():
 
 
 # --------------------------------------------------------------------------
-#   7. The lead's live battery (2026-11-18 17:57Z): what the questions reach
+#   7. Ruling 5.1: the deterministic fast path - no model, no owner/name ask
+# --------------------------------------------------------------------------
+#
+# The model is measurably unreliable at choosing a tool for these (the live
+# 17:57Z battery: seven turns called nothing). The owner's ruling was to answer
+# the four core read-only questions on the chat fast path the capability
+# answers already use - open pull requests, one PR's checks/failures, the newest
+# run on main (the read that names a commit), and the unmerged work - and NOT
+# the open-defect count, which another lane owns.
+def _quick(question, fetch):
+    """`(intent, reply)` from jarvis_quick's own match/run, with the fake token."""
+    with _Token():
+        real = GH._default_fetch_full
+        GH._default_fetch_full = fetch
+        try:
+            intent = Q.match(question)
+            if intent is None:
+                return None, None
+            return intent, str(Q.run(intent, None, 0.0).reply)
+        finally:
+            GH._default_fetch_full = real
+
+
+def t_the_owner_questions_are_answered_without_the_model():
+    """Each core GitHub read is a deterministic answer naming real data.
+
+    BEFORE THIS CHANGE these questions had no fast path at all: they fell to the
+    9B model, which (the live battery) either asked for `owner/name` or denied
+    having access. This is the half the owner feels immediately.
+    """
+    pulls = json.dumps([{"number": 1376, "title": "fix: the cloud path",
+                         "state": "open"},
+                        {"number": 1377, "title": "feat: the cloud row",
+                         "state": "open"}])
+    pr = json.dumps({"number": 1376, "title": "fix: the cloud path",
+                     "state": "open", "head": {"sha": HEAD_SHA}})
+    failing = {"id": 9, "name": "ci", "head_sha": HEAD_SHA,
+               "status": "completed", "conclusion": "failure"}
+    checks = {"check_runs": [{"name": "backend", "status": "completed",
+                              "conclusion": "failure"}]}
+    main = {"id": 10, "name": "ci", "head_sha": HEAD_SHA,
+            "status": "completed", "conclusion": "success"}
+    for question in ("What are my open pull requests on Epic-Jarvis?",
+                     "Which pull requests are ready to merge?",
+                     "what are my open PRs?"):
+        fetch = FakeGitHub(routes=[("/pulls?", (200, pulls))])
+        intent, reply = _quick(question, fetch)
+        check(f"{question!r}: answered with no model by the fast path",
+              intent is not None and intent.name == "github_own_read",
+              intent.name if intent else None)
+        check(f"{question!r}: ... naming the repository and the real PRs",
+              "#1376" in reply and OWN in reply, reply[:300])
+        check(f"{question!r}: ... and never asking for owner/name",
+              "owner/name" not in reply and "who owns" not in reply.lower(),
+              reply[:300])
+    # "What is failing on pull request 1376?" - the checks read.
+    fetch = FakeGitHub(routes=[
+        ("/branches/", (200, json.dumps({"name": "main"}))),
+        ("/pulls/1376", (200, pr)),
+        ("/actions/runs", (200, json.dumps({"workflow_runs": [failing]}))),
+        ("/check-runs", (200, json.dumps(checks)))])
+    intent, reply = _quick("What is failing on pull request 1376?", fetch)
+    check("'what is failing on pull request 1376?': answered with no model",
+          intent is not None and intent.name == "github_own_read",
+          intent.name if intent else None)
+    check("... naming the failing check and the repository",
+          "backend" in reply and OWN in reply, reply[:400])
+    # "What is the latest commit on main in Epic-Jarvis?" - the false-denial one.
+    fetch = FakeGitHub(routes=[
+        ("/branches/main", (200, json.dumps({"name": "main"}))),
+        ("/actions/runs", (200, json.dumps({"workflow_runs": [main]})))])
+    intent, reply = _quick("What is the latest commit on main in Epic-Jarvis?",
+                           fetch)
+    check("'what is the latest commit on main...': answered with no model",
+          intent is not None and intent.name == "github_own_read",
+          intent.name if intent else None)
+    check("... and it does NOT deny having access",
+          "don't have" not in reply.lower() and "no access" not in reply.lower(),
+          reply[:300])
+    check("... it names the newest run on main and the repository",
+          "ci" in reply.lower() and OWN in reply, reply[:400])
+    # "Which branches have unmerged work?" - the open pull requests are the read.
+    fetch = FakeGitHub(routes=[("/pulls?", (200, pulls))])
+    intent, reply = _quick("Which branches have unmerged work?", fetch)
+    check("'which branches have unmerged work?': answered with no model",
+          intent is not None and intent.name == "github_own_read",
+          intent.name if intent else None)
+    check("... naming the real unmerged work and its limit",
+          "#1376" in reply and "branch with no pull request" in reply, reply[:400])
+    # The fast path answers are READ-ONLY intents (they may not clear "cancel that").
+    check("github_own_read is a read-only intent",
+          "github_own_read" in Q.READ_ONLY_INTENTS)
+    # The open-defect count is DELIBERATELY not claimed here: another lane owns
+    # the deterministic answer for it, and two doors for one question would drift.
+    intent, _ = _quick("How many open defects are in the register?",
+                       FakeGitHub())
+    check("the open-defect count is left to the lane that owns it",
+          intent is None or intent.name != "github_own_read",
+          intent.name if intent else None)
+
+
+def t_the_fast_path_is_not_used_while_the_read_card_is_on():
+    """The fast path must never go round a card the owner put back.
+
+    The deterministic answers read GitHub with no model and no card, so they
+    exist ONLY while `github_inspect` is "auto" (the owner's default). With the
+    switchable "Read your GitHub" row on "ask", the sentence goes back to the
+    model's tool path, which raises that card as before.
+    """
+    import jarvis_framework as FW
+    real = FW.action_tier
+    pulls = json.dumps([{"number": 1376, "title": "fix: the cloud path",
+                         "state": "open"}])
+    try:
+        FW.action_tier = lambda action: ("ask" if action == "github_inspect"
+                                         else real(action))
+        fetch = FakeGitHub(routes=[("/pulls?", (200, pulls))])
+        intent, _reply = _quick("What are my open pull requests on Epic-Jarvis?",
+                                fetch)
+        check("with the read card ON, the fast path declines (the model path "
+              "raises the card)",
+              intent is None or intent.name != "github_own_read",
+              (intent.name if intent else None, fetch.calls))
+        check("... and it sent nothing before anybody said yes",
+              fetch.calls == [], fetch.calls)
+    finally:
+        FW.action_tier = real
+
+
+# --------------------------------------------------------------------------
+#   8. The lead's live battery (2026-11-18 17:57Z): what the questions reach
 # --------------------------------------------------------------------------
 #
 # The eight questions asked of the live Jarvis at 17:57Z, verbatim. The
@@ -787,14 +953,16 @@ def main() -> int:
     try:
         with NoSocket():
             t_the_owners_own_repository_is_named_in_his_own_words()
-            t_a_bare_owner_name_reaches_every_github_planner()
+            t_a_bare_owner_name_reaches_every_read_planner()
             t_the_owners_exact_sentence_reads_his_own_pull_requests()
             t_the_read_tiers_are_auto_in_the_shipped_config()
             t_my_open_prs_my_repo_and_this_repository_fill_the_repository_in()
             t_a_foreign_repository_is_never_replaced_by_the_owners()
             t_every_github_tool_with_a_repository_says_it_may_be_bare()
-            t_a_write_card_names_the_full_repository()
+            t_a_write_card_names_the_repository_it_was_given()
             t_a_read_plan_is_unchanged_apart_from_the_name()
+            t_the_owner_questions_are_answered_without_the_model()
+            t_the_fast_path_is_not_used_while_the_read_card_is_on()
             t_the_live_battery_questions_offer_the_github_tool_they_need()
             t_the_live_battery_tool_calls_answer_real_data()
     except Exception:

@@ -1776,12 +1776,12 @@ def repo_from_words(text) -> str:
 #: lane system prompt (`docs/ARCHITECTURE.md`, "An explicit action request
 #: reaches its gating tool"); the measured 9B model answers this class of
 #: request in words unless the tool text itself says to call it.
-REPO_ARG_HINT = ('"Epic-Jarvis", or "my repo"/"this repository", is a valid '
-                 'repository: Jarvis fills in the owner, so call the tool - do '
-                 'not ask who owns it. ')
+REPO_ARG_HINT = (f'"Epic-Jarvis" (that is {OWN_REPO}), or "my repo"/"this '
+                 f'repository", is a valid repository: Jarvis fills in the owner, '
+                 f'so call the tool - do not ask who owns it. ')
 
 
-def _check_repo(repo: str) -> str:
+def _check_repo(repo: str, *, read: bool = False) -> str:
     """The repository a card names - or an ASK, never a guess (2026-11-17, Q5).
 
     The name must come from the request itself: there is no repository that is
@@ -1791,17 +1791,21 @@ def _check_repo(repo: str) -> str:
     absent name is refused BEFORE a card exists, in words that say what could
     not be resolved and ask for it.
 
-    THE ONE REPOSITORY IT DOES RESOLVE (2026-11-18) is the owner's OWN one,
-    when he named it without GitHub's "owner/name" form: its bare name
-    ("Epic-Jarvis", case-insensitively) or a self phrase ("my repo", "this
-    repository", "my open PRs"). `repo_from_words` above holds the rule and the
-    measured failure that made it necessary; the important half is that a name
-    that is NOT OWN_REPO is never replaced by it, so this is not the "guess"
-    the paragraph above forbids - it is the owner's own repository, named in
-    his own words.
+    READS MAY ASSUME THE OWNER'S OWN REPOSITORY; WRITES MAY NOT (2026-11-18,
+    the owner's ruling 5.2 and decision #1348). `read=True` - passed by the five
+    read-only planners only - resolves the owner's OWN repository when he named
+    it without GitHub's "owner/name" form: its bare name ("Epic-Jarvis",
+    case-insensitively) or a self phrase ("my repo", "this repository", "my
+    open PRs"). `repo_from_words` above holds the rule and the measured failure
+    that made it necessary; a name that is NOT OWN_REPO is never replaced by it.
+    A WRITE planner calls this with the default `read=False` and keeps EXACTLY
+    its old rule: a bare name that is not a full `owner/name` is refused and
+    asked about, because a card built from an ambiguous name is how a change
+    lands on a repository nobody named - the Q5 target rule and #1348 together.
     """
     repo = str(repo or "").strip()
-    repo = repo_from_words(repo) or repo
+    if read:
+        repo = repo_from_words(repo) or repo
     if not repo:
         raise GitHubError(
             'Jarvis could not tell which repository this is about: no repository '
@@ -2723,7 +2727,7 @@ def plan_list(args: Optional[dict] = None) -> Request:
             touches="Nothing on GitHub changes; this only reads.",
             scope=scope,
         )
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     if scope in SCOPE_NOUNS:
         path = (f"{_repo_path(repo)}/{scope}?state={state}"
                 f"&per_page={PER_PAGE}")
@@ -2750,7 +2754,7 @@ def plan_list(args: Optional[dict] = None) -> Request:
 def plan_read_file(args: Optional[dict] = None) -> Request:
     """Read ONE file's text, at an optional branch or commit."""
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     path = _check_path(args.get("path"))
     ref = _check_ref(args["ref"]) if str(args.get("ref") or "").strip() else ""
     query = f"?ref={urllib.parse.quote(ref, safe='')}" if ref else ""
@@ -2778,7 +2782,7 @@ def plan_ci(args: Optional[dict] = None) -> Request:
     all digits, so no address comes from fetched text.
     """
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     pr = str(args.get("pr") or "").strip()
     branch = str(args.get("branch") or "").strip()
     if pr and branch:
@@ -2952,7 +2956,7 @@ def plan_scan_prs(args: Optional[dict] = None) -> Request:
     on its head commit. Capped at `MAX_PRS`, reads only, no body.
     """
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     step = Step("GET", f"{_repo_path(repo)}/pulls?state=open&per_page={MAX_PRS}")
     return Request(
         ACTION_INSPECT,
@@ -3434,7 +3438,7 @@ def plan_pr_detail(args: Optional[dict] = None) -> Request:
     from the pull request itself, never from how many rows happened to parse.
     """
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     number = _check_number(args.get("number"), "pull request")
     steps = (
         Step("GET", f"{_repo_path(repo)}/pulls/{number}"),

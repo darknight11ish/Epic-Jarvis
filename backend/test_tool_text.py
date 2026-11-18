@@ -173,7 +173,7 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # shows the old/new title/body pin (345) and issue_state pins the
                    # title and the close/reopen direction (359). Measured on this
                    # tree; each is its own action with its own one-shot card.
-                   "github_open_pr": 500, "github_edit_pr": 400,
+                   "github_open_pr": 500, "github_edit_pr": 420,
                    "github_issue_state": 420,
                    # The five repo-taking tools the 2026-11-18 REPO_ARG_HINT
                    # sentence pushed over the 300 default, measured on this tree
@@ -194,7 +194,16 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # SETTINGS_TOOL above). Measured on this tree: github_list 384,
                    # github_ci_status 339, github_pr_scan 1471, github_pr_detail
                    # 346. Paid only when the `github` group is opened.
-                   "github_ci_status": 350,
+                   "github_ci_status": 360,
+                   # The 2026-11-18 ruling added the owner's FULL repository
+                   # name to the sentence ("Epic-Jarvis" is
+                   # darknight11ish/Epic-Jarvis), which grew every repo-taking
+                   # description by 13 tokens with this module's own rule:
+                   # github_read_file 301, github_issue_labels 323 (the two the
+                   # measured numbers above did not already cover), github_list
+                   # 397, github_workflow 327, github_pr_review 359, github_pr_detail
+                   # 359. The cost is still paid only when the group is opened.
+                   "github_read_file": 310, "github_issue_labels": 330,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six
                    # format names and two "use that" lines. Measured 329 with
