@@ -417,8 +417,14 @@ object FocusPresets {
     fun replyLine(code: Int, body: JsonObject?): String = when (code) {
         200 -> body?.str("words") ?: body?.str("message") ?: body?.str("line")
             ?: if (body?.bool("changed") == true) {
-                // The apply route's success body carries no sentence of its own.
-                "Preset applied. Your PC switched its chat lane; nothing else changed."
+                // The apply route's success body carries no sentence of its own
+                // (backend/jarvis_presets.py's 200 body has `preset`, `model`,
+                // `switched` and the rest, but no `words`). A 200 also does not
+                // prove the switch happened - the caller re-reads the list - so
+                // this says only what the phone knows: the PC answered, and the
+                // re-read shows what is in use now. Never "nothing else changed".
+                "Preset applied. Your PC answered; the list is being re-read to " +
+                    "show what is in use now."
             } else {
                 WAITING
             }
