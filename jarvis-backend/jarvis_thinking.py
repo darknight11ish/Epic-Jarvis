@@ -207,7 +207,8 @@ def _write_settings(data: dict) -> None:
 
 
 def _ollama_url() -> str:
-    return os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+    import jarvis_models
+    return jarvis_models.ollama_url_on_this_pc().rstrip("/")
 
 
 def model_capabilities(model: str, ollama_url: Optional[str] = None) -> List[str]:

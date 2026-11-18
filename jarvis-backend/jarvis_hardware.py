@@ -652,7 +652,8 @@ def _http_json(url: str, payload: Optional[dict] = None, timeout: float = 2.0):
 
 
 def _main_url() -> str:
-    return (os.environ.get("OLLAMA_URL") or f"http://{HOST}:{MAIN_PORT}").rstrip("/")
+    import jarvis_models
+    return (jarvis_models.ollama_url_on_this_pc() or f"http://{HOST}:{MAIN_PORT}").rstrip("/")
 
 
 def _second_url() -> Optional[str]:

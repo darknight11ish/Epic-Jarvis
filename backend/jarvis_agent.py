@@ -14685,7 +14685,8 @@ def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None)
     bytes a Live question sends. `why="live"` so WARM_LAST says which path
     warmed. warm_prefix never raises and never loads a model, so this can only
     turn a slow first answer into a fast one."""
-    url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
+    import jarvis_models
+    url = (ollama_url or jarvis_models.ollama_url_on_this_pc() or "http://127.0.0.1:11434").rstrip("/")
     name = model or _chat_model_now() or "jarvis-primary"
     # Q6 (2026-11-08): the #1 live-stability guard. (a) While the on-demand
     # pooled lane is the chat lane and is running, the two single-card lanes are

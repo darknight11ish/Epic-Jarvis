@@ -8,9 +8,17 @@ from unittest.mock import patch, MagicMock
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+#: `jarvis_models.py` is one of the owner's own files; the published base carries
+#: it, and the modules under test ask it for the one Ollama address (2026-11-18).
+import _base  # noqa: E402
+_base.put_on_path(_base.folder("jarvis_models.py"))
 
-import jarvis_thinking as JT
-import jarvis_quick as JQ
+import jarvis_thinking as JT  # noqa: E402
+import jarvis_quick as JQ  # noqa: E402
+
+#: The lane this module resolves for itself; the address the checks below use,
+#: whatever OLLAMA_URL says on the machine running them.
+LANE_URL = JT._ollama_url()
 
 
 class TestThinkingUnits(unittest.TestCase):
@@ -38,8 +46,8 @@ class TestThinkingUnits(unittest.TestCase):
 
     def test_capabilities_and_supported_levels(self):
         # Override capabilities for test models
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "smart-model")] = ["tools", "thinking"]
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "plain-model")] = ["tools"]
+        JT._CAP_OVERRIDE[(LANE_URL, "smart-model")] = ["tools", "thinking"]
+        JT._CAP_OVERRIDE[(LANE_URL, "plain-model")] = ["tools"]
 
         self.assertTrue(JT.supports_thinking("smart-model"))
         self.assertFalse(JT.supports_thinking("plain-model"))
@@ -76,8 +84,8 @@ class TestThinkingUnits(unittest.TestCase):
         self.assertEqual(JT.decide_auto("debug this python script and trace this memory leak"), JT.DEEP)
 
     def test_reasoning_parameters(self):
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "smart-model")] = ["thinking"]
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "plain-model")] = []
+        JT._CAP_OVERRIDE[(LANE_URL, "smart-model")] = ["thinking"]
+        JT._CAP_OVERRIDE[(LANE_URL, "plain-model")] = []
 
         # Plain model without thinking gets reasoning_effort none (thinking off)
         self.assertEqual(JT.reasoning_parameters("plain-model"), {"reasoning_effort": "none"})
@@ -111,7 +119,7 @@ class TestThinkingUnits(unittest.TestCase):
 
     def test_when_thinking_happens(self):
         """"Only when I ask" and "Always" (2026-10-11), and the safe default."""
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "smart-model")] = ["thinking"]
+        JT._CAP_OVERRIDE[(LANE_URL, "smart-model")] = ["thinking"]
 
         # Nothing chosen: answering directly, and an asked-for question thinks
         # briefly rather than not at all.
@@ -285,30 +293,30 @@ class TestThinkingAgentIntegration(unittest.TestCase):
 
     def test_agent_chat_body_reasoning(self):
         import jarvis_agent
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "test-think-model")] = ["thinking"]
-        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "test-no-think-model")] = []
+        JT._CAP_OVERRIDE[(LANE_URL, "test-think-model")] = ["thinking"]
+        JT._CAP_OVERRIDE[(LANE_URL, "test-no-think-model")] = []
 
         # Model with thinking, level deep, on "always" - so this is the level
         # talking and not the WHEN setting (2026-10-11).
         JT.set_level("everyday", "deep")
         JT.set_when(JT.ALWAYS)
-        body = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
+        body = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url=LANE_URL)
         self.assertEqual(body.get("reasoning_effort"), "high")
 
         # Spoken turn always overrides to none
-        body_spoken = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=True, ollama_url="http://127.0.0.1:11434")
+        body_spoken = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=True, ollama_url=LANE_URL)
         self.assertEqual(body_spoken.get("reasoning_effort"), "none")
 
         # Model without thinking gets reasoning_effort none (thinking off)
-        body_no_think = jarvis_agent.chat_body("test-no-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
+        body_no_think = jarvis_agent.chat_body("test-no-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url=LANE_URL)
         self.assertEqual(body_no_think.get("reasoning_effort"), "none")
 
         # The owner's own question, on the default "only when I ask": the flag
         # chat_body is handed is what thinking follows.
         JT.set_when(JT.WHEN_ASKED)
-        ordinary = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
+        ordinary = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url=LANE_URL)
         self.assertEqual(ordinary.get("reasoning_effort"), "none")
-        asked = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434", per_turn=True)
+        asked = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url=LANE_URL, per_turn=True)
         self.assertEqual(asked.get("reasoning_effort"), "high")
 
 

@@ -635,15 +635,15 @@ def t_only_loopback_is_ever_used_and_the_pin_bites():
     `_loopback_url`."""
     check("an explicit remote url is not used", M._loopback_url("http://192.168.1.5:11434")
           == M.DEFAULT_URL, M._loopback_url("http://192.168.1.5:11434"))
-    had = os.environ.get("OLLAMA_HOST")
-    os.environ["OLLAMA_HOST"] = "http://example.com:11434"
+    had = os.environ.get("OLLAMA_URL")
+    os.environ["OLLAMA_URL"] = "http://example.com:11434"
     try:
         from_env = M._loopback_url()
     finally:
         if had is None:
-            os.environ.pop("OLLAMA_HOST", None)
+            os.environ.pop("OLLAMA_URL", None)
         else:
-            os.environ["OLLAMA_HOST"] = had
+            os.environ["OLLAMA_URL"] = had
     check("... nor one from the environment", from_env == M.DEFAULT_URL, from_env)
     check("... and loopback is kept", M._loopback_url("http://127.0.0.1:11435")
           == "http://127.0.0.1:11435", M._loopback_url("http://127.0.0.1:11435"))

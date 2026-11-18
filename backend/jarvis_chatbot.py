@@ -648,7 +648,8 @@ def _default_full_version_on() -> bool:
 
 
 def _default_main_lane() -> tuple:
-    url = os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434"
+    import jarvis_models
+    url = jarvis_models.ollama_url_on_this_pc() or "http://127.0.0.1:11434"
     model = os.environ.get("JARVIS_LOCAL_MODEL") or MAIN_MODEL_DEFAULT
     return url.rstrip("/"), model
 
