@@ -378,7 +378,8 @@ def t_every_pooled_preset_carries_a_measured_dict():
     check("... and every one carries a measured dict, never an empty guess",
           all(isinstance(p.measured, dict) and p.measured for p in pooled),
           [(p.id, p.measured) for p in pooled])
-    required = ("tok_s", "size_gib", "spill_gib", "cold_load_s", "source")
+    required = ("tok_s", "tok_s_on", "tok_s_note", "size_gib", "spill_gib",
+                "cold_load_s", "source")
     check("... with the figures a three-card decision needs in EVERY pooled row: "
           + ", ".join(required),
           all(all(k in p.measured for k in required) for p in pooled),
@@ -403,10 +404,11 @@ def t_every_pooled_preset_carries_a_measured_dict():
     moved = (P.by_id("reflect"), P.by_id("pictures"))
     check("... and both moved rows quote their own numbers in plain words, not only "
           "in a dict the owner never sees",
-          all(str(p.measured["tok_s"]) in p.cost for p in moved)
+          all(p.measured["tok_s_on"] == "2026-11-17" for p in moved)
+          and all(str(p.measured["tok_s"]) in p.measured["tok_s_note"] for p in moved)
           and all(str(p.measured["size_gib"]) in p.cost for p in moved)
           and all("all three cards" in p.heavy_words for p in moved),
-          [(p.id, p.cost) for p in moved])
+          [(p.id, p.measured["tok_s_note"]) for p in moved])
 
 
 def main() -> int:
@@ -437,7 +439,7 @@ def main() -> int:
     check("Coding is heavy, on the pooled all-three-card lane",
           cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
           and cod.lane == "pooled"
-          and cod.measured["tok_s"] == 83.8 and cod.measured["rubric"] == "6/6 coding rubric"
+          and cod.measured["tok_s"] == 40.3 and cod.measured["rubric"] == "6/6 coding rubric"
           and cod.measured["size_gib"] == 16.2 and cod.measured["cold_load_s"] == 31.6
           and "ALL THREE GPUs" in cod.cost, cod.model)
     check("Coding asks for the 49,152-token window measured on all three cards, "
@@ -458,13 +460,13 @@ def main() -> int:
     check("Fast is qwen3.5:4b on the 2080 SUPER's coding lane at 16,384",
           P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "coding"
           and P.by_id("fast").context == 16384
-          and P.by_id("fast").measured["tok_s"] == 77.1
+          and P.by_id("fast").measured["tok_s"] == 83.2
           and P.by_id("fast").measured["context"] == 65536)
     gu = P.by_id("general_uncensored")
     check("General Uncensored now names the measured abliterated Qwen3.5 ref",
           gu.pending is False
           and gu.model == "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M"
-          and gu.measured["tok_s"] == 45.6 and gu.measured["context_max"] == 262144
+          and gu.measured["tok_s"] == 42.6 and gu.measured["context_max"] == 262144
           and gu.measured["licence"] == "Apache-2.0", gu.model)
     check("... its words say one-run rubric, not independent, and the Homebrew nit",
           "6/6" in gu.measured["source"] and "not independent" in gu.measured["source"]
@@ -477,12 +479,30 @@ def main() -> int:
     check("measured tok/s is present only where that measurement exists",
           all(isinstance(p["measured"]["tok_s"], (int, float)) for p in text_measured),
           [p["id"] for p in text_measured])
+    # The owner's one ask (2026-11-17): the speed in the list is DATED. Every
+    # measured row names the live-lane run it came from and says in words what
+    # was measured; a row repeated twice carries the RANGE and the LOW end is
+    # the number the list shows, so the row can never flatter itself.
+    check("every measured row dates its speed and says what was measured",
+          all(p["measured"].get("tok_s_on") == "2026-11-17"
+              and isinstance(p["measured"].get("tok_s_note"), str)
+              and p["measured"]["tok_s_note"] for p in text_measured),
+          [(p["id"], p["measured"].get("tok_s_on")) for p in text_measured])
+    ranged = {p["id"]: p["measured"] for p in text_measured
+              if "two runs" in p["measured"].get("tok_s_note", "")}
+    check("... the four rows run twice carry their range, and tok_s is its LOW end",
+          set(ranged) == {"coding", "reflect", "pictures", "medical"}
+          and all(re.search(r"read " + re.escape(str(m["tok_s"])) + r"-",
+                            m["tok_s_note"]) for m in ranged.values()),
+          {k: v.get("tok_s_note") for k, v in ranged.items()})
     av = fixture["presets"][3]
     check("Agentic+Vision now uses qwen3.5:9b on the 2060 at 16,384",
           av["id"] == "agentic_vision" and av["model"] == "qwen3.5:9b"
           and av["lane"]["key"] == "main" and av["context"] == 16384, av["model"])
-    check("... its measured latency is labelled LATENCY, never tok/s",
-          "tok_s" not in av["measured"]
+    check("... its measured latency is labelled LATENCY in its own receipt, and its "
+          "dated 2026-11-17 decode rate sits beside it",
+          av["measured"]["tok_s"] == 40.1
+          and av["measured"]["tok_s_on"] == "2026-11-17"
           and "LATENCY" in av["measured"]["source"]
           and av["measured"]["vision_latency_s"]["browser_first_token"] == 4.45
           and av["measured"]["vision_latency_s"]["desktop_cold_total"] == 70.2,
@@ -502,8 +522,8 @@ def main() -> int:
           [(caps[k].model, caps[k].lane, caps[k].context)
            for k in ("documents", "browser")])
     check("... and both keep the General setup's measured figures",
-          caps["documents"].measured["tok_s"] == 44.9
-          and caps["browser"].measured["tok_s"] == 44.9)
+          caps["documents"].measured["tok_s"] == 38.1
+          and caps["browser"].measured["tok_s"] == 38.1)
     check("2026-11-18: Reflective Coach moved to the measured gemma4-26b-a4b pooled "
           "mode - all three cards, heavy mode, its own 32,768-token window",
           caps["reflect"].model == "gemma4:26b-a4b-it-qat"
@@ -513,7 +533,8 @@ def main() -> int:
           (caps["reflect"].model, caps["reflect"].lane, caps["reflect"].mode))
     check("... with the 2026-11-09 bench receipt copied, the measured spill included "
           "and never rounded away",
-          caps["reflect"].measured["tok_s"] == 49.26
+          caps["reflect"].measured["tok_s"] == 25.4
+          and caps["reflect"].measured["tok_s_on"] == "2026-11-17"
           and caps["reflect"].measured["size_gib"] == 15.5
           and caps["reflect"].measured["spill_gib"] == 0.68
           and caps["reflect"].measured["cold_load_s"] == 52.0,
@@ -527,7 +548,8 @@ def main() -> int:
           (caps["pictures"].model, caps["pictures"].lane, caps["pictures"].mode))
     check("... with the 2026-11-09 bench receipt copied, including the 2.24 GiB spill "
           "it really measured",
-          caps["pictures"].measured["tok_s"] == 33.1
+          caps["pictures"].measured["tok_s"] == 14.6
+          and caps["pictures"].measured["tok_s_on"] == "2026-11-17"
           and caps["pictures"].measured["size_gib"] == 19.88
           and caps["pictures"].measured["spill_gib"] == 2.24
           and caps["pictures"].measured["cold_load_s"] == 54.8,
@@ -543,7 +565,9 @@ def main() -> int:
           and med.mode == "medical", (med.model, med.lane, med.context))
     check("... its measured figures are the 2026-11-09 receipt, with no tool calling "
           "claimed",
-          med.measured["tok_s"] == 9.27 and med.measured["cold_load_s"] == 46.8
+          med.measured["tok_s"] == 11.4
+          and med.measured["tok_s_on"] == "2026-11-17"
+          and med.measured["cold_load_s"] == 46.8
           and med.measured["size_gib"] == 17.31 and med.measured["tools"] == 0
           and med.measured["spill_gib"] == 0.0, med.measured)
     check("... its words say the honest cost and refuse the doctor claim",
@@ -663,7 +687,7 @@ def main() -> int:
           "not a preset" in rec["three_gpu_plan"]["future_not_a_preset"]
           and "28 GB" in rec["three_gpu_plan"]["future_not_a_preset"])
     check("General Uncensored is measured in the 2-GPU rows now",
-          rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 45.6
+          rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 42.6
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
 
     t_every_pooled_preset_carries_a_measured_dict()

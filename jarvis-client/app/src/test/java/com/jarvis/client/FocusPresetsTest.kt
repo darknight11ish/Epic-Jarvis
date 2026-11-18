@@ -301,7 +301,7 @@ class FocusPresetsTest {
         val measured = requireNotNull(medical.measured) {
             "Medical carries its measured numbers, in every row's shape"
         }
-        assertEquals(9.27, measured.tokensPerSecond ?: 0.0, 0.001)
+        assertEquals(11.4, measured.tokensPerSecond ?: 0.0, 0.001)
         assertEquals(17.31, measured.sizeGib ?: 0.0, 0.001)
         assertEquals(0.0, measured.spillGib ?: -1.0, 0.001)
         // Heavy mode IS offered (2026-11-02): the PC's pooled three-card lane

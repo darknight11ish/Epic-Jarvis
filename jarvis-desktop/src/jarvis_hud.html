@@ -369,6 +369,13 @@ html[data-hud-shell="split-stage"] .rail-menu-mode{display:none;}
   flex:0 1 45%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .preset[aria-pressed="true"] .preset-model{color:var(--ice);}
+/* The dated speed the PC measured on this preset's own lane (owner's request,
+   2026-11-17): drawn IN the collapsed rail row, never behind a press, an
+   expand button or a hover. The note behind the number is the row's tooltip. */
+.preset .preset-speed{
+  font-size:9px; color:var(--dim); flex:0 0 auto; white-space:nowrap;
+}
+.preset[aria-pressed="true"] .preset-speed{color:var(--ice);}
 .preset-cloud{
   display:flex; align-items:center; justify-content:center; gap:6px;
   width:100%; margin-top:6px; padding:7px 9px; border-radius:3px;
@@ -8683,6 +8690,29 @@ window.addEventListener("jarvis:cloud-escalate", e => {
 const HEAVY_PRESET_WORDS = "This preset needs all three cards at once as one "
   + "pooled lane. While it runs, the other two models are paused - they "
   + "come back when you apply another preset. Loading it takes about half a minute.";
+
+/** The PC's dated live speed for one rail row: "38.1 tok/s", or "not measured"
+ *  when the PC carries no trustworthy number for it. NEVER a guess and never a
+ *  figure borrowed from another model (owner's request, 2026-11-17: the number
+ *  is in the list without pressing anything). */
+function presetSpeedWords(p){
+  const measured = p && typeof p.measured === "object" && p.measured ? p.measured : null;
+  const value = measured ? measured.tok_s : null;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? String(value) + " tok/s" : "not measured";
+}
+
+/** The PC's own note for that number, as the row's tooltip. It is the detail
+ *  behind the figure, never the only way to see the figure itself. */
+function presetSpeedDetail(p){
+  const measured = p && typeof p.measured === "object" && p.measured ? p.measured : null;
+  const on = measured && typeof measured.tok_s_on === "string"
+    ? measured.tok_s_on.trim() : "";
+  const note = measured && typeof measured.tok_s_note === "string"
+    ? measured.tok_s_note.trim() : "";
+  if(!note && !on) return "";
+  return on ? "Measured " + on + ": " + (note || "no note") : "Measured: " + note;
+}
 function renderPresets(){
   const box = $("presets");
   if(!box) return;
@@ -8700,18 +8730,26 @@ function renderPresets(){
     const model = document.createElement("span");
     model.className = "preset-model";
     model.textContent = p.heavy_mode === true ? "needs all three cards" : String(p.model || "");
+    // The PC's dated speed, IN the collapsed row (owner's request, 2026-11-17):
+    // visible without a press, an expand or a hover; the note is the tooltip.
+    const speed = document.createElement("span");
+    speed.className = "preset-speed";
+    speed.textContent = presetSpeedWords(p);
     b.appendChild(name);
     b.appendChild(model);
+    b.appendChild(speed);
     const what = [p.what, p.focus, p.model].filter(x => typeof x === "string" && x).join(" - ");
+    const measured = presetSpeedDetail(p);
     if(p.heavy_mode === true){
       const cost = (typeof p.heavy_words === "string" && p.heavy_words) || HEAVY_PRESET_WORDS;
-      b.title = cost;
+      b.title = cost + (measured ? " " + measured : "");
       b.setAttribute("aria-label", String(p.title || p.id || "preset") + " - " + cost);
       b.addEventListener("click", () => applyPreset(String(p.id || "")));
       box.appendChild(b);
       return;
     }
-    b.title = what + (p.pending ? " (being prepared)" : "");
+    b.title = what + (p.pending ? " (being prepared)" : "")
+      + (measured ? " - " + measured : "");
     b.addEventListener("click", () => applyPreset(String(p.id || "")));
     box.appendChild(b);
   });
