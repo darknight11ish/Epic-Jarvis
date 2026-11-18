@@ -10,15 +10,26 @@ have direct access to your GitHub repositories". A false denial of an ability
 this backend has. The same shape hid the tool on any question that named a
 thing in the owner's words instead of the tool's own hint words.
 
+**The #1382 lane merged before this branch** and patched the two hint words it
+needed (`commit` on `github_ci_status`, `defect`/`register` on `check_records`),
+so on today's `main` the exact commit question is shown a GitHub tool again.
+That does not make this suite vacuous: nothing in the hint table knows the
+owner's repository by NAME, "branches" does not match any tool's hints (so the
+branch question still got a 29-tool full-list fallback), and `feature_guide`
+was still matched by accident. Against that merged `main` this suite fails 8
+checks; with the floor it passes. The safety rule is what keeps the NEXT
+owner-worded question from being hidden, not the two words #1382 added.
+
 WHAT THIS SUITE PROVES, driving the REAL `_new_offer`/`_fill_offer` - the
 exact path a local turn uses - and `tool_diet_selection`, with no model, no
 network, no GPU and no live config:
 
-  1. the hints ALONE match no GitHub tool for the owner's exact words, which
-     is the measured cause; the named-thing floor names the read he wanted;
+  1. the hints cannot see the owner's repository by name: no tool's hint words
+     match "Epic-Jarvis", and the repository read is not a hint match for the
+     exact sentence - the named-thing floor is what names the read he wanted;
   2. the owner's exact question now shows the GitHub commit read and at least
-     one GitHub tool, in a list of at most TOOL_DIET_LIMIT (before the fix it
-     was two tools, neither GitHub);
+     one GitHub tool, in a list of at most TOOL_DIET_LIMIT (before the fix the
+     live turn was shown two tools, neither GitHub);
   3. a question naming a repository, a pull request, a commit, a branch or a
      defect is NEVER dieted away from its read tool - on the owner's live tool
      set AND on the whole built-in catalogue;
@@ -130,24 +141,33 @@ def t_the_suite_reads_the_real_selector_and_the_live_tool_set():
 
 
 # --------------------------------------------------------------------------
-#   1. the measured cause: the hints alone cannot see the owner's words
+#   1. the measured cause: the hints cannot see the owner's repository NAME
 # --------------------------------------------------------------------------
 
-def t_the_hints_alone_match_no_github_tool_for_the_owners_words():
+def t_the_owners_repository_name_is_not_a_tool_hint_and_the_floor_is_what_adds_it():
     """"What is the latest commit on main in Epic-Jarvis?" - the hints that
     decide the diet score a tool by ITS OWN words, and every GitHub tool's
     hints open with `github`. The owner says "Epic-Jarvis", not "GitHub".
 
-    This is the deterministic cause, driven through the production hint table
-    (`AG._TOOL_HINTS_RX`): NO GitHub tool's hints match the sentence, so the
-    diet alone can only show the two incidental matches - and the model then
-    honestly says it has no access. The floor is what recovers the read.
+    The 17:57Z live turn was shown only `web_search` and `feature_guide`. The
+    #1382 lane then gave `github_ci_status` the word "commit" (merged before
+    this branch), so on today's `main` the hints DO reach that one tool for
+    this exact sentence - but NOTHING in the hint table knows the owner's
+    repository by name, and the other named things the battery asks about (a
+    branch, a defect register) still fell into the full-list fallback. The
+    checks below are therefore about what the FLOOR adds, not about the hint
+    table being empty: the repository's name matches no hint, and the
+    repository read is not a hint match for the sentence.
     """
     question = FALSE_DENIAL_QUESTION
+    repo_words = "epic-jarvis"
+    name_hits = [n for n in LIVE
+                 if any(rx.search(repo_words) for rx in AG._TOOL_HINTS_RX.get(n, ()))]
+    check("no tool's hints match the owner's repository by its NAME", not name_hits, name_hits)
     hint_hits = [n for n in LIVE
                  if any(rx.search(question) for rx in AG._TOOL_HINTS_RX.get(n, ()))]
-    check("the hints alone match NO GitHub tool for the owner's own words",
-          not [n for n in hint_hits if n.startswith("github_")], hint_hits)
+    check("the hints alone do not reach the owner's repository read (github_list)",
+          "github_list" not in hint_hits, hint_hits)
     floor = AG.named_action_floor(question, LIVE)
     check("the named-thing floor names the commit read the question is about",
           "github_ci_status" in floor, floor)
@@ -326,7 +346,7 @@ def t_a_hidden_tool_is_still_allowed_and_goes_to_the_gate():
 
 if __name__ == "__main__":
     for fn in (t_the_suite_reads_the_real_selector_and_the_live_tool_set,
-               t_the_hints_alone_match_no_github_tool_for_the_owners_words,
+               t_the_owners_repository_name_is_not_a_tool_hint_and_the_floor_is_what_adds_it,
                t_the_owners_exact_question_now_shows_the_github_tools,
                t_a_question_that_names_a_thing_is_never_dieted_away_from_its_read_tool,
                t_the_eight_battery_questions_show_the_tool_they_need,
