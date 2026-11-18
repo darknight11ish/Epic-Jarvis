@@ -975,7 +975,7 @@ def main(argv: Optional[list] = None) -> int:
                         help="the repository checkout (default: this tool's parent folder)")
     parser.add_argument("--live-dir", default="",
                         help="the folder holding the live start-lane.ps1 (default: "
-                             "%LOCALAPPDATA%\\JarvisOllama)")
+                             "the LOCALAPPDATA JarvisOllama folder)")
     parser.add_argument("--repo-only", action="store_true",
                         help="read no machine at all: prove only the repository's lane "
                              "table against its tracked logon tasks (what CI can check)")

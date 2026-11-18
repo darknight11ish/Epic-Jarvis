@@ -538,6 +538,22 @@ def t_this_repository_is_honourable():
           any(task.lane == "main" and task.port == 11436 for task in tasks), tasks)
 
 
+def t_the_cli_help_works():
+    """--help must work on every Python: argparse %-expands help strings.
+
+    This is the failure a CI runner caught on Python 3.14 and a desk run on
+    3.12 did not: a help string carrying the literal "%LOCALAPPDATA%" made
+    argparse raise "unsupported format character 'O'" at `--help` (and, on
+    3.14, at import of the argument parser - so even a bare run crashed). It
+    is one line of a test here and a red audit job otherwise."""
+    code, output = run_tool("--help")
+    check("the CLI's --help exits 0", code == 0, (code, output[-800:]))
+    check("... and it names the flags", "--live-dir" in output
+          and "--repo-only" in output, output[-800:])
+    check("... with no argparse traceback", "Traceback" not in output
+          and "unsupported format character" not in output, output[-800:])
+
+
 # ---------------------------------------------------------------------------
 #   8. the tool only reads
 # ---------------------------------------------------------------------------
@@ -568,6 +584,7 @@ if __name__ == "__main__":
                t_a_named_card_that_is_not_the_pinned_card_fails,
                t_a_tracked_copy_without_a_header_is_a_failure,
                t_this_repository_is_honourable,
+               t_the_cli_help_works,
                t_the_tool_only_reads_and_never_changes_a_task):
         print(f"\n--- {fn.__name__} ---")
         try:
