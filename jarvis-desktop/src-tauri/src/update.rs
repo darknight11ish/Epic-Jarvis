@@ -1956,10 +1956,13 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
 ///
 /// HOW IT IS REACHED, AND WHY THAT IS THE GATE. The backend's chat fast path
 /// raises one approval card (`jarvis_quick.py`, action `desktop_update`,
-/// PC-only and therefore Windows Hello) and downloads nothing. The owner's
-/// Approve is sent by [`crate::commands::answer_approval`], which reads the
-/// card it is answering from the queue it already holds and, only when that
-/// card's action is the update one, calls this. So the path is:
+/// risky and therefore Windows Hello here) and downloads nothing. The
+/// owner's Approve is sent by [`crate::commands::answer_approval`], which
+/// reads the card it is answering from the queue it already holds and, only
+/// when that card's action is the update one, calls this. (Since 2026-11-18
+/// the phone may answer that same card with its own fingerprint; that path
+/// never reaches this command - the backend runs the same updater itself,
+/// `jarvis_update.py` - so the PC road below is unchanged.) So the path is:
 ///
 ///   chat message -> ONE card -> the owner's yes -> this function -> the
 ///   SAME `update_both` the Settings button uses.

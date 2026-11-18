@@ -262,16 +262,24 @@ def t_the_pc_only_set_is_the_one_the_phone_is_taught():
     PC's set is what that copy is checked against. `desktop_update` joined the
     PC's set on 2026-10-26 and the phone went on offering Approve for it -
     which is why the set is generated into the file both apps' tests read.
+
+    It LEFT the set on 2026-11-18, and this suite follows the PC: the owner
+    ruled that the phone may ask for the update and answer its card with its
+    own fingerprint, exactly as `raise_api_limit` was moved out on 2026-10-11.
+    The card is still risky (the gate has no `_RISK` row for it, so it carries
+    the worst case), so nothing about the phone's own check was loosened.
     """
     import jarvis_owner_check as OC
     import gen_card_words_cases as G
     doc = json.loads(G.document())
     check("the generated file carries the PC's own set",
           doc.get("pc_only_actions") == sorted(OC.PC_ONLY_ACTIONS), doc.get("pc_only_actions"))
-    check("the update card is in it (a phone cannot install a PC update)",
-          "desktop_update" in OC.PC_ONLY_ACTIONS)
+    check("the update card is no longer in it (the phone may answer it now)",
+          "desktop_update" not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+    check("... and the phone's generated copy agrees",
+          "desktop_update" not in (doc.get("pc_only_actions") or []))
     check("the risky cards the owner allowed from the phone are NOT in it",
-          not ({"raise_api_limit", "send_email", "app_merge_change"}
+          not ({"raise_api_limit", "send_email", "app_merge_change", "desktop_update"}
                & set(OC.PC_ONLY_ACTIONS)))
 
 

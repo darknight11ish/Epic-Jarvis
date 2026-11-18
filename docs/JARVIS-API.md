@@ -29274,10 +29274,14 @@ sentence per change, capped at 20 entries.
 * tier `ask` in `jarvis-framework.toml` (an unlisted action would be `ask` too,
   but the row is written down so a later edit to `unknown_action_tier` cannot
   move it silently);
-* in `jarvis_owner_check.PC_ONLY_ACTIONS` - **only this PC can approve it**, and
-  Windows Hello comes first, whatever the tier table says. The phone shows the
-  card and its Approve is refused with the standard `pc_only` 403; the card's
-  own words say "only on this PC";
+* **on this PC, Windows Hello comes first**, whatever the tier table says: the
+  action has no `_RISK` row, so the gate gives it its worst case and
+  `jarvis_owner_check.is_risky` puts it at the prompt. **Since 2026-11-18 it is
+  no longer in `PC_ONLY_ACTIONS`**: the owner ruled the phone may ask for the
+  same update and answer the card with its own fingerprint or PIN (section 226
+  below, and the 2026-11-18 entry in ARCHITECTURE section 8). The phone's
+  approval needs that phone's signed approval; a phone with no approval key is
+  refused with the usual `no_approval_key` sentence;
 * on the **What asks first** page (`jarvis_asks_first.py`, in "Jarvis's own
   settings, memory and voice", and in its `HARD_LIMITS`/`MUST_ASK` sets), so the
   owner can find it beside the other cards over Jarvis's own code, with no
@@ -29296,6 +29300,11 @@ decision is sent, and only when it is `desktop_update` does it call
 the Settings button runs - backend first, then the signed desktop release,
 then a restart. A denial, a timeout, a stale link, a locked PC or a card that
 cannot be read starts nothing.
+
+**A phone's approval never reaches that command**, so the backend runs the
+same updater itself after the yes - `backend/jarvis_update.py`, documented in
+section 226.4 below: `scripts/update-jarvis.ps1` in a detached helper, holding
+the shared `update-in-progress.lock` so the two roads cannot patch at once.
 
 **What deliberately does not exist.** No route downloads an installer, no page
 may start one (the HUD window still holds no update command in
@@ -40079,3 +40088,158 @@ card and a denial serving nothing, and the install surface).
 `backend/test_base_matches_repo.py` 140/0 and `test_base_regeneration.py` 39/0.
 `jarvis-client`'s whole JVM suite is **3,862 tests, 0 failures, 0 skipped**,
 with `SendFileTest` at 25 tests.
+
+## 226. The phone asks for a desktop update, and ONE card decides (2026-11-18)
+
+**The owner's ask.** The desktop program could already update itself, but only
+at the PC, and only after Windows Hello there: "I want the phone to be able to
+ask for that same update, with the phone's own fingerprint." This section
+documents the backend half of that. The phone's own screen is the next slice.
+
+```
+GET  /api/update/status
+POST /api/update/request
+```
+
+Both routes come from `backend/jarvis_update.py`, installed by the drop-in
+folder `plugins/ready/update/` - so there is no patch and no `jarvis_hud.py`
+line. Both go through the core's own origin and token checks (`X-Jarvis-Token`,
+a paired phone's own key) exactly like `/api/files/send`; there is no keyless
+route and no second credential.
+
+### 226.1 The action is the one that already exists
+
+`desktop_update` - `jarvis_quick.UPDATE_ACTION` - tier **"ask"**, the card
+`jarvis_card_words` describes as "Jarvis wants to update Jarvis itself - the
+backend first, then this app". The request raises that SAME card through
+`jarvis_gate.check`; it is not a second name for the ability, and there is no
+`update_jarvis` action anywhere.
+
+What changed on 2026-11-18 is only **where the card may be answered**:
+`jarvis_owner_check.PC_ONLY_ACTIONS` no longer holds it, exactly as
+`raise_api_limit` was taken out on 2026-10-11 for the same owner's reason. The
+two halves of the old rule both remain:
+
+- **on the PC it still asks Windows Hello.** The action has no `_RISK` row, so
+  `risk_for()` gives it the gate's worst case (permanent, outbound) and
+  `is_risky()` sends it to the prompt - the same answer the PC-only list used to
+  give, for a different reason;
+- **on the phone it needs that phone's signed approval**: a fresh fingerprint or
+  PIN over a one-use challenge (`jarvis_devices.check_signed_approval`). A phone
+  with no approval key is refused with "Turn on signed approvals for this phone
+  first." so it can offer to turn signing on.
+
+The card can never be approved with a swipe, in bulk, or by a standing rule: it
+is one card, one decision, and a "no" proposes nothing (`jarvis_asks_first`:
+`HARD_LIMITS`, `MUST_ASK`).
+
+### 226.2 `GET /api/update/status` - what the screen reads
+
+Read-only. It raises no card, downloads no installer and writes no file.
+
+| Field | What it is |
+|---|---|
+| `installed` / `why_installed` | the Jarvis Desktop version Windows' uninstall list records (the newest row), or `null` with a plain "cannot tell: ..." sentence |
+| `published` / `why_published` | the newest published release, from the SAME public manifest the desktop's Settings card reads (`jarvis_quick._release_manifest`) |
+| `newer` | `true`, `false`, or `null` when either number cannot be read - never a guess |
+| `phase` | `idle`, `starting`, `closing`, `patching`, `installing`, `restarting`, `checking`, `done`, or `failed` |
+| `what` | one plain sentence for that phase, shown as-is |
+| `running` | a state file in flight whose writer is still alive |
+| `waiting_for_approval` / `expires_in` | a card this backend raised is waiting, and the seconds left on it |
+| `can_request` / `why_not` | whether a request would be accepted now, and the same sentence the request itself would refuse with; `why_not_detail` carries the extra sentence that says what to fix, when there is one |
+| `from` / `to` | the version the last update moved between |
+| `started_at`, `updated_at`, `finished_at` | when the helper last moved |
+| `ending` / `reason` / `tail` | the updater's own last line, the module's reason, and its last few lines (bounded) |
+| `last` | the last card's outcome (`started`, `denied`, `timed_out`, `refused`, `failed`) |
+
+`can_request` and `why_not` are computed by the SAME function that refuses a
+request (`obstacle()`), in the same order, so a greyed-out button can never name
+a different reason from the tap.
+
+### 226.3 `POST /api/update/request` - ONE card
+
+The body is read for **nothing**: there is no field for a command, a path or a
+version, and nothing from it reaches the card or the child process.
+
+Refusals, each in words and with nothing changed (all 409):
+
+- a card this backend raised is already waiting ("approve or deny that card first");
+- an update is already running (`phase` and its plain sentence on the answer);
+- the PC's own `update-in-progress.lock` is held (the desktop's updater, or a helper);
+- the backend folder (`jarvis_hud.py`'s folder) cannot be found;
+- `scripts/update-jarvis.ps1` cannot be found (the repository folder is unknown);
+- the two versions cannot be compared, or there is nothing newer;
+- the action's tier in `jarvis-framework.toml` is not `"ask"`.
+
+Otherwise it raises exactly one card on a background thread and returns **202**
+with `pending: true`. Nothing is downloaded, installed or changed before the
+owner's yes.
+
+### 226.4 What runs after the yes
+
+- **A PC approval** answers the card through the desktop shell's own
+  `answer_approval`, and its `run_approved_update` runs the same `update_both`
+  the Settings button runs. That path is unchanged by this feature.
+- **A phone approval** never reaches that command, so the backend runs
+  `scripts/update-jarvis.ps1`: the repository's own both-halves updater, the
+  same one the owner runs by hand, which applies the patcher and installs the
+  same signed desktop release. It is started in a **detached helper**
+  (`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`), because the updater closes
+  the backend it was asked from; the helper writes `update-state.json` as it
+  goes, so `/status` reports the phase across the restart the update causes.
+
+The child's arguments are fixed in `_updater_argv`: `powershell -NoProfile
+-ExecutionPolicy Bypass -File <the one script> -BackendPath <the folder this
+module found> -Force`. `-Force` closes a running Jarvis rather than waiting for a
+person at the PC; there is no `-SkipTests`, no `-SkipDesktop`, no `-NoCheck` -
+the card promised both halves and a proven update.
+
+**One update at a time.** The helper holds `update-in-progress.lock`, the same
+file `tools/update_backend.py` and the desktop's `backend_update.rs` write and
+read (a live pid, a heartbeat under 30 minutes, a start under 3 hours, and no
+future or non-finite timestamp). It REFUSES to take a live lock somebody else
+holds, so a PC approval and a phone approval cannot patch the machine at the
+same moment: one runs, the other says an update is already running and changes
+nothing. It sets `JARVIS_INSIDE_PATCHER=1` for its child, which is how
+`backend/run_suites.py` knows a suite sweep belongs to the update that is
+running.
+
+### 226.5 Honest limits
+
+- **The phone's screen is not built.** The two routes exist and are tested; the
+  button, the phase line and the fingerprint prompt on `jarvis-client` are the
+  next slice. `docs/ARCHITECTURE.md` section 8 records that one-sidedness for
+  now, and `tools/check_parity.py` classifies both routes `planned` with the
+  client named in `PENDING_CLIENTS` - the moment the phone calls one of them,
+  that checker fails until the entry is reclassified.
+- **No real phone-driven update has been run.** The suites prove the card, the
+  refusals, the locks and the state file; the field test - a phone raising the
+  card, approving it with a fingerprint, and the PC updating - is still owed,
+  and this section says so rather than implying it happened.
+- **The update pulls the newest code.** `scripts/update-jarvis.ps1` is the
+  manual updater, and it fetches this repository's newest code before patching;
+  a checkout with local changes it cannot fast-forward stays as it is on that
+  script's own terms (it refuses rather than guessing).
+- **A PC approval races a phone approval at most one way, and loses safely.**
+  If the owner approves the phone's card on the PC, the desktop runs its own
+  updater AND the backend's helper wakes: the lock means exactly one patches,
+  and the other's refusal is shown in the HUD chat. Nothing is applied twice.
+
+### 226.6 Proof
+
+`backend/test_phone_authorized_update.py` - the suite this section's claims
+rest on. It runs with **no network, no PowerShell and no card answered**: every
+version read is a fake, every gate call is a fake and the detached helper is a
+recorder. It proves the six things the feature promises: the request raises one
+`desktop_update` card and downloads nothing first; a denied, timed-out, failed
+or loosened gate installs nothing and says so; both routes go through the core's
+origin and token checks with no keyless route, and the phone's generated copy of
+the PC-only set no longer holds `desktop_update` while the action stays risky;
+the action and tier are asserted through `jarvis_framework.action_tier`, the
+shipped TOML, `HARD_LIMITS` and `MUST_ASK`; the card's sentence is asserted word
+for word and refused if it drifts into jargon; and no path in the module can
+start an update without a person's yes (with the module's own source read to
+prove the start sits after that check). The phase markers and the failure
+banners are read OUT of `scripts/update-jarvis.ps1`, so a renamed step or a
+reworded ending fails a test instead of leaving the phone on a phase nobody
+updates.

@@ -2523,7 +2523,6 @@
   "timed_out_next": "Ask the desktop to raise this again.",
   "pc_only_actions": [
     "change_approval_policy",
-    "desktop_update",
     "handoff_bring_to_front",
     "handoff_keep_offering",
     "loosen_what_asks_first",
