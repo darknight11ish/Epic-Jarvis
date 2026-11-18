@@ -81,10 +81,15 @@ class AuditPlumbingTest {
             onPc,
             PcOnlyActions.ALL,
         )
-        assertTrue(
-            "desktop_update is PC-only on the PC since 2026-10-26, so the phone must not " +
-                "offer Approve for it",
+        assertFalse(
+            "desktop_update left the PC's set on 2026-11-18 (the owner: the phone " +
+                "may approve the update card with its own fingerprint), so the phone " +
+                "must offer Approve for it",
             "desktop_update" in PcOnlyActions.ALL,
+        )
+        assertFalse(
+            "the update card is approvable from the phone now, with its fingerprint",
+            PendingItem(id = "x", action = "desktop_update").pcOnly,
         )
         assertTrue(AsksFirst.LOOSEN_ACTION in PcOnlyActions.ALL)
         for (action in PcOnlyActions.ALL) {

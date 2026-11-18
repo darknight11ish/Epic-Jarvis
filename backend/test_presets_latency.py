@@ -24,6 +24,10 @@ from types import SimpleNamespace
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+#: `jarvis_models.py` is one of the owner's own files; the published base carries
+#: it, and the modules under test ask it for the one Ollama address (2026-11-18).
+import _base  # noqa: E402
+_base.put_on_path(_base.folder("jarvis_models.py"))
 import jarvis_presets as P  # noqa: E402
 
 FAILED, PASSED = [], []

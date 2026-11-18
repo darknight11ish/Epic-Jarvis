@@ -574,10 +574,11 @@ def t_no_disk_no_learner():
     src = Path(Q.__file__).read_text(encoding="utf-8")
     code_lines = [l for l in src.split("\n") if l.strip() and not l.strip().startswith("#")]
     imports = sorted(l.strip() for l in code_lines if l.startswith(("import ", "from ")))
-    check("the module imports only the standard library and jarvis_local_http",
+    check("the module imports only the standard library, jarvis_local_http and "
+          "the one address resolver",
           all(i.split()[1].split(".")[0] in {"__future__", "json", "os", "re", "secrets", "threading",
                                              "time", "urllib", "pathlib", "typing", "unicodedata",
-                                             "jarvis_local_http"}
+                                             "jarvis_local_http", "jarvis_models"}
               for i in imports), imports)
     banned = ("jarvis_learner", "jarvis_memory", "jarvis_auto_learn", "jarvis_extract", "jarvis_gate",
               "jarvis_history", "jarvis_chat_history", "jarvis_agent", "jarvis_facts", "sqlite3",
@@ -598,8 +599,10 @@ def t_no_disk_no_learner():
         elif isinstance(node, ast.ImportFrom):
             mods.add(node.module or "")
     jarvis_mods = sorted(mm for mm in mods if mm.startswith("jarvis_"))
-    check("the only jarvis_ module it imports besides jarvis_local_http is jarvis_wellbeing",
-          set(jarvis_mods) == {"jarvis_local_http", "jarvis_wellbeing"}, jarvis_mods)
+    check("the only jarvis_ modules it imports are jarvis_local_http, jarvis_wellbeing "
+          "and the one address resolver (jarvis_models)",
+          set(jarvis_mods) == {"jarvis_local_http", "jarvis_wellbeing", "jarvis_models"},
+          jarvis_mods)
     used = sorted({n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
                    and isinstance(n.value, ast.Name) and n.value.id == "jarvis_wellbeing"})
     check("it calls only crisis() and reply() from jarvis_wellbeing", used == ["crisis", "reply"], used)

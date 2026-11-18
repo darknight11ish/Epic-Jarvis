@@ -457,11 +457,18 @@ object PcOnlyActions {
         "register_approval_key",
         "handoff_keep_offering",
         "handoff_bring_to_front",
-        // 2026-10-26, the PC's ninth: the update card replaces this PC's own
-        // executable and patches the folder Jarvis runs from, so only the PC
-        // can approve it, with Windows Hello. Approving it here would promise
-        // an install nothing on the phone can perform.
-        "desktop_update",
+        // `desktop_update` was here from 2026-10-26 to 2026-11-18: "the update
+        // card replaces this PC's own executable and patches the folder Jarvis
+        // runs from, so only the PC can approve it". The owner took it out on
+        // 2026-11-18 - "the phone should be able to ask for that same update,
+        // with the phone's own fingerprint" - exactly as `raise_api_limit` left
+        // this set on 2026-10-11. It is still a RISKY card (the gate has no
+        // `_RISK` row for it, so it is given the worst case: permanent and
+        // outbound), so this phone's Approve offers its fingerprint or PIN
+        // ([SecurityRules]), and a phone with no approval key is refused with
+        // the existing "no_approval_key" sentence so it can offer signing on.
+        // Nothing on the phone installs anything: the approval lets the PC run
+        // its own updater.
         // 2026-11-04, the PC's tenth: the product check opens one Amazon
         // product page in the owner's own signed-in browser window on the PC,
         // so only the PC can approve it, with Windows Hello. Approving it here

@@ -323,7 +323,8 @@ class EverydayOllama:
     LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
     def __init__(self, url: Optional[str] = None):
-        raw = url if url is not None else (os.environ.get("OLLAMA_URL")
+        import jarvis_models
+        raw = url if url is not None else (jarvis_models.ollama_url_on_this_pc()
                                            or "http://127.0.0.1:11434")
         raw = str(raw).strip().rstrip("/").replace("://0.0.0.0", "://127.0.0.1")
         if "://" not in raw:

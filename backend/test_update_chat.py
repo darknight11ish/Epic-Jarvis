@@ -27,8 +27,10 @@ file supplies, and every gate call is a fake too. What it proves:
    check and "only on this PC".
 4. THE GATE IS THE ONLY DOOR. The module downloads no installer, runs no
    program and installs nothing: the card thread calls the gate and returns.
-   `desktop_update` is in `jarvis_owner_check.PC_ONLY_ACTIONS` and tier "ask",
-   so only this PC can approve it, and Windows Hello comes first.
+   `desktop_update` is tier "ask" and still risky, so the PC asks Windows Hello
+   first; since 2026-11-18 it is no longer in `PC_ONLY_ACTIONS`, because the same
+   card may now be answered on the phone with its own fingerprint
+   (`backend/jarvis_update.py`, `backend/test_phone_authorized_update.py`).
 5. THE TWO FILES AND THE TWO APPS. `jarvis-backend/jarvis_quick.py` is the
    byte-identical twin. The manifest URL in the module is the one the app's
    own updater reads (`tauri.conf.json`), so the chat can never check a
@@ -371,11 +373,19 @@ def t_the_card_thread_only_asks_the_gate():
 # 4. the gate's own tables
 # ---------------------------------------------------------------------------
 
-def t_the_card_is_pc_only_and_ask():
+def t_the_card_is_ask_and_the_pc_still_asks_windows_hello():
     import jarvis_owner_check as O
     import jarvis_card_words as W
-    check("desktop_update is PC-only (Windows Hello, this PC only)",
-          Q.UPDATE_ACTION in O.PC_ONLY_ACTIONS, sorted(O.PC_ONLY_ACTIONS))
+    # It was PC-only from 2026-10-26 to 2026-11-18. The owner moved it out of
+    # that set so the phone may ask for the same update and answer its card
+    # with its own fingerprint (backend/jarvis_update.py,
+    # backend/test_phone_authorized_update.py). The PC's own check is
+    # unchanged: the action has no `_RISK` row, so `is_risky` gives it the
+    # worst case and Windows Hello still comes first here.
+    check("desktop_update is no longer PC-only (the phone may answer it now)",
+          Q.UPDATE_ACTION not in O.PC_ONLY_ACTIONS, sorted(O.PC_ONLY_ACTIONS))
+    check("... and a card row for it is still RISKY, so the PC asks Windows Hello",
+          O.is_risky({"action": Q.UPDATE_ACTION}) is True)
     check("it has a written title, not the fallback",
           W.has_written_title(Q.UPDATE_ACTION))
     summary = W.summary_for(Q.UPDATE_ACTION)
@@ -453,7 +463,8 @@ if __name__ == "__main__":
                t_a_spawn_that_fails_claims_no_card,
                t_the_card_says_exactly_what_will_happen,
                t_the_card_thread_only_asks_the_gate,
-               t_the_card_is_pc_only_and_ask, t_the_twin_is_byte_identical,
+               t_the_card_is_ask_and_the_pc_still_asks_windows_hello,
+               t_the_twin_is_byte_identical,
                t_the_manifest_url_is_the_apps_own,
                t_the_body_carries_the_desktop_facts_through,
                t_the_route_line_is_unchanged):

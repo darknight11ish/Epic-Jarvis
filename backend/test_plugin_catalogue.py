@@ -144,6 +144,15 @@ NO_PATCH = {
     # drop-in loader, so the folder is the whole of its wiring and no patch is
     # added to `jarvis_hud.py`.
     "creator-mode",
+    # The phone asking for a desktop update (2026-11-18; the owner's ask that
+    # the phone be able to ask for the same update the PC can do). Its two
+    # routes (GET /api/update/status, POST /api/update/request) come from
+    # jarvis_update.install(), called by the drop-in loader, so the folder is
+    # the whole of its wiring and no patch is added to `jarvis_hud.py` - nor a
+    # `phone-update.patch` anywhere else. The card it raises is the one the
+    # chat already raises (`desktop_update`), which is why this list grows and
+    # the patch stack does not.
+    "update",
 }
 
 

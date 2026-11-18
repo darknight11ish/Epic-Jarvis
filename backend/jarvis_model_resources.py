@@ -166,7 +166,9 @@ def _active_lane(config_dir: Path, ollama_url: str = "") -> dict:
     if candidate.startswith(_LOCAL_PREFIXES):
         return {"url": candidate, "source": "presets-active-lane.json",
                 "file": str(path), "fallback": False}
-    fallback = (ollama_url or os.environ.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL)
+    import jarvis_models
+    fallback = (ollama_url or jarvis_models.ollama_url_on_this_pc()
+                or DEFAULT_OLLAMA_URL)
     return {"url": str(fallback).strip().rstrip("/"), "source": "OLLAMA_URL",
             "file": str(path), "fallback": True}
 

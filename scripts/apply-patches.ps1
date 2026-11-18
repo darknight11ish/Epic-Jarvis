@@ -3249,6 +3249,20 @@ $SHIPPED = @(
     # The same entry, in the same position, is in backend/_where.py's SHIPPED,
     # above jarvis_bench.py, which stays LAST.
     'jarvis_egress_gate.py'
+    # The phone asking for a desktop update, and ONE card deciding
+    # (jarvis_update.py, 2026-11-18; the owner's ask: "the desktop program can
+    # update itself, but only at the PC ... I want the phone to be able to ask
+    # for that same update, with the phone's own fingerprint"). It raises the
+    # SAME card the chat does - `desktop_update`, tier "ask",
+    # jarvis_quick.UPDATE_ACTION - reads back the installed and published
+    # versions, and runs ONE program after the yes: scripts/update-jarvis.ps1,
+    # the same updater the owner runs by hand, in a detached helper that holds
+    # the PC's own update lock so the desktop's updater and this one cannot
+    # patch the machine at once. Its two routes come from
+    # plugins/ready/update, so it adds no patch and no core line. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED, above
+    # jarvis_bench.py, which stays LAST.
+    'jarvis_update.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

@@ -225,7 +225,9 @@ def configure(*, call: Optional[Callable] = None, ollama_url: Optional[str] = No
 
 
 def _lane() -> tuple:
-    url = _STATE["ollama_url"] or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434"
+    import jarvis_models
+    url = (_STATE["ollama_url"] or jarvis_models.ollama_url_on_this_pc()
+           or "http://127.0.0.1:11434")
     model = _STATE["model"] or os.environ.get("JARVIS_LOCAL_MODEL") or MAIN_MODEL_DEFAULT
     return str(url).rstrip("/"), model
 

@@ -1203,8 +1203,8 @@ def _lane_url(key: str) -> str:
 
 
 def _active_url() -> str:
-    import os
-    return os.environ.get("OLLAMA_URL", "http://127.0.0.1:11436").rstrip("/")
+    import jarvis_models
+    return jarvis_models.ollama_url_on_this_pc().rstrip("/")
 
 
 def _set_active_url(url: str) -> bool:

@@ -1854,7 +1854,7 @@ def t_the_phone_may_approve_a_tool_enable_card_too():
           sorted(OC.PC_ONLY_ACTIONS) == sorted([
               "loosen_what_asks_first", "restore_backup", "pair_device",
               "unretire_shared_key", "register_approval_key", "handoff_keep_offering",
-              "handoff_bring_to_front", "desktop_update", "product_check",
+              "handoff_bring_to_front", "product_check",
               "change_approval_policy"]), sorted(OC.PC_ONLY_ACTIONS))
 
     import jarvis_devices as D

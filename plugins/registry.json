@@ -7,8 +7,8 @@
     "core": 149,
     "missing": 0
   },
-  "folder_count": 29,
-  "ready_count": 58,
+  "folder_count": 30,
+  "ready_count": 59,
   "folders": [
     {
       "name": "skill-hub",
@@ -240,6 +240,14 @@
       "install": "handler",
       "stack_order": 190,
       "summary": "Creator mode: ONE waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card is opened, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in the pack manager's own words in this slice.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "update",
+      "module": "jarvis_update",
+      "install": "handler",
+      "stack_order": 191,
+      "summary": "ask for a desktop update from the phone, and ONE card decides: the same `desktop_update` card the chat already raises, the phone's own fingerprint or PIN to approve it, and the PC's own updater runs only after that yes.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

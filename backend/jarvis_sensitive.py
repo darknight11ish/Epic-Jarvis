@@ -3027,7 +3027,8 @@ def learner_model() -> tuple:
         url = getattr(jarvis_extract, "OLLAMA", None)
     except Exception:
         pass
-    url = url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434"
+    import jarvis_models
+    url = url or jarvis_models.ollama_url_on_this_pc() or "http://127.0.0.1:11434"
     model = None
     for mod in (sys.modules.get("jarvis_hud"), sys.modules.get("__main__")):
         fn = getattr(mod, "_extract_model", None) if mod is not None else None

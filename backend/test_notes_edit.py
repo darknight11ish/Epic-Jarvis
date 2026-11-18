@@ -249,8 +249,14 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     # again - measured from the branch's own plugins/registry.json, and
     # tools/gen_plugin_catalogue.py --check reports it up to date (58 drop-in
     # folders: 29 with a patch + 29 without).
+    # Wave 21 (2026-11-18): the phone-authorized update is the 59th ready folder
+    # and the 30th no-patch drop-in (it was born as a folder, not a patch), so
+    # both figures rise by one - the same one-line change every new drop-in
+    # makes here. Measured from this branch's own plugins/registry.json, and
+    # tools/gen_plugin_catalogue.py --check reports it up to date (59 drop-in
+    # folders: 29 with a patch + 30 without).
     check("the registry is not stale (the folder count rose, and more ready modules)",
-          registry.get("folder_count") == 29 and registry.get("ready_count") == 58,
+          registry.get("folder_count") == 30 and registry.get("ready_count") == 59,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)

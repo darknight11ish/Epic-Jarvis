@@ -923,6 +923,22 @@ CLASSIFICATION = {
     # says phone, and the desktop's command takes no argument at all.
     "/api/files/prepare": ("deliberate", "\"Send a file to your phone…\", the desktop's button (the owner's design of 2026-11-14, SEND-TO-PHONE-2GB-DESIGN-2026-11-14.md sections 6 and 8; backend/jarvis_send_file.py prepare_route, the drop-in folder plugins/ready/send-file/): the PC checks the ONE absolute path the owner just picked in the Windows open-file dialog, refuses a missing file, a folder, a protected path, an empty file or one over CAP_BYTES in words BEFORE any card, registers the candidate and raises the SAME send_file_to_phone card (tier ask) the chat tool raises - nothing is fetchable until that yes, and a denial or timeout releases it. Desktop: folders.rs prepare_file_for_phone (the picker runs in Rust and the command takes no argument, so no page can name a path) and the Settings card's button. Phone: deliberately none - the phone's side is the two PHONE_ONLY routes below, which take an opaque id and numbers and never a path; a phone that named a path here would be the one thing the design forbids, so the route refuses an X-Jarvis-Surface: phone request. ARCHITECTURE section 8."),
 
+    # ---- The phone asking for a desktop update (2026-11-18) -----------------
+    # BACKEND FIRST, and that is the whole status: the owner asked for the phone
+    # to be able to ask for the same update the PC can do, the backend half is
+    # complete here - both routes, the ONE `desktop_update` card, the phone's
+    # fingerprint approval and the runner (backend/jarvis_update.py, the drop-in
+    # folder plugins/ready/update/) - and the phone's own screen for it is the
+    # next slice (ARCHITECTURE section 8 records that one-sidedness for now;
+    # JARVIS-API section 226 documents both routes). The desktop does NOT call
+    # them: its Settings -> Updates button runs the same updater in Rust
+    # (`update.rs` `update_both`) and needs no route for it. So both are
+    # `planned` and named in PENDING_CLIENTS below, which is what that table is
+    # for - a route that really exists, that neither app names yet, whose client
+    # a later slice owns.
+    "/api/update/status": ("planned", "What the phone's update screen reads (2026-11-18; backend/jarvis_update.py status(), the drop-in folder plugins/ready/update/): the installed desktop version, the newest published release, and the phase of any update in flight or just finished, read from update-state.json so it survives the restart the update causes. `can_request` and `why_not` come from the SAME function that refuses a request, so a greyed button names the same reason the tap would. Read-only: no card, no download, no write. Phone: the screen is the next slice (PENDING_CLIENTS below). Desktop: deliberately not called - its own Settings -> Updates card reads src-tauri/src/update.rs directly. ARCHITECTURE section 8; JARVIS-API section 226."),
+    "/api/update/request": ("planned", "Ask for the update from the phone (2026-11-18; backend/jarvis_update.py request()): raises ONE `desktop_update` card through jarvis_gate.check at tier \"ask\" - the SAME action and card the chat raises - and returns 202. The owner answers it on the PC with Windows Hello or on the phone with that phone's own fingerprint or PIN over a one-use challenge; nothing is downloaded, installed or changed before that yes. The request body is read for nothing: no field can carry a command, a path or a version. Phone: the screen is the next slice (PENDING_CLIENTS below). Desktop: deliberately not called - the chat fast path in jarvis_quick.py raises the same card for the PC. ARCHITECTURE section 8; JARVIS-API section 226."),
+
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
@@ -1622,6 +1638,15 @@ RETIRED = {
 # the apps lane wired BOTH apps: it is `ported` now, exactly as the rule above
 # says, and the mechanism stays empty for the next backend-first route.
 PENDING_CLIENTS = {
+    "/api/update/status": (
+        "the phone's update screen (jarvis-client) is the next slice; the backend "
+        "half is complete and tested here (backend/test_phone_authorized_update.py), "
+        "and docs/ARCHITECTURE.md section 8 records the one-sidedness for now"),
+    "/api/update/request": (
+        "the phone's update screen (jarvis-client) is the next slice; the ONE "
+        "`desktop_update` card, the fingerprint approval and the runner are built "
+        "and tested here, and docs/ARCHITECTURE.md section 8 records the "
+        "one-sidedness for now"),
 }
 
 
