@@ -465,8 +465,10 @@ def main() -> int:
           [(p["id"], p["measured"].get("tok_s_on")) for p in text_measured])
     ranged = {p["id"]: p["measured"] for p in text_measured
               if "two runs" in p["measured"].get("tok_s_note", "")}
-    check("... the four rows run twice carry their range, and tok_s is its LOW end",
-          set(ranged) == {"coding", "reflect", "pictures", "medical"}
+    check("... the rows run twice carry their range, and tok_s is its LOW end "
+          "(General's 26B row is the same twice-measured pooled load as "
+          "Reflective Coach's, so it carries the range too)",
+          set(ranged) == {"general", "coding", "reflect", "pictures", "medical"}
           and all(re.search(r"read " + re.escape(str(m["tok_s"])) + r"-",
                             m["tok_s_note"]) for m in ranged.values()),
           {k: v.get("tok_s_note") for k, v in ranged.items()})
