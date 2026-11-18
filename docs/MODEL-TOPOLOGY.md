@@ -1511,6 +1511,27 @@ because each sets its own card (the everyday lane by UUID, the pooled Coding
 lane by removing the variable so it sees all cards, the picture reader by `-1`).
 Rollback is the three commands above, not a registry edit.
 
+## The preset speeds the two apps show (added 2026-11-17)
+
+Every focus-preset row in both apps now shows a measured decode rate, and it is
+the owner's own PC that measured it. A live run on **2026-11-17, 20:50-21:14
+PDT**, loaded each preset's exact model on its real lane at its real context,
+one model at a time (the everyday lane 11436 on the RTX 2060, the coding lane
+11435 on a 2080 SUPER, the pooled lane 11450 across all three cards), drove one
+fixed ~100-token prompt at temperature 0 and read `eval_count / eval_duration`
+from Ollama 0.40.16. The report is
+`.dsh-scratch/wave21/preset-truth/REPORT.md` and every raw row is
+`rows.jsonl` beside it. The figures live in `backend/jarvis_presets.py`'s
+per-preset `measured` object as `tok_s` / `tok_s_on` / `tok_s_note`, so
+the desktop HUD and the phone draw the same number from the same builder.
+
+Where the run repeated a row, speed varied by up to about +/-40% between
+back-to-back runs (Coding 40.3-51.2 tok/s, Reflective Coach 25.4-36.5, Pictures
+& Screens 14.6-25.4, Medical 11.4-11.7); the apps show the **low end** and the
+note carries the range. A row without a trustworthy measurement carries
+`tok_s: null` and the apps say **not measured** - never a guess and never a
+figure borrowed from a different model.
+
 ---
 
 ## The rule: one preset's model at a time, and any preset may use all three (2026-11-18)

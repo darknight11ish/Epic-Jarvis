@@ -21,12 +21,15 @@ and Medical Expert, appended tenth on 2026-11-09 (medgemma:27b, one of the
 pooled rows). They replace the five "work setups" in jarvis_work.py (decision
 2026-10-18).
 
-Every measured number below is from
-.dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it),
-except the everyday 26B's speed and memory, which were measured on this PC on
-2026-11-17 (`.dsh-scratch/wave21/preset-truth/REPORT.md`, every raw row in
-rows.jsonl beside it) for the owner's 2026-11-18 decision; `measured is None`
-means NOT measured for that model - never a guess.
+Each `measured` dict keeps the receipt it was taken from. The decode rate
+`tok_s` is the live measurement run of 2026-11-17
+(`.dsh-scratch/wave21/preset-truth/REPORT.md`, raw rows in rows.jsonl beside
+it), with its own `tok_s_on` date and `tok_s_note`; every other key under
+`measured` keeps its dated receipt (.dsh-scratch/android-verify/
+MODEL-BENCH-2026-10-10.md and STRATEGY beside it). The everyday 26B's figures
+are that run measured ON THE POOLED LANE it now names - the same lane, window
+and cards - and `measured is None` means NOT measured for that model, never a
+guess.
 
 Lanes (this PC, 2026-11-18):
   main    ONE card (the RTX 2060), port 11436 - the everyday lane and the only
@@ -276,7 +279,10 @@ PRESETS = (
               "Homebrew on Windows.",
         model="hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
         lane="main", context=196608, pending=False,
-        measured={"tok_s": 45.6, "tok_s_16k": 45.0, "cold_load_s": [18.5, 20.5],
+        measured={"tok_s": 42.6, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "9.18 GiB, 0 spill, one card (RTX 2060), "
+                                "196,608 context",
+                  "tok_s_16k": 45.0, "cold_load_s": [18.5, 20.5],
                   "vram_gib_32k": 7.3, "context_max": 262144, "params_b": 8.95,
                   "disk_gib": 6.3, "licence": "Apache-2.0",
                   "source": "measurement 2026-10-18: one-run 6-prompt general rubric, "
@@ -319,7 +325,11 @@ PRESETS = (
                     "and that reload takes about 50 seconds. "
                     "Loading it takes about half a minute.",
         tools=("code", "files"),
-        measured={"tok_s": 83.8, "rubric": "6/6 coding rubric", "size_gib": 16.2,
+        measured={"tok_s": 40.3, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "16.17 GiB, 0 spill, all three cards, 49,152 "
+                                "context; two runs read 40.3-51.2 tok/s, the low "
+                                "end is shown",
+                  "rubric": "6/6 coding rubric", "size_gib": 16.2,
                   "gpu_use": "100% GPU across all three cards", "cold_load_s": 31.6,
                   "spill_gib": 0.0, "context_zero_spill": 49152,
                   "context_measured": 49152,
@@ -363,7 +373,10 @@ PRESETS = (
         model="qwen3.5:9b", lane="main", context=16384,
         prompt="agentic", diet="agentic",
         tools=("browser", "phone", "forms", "notes"),
-        measured={"vision_latency_s": {"browser_first_token": 4.45,
+        measured={"tok_s": 40.1, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "5.49 GiB, 0 spill, one card (RTX 2060), 16,384 "
+                                "context",
+                  "vision_latency_s": {"browser_first_token": 4.45,
                                        "browser_total": 25.6,
                                        "desktop_warm_first_token": 0.89,
                                        "desktop_warm_total": 46.9,
@@ -399,7 +412,10 @@ PRESETS = (
               "everyday model's cold load (about 50 seconds).",
         model="qwen3.5:4b", lane="main", context=16384,
         prompt="fast", diet="fast",
-        measured={"tok_s": 77.1, "size_gib": 3.16, "vram_gib": 4.15, "spill_gib": 0.0,
+        measured={"tok_s": 83.2, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "3.20 GiB, 0 spill, one card (RTX 2080 SUPER), "
+                                "16,384 context",
+                  "size_gib": 3.16, "vram_gib": 4.15, "spill_gib": 0.0,
                   "context": 65536,
                   "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 "
                             "SUPER (repo restatement: docs/WORK-SETUPS.md:29, "
@@ -430,7 +446,11 @@ PRESETS = (
         model="gemma4:26b-a4b-it-qat", lane="pooled", context=32768,
         heavy_mode=True, mode="gemma4-26b-a4b",
         prompt="balanced", diet="balanced",
-        measured={"tok_s": 49.26, "size_gib": 15.5, "spill_gib": 0.68,
+        measured={"tok_s": 25.4, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "15.50 GiB, 0.68 GiB spill, all three cards, "
+                                "32,768 context; two runs read 25.4-36.5 tok/s, the "
+                                "low end is shown",
+                  "size_gib": 15.5, "spill_gib": 0.68,
                   "spill_pct": 4.4, "vram_pct": 96, "cold_load_s": 52.0,
                   "context_measured": 32768,
                   "source": "model matrix 2026-11-09: gemma4:26b-a4b-it-qat at "
@@ -470,7 +490,11 @@ PRESETS = (
         heavy_mode=True, mode="qwen3-vl-30b-a3b",
         prompt="balanced", diet="balanced",
         tools=("pictures",),
-        measured={"tok_s": 33.1, "size_gib": 19.88, "spill_gib": 2.24,
+        measured={"tok_s": 14.6, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "19.88 GiB, 2.24 GiB spill, all three cards, "
+                                "32,768 context; two runs read 14.6-25.4 tok/s, the "
+                                "low end is shown",
+                  "size_gib": 19.88, "spill_gib": 2.24,
                   "spill_pct": 11.2, "vram_pct": 89, "cold_load_s": 54.8,
                   "context_measured": 32768,
                   "source": "model matrix 2026-11-09: qwen3-vl:30b-a3b-instruct at "
@@ -502,7 +526,10 @@ PRESETS = (
               "different model.",
         model="qwen3.5:9b", lane="main", context=196608,
         prompt="balanced", diet="balanced",
-        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        measured={"tok_s": 38.1, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "9.18 GiB, 0 spill, one card (RTX 2060), "
+                                "196,608 context; the same measured row as General",
+                  "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
         words=("document", "documents", "long read", "summarise", "summarize", "pdf",
                "long text", "notes", "wiki", "study"),
         strong=("read this long document", "summarise this"),
@@ -520,7 +547,10 @@ PRESETS = (
               "Vision already uses.",
         model="qwen3.5:9b", lane="main", context=196608,
         prompt="agentic", diet="agentic",
-        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        measured={"tok_s": 38.1, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "9.18 GiB, 0 spill, one card (RTX 2060), "
+                                "196,608 context; the same measured row as General",
+                  "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
         tools=("browser", "forms"),
         words=("browser", "web page", "form", "fill in", "website"),
         strong=("use the browser", "fill in this form"),
@@ -545,7 +575,11 @@ PRESETS = (
               "model trained on clinical text can still be wrong about your case.",
         model="medgemma:27b", lane="pooled", context=32768, heavy_mode=True, mode="medical",
         prompt="balanced", diet="balanced",
-        measured={"tok_s": 9.27, "tok_s_long": 11.1, "tok_s_short": 7.89,
+        measured={"tok_s": 11.4, "tok_s_on": "2026-11-17",
+                  "tok_s_note": "17.31 GiB, 0 spill, all three cards, 32,768 "
+                                "context; two runs read 11.4-11.7 tok/s, the low "
+                                "end is shown",
+                  "tok_s_long": 11.1, "tok_s_short": 7.89,
                   "size_gib": 17.31, "spill_gib": 0.0, "cold_load_s": 46.8,
                   "context_measured": 32768,
                   "gpu_use": "100% in video memory, 0 B spilled",

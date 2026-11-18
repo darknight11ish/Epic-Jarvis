@@ -90,8 +90,19 @@ const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/cs
   ".json": "application/json", ".woff2": "font/woff2", ".woff": "font/woff" };
 const ORIGIN = "http://127.0.0.1:4719";
 
-function fixturePayload(chosen = null) {
+function fixturePayload(chosen = null, noSpeed = false) {
   const presets = JSON.parse(JSON.stringify(FIXTURE.presets));
+  // The "not measured" control: a PC that carries no dated speed for any row.
+  // The lists must say so rather than inventing a number.
+  if (noSpeed) {
+    for (const preset of presets) {
+      if (preset.measured && typeof preset.measured === "object") {
+        delete preset.measured.tok_s;
+        delete preset.measured.tok_s_on;
+        delete preset.measured.tok_s_note;
+      }
+    }
+  }
   const chosenPreset = chosen ? presets.find((p) => p.id === chosen) || null : null;
   return {
     found: `${presets.length} focus presets`,
@@ -168,7 +179,7 @@ function mannerPayload(current = PERSONALITIES.default, mine = []) {
 async function openHud(browser, options = {}) {
   const state = {
     proxy: options.proxy !== false,
-    payload: fixturePayload(options.chosen || null),
+    payload: fixturePayload(options.chosen || null, options.noSpeed === true),
     presetsAvailable: options.presetsAvailable !== false,
     manner: mannerPayload(options.personality || PERSONALITIES.default,
       options.userPersonalities || []),
@@ -355,6 +366,9 @@ async function presetRows(page) {
       id: b.dataset.preset,
       title: b.querySelector(".preset-name").textContent,
       model: b.querySelector(".preset-model").textContent,
+      // The dated speed drawn IN the collapsed row (owner's request, 2026-11-17).
+      speed: (b.querySelector(".preset-speed") || {}).textContent || "",
+      titleWords: b.title,
       pressed: b.getAttribute("aria-pressed"),
     })));
 }
@@ -418,6 +432,31 @@ await check("the rail lists the PC's ten presets in the contract's order, titles
   assert.deepEqual(rows.map((r) => r.model),
     FIXTURE.presets.map((p) => (p.heavy_mode === true ? "needs all three cards" : p.model)),
     "models drifted");
+  // The owner's one ask (2026-11-17): every preset's measured tokens a second
+  // is IN the collapsed row, drawn from the PC's own dated figure - no press,
+  // no expand and no hover, and never a number the PC did not send.
+  assert.deepEqual(rows.map((r) => r.speed),
+    FIXTURE.presets.map((p) => `${p.measured.tok_s} tok/s`),
+    "the dated speed is not in every rail row");
+  // ... and the note is the detail behind it, in the row's tooltip.
+  for (const [i, p] of FIXTURE.presets.entries()) {
+    assert.match(rows[i].titleWords, new RegExp(`Measured 2026-11-17`),
+      `the note is not in ${p.id}'s tooltip: ${rows[i].titleWords}`);
+  }
+  assert.deepEqual(problems, []);
+});
+
+await check("a preset the PC did not measure says not measured, in both lists", async () => {
+  const { page, problems } = await openHud(browser, { noSpeed: true });
+  const rows = await presetRows(page);
+  await openPresetMenu(page);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.deepEqual(rows.map((r) => r.speed), FIXTURE.presets.map(() => "not measured"),
+    "a rail row without a measurement did not say so");
+  assert.deepEqual(menu.model.map((r) => r.text),
+    FIXTURE.presets.map((p) => `${p.title} - not measured`),
+    "a menu row without a measurement did not say so");
   assert.deepEqual(problems, []);
 });
 
@@ -1005,8 +1044,10 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
   const live = FIXTURE.presets;
   assert.deepEqual(menu.model.map((r) => r.preset), live.map((p) => p.id),
     "the menu does not list the PC's presets in its order");
-  assert.deepEqual(menu.model.map((r) => r.text), live.map((p) => p.title),
-    "the presets' visible labels are not the PC's own titles");
+  // The PC's own title, plus the PC's own dated speed (2026-11-17) IN the row.
+  assert.deepEqual(menu.model.map((r) => r.text),
+    live.map((p) => `${p.title} - ${p.measured.tok_s} tok/s`),
+    "the presets' visible labels are not the PC's own titles and dated speeds");
   // WHICH ROWS ARE HEAVY COMES FROM THE CONTRACT, NEVER FROM A LIST HERE
   // (2026-11-18). This used to pin ["coding", "medical"] by hand, so the next
   // preset to gain or lose `heavy_mode` broke this check for a reason that was
