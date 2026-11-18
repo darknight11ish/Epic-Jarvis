@@ -7961,11 +7961,46 @@ _CAP_ASKS_ABOUT_A_CARD = re.compile(
 
 #: Does the question come from the PHONE toward the PC while the row's own words
 #: describe the PC sending TO the phone? Then the row answers the opposite
-#: direction and must not be claimed as this question's answer (the measured
-#: "Can I send a file from my phone to my PC?" - the catalogue has no row for
-#: that direction, so it falls through rather than answer backwards).
+#: direction and must not be claimed as this question's answer. The sentence
+#: this was written for is the measured "Can I send a file from my phone to my
+#: PC?" (2026-11-06): while the catalogue had ONE file row the honest answer
+#: was to fall through, because that row described the other direction. Since
+#: 2026-11-15 the catalogue HAS the phone->PC row (`document-from-phone`, with
+#: the alias "send a file from my phone to my pc"), so the row is now chosen
+#: rather than the question dropped - `_cap_resolve` filters direction-wrong
+#: rows out and answers from the best direction-correct one.
 _CAP_FROM_PHONE = re.compile(r"\bfrom\s+(?:my|the|a)\s+(?:phone|android|mobile)\b")
 _CAP_TO_PHONE = re.compile(r"\bto\s+(?:your|the|my|a)\s+phone\b")
+#: The other end of the same question (2026-11-18): the owner says the file is
+#: going TO this PC. A row whose own words send a file to the PHONE is then the
+#: opposite direction, exactly as `_CAP_FROM_PHONE` reads it the other way
+#: round - so "Can you send a file for me to my PC?" must not be answered by
+#: `file-from-pc` ("to your phone") while `document-from-phone` (phone -> this
+#: PC) is the row that says it.
+_CAP_TO_PC = re.compile(
+    r"\b(?:to|onto|into)\s+(?:my|the|this|a|your)\s+"
+    r"(?:pc|computer|laptop|desktop)\b")
+
+#: THE ONE "can you ..." SHAPE THIS MATCHER MAY TAKE (2026-11-18), and why it
+#: is this narrow. "can you ..." is NOT a generic capability lead: it is how
+#: the owner asks Jarvis to DO things, and `backend/test_chat_honesty.py` pins
+#: that "can you write a nice email for my boss?" and "can you help me create
+#: a plan" keep their own paths. The owner's measured sentence - "Can you send
+#: a file for me to my PC?" - is a question about the phone-to-PC door, and
+#: that direction has NO tool: the phone's own Settings picks the file, so
+#: `send_file_to_phone` (the real tool) only ever runs the other way. Claiming
+#: this shape therefore takes no action away from the model, and it stops the
+#: measured false denial ("I can't send files directly") that the catalogue
+#: answers with its own steps. Only "to my PC/computer/laptop/desktop" is
+#: accepted: "can you send a file to my phone" keeps its own path.
+_CAP_CAN_YOU_TO_PC = re.compile(
+    r"can\s+(?:you|jarvis)\s+"
+    r"(?=[^.!?\n]*\b(?:send|upload|transfer|move|copy|put|bring|get|receive|"
+    r"take|share)\b"
+    r"[^.!?\n]*\b(?:file|files|document|documents|photo|photos|picture|pictures|"
+    r"pdf|word|excel|powerpoint|markdown|csv|archive|zip)\b"
+    r"[^.!?\n]*\b(?:to|onto|into)\s+(?:my|the|this|a|your)\s+"
+    r"(?:pc|computer|laptop|desktop)\b)")
 
 #: The limit/permission questions answered EARLY, in the owner's terms, from the
 #: row that records the rule. Each entry is (pattern, row id, leading verdict):
@@ -8158,8 +8193,19 @@ def _cap_index() -> Optional[list]:
                     phrases.add(frozenset(piece))
         singles = ({frozenset((id_seq[0],))} if len(id_seq) == 1 else set())
         what = frozenset(_cap_tokens(row.get("what") or ""))
+        #: Each alias as the SET of its content words (function words and order
+        #: gone), for the exact-alias comparison in `_cap_resolve` below. Kept
+        #: per alias - never merged into `name` - because the comparison is
+        #: "the question's words ARE one of these aliases", not "share a word
+        #: with the row".
+        alias_sets = []
+        for alias in (row.get("aliases") or ()):
+            tokens = frozenset(_cap_tokens(alias))
+            if len(tokens) >= 2:
+                alias_sets.append(tokens)
         index.append({"row": row, "name": name, "name_seq": name_seq, "id_seq": id_seq,
-                      "phrases": phrases, "singles": singles, "what": what})
+                      "phrases": phrases, "singles": singles, "what": what,
+                      "alias_sets": alias_sets})
         for token in name | what:
             df[token] = df.get(token, 0) + 1
         for token in name:
@@ -8181,13 +8227,34 @@ def _cap_tail(raw) -> str:
     text = re.sub(r"\s+answer\s+in\s+(?:one|a\s+short|a\s+single)\s+sentence$", "", text)
     text = re.sub(r"\s+please$", "", text)
     seen = _CAP_LEAD.match(text)
+    if seen:
+        return text[seen.end():].strip()
+    # 2026-11-18, the owner's own phone report: "Can you send a file for me to
+    # my PC?" The generic lead above deliberately does NOT take "can you ..."
+    # - that is how the owner asks Jarvis to DO things - so only the measured
+    # file-transfer shape in `_CAP_CAN_YOU_TO_PC` strips it, and only toward
+    # THIS PC: that direction has no tool of ours (the phone's own Settings
+    # picks the file), so claiming the sentence takes no action away from the
+    # model. "Can you send a file to my phone" keeps its own path, because
+    # send_file_to_phone IS a real tool.
+    seen = _CAP_CAN_YOU_TO_PC.match(text)
     return text[seen.end():].strip() if seen else ""
 
 
 def _cap_direction_ok(row: dict, text: str) -> bool:
-    """Is this row's direction the question's own? See _CAP_FROM_PHONE."""
+    """Is this row's direction the question's own? See _CAP_FROM_PHONE.
+
+    Two ways a question can name the phone->PC direction: it says the file
+    comes FROM the phone, or that it goes TO this PC. Either way a row whose
+    own words send a file to the PHONE answers the opposite direction and must
+    not be quoted (2026-11-18: `file-from-pc`'s "to your phone" against "Can
+    you send a file for me to my PC?").
+    """
     what = str(row.get("what") or "").lower()
-    return not (_CAP_FROM_PHONE.search(text) and _CAP_TO_PHONE.search(what))
+    if _CAP_TO_PHONE.search(what) and (
+            _CAP_FROM_PHONE.search(text) or _CAP_TO_PC.search(text)):
+        return False
+    return True
 
 
 def _cap_resolve(raw) -> Optional[dict]:
@@ -8226,6 +8293,16 @@ def _cap_resolve(raw) -> Optional[dict]:
                     r"(?:(how|where)\b|(?:can|could|do|does|is|are)\b)", text_low)
     about = said_you or not (lead and lead.group(1))
     df, total = index[0]["df"], len(index)
+    # THE MEASURED PHONE->PC TRANSFER (2026-11-18). The owner asked "Can you
+    # send a file for me to my PC?": that is the catalogue's own alias "send a
+    # file from my phone to my PC" minus two words, so none of its two-word
+    # phrases carries the row's id word ("document"/"phone") and the row could
+    # not be named at all - the model guessed "I can't send files directly".
+    # When the question names this direction, an alias whose content words ARE
+    # the question's content words names the row outright. Exact equality of
+    # the content words (function words and order ignored), never a guess - and
+    # only for this direction, so no other question gains reach.
+    transfer_to_pc = bool(_CAP_FROM_PHONE.search(tail) or _CAP_TO_PC.search(tail))
     found = []
     for item in index:
         in_name = tuple(t for t in query if t in item["name"])
@@ -8246,21 +8323,29 @@ def _cap_resolve(raw) -> Optional[dict]:
         # neighbouring one.
         named = [p for p in named
                  if len(p) == 1 or any(t in item["id_seq"] for t in p)]
-        if not named:
+        exact = (query_set if transfer_to_pc and query_set in item["alias_sets"]
+                 else frozenset())
+        if not named and not exact:
             continue
-        if not about and all(len(p) == 1 for p in named):
+        if not about and not exact and all(len(p) == 1 for p in named):
             # A lone one-word name from a question that does not say whose
             # features they are is not enough ("how do I delete my account on
             # Netflix" shares only "account").
             continue
+        named_words = {t for p in named for t in p} | set(exact)
         score = 0.0
         if named:
+            # Unchanged from 2026-11-06 ON PURPOSE: overlapping two-word phrases
+            # each count their own words, and the measured margins depend on
+            # it. The exact alias is added on the same scale, once.
             score += 3.0 * sum(_cap_idf(t, df, total)
                                for p in named for t in p)
+        if exact:
+            score += 3.0 * sum(_cap_idf(t, df, total) for t in exact)
         if in_what:
             score += sum(_cap_idf(t, df, total) for t in in_what)
         found.append({"row": item["row"], "score": score,
-                      "named": len({t for p in named for t in p}),
+                      "named": len(named_words),
                       "whats": len(in_what),
                       "ok": _cap_direction_ok(item["row"], tail),
                       "first": min(query.index(t) for t in in_name + in_what)})
@@ -8268,13 +8353,20 @@ def _cap_resolve(raw) -> Optional[dict]:
         return None
     found.sort(key=lambda c: (-c["named"], -c["score"], -c["whats"], c["first"],
                               str(c["row"].get("id") or "")))
-    best = found[0]
-    if not best["ok"]:
-        # The row that fits best answers the OPPOSITE direction ("a file from
-        # my phone to my PC" against the PC's own File-from-your-PC row), so
-        # there is no honest catalogue answer at all. Fall through rather than
-        # answer backwards from a worse-fitting row.
+    # ONLY the rows whose direction is the question's own may answer it. This
+    # used to give up when the highest-scoring row was direction-wrong, which
+    # was right while the catalogue had one file row: the measured 2026-11-18
+    # sentence "Can I send a file from my phone to my PC?" ranks `file-from-pc`
+    # first because its own id says "file from pc", so the fast path answered
+    # None even though `document-from-phone` - the row whose alias IS that
+    # sentence - is right there in the list. A direction-wrong row must lose to
+    # the honest one, never silence it; when NO row has the question's
+    # direction there is still no honest catalogue answer and this falls
+    # through exactly as before.
+    usable = [c for c in found if c["ok"]]
+    if not usable:
         return None
+    best = usable[0]
     if best["score"] < _CAP_WEAK_MIN:
         return None
     if any(word in text_low for word in _CAP_ASKED_STRONGER):
@@ -8287,8 +8379,7 @@ def _cap_resolve(raw) -> Optional[dict]:
                         ("what", "where", "asks", "limit")).lower()
         if not any(word in said for word in _CAP_ASKED_STRONGER):
             return None
-    others = [c for c in found[1:] if c["row"].get("id") != best["row"].get("id")
-              and c["ok"]]
+    others = [c for c in usable[1:] if c["row"].get("id") != best["row"].get("id")]
     if others and others[0]["score"] * _CAP_MARGIN > best["score"]:
         # Two rows fit about as well: this is not a confident answer, so the
         # model answers exactly as before rather than the fast path guessing.

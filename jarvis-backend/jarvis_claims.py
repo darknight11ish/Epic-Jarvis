@@ -48,6 +48,14 @@ drift apart:
     own confirmation as an explicit `Correction - ...` line. Only a tool that
     really ran and returned ok triggers it; a refused or failed one leaves an
     honest limitation standing.
+  - surface_correction(text, steps) (2026-11-18) - a claim that something was
+    SHOWN, OPENED or SENT when no tool in this answer did it: "It's on your
+    screen." (the owner's own phone report of 2026-11-18) and "It's been sent."
+    are bare-pronoun confirmations that CLAIMS_DONE's first-person head cannot
+    see and _PASSIVE_CLAIM's named object cannot see either. Backed only by the
+    tools that really show/open something or really send something; the same
+    "earlier/already" and question/conditional exemptions as the rest, so a
+    true sentence is never corrected.
 
 "An action tool" is any tool that is not in READ_ONLY_TOOLS. The check is
 deliberately loose about WHICH action: an 8B model's wording ("I've set up
@@ -592,3 +600,117 @@ def schedule_correction(text: str, steps) -> str:
     if not said:
         return ""
     return SCHEDULE_CORRECTION_HEAD + " ".join(said)
+
+
+# --------------------------------------------------------------------------
+#   A claim that something was SHOWN, OPENED or SENT (2026-11-18)
+# --------------------------------------------------------------------------
+#
+# MEASURED. On the owner's phone he asked Jarvis to send a file to his PC; the
+# answer denied the catalogue's own feature, and a later answer told him
+# "it's on your screen" about something no tool had put there. That sentence
+# passed every check this module has: CLAIMS_DONE needs a first-person head
+# ("I've opened..."), _PASSIVE_CLAIM needs a named object ("The settings page
+# is open."), and neither reads a bare-pronoun subject at all. The same is true
+# of "It's been sent." - the short confirmation an owner reads as "it really
+# went" while nothing was sent.
+#
+# THE SHAPE is the same one `unbacked_claim` and `schedule_correction` use: a
+# plain pattern over the model's own words plus THIS turn's `steps` - what the
+# tools really returned, never what the model says ran - and ONE correction
+# line, added at the end of the answer by jarvis_agent.postscript_lines. It
+# never rewrites the model's words and never fails an answer.
+#
+# WHAT COUNTS AS BACKING, and why each tool is here. A "shown"/"opened" claim is
+# backed by a tool whose own result really puts something on the owner's screen
+# or opens something for them: `retirement_whatif` writes its table on the
+# owner's screen by code (its result carries `"shown_on_screen": True`),
+# `product_check` opens one page in the owner's own browser window,
+# `conversation_open` opens one kept conversation, and the three acting tools
+# open/click/type in a real window or app. `self_portrait` and
+# `refresh_abilities` are deliberately NOT here: they read, they show nothing.
+# A "sent" claim is backed by a tool that really sends something in the owner's
+# name - email, a text, the one file to the phone, or a GitHub write. A draft is
+# not a send, so `draft_email` is absent on purpose.
+#
+# The two exemptions are this module's own, so a wrong correction is never
+# added after a true sentence (`claims_done`'s rule): a question or a
+# conditional/offer, and anything that says "earlier"/"already" (done before
+# this answer). A sentence CLAIMS_DONE already corrects ("I've sent it") is
+# left to that line - this one only adds the shapes it cannot see.
+_SHOWN_OPENED_TOOLS = frozenset({
+    "retirement_whatif", "product_check", "conversation_open",
+    "browser_control", "control_computer", "control_phone",
+})
+_SENT_TOOLS = frozenset({
+    "send_email", "send_text_message", "send_file_to_phone",
+    "github_comment", "github_open_issue", "github_open_pr", "github_pr_review",
+    "github_issue_labels", "github_edit_pr", "github_workflow",
+    "github_rerun_workflow", "github_merge_pr", "github_fix_and_push",
+    "github_create_repo", "github_issue_state",
+})
+
+#: "It's on your screen." (the owner's own report), "That is up on the
+#: screen.", "It has been shown.", "I've opened it on your screen.", "I have
+#: put it on your screen.", "It's open on your screen." - the shapes a bare
+#: pronoun can carry, which CLAIMS_DONE and _PASSIVE_CLAIM cannot see.
+_SHOWN_OPENED_CLAIM = re.compile(
+    r"\b(?:it|that|this)(?:'s|\s+is|\s+was)\s+"
+    r"(?:now\s+|already\s+|right\s+)?(?:on|up\s+on)\s+(?:your|the)\s+screen\b"
+    r"|\b(?:it|that|this)(?:'s|\s+is|\s+has\s+been|\s+was)\s+"
+    r"(?:now\s+|already\s+|been\s+)?(?:shown|displayed)\b"
+    r"|\b(?:it|that|this)(?:'s|\s+is)\s+(?:now\s+)?open\s+"
+    r"(?:on|in)\s+(?:your|the)\s+(?:screen|window)\b"
+    r"|\bi(?:'ve|\s+have|\s+just|\s+now)\s+"
+    r"(?:opened|shown|displayed|put|brought)\s+(?:it|that|this|them)\b",
+    re.I)
+
+#: "It's been sent." / "That has been sent." - the short pronoun confirmation.
+#: The first-person "I've sent it" is NOT here: CLAIMS_DONE already reads that
+#: verb, and "The file has been sent." is not here either, because
+#: _PASSIVE_CLAIM's named object reads it - adding a second line for one
+#: sentence would repeat the correction.
+_SENT_CLAIM = re.compile(
+    r"\b(?:it|that|this)(?:'s|\s+is|\s+has\s+been|\s+was)\s+"
+    r"(?:now\s+|already\s+)?(?:been\s+)?sent\b",
+    re.I)
+
+SHOWN_OPENED_CLAIM_CORRECTION = (
+    "(Correction - I did not open or show anything on your screen in this "
+    "answer: no tool ran that opens or displays something. The words above are "
+    "the whole answer.)")
+SENT_CLAIM_CORRECTION = (
+    "(Correction - nothing was sent in this answer: no sending tool ran.)")
+
+
+def _ran_any_ok(steps, tools) -> bool:
+    """True when one of `tools` RAN and returned ok in this answer."""
+    for s in steps or ():
+        if isinstance(s, dict) and s.get("ran") is True and s.get("ok") is True \
+                and s.get("tool") in tools:
+            return True
+    return False
+
+
+def surface_correction(text: str, steps) -> str:
+    """The correction line for an answer that claims something was shown,
+    opened or sent and no tool in this answer did it, or "".
+
+    Read per sentence, like `claims_done`, so one honest sentence does not
+    excuse a claim in the next. One line at most: a second would repeat the
+    point. A missing step list (a cloud turn offers no tools at all) means
+    nothing can back the claim, which is exactly right there.
+    """
+    for m in _SENTENCE.finditer(text or ""):
+        sentence = m.group(0).strip()
+        if not sentence:
+            continue
+        if _EARLIER.search(sentence) or _NOT_A_CLAIM.search(sentence):
+            continue
+        if _SHOWN_OPENED_CLAIM.search(sentence):
+            if not _ran_any_ok(steps, _SHOWN_OPENED_TOOLS):
+                return SHOWN_OPENED_CLAIM_CORRECTION
+        elif _SENT_CLAIM.search(sentence):
+            if not _ran_any_ok(steps, _SENT_TOOLS):
+                return SENT_CLAIM_CORRECTION
+    return ""
