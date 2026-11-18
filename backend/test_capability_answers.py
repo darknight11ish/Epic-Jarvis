@@ -585,10 +585,13 @@ def t_outside_the_catalogue_falls_through():
 
 
 # --------------------------------------------------------------------------
-#   6. every one of the 183 rows answers from itself
+#   6. every one of the 184 rows answers from itself
 # --------------------------------------------------------------------------
+# 184 since 2026-11-18, the picture-conversion row (pictures into one PDF, or
+# one picture into another format). The pin is the catalogue's real length, so
+# a row that is added without an answer of its own words fails here.
 def t_every_catalogue_row_answers_from_its_own_words():
-    check("the catalogue has its 183 rows", len(C.FEATURES) == 183,
+    check("the catalogue has its 184 rows", len(C.FEATURES) == 184,
           len(C.FEATURES))
     missing = []
     for row in C.FEATURES:
