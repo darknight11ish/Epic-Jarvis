@@ -33,7 +33,6 @@ infinite retry loop against a service that is already refusing.
 from __future__ import annotations
 
 import json
-import os
 import re
 import threading
 import time
@@ -575,13 +574,21 @@ def is_remote_model(name: str) -> bool:
 def _default_local_url() -> str:
     """This PC's own default Ollama address: `OLLAMA_URL`, or Ollama's default.
 
-    The same two answers `jarvis_hud.OLLAMA_URL` takes (the owner's PC exports
-    11436; a fresh clone, a CI runner and this repository's suites have none).
-    The number is read from the lane module that owns it, never typed here.
+    It asks `jarvis_models.ollama_url_on_this_pc()` - the ONE resolver every
+    shipped module uses since PR #1330 - rather than reading the environment
+    here: that resolver refuses a host that is not this PC, and
+    `backend/test_ollama_url_routing.py` fails any SECOND direct read of
+    `OLLAMA_URL` in the base, in whatever module (its own docstring explains
+    why a checked address is not a constant). The lane module's own default is
+    the fallback for a backend too old to have the resolver.
     """
-    base = str(os.environ.get("OLLAMA_URL") or "").strip().rstrip("/")
-    if base:
-        return base
+    try:
+        import jarvis_models
+        url = str(jarvis_models.ollama_url_on_this_pc() or "").strip().rstrip("/")
+        if url:
+            return url
+    except Exception:
+        pass
     try:
         import jarvis_model_lanes
         return str(jarvis_model_lanes.DEFAULT_OLLAMA_URL)
@@ -594,7 +601,8 @@ def local_lane_url(default: str = "") -> str:
 
     The HUD picks it from the applied preset (`jarvis_presets.active_chat_url`:
     the named lane, normally 11436, or the on-demand pooled lane at 11450),
-    falling back to `OLLAMA_URL`. Asking the same function here is what makes
+    falling back to the checked `OLLAMA_URL` resolver
+    (`jarvis_models.ollama_url_on_this_pc`). Asking the same function here is what makes
     "the lane it will run on" a measured fact rather than an assumption - and
     it also picks up that function's own repair of a persisted pointer at the
     pooled port when nothing is listening there (a read, one TCP connect at
