@@ -602,13 +602,33 @@ await check("modelPresetRows reads the PC's chosen_preset - and nothing else mar
     ],
     chosen_preset: "coding",
   };
-  assert.deepEqual(P.modelPresetRows(payload), [
+  // A SUBSET, not the whole row: this check is about chosen_preset and the two
+  // PC facts beside it (heavy/pending), and a whole-row deepEqual breaks on
+  // every new row field - which is exactly what happened when the dated speed
+  // joined the row on 2026-11-17. The subset keeps this check about its own
+  // name; the row's full current shape is pinned below and in hud-presets.mjs.
+  const coreRows = (rows) => rows.map(({ id, title, focus, chosen, heavy, heavyWords, pending }) =>
+    ({ id, title, focus, chosen, heavy, heavyWords, pending }));
+  assert.deepEqual(coreRows(P.modelPresetRows(payload)), [
     // heavyWords is the PC's own cost sentence, carried ONLY on a heavy row
     // (2026-11-02: the row is offered now, so the cost is what it says).
     { id: "general", title: "General", focus: "everyday chat", chosen: false, heavy: false, heavyWords: "", pending: false },
     { id: "coding", title: "Coding", focus: "big code", chosen: true, heavy: true, heavyWords: P.HEAVY_PRESET_WORDS, pending: false },
     { id: "fast", title: "Fast", focus: "short answers", chosen: false, heavy: false, heavyWords: "", pending: true },
   ]);
+  // The row's dated speed (owner's request, 2026-11-17) is still pinned HERE,
+  // separately: a row with no measurement says "not measured" (never a guess),
+  // and a measured row shows the number with the PC's note as its tooltip.
+  const speedRows = P.modelPresetRows({ presets: [
+    { id: "general", title: "General" },
+    { id: "reflect", title: "Reflective Coach", measured: {
+      tok_s: 25.4, tok_s_on: "2026-11-17",
+      tok_s_note: "15.50 GiB, 0.68 GiB spill, all three cards, 32,768 context" } },
+  ] });
+  assert.deepEqual(speedRows.map((row) => [row.speedWords, row.speedDetail]), [
+    ["not measured", ""],
+    ["25.4 tok/s", "Measured 2026-11-17: 15.50 GiB, 0.68 GiB spill, all three cards, 32,768 context"],
+  ], "the row's dated speed is not carried, or a missing one is invented");
   assert.equal(P.modelPresetRows({ available: false, why: "old backend" }).length, 0,
     "a backend without the route invents presets");
   assert.equal(P.modelPresetRows({ presets: [{ title: "no id" }] }).length, 0,
