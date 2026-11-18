@@ -69,7 +69,22 @@ WHAT THIS SUITE CHECKS
      phrase nowhere - and every row the matcher names is a real catalogue row;
   7. it is read-only: `capability_answer` is in READ_ONLY_INTENTS (a private
      chat hands it to the model), the intent carries no card, route or action,
-     and a private chat gets None.
+     and a private chat gets None;
+  8. THE THREE MEASURED FALSE-DENIAL QUESTIONS (2026-11-18, CHAT-GAPS section
+     4): "Can you send a file from my PC to my phone?", "Can you read my phone
+     notifications?" and "Can you add up my spending?" (with "Can you check my
+     bank export?"). All three reached the local model while the catalogue had
+     the row and its real steps, so the model could answer "I can't" about
+     something that exists. Each must answer from its row's own what/where and
+     its own rule, and every widened lead has a negative control that must keep
+     the path it had before - including "can you write a nice email for my
+     boss?", pinned to the writer's own path by `test_chat_honesty.py`;
+  9. THE "and" REGRESSION (2026-11-18, CHAT-GAPS section 6): the explicit
+     feature lane used to short-circuit on "and" before trying `_FEAT_EXPLICIT`,
+     which sent all six measured feature questions with "and" in the subject to
+     the model (49 catalogue rows were in that blast radius). Every one of the
+     six must now reach its row and quote its words, and action sentences that
+     contain "and" must keep the deterministic path they already had.
 
 No model runs, no network, no owner file is touched: the answers read the
 catalogue and a made-up scheduler only.
@@ -298,6 +313,86 @@ OUTSIDE = (
     "how do I fix a leaking tap",
 )
 
+#: THE THREE MEASURED FALSE-DENIAL QUESTIONS (2026-11-18, CHAT-GAPS section 4).
+#: Each one fell to the local model while the catalogue had the row with the
+#: real steps, so the model could answer "I can't" about something that exists:
+#:   * the PC -> phone file question - `_CAP_CAN_YOU_TO_PC` is one-way (only
+#:     toward this PC), and `send_file_to_phone` is a real tool, so the mirror
+#:     direction the `file-from-pc` row describes was missed;
+#:   * phone notifications and spending were both named in the measured model
+#:     denials of 2026-11-06.
+#: `_CAP_CAN_YOU_NAMED` (jarvis_quick) claims each in `_explicit_feature_question`
+#: only - the last lane in `match()`, after every action path declined - and the
+#: required phrase is the row's own rule, which the false denial hid.
+FALSE_DENIAL = (
+    ("Can you send a file from my PC to my phone?", "file-from-pc",
+     "one approval card per file"),
+    ("Can you send me a file from my PC?", "file-from-pc",
+     "one approval card per file"),
+    ("Can you read my phone notifications?", "phone-notifications",
+     "off by default"),
+    ("Can you add up my spending?", "spending", "no card"),
+    ("Can you check my bank export?", "spending", "no card"),
+)
+
+#: THE "and" REGRESSION (2026-11-18, CHAT-GAPS section 6). Every one of these
+#: fell to the model because `_explicit_feature_question` short-circuited on
+#: "and" before `_FEAT_EXPLICIT` was tried; the audit measured all six. Two of
+#: them ("lets you ...", "lets Jarvis ...") also needed the speaker's frame
+#: ("lets you") taken off the subject, or the row was replaced by the honest
+#: "I do not have that one" - still deterministic, still wrong.
+AND_QUESTIONS = (
+    ("Do you have a feature that lets you type a question and Jarvis answers "
+     "in the box?", "typing"),
+    ('Do you have a feature called "The whole conversation, and carrying it '
+     'on"?', "chat-thread"),
+    ('Do you have a feature called "People and things"?', "memory-people"),
+    ("Do you have a feature that lets Jarvis stop acting, and says so, rather "
+     "than guessing?", "stale-link"),
+    ('Do you have a feature called "Small Python scripts for sums and averages"?',
+     "data-sandbox"),
+    ("Do you have a feature that shows content risk and the audit chain?", "trust"),
+)
+
+#: NEGATIVE CONTROLS for every widened lead (2026-11-18). A lead may only claim
+#: the one false-denial question it was written for; each sentence here keeps the
+#: path it had BEFORE the lead existed. `None` as the name means "no
+#: deterministic answer, so the model / its real tool keeps it" - the path those
+#: sentences already had. `field`/`value` pin the field that path carries.
+NARROW = (
+    # a writing request is the writer's, never `email-send` - the trap the
+    # audit measured when a bare "can you" lead was considered.
+    ("can you write a nice email for my boss?", None, None, None),
+    # the file lead requires "from my PC": the plain action shape toward the
+    # phone keeps its path, and a named file is the real send_file door.
+    ("Can you send a file to my phone?", None, None, None),
+    ("can you send report.pdf from my desktop to my phone", "send_file",
+     "query", "report.pdf"),
+    ("send report.pdf from my desktop to my phone", "send_file",
+     "query", "report.pdf"),
+    # the file lead's destination must be the phone: "to my boss" is not it
+    ("Can you send a file from my PC to my boss?", None, None, None),
+    # the notification lead is read-only and needs "phone notifications": the
+    # smartwatch question belongs to the phone-watch row and keeps reminder_notify
+    ("Can you show my phone notifications on my watch?", "reminder_notify",
+     None, None),
+    # the spending lead needs spending/bank-export words: the spending DOOR and
+    # the email read keep their own deterministic answers
+    ("how much did I spend last month", "honest_chat", "row", "spending"),
+    ("Can you read my email?", "honest_chat", "shape", "capability_off"),
+    # a real sum is not "spending"
+    ("Can you add 2 and 3?", None, None, None),
+)
+
+#: Action sentences that contain "and" and already had a deterministic path:
+#: the short-circuit was removed from the FEATURE lane only, so these must be
+#: untouched (the audit's "it cannot steal an action path" claim, pinned).
+AND_ACTIONS = (
+    ("remind me to call mum and dad at 5pm", "reminder_set"),
+    ("add milk and eggs to my shopping list", "todo_add"),
+    ("turn on the lights and the fan", "honest_chat"),
+)
+
 #: The measured crisis sentence and the words the wrong answer contained.
 CRISIS_SENT = ("Do you have a feature that answers with crisis help lines if "
                "a message sounds like a crisis? Answer in one sentence.")
@@ -479,6 +574,107 @@ def t_the_phone_door_and_a_pc_only_row_are_both_said_plainly():
 
 
 # --------------------------------------------------------------------------
+#   1c. the three measured false-denial questions (CHAT-GAPS section 4)
+# --------------------------------------------------------------------------
+def t_the_three_measured_false_denial_questions():
+    """Each must answer from the catalogue row, not fall to the model.
+
+    Before the leads existed all five sentences below returned None from
+    `match()`, so the local model answered - and that model was measured
+    denying all three feature classes on this PC (2026-11-06).
+    """
+    for sentence, row_id, rule in FALSE_DENIAL:
+        res, intent = _answer(sentence)
+        check(f"false denial is answered from the catalogue: {sentence!r}",
+              _row_of(intent) == row_id, f"{_row_of(intent)} != {row_id}")
+        if res is None:
+            continue
+        row = BY_ID[row_id]
+        check(f"... quoting the row's own what: {sentence!r}",
+              _quote(row, "what") in res.reply, res.reply[:220])
+        check(f"... quoting the row's own where: {sentence!r}",
+              _quote(row, "where") in res.reply, res.reply[:240])
+        low = res.reply.lower()
+        check(f"... with its own rule ({rule!r}) and no denial: {sentence!r}",
+              rule in low and not any(d in low for d in DENIALS),
+              res.reply[:260])
+        # THE REAL ROUTE, not only match(): /api/chat calls `answer_turn`, and
+        # the question must come back from there with the same row - a fixed
+        # `match()` that the request path never asks is no fix at all. The
+        # route hands back a `Result` (not the Intent), so the row is read off
+        # the answer's own quoted `what`, which only that row carries.
+        body = {"messages": [{"role": "user", "content": sentence,
+                              "provenance": "typed"}]}
+        turn = Q.answer_turn(body, sched=Sched())
+        check(f"... and /api/chat's own route answers it without the model: "
+              f"{sentence!r}",
+              turn is not None and turn.intent == "capability_answer"
+              and _quote(row, "what") in turn.reply,
+              None if turn is None else (turn.intent, turn.reply[:160]))
+
+
+def t_the_false_denial_leads_stay_narrow():
+    """Every widened lead has a control that keeps the path it had before.
+
+    The audit's trap is measured: a bare "can you ..." capability lead would
+    claim "can you write a nice email for my boss?" as `email-send`, which
+    `backend/test_chat_honesty.py` pins to the writer's own path. So each lead
+    is the words of ONE question, and every sentence here is a neighbour that
+    must not move.
+    """
+    for sentence, expected, field, value in NARROW:
+        intent = Q.match(sentence)
+        name = None if intent is None else intent.name
+        check(f"a widened lead did not claim its control: {sentence!r}",
+              name == expected, f"{name!r} != {expected!r}")
+        if field is not None and intent is not None:
+            got = (intent.f or {}).get(field)
+            check(f"... and it still carries its own {field}: {sentence!r}",
+                  got == value, f"{field}={got!r}")
+        # ... and the request route keeps it too (/api/chat calls answer_turn).
+        body = {"messages": [{"role": "user", "content": sentence,
+                              "provenance": "typed"}]}
+        turn = Q.answer_turn(body, sched=Sched())
+        turn_name = None if turn is None else turn.intent
+        check(f"... and /api/chat's route keeps that path: {sentence!r}",
+              turn_name == expected, f"{turn_name!r} != {expected!r}")
+
+
+# --------------------------------------------------------------------------
+#   1d. the "and" regression (CHAT-GAPS section 6)
+# --------------------------------------------------------------------------
+def t_a_feature_question_with_and_reaches_its_row():
+    """The explicit feature lane no longer short-circuits on "and".
+
+    Before the fix every sentence below returned None from `match()` (the
+    model answered), because `_explicit_feature_question` refused any text
+    containing "and" before trying `_FEAT_EXPLICIT`. It was redundant: the
+    two-part matcher ran earlier and this lane runs last in `match()`.
+    """
+    for sentence, row_id in AND_QUESTIONS:
+        label = sentence[:54] + ("..." if len(sentence) > 54 else "")
+        res, intent = _answer(sentence)
+        check(f"an 'and' feature question reaches its row: {label}",
+              _row_of(intent) == row_id, f"{_row_of(intent)} != {row_id}")
+        if res is None:
+            continue
+        low = res.reply.lower()
+        check(f"... answered from the row's own words, never 'not that one': "
+              f"{label}",
+              _quote(BY_ID[row_id], "what") in res.reply
+              and "do not have that one" not in low
+              and "i do not have" not in low, res.reply[:220])
+    # Removing the short-circuit from the FEATURE lane must not touch a
+    # sentence that already has a deterministic owner - that is the audit's
+    # "this lane runs last, so it cannot steal an action path" claim, pinned.
+    for sentence, expected in AND_ACTIONS:
+        intent = Q.match(sentence)
+        name = None if intent is None else intent.name
+        check(f"an 'and' action keeps its own path: {sentence!r}",
+              name == expected, f"{name!r} != {expected!r}")
+
+
+# --------------------------------------------------------------------------
 #   2. the 25 measured availability questions
 # --------------------------------------------------------------------------
 def t_the_measured_availability_questions():
@@ -585,10 +781,13 @@ def t_outside_the_catalogue_falls_through():
 
 
 # --------------------------------------------------------------------------
-#   6. every one of the 183 rows answers from itself
+#   6. every one of the 184 rows answers from itself
 # --------------------------------------------------------------------------
+# 184 since 2026-11-18, the picture-conversion row (pictures into one PDF, or
+# one picture into another format). The pin is the catalogue's real length, so
+# a row that is added without an answer of its own words fails here.
 def t_every_catalogue_row_answers_from_its_own_words():
-    check("the catalogue has its 183 rows", len(C.FEATURES) == 183,
+    check("the catalogue has its 184 rows", len(C.FEATURES) == 184,
           len(C.FEATURES))
     missing = []
     for row in C.FEATURES:
@@ -612,11 +811,18 @@ def t_every_catalogue_row_answers_from_its_own_words():
 
 def t_every_row_the_matcher_names_is_a_real_row():
     named = set()
-    for entry in TRAPS + AVAILABILITY + HOWTO + INVERSIONS:
+    questions = list(TRAPS) + list(AVAILABILITY) + list(HOWTO) + list(INVERSIONS)
+    questions += [(q, r) for q, r, _ in FALSE_DENIAL]
+    questions += list(AND_QUESTIONS)
+    for entry in questions:
         intent = Q.match(entry[0])
         if intent is not None:
             named.add(_row_of(intent))
     for _, row_id, _ in INVERSIONS:
+        named.add(row_id)
+    for _, row_id, _ in FALSE_DENIAL:
+        named.add(row_id)
+    for _, row_id in AND_QUESTIONS:
         named.add(row_id)
     for row_id in ("crisis-help", "memory-saved", "models", "settings-by-asking",
                    "approvals", "shell-commands", "what-asks-first"):
@@ -731,6 +937,9 @@ def main():
     for fn in (t_the_owner_trap_sentences,
                t_the_owner_s_phone_file_question,
                t_the_phone_door_and_a_pc_only_row_are_both_said_plainly,
+               t_the_three_measured_false_denial_questions,
+               t_the_false_denial_leads_stay_narrow,
+               t_a_feature_question_with_and_reaches_its_row,
                t_the_measured_availability_questions,
                t_the_measured_howto_questions,
                t_the_four_dangerous_inversions,

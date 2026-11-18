@@ -7981,9 +7981,9 @@ _CAP_TO_PC = re.compile(
     r"\b(?:to|onto|into)\s+(?:my|the|this|a|your)\s+"
     r"(?:pc|computer|laptop|desktop)\b")
 
-#: THE ONE "can you ..." SHAPE THIS MATCHER MAY TAKE (2026-11-18), and why it
-#: is this narrow. "can you ..." is NOT a generic capability lead: it is how
-#: the owner asks Jarvis to DO things, and `backend/test_chat_honesty.py` pins
+#: The "can you ..." shapes this matcher may take (2026-11-18), and why each is
+#: this narrow. "can you ..." is NOT a generic capability lead: it is how the
+#: owner asks Jarvis to DO things, and `backend/test_chat_honesty.py` pins
 #: that "can you write a nice email for my boss?" and "can you help me create
 #: a plan" keep their own paths. The owner's measured sentence - "Can you send
 #: a file for me to my PC?" - is a question about the phone-to-PC door, and
@@ -8001,6 +8001,62 @@ _CAP_CAN_YOU_TO_PC = re.compile(
     r"pdf|word|excel|powerpoint|markdown|csv|archive|zip)\b"
     r"[^.!?\n]*\b(?:to|onto|into)\s+(?:my|the|this|a|your)\s+"
     r"(?:pc|computer|laptop|desktop)\b)")
+
+#: THE THREE MEASURED FALSE-DENIAL QUESTIONS (2026-11-18, CHAT-GAPS section 4).
+#: Each is a NAMED question, not a shape: the owner asked it, the catalogue row
+#: exists with the real steps, and today the sentence reaches the local model,
+#: which has already been measured denying this class on this PC ("I can't send
+#: files directly"; phone notifications and spending were named in the
+#: self-awareness denials of 2026-11-06). `_explicit_feature_question` checks
+#: these, and that function runs LAST in `match()` through `_cap_question`,
+#: after every action matcher - so a sentence another path owns was never
+#: reachable here, and one of these can only claim a sentence nothing else
+#: answered.
+#:
+#: WHY NOT A GENERIC "can you ..." LEAD. The audit measured that widening it
+#: would claim "Can you write a nice email for my boss?" as `email-send` - a
+#: sentence `backend/test_chat_honesty.py` pins to the writer's own path. Each
+#: pattern below is only the words of the ONE question it serves; the negative
+#: controls are in `backend/test_capability_answers.py` beside the tests.
+_CAP_CAN_YOU_NAMED = (
+    # "Can you send a file from my PC to my phone?" - the mirror of the
+    # phone->PC sentence above: the `file-from-pc` row describes this direction
+    # and `send_file_to_phone` really performs it, while the matcher answered
+    # neither (the phone->PC sentence is caught, the PC->phone one was not).
+    # The "from my PC" half is required, so the action shape "Can you send a
+    # file to my phone?" (pinned in test_capability_answers) and a real file
+    # request such as "can you send report.pdf from my desktop to my phone"
+    # (which `_send_file` claims) keep their own paths. "Can you send me a file
+    # from my PC?" is the same question with the destination left implied.
+    (re.compile(
+        r"can\s+(?:you|jarvis)\s+"
+        r"(?:send|share|transfer|move|copy|put|bring)\s+"
+        r"(?:me\s+)?(?:a\s+|one\s+|the\s+|my\s+)?"
+        r"(?:file|files|document|documents|photo|photos|picture|pictures|pdf|"
+        r"word|excel|csv|zip|archive)\s+"
+        r"(?:from|off)\s+(?:my|this|the)\s+(?:pc|computer|laptop|desktop)\b"
+        r"(?:\s*,?\s*(?:to|onto|over\s+to)\s+(?:my|the|your)\s+"
+        r"(?:phone|android|mobile)\b)?\s*$"),
+     "file-from-pc"),
+    # "Can you read my phone notifications?" - `phone-notifications` exists with
+    # the exact Settings path and its own off-by-default rule. Only READ/SEE
+    # words are taken and "phone notifications" is required: "Can you show my
+    # phone notifications on my watch?" is the smartwatch row's question and
+    # keeps its own (reminder_notify) path.
+    (re.compile(
+        r"can\s+(?:you|jarvis)\s+(?:read|see|view|check)\s+"
+        r"(?:my|the)\s+phone(?:'s)?\s+notifications\b"),
+     "phone-notifications"),
+    # "Can you add up my spending?" and "Can you check my bank export?" - the
+    # `spending` row says plain code on the PC adds it up. Both are the owner's
+    # words for that row in the audit; "how much did I spend last month" is the
+    # spending DOOR and keeps its own (feature_door) path.
+    (re.compile(
+        r"can\s+(?:you|jarvis)\s+(?:add\s+up|total|sum\s+up|work\s+out)\s+"
+        r"(?:my|the|our)\s+spending\b"
+        r"|can\s+(?:you|jarvis)\s+check\s+(?:my|the)\s+bank\s+export\b"),
+     "spending"),
+)
 
 #: The limit/permission questions answered EARLY, in the owner's terms, from the
 #: row that records the rule. Each entry is (pattern, row id, leading verdict):
@@ -10394,6 +10450,13 @@ _FEAT_EXPLICIT = re.compile(
     r"(?:(?:have|got|offer|support|provide|do)\s+)?"
     r"(?:a\s+|an\s+|any\s+|the\s+)?(?:feature|ability|option|way|tool)s?\s+"
     r"(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)?"
+    # "a feature that LETS YOU type a question and Jarvis answers in the box"
+    # (2026-11-18, CHAT-GAPS section C). The connector is "that"; "lets you" is
+    # the speaker's frame, not the feature's name, so it is not part of `area` -
+    # without this the two measured questions whose subject starts that way
+    # answered "I do not have that one" about a row that exists (typing,
+    # stale-link). Only shapes that say "feature/way/tool" reach this pattern.
+    r"(?:(?:lets?|allows?)\s+(?:you|me|jarvis|it|us)\s+)?"
     r"(?P<area>.+)"
     r"|is\s+there\s+(?:a\s+|an\s+|any\s+)?(?:feature|ability|option|way|tool)s?\s+"
     r"(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)?"
@@ -10469,14 +10532,33 @@ def _explicit_feature_question(raw) -> Optional[Intent]:
     if not text:
         return None
     # These already have their own deterministic owners, and stealing them would
-    # take a better answer away: the GitHub self-knowledge intents, the crisis
-    # help answer, and the two-part question matcher.
+    # take a better answer away: the GitHub self-knowledge intents and the crisis
+    # help answer.
     if re.search(r"\bgithub\b", text):
         return None
     if "crisis" in text:
         return None
-    if re.search(r"\band\b", text):
-        return None
+    # NO "and" SHORT-CIRCUIT (removed 2026-11-18, CHAT-GAPS section 6). It used
+    # to send EVERY feature question whose subject contains "and" to the model,
+    # which is 49 catalogue rows with "and" in a name or alias and all six
+    # measured owner questions that still fell through (typing, chat-thread,
+    # memory-people, stale-link, data-sandbox, trust). It was redundant as
+    # written: the two-part question matcher `_cap_multi_question` already ran
+    # in `_cap_question` BEFORE this function, and this lane runs LAST in
+    # `match()`, so an "and" sentence another lane owns was never reachable here
+    # in the first place - this only silenced the explicit feature shapes below.
+    #
+    # THE THREE MEASURED FALSE-DENIAL QUESTIONS (2026-11-18, CHAT-GAPS section
+    # 4), before the explicit "feature" shapes because these sentences do not
+    # say "feature". Each lead is a named question (see `_CAP_CAN_YOU_NAMED`)
+    # and this lane runs last, so it cannot take a sentence an action path owns.
+    for pattern, row_id in _CAP_CAN_YOU_NAMED:
+        if pattern.search(text):
+            # ask=True: these three are permission-shaped questions, so the
+            # row's own `asks` rule belongs in the answer - the file row's
+            # one-card-per-file rule and the notification row's honest
+            # "Off by default" state are exactly what the false denial hid.
+            return Intent("capability_answer", {"id": row_id, "ask": True})
     m = _FEAT_EXPLICIT.fullmatch(text)
     if m:
         area = next((g for g in (m.group("area"), m.group("area2"),
