@@ -3498,8 +3498,10 @@ that keeps it:
   is a written rule, not a gap: both strings come from the one module and both
   apps' tests hold their copy to it.
 - **A PC-only card is answered on the PC, and the phone says so.** The set is
-  `jarvis_owner_check.PC_ONLY_ACTIONS` (nine on 2026-10-28, `desktop_update`
-  being the newest); the PC refuses such a card's approval from any other device
+  `jarvis_owner_check.PC_ONLY_ACTIONS` (nine on 2026-11-18; `desktop_update` was
+  its newest member until that day, when the owner ruled the phone may answer
+  that one with its own fingerprint - section 8's 2026-11-18 entry and
+  JARVIS-API section 226); the PC refuses such a card's approval from any other device
   (403 `pc_only`) and always checks Windows Hello. The phone draws **Deny only**
   and says "Approve this one on the PC - it needs Windows Hello there. Deny
   still works here." The phone keeps its own copy of that set
@@ -5347,6 +5349,44 @@ what is missing is only the Settings screen agreeing about who turned it off.
   to start a read, press HOME, lock the screen, hear it finish, and stop it from
   the shade.
 
+- **The phone can ask for a desktop update; the phone's own screen for it is
+  the next lane, and that is one-sided on purpose for now** (2026-11-18; the
+  owner's ask *"the desktop program can update itself, but only at the PC, and
+  only after Windows Hello there. I want the phone to be able to ask for that
+  same update, with the phone's own fingerprint."*; `backend/jarvis_update.py`,
+  `plugins/ready/update/`, `backend/test_phone_authorized_update.py`,
+  JARVIS-API §226). This slice is the **backend half**, complete and tested:
+  `GET /api/update/status` reads the installed and published versions and the
+  phase of any update in flight, and `POST /api/update/request` raises the ONE
+  card the chat already raises - action `desktop_update`, tier "ask", the same
+  string as `jarvis_quick.UPDATE_ACTION` - through `jarvis_gate.check`. Nothing
+  is downloaded, installed or changed before the owner's yes, and the request
+  body cannot carry a command, a path or a version. **Both answers are a
+  person's:** on the PC the card still asks Windows Hello (the action has no
+  `_RISK` row, so the gate gives it its worst case and `is_risky` puts it at the
+  prompt), and on the phone it needs that phone's signed approval - a fresh
+  fingerprint or PIN over a one-use challenge - with `no_approval_key` refused in
+  the existing words. `desktop_update` therefore left
+  `jarvis_owner_check.PC_ONLY_ACTIONS` on 2026-11-18, exactly as
+  `raise_api_limit` left it on 2026-10-11, and the phone's generated copy of
+  that set (`net/PcOnlyActions.kt`, `contract/card-words-cases.json`) follows.
+  **What runs it:** a PC approval still runs the desktop shell's own
+  `update_both`; a phone approval cannot reach that command, so the backend runs
+  `scripts/update-jarvis.ps1` - the same both-halves updater the owner runs by
+  hand, installing the same signed release - in a detached helper that holds
+  `update-in-progress.lock`, so the two roads can never patch the machine at
+  once. **What is deliberately NOT here:** the phone's screen (the button, the
+  phase line and the fingerprint prompt on `jarvis-client`) is its own pull
+  request against these frozen routes, so no app calls either route on this
+  tree. `tools/check_parity.py` classifies both `planned` and names that slice
+  in `PENDING_CLIENTS`; the moment the phone calls one, the checker fails until
+  the entry is reclassified - which is how a backend-first route stops being
+  "pending" the day somebody wires it. The server does not send
+  `X-Jarvis-Client: hud` for the phone and the phone's screen must; the routes
+  themselves need it not. **NOT-TESTABLE until the phone lane lands:** no real
+  phone has raised, approved or reported this card, so the field test - ask from
+  the phone, approve with a fingerprint, watch the PC update and come back - is
+  owed, and JARVIS-API §226.5 says so rather than implying it happened.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

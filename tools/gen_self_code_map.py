@@ -468,14 +468,17 @@ SUBSYSTEMS = (
         "group": "runtime",
         "areas": ("desktop", "backend"),
         "purpose": "The window on this PC: the Rust shell that holds the token and "
-                   "talks to the backend, and the HUD page - cards, Brain, History and "
-                   "the animal faces - it shows.",
-        "modules": ("jarvis_animal", "jarvis_sky", "jarvis_sky_places"),
+                   "talks to the backend, the HUD page - cards, Brain, History and "
+                   "the animal faces - it shows, and the phone's road to asking for "
+                   "the same update that shell installs.",
+        "modules": ("jarvis_update", "jarvis_animal", "jarvis_sky",
+                    "jarvis_sky_places"),
         "paths": ("jarvis-desktop/*", "backend/static/*", "backend/jarvis_hud.html",
                   "tokens/*"),
-        "key_modules": ("jarvis_animal", "jarvis_sky"),
-        "tests": ("backend/test_hud_static.py", "backend/test_animal.py",
-                  "backend/test_sky.py", "backend/test_appearance.py"),
+        "key_modules": ("jarvis_update", "jarvis_animal", "jarvis_sky"),
+        "tests": ("backend/test_phone_authorized_update.py", "backend/test_hud_static.py",
+                  "backend/test_animal.py", "backend/test_sky.py",
+                  "backend/test_appearance.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/APPEARANCE-API.md"),
     },
     {

@@ -169,16 +169,28 @@ UNLABELLED = ("Jarvis has no written words for this action yet, so it will not a
 #: Turning a tool OFF is still instant, from either app, and needs no card.
 #: Nothing else about the tool-enable card changes: each USE of the tool still
 #: has its own "Ask me first" decision.
+#:
+#: `desktop_update` WAS in this set from 2026-10-26 to 2026-11-18, for the
+#: reason written there: "the update card replaces this PC's own executable and
+#: patches the folder Jarvis runs from, so only the PC it runs on can say yes".
+#: The owner took it out on 2026-11-18 - "the phone should be able to ask for
+#: that same update, with the phone's own fingerprint" - and the two halves of
+#: the rule are unchanged, exactly as for the raise above:
+#:   * on the PC it still asks Windows Hello: the action has no `_RISK` row, so
+#:     `is_risky` gives it the worst case (permanent, outbound) and sends it to
+#:     the prompt - the same answer this list used to give for a different
+#:     reason, and `jarvis_quick` keeps raising it at tier "ask";
+#:   * on the phone it needs that phone's signed approval (a fingerprint or PIN
+#:     over a one-use challenge); a phone with no approval key is refused with
+#:     "no_approval_key" so it can offer to turn signing on.
+#: The card is still ONE card and still asks a person: what changed is only
+#: WHERE it may be confirmed. Nothing on the phone installs anything - the
+#: approval is what lets the PC run its own updater (backend/jarvis_update.py
+#: for the phone's road, the desktop shell's own for the PC's).
 PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "restore_backup",
                              "pair_device", "unretire_shared_key", "register_approval_key",
                              "handoff_keep_offering",
                              "handoff_bring_to_front",
-                             # 2026-10-26: the update card replaces this PC's own
-                             # executable and patches the folder Jarvis runs from,
-                             # so only the PC it runs on can say yes - with
-                             # Windows Hello. A phone approving it would promise an
-                             # install nothing on the phone can perform.
-                             "desktop_update",
                              # 2026-11-04: the product check opens ONE Amazon
                              # product page in the owner's own signed-in browser
                              # window. That window, and the profile it is signed
