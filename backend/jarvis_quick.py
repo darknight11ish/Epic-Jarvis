@@ -1550,6 +1550,18 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- a question that QUOTES a feature's own exact name (2026-11-18) -------
+    # BEFORE the limit lane and the reminder / goal / feature-guide /
+    # read-a-link families, and that placement is the fix: each measured
+    # question the awareness audit still missed already says the row's own
+    # exact title or alias, but a generic family that shares ONE word with
+    # that name answered first (see `_named_feature_question`). Exact equality
+    # of a row's id, title or alias only - never a shared word - so this can
+    # only take a question that already said which feature it means.
+    got = _named_feature_question(text)
+    if got is not None:
+        return got
+
     # --- limits and permissions, from the row that records the rule -----------
     # (2026-11-06) EARLY, and that is the fix, not a preference: the measured
     # live test answered "Can you change a setting without asking?" with "Yes, I
@@ -10491,14 +10503,48 @@ def _feat_spoken(text) -> str:
     return _cap_alias_normalise(text)
 
 
+def _feature_exact_row(area):
+    """The ONE catalogue row whose own name IS this subject, or None.
+
+    EXACT, NEVER A GUESS. `jarvis_feature_guide.find_exact` already matches a
+    row's id, title AND aliases with exact equality rather than a substring or
+    a shared word, and `_explicit_feature_question` has used it as its first
+    gate since 2026-11-08. What it did not do is try the question's RAW words
+    as well: `_cap_alias_normalise` turns the question's "out loud" into
+    "aloud" (the read-aloud row's own id), while ANOTHER row's own title may
+    literally say "out loud" - `read-web-page` is "Read one web page out
+    loud" - so the measured question that quotes that title could not name it
+    and was answered "I do not have that one". Both forms are tried here; only
+    exact equality counts.
+    """
+    seen = []
+    for base in (_feat_spoken(area), area):
+        target = " ".join(str(base or "").split()).strip(' ?.!,;"\'')
+        if not target or target in seen:
+            continue
+        seen.append(target)
+        target = _FEAT_AREA_LEAD.sub("", target)
+        target = _FEAT_AREA_AUX.sub("", target)
+        target = _FEAT_AREA_ARTICLE.sub("", target)
+        target = _feature_target(target)
+        if not target:
+            continue
+        row = _feature_lookup_exact(target)
+        if row is not None:
+            return row
+    return None
+
+
 def _feature_echo_row(area):
     """The ONE catalogue row the question's subject names, or None.
 
-    NORMALISED QUESTION, UNCHANGED ROWS: "reading out loud" -> "read aloud",
-    which is the read-aloud row's own id. Exact name first, then the guide's
-    loose finder - and only when it answers with exactly one row; an ambiguous
-    name is never turned into an answer about the wrong one.
+    EXACT NAME FIRST (see `_feature_exact_row`), THEN the guide's loose finder
+    - and only when it answers with exactly one row; an ambiguous name is
+    never turned into an answer about the wrong one.
     """
+    row = _feature_exact_row(area)
+    if row is not None:
+        return row
     target = " ".join(_feat_spoken(area).split()).strip(" ?.!,;")
     target = _FEAT_AREA_LEAD.sub("", target)
     target = _FEAT_AREA_AUX.sub("", target)
@@ -10506,9 +10552,6 @@ def _feature_echo_row(area):
     target = _feature_target(target)
     if not target:
         return None
-    row = _feature_lookup_exact(target)
-    if row is not None:
-        return row
     try:
         import jarvis_feature_guide as FG
         got = FG.find(target, loose=True)
@@ -10517,6 +10560,77 @@ def _feature_echo_row(area):
     if got.get("kind") == "feature":
         return got.get("row")
     return None
+
+
+def _feature_question_text(raw) -> str:
+    """The question's own words: lower-cased, addressed, tail instructions gone.
+
+    The harness's trailing "Answer in one sentence." is not part of the
+    question - it is stripped with `_strip_meta_instruction`, whose own pattern
+    already handles the full stop that `_FEAT_HARNESS_TAIL` alone cannot. For
+    the measured owner sentences that is the difference between reaching the
+    row and being claimed by an earlier family on the FIRST pass (a sentence
+    another lane claims is never retried with the tail taken off).
+    """
+    text = " ".join(str(raw or "").replace("\u2019", "'").lower().split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    text = _FEAT_HARNESS_TAIL.sub("", text).strip(" ?.!,")
+    stripped = _strip_meta_instruction(text)
+    return stripped if stripped is not None else text
+
+
+def _named_feature_question(raw) -> Optional[Intent]:
+    """A feature question that QUOTES a catalogue row's exact name, or None.
+
+    RUNS EARLY IN `match()` (2026-11-18): before the limit lane, the reminder
+    family, the feature guide and the read-a-link lane. THAT PLACEMENT IS THE
+    FIX, and the audit of 2026-11-18 shows why. Each of the measured questions
+    still missing its row already says the row's own name - its exact title or
+    an exact alias - and was nevertheless answered by a generic family that
+    shares ONE word with that name:
+
+      * "... a feature called \\"How much Jarvis may interrupt you\\"?" was
+        claimed by `_CAP_SAFETY`'s stop-everything pattern on "interrupt you";
+      * "... called \\"Also on my phone\\"" and "... called \\"Open an app on my
+        phone\\"" were claimed by `call-recording`: "called" stems to "call",
+        and "call" + "phone" IS that row's own two-word name "phone call";
+      * "... called \\"Jarvis starts the local model again by itself when it
+        dies\\"" was outscored by `start-the-model-lane`'s own "start ... local
+        model" words, so the quoted name lost to a near neighbour;
+      * the alarm/reminder family read "sound", "reminder", "asks" and "ring";
+        the read-a-link lane read "read ..."; the goals lane read "goals" and
+        the guide lane read "reminder ..." - so voice-training, coming-up,
+        reminder-asks, reminder-actions, photo-reminder, media-read,
+        read-web-page, find-phone and decks each got a confident answer about a
+        different ability (or, where the row was already found, a generic
+        message instead of the row's own words).
+
+    A question that says "feature" and quotes a feature's EXACT catalogue name
+    is that feature's question, whatever word another family also uses. Only
+    exact equality of the row's id, title or alias is taken - never a shared
+    word, a substring or a loose find - so this lane cannot claim another
+    row's question. `_explicit_feature_question` keeps the loose shapes, LAST
+    in the chain, exactly as before.
+    """
+    text = _feature_question_text(raw)
+    if not text:
+        return None
+    # These already have their own deterministic owners; taking them here would
+    # remove a better answer (the same exclusions `_explicit_feature_question`
+    # makes).
+    if re.search(r"\bgithub\b", text) or "crisis" in text:
+        return None
+    m = _FEAT_EXPLICIT.fullmatch(text)
+    if not m:
+        return None
+    area = next((g for g in (m.group("area"), m.group("area2"),
+                             m.group("area3")) if g), "")
+    row = _feature_exact_row(area)
+    if row is None:
+        return None
+    return Intent("capability_answer",
+                  {"id": str(row.get("id") or ""),
+                   "ask": bool(_CAP_ASKS_ABOUT_A_CARD.search(text))})
 
 
 def _explicit_feature_question(raw) -> Optional[Intent]:
