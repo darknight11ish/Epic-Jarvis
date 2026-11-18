@@ -23,10 +23,13 @@ one file and does NOT need the key, so a lost key never stops the owner
 wiping it); (2) a FHIR R4 Bundle checker that
 runs entirely on this PC, reports the file's shape and its own internal
 contradictions, and lists every question it cannot answer; (3) a thin client
-for the local MedGemma 1.5 4B model on the medical lane (127.0.0.1:11435),
-which can read a row and say "this looks odd", never confirm what a code means.
-There is no route, no screen, no chat tool and no approval card here: this is a
-library, deliberately unwired (see "WHAT IS NOT BUILT TONIGHT").
+for the local model the PC has chosen, on the lane chat uses, which can read a
+row and say "this looks odd", never confirm what a code means. NEITHER THE
+MODEL NOR THE PORT IS NAMED IN THIS FILE any more (2026-11-18): the medical
+lane on 11435 that the first version typed is RETIRED, and the model comes from
+`jarvis_models.current_model()`. There is no route, no screen, no chat tool and
+no approval card here: this is a library, deliberately unwired (see "WHAT IS
+NOT BUILT TONIGHT").
 
 THE FIVE HONEST LIMITS - read these before trusting anything else
 
@@ -154,18 +157,22 @@ KINDS = ("conditions", "medications", "labs", "visits")
 #: The fields a row may carry. `label` is required; the rest are optional text.
 FIELDS = ("label", "started", "observed", "value", "unit", "source", "note")
 
-#: The medical lane, measured on 2026-10-24: a separate `ollama serve` on the
-#: RTX 2080 SUPER, 100% GPU, model tag medgemma1.5:4b-it-q4_K_M at 16,384
-#: context. NOT medgemma:4b - that is the older 1.0 model.
-LANE_URL = "http://127.0.0.1:11435"
+#: NO MODEL AND NO PORT ARE TYPED HERE (2026-11-18). The lane and the model are
+#: resolved at call time from the product's own sources: the chat lane from
+#: `jarvis_presets.active_chat_url()` (which falls back to
+#: `jarvis_models.ollama_url_on_this_pc()`, the ONE reader of OLLAMA_URL) and the
+#: model from `jarvis_models.current_model()`. The window comes from the preset
+#: row that names that model on that lane, else the lane's own configured
+#: window - never a guess.
+#:
+#: THE DEFECT THIS FIXES, and it would have been silent: this module used to
+#: type `http://127.0.0.1:11435` and `medgemma1.5:4b-it-q4_K_M` as its
+#: defaults. The 11435 coding lane was RETIRED on 2026-11-18 ("i dont need a
+#: separate coding lane on any preset"), so the medical default would have
+#: probed a port nothing listens on and asked for a model the lane table no
+#: longer owns. A down lane only reads as "not running", so nothing would have
+#: said why - the medical read would simply have stopped working.
 LANE_PROBE_SECONDS = 0.20
-MEDGEMMA_MODEL = "medgemma1.5:4b-it-q4_K_M"
-MEDGEMMA_CONTEXT = 16384
-
-#: The primary local model lane. Named in every fallback note so the owner
-#: knows what is still available, and so no caller can pretend the medical
-#: model's absence means no model at all.
-PRIMARY_LANE = ":11436"
 
 #: The thinking markers MedGemma 1.5 leaks into `response` on this Ollama
 #: template (measured 2026-10-24). They are its internal monologue, not an
@@ -667,8 +674,109 @@ def _installed_tags(body) -> set:
     return names
 
 
-def lane_status(lane_url: str = LANE_URL) -> dict:
-    """Is the local medical model awake? A 0.2 s probe of this PC only.
+def _bare(model) -> str:
+    """A model name without the ":latest" tag Ollama adds for itself."""
+    name = str(model or "").strip()
+    return name[:-7] if name.endswith(":latest") else name
+
+
+def _same_model(a, b) -> bool:
+    return bool(_bare(a)) and _bare(a) == _bare(b)
+
+
+def _port_of(url) -> int:
+    text = str(url or "").rstrip("/")
+    tail = text.rsplit(":", 1)[-1] if ":" in text else ""
+    try:
+        return int(tail)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _preset_window(presets, url: str, model: str):
+    """The window the preset that names `model` on the lane at `url` asks for."""
+    lanes = getattr(presets, "LANES", None) or {}
+    port = _port_of(url)
+    if not isinstance(lanes, dict) or not port:
+        return None
+    windows = []
+    for preset in getattr(presets, "PRESETS", ()) or ():
+        lane = lanes.get(str(getattr(preset, "lane", "") or ""))
+        if not isinstance(lane, dict) or int(lane.get("port") or 0) != port:
+            continue
+        if not _same_model(getattr(preset, "model", ""), model):
+            continue
+        try:
+            windows.append(int(getattr(preset, "context", 0) or 0))
+        except (TypeError, ValueError):
+            continue
+    windows = [w for w in windows if w > 0]
+    return windows[0] if windows and len(set(windows)) == 1 else None
+
+
+def _lane_table_window(url: str, model: str):
+    """The configured window of the shipped lane row for `url`/`model`."""
+    try:
+        import jarvis_big_coder as big
+    except Exception:                              # noqa: BLE001 - a trimmed backend
+        return None
+    port = _port_of(url)
+    for lane in getattr(big, "LANES", ()) or ():
+        if int(getattr(lane, "port", 0) or 0) != port:
+            continue
+        if _same_model(getattr(lane, "model", ""), model):
+            try:
+                return int(getattr(lane, "ctx", 0) or 0) or None
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def current_lane(lane_url: str = "", model: str = "") -> dict:
+    """{"url", "model", "num_ctx", "why"} - the lane this PC is on NOW.
+
+    Resolved, never typed: the address from `jarvis_presets.active_chat_url()`
+    (falling back to `jarvis_models.ollama_url_on_this_pc()`), the model from
+    `jarvis_models.current_model()` unless a caller names one, and the window
+    from the preset row naming that model on that lane, else the shipped lane
+    row's own `num_ctx`. Never raises; `why` is "" when a model is named and a
+    plain sentence when not.
+    """
+    import jarvis_models
+    url = str(lane_url or "").strip()
+    if not url:
+        try:
+            import jarvis_presets
+            url = str(jarvis_presets.active_chat_url() or "")
+        except Exception:                          # noqa: BLE001 - a trimmed backend
+            url = ""
+    if not url:
+        url = str(jarvis_models.ollama_url_on_this_pc() or "")
+    url = _loopback_url(url)
+    chosen = str(model or "").strip()
+    if not chosen:
+        try:
+            chosen = str(jarvis_models.current_model() or "").strip()
+        except Exception:                          # noqa: BLE001 - a trimmed backend
+            chosen = ""
+    num_ctx = None
+    if chosen:
+        try:
+            import jarvis_presets as presets
+            num_ctx = presets.lane_num_ctx(url) or _preset_window(presets, url, chosen)
+        except Exception:                          # noqa: BLE001 - a trimmed backend
+            num_ctx = None
+        if num_ctx is None:
+            num_ctx = _lane_table_window(url, chosen)
+    why = ("" if chosen else
+           "No local model is chosen on this PC yet, so there is nothing to ask; "
+           "apply a preset first.")
+    return {"url": url, "model": chosen,
+            "num_ctx": int(num_ctx) if num_ctx else None, "why": why}
+
+
+def lane_status(lane_url: str = "", *, model: str = "") -> dict:
+    """Is the local model awake on the lane chat uses? A 0.2 s probe, PC only.
 
     Returns {'available', 'lane_url', 'model', 'note'}. A lane that is down is
     a False and a calm note, never an exception. A lane that is up without
@@ -676,29 +784,32 @@ def lane_status(lane_url: str = LANE_URL) -> dict:
     from "the lane is not running", so the two are said differently.
     """
     second = _second_card()
-    url = _loopback_url(lane_url)
+    target = current_lane(lane_url, model)
+    url, chosen = target["url"], target["model"]
     if second is None:
-        return {"available": False, "lane_url": url, "model": MEDGEMMA_MODEL,
-                "note": ("The local medical model's own helper is not in this backend, "
-                         "so it was not asked. Nothing was sent anywhere. Your main "
-                         f"local model ({PRIMARY_LANE}) is still on this PC.")}
+        return {"available": False, "lane_url": url, "model": chosen,
+                "note": ("The local model's own helper is not in this backend, so it "
+                         "was not asked. Nothing was sent anywhere.")}
+    if not chosen:
+        return {"available": False, "lane_url": url, "model": "",
+                "note": target["why"] + " Nothing was sent anywhere."}
     try:
         body = second._http_json(f"{url}/api/tags", timeout=LANE_PROBE_SECONDS)
     except Exception:                              # noqa: BLE001 - a probe
-        return {"available": False, "lane_url": url, "model": MEDGEMMA_MODEL,
-                "note": ("The local medical model is not running right now, so nothing "
-                         "was sent to it. Your main local model "
-                         f"({PRIMARY_LANE}) is still on this PC.")}
-    if MEDGEMMA_MODEL in _installed_tags(body):
-        return {"available": True, "lane_url": url, "model": MEDGEMMA_MODEL,
-                "note": ("The local medical model is running on this PC. It can read a "
-                         "row and say it looks odd; it is not an authority and cannot "
-                         "confirm what a code means.")}
-    return {"available": False, "lane_url": url, "model": MEDGEMMA_MODEL,
-            "note": ("The medical model lane is running, but the model "
-                     f"{MEDGEMMA_MODEL} is not installed in it yet. Nothing is wrong "
-                     "with your PC, and nothing was sent anywhere; the one-line install "
-                     "is in docs/MEDICAL-STORE.md.")}
+        return {"available": False, "lane_url": url, "model": chosen,
+                "note": (f"The local model lane ({url}) is not running right now, so "
+                         f"nothing was sent to it. {chosen} is still installed on this "
+                         "PC.")}
+    if chosen in _installed_tags(body) or _bare(chosen) in {_bare(n) for n in
+                                                            _installed_tags(body)}:
+        return {"available": True, "lane_url": url, "model": chosen,
+                "note": ("The local model is running on this PC. It can read a row and "
+                         "say it looks odd; it is not an authority and cannot confirm "
+                         "what a code means.")}
+    return {"available": False, "lane_url": url, "model": chosen,
+            "note": (f"The lane is running, but the model {chosen} is not installed in "
+                     "it yet. Nothing is wrong with your PC, and nothing was sent "
+                     "anywhere; the one-line install is in docs/MEDICAL-STORE.md.")}
 
 
 def _strip_thinking(text: str) -> str:
@@ -715,17 +826,21 @@ def _strip_thinking(text: str) -> str:
     return " ".join(out.split())
 
 
-def _lane_fallback(why: str = "") -> dict:
-    """What a caller gets when the medical model did not answer."""
-    lead = why or "The local medical model did not answer, so nothing was read by it."
-    note = (f"{lead} Your main local model ({PRIMARY_LANE}) is still on this PC, and "
-            "nothing was sent anywhere else.")
+def _lane_fallback(why: str = "", *, model: str = "", url: str = "") -> dict:
+    """What a caller gets when the local model did not answer."""
+    lead = why or "The local model did not answer, so nothing was read by it."
+    if model:
+        note = (f"{lead} The local model {model} ({url}) is still on this PC, and "
+                "nothing was sent anywhere else.")
+    else:
+        note = (f"{lead} No local model is chosen on this PC yet, so there was nothing "
+                "to ask; nothing was sent anywhere else.")
     return {"ok": False, "fallback_to_primary": True,
             "model_used": "primary_local_fallback", "response": "",
             "authority": "none", "note": note}
 
 
-def consult_local_medgemma(prompt: str, *, model: str = MEDGEMMA_MODEL,
+def consult_local_medgemma(prompt: str, *, model: str = "",
                            keep_alive: str = "15m", timeout: float = 120.0,
                            taint_latch: Optional[Callable[[], object]] = None) -> dict:
     """Ask the local medical model one question; never anything but an opinion.
@@ -737,10 +852,19 @@ def consult_local_medgemma(prompt: str, *, model: str = MEDGEMMA_MODEL,
     the answer is the model's opinion, not a fact and not a check on a code.
 
     `timeout` is 120 seconds, not the 25 this first shipped with: measured on
-    2026-10-24, one answer from `medgemma1.5:4b-it-q4_K_M` took 28.35 s, so a
-    25-second limit cut the model off and the caller got the fallback instead
-    of the answer. A model that is still slow after two minutes is a model the
-    lane should be restarted for, not waited on indefinitely.
+    2026-10-24, one answer from a 4B MedGemma took 28.35 s, so a 25-second limit
+    cut the model off and the caller got the fallback instead of the answer. A
+    model that is still slow after two minutes is a model the lane should be
+    restarted for, not waited on indefinitely.
+
+    THE MODEL AND THE LANE ARE RESOLVED, NEVER TYPED (2026-11-18). `model` is
+    "" by default: the model is `jarvis_models.current_model()` and the lane is
+    the one chat uses, from `current_lane()`. The window must be nameable - the
+    preset row that names that model, else the shipped lane row - and if it
+    cannot be named the model is NOT asked, because a probe that names no
+    `num_ctx` reloads the model at Ollama's own default and throws away the
+    window the lane serves (the same DEF-088 rule `jarvis_models.probe_refusal`
+    keeps). That refusal says so in plain words rather than guessing.
 
     `taint_latch` is a callable seam for the suites (and a later caller); None
     means this module's own gate call. A latch that cannot be set raises
@@ -752,24 +876,33 @@ def consult_local_medgemma(prompt: str, *, model: str = MEDGEMMA_MODEL,
         return _lane_fallback("There was no question to send.")
     second = _second_card()
     if second is None:
-        return _lane_fallback("The local medical model's own helper is not in this backend.")
-    url = _loopback_url(LANE_URL)
-    lane = second.Lane(url=url, model=model, num_ctx=MEDGEMMA_CONTEXT, why="medical")
+        return _lane_fallback("The local model's own helper is not in this backend.")
+    target = current_lane(model=str(model or ""))
+    url, chosen, num_ctx = target["url"], target["model"], target["num_ctx"]
+    if not chosen:
+        return _lane_fallback(target["why"])
+    if num_ctx is None:
+        return _lane_fallback(
+            f"The window the lane at {url} is set to cannot be named, so the model "
+            "was not asked - a guessed window would reload it at the wrong size.",
+            model=chosen, url=url)
+    lane = second.Lane(url=url, model=chosen, num_ctx=num_ctx, why="medical")
     try:
-        text = second.generate(lane, prompt, timeout=timeout, model=model,
+        text = second.generate(lane, prompt, timeout=timeout, model=chosen,
                                keep_alive=keep_alive)
     except Exception:                              # noqa: BLE001 - reported
         text = None
     if not isinstance(text, str):
-        return _lane_fallback("The local medical model did not answer.")
+        return _lane_fallback("The local model did not answer.", model=chosen, url=url)
     cleaned = _strip_thinking(text)
     if not cleaned:
-        return _lane_fallback("The local medical model answered with no readable text.")
-    return {"ok": True, "fallback_to_primary": False, "model_used": model,
+        return _lane_fallback("The local model answered with no readable text.",
+                              model=chosen, url=url)
+    return {"ok": True, "fallback_to_primary": False, "model_used": chosen,
             "response": cleaned, "authority": "none",
-            "note": ("The local medical model read this on your PC. It is a "
-                     "plain-English explainer, not an authority, and it cannot confirm "
-                     "what a code means.")}
+            "note": ("The local model read this on your PC. It is a plain-English "
+                     "explainer, not an authority, and it cannot confirm what a code "
+                     "means.")}
 
 
 # --------------------------------------------------------------------------

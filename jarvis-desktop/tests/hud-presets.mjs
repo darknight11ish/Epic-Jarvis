@@ -763,7 +763,11 @@ await check("the top-right model name IS the door, and it opens the PC's own mod
   assert.deepEqual(panel.loaded,
     ["qwen3.5:9b \u2014 6100 MB in memory, 5900 MB of that on the graphics card, 97% on the GPU"],
     `the loaded section is not the PC's own offload block: ${JSON.stringify(panel.loaded)}`);
-  assert.deepEqual(panel.focus, ["Chosen focus preset: General (qwen3.5:9b)"],
+  // General's own row moved with the owner's decision of 2026-11-18 ("each
+  // preset should be dedicated to one preset local ai model"): the everyday
+  // model is the 26B across all three cards, so the panel must show THAT -
+  // the fixture above is the PC's answer, and this line is what it says.
+  assert.deepEqual(panel.focus, ["Chosen focus preset: General (gemma4:26b-a4b-it-qat)"],
     `the focus section is not the PC's own chosen preset: ${JSON.stringify(panel.focus)}`);
   for (const path of ["/api/models", "/api/status", "/api/presets"]) {
     const seen = panelReads.filter((r) => r.path === path);

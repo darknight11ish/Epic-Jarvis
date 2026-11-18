@@ -946,9 +946,11 @@ def _lane_rows() -> list:
     """(url, lane_key) of the project's local model lanes, the main lane first.
 
     Read from the SAME table the apps use (`jarvis_presets.LANES`): the main
-    lane is the 2060 at :11436 (196k context, the Agentic + Vision preset's
-    lane), the other is the 2080 SUPER at :11435. The raw :11434 fast lane an
-    env default points at is deliberately not a candidate.
+    lane is the everyday one at :11436, which since 2026-11-18 is all three
+    cards, and the other is the pooled all-three-card lane at :11450. The
+    second everyday lane on :11435 was RETIRED then - the owner's "i dont need
+    a separate coding lane on any preset" - so it is no candidate any more, and
+    neither is the raw :11434 fast lane an env default points at.
     """
     rows, seen = [], set()
 

@@ -101,6 +101,41 @@ reading and the numbers).
   that. See the module's own README before assuming anything else in it is
   safe to copy over verbatim.
 
+## One preset's model at a time
+
+**Added 2026-11-18.** Only one preset's model may be loaded at a time: applying
+a different preset ends the previous one first, and nothing is left resident
+"just in case". Because no preset has to keep its own card's memory free for
+another preset, any preset may use all three cards where its model warrants it -
+that is the consequence that makes the rule useful rather than restrictive. The
+older design reserved one model per card so several could run at once, and the
+dated sections of `docs/MODEL-TOPOLOGY.md` still describe that layout because
+they are the record of the machine they measured; this rule replaces it.
+
+
+## The product is Atlas, and the spoken name is not there yet
+
+**The owner's ruling, 2026-11-18.** Everything in this product is **Atlas**: the
+app, the visible assistant name, and the spoken wake phrase is **"Hey Atlas"**.
+"Jarvis" must not appear as the assistant's name anywhere a person reads or
+hears it. The old name survives only where it is an identifier that must not
+move - file names, module names and the repository name are full of it, and
+**nobody renames a `jarvis_*.py` module chasing this rule**; that would break
+the patch stack, the lane tables and every path the record cites. A new display
+name is a wording change; a renamed module is a refactor. This supersedes the
+earlier "keep Hey Jarvis as the default" position.
+
+**Be honest about the wake phrase in the same breath: it is not done.** The
+shipped spotter is still openWakeWord's `hey_jarvis` model, and the owner's own
+recording of "Hey Atlas" measured a **peak of 0.1744 with zero frames at the 0.5
+threshold** - the software physically cannot hear "Hey Atlas" today. A new
+keyword model is being trained. **Until that model ships, user-facing copy must
+not tell the owner to say "Hey Atlas"** - that would be a promise the software
+cannot keep - and the copy moves with the model, not before it. Code, comments
+and this file may explain the ruling; the app's words to the owner may claim
+only what the shipped spotter can do.
+
+
 ## The five rules that are not negotiable
 
 1. Anything touching email, files, credentials or stored memory stays on the

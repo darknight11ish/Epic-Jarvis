@@ -145,7 +145,8 @@ def main():
           getattr(r, "reply", None))
     r = ask("which model would the general preset load?")
     check("preset detail: the model question shape",
-          r is not None and "qwen3.5:9b" in r.reply, getattr(r, "reply", None))
+          r is not None and "gemma4:26b-a4b-it-qat" in r.reply,
+          getattr(r, "reply", None))
 
     # --- 3. measured speed, pros/cons, releases -----------------------------
     r = ask("how fast is qwen3.5:9b?")
