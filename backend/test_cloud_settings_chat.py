@@ -536,20 +536,29 @@ def t_a_private_chat_answers_the_reads_and_refuses_the_change():
 
 
 def t_no_key_store_and_no_key_words():
-    src = (HERE / "jarvis_cloud_settings.py").read_text(encoding="utf-8")
-    # The module docstring is allowed to SAY it never touches the key store;
-    # the code below it is what must not reach for one.
-    body = src.split('"""', 2)[2] if src.count('"""') >= 2 else src
-    for forbidden in ("key_saved", "_read_key", "read_key(", "win32cred",
-                      "jarvis_secrets", "import jarvis_owner_check"):
-        check(f"the code never reaches for a key ({forbidden})", forbidden not in body)
-    clean()
-    write_json(CHOICE, {"provider": "deepseek_api"})
-    write_json(SWITCH, {"on": True})
-    write_json(MONEY, money_doc(cap=10.0))
-    for sentence in ("which cloud provider am i using?", "is escalation on?",
-                     "what's my cap?", "what does escalation actually do?"):
-        r = words(sentence) or ""
+    """The runtime seam: no answer may READ the key store, and none may show a
+    key. The store is a spy here, so a future answer that reaches for it fails
+    on WHAT WAS CALLED, not on how the source is spelled."""
+    calls = []
+    real = API.key_saved
+    API.key_saved = lambda pid: (calls.append(pid) or False)
+    try:
+        clean()
+        write_json(CHOICE, {"provider": "deepseek_api"})
+        write_json(SWITCH, {"on": True})
+        write_json(MONEY, money_doc(cap=10.0))
+        replies = []
+        for sentence in ("which cloud provider am i using?", "am i on cloud?",
+                         "is escalation on?",
+                         "will you send things to the cloud by yourself?",
+                         "what's my cap?", "how much have I spent this month?",
+                         "what does escalation actually do?"):
+            replies.append((sentence, words(sentence) or ""))
+    finally:
+        API.key_saved = real
+    check("no answer reads the key store (the spy was called)",
+          calls == [], calls)
+    for sentence, r in replies:
         check(f"{sentence!r} carries no key or fragment",
               "sk-" not in r and "api key" not in r.lower(), r)
 

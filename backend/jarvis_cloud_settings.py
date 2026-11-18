@@ -32,11 +32,11 @@ TWO JOBS, AND THEY ARE DELIBERATELY DIFFERENT.
                      card, OFF is instant (the existing rule), and ON with no
                      service chosen is refused BEFORE a card.
      the money cap   jarvis_chatbot_limits.change - the SAME door behind
-                     `POST /api/chatbot/money`: raising the cap raises ONE
-                     `raise_api_limit` card (tier "ask", Windows Hello on this
-                     PC or the asking phone's own fingerprint), while lowering,
-                     removing and correcting a price are instant because they
-                     only ever spend less. Nothing is written before the yes.
+                     `POST /api/chatbot/money`: raising the cap raises ONE card
+                     at tier "ask" (Windows Hello on this PC or the asking
+                     phone's own fingerprint), while lowering, removing and
+                     correcting a price are instant because they only ever
+                     spend less. Nothing is written before the yes.
 
    A provider name this PC does not know is refused with the list read from
    `jarvis_chatbot_api.PRESETS` - the code that owns the six - never accepted
@@ -225,7 +225,7 @@ def provider_for_words(words: str) -> str:
 
 
 def _who(pid: str) -> str:
-    """'DeepSeek (API) - model deepseek-flash at api.deepseek.com', or the id.
+    """'DeepSeek (API) - model deepseek-flash at its own host', or the id.
 
     The service's own name is used when it already carries the company name
     ("DeepSeek (API)", "ChatGPT (OpenAI API)"); otherwise the company leads.
@@ -657,9 +657,9 @@ def set_cap(dollars, *, provider: str = "", peer=None, local=None) -> tuple:
 
     `jarvis_chatbot_limits.change` is the exact function behind
     `POST /api/chatbot/money`. It decides the DIRECTION from the amount against
-    the cap it already holds: an amount above today's cap raises ONE
-    `raise_api_limit` card (tier "ask") and writes nothing before that yes; an
-    amount at or below it only spends less, so it applies at once with no card.
+    the cap it already holds: an amount above today's cap raises ONE card at
+    tier "ask" and writes nothing before that yes; an amount at or below it only
+    spends less, so it applies at once with no card.
     No card is ever approved here and no file is written by this module.
 
     With no service named, the chosen provider is used; when that is not a

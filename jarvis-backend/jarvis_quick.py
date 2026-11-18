@@ -11669,8 +11669,8 @@ def _run_cloud_provider_choose(f: dict) -> Result:
 #     change_own_config card), `jarvis_presets.cloud_escalate` for the switch
 #     (ON is one card, OFF is instant), and `jarvis_chatbot_limits.change` for
 #     the monthly cap (the same door `POST /api/chatbot/money` uses: a raise is
-#     one `raise_api_limit` card, a lowering is instant). Nothing is written
-#     before a card's yes, and this path approves nothing.
+#     one card at tier ask, a lowering is instant). Nothing is written before
+#     a card's yes, and this path approves nothing.
 #
 # A provider name this PC does not know is refused with the list read from
 # `jarvis_chatbot_api.PRESETS`. A name it DOES know is left to the older
