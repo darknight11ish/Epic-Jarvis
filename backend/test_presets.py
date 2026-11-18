@@ -346,10 +346,13 @@ def t_every_pooled_preset_carries_a_measured_dict():
           all(m["needs_cards"] == 3 for m in P.pooled_modes()))
     moved = (P.by_id("reflect"), P.by_id("pictures"))
     check("... and both moved rows quote their own numbers in plain words, not only "
-          "in a dict the owner never sees",
-          all(p.measured["tok_s_on"] == "2026-11-17" for p in moved)
+          "in a dict the owner never sees (Reflective Coach's is the 2026-11-17 run; "
+          "Pictures & Screens is the 2026-11-18 real-lane run that replaced the "
+          "spilling 30B, a single run, so it carries no range)",
+          all(p.measured["tok_s_on"] in ("2026-11-17", "2026-11-18") for p in moved)
           and all(str(p.measured["tok_s"]) in p.measured["tok_s_note"] for p in moved)
-          and all(str(p.measured["size_gib"]) in p.cost for p in moved)
+          and all(str(p.measured["size_gib"]) in p.cost
+                  or f"{p.measured['size_gib']:.2f}" in p.cost for p in moved)
           and all("all three cards" in p.heavy_words for p in moved),
           [(p.id, p.measured["tok_s_note"]) for p in moved])
 
@@ -459,7 +462,7 @@ def main() -> int:
     # was measured; a row repeated twice carries the RANGE and the LOW end is
     # the number the list shows, so the row can never flatter itself.
     check("every measured row dates its speed and says what was measured",
-          all(p["measured"].get("tok_s_on") == "2026-11-17"
+          all(p["measured"].get("tok_s_on") in ("2026-11-17", "2026-11-18")
               and isinstance(p["measured"].get("tok_s_note"), str)
               and p["measured"]["tok_s_note"] for p in text_measured),
           [(p["id"], p["measured"].get("tok_s_on")) for p in text_measured])
@@ -467,10 +470,13 @@ def main() -> int:
               if "two runs" in p["measured"].get("tok_s_note", "")}
     check("... the rows run twice carry their range, and tok_s is its LOW end "
           "(General's 26B row is the same twice-measured pooled load as "
-          "Reflective Coach's, so it carries the range too)",
-          set(ranged) == {"general", "coding", "reflect", "pictures", "medical"}
+          "Reflective Coach's, so it carries the range too; Pictures & Screens was "
+          "measured once on 2026-11-18, when its whole model changed, so it is not "
+          "one of the ranged rows and says so in its note)",
+          set(ranged) == {"general", "coding", "reflect", "medical"}
           and all(re.search(r"read " + re.escape(str(m["tok_s"])) + r"-",
-                            m["tok_s_note"]) for m in ranged.values()),
+                            m["tok_s_note"]) for m in ranged.values())
+          and "one run" in P.by_id("pictures").measured["tok_s_note"],
           {k: v.get("tok_s_note") for k, v in ranged.items()})
     av = fixture["presets"][3]
     check("Agentic+Vision now uses qwen3.5:9b on the 2060 at 16,384",
@@ -516,21 +522,37 @@ def main() -> int:
           and caps["reflect"].measured["spill_gib"] == 0.68
           and caps["reflect"].measured["cold_load_s"] == 52.0,
           caps["reflect"].measured)
-    check("2026-11-18: Pictures & Screens moved to the measured qwen3-vl-30b-a3b "
-          "pooled mode - all three cards, heavy mode, its own 32,768-token window",
-          caps["pictures"].model == "qwen3-vl:30b-a3b-instruct"
+    check("2026-11-18: Pictures & Screens runs the gemma4-12b pooled mode on all three "
+          "cards at a 32,768-token window - because the 30B vision model it named that "
+          "same day was measured spilling 2.24 GiB on the real lane and 1.65 GiB even "
+          "at 16,384, which no window can fix",
+          caps["pictures"].model == "gemma4:12b-it-qat"
           and caps["pictures"].lane == "pooled" and caps["pictures"].heavy_mode is True
-          and caps["pictures"].mode == "qwen3-vl-30b-a3b"
+          and caps["pictures"].mode == "gemma4-12b"
           and caps["pictures"].context == 32768,
           (caps["pictures"].model, caps["pictures"].lane, caps["pictures"].mode))
-    check("... with the 2026-11-09 bench receipt copied, including the 2.24 GiB spill "
-          "it really measured",
-          caps["pictures"].measured["tok_s"] == 14.6
-          and caps["pictures"].measured["tok_s_on"] == "2026-11-17"
-          and caps["pictures"].measured["size_gib"] == 19.88
-          and caps["pictures"].measured["spill_gib"] == 2.24
-          and caps["pictures"].measured["cold_load_s"] == 54.8,
+    check("... the 30B model the row first named is nowhere in the shipped rows any "
+          "more, and no preset names it",
+          all(p.model != "qwen3-vl:30b-a3b-instruct" for p in P.PRESETS)
+          and all(m["model"] != "qwen3-vl:30b-a3b-instruct"
+                  for m in P.pooled_modes()))
+    check("... with the 2026-11-18 lane measurement copied: 8.696 GiB resident, all "
+          "of it in video memory (0 B spilled), a 20.3 s cold load and 28.08 tok/s",
+          caps["pictures"].measured["tok_s"] == 28.08
+          and caps["pictures"].measured["tok_s_on"] == "2026-11-18"
+          and caps["pictures"].measured["size_gib"] == 8.696
+          and caps["pictures"].measured["vram_gib"] == 8.696
+          and caps["pictures"].measured["spill_gib"] == 0.0
+          and caps["pictures"].measured["cold_load_s"] == 20.3,
           caps["pictures"].measured)
+    check("... and the row carries the picture-reading evidence, not a quality claim "
+          "it cannot support",
+          "picture_test" in caps["pictures"].measured
+          and "30B gave" in caps["pictures"].measured["picture_test"]
+          and caps["pictures"].measured["quality_general"].startswith("21/24")
+          and "not a score" in caps["pictures"].worse
+          and "0 B spilled" in caps["pictures"].cost, caps["pictures"].measured)
+
     check("Reflective Coach is a model choice only, never a therapist claim",
           "not a therapist" in caps["reflect"].worse
           and "no therapy record" in caps["reflect"].worse)
@@ -556,17 +578,24 @@ def main() -> int:
     modes = P.pooled_modes()
     check("pooled_modes(): three named rows - Medical from its Preset row, and the two "
           "measured candidates Reflective Coach and Pictures & Screens now apply",
-          [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "qwen3-vl-30b-a3b"]
+          [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "gemma4-12b"]
           and modes[0]["model"] == med.model and modes[0]["num_ctx"] == med.context
           and [m["num_ctx"] for m in modes] == [32768, 32768, 32768]
           and all(m["needs_cards"] == 3 for m in modes), modes)
     check("... the two candidates are exactly the models the two moved presets run, "
-          "and each row keeps the measured spill allowance its bench row gave it",
+          "and the 12B row's measured spill allowance is ZERO (it was measured with "
+          "nothing spilled) while the 26B keeps its measured 0.68 GiB",
           modes[1]["model"] == P.by_id("reflect").model
           and modes[2]["model"] == P.by_id("pictures").model
           and modes[1]["spill_allowance"] == round(0.681 * 1024 ** 3)
-          and modes[2]["spill_allowance"] == round(2.24 * 1024 ** 3),
+          and modes[2]["spill_allowance"] == 0,
           [m["model"] for m in modes])
+    check("... so the pictures apply is read back with the zero-spill rule, not a "
+          "2.24 GiB allowance for a replaced model",
+          P._preset_spill_allowance(P.by_id("pictures")) == 0
+          and "0 B spilled" in modes[2]["measured_words"],
+          (P._preset_spill_allowance(P.by_id("pictures")),
+           modes[2]["measured_words"]))
     rec3 = P.recommendations()["by_gpu_count"]["3"]
     check("every preset has a 3-GPU recommendation row (the id-keyed GPU dicts cover the catalogue)",
           set(rec3) == set(P.PRESET_IDS), sorted(rec3))

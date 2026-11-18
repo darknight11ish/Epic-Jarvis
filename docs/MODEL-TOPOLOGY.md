@@ -95,6 +95,16 @@ three cards, so pointing General at it gives the owner the model he chose with
 **no change to his PC**. General is therefore `heavy_mode=True, mode
 "gemma4-26b-a4b"`, the same measured pooled mode Reflective Coach uses.
 
+**Pictures & Screens runs `gemma4:12b-it-qat` on that same pooled lane.** The
+30B vision model the row first named was measured on the real lane on
+2026-11-18 spilling **2.24 GiB** into system RAM (and 1.65 GiB at 16,384
+tokens, with 8.6 GiB of the three cards left unused - its own split, not a full
+card), so it was replaced the same day by the 12B model: **8.70 GiB resident
+with 0 B spilled**, a 20.3 s cold load and 28.08 tokens a second, and it read
+the picture and screenshot tests the same way the 30B did. Its own `worse` line
+says picture quality has no scoring battery. The proof is in the preset-speeds
+section below and in `.dsh-scratch/preset-pictures-2026-11-18/`.
+
 **Measured on this PC on 2026-11-17, on the pooled lane, across all three cards
 at 32,768 tokens.** The run is `.dsh-scratch/wave21/preset-truth/REPORT.md`;
 every raw row is `rows.jsonl` beside it:
@@ -1526,11 +1536,23 @@ per-preset `measured` object as `tok_s` / `tok_s_on` / `tok_s_note`, so
 the desktop HUD and the phone draw the same number from the same builder.
 
 Where the run repeated a row, speed varied by up to about +/-40% between
-back-to-back runs (Coding 40.3-51.2 tok/s, Reflective Coach 25.4-36.5, Pictures
-& Screens 14.6-25.4, Medical 11.4-11.7); the apps show the **low end** and the
-note carries the range. A row without a trustworthy measurement carries
-`tok_s: null` and the apps say **not measured** - never a guess and never a
-figure borrowed from a different model.
+back-to-back runs (Coding 40.3-51.2 tok/s, Reflective Coach 25.4-36.5, Medical
+11.4-11.7); the apps show the **low end** and the note carries the range. A row
+without a trustworthy measurement carries `tok_s: null` and the apps say **not
+measured** - never a guess and never a figure borrowed from a different model.
+
+**Pictures & Screens was re-measured on 2026-11-18, and its whole model
+changed.** The row the 2026-11-17 run timed (`qwen3-vl:30b-a3b-instruct`,
+14.6-25.4 tok/s) was found spilling **2.24 GiB** into system RAM on the real
+pooled lane - and still 1.65 GiB at 16,384 tokens with 8.6 GiB of the cards
+free - so it was replaced the same day. Its replacement,
+`gemma4:12b-it-qat` at the same 32,768-token window, measured **8.70 GiB
+resident with 0 B spilled, a 20.3 s cold load and 28.08 tokens a second** (one
+run, on the real lane, thinking off); its `measured` object says so with its
+own `tok_s_on` date, and the row's `worse` line says picture quality has no
+scoring battery. The evidence is
+`.dsh-scratch/preset-pictures-2026-11-18/` (`rows.jsonl`, `rows2.jsonl`,
+`rows3.jsonl`, `rows-logged.jsonl`).
 
 ---
 

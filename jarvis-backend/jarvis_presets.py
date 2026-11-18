@@ -29,7 +29,9 @@ it), with its own `tok_s_on` date and `tok_s_note`; every other key under
 MODEL-BENCH-2026-10-10.md and STRATEGY beside it). The everyday 26B's figures
 are that run measured ON THE POOLED LANE it now names - the same lane, window
 and cards - and `measured is None` means NOT measured for that model, never a
-guess.
+guess. Pictures & Screens is the ONE row re-measured after that run: its
+2026-11-18 receipt (the row's own `source`) was taken on the real pooled lane,
+and it is why that row no longer runs the 30B vision model.
 
 Lanes (this PC, 2026-11-18):
   main    ONE card (the RTX 2060), port 11436 - the everyday lane and the only
@@ -82,6 +84,21 @@ the next apply that is not heavy. The cost is stated in each preset's own words
 and on the card: the everyday model is paused while it runs and comes back when
 it is stopped. 2026-11-18 also added Reflective Coach and Pictures & Screens to
 that road, each naming its own measured pooled mode.
+
+PICTURES & SCREENS MOVED AGAIN THE SAME DAY, and the measurement is the reason.
+The 30B vision model it first named does not fit: measured on the real pooled
+lane on 2026-11-18 (the three named lanes paused, one model resident), it loaded
+19.88 GiB with **2.24 GiB in system memory**, and at 16,384 tokens it still
+spilled 1.65 GiB while the cards had 8.6 GiB free - the model's own split, not
+the window, so no context size fixes it. The row therefore runs
+`gemma4:12b-it-qat` at the same 32,768-token window on the same pooled lane:
+8.70 GiB resident, **all of it in the cards' memory (0 B spilled)**, a 20.3 s
+cold load and 28.1 tokens a second. That model answered the picture test the
+same way the 30B did (it read a generated screenshot's Save button, server
+address and red banner), and its general quality is the project's own blind
+eight-task battery's 21/24. The proof, the raw rows and the test pictures are in
+`.dsh-scratch/preset-pictures-2026-11-18/`; the decision is recorded in
+`decisions.d/2026-11-18-pictures-preset-zero-spill.md`.
 """
 from __future__ import annotations
 
@@ -155,8 +172,10 @@ class Preset:
     #: The pooled mode this preset starts (`jarvis_model_lanes.
     #: start_pooled_lane(mode=...)`), "" for a preset on a named lane. Four rows
     #: name one: Coding keeps the lane's own default, Medical names `medical`,
-    #: and since 2026-11-18 Reflective Coach names `gemma4-26b-a4b` and Pictures
-    #: & Screens names `qwen3-vl-30b-a3b`.
+    #: Reflective Coach names `gemma4-26b-a4b`, and Pictures & Screens names
+    #: `gemma4-12b` (the 30B vision mode it named first was measured spilling
+    #: 2.24 GiB on this PC and was replaced the same day - see the module
+    #: docstring).
     mode: str = ""
     words: tuple = ()       # trigger words for /api/work/recommend
     strong: tuple = ()
@@ -198,26 +217,26 @@ MEDICAL_MEASURED_WORDS = (
     "re-measurement read 11.4-11.7 tokens a second, and the LOW end (11.4) is "
     "the figure the row shows")
 
-#: The two measured pooled modes, from the 2026-11-09 bench rows (spill included,
-#: never trimmed). They were availability only until 2026-11-18; since then
-#: Reflective Coach AND General apply `gemma4-26b-a4b` (General is a heavy row on
-#: the pooled lane - see the module docstring), and Pictures & Screens applies
-#: `qwen3-vl-30b-a3b`. The numbers live here ONCE and `pooled_modes()`
-#: republishes them, so the applied card, the lane row and the preset cannot
-#: drift. The 26B sentence is the 2026-11-17 live re-measurement of the SAME
-#: load (same model, 32,768 tokens, all three cards), because that run's 25.4
-#: low end is what the preset rows quote; the 2026-11-09 receipt's 49.26 was a
-#: different run of the same row and is kept in `docs/MODEL-TOPOLOGY.md`.
+#: The measured pooled-mode sentences. Each is the ONE copy `pooled_modes()`
+#: republishes, so the applied card, the lane row and the preset row cannot
+#: drift. Reflective Coach AND General apply `gemma4-26b-a4b` (General is a
+#: heavy row on the pooled lane - see the module docstring); the 26B sentence is
+#: the 2026-11-17 live re-measurement of that load (same model, 32,768 tokens,
+#: all three cards), because that run's 25.4 low end is what the preset rows
+#: quote; the 2026-11-09 receipt's 49.26 was a different run of the same row and
+#: is kept in `docs/MODEL-TOPOLOGY.md`. Pictures & Screens applies the 12B row,
+#: measured fresh on 2026-11-18 after the 30B vision model it first named spilled
+#: 2.24 GiB - the old sentence is NOT kept as an allowance anywhere, because the
+#: row it described is gone.
 GEMMA4_26B_MEASURED_WORDS = (
     "measured on this PC on 2026-11-17 at 32,768 tokens across all three "
     "cards: 15.50 GiB loaded with 0.68 GiB (4.4%) spilled into system memory, "
     "25.4-36.5 tokens a second (the LOW end is the figure the row shows) and a "
     "49.9 s cold load")
-QWEN3_VL_30B_MEASURED_WORDS = (
-    "measured on this PC: 19.88 GiB loaded with 2.24 GiB (11.2%) spilled into "
-    "system memory, 89% in the cards' memory and a 54.8 s cold load "
-    "(2026-11-09); the 2026-11-17 re-measurement read 14.6-25.4 tokens a "
-    "second, and the LOW end (14.6) is the figure the row shows")
+GEMMA4_12B_MEASURED_WORDS = (
+    "measured on this PC on 2026-11-18 at 32,768 tokens across all three "
+    "cards on the real pooled lane: 8.70 GiB loaded entirely in the cards' "
+    "memory with 0 B spilled, a 20.3 s cold load and 28.1 tokens a second")
 
 PRESETS = (
     Preset(
@@ -483,47 +502,61 @@ PRESETS = (
     Preset(
         id="pictures", title="Pictures & Screens",
         focus="reading a screenshot or a picture",
-        what="For looking at a picture or a screenshot and talking about it: a 30B "
-             "vision model that uses all three cards at once. Agentic + Vision is the "
-             "version that also drives tools.",
+        what="For looking at a picture or a screenshot and talking about it: a 12B "
+             "vision model on the all-three-card lane that holds the whole model in "
+             "the cards' memory. Agentic + Vision is the version that also drives "
+             "tools.",
         cost="HEAVY MODE: it needs all three cards at once as one pooled lane and "
-             "pauses the everyday 9B model while it works. Measured on this PC: "
-             "19.88 GiB loaded with 2.24 GiB (11.2%) spilled into system memory, 89% "
-             "in the cards' memory and a 54.8 s cold load (2026-11-09); the "
-             "2026-11-17 re-measurement read 14.6-25.4 tokens a second, and the LOW "
-             "end (14.6) is the figure this row shows.",
-        worse="Picture QUALITY through this row is not measured - the 2026-11-09 receipt "
-              "measured speed and memory, not whether its answers about a picture are "
-              "better than the 9B's. It is slower than the single-card row it replaces "
-              "(14.6 tokens a second, the low end of two 2026-11-17 runs, against "
-              "that card's measured 41.89 at this 32,768 window on 2026-11-07), it "
-              "spills 2.24 GiB into system memory, and it pauses the everyday model "
-              "for about a minute while it loads. Live phone-camera frames are "
-              "explicitly unmeasured.",
-        model="qwen3-vl:30b-a3b-instruct", lane="pooled", context=32768,
-        heavy_mode=True, mode="qwen3-vl-30b-a3b",
+             "pauses the everyday 9B model while it works. Measured on this PC on "
+             "2026-11-18 on that lane at 32,768 tokens: 8.70 GiB loaded ENTIRELY in "
+             "the cards' memory (0 B spilled), a 20.3 s cold load and 28.1 tokens a "
+             "second.",
+        worse="Picture QUALITY has no scoring battery. The measured check behind this "
+              "row is a generated picture and a generated settings screenshot: it read "
+              "the picture's words and shapes and named the screenshot's Save button, "
+              "server address and red banner exactly as the 30B vision model did - but "
+              "that is a reading test, not a score against other models. It is a 12B "
+              "model, smaller than the 30B it replaces, so a busy or hard screenshot "
+              "can be read less well; its general quality is the project's own blind "
+              "eight-task battery's 21/24 (2026-11-17), one below the 26B's 22/24. It "
+              "pauses the everyday model for about 20 seconds while it loads. Live "
+              "phone-camera frames are explicitly unmeasured.",
+        model="gemma4:12b-it-qat", lane="pooled", context=32768,
+        heavy_mode=True, mode="gemma4-12b",
         prompt="balanced", diet="balanced",
         tools=("pictures",),
-        measured={"tok_s": 14.6, "tok_s_on": "2026-11-17",
-                  "tok_s_note": "19.88 GiB, 2.24 GiB spill, all three cards, "
-                                "32,768 context; two runs read 14.6-25.4 tok/s, the "
-                                "low end is shown",
-                  "size_gib": 19.88, "spill_gib": 2.24,
-                  "spill_pct": 11.2, "vram_pct": 89, "cold_load_s": 54.8,
-                  "context_measured": 32768,
-                  "source": "model matrix 2026-11-09: qwen3-vl:30b-a3b-instruct at "
-                            "32,768 tokens loaded 19.88 GiB with 2.24 GiB (11.2%) "
-                            "spilled into system memory (89% in the cards' memory), "
-                            "a 54.8 s cold load and 33.1 tok/s; the 2026-11-17 "
-                            "re-measurement of the same row read 14.6-25.4 tok/s, "
-                            "low end shown. Same row as QWEN3_VL_30B_MEASURED_WORDS "
-                            "above; picture quality was not measured."},
+        measured={"tok_s": 28.08, "tok_s_on": "2026-11-18",
+                  "tok_s_note": "8.70 GiB, 0 spill, all three cards, 32,768 "
+                                "context; one run on the real pooled lane read "
+                                "28.08 tok/s",
+                  "size_gib": 8.696, "vram_gib": 8.696, "spill_gib": 0.0,
+                  "cold_load_s": 20.3, "context_measured": 32768,
+                  "picture_test": "read 'ATLAS 42' and the two shapes from a "
+                                  "generated picture, then named the Save button, "
+                                  "the server address and the red banner from a "
+                                  "generated screenshot - the same answers the 30B "
+                                  "gave",
+                  "quality_general": "21/24 on the blind eight-task battery of "
+                                     "2026-11-17",
+                  "replaced": "qwen3-vl:30b-a3b-instruct at 32,768 measured 2.24 "
+                              "GiB spilled on 2026-11-18 (and 1.65 GiB at 16,384), "
+                              "so it was not kept",
+                  "source": "measured on this PC 2026-11-18 on the real pooled "
+                            "lane (port 11450, the three named lanes paused, one "
+                            "model resident, thinking off - the app's ordinary "
+                            "turn): 9,336,929,643 B resident and 9,336,929,643 B "
+                            "in video memory (0 B spilled), a 20.3 s cold load "
+                            "and 28.08 tok/s warm. The supplied picture and "
+                            "screenshot tests are in "
+                            ".dsh-scratch/preset-pictures-2026-11-18/ (screenshot-test.png, "
+                            "rows3.jsonl); the quality battery is "
+                            ".dsh-scratch/wave21/quality-battery/REPORT.md."},
         heavy_words="This preset needs all three cards at once as one pooled lane. "
                     "While it runs, the everyday 9B model is paused - it comes back, "
                     "proved from the model list, when you apply a preset that is not "
-                    "heavy. It loads about 19.88 GiB, spills 2.24 GiB into system "
-                    "memory, takes about 55 s cold and writes about 14.6 tokens a "
-                    "second (the low end of two 2026-11-17 runs).",
+                    "heavy. It loads about 8.70 GiB with NOTHING spilled into system "
+                    "memory, takes about 20 s cold and writes about 28 tokens a "
+                    "second.",
         words=("picture", "screenshot", "screen", "image", "photo", "look at"),
         strong=("read this screenshot", "look at this picture"),
     ),
@@ -630,13 +663,16 @@ def pooled_modes() -> tuple:
     `jarvis_big_coder.MODES` owns coding/deep_think/creative. This is the preset
     layer's own extra rows: `medical`, derived from the Medical Preset row so its
     model and window are typed once, plus the two measured candidates
-    (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`). Until 2026-11-18 no preset pointed at
-    those two; now Reflective Coach applies the first and Pictures & Screens the
-    second, so their measured row is the ONE copy the preset and the lane both
-    read rather than two numbers that can drift. `gemma4:26b-a4b-it-qat` is also
-    the General preset's model since 2026-11-18, at the SAME 32,768-token window
-    but on the everyday lane (11436) rather than this pooled one (11450); only
-    one preset's model is loaded at a time, so the two rows never share a machine.
+    (`gemma4-26b-a4b`, `gemma4-12b`). Reflective Coach applies the first and
+    Pictures & Screens the second, so their measured row is the ONE copy the
+    preset and the lane both read rather than two numbers that can drift.
+    `gemma4:26b-a4b-it-qat` is also the General preset's model since 2026-11-18,
+    at the SAME 32,768-token window but on the everyday lane (11436) rather than
+    this pooled one (11450); only one preset's model is loaded at a time, so the
+    two rows never share a machine. The 2026-11-18 measurements replaced the
+    `qwen3-vl-30b-a3b` row: that 30B model spilled 2.24 GiB on the real lane (and
+    1.65 GiB at 16,384), so its allowance is not carried here - the 12B row's
+    allowance is ZERO, which is what `load_coder`'s zero-spill rule checks.
     Read by `jarvis_model_lanes` and `jarvis_big_coder` through lazy imports.
     Never raises; `()` when the Medical row is absent (a trimmed backend).
     """
@@ -651,10 +687,10 @@ def pooled_modes() -> tuple:
          "model": "gemma4:26b-a4b-it-qat", "num_ctx": 32768,
          "measured_words": GEMMA4_26B_MEASURED_WORDS,
          "spill_allowance": round(0.681 * 1024 ** 3), "needs_cards": 3},
-        {"key": "qwen3-vl-30b-a3b", "label": "Qwen3-VL 30B A3B",
-         "model": "qwen3-vl:30b-a3b-instruct", "num_ctx": 32768,
-         "measured_words": QWEN3_VL_30B_MEASURED_WORDS,
-         "spill_allowance": round(2.24 * 1024 ** 3), "needs_cards": 3},
+        {"key": "gemma4-12b", "label": "Gemma 4 12B",
+         "model": "gemma4:12b-it-qat", "num_ctx": 32768,
+         "measured_words": GEMMA4_12B_MEASURED_WORDS,
+         "spill_allowance": 0, "needs_cards": 3},
     )
 
 
@@ -2107,9 +2143,9 @@ def _preset_spill_allowance(p) -> int:
 
     A HEAVY preset runs on the pooled lane, and a pooled mode's row carries the
     spill that mode was measured with (`pooled_modes()` -> `spill_allowance`:
-    General/Reflective Coach 0.68 GiB, Pictures & Screens 2.24 GiB, Coding and
-    Medical 0). The apply's lane read-back is the only place that number has a
-    say, and it is read from the ONE mode row rather than typed again here.
+    General/Reflective Coach 0.68 GiB, Coding, Medical and Pictures & Screens 0).
+    The apply's lane read-back is the only place that number has a say, and it is
+    read from the ONE mode row rather than typed again here.
     Every preset that is not heavy keeps the zero-spill rule.
     """
     if not getattr(p, "heavy_mode", False):
@@ -3271,7 +3307,7 @@ def recommendations() -> dict:
                                  f"(qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), "
                                  f"Medical (medgemma:27b at 32,768), Reflective Coach "
                                  f"(gemma4:26b-a4b-it-qat at 32,768) and Pictures & "
-                                 f"Screens (qwen3-vl-30b-a3b-instruct at 32,768). "
+                                 f"Screens (gemma4:12b-it-qat at 32,768). "
                                  f"Each is too big for one card, which is why a heavy "
                                  f"preset splits one model across the cards; every "
                                  f"preset that is not heavy runs on the one everyday "
