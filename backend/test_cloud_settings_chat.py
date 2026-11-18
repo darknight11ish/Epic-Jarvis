@@ -179,13 +179,16 @@ def t_am_i_on_cloud_answers_from_the_reality():
     write_json(CHOICE, {"provider": "deepseek_api"})
     r = words("am i on cloud?") or ""
     check("'am I on cloud?' -> this answer is local, the chosen service sends nothing "
-          "by itself",
+          "by itself while the switch is off",
           "written on this PC" in r and "nothing is sent by itself" in r
-          and "off" in r and "cloud-choice.json" in r, r)
+          and "every cloud turn waits for your yes" in r
+          and "cloud-choice.json" in r, r)
     write_json(SWITCH, {"on": True})
     r = words("am i on cloud?") or ""
     check("... with the standing switch on, it says a hard question may go without "
-          "asking first", "standing switch is ON" in r, r)
+          "asking first, and never claims nothing is sent",
+          "standing switch is ON" in r and "without asking you first" in r
+          and "nothing is sent by itself" not in r, r)
 
 
 def t_escalation_state_off_is_plain():

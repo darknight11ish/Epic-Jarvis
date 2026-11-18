@@ -270,7 +270,7 @@ def provider_state() -> dict:
     elif not known_ids():
         out["error"] = "the cloud services are not set up on this PC"
     elif raw not in known_ids():
-        out["error"] = "it names a cloud service this PC does not know"
+        out["error"] = (f"it names {raw!r}, a cloud service this PC does not know")
     else:
         out["provider"] = raw
     return out
@@ -396,17 +396,19 @@ def _default_cap_service() -> str:
     return _cap_service(money_state(), provider_state().get("provider") or "")
 
 
-def _switch_clause(esc: dict) -> str:
-    """One honest clause for the switch, in plain words, from the file read."""
+def _send_rule(esc: dict) -> str:
+    """One honest clause for whether Jarvis may send by itself, from the file
+    read. It never says "nothing is sent by itself" while the switch is ON."""
     if esc.get("on"):
-        return ("the standing switch is ON, so a hard question can go to the cloud "
-                "without asking you first")
+        return ("a hard question can go to the cloud without asking you first (the "
+                "standing switch is ON), after every privacy check and the monthly cap")
     if esc.get("error"):
-        return ("the switch file cannot be read, so it counts as off and every cloud "
-                "turn waits for your yes")
+        return ("nothing is sent by itself: the switch file cannot be read, so it counts "
+                "as off and every cloud turn waits for your yes")
     if not esc.get("exists"):
-        return "the switch is not set up (off), so every cloud turn waits for your yes"
-    return "the switch is off, so every cloud turn waits for your yes"
+        return ("nothing is sent by itself: no switch has been saved, so every cloud "
+                "turn waits for your yes")
+    return "nothing is sent by itself: the switch is off, so every cloud turn waits for your yes"
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +439,7 @@ def _provider_words() -> str:
                 f"\"switch to DeepSeek as my cloud provider\".")
     return (f"Your cloud service is {_who(pid)}. I read that from cloud-choice.json "
             f"({st['saved'] or 'no saved time readable'}). That is only a choice: "
-            f"nothing is sent by itself, and {_switch_clause(escalation_state())}.")
+            f"{_send_rule(escalation_state())}.")
 
 
 def _on_cloud_words() -> str:
@@ -450,8 +452,8 @@ def _on_cloud_words() -> str:
                 ", so every answer is written by the model here.")
     return (f"This answer is written on this PC, not by a cloud service. "
             f"{_who(st['provider'])} is chosen for hard questions (cloud-choice.json, "
-            f"{st['saved'] or 'no saved time readable'}), but nothing is sent by "
-            f"itself, and {_switch_clause(esc)}.")
+            f"{st['saved'] or 'no saved time readable'}), but that choice sends nothing "
+            f"by itself: {_send_rule(esc)}.")
 
 
 def _escalation_words() -> str:
@@ -556,11 +558,18 @@ def _spend_words() -> str:
 def _what_it_does_words() -> str:
     esc = escalation_state()
     st = provider_state()
+    saved = esc.get("saved") or "no saved time readable"
+    if not esc["exists"]:
+        source = "escalate-cloud.json is not there"
+    elif esc.get("error"):
+        source = f"escalate-cloud.json cannot be read ({esc['error']})"
+    else:
+        source = f"escalate-cloud.json, {saved}"
     state = ("It is ON right now." if esc.get("on") else
              "It is OFF right now." if not esc.get("error") else
              "It cannot be read right now, so it counts as OFF.")
     who = (_company(st["provider"]) if st["provider"] else "a cloud service once one is chosen")
-    return ("The standing switch (escalate-cloud.json) is how you let a hard question go "
+    return (f"The standing switch ({source}) is how you let a hard question go "
             f"to {who} without a card for each one: I may then spend money and send "
             f"that message's own words by myself. {_NEVER_SENT} Lockdown, every privacy "
             "check and the monthly cap still run first, and turning it off makes every "
