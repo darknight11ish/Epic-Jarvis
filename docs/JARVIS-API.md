@@ -30260,9 +30260,18 @@ id plus the declared fields - with no token in the page.
 The owner's decision, 2026-10-29: "file attachment in chat", **both apps at
 once**, with the design's recommended defaults - a 2,500,000-byte raw cap,
 12,000 characters of text to the model, no approval card (the existing
-`read_files_readonly` row is reused when it says ask), nothing written to disk,
-no new route, images still on the existing picture path, no audio or video, and
-no new Settings switch. The design is
+`read_files_readonly` row is reused when it says ask), no new route, images still
+on the existing picture path, and no new Settings switch. A DOCUMENT is still
+never written to disk. **2026-11-18 (the owner's report that an `.m4a` voice memo
+could not be attached from the phone's row) adds RECORDINGS**: the chat row now
+carries the eight audio formats `jarvis_media_read` reads, and those bytes are
+transcribed by that same local reader - never by the document converter and
+never transcribed on the phone. A compressed recording is decoded through ONE
+private temporary copy, removed before the read returns (163.2 step 5b). The
+same change fixes a PRE-EXISTING reader bug: `if not samples:` is invalid on the
+numpy array the real decoder returns (a multi-element array's truth value raises
+`ValueError`), so every real recording - and every real WAV - answered "This file
+could not be read (ValueError)". The design is
 `.dsh-scratch/FILE-UPLOAD-FEASIBILITY-2026-10-29/REPORT.md` (sections 7 and 8
 are the shape); `backend/jarvis_attached_file.py` is the reader.
 
@@ -30298,7 +30307,12 @@ never multipart, never a temporary store:
   a claim; this PC also reads the field itself, so a client that forgets the
   flag cannot take a file's words anywhere.
 * Kinds: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.md`, `.markdown`, `.txt`, `.csv` -
-  the seven `my_files` already reads, read by the same converter.
+  the seven `my_files` already reads, read by the same converter - plus the eight
+  RECORDING formats `jarvis_media_read` reads (2026-11-18): `.wav`, `.mp3`,
+  `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, read by that audio reader.
+  No video is offered in this row even though the audio reader can also read
+  one: one chat attachment is at most 2.5 MB, and the row exists for a question
+  about a file the owner hands over (163.5).
 
 ### 163.2 What the PC does with it, in order
 
@@ -30323,9 +30337,10 @@ never multipart, never a temporary store:
    `.key`, `.pfx`, `.p12`, `.kdbx`, `.ppk`, `.jks`, `.keystore`, browser data,
    Jarvis's own files - asked through `jarvis_agent.protected_name`, the same
    list `_protected_path` uses, not a second copy); the extension is one of the
-   seven; the magic bytes agree with it (`%PDF-`; `PK\x03\x04` plus the right
-   `word/`, `xl/` or `ppt/` member inside; UTF-8 with no NUL bytes for text).
-   An encrypted PDF (`/Encrypt` in its trailer) is refused in words.
+   seven documents or one of the eight recordings; for a DOCUMENT the magic
+   bytes agree with it (`%PDF-`; `PK\x03\x04` plus the right `word/`, `xl/` or
+   `ppt/` member inside; UTF-8 with no NUL bytes for text). An encrypted PDF
+   (`/Encrypt` in its trailer) is refused in words.
 4. **Zip bombs** are refused before conversion by
    `jarvis_documents.zip_bomb_problem` (the existing guard, not another one)
    with this turn's own **25 MB declared-uncompressed ceiling**
@@ -30335,9 +30350,23 @@ never multipart, never a temporary store:
    (review R6 / trap W1, 2026-10-30).
 5. **The text comes out of the one converter, over a stream.**
    `jarvis_documents.convert_bytes` calls `_default_convert("-", ext)` - the
-   converter's new **stdin mode** - so the file is never written to disk, not
+   converter's new **stdin mode** - so a document is never written to disk, not
    even to a temporary one. Same child program, same scrubbed environment, same
    120-second clock, same 4,000,000-character stdout cap.
+5b. **A recording's words come out of the one audio reader.**
+   `jarvis_media_read.read_media_bytes` is the bytes door of the SAME reader
+   `my_files`' `read_media` action uses: one audio reader, not two. A WAV is
+   decoded in memory, with no ffmpeg and no file. A COMPRESSED format (M4A,
+   MP3, AAC, FLAC, OGG, OPUS, WMA) is copied to ONE private temp file for the
+   length of the decode only, then deleted in a `finally` - an MP4/M4A keeps
+   its index in a `moov` atom that may sit at the END of the file, so ffmpeg
+   cannot decode it from a pipe (probed 2026-11-18: a 100 KB `.m4a` on stdin
+   produced a 78-byte WAV header and "partial file"). The copy has a random
+   name, is never the owner's file name and is never kept, indexed or logged.
+   With no ffmpeg installed, the owner reads `jarvis_media_read.NO_FFMPEG`
+   itself - "This PC has no ffmpeg, so this file's sound cannot be read. A WAV
+   file needs no ffmpeg; an MP3, M4A or video does." - and no second sentence is
+   invented.
 6. **Chat markers are stripped** (`jarvis_agent.strip_chat_markers`), the text
    is capped at `min(12,000, what the measured window can hold)` and the block
    says how much was left out.
@@ -30376,12 +30405,21 @@ NOT read by this PC: <why> Say so plainly rather than guessing what is in it.]`,
 and the same sentence goes into the answer itself, said by code, never left to
 the model - the picture path's rule of 2026-09-29.
 
+For a RECORDING the block is the same and `<the first 12,000 characters>` is the
+transcript `jarvis_media_read` produced, with the same "N of M characters were
+shown" line when the transcript is longer; a refused recording's block carries
+the audio reader's own sentence (no ffmpeg, no speech recognised, a busy
+reader), capitalized and punctuated by `jarvis_attached_file.said_for`, which
+never rewrites it.
+
 ### 163.4 The refusals, in the owner's words
 
 | What happened | What the owner reads |
 |---|---|
 | over the cap | `That file is 4.2 MB. Files up to 2.5 MB can be attached; for bigger ones, put it in a folder Jarvis may look in.` |
-| not one of the seven | `Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a chat, and that one is not a kind Jarvis reads.` |
+| not one of the kinds | `Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a chat, or a recording (WAV, MP3, M4A, AAC, FLAC, OGG, OPUS or WMA), and that one is not a kind Jarvis reads.` |
+| a recording with no ffmpeg | `This PC has no ffmpeg, so this file's sound cannot be read. A WAV file needs no ffmpeg; an MP3, M4A or video does.` |
+| a recording with no speech | `No speech was recognised in that file, so there is no transcript to show.` |
 | a picture | `A picture goes in as a picture: attach it with the picture button, and this PC will read its words. Nothing was read from it here.` |
 | a never-read name | `That file was not opened: its name is on the list of things Jarvis never reads - keys, saved passwords, browser data and Jarvis's own files. Nothing was opened.` |
 | wrong magic bytes | `That file was not opened: it says it is Word but it is not one, so it was not opened.` |
@@ -30403,9 +30441,15 @@ that quotes it) - a known follow-up, not a phone-UI change.
 
 ### 163.5 What it deliberately does not do, and exactly what is stored
 
-No upload route, no upload folder, no temporary file, no chunking, no resume, no
-document preview, no second image path, no new Settings switch, no new Android
-permission, no audio or video. The file is **not** added to any folder list, so
+No upload route, no upload folder, no chunking, no resume, no document preview,
+no second image path, no new Settings switch, no new Android permission, no
+video. A DOCUMENT is never written, not even to a temporary one. A RECORDING is
+the one exception, and only as a decode scratch copy: a WAV is decoded in memory,
+and a compressed recording is copied to ONE private temp file (random name, mode
+0600 where the platform has modes) for the length of the decode, removed before
+the read returns - never indexed, kept or logged, and `backend/test_media_read.py`
+proves the copy is gone after both a read and a refusal. The file is **not**
+added to any folder list, so
 a later turn cannot read it again: a second question about the same file needs
 it attached again, and the chip says so.
 
@@ -30481,12 +30525,26 @@ it results in is asserted in Rust.
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
 with the same document list, plus an image wildcard only while the PC's
 Pictures feature works (or it reads the words in pictures - section 36), so it
-is not the document list alone any more (2026-11-01). Same chip and the same
-refusal sentences, the cap enforced by reading one byte over the limit, and no
-storage permission. A picked image is routed BEFORE a byte is read
-(`AttachFile.goesToPicture`), down the picture path (`ChatPicture`), and is
+is not the document list alone any more (2026-11-01). **Since 2026-11-18 it also
+offers the eight recording types** (the extension decides before any provider
+type, so a picker that reports `application/octet-stream` for a `.m4a` still
+attaches it, and `audio/x-m4a` is an offered alias beside `audio/mp4`). Same
+chip and the same refusal sentences, the cap enforced by reading one byte over
+the limit, and no storage permission. A picked image is routed BEFORE a byte is
+read (`AttachFile.goesToPicture`), down the picture path (`ChatPicture`), and is
 never read as a document. `tools/check_parity.py` sees no new route on either
 side.
+
+**The recording kinds are the phone's in this change, and that is one-sided on
+purpose.** The desktop HUD, every chat window and the Alt+Space bar keep their
+eight-document filter and their own refusal wording (`jarvis_hud.html` in its
+three byte-identical copies, `main.js`, and Rust's `commands.rs`
+`CHAT_ATTACH_KINDS` with `chat_attachment_problem`): nothing on the desktop
+OFFERS a recording, so nothing there claims a capability it lacks. The PC still
+reads a recording a client does send - the reader is one, and the wire format is
+unchanged - and widening the desktop's list is a separate lane that has to move
+three copies of the page, `main.js`, the Rust guard and their tests together.
+The reason is written here and in `docs/ARCHITECTURE.md` section 8.
 
 ### 163.7 Tests
 
@@ -30508,7 +30566,20 @@ earlier conversation, and the conversation - not the whole PC - is marked
 private. `backend/test_chat_log.py` opens the stored row and proves it holds only
 the owner's words, and `backend/test_backup.py` decrypts the archived history and
 scans every archive member to prove no backup carries the file's body, its
-base64 or its name. The HUD half is `jarvis-desktop/tests/attach.mjs`, which
+base64 or its name. **The 2026-11-18 recording half** is
+`backend/test_media_read.py` - the bytes door accepts an `.m4a`/`.mp4` container
+name, a WAV's bytes are read in memory with no ffmpeg, an m4a with no ffmpeg
+returns exactly `NO_FFMPEG`, the private decode copy is removed after a refusal,
+and (on a machine that has ffmpeg) a REAL m4a decodes through it - and
+`backend/test_attached_file.py`: all eight recording extensions route to the one
+audio reader with their bytes and name, the reader's refusals are passed on
+verbatim, `RECORDING_KINDS` is exactly `jarvis_media_read.AUDIO_EXTS` with no
+video, and a real WAV goes attachment -> reader -> block. The phone half is
+`jarvis-client/app/src/test/java/com/jarvis/client/AttachFileTest.kt`: the
+picker's `MIME_TYPES` carries the recording types (including `audio/x-m4a`),
+`.m4a` resolves to the recording kind from the extension alone even when the
+picker says `application/octet-stream`, and a recording never takes the picture
+path. The HUD half is `jarvis-desktop/tests/attach.mjs`, which
 pins the caps, the wording, the part shape, the several-file rule (the first
 file that passes the kind and cap checks is the one attached, the rest are named
 as not attached, and a batch with nothing readable says so) and the window

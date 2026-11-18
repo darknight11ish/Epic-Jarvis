@@ -608,16 +608,17 @@ class MainActivity : FragmentActivity() {
 
     /**
      * The ONE "Attach a file" row's picker (2026-10-29; the only way to send a
-     * document OR a photo since 2026-11-01, when the owner asked for the Photo
-     * row to go: "ATTach a file on my Android phone will bring up the option
-     * to add a photo").
+     * document, a RECORDING (2026-11-18) OR a photo since 2026-11-01, when the
+     * owner asked for the Photo row to go: "ATTach a file on my Android phone
+     * will bring up the option to add a photo").
      *
      * It is the same `ActivityResultContracts.OpenDocument()` the custom-voice
      * WAV uses, with no storage permission (the owner chooses one file and the
      * app may read that one, once). The filter comes from [AttachFile.MIME_TYPES]
-     * - the eight kinds `my_files` already reads, plus an image type wildcard
-     * only while the PC's Pictures feature works - and nothing that would let a
-     * 400 MB video be picked only to be refused.
+     * - the documents `my_files` reads and the recordings `jarvis_media_read`
+     * reads, plus an image type wildcard only while the PC's Pictures feature
+     * works - and nothing the PC has no reader for, so a 400 MB video cannot be
+     * picked only to be refused.
      *
      * A photo the picker returns is routed BEFORE a byte is read: it goes down
      * the picture path ([attachPickedPicture] -> [PictureEncoder] -> [ChatPicture]),

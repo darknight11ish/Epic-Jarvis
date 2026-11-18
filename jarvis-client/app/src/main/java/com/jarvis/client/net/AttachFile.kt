@@ -7,7 +7,7 @@ import java.util.Base64
 import java.util.Locale
 
 /**
- * A document sent in chat, and the numbers that keep it inside what the PC accepts.
+ * A file sent in chat, and the numbers that keep it inside what the PC accepts.
  *
  * ONE FILE, ONE QUESTION, ONE TURN. The file the owner picks rides inside the
  * newest user message as one `attachment` object - `name`, `mime`, `size` and
@@ -24,14 +24,18 @@ import java.util.Locale
  * ([ChatHistory] keeps the WORDS only, so a later question cannot re-send the
  * file - the owner attaches it again if they want to ask something else).
  *
- * THE PC DOES THE READING. The phone does not extract text, render a page or
- * preview anything: the PC turns the bytes into at most 12,000 characters with
- * the same converter `my_files` already uses, and the answer says how much was
- * left out. A picture is NOT read as one of these, even when it is picked
- * through the same "Attach a file" row: [goesToPicture] decides that, and the
- * picture then takes its own path ([ChatPicture]), which covers secrets with
- * black boxes before any model sees it. Nothing here ever reads a picture's
- * bytes as a document.
+ * THE PC DOES THE READING. The phone does not extract text, render a page,
+ * transcribe a recording or preview anything: the PC turns the bytes into at
+ * most 12,000 characters with the same converter `my_files` already uses, and
+ * the answer says how much was left out. A RECORDING (`.m4a`, `.mp3`, `.wav`,
+ * and the rest of `jarvis_media_read`'s own list) is read on the PC by that
+ * reader, never transcribed here - the phone only carries the bytes
+ * (2026-11-18: the owner's report that a voice memo could not be attached). A
+ * picture is NOT read as one of these, even when it is picked through the same
+ * "Attach a file" row: [goesToPicture] decides that, and the picture then takes
+ * its own path ([ChatPicture]), which covers secrets with black boxes before
+ * any model sees it. Nothing here ever reads a picture's bytes as one of the
+ * attached file kinds.
  *
  * THE CAP IS THE REASON THIS FILE EXISTS. Base64 grows the bytes by a third, so
  * 2,500,000 bytes becomes 3,333,336 characters of JSON; with the most
@@ -54,15 +58,33 @@ object AttachFile {
     /** The PC's `MAX_BODY`: the whole `/api/chat` request, in bytes. */
     const val BACKEND_MAX_BODY = ChatPicture.BACKEND_MAX_BODY
 
-    /** One kind the PC already reads with `my_files`, named by its extension. */
-    class Kind(val extension: String, val mime: String, val label: String)
+    /**
+     * One kind the PC reads, named by its extension.
+     *
+     * [mime] is the ONE type that goes on the wire and the one the PC's reader
+     * knows. [altMimes] are the OTHER type strings providers really report for
+     * the same extension (a voice recorder's `.m4a` arrives as `audio/mp4`,
+     * `audio/x-m4a` or `application/octet-stream`, depending on the app). They
+     * widen the PICKER filter, never the wire: the PC decides what a file IS
+     * from its NAME, and [kindOf] runs on the extension before any MIME type is
+     * looked at.
+     */
+    class Kind(
+        val extension: String,
+        val mime: String,
+        val label: String,
+        val altMimes: List<String> = emptyList(),
+    ) {
+        /** Every type string this kind answers to, [mime] first. */
+        val allMimes: List<String> get() = listOf(mime) + altMimes
+    }
 
     private const val DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     private const val XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     private const val PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
-    /** The eight extensions - the seven `my_files` kinds, with `.md` written both ways. */
-    val KINDS: List<Kind> = listOf(
+    /** The eight document extensions - the seven `my_files` kinds, with `.md` written both ways. */
+    val DOCUMENT_KINDS: List<Kind> = listOf(
         Kind("pdf", "application/pdf", "PDF"),
         Kind("docx", DOCX, "Word"),
         Kind("xlsx", XLSX, "Excel"),
@@ -74,13 +96,48 @@ object AttachFile {
     )
 
     /**
+     * The eight RECORDING extensions `jarvis_media_read` genuinely reads, as
+     * `my_files read_media` already reads them (2026-11-18, the owner's report
+     * that an `.m4a` voice memo could not be attached from this row).
+     *
+     * THEY GO DOWN THE AUDIO ROAD, NEVER THE DOCUMENT ONE: the PC hands the
+     * bytes to that reader, which transcribes them with the local speech model
+     * and gives the answer the words as outside text. The phone does no
+     * speech-to-text. The wire type is the canonical one ([Kind.mime]); the
+     * alternates are picker filters only, because the PC decides by the name.
+     *
+     * A video is NOT here even though `jarvis_media_read` can read one: the
+     * chat attachment row sends ONE file of at most 2.5 MB, and this change is
+     * the owner's voice memo, so the chat row keeps offering what a question
+     * about a recording needs and no more.
+     */
+    val RECORDING_KINDS: List<Kind> = listOf(
+        Kind("wav", "audio/wav", "recording", listOf("audio/x-wav")),
+        Kind("mp3", "audio/mpeg", "recording", listOf("audio/mp3")),
+        Kind("m4a", "audio/mp4", "recording", listOf("audio/x-m4a", "audio/m4a")),
+        Kind("aac", "audio/aac", "recording"),
+        Kind("flac", "audio/flac", "recording", listOf("audio/x-flac")),
+        Kind("ogg", "audio/ogg", "recording"),
+        Kind("opus", "audio/opus", "recording"),
+        Kind("wma", "audio/x-ms-wma", "recording", listOf("audio/x-wma", "audio/wma")),
+    )
+
+    /**
+     * Every extension the ONE chat "Attach a file" row offers and the PC really
+     * reads: the eight documents plus the eight recordings. A picture is still
+     * NOT a kind - it takes [goesToPicture]'s own path - and no video is here.
+     */
+    val KINDS: List<Kind> = DOCUMENT_KINDS + RECORDING_KINDS
+
+    /**
      * The picture extensions the Settings "Send a document or a photo" row may
      * carry as a PLAIN FILE COPY into `From my phone` (2026-11-13: the owner's
      * report that Jarvis denied being able to send a photo to the PC at all).
      *
      * THEY ARE NOT KINDS AND MUST NEVER JOIN [KINDS]. [KINDS] is what the chat
-     * "Attach a file" path reads as a document, and a picture there takes
-     * [goesToPicture]'s own road ([ChatPicture], vision, secrets black-boxed).
+     * "Attach a file" path reads (documents and recordings), and a picture there
+     * takes [goesToPicture]'s own road ([ChatPicture], vision, secrets
+     * black-boxed).
      * This list is only the Settings row's transport allowlist - the PC saves
      * the bytes as a file, and no model is shown them on that path. So a photo
      * is still `kindOf(...) == null` and still goes to the picture path in
@@ -121,9 +178,12 @@ object AttachFile {
     val SEND_FILE_MIME_TYPES: Array<String> = arrayOf("*/*")
 
     /**
-     * The system picker's own filter for DOCUMENTS. Narrow on purpose: a
-     * document attached to a chat question is READ on the PC, so a type the PC
-     * cannot read is not offered there.
+     * The system picker's own filter for the chat "Attach a file" row. Narrow on
+     * purpose: a file attached to a chat question is READ on the PC, so a type
+     * the PC cannot read is not offered there. It is exactly the types the
+     * reader knows - every document ([DOCUMENT_KINDS]) and every recording
+     * ([RECORDING_KINDS]), each with the aliases a provider may report - and no
+     * wildcard.
      *
      * Since 2026-11-01 the one "Attach a file" row opens this list (or
      * [mimeTypes], which adds images) - there is no separate Photo control.
@@ -132,7 +192,7 @@ object AttachFile {
      * [SEND_FILE_MIME_TYPES] (the ANY-file wildcard) instead: that door copies
      * any file as a plain file, so its picker is not this list.
      */
-    val MIME_TYPES: Array<String> = KINDS.map { it.mime }.distinct().toTypedArray()
+    val MIME_TYPES: Array<String> = KINDS.flatMap { it.allMimes }.distinct().toTypedArray()
 
     /** The picker's word for "any picture", when the PC's Pictures works. */
     const val IMAGE_MIME = "image/*"
@@ -145,7 +205,7 @@ object AttachFile {
      * [withPictures] is the Photo row's old gate, kept: a PC whose Pictures
      * feature is off must not even be shown images, because it could do
      * nothing with one. The images that ARE offered still go down the
-     * picture path ([goesToPicture]), never this file's document path.
+     * picture path ([goesToPicture]), never this file's attachment path.
      */
     fun mimeTypes(withPictures: Boolean): Array<String> =
         if (withPictures) MIME_TYPES + IMAGE_MIME else MIME_TYPES
@@ -156,13 +216,14 @@ object AttachFile {
     /**
      * Does one pick go down the PICTURE path ([ChatPicture] - vision and
      * black-boxed secrets, via `MainActivity.attachPicture`) instead of the
-     * document path here ([picked])?
+     * attachment path here ([picked])?
      *
      * The name decides first, the same way [kindFor] does: an extension this
-     * file reads as a document is a document whatever type a provider claims,
-     * so a `.pdf` can never be swallowed by a wrong image type. Then a
-     * provider's `image/...` type, then the photo's own extension - which is
-     * what catches an image a provider typed `application/octet-stream`.
+     * file reads (a document or a recording) is that whatever type a provider
+     * claims, so a `.pdf` - or a `.m4a` voice memo - can never be swallowed by a
+     * wrong image type. Then a provider's `image/...` type, then the photo's own
+     * extension - which is what catches an image a provider typed
+     * `application/octet-stream`.
      *
      * Pure on purpose (no Android, no bytes): a JVM test holds every case.
      */
@@ -187,7 +248,7 @@ object AttachFile {
             "reads the words in them), and that is not working right now" +
             (why?.let { " ($it)" } ?: "") +
             ". Nothing was attached. Turn Pictures on in Brain, then try again - or " +
-            "attach a document instead."
+            "attach a document or a recording instead."
 
     /** A file ready to send, held in memory only. */
     class Ready(
@@ -255,7 +316,8 @@ object AttachFile {
     /** Why this kind is refused: what IS read, and the same folder alternative. */
     fun wrongKind(name: String): String =
         "$name is not a kind Jarvis reads in chat. Attach a PDF, Word, Excel, PowerPoint, " +
-            "text, Markdown or CSV file - or put it in a folder Jarvis may look in."
+            "text, Markdown or CSV file, a recording (WAV, MP3, M4A, AAC, FLAC, OGG, OPUS " +
+            "or WMA) - or put it in a folder Jarvis may look in."
 
     /**
      * One pick, decided here rather than in the Activity: the size cap first
@@ -285,10 +347,12 @@ object AttachFile {
         kindOf(name) ?: (if (hasNoExtension(name)) kindForMime(mime) else null)
 
     /**
-     * The kind the Settings "Send a file from your phone" row accepts: a
-     * document exactly as [kindFor] decides it, a photo by its extension
-     * ([photoKindOf]), or - since 2026-11-13 - ANY other file as a plain copy,
-     * with [ANY_FILE_MIME] when the provider gave no usable type.
+     * The kind the Settings "Send a file from your phone" row accepts: a known
+     * kind (a document or a recording) exactly as [kindFor] decides it, a photo
+     * by its extension ([photoKindOf]), or - since 2026-11-13 - ANY other file
+     * as a plain copy, with [ANY_FILE_MIME] when the provider gave no usable
+     * type. A recording through this door is still only STORED: this door never
+     * reads anything, and the PC decides what a file is from its name.
      *
      * It therefore never returns null. That is the difference from [kindFor]:
      * the chat row still refuses what the PC cannot READ, while this door only
@@ -348,7 +412,7 @@ object AttachFile {
     fun kindForMime(mime: String?): Kind? {
         val m = mime?.trim()?.lowercase(Locale.ROOT)?.substringBefore(';') ?: return null
         if (m.isEmpty()) return null
-        return KINDS.firstOrNull { it.mime == m }
+        return KINDS.firstOrNull { m == it.mime || m in it.altMimes }
     }
 
     /**

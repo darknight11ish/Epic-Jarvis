@@ -19,12 +19,27 @@ WHAT IT IS NOT, and each of these is a rule rather than an omission:
   * not a route, not an upload, not a temporary store. The bytes arrive in the
     newest user message of the /api/chat request that already exists (the wire
     format is docs/JARVIS-API.md's "attachment" section), and they exist only for
-    the length of that one request. Nothing is written - not to a temp file, not
-    to the history database, not to a log line, not to a memory fact, not to the
-    learner.
+    the length of that one request. Nothing is KEPT - not in the history
+    database, not in a log line, not in a memory fact, not in the learner. The
+    one exception to "never written at all" is a COMPRESSED recording's decode
+    scratch copy (see the next bullet), which is removed before the read
+    returns.
   * not a second image path. A picture goes in as itself, through
     jarvis_chat_picture.py, so there is still exactly ONE secret-cleaner for
     pictures.
+  * not a second audio path. A RECORDING (2026-11-18: the owner's ".m4a file
+    will not attach" report; .m4a .mp3 .wav .aac .flac .ogg .opus .wma) rides
+    the SAME one-file turn and is read by `jarvis_media_read.py` - the reader
+    `my_files read_media` already uses, with its own transcript, its own
+    one-read-at-a-time lock and its own plain refusals. The phone never
+    transcribes anything; this PC does, on its local speech model. A WAV is
+    decoded in memory; a compressed format is copied to ONE private temp file
+    for the length of the decode only, because ffmpeg cannot read an MP4/M4A
+    from a pipe (its index may sit at the end of the file) - that copy is named
+    randomly, deleted in a `finally`, and never indexed, kept or logged. With no
+    ffmpeg on the PC the owner reads `jarvis_media_read.NO_FFMPEG` itself:
+    "This PC has no ffmpeg, so this file's sound cannot be read. A WAV file
+    needs no ffmpeg; an MP3, M4A or video does."
   * not a tool. The model cannot call it and cannot ask for a file: it is part
     of the message the owner sent, and this module's answer reaches the model as
     OUTSIDE TEXT (jarvis_agent.with_file_text).
@@ -131,7 +146,9 @@ CHARS_PER_TOKEN = 3
 LABEL_CHARS = 420
 
 #: The seven kinds "my_files" already reads, read the same way. Images are not
-#: here on purpose - they keep their own path - and neither are audio and video.
+#: here on purpose - they keep their own path - and neither are audio/video:
+#: a recording is read by `jarvis_media_read.py` (RECORDING_KINDS below), never
+#: by the document converter.
 KINDS = {
     ".pdf": "PDF",
     ".docx": "Word",
@@ -141,6 +158,25 @@ KINDS = {
     ".markdown": "note",
     ".txt": "text",
     ".csv": "table",
+}
+
+#: The RECORDING extensions one chat turn may carry (2026-11-18), and the word
+#: the owner and the model see for one. They are deliberately NOT in KINDS: a
+#: recording is not a document and no converter opens it - it goes to
+#: `jarvis_media_read.read_media_bytes`, the bytes door of the SAME reader
+#: `my_files read_media` uses, so there is one audio reader in this project and
+#: not two. This mapping is a copy of that module's own AUDIO_EXTS only so this
+#: module can decide a kind before it imports the reader; test_attached_file.py
+#: pins the two lists equal, so the reader stays the authority.
+RECORDING_KINDS = {
+    ".wav": "recording",
+    ".mp3": "recording",
+    ".m4a": "recording",
+    ".aac": "recording",
+    ".flac": "recording",
+    ".ogg": "recording",
+    ".opus": "recording",
+    ".wma": "recording",
 }
 TEXT_KINDS = (".md", ".markdown", ".txt", ".csv")
 #: A .docx/.xlsx/.pptx is a ZIP, and these are the folders each must really have
@@ -177,9 +213,12 @@ WHY_BAD_BASE64 = "it did not arrive whole (the bytes were not valid base64), so 
 WHY_TOO_BIG = ("that file is {size}. Files up to {cap} can be attached; for bigger ones, put it "
                "in a folder Jarvis may look in.")
 WHY_KIND = ("Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a "
-            "chat, and that one is {what}.")
+            "chat, or a recording (WAV, MP3, M4A, AAC, FLAC, OGG, OPUS or WMA), and that one is "
+            "{what}.")
 WHY_PICTURE = ("a picture goes in as a picture: attach it with the picture button, and this PC "
                "will read its words. Nothing was read from it here.")
+WHY_MEDIA_MISSING = ("the part of Jarvis that reads recordings (jarvis_media_read.py) is not "
+                     "installed on this PC.")
 WHY_PROTECTED = ("its name is on the list of things Jarvis never reads - keys, saved passwords, "
                  "browser data and Jarvis's own files. Nothing was opened.")
 WHY_MAGIC = ("it says it is {kind} but it is not one, so it was not opened.")
@@ -465,8 +504,40 @@ def _stripped(text: str) -> str:
                       "", text)
 
 
+def _read_recording(raw: bytes, name: str, ext: str,
+                    media: Optional[Callable[[bytes, str], dict]]) -> dict:
+    """`{"text", "kind"}` for a recording, or `{"why"}` when it cannot be read.
+
+    The bytes go to `jarvis_media_read.read_media_bytes` - the bytes door of the
+    SAME reader the `my_files` tool's `read_media` action uses - so the
+    transcript, the caps, the one-read-at-a-time lock and every refusal are that
+    module's, never a second copy. Its `error` sentence is returned UNCHANGED:
+    with no ffmpeg the owner reads `jarvis_media_read.NO_FFMPEG`, the existing
+    plain sentence, and this module does not invent a second one.
+    """
+    read = media
+    if read is None:
+        try:
+            import jarvis_media_read as MEDIA
+            read = MEDIA.read_media_bytes
+        except Exception:                           # noqa: BLE001
+            return {"why": WHY_MEDIA_MISSING}
+    try:
+        got = read(raw, name) or {}
+    except Exception as exc:                        # noqa: BLE001
+        return {"why": f"the recording could not be read ({type(exc).__name__})."}
+    if not isinstance(got, dict):
+        return {"why": "the recording's words could not be read."}
+    if not got.get("ok"):
+        why = str(got.get("error") or "").strip()
+        return {"why": why or "the recording's words could not be read."}
+    return {"text": str(got.get("text") or ""),
+            "kind": RECORDING_KINDS.get(ext, "recording")}
+
+
 def read(attachment, *, limit: int = MAX_CHARS,
-         convert: Optional[Callable[[bytes, str], dict]] = None) -> dict:
+         convert: Optional[Callable[[bytes, str], dict]] = None,
+         media: Optional[Callable[[bytes, str], dict]] = None) -> dict:
     """Read one attachment. `{"ok", "words", "chars", "left_out", "kind",
     "name_said", "why", "refusal"}` - never raises.
 
@@ -475,11 +546,18 @@ def read(attachment, *, limit: int = MAX_CHARS,
       1. the bytes are there and are base64 (never trusted by claimed size)
       2. the size is under MAX_BYTES
       3. the NAME is not on the never-read list (`protected_name`)
-      4. the kind is one of the seven "my_files" reads
+      4. the kind is one of the "my_files" reads, a RECORDING (RECORDING_KINDS,
+         read by `jarvis_media_read`, never by the document converter), or it
+         is refused
       5. the magic bytes / the zip's own members / the UTF-8 check agree with it
       6. the text comes out of the ONE converter, over a stream, in a child
-         program with no secret in its environment and a clock
+         program with no secret in its environment and a clock - or, for a
+         recording, out of the ONE audio reader
       7. chat markers are stripped, the text is capped, and the counts are kept
+
+    `media(raw, name)` is injectable so the suite can drive a recording without
+    ffmpeg or the speech model; the default is
+    `jarvis_media_read.read_media_bytes`.
     """
     out = {"ok": False, "words": "", "chars": 0, "left_out": 0, "kind": "",
            "name_said": "", "why": "", "refusal": "", "said": "", "total": 0}
@@ -525,27 +603,35 @@ def read(attachment, *, limit: int = MAX_CHARS,
         return refuse(WHY_KIND.format(what="not a kind Jarvis reads"))
     if ext in IMAGE_KINDS:
         return refuse(WHY_PICTURE)
-    if ext not in KINDS:
+    if ext not in KINDS and ext not in RECORDING_KINDS:
         return refuse(WHY_KIND.format(what="not a kind Jarvis reads"))
 
-    problem = _magic_problem(raw, ext)
-    if problem:
-        return refuse(problem)
-
-    total = 0
-    if ext in TEXT_KINDS:
-        text, problem = _text_of_bytes(raw)
+    if ext in RECORDING_KINDS:
+        # A recording is NOT a document: it goes to the audio reader, whose
+        # transcript and refusals this module passes on unchanged.
+        got = _read_recording(raw, name, ext, media)
+        if got.get("why"):
+            return refuse(got["why"])
+        text = str(got.get("text") or "")
+        out["kind"] = str(got.get("kind") or RECORDING_KINDS.get(ext, "recording"))
+    else:
+        problem = _magic_problem(raw, ext)
         if problem:
             return refuse(problem)
-    else:
-        got = _convert(raw, ext, convert)
-        if got.get("missing"):
-            return refuse(WHY_CONVERTER_MISSING)
-        if not got.get("ok"):
-            detail = str(got.get("error") or "").strip()
-            return refuse(f"Jarvis could not read it ({detail})" if detail
-                          else "Jarvis could not read it.")
-        text = str(got.get("text") or "")
+
+        if ext in TEXT_KINDS:
+            text, problem = _text_of_bytes(raw)
+            if problem:
+                return refuse(problem)
+        else:
+            got = _convert(raw, ext, convert)
+            if got.get("missing"):
+                return refuse(WHY_CONVERTER_MISSING)
+            if not got.get("ok"):
+                detail = str(got.get("error") or "").strip()
+                return refuse(f"Jarvis could not read it ({detail})" if detail
+                              else "Jarvis could not read it.")
+            text = str(got.get("text") or "")
 
     # The words themselves: the one stripper, then the cap. `left_out` is what
     # the owner is told was not shown - the honest number, not an estimate.

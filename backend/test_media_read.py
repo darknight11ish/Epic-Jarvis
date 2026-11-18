@@ -42,7 +42,7 @@ import jarvis_media_read as M  # noqa: E402
 import jarvis_agent as AG  # noqa: E402
 import jarvis_sources as SRC  # noqa: E402
 
-PASSED, FAILED = [], []
+PASSED, FAILED, SKIPPED = [], [], []
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-media-read-"))
 
 
@@ -53,6 +53,12 @@ def check(name, cond, detail=""):
           + (f"\n        {detail}" if detail and not ok else ""))
 
 
+def skip(why):
+    """A skipped check is NOT a pass, and the count says so out loud."""
+    SKIPPED.append(why)
+    print(f"SKIP  {why}")
+
+
 def write_wav(name="clip.wav", seconds=1.0, rate=16000):
     p = TMP / name
     with wave.open(str(p), "wb") as h:
@@ -60,6 +66,22 @@ def write_wav(name="clip.wav", seconds=1.0, rate=16000):
         h.setsampwidth(2)
         h.setframerate(rate)
         h.writeframes(b"\x00\x00" * int(rate * seconds))
+    return p
+
+
+def write_loud_wav(name="loud.wav", seconds=12.0, rate=16000):
+    """A WAV a transcript can be made from: loud enough not to be a silence window.
+
+    12 s because `_windows` drops a piece shorter than half a 10 s window, and
+    `_decode_default`/`_decode_wav_bytes` really decode these bytes (numpy).
+    """
+    import struct
+    p = TMP / name
+    with wave.open(str(p), "wb") as h:
+        h.setnchannels(1)
+        h.setsampwidth(2)
+        h.setframerate(rate)
+        h.writeframes(struct.pack("<h", 0x4000) * int(rate * seconds))
     return p
 
 
@@ -107,6 +129,16 @@ def t_the_tool_surface_and_caps():
         state, desc = M.prepare({"path": str(real)})
         check("prepare resolves an allowed media file", state.get("path") == str(real.resolve())
               and "at most" in desc, (state, desc))
+        # THE CONTAINER NAMES THE PHONE SENDS (2026-11-18): .m4a is the owner's
+        # voice memo, and .mp4 is the same MP4 container this reader knows.
+        # `prepare` is the name door, so both must be accepted, and so must the
+        # other audio formats the phone's picker offers.
+        for leaf in ("voice memo.m4a", "clip.mp4", "memo.mp3", "note.wav"):
+            named = TMP / leaf
+            named.write_bytes(b"x")
+            got, _desc = M.prepare({"path": str(named)})
+            check(f"prepare accepts a {leaf} container name",
+                  got.get("path") == str(named.resolve()), got)
         try:
             M.prepare({"path": str(fake)})
         except ValueError as exc:
@@ -322,6 +354,103 @@ def t_pause_and_one_at_a_time():
           M._owner_busy_default() is False)
 
 
+# ------------------------------- 6. the bytes door (chat attachment, 2026-11-18)
+#
+# The phone's "Attach a file" row can carry a recording (the owner's ".m4a will
+# not attach" report). Those bytes never land in a folder: they are handed to
+# `read_media_bytes`, whose NAME decides the format. A WAV is decoded in memory;
+# a compressed container is decoded through ONE private temp copy, and a PC with
+# no ffmpeg gives the EXISTING NO_FFMPEG sentence, not a new one.
+
+
+def t_the_bytes_door_accepts_an_m4a_and_mp4_name():
+    for leaf in ("voice memo.m4a", "clip.mp4", "memo.mp3", "note.wav"):
+        out = M.read_media_bytes(
+            b"container bytes", leaf,
+            decode=lambda raw, ext: ([0.5] * 100, 10, 20.0),
+            transcribe=fake_transcribe(f"words from the {leaf.rsplit('.', 1)[-1]}"))
+        check(f"the bytes door reads a {leaf} name", out.get("ok") is True, out)
+        check(f"... and the result names the attachment ({leaf})",
+              out.get("path") == leaf, out)
+
+
+def t_the_bytes_door_reads_a_wav_in_memory_with_no_ffmpeg():
+    loud = write_loud_wav("bytes-loud.wav").read_bytes()
+    saved = M._ffmpeg
+    M._ffmpeg = lambda: None
+    try:
+        out = M.read_media_bytes(loud, "voice.wav",
+                                 transcribe=fake_transcribe("from the wav bytes"))
+    finally:
+        M._ffmpeg = saved
+    check("a WAV's bytes are read with no ffmpeg and no file", out.get("ok") is True, out)
+    check("... and the words come back as a transcript",
+          "from the wav bytes" in str(out.get("text")), out)
+    check("... at the length the sound really is", out.get("seconds") == 12.0,
+          out.get("seconds"))
+
+
+def t_a_compressed_recording_without_ffmpeg_gets_the_existing_sentence():
+    saved = M._ffmpeg
+    M._ffmpeg = lambda: None
+    try:
+        out = M.read_media_bytes(b"container bytes", "voice memo.m4a")
+    finally:
+        M._ffmpeg = saved
+    check("an m4a with no ffmpeg is refused with the EXISTING NO_FFMPEG sentence",
+          out.get("ok") is False and out.get("error") == M.NO_FFMPEG, out)
+    check("... and that is the path door's own sentence, not a new one",
+          out.get("error") is not None and "A WAV file needs no ffmpeg" in M.NO_FFMPEG
+          and "no ffmpeg" in str(out.get("error")))
+
+
+def t_the_private_decode_copy_is_removed_after_the_read():
+    import shutil
+    folder = Path(tempfile.mkdtemp(prefix="jarvis-media-stage-"))
+    saved_env = os.environ.get(M.STAGE_DIR_ENV)
+    saved_ff = M._ffmpeg
+    M._ffmpeg = lambda: None
+    os.environ[M.STAGE_DIR_ENV] = str(folder)
+    try:
+        out = M.read_media_bytes(b"container bytes", "voice.m4a")
+        left = sorted(p.name for p in folder.iterdir())
+    finally:
+        M._ffmpeg = saved_ff
+        if saved_env is None:
+            os.environ.pop(M.STAGE_DIR_ENV, None)
+        else:
+            os.environ[M.STAGE_DIR_ENV] = saved_env
+        shutil.rmtree(folder, ignore_errors=True)
+    check("a compressed recording is decoded through ONE private temp copy",
+          out.get("ok") is False and out.get("error") == M.NO_FFMPEG, out)
+    check("... and that copy is removed even when the decode refuses", left == [], left)
+
+
+def t_a_real_m4a_decodes_through_the_bytes_door():
+    """The owner's own shape: a real .m4a -> the bytes door -> words.
+
+    SKIPPED in words on a machine with no ffmpeg (CI runners have none): there
+    the NO_FFMPEG check above is what can be proven, and the seams prove the
+    rest. Here the PC has ffmpeg, so this runs for real.
+    """
+    if not M._ffmpeg():
+        skip("this machine has no ffmpeg, so no real .m4a can be made or decoded "
+             "here; the NO_FFMPEG sentence and the seams above are what it proves")
+        return
+    import subprocess
+    loud = write_loud_wav("m4a-source.wav")
+    m4a = TMP / "voice memo.m4a"
+    subprocess.run([M._ffmpeg(), "-y", "-v", "error", "-i", str(loud),
+                    "-c:a", "aac", "-b:a", "32k", str(m4a)], check=True)
+    out = M.read_media_bytes(m4a.read_bytes(), "voice memo.m4a",
+                             transcribe=fake_transcribe("words from a real m4a"))
+    check("a REAL m4a decodes through the bytes door", out.get("ok") is True, out)
+    check("... and its words are the transcript",
+          "words from a real m4a" in str(out.get("text")), out)
+    check("... at the real length", isinstance(out.get("seconds"), (int, float))
+          and out["seconds"] > 10.0, out.get("seconds"))
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":
@@ -333,7 +462,7 @@ if __name__ == "__main__":
                 traceback.print_exc()
     import shutil
     shutil.rmtree(TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

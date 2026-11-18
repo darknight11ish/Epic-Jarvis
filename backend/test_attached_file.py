@@ -23,8 +23,15 @@ its section 9 S1 row, point by point:
   - the 12,000-character cap, with the honest "12,000 of N characters were
     shown" sentence, and the cap SHRINKS to fit a 4,096-token window;
   - chat-template markers stripped (`<|im_start|>` and its look-alikes);
-  - nothing written to disk, ever: the converter is handed a stream (its new
-    `-` stdin mode), and a directory listing before and after is identical.
+  - a RECORDING (`.m4a`, `.mp3`, `.wav`, and the rest of `jarvis_media_read`'s
+    audio list) is read by that reader's own bytes door, never by the document
+    converter, and its refusals are the reader's own words - no ffmpeg still
+    reads the EXISTING `NO_FFMPEG` sentence, never a new one. A WAV is decoded
+    in memory; a compressed recording uses ONE private decode copy that is
+    removed (2026-11-18, the owner's ".m4a will not attach" report);
+  - nothing written to disk for a DOCUMENT, ever: the converter is handed a
+    stream (its new `-` stdin mode), and a directory listing before and after is
+    identical.
 
   THE TURN (jarvis_agent.with_file_text):
   - the `attachment` field is gone from EVERY message of the copy the model
@@ -73,6 +80,7 @@ import traceback
 import types
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -80,7 +88,8 @@ sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
 require_shipped("jarvis_attached_file.py", "jarvis_agent.py", "jarvis_documents.py",
-                "jarvis_child_env.py", "jarvis_owner_check.py")
+                "jarvis_child_env.py", "jarvis_owner_check.py",
+                "jarvis_media_read.py")
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.append(str(HERE / "rebuilt"))
 
@@ -367,12 +376,159 @@ def t_the_kinds_and_the_magic_bytes():
     got = A.read(attach("party.png", b"\x89PNG\r\n\x1a\n" + b"0" * 40))
     check_refused(got, "a picture: sent to the picture path, not read here",
                   "picture button", str(got.get("why")))
-    got = A.read(attach("song.mp3", b"ID3\x04" + b"0" * 40))
-    check_refused(got, "audio is not a kind this reads (no audio, no video)",
-                  "not a kind Jarvis reads", str(got.get("why")))
+    # 2026-11-18: a recording IS a kind now, and it is NOT refused by the
+    # document list - it reaches the audio reader, whose own sentence is the
+    # one that comes back.
+    got = A.read(attach("song.mp3", b"ID3\x04" + b"0" * 40),
+                 media=lambda raw, name: {"ok": False, "error": "the audio reader's own words"})
+    check("a recording is not refused as 'not a kind Jarvis reads'",
+          got.get("ok") is False and "not a kind Jarvis reads" not in str(got.get("why"))
+          and got.get("why") == "the audio reader's own words", str(got.get("why")))
     got = A.read(attach("archive.zip", b"PK\x03\x04"))
     check_refused(got, "a zip by its own name: refused", "not a kind Jarvis reads",
                   str(got.get("why")))
+
+
+# ================================= 1b. a RECORDING in a chat (2026-11-18)
+#
+# The owner's report: an .m4a voice memo cannot be attached from the phone. The
+# bytes go to the SAME audio reader `my_files read_media` uses
+# (`jarvis_media_read.read_media_bytes`), never to the document converter, and
+# the refusals are that reader's own words. A WAV needs no ffmpeg; a compressed
+# format uses one private decode copy that is removed (jarvis_media_read's own
+# suite proves the copy is deleted).
+
+
+def a_loud_wav_bytes(seconds: float = 12.0, rate: int = 16000) -> bytes:
+    """A WAV a transcript can be made from: 12 s of a loud tone, in memory."""
+    import struct as _struct
+    import wave as _wave
+    buf = io.BytesIO()
+    with _wave.open(buf, "wb") as h:
+        h.setnchannels(1)
+        h.setsampwidth(2)
+        h.setframerate(rate)
+        h.writeframes(_struct.pack("<h", 0x4000) * int(rate * seconds))
+    return buf.getvalue()
+
+
+def a_reader(text: str = "remember to call the plumber", seen: Optional[list] = None):
+    """The audio reader's result shape, with the speech model stood in for."""
+    def read(raw, name):
+        if seen is not None:
+            seen.append((len(raw), name))
+        return {"ok": True, "path": name, "seconds": 12.0,
+                "segments": [{"start": 0.0, "end": 10.0, "text": text}],
+                "text": text, "ocr": [], "stored": False}
+    return read
+
+
+def real_reader(text: str):
+    """The REAL `jarvis_media_read.read_media_bytes`, speech model stood in for.
+
+    Drives the whole path: attachment -> attached_file -> the audio reader's
+    bytes door -> a real in-memory WAV decode -> a transcript -> the block.
+    """
+    def read(raw, name):
+        import jarvis_media_read as MEDIA
+        return MEDIA.read_media_bytes(raw, name, transcribe=lambda samples, rate: text)
+    return read
+
+
+def t_a_recording_goes_to_the_one_audio_reader():
+    seen = []
+    for ext in A.RECORDING_KINDS:
+        got = A.read(attach("voice memo" + ext, b"container bytes"),
+                     media=a_reader(seen=seen))
+        check(f"{ext} is read by the audio reader", got.get("ok") is True
+              and got.get("kind") == "recording", str(got))
+        check(f"... and the reader was handed its bytes and its name ({ext})",
+              seen and seen[-1] == (len(b"container bytes"), "voice memo" + ext),
+              seen[-1:])
+    got = A.read(attach("memo.m4a", b"x"), media=a_reader())
+    check("... the words are the transcript", got.get("words") ==
+          "remember to call the plumber", got.get("words"))
+    long = "x" * 20_000
+    got = A.read(attach("long.m4a", b"x"), media=a_reader(long))
+    check("... a long transcript is capped by the attachment's own cap",
+          got["chars"] == 12_000 and got["left_out"] == 8_000,
+          (got["chars"], got["left_out"]))
+    block = A.block(got["name_said"], got["words"], shown=got["chars"],
+                    total=got["total"], left_out=got["left_out"])
+    check("... and the model is told what it is and what was left out",
+          "outside text" in block and "12,000 of 20,000 characters" in block,
+          block[:160])
+
+
+def t_a_recording_refusal_is_the_audio_readers_own_sentence():
+    import jarvis_media_read as MEDIA
+    got = A.read(attach("voice.m4a", b"x"),
+                 media=lambda raw, name: {"ok": False, "error": MEDIA.NO_FFMPEG})
+    check("no ffmpeg: the owner reads the EXISTING NO_FFMPEG sentence",
+          got["ok"] is False and got["why"] == MEDIA.NO_FFMPEG, got.get("why"))
+    check("... and the sentence code says is that same one, verbatim",
+          got["said"] == MEDIA.NO_FFMPEG, got.get("said"))
+    got = A.read(attach("voice.m4a", b"x"),
+                 media=lambda raw, name: {"ok": False, "reason": "busy",
+                                          "error": MEDIA.BUSY_WORDS})
+    check("a busy audio reader is passed on in its own words",
+          got["why"] == MEDIA.BUSY_WORDS, got.get("why"))
+    got = A.read(attach("voice.m4a", b"x"), media=lambda raw, name: {"ok": False})
+    check("a reader with no sentence still refuses, and never raises",
+          got["ok"] is False and bool(got["why"]), got.get("why"))
+
+
+def t_the_recording_kinds_are_the_audio_readers_own_list():
+    import jarvis_media_read as MEDIA
+    check("the chat's recording kinds are jarvis_media_read's AUDIO_EXTS",
+          set(A.RECORDING_KINDS) == set(MEDIA.AUDIO_EXTS),
+          (sorted(A.RECORDING_KINDS), sorted(MEDIA.AUDIO_EXTS)))
+    check("... and no video format joined the chat attachment kinds",
+          set(A.RECORDING_KINDS).isdisjoint(MEDIA.VIDEO_EXTS),
+          sorted(set(A.RECORDING_KINDS) & set(MEDIA.VIDEO_EXTS)))
+    check("... and a recording is NOT a document kind (KINDS stays documents)",
+          not (set(A.RECORDING_KINDS) & set(A.KINDS)),
+          sorted(set(A.RECORDING_KINDS) & set(A.KINDS)))
+    check("the m4a the owner reported is in the list",
+          ".m4a" in A.RECORDING_KINDS and A.RECORDING_KINDS[".m4a"] == "recording")
+
+
+def t_the_default_recording_door_is_the_audio_reader():
+    import jarvis_media_read as MEDIA
+    saved = MEDIA.read_media_bytes
+    calls = []
+
+    def fake(raw, name):
+        calls.append((len(raw), name))
+        return {"ok": True, "text": "from the real module", "seconds": 1.0}
+
+    MEDIA.read_media_bytes = fake
+    try:
+        got = A.read(attach("voice.m4a", b"container bytes"))
+    finally:
+        MEDIA.read_media_bytes = saved
+    check("with no seam, the attachment door IS jarvis_media_read.read_media_bytes",
+          calls == [(len(b"container bytes"), "voice.m4a")], calls)
+    check("... and its words reach the attachment reader",
+          got.get("ok") is True and got.get("words") == "from the real module",
+          str(got))
+
+
+def t_a_real_wav_reads_through_the_whole_attachment_path():
+    """Attachment bytes -> attached_file -> the REAL audio reader's bytes door.
+
+    The sound is a real in-memory WAV and the decode is the reader's real one
+    (no ffmpeg needed); only the speech model is stood in for, because CI has
+    no model. A failure here is the wiring, not the transcriber.
+    """
+    got = A.read(attach("voice memo.wav", a_loud_wav_bytes()),
+                 media=real_reader("the real reader's words"))
+    check("a real WAV decodes through the whole attachment -> reader path",
+          got.get("ok") is True, str(got))
+    check("... and the transcript is the words the reader produced",
+          "the real reader's words" in str(got.get("words")), got.get("words"))
+    check("... with the recording's own kind, not a document's",
+          got.get("kind") == "recording", got.get("kind"))
 
 
 def t_the_never_read_names():
@@ -484,7 +640,13 @@ def t_the_chat_markers_are_stripped():
 
 
 def t_nothing_is_written_to_disk():
-    """The promise is 'never written', not 'deleted afterwards'."""
+    """The promise for a DOCUMENT is 'never written', not 'deleted afterwards'.
+
+    A recording is the one exception (2026-11-18) and it is not this test's:
+    a compressed one is decoded through ONE private temp copy that
+    `jarvis_media_read` removes, proven by test_media_read.py and by
+    `t_a_recording_goes_to_the_one_audio_reader` above.
+    """
     folder = Path(tempfile.mkdtemp(prefix="jarvis-attach-nowrite-"))
     before = sorted(p.name for p in folder.iterdir())
     seen = []
@@ -635,7 +797,9 @@ def t_every_path_strips_the_field_even_when_nothing_can_be_read():
 
 
 def t_the_refusal_is_a_sentence_code_says():
-    msgs = [{"role": "user", "content": "look", "attachment": attach("song.mp3", b"ID3" * 9)}]
+    # A .zip is still not a kind this reads (2026-11-18: a .mp3 IS one now, so
+    # it can no longer be the "refused file" fixture here).
+    msgs = [{"role": "user", "content": "look", "attachment": attach("notes.zip", b"PK\x03\x04")}]
     out, info = AG.with_file_text(msgs)
     check("a refused file: the answer's own sentence says why, in words",
           "picture" in info["said"] or "not a kind" in info["said"], info["said"])
@@ -1164,6 +1328,15 @@ def t_the_module_is_shipped_and_the_twin_matches():
         check("... byte for byte (line endings ignored)",
               twin.read_bytes().replace(b"\r\n", b"\n")
               == (HERE / "jarvis_attached_file.py").read_bytes().replace(b"\r\n", b"\n"))
+    # The reader a recording goes through is shipped as well, and its twin too.
+    check("jarvis_media_read.py is in backend/_where.py's SHIPPED list",
+          "jarvis_media_read.py" in _where.SHIPPED)
+    media_twin = REPO / "jarvis-backend" / "jarvis_media_read.py"
+    check("... and the published base has its own copy", media_twin.is_file())
+    if media_twin.is_file():
+        check("... byte for byte (line endings ignored)",
+              media_twin.read_bytes().replace(b"\r\n", b"\n")
+              == (HERE / "jarvis_media_read.py").read_bytes().replace(b"\r\n", b"\n"))
 
 
 def t_the_apps_say_the_same_thing():
@@ -1194,6 +1367,11 @@ def main() -> int:
                t_the_cap_shrinks_to_fit_a_small_window,
                t_the_size_cap_and_its_sentence,
                t_the_kinds_and_the_magic_bytes,
+               t_a_recording_goes_to_the_one_audio_reader,
+               t_a_recording_refusal_is_the_audio_readers_own_sentence,
+               t_the_recording_kinds_are_the_audio_readers_own_list,
+               t_the_default_recording_door_is_the_audio_reader,
+               t_a_real_wav_reads_through_the_whole_attachment_path,
                t_the_never_read_names,
 t_a_zip_bomb_is_refused_before_any_parser,
 t_an_archive_over_the_attachment_ceiling_is_refused,
