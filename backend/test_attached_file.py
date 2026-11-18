@@ -521,6 +521,18 @@ def t_a_real_wav_reads_through_the_whole_attachment_path():
     (no ffmpeg needed); only the speech model is stood in for, because CI has
     no model. A failure here is the wiring, not the transcriber.
     """
+    # The WAV decode is numpy's (the same decoder the folder door uses). The
+    # `audit` job runs this suite through tools/check_claims.py in an
+    # environment that installs no backend dependency, so say so out loud
+    # there rather than failing; the required backend job and
+    # backend/test_media_read.py run the real decode with numpy installed.
+    try:
+        import numpy  # noqa: F401
+    except Exception:
+        skip("numpy is not installed for this Python, so the real WAV decode cannot run "
+             "here; the two checks above prove the wiring, and backend/test_media_read.py "
+             "plus the required backend job prove the real decode")
+        return
     got = A.read(attach("voice memo.wav", a_loud_wav_bytes()),
                  media=real_reader("the real reader's words"))
     check("a real WAV decodes through the whole attachment -> reader path",
