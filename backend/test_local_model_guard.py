@@ -33,15 +33,17 @@ the other half:
   4. THE HUD RUNS THE FALLBACK LOCALLY. A router-only change would NOT have
      been enough, and this is the part that matters most: the HUD decides
      "this is a local turn" as `lane == local_model`, so a fallback model name
-     made `use_tools` false and sent the turn to the plain cloud relay - which
-     resolves a lane name it does not know through
-     `jarvis_chatbot_api.lane_service()`, whose fallback for an UNKNOWN name is
-     a CLOUD provider (measured below; `DEFAULT_LANE` is DeepSeek). With a
-     saved provider key, a PRIVATE prompt could have reached a cloud provider -
-     rule 1 broken by a fix intended to protect it. `local-model-guard.patch`
-     is the ONE line that keeps that turn on the local answering loop, and this
-     suite reads the patched HUD's own expressions and evaluates them, so the
-     proof is of the shipped text and not of a second copy of its logic.
+     made `use_tools` false and sent the turn to the plain cloud relay. That
+     relay used to resolve a lane name it did not know through
+     `jarvis_chatbot_api.lane_service()` to a CLOUD provider (measured below;
+     `DEFAULT_LANE` is DeepSeek), so with a saved provider key a PRIVATE prompt
+     could have reached a cloud provider - rule 1 broken by a fix intended to
+     protect it. `local-model-guard.patch` is the ONE line that keeps that turn
+     on the local answering loop, and since the owner's 2026-11-18 ruling the
+     relay fails closed as well: an unknown name names NO service. The two are
+     defence in depth, and this suite reads the patched HUD's own expressions
+     and evaluates them, so the proof is of the shipped text and not of a
+     second copy of its logic.
 
 WHAT IS REAL AND WHAT IS INJECTED. The router, the refusal authority
 (`jarvis_agent.local_model_refusal`), the lane tables (`jarvis_model_lanes`,
@@ -346,28 +348,29 @@ def _find(text: str, pattern: str, what: str) -> str:
     return m.group(1)
 
 
-def t_an_unknown_lane_name_is_a_cloud_provider_name():
-    """The measured hazard: `lane_service()` maps an UNKNOWN name to a cloud one.
+def t_an_unknown_lane_name_is_not_a_cloud_provider():
+    """The hazard this suite was born from - now CLOSED (2026-11-18).
 
     This is why a fallback MODEL name must never be handed to the HUD's plain
-    relay. The module's own docstring says it: "A lane name the table does not
-    know falls back the same way: to the chosen service when one is recorded,
-    else to DEFAULT_LANE's real service." Its default is DeepSeek, and a saved
-    key would make `lane_state()` answer with that service's https address.
+    relay: an unknown name used to resolve to a cloud service, so a fallback
+    model's name plus a saved provider key would have made `lane_state()` answer
+    with that service's https address. The owner's ruling of 2026-11-18 removed
+    that fallback: only a name in `CLOUD_LANES` names a service, so the hazard
+    is closed at the relay as well as by the HUD guard below (defence in depth).
     """
     import jarvis_chatbot_api as API
     check("this suite is reading a new enough jarvis_chatbot_api to know the "
           "mapping", hasattr(API, "lane_service") and hasattr(API, "DEFAULT_LANE"))
     pid, model = API.lane_service(EVERYDAY_MODEL)
     check("an UNKNOWN 'lane' name - which is exactly what a fallback model "
-          "looks like to it - resolves to a CLOUD provider",
-          pid == API.DEFAULT_LANE[0] and model == API.DEFAULT_LANE[1],
-          (pid, model))
+          "looks like to it - names NO service (fail closed)",
+          (pid, model) == ("", ""), (pid, model))
     state = API.lane_state(EVERYDAY_MODEL)
-    check("... and that provider would be the one the request is addressed to",
-          state.get("pid") == API.DEFAULT_LANE[0], state)
-    check("... which is why a fallback model must never reach that relay: its "
-          "own name is not a lane", EVERYDAY_MODEL not in API.CLOUD_LANES)
+    check("... so no service, address, key or model reaches a request",
+          state.get("pid") == "" and state.get("model") == ""
+          and state.get("url") == "" and state.get("key") == "", state)
+    check("... and a fallback model's own name is still not a lane",
+          EVERYDAY_MODEL not in API.CLOUD_LANES)
 
 
 def t_the_hud_runs_a_local_fallback_turn_locally():
@@ -421,16 +424,16 @@ def t_the_hud_runs_a_local_fallback_turn_locally():
               decision=cloud, _agent_ok=True) is False
           and run(is_cloud, lane=RT.CLOUD_LANE, local_model=EVERYDAY_MODEL,
                   decision=cloud) is True)
-    # And what the relay would do with a name it does not know: resolve it as a
-    # cloud lane. The relay treats the LOCAL lane as the empty name (that is the
-    # contract `jarvis_chatbot_api.lane_state` documents), so any non-empty
-    # unknown name is a cloud request - which is exactly why the fallback must
-    # not take that path.
+    # And what the relay would do with a name it does not know: since
+    # 2026-11-18 it names NO service (fail closed), so even a caller that
+    # skipped the guard above cannot address a cloud service with a fallback
+    # model's name. The relay treats the LOCAL lane as the empty name - the
+    # contract `jarvis_chatbot_api.lane_state` documents.
     import jarvis_chatbot_api as API
-    check("the plain relay only treats the EMPTY name as local, so a fallback "
-          "model name handed to it would be resolved as a cloud lane",
+    check("the plain relay only treats the EMPTY name as local, and an unknown "
+          "fallback model name names no service at all (fail closed, 2026-11-18)",
           API.lane_state("").get("pid") == ""
-          and API.lane_state(EVERYDAY_MODEL).get("pid") == API.DEFAULT_LANE[0],
+          and API.lane_state(EVERYDAY_MODEL).get("pid") == "",
           (API.lane_state(""), API.lane_state(EVERYDAY_MODEL)))
 
 
@@ -512,7 +515,7 @@ def main() -> int:
                t_the_spill_refusal_still_refuses_the_pooled_model_on_a_one_card_lane,
                t_a_pooled_model_on_the_pooled_lane_is_untouched,
                t_the_unfixable_refusals_are_not_papered_over,
-               t_an_unknown_lane_name_is_a_cloud_provider_name,
+               t_an_unknown_lane_name_is_not_a_cloud_provider,
                t_the_hud_runs_a_local_fallback_turn_locally,
                t_the_patch_is_well_formed_and_applies_where_it_claims):
         try:

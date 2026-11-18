@@ -1142,6 +1142,36 @@ def _github_capabilities_words() -> str:
 GITHUB_CAPABILITIES_WORDS = _github_capabilities_words()
 
 
+def _github_repo_arg_hint() -> str:
+    """The one sentence every GitHub tool's description carries about the
+    owner's OWN repository, or "" on a backend older than the resolver.
+
+    (2026-11-18, the date's measured failure is written at
+    `jarvis_github.repo_from_words`.) The text lives in
+    `jarvis_github.REPO_ARG_HINT`, beside the resolver that makes it true - the
+    same arrangement `_github_capabilities_words` above uses, and wrapped for
+    the same reason: `jarvis_agent.py` must import on a PC whose backend
+    predates that resolver. An empty answer leaves the descriptions exactly as
+    they were before this change.
+    """
+    try:
+        import jarvis_github as GH
+        if not hasattr(GH, "repo_from_words"):
+            return ""
+        return str(getattr(GH, "REPO_ARG_HINT", "") or "")
+    except Exception:                        # noqa: BLE001 - older backend is a state
+        return ""
+
+
+#: The 2026-11-18 sentence, appended by `Tool.__init__` to every GitHub tool
+#: that takes a `repo` argument. It is the "call it, do not ask first"
+#: instruction for the owner's own repository - the model may pass a bare
+#: "Epic-Jarvis" or "my repo" and the tool fills in the owner - and it lives in
+#: the TOOL's own description, never in LANE_SYSTEM (docs/ARCHITECTURE.md,
+#: "An explicit action request reaches its gating tool").
+GITHUB_REPO_ARG_HINT = _github_repo_arg_hint()
+
+
 class _GitHubNoToken:
     """What a GitHub planner returns when no token is saved yet.
 
@@ -2634,6 +2664,18 @@ class Tool:
                  gate_lookup_name: Optional[Callable[[dict], str]] = None,
                  instead: Optional[dict] = None):
         self.name = name
+        # The 2026-11-18 sentence about the owner's OWN repository (see
+        # REPO_ARG_HINT in jarvis_github.py) rides on EVERY GitHub tool that
+        # takes a `repo` argument. Added here, in the one constructor, rather
+        # than typed into sixteen literals: a tool can then never be written
+        # without the "pass the bare name, do not ask who owns it" instruction
+        # the measured live failure needed. `github_create_repo` names no
+        # repository to read, so it does not carry it, and a backend older than
+        # the resolver leaves GITHUB_REPO_ARG_HINT empty and changes nothing.
+        if (GITHUB_REPO_ARG_HINT and name in GITHUB_TOOLS
+                and isinstance(parameters, dict)
+                and "repo" in (parameters.get("properties") or {})):
+            description = description.rstrip() + " " + GITHUB_REPO_ARG_HINT
         self.description = description
         self.parameters = parameters
         self.prepare = prepare
@@ -5939,6 +5981,8 @@ TOOLS: dict = {
     # ask, which is the same fail-safe.
     "github_list": Tool(
         "github_list",
+        "Call this when the owner asks what is on their GitHub - their repositories, "
+        "their open pull requests or issues, or its recent workflow runs. "
         "List ONE fixed thing on GitHub: your repositories (\"repos\"), a "
         "repository's pull requests (\"pulls\") or issues (\"issues\") in open "
         "(default), closed or all state, or its recent workflow runs (\"runs\"). "
@@ -5972,6 +6016,8 @@ TOOLS: dict = {
         _prepare_github_read_file, _run_github),
     "github_ci_status": Tool(
         "github_ci_status",
+        "Call this when the owner asks what CI says, or what checks are failing or "
+        "still running, on a branch or a pull request. "
         "How CI went: the newest workflow run for a repository and branch, or for "
         "a pull request. When that run failed, it names the checks that failed and "
         "shows ONE bounded excerpt of the first failing check's log - the end of "
@@ -6046,6 +6092,8 @@ TOOLS: dict = {
     # reads card-free from Settings (the switchable `github_inspect` row).
     "github_pr_scan": Tool(
         "github_pr_scan",
+        "Call this when the owner asks which pull requests are ready to merge, or "
+        "what is blocking one. "
         "The pull request cockpit: list the open pull requests on one repository and "
         "say, for each one, whether it can be merged - merge-ready, blocked, "
         "conflicted, running or draft - and which required check is holding it. It "
@@ -6188,6 +6236,8 @@ TOOLS: dict = {
     # files, commits, comments and reviews, five fixed GETs, nothing but GET.
     "github_pr_detail": Tool(
         "github_pr_detail",
+        "Call this when the owner asks what is failing on a pull request, or for "
+        "one pull request's details, files, commits or reviews. "
         "Read ONE pull request in full: its title, body, state, draft and "
         "mergeable flags, its head commit and base branch, and then its changed "
         "files WITH THEIR UNIFIED DIFF (bounded: at most 20 files and 60,000 "
@@ -11867,7 +11917,13 @@ TOOL_HINTS = {
                     r"\bissues?\b", r"\bworkflow runs?\b", r"\bmy repos\b"),
     "github_read_file": (r"\bgithub\b", r"\bfile\b", r"\bsource\b", r"\breadme\b"),
     "github_ci_status": (r"\bgithub\b", r"\bci\b", r"\bchecks?\b", r"\bworkflow\b",
-                         r"\bbuild\b", r"\bactions?\b", r"\bfailed\b"),
+                         r"\bbuild\b", r"\bactions?\b", r"\bfailed\b",
+                         # 2026-11-18: "what is the latest commit on main?" is
+                         # answered by the newest workflow run, which names its
+                         # head commit - without this word the diet hid every
+                         # GitHub tool for that question and the model denied
+                         # having access at all (the live 17:57 battery).
+                         r"\bcommit\b"),
     "github_comment": (r"\bgithub\b", r"\bcomment\b", r"\bpull request\b", r"\bissue\b",
                        r"\breply\b"),
     "github_open_issue": (r"\bgithub\b", r"\bopen\b[\s\S]{0,20}\bissue\b",
@@ -11892,7 +11948,11 @@ TOOL_HINTS = {
     "review_changes": (r"\breview\b", r"\bbranch\b", r"\bchange set\b",
                       r"\brisk flags?\b", r"\bpull request\b", r"\bpacket\b"),
     "check_records": (r"\brecords?\b", r"\bchangelog\b", r"\bready to push\b",
-                            r"\bbookkeeping\b", r"\bcheck(?:s)? (?:the|my) records\b"),
+                            r"\bbookkeeping\b", r"\bcheck(?:s)? (?:the|my) records\b",
+                            # 2026-11-18, the live battery's "how many open
+                            # defects are in the register?": this tool reads the
+                            # register itself, so its words must offer it.
+                            r"\bdefects?\b", r"\bregister\b"),
     # The 2026-11-10 22:30 ruling's Step 2 actions: their own words, so
     # `tool_diet` can tell them apart. Every one keeps `github`, because that
     # word alone must not summon all sixteen to every GitHub question.
@@ -19685,6 +19745,67 @@ def _protection_path_args(name: str, args: dict) -> str:
     return ""
 
 
+def _github_repo_call(call: dict, every: dict, watch) -> dict:
+    """`call`, with the owner's own repository filled in when it was left out.
+
+    THE OTHER HALF OF THE 2026-11-18 FAILURE. The measured live turn called
+    `github_list` with the BARE name "Epic-Jarvis"; `jarvis_github._check_repo`
+    now resolves that (and "my repo", "this repository") itself, so the call
+    the model really made works. This answers the case where the model leaves
+    `repo` out entirely, because the owner named no repository at all - "what
+    are my open PRs?" - and the tool's schema cannot be filled by the model:
+    the tool layer fills it from the owner's OWN newest words, through the same
+    `jarvis_github.repo_from_words` resolver.
+
+    Bounded on purpose. It applies to the READ tools ONLY (`GITHUB_READ_TOOLS`):
+    reads may assume the owner's own repository, WRITES may not (the owner's
+    2026-11-18 ruling 5.2 and decision #1348) - a write must name its target in
+    full, because a change built from an assumed repository is worse than a
+    question, and its planner keeps that rule. Only when `repo` is absent or
+    blank (a repository the model did pass is the planner's to validate,
+    exactly as before); and only from `watch.newest_own_words`, which is the
+    newest message's words ONLY when they are the owner's own (typed or spoken)
+    - never a pasted or clipboard caption, never an earlier turn's message,
+    never a setting or a guess. A foreign repository named in those words is NOT
+    filled in (the resolver returns ""), so its ask/refusal stays exactly as it
+    was.
+    """
+    fn = call.get("function") if isinstance(call, dict) else None
+    if not isinstance(fn, dict):
+        return call
+    name = str(fn.get("name") or "")
+    if name not in GITHUB_READ_TOOLS or name not in every:
+        return call
+    raw = fn.get("arguments")
+    if isinstance(raw, str):
+        try:
+            args = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            return call
+    else:
+        args = raw
+    if not isinstance(args, dict):
+        return call
+    if str(args.get("repo") or "").strip():
+        return call
+    sent, _why = _parameters_to_send(every[name])
+    if not isinstance(sent, dict) or "repo" not in (sent.get("properties") or {}):
+        return call
+    words = str(getattr(watch, "newest_own_words", "") or "")
+    if not words:
+        return call
+    try:
+        import jarvis_github as GH
+        repo = GH.repo_from_words(words)
+    except Exception:                     # noqa: BLE001 - older backend is a state
+        return call
+    if not repo:
+        return call
+    fixed = dict(call)
+    fixed["function"] = dict(fn, arguments=json.dumps(dict(args, repo=repo)))
+    return fixed
+
+
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
               tell_owner: Optional[Callable[[str], None]] = None,
@@ -19709,6 +19830,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # in it, and nothing is put to anyone (jarvis_stop_all.py).
         _refuse_stopped(name, call, convo, steps, say_step, watch, tell_owner)
         return
+    # 2026-11-18: a GitHub call that left the repository out gets the owner's
+    # OWN one from his own newest words - see _github_repo_call. Before
+    # check_call, because the schema marks `repo` required on most of these
+    # tools and the empty field is exactly the state that has to be filled.
+    call = _github_repo_call(call, every, watch)
+    fn = (call.get("function") or {})
     # Checked BEFORE prepare() and the gate: a call whose arguments are not
     # JSON, not an object, or wrong for the tool's own schema is never
     # prepared and never raises a card (see check_call). It used to become

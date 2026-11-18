@@ -11,12 +11,42 @@ sender asks it by calling `check_egress(...)` before it opens a socket.
 
 WHAT IT CHECKS
 Every `.py` under `backend/`, `jarvis-backend/` and `tools/` that names one of
-the outbound hosts in HOSTS is either:
+the outbound hosts in HOSTS **in real code** is either:
 
-  * a file that also names `check_egress` in the same file - the sender has the
-    gate in it; or
+  * a file whose real code also names `check_egress` - the sender has the gate
+    in it; or
   * a file in ALLOWED below, with a one-line reason saying why its host name is
     not a way out of this PC that skips the gate.
+
+WHAT COUNTS AS A MENTION: THE CODE, NOT THE TEXT (2026-11-18)
+Until 2026-11-18 this walked the raw file text, so it flagged prose as well: a
+new module's docstring showed `api.deepseek.com` as an example, the gate failed
+`backend/test_chatbot_api.py` and the lane's fix was to DELETE the example. A
+gate that trains an author to remove documentation is teaching the wrong lesson
+- the honest fix is to read the program, not the writing about it - so an
+external review ruled that docstrings and `#` comments must not count.
+
+The walk is over `ast` now. A mention is one of the HOSTS named in a string
+literal that is part of the code, and it is NOT counted when it is:
+
+  * a docstring - the literal `ast.get_docstring` returns for a module, class,
+    function or method; or
+  * any other bare string expression statement - a literal evaluated and thrown
+    away can only be documentation; and
+  * a `#` comment - comments never enter the AST at all, so the walk cannot see
+    them and no new way of hiding one is needed to ignore them.
+
+Literal-only expressions are folded into the string they build: an f-string
+whose substituted values are themselves literals, and a `+` chain or adjacent
+literals, are one value. So a host split over two literals - adjacent, as in
+`"https://api." "deepseek.com"`, or joined with `+` - is still the mention the
+program ends up with. The raw-text scan could not see either; this walk is
+stricter there, not looser.
+
+The wiring half is code too: a file names the gate when the program refers to
+`check_egress` as a name, as an attribute, or in an import. A docstring or a
+comment saying "this asks check_egress" is not a call, but the old text check
+counted it as one - `backend/test_web_search.py` was green that way.
 
 THE LIST IS A CENSUS NOW, NOT A SIX-HOST NET (2026-11-16)
 The first shape of this check named the six chatbot API hosts
@@ -38,21 +68,30 @@ run, with the file and line printed, and the fix is deliberate - wire the gate,
 or add an entry with the reason the name cannot send anything.
 
 WHAT IT CANNOT DECIDE, SAID OUT LOUD
-This is a TEXT check. It proves `check_egress` is named in the same file as the
-host; it cannot prove every branch calls it, and it cannot see a host built at
-runtime. The audit's own list of what it could not see is still true here: the
-HUD relays to an address it is handed at runtime (no host literal), the mail
-sender and the mail reader take an SMTP/IMAP host from settings, `jarvis_home.py`
-takes a base URL from settings, and DuckDuckGo goes through the `ddgs` package's
-own sockets - none of those spell a host this file can search for. The suites
-that drive the wired senders prove the call actually refuses and actually
-allows; this file's job is to keep the list of names complete and deliberate.
+This is a SYNTAX check. It proves `check_egress` is referred to in code in the
+same file as the host; it cannot prove every branch calls it, and it cannot see
+a host built at runtime. HOSTS is also a closed census of the outbound hosts
+the audit found, not a promise to recognise every address in the world: a host
+that is not in HOSTS is not a mention here until a person adds it, which is how
+the 2026-11-16 audit grew the list from six to the census below. The audit's
+own list of what it could not see is still true: the HUD relays to an address it
+is handed at runtime (no host literal), the mail sender and the mail reader take
+an SMTP/IMAP host from settings, `jarvis_home.py` takes a base URL from
+settings, an f-string may interpolate the name, and DuckDuckGo goes through the
+`ddgs` package's own sockets - none of those spell a host this file can search
+for. The suites that drive the wired senders prove the call actually refuses and
+actually allows; this file's job is to keep the list of names complete and
+deliberate.
 
 WHY THE ALLOW-LIST IS THIS SHAPE
 Each key is the exact repository path, never a glob, and each value is one
 line. A new hit has to be added by a person who wrote down why. The list is
 checked both ways: an entry whose file has gone, or which no longer names a
-host, is reported too, so the reasons cannot quietly stop being true.
+host in code, is reported too, so the reasons cannot quietly stop being true -
+that is why the 2026-11-18 walk removed every entry whose host name lived only
+in a comment or a docstring: prose is not a mention, so those entries no longer
+described a hit (their files still open no socket; they are simply not in the
+census).
 
 One derived entry, stated rather than hidden: a shipped module has two copies,
 `backend/<name>.py` and its byte-identical `jarvis-backend/<name>.py` base. The
@@ -63,7 +102,10 @@ is reported like any other file.
 """
 from __future__ import annotations
 
+import ast
+import io
 import sys
+import tokenize
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -192,26 +234,20 @@ ALLOWED = {
     # Production files that name a host but open no socket at all. The
     # claim is about THIS file only, which is what the check measures.
     # ------------------------------------------------------------------
-    "backend/_where.py":
-        "the shipped-module list: both hosts are in comments about where a module"
-        " came from, and this file opens no socket",
     "backend/grade-peers.py":
-        "a desk-side script: the host is in its own explanation of what it refuses,"
-        " and it opens no socket",
+        "a desk-side script: the host is in the line it prints telling the owner"
+        " to fetch it on another machine; it opens no socket",
     "backend/import_history.py":
-        "an import tool: the host is in a comment about the export it was tested"
-        " against, and it opens no socket",
-    "backend/jarvis_agent.py":
-        "names the host in tool descriptions; its own request goes to this PC's local"
-        " HTTP service",
+        "an import tool: the host is in a comment and in the --claude help text,"
+        " and it opens no socket",
     "backend/jarvis_asks_first.py":
         "names the host in the switch descriptions it shows the owner; it opens no"
         " socket",
     "backend/jarvis_browser_control.py":
         "names the host in its list of sign-in pages; it opens no socket",
     "backend/jarvis_chatbot.py":
-        "the driver names the sites in its adapter notes; every website send goes"
-        " through jarvis_chatbot_web.py, which asks the gate",
+        "the driver lists the sites in its adapter TABLE rows; every website send"
+        " goes through jarvis_chatbot_web.py, which asks the gate",
     "backend/jarvis_chatbot_chatgpt.py":
         "a thin site file: it names the site's own address and the sign-in host; the"
         " shared adapter in jarvis_chatbot_web.py asks the gate, and this file opens"
@@ -251,37 +287,17 @@ ALLOWED = {
         "names the host in the feature card text it shows; it opens no socket",
     "backend/jarvis_feature_guide.py":
         "names the host in the guide text it shows; it opens no socket",
-    "backend/jarvis_front.py":
-        "names the host in a comment about how host names are compared; it opens no"
-        " socket",
-    "backend/jarvis_mail_mask.py":
-        "names the sign-in host in its link-masking rules; it opens no socket",
     "backend/jarvis_model_recommendations.py":
-        "names the public listing addresses in its docstring; the fetch happens in"
-        " jarvis_hf_inspect.py, not here",
+        "builds and compares the public listing addresses in code; its own fetch"
+        " happens in jarvis_hf_inspect.py, not here, so it opens no socket",
     "backend/jarvis_reach.py":
         "the reach register: the hosts are row data in a table of what can be"
         " reached; it opens no socket",
-    "backend/jarvis_scrub.py":
-        "names the host in the example address its scrubber hides; it opens no socket",
-    "backend/jarvis_second_card.py":
-        "names the host in a comment; its own sockets go to Ollama on this PC",
     "backend/jarvis_tool_profiles.py":
-        "names the host in a comment about a read; it opens no socket",
-    "backend/jarvis_vault.py":
-        "names the host in the docstring's example request; it opens no socket",
+        "names the host in the card text it shows the owner; it opens no socket",
     "backend/jarvis_youtube.py":
         "builds and checks YouTube watch addresses; it opens no socket (the page"
         " itself is read by jarvis_readpage)",
-    "backend/rebuilt/jarvis_framework.py":
-        "names the host in a comment about what a package is not; it opens no socket",
-    "jarvis-backend/jarvis_framework.py":
-        "the base's copy of the rebuilt framework: the host is in the same comment,"
-        " and this file opens no socket",
-    "jarvis-backend/_where.py":
-        "the base's copy of the shipped-module list: both hosts are in comments, and"
-        " this file opens no socket (it carries the base trailer, so it is not"
-        " byte-identical to backend/_where.py)",
 
     # ------------------------------------------------------------------
     # Suites. A suite is not a sender Jarvis runs; the host is fixture
@@ -291,9 +307,6 @@ ALLOWED = {
         "a suite; the host is fixture data and this file opens no socket",
     "backend/test_account_secrets.py":
         "a suite; the host is fixture data and this file opens no socket",
-    "backend/test_agent.py":
-        "a suite; the hosts are in comments and fixture rows, and this file opens no"
-        " socket",
     "backend/test_briefing.py":
         "a suite; the host is fixture data and its socket guard refuses every"
         " connection",
@@ -304,7 +317,7 @@ ALLOWED = {
     "backend/test_calendar_link.py":
         "a suite; the hosts are fixture data and this file opens no socket",
     "backend/test_chatbot.py":
-        "a suite; the host is in the driver's adapter notes, and its socket guard"
+        "a suite; the host is a driver-table fixture row, and its socket guard"
         " refuses every connection",
     "backend/test_chatbot_gemini.py":
         "a suite; the host is fixture data and this file opens no socket",
@@ -316,10 +329,14 @@ ALLOWED = {
         "a suite; the host is fixture data and this file opens no socket",
     "backend/test_connect_account_chat.py":
         "a suite; the host is fixture data and this file opens no socket",
+    "backend/test_egress_gate_checker.py":
+        "this checker's own suite: the hosts are fixture source it writes into a"
+        " temporary tree, and it opens no socket",
     "backend/test_focus.py":
         "a suite; the host is fixture data and this file opens no socket",
     "backend/test_front.py":
-        "a suite; the host is in a docstring/comment, and this file opens no socket",
+        "a suite; the host is an expected value in an assertion, and this file"
+        " opens no socket",
     "backend/test_github_authoring.py":
         "a suite; the host is fixture data and its socket guard refuses every"
         " connection",
@@ -359,9 +376,6 @@ ALLOWED = {
         "a suite; the host is fixture data and this file opens no socket",
     "backend/test_price_sources.py":
         "a suite; the host is fixture data and this file opens no socket",
-    "backend/test_quick_wins.py":
-        "a suite; the host is fixture data and its socket guard refuses every"
-        " connection",
     "backend/test_reach.py":
         "a suite; the hosts are reach-register and site fixture rows",
     "backend/test_read_link.py":
@@ -370,8 +384,6 @@ ALLOWED = {
         "a suite; the host is in a fake cloud request row whose transport is replaced",
     "backend/test_research.py":
         "a suite; the host is an expected value and its opener is replaced",
-    "backend/test_runtime_identity.py":
-        "a suite; the host appears in a comment about the cloud preset",
     "backend/test_security_pc.py":
         "a suite; the host is fixture data and this file opens no socket",
     "backend/test_sky.py":
@@ -388,6 +400,10 @@ ALLOWED = {
         " sockets",
     "backend/test_watch_repos.py":
         "a suite; the host is fixture data and this file opens no socket",
+    "backend/test_web_search.py":
+        "a suite; the hosts are fixture and expected values in its fake-transport"
+        " rows, and the real send for every one of them is jarvis_search.py, which"
+        " asks the gate before the key is resolved",
     "backend/test_youtube.py":
         "a suite; the host is an expected value and its own banned-call list refuses"
         " sockets",
@@ -435,33 +451,167 @@ ALLOWED = {
 SKIP_DIRS = {"__pycache__", ".git"}
 
 
-def python_files() -> list[Path]:
-    """Every .py file under the three roots, sorted, with no build residue."""
+def python_files(root: Path) -> list[Path]:
+    """Every .py file under the three roots of `root`, sorted, no build residue."""
     out: list[Path] = []
-    for root in ROOTS:
-        for path in sorted((REPO / root).rglob("*.py")):
+    for name in ROOTS:
+        for path in sorted((root / name).rglob("*.py")):
             if any(part in SKIP_DIRS for part in path.parts):
                 continue
             out.append(path)
     return out
 
 
-def host_lines(text: str) -> list[tuple[int, str]]:
-    """(line number, host) for every line that names one of the outbound hosts."""
+# ---------------------------------------------------------------------------
+# What counts as a mention: the code, not the text (2026-11-18).
+# ---------------------------------------------------------------------------
+
+def _documentation_ids(tree: ast.AST) -> set[int]:
+    """ids of the string literals that are documentation, not code.
+
+    Two shapes. `ast.get_docstring` names the first: the literal at the top of a
+    module, class or function. The second is any other bare string expression
+    statement - a literal evaluated and its value thrown away can only be
+    documentation (`ast.get_docstring` does not call a section string further
+    down a long function a docstring, but it is just as much writing rather than
+    code).
+    """
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                             ast.AsyncFunctionDef)):
+            body = getattr(node, "body", ())
+            if (body and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and ast.get_docstring(node) is not None):
+                ids.add(id(body[0].value))
+        if (isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            ids.add(id(node.value))
+    return ids
+
+
+def _literal_value(node: ast.AST) -> str | None:
+    """The string a literal-only expression builds, or None if it needs a name.
+
+    Folding these is what lets the walk see a host the raw-text scan could not:
+    `"https://api." "deepseek.com"` (the parser joins adjacent literals),
+    `"https://api." + "deepseek.com"` (a `+` chain of literals) and an f-string
+    whose substituted values are themselves literals all name the host the
+    program ends up with. An f-string that interpolates a real variable returns
+    None here - its literal parts are still visited on their own, which catches
+    a host spelled contiguously there.
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append(value.value)
+            elif isinstance(value, ast.FormattedValue):
+                inner = _literal_value(value.value)
+                if inner is None:
+                    return None
+                parts.append(inner)
+            else:
+                return None
+        return "".join(parts)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _literal_value(node.left)
+        right = _literal_value(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
+def _hosts_in(value: str) -> list[str]:
+    """Every HOSTS entry named by `value`, in census order."""
+    low = value.lower()
+    return [host for host in HOSTS if host in low]
+
+
+def code_host_mentions(tree: ast.AST) -> list[tuple[int, str]]:
+    """(line, host) for every HOSTS host named in real CODE in `tree`.
+
+    Documentation is skipped: a docstring or any other bare string statement is
+    not code, and `#` comments never reach the AST at all, so no comment
+    stripping is needed. `ast.get_docstring` is the authority for the first
+    kind; `_documentation_ids` also knows the bare-string kind.
+    """
+    documentation = _documentation_ids(tree)
+    seen: set[tuple[int, str]] = set()
     out: list[tuple[int, str]] = []
-    low = text.lower()
-    for host in HOSTS:
-        start = 0
-        while True:
-            at = low.find(host, start)
-            if at < 0:
-                break
-            out.append((low[:at].count("\n") + 1, host))
-            start = at + len(host)
+    for node in ast.walk(tree):
+        if id(node) in documentation:
+            continue
+        value = _literal_value(node)
+        if value is None:
+            continue
+        for host in _hosts_in(value):
+            hit = (node.lineno, host)
+            if hit not in seen:
+                seen.add(hit)
+                out.append(hit)
     return out
 
 
-def _allowed_reason(rel: str, path: Path) -> str:
+def _comment_tokens(text: str) -> list[tokenize.TokenInfo]:
+    """Every `#` comment token, or none where the file's tokenizer gives up.
+
+    Only used to count what the walk ignored; a tokenizer that cannot read the
+    file changes nothing about the verdict (the AST parse is what decides, and
+    `main` rejects a file the AST cannot read before this is reached).
+    """
+    try:
+        return [tok for tok in tokenize.generate_tokens(io.StringIO(text).readline)
+                if tok.type == tokenize.COMMENT]
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return []
+
+
+def documentation_host_mentions(tree: ast.AST, text: str) -> list[tuple[int, str]]:
+    """(line, host) for the host names the walk ignored as documentation.
+
+    These are the mentions the 2026-11-18 ruling took out of the census: the
+    same host named in a docstring, in another bare string statement, or in a
+    `#` comment. They are counted and printed, never used to pass or fail.
+    """
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            out.extend((node.value.lineno, host)
+                       for host in _hosts_in(node.value.value))
+    for tok in _comment_tokens(text):
+        out.extend((tok.start[0], host) for host in _hosts_in(tok.string))
+    return out
+
+
+def code_names_gate(tree: ast.AST) -> bool:
+    """True when real CODE refers to the gate - a docstring or comment is not it.
+
+    Names, attributes and imports count; a string that merely spells the word is
+    not a call, so it does not. `backend/test_web_search.py` used to pass this
+    half on its own docstring, which said the gate is asked; the suite asks
+    nothing itself, so it is now on the allow-list for the reason that IS true.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == GATE:
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == GATE:
+            return True
+        if isinstance(node, ast.alias):
+            if GATE in (getattr(node, "name", "") or "",
+                        getattr(node, "asname", "") or ""):
+                return True
+    return False
+
+
+def _allowed_reason(rel: str, path: Path, root: Path,
+                    allowed: dict[str, str]) -> str:
     """The written reason for `rel`, or "".
 
     A shipped module has two copies: `backend/<name>.py` and its base,
@@ -471,76 +621,104 @@ def _allowed_reason(rel: str, path: Path) -> str:
     that has drifted - `backend/_where.py` carries the base's trailer - needs
     its own entry, so a drifted copy cannot inherit a reason it may not deserve.
     """
-    if rel in ALLOWED:
-        return ALLOWED[rel]
+    if rel in allowed:
+        return allowed[rel]
     if rel.startswith("jarvis-backend/"):
         twin = "backend/" + rel[len("jarvis-backend/"):]
-        if twin in ALLOWED:
+        if twin in allowed:
             try:
-                if path.read_bytes() == (REPO / twin).read_bytes():
-                    return ALLOWED[twin]
+                if path.read_bytes() == (root / twin).read_bytes():
+                    return allowed[twin]
             except OSError:
                 return ""
     return ""
 
 
-def main() -> int:
-    verbose = "-v" in sys.argv
+def main(argv: list[str] | None = None, repo: Path | None = None,
+         allowed: dict[str, str] | None = None, say=print) -> int:
+    """Run the walk and return the exit code; arguments exist for the suite.
+
+    `argv`, `repo` and `allowed` default to the real ones, so the command line
+    behaviour is unchanged. The suite passes a fixture tree and a fixture
+    allow-list so every rule can be proved on text it wrote, not on the repo's
+    own files, and then runs the default form on this checkout.
+    """
+    args = sys.argv[1:] if argv is None else list(argv)
+    verbose = "-v" in args
+    root = REPO if repo is None else Path(repo)
+    allow = ALLOWED if allowed is None else allowed
     seen_allowed: set[str] = set()
     wired: list[str] = []
-    allowed: list[str] = []
+    allowlisted: list[str] = []
     violations: list[tuple[str, int, str]] = []
+    problems: list[str] = []
+    real_mentions = 0
+    prose_mentions = 0
 
-    for path in python_files():
-        rel = path.relative_to(REPO).as_posix()
+    for path in python_files(root):
+        rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
-        hits = host_lines(text)
+        try:
+            tree = ast.parse(text, filename=rel)
+        except SyntaxError as exc:
+            problems.append(f"{rel} is not valid Python ({exc.msg} at line "
+                            f"{exc.lineno}), so its host mentions cannot be "
+                            f"read - fix the file")
+            continue
+        hits = code_host_mentions(tree)
+        prose_mentions += len(documentation_host_mentions(tree, text))
         if not hits:
             continue
-        reason = _allowed_reason(rel, path)
+        real_mentions += len(hits)
+        reason = _allowed_reason(rel, path, root, allow)
         if reason:
-            allowed.append(rel)
-            if rel in ALLOWED:
+            allowlisted.append(rel)
+            if rel in allow:
                 seen_allowed.add(rel)
             continue
-        if GATE in text:
+        if code_names_gate(tree):
             wired.append(rel)
             continue
         violations.extend((rel, line, host) for line, host in hits)
 
-    problems: list[str] = []
-    for rel in ALLOWED:
-        if not (REPO / rel).is_file():
+    for rel in allow:
+        if not (root / rel).is_file():
             problems.append(f"{rel} is on the allow-list but is not in this checkout "
                             f"- remove the entry or restore the file")
         elif rel not in seen_allowed:
-            problems.append(f"{rel} is on the allow-list but no longer names a cloud host "
-                            f"- remove the entry, it is no longer true")
+            problems.append(f"{rel} is on the allow-list but no longer names a "
+                            f"cloud host in code - remove the entry, it is no "
+                            f"longer true")
 
     if violations:
-        print("::error::an outbound host is named by a file that does not name "
-              f"{GATE} - wire the gate or add the file to ALLOWED with a reason:",)
+        say("::error::an outbound host is named in real code by a file that "
+            f"does not name {GATE} in code - wire the gate or add the file to "
+            "ALLOWED with a reason:",)
         for rel, line, host in violations:
-            print(f"  {rel}:{line}: {host}")
+            say(f"  {rel}:{line}: {host}")
     for problem in problems:
-        print(f"::error::{problem}")
+        say(f"::error::{problem}")
 
     if violations or problems:
-        print(f"\nFAIL  {len(violations)} unaccounted host mention(s), "
-              f"{len(problems)} stale allow-list entr(ies).")
+        say(f"\nFAIL  {len(violations)} unaccounted host mention(s), "
+            f"{len(problems)} stale allow-list entr(ies).")
         return 1
 
-    print(f"{len(wired) + len(allowed)} file(s) name one of the {len(HOSTS)} outbound "
-          f"hosts: {len(wired)} name {GATE}, {len(allowed)} are on the allow-list "
-          f"with a reason.")
-    print(f"The allow-list is {len(ALLOWED)} exact path(s), each of which also covers "
-          f"its byte-identical base copy; an unlisted host name would fail this run.")
+    say(f"{len(wired) + len(allowlisted)} file(s) name one of the {len(HOSTS)} "
+        f"outbound hosts in real code: {len(wired)} name {GATE} in code, "
+        f"{len(allowlisted)} are on the allow-list with a reason.")
+    say(f"The allow-list is {len(allow)} exact path(s), each of which also covers "
+        f"its byte-identical base copy; an unlisted host name would fail this run.")
+    say(f"The walk counted {real_mentions} host mention(s) in real code and "
+        f"ignored {prose_mentions} that are documentation only - a docstring, "
+        f"another bare string statement, or a # comment - which the old text "
+        f"scan used to count.")
     if verbose:
-        for rel in sorted(allowed):
-            print(f"  allowed  {rel}")
-            print(f"           {ALLOWED.get(rel) or _allowed_reason(rel, REPO / rel)}")
+        for rel in sorted(allowlisted):
+            say(f"  allowed  {rel}")
+            say(f"           {allow.get(rel) or _allowed_reason(rel, root / rel, root, allow)}")
         for rel in sorted(wired):
-            print(f"  wired    {rel}")
+            say(f"  wired    {rel}")
     return 0
 
 

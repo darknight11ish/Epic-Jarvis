@@ -320,6 +320,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 #: How an answer that raised a card ends. A "yes" said aloud approves
@@ -1436,6 +1437,21 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if _STOP_EVERYTHING.fullmatch(s):
         return Intent("stop_all")
 
+    # --- the hybrid/cloud settings, asked plainly (2026-11-18) ---------------
+    # The owner's own words for the three things he keeps asking about, read
+    # from THIS PC's files and answered in a second: which cloud service is
+    # chosen ("which cloud provider am I using?", "am I on cloud?"), the
+    # standing switch ("is escalation on?", "will you send things to the cloud
+    # by yourself?"), the money ("what's my cap?", "how much have I spent this
+    # month?") and what the switch does ("what does escalation actually do?").
+    # Every change it accepts ("turn escalation on", "set my cap to $5") goes
+    # through the door that setting already has, so this adds no route and no
+    # write of its own. Read only: `_run_cloud_settings` reads the three files;
+    # the change intent raises the setting's own card.
+    got = _cloud_settings_prompt(s, text)
+    if got is not None:
+        return got
+
     # --- the cloud/API honesty questions (2026-10-31) -----------------------
     # These come before the feature answers: the owner asked the local model
     # and got "I have no connection to any external API" while the Cloud
@@ -1547,6 +1563,18 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # calendar?" loses its "can you" on the way in and would otherwise be
     # treated as an action request. See _feature_capability_question.
     got = _feature_capability_question(text)
+    if got is not None:
+        return got
+
+    # --- a question that QUOTES a feature's own exact name (2026-11-18) -------
+    # BEFORE the limit lane and the reminder / goal / feature-guide /
+    # read-a-link families, and that placement is the fix: each measured
+    # question the awareness audit still missed already says the row's own
+    # exact title or alias, but a generic family that shares ONE word with
+    # that name answered first (see `_named_feature_question`). Exact equality
+    # of a row's id, title or alias only - never a shared word - so this can
+    # only take a question that already said which feature it means.
+    got = _named_feature_question(text)
     if got is not None:
         return got
 
@@ -2051,6 +2079,14 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _self_github(s)
     if got is not None:
         return got
+    # The owner's own GitHub READS, answered from GitHub's own answer with no
+    # model (2026-11-18). After the self-knowledge answers, so "what's your CI
+    # status?" keeps answering about Jarvis's own runs; before the accounts and
+    # settings grammar, because "which pull requests..." must not be read as a
+    # settings sentence.
+    got = _self_github_reads(s)
+    if got is not None:
+        return got
     got = _self_accounts(s)
     if got is not None:
         return got
@@ -2160,6 +2196,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # record digest, BEFORE the update checker - that one answers whether an
     # update is AVAILABLE, never what the newest changes were.
     got = _recent_changes(s)
+    if got is not None:
+        return got
+    # --- the defect register (2026-11-18) ------------------------------------
+    # "How many open defects are in the register?" was answered by the live
+    # backend with "I don't know about your defect register without seeing it",
+    # although the register is a file in this repository. No lane read it, so
+    # the question reached the model; these three shapes are answered from
+    # `docs/defect-register.tsv` on this PC, with its path and read date named.
+    # Read-only and cardless - see the block header at `_defect_register`.
+    got = _defect_register(s)
     if got is not None:
         return got
     # --- "is there an update?", "what changed in the update?", "update Jarvis"
@@ -6073,6 +6119,163 @@ _RECENT_CHANGES = re.compile(
 def _recent_changes(s: str) -> Optional[Intent]:
     if _RECENT_CHANGES.fullmatch(s):
         return Intent("recent_changes")
+    return None
+
+
+# --------------------------------------------------------------------------
+#   The defect register, read from its own file (2026-11-18)
+# --------------------------------------------------------------------------
+# THE MEASURED FAILURE. Asked "How many open defects are in the register?", the
+# live Jarvis of 2026-11-18 answered "I don't know about your defect register
+# without seeing it. Do you have a file or database I can search? ..." - a
+# denial of the register that sits in this repository, while the only reader of
+# it (`tools/check_defect_register.py`) was a repo checker no chat path could
+# reach. Nothing here guessed a missing sentence: NO lane read the register at
+# all, so the question fell through to the model, and the model has no tool
+# that can count a file on this PC.
+#
+# WHAT IS ANSWERED. Three whole-sentence families, answered from
+# `docs/defect-register.tsv` on this PC with the path named and the date it was
+# read:
+#   * the COUNT - "how many open defects are in the register", "... are there",
+#     "how many defects are there";
+#   * the OPEN LIST - "what is open", "what defects are still open";
+#   * ONE ROW by id - "what is DEF-089", "is DEF-002 closed".
+# The number is the CHECKER's: `tools/check_defect_register.py`'s own
+# `parse_tsv()` is called on the file, never a second parser written here, so
+# the count chat says and the number the checker prints cannot drift apart.
+#
+# WHERE THE FILE IS, AND WHY IT CAN BE ABSENT. The backend runs from its
+# installed folder, which is not the git checkout - `jarvis_review.py`'s own
+# header says the same about the review gates. So the register is looked for in
+# ONE of three NAMED places, never by a scan of the owner's folders:
+#   1. `JARVIS_DEFECT_REGISTER` - the register file itself;
+#   2. `JARVIS_REVIEW_REPO` - the checkout the review gates already use;
+#   3. the checkout this module runs from (`<backend>/..`), and ONLY when it
+#      really is this repository (`scripts/apply-patches.ps1` beside `docs/`,
+#      the narrow marker `jarvis_self_improve.default_roots()` uses).
+# When none of them has it, the answer is one plain refusal - "the register is
+# not there, so I cannot count it" - which is what an installed copy with no
+# checkout beside it must say: never a number, and never the model's denial.
+#
+# HONESTY, THE PART THAT MATTERS MORE THAN THE COUNT. A missing file, a
+# missing checker, a header that is not the seven TAB columns, a row with the
+# wrong column count, a duplicate id or an invented status - every problem the
+# checker names is a REFUSAL in words. A wrong count is worse than "I cannot
+# read it", so NO state falls through to a guess.
+#
+# READ-ONLY. The register is opened for reading and nothing else: no card, no
+# write, no model and no network, and the one other file it opens is the
+# checker that lives beside it. The intent is in READ_ONLY_INTENTS, so a read
+# can never take away what "cancel that" would undo.
+#
+# This block is the GRAMMAR only; the reading lives in
+# `_run_defect_register` beside the other record answers.
+
+#: The register's own nouns: "the register", "the defect register", "your
+#: defect register". A bare "the register" is this register, because it is the
+#: only register chat answers from.
+_REGISTER = (r"(?:the\s+|this\s+|that\s+|my\s+|our\s+|your\s+)?"
+             r"(?:defects?\s+)?register")
+
+#: "how many (open) defects ..." - the count family, whole sentences only. An
+#: ordinary question that merely says "defects" ("how many defects are there in
+#: my code") has words this does not allow and keeps its own path.
+_DEFECT_COUNT = re.compile(
+    # The whole alternation is one group so the trailing "right now / today"
+    # words below apply to EVERY count shape, not only the last one (in a
+    # regex, `|` binds looser than concatenation - the first draft attached
+    # them to the bare shape alone and "how many defects are open right now"
+    # fell through to the model).
+    r"(?:"
+    # "how many open defects are in the register" / "... on the defect register"
+    r"how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"are\s+(?:in|on)\s+" + _REGISTER +
+    # "how many open defects are open in the register"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open)\s+)?defects?\s+"
+    r"are\s+(?:(?:currently|still|now)\s+)?open\s+(?:in|on)\s+" + _REGISTER +
+    # "how many open defects are there" / "... are there in the register"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"are\s+there(?:\s+(?:in|on)\s+" + _REGISTER + r")?" +
+    # "how many defects are open / left / outstanding"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+are\s+"
+    r"(?:(?:currently|still|now)\s+)?(?:open|left|outstanding|unfixed|unresolved)" +
+    # "how many open defects does the register have" / "... do we have"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"(?:does\s+" + _REGISTER + r"\s+have|do\s+(?:we|i|you)\s+have|"
+    r"have\s+(?:we|i|you)\s+got)" +
+    # "how many defects are recorded / filed / logged"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+are\s+"
+    r"(?:recorded|filed|logged|on\s+file)" +
+    # "how many defects in the register" (no verb at all)
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"(?:in|on)\s+" + _REGISTER +
+    # "what is in the register", "what's on the defect register"
+    r"|what(?:'s|\s+is)\s+(?:in|on)\s+" + _REGISTER +
+    # "what is the number of open defects", "what's the open defect count"
+    r"|what(?:'s|\s+is)\s+the\s+(?:number\s+of\s+"
+    r"(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?"
+    r"|(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+(?:count|number))" +
+    # "how many open defects" on its own ("how many open defects, Jarvis?")
+    r"|how\s+many\s+(?:open|unfixed|unresolved|still\s+open|left)\s+defects?"
+    r")"
+    # trailing time/framing words that change nothing about the question
+    r"(?:\s+(?:right\s+now|now|currently|at\s+the\s+moment|today|in\s+total|"
+    r"on\s+the\s+register))?")
+
+#: "what is open" - the open-list family. The bare sentence is answered from
+#: this register because it is the only open/closed record chat reads; anything
+#: that names windows, apps or files has words this does not allow.
+_DEFECT_OPEN = re.compile(
+    # "what is open" / "what's open right now" / "what is still open"
+    r"what(?:'s|\s+is)\s+(?:(?:currently|still|now|right\s+now)\s+)?open"
+    r"(?:\s+(?:right\s+now|now|currently|at\s+the\s+moment|today))?"
+    # "what is open in the defect register" / "... on the register"
+    r"|what(?:'s|\s+is)\s+(?:(?:currently|still|now)\s+)?open\s+(?:in|on)\s+" + _REGISTER +
+    # "what defects are open", "which defects are still open"
+    r"|(?:what|which)\s+defects?\s+are\s+(?:(?:currently|still|now)\s+)?"
+    r"(?:open|left|outstanding)"
+    # "what are the open defects", "what are my open defects"
+    r"|what\s+are\s+(?:the\s+|my\s+|your\s+|all\s+the\s+)?open\s+defects?"
+    # "show me the open defects", "list open defects"
+    r"|(?:show|list|give)\s+(?:me\s+)?(?:the\s+|all\s+the\s+|all\s+)?open\s+defects?"
+    # "what open defects are there"
+    r"|what\s+open\s+defects?\s+are\s+there")
+
+#: One defect by id: DEF-089, def-089, DEF 089 or defect 89 - the register's own
+#: ids are `DEF-` plus digits, so the number is what identifies the row.
+_DEFECT_ID = r"def(?:ect)?[\s_-]?(\d{1,4})"
+_DEFECT_ONE = re.compile(
+    # "what is DEF-089", "what's DEF-089 about", "show me DEF-089", "tell me
+    # about DEF-089", "what about DEF-089", "what is DEF-089's status"
+    r"(?:what(?:'s|\s+is)|tell\s+me\s+about|show\s+me|what\s+about)\s+"
+    r"(?:the\s+)?(?:defect\s+)?" + _DEFECT_ID +
+    r"(?:'s)?(?:\s+(?:about|status|state|say|mean|again|then))?"
+    # "what is the status of DEF-089"
+    r"|what(?:'s|\s+is)\s+the\s+(?:status|state)\s+of\s+(?:the\s+)?(?:defect\s+)?"
+    + _DEFECT_ID +
+    # "is DEF-089 open / closed / fixed"
+    r"|is\s+(?:the\s+)?(?:defect\s+)?" + _DEFECT_ID +
+    r"\s+(?:still\s+)?(?:open|closed|fixed|unfixed|resolved|done)\b"
+    # "what does DEF-089 say"
+    r"|what\s+does\s+(?:the\s+)?(?:defect\s+)?" + _DEFECT_ID + r"\s+(?:say|mean)\b")
+
+
+def _defect_register(s: str) -> Optional[Intent]:
+    """The defect-register questions above, or None. See the block header.
+
+    Count first, then the open list, then one id - the three shapes cannot
+    overlap (the count's words are "how many", the list's are "what is open",
+    one id's carry a number), and each pattern is a WHOLE sentence."""
+    if _DEFECT_COUNT.fullmatch(s):
+        return Intent("defect_register", {"ask": "count"})
+    if _DEFECT_OPEN.fullmatch(s):
+        return Intent("defect_register", {"ask": "open"})
+    match = _DEFECT_ONE.fullmatch(s)
+    if match:
+        number = next((int(group) for group in match.groups() if group), None)
+        if number is not None:
+            return Intent("defect_register", {"ask": "one", "number": number})
     return None
 
 
@@ -10491,14 +10694,48 @@ def _feat_spoken(text) -> str:
     return _cap_alias_normalise(text)
 
 
+def _feature_exact_row(area):
+    """The ONE catalogue row whose own name IS this subject, or None.
+
+    EXACT, NEVER A GUESS. `jarvis_feature_guide.find_exact` already matches a
+    row's id, title AND aliases with exact equality rather than a substring or
+    a shared word, and `_explicit_feature_question` has used it as its first
+    gate since 2026-11-08. What it did not do is try the question's RAW words
+    as well: `_cap_alias_normalise` turns the question's "out loud" into
+    "aloud" (the read-aloud row's own id), while ANOTHER row's own title may
+    literally say "out loud" - `read-web-page` is "Read one web page out
+    loud" - so the measured question that quotes that title could not name it
+    and was answered "I do not have that one". Both forms are tried here; only
+    exact equality counts.
+    """
+    seen = []
+    for base in (_feat_spoken(area), area):
+        target = " ".join(str(base or "").split()).strip(' ?.!,;"\'')
+        if not target or target in seen:
+            continue
+        seen.append(target)
+        target = _FEAT_AREA_LEAD.sub("", target)
+        target = _FEAT_AREA_AUX.sub("", target)
+        target = _FEAT_AREA_ARTICLE.sub("", target)
+        target = _feature_target(target)
+        if not target:
+            continue
+        row = _feature_lookup_exact(target)
+        if row is not None:
+            return row
+    return None
+
+
 def _feature_echo_row(area):
     """The ONE catalogue row the question's subject names, or None.
 
-    NORMALISED QUESTION, UNCHANGED ROWS: "reading out loud" -> "read aloud",
-    which is the read-aloud row's own id. Exact name first, then the guide's
-    loose finder - and only when it answers with exactly one row; an ambiguous
-    name is never turned into an answer about the wrong one.
+    EXACT NAME FIRST (see `_feature_exact_row`), THEN the guide's loose finder
+    - and only when it answers with exactly one row; an ambiguous name is
+    never turned into an answer about the wrong one.
     """
+    row = _feature_exact_row(area)
+    if row is not None:
+        return row
     target = " ".join(_feat_spoken(area).split()).strip(" ?.!,;")
     target = _FEAT_AREA_LEAD.sub("", target)
     target = _FEAT_AREA_AUX.sub("", target)
@@ -10506,9 +10743,6 @@ def _feature_echo_row(area):
     target = _feature_target(target)
     if not target:
         return None
-    row = _feature_lookup_exact(target)
-    if row is not None:
-        return row
     try:
         import jarvis_feature_guide as FG
         got = FG.find(target, loose=True)
@@ -10517,6 +10751,77 @@ def _feature_echo_row(area):
     if got.get("kind") == "feature":
         return got.get("row")
     return None
+
+
+def _feature_question_text(raw) -> str:
+    """The question's own words: lower-cased, addressed, tail instructions gone.
+
+    The harness's trailing "Answer in one sentence." is not part of the
+    question - it is stripped with `_strip_meta_instruction`, whose own pattern
+    already handles the full stop that `_FEAT_HARNESS_TAIL` alone cannot. For
+    the measured owner sentences that is the difference between reaching the
+    row and being claimed by an earlier family on the FIRST pass (a sentence
+    another lane claims is never retried with the tail taken off).
+    """
+    text = " ".join(str(raw or "").replace("\u2019", "'").lower().split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    text = _FEAT_HARNESS_TAIL.sub("", text).strip(" ?.!,")
+    stripped = _strip_meta_instruction(text)
+    return stripped if stripped is not None else text
+
+
+def _named_feature_question(raw) -> Optional[Intent]:
+    """A feature question that QUOTES a catalogue row's exact name, or None.
+
+    RUNS EARLY IN `match()` (2026-11-18): before the limit lane, the reminder
+    family, the feature guide and the read-a-link lane. THAT PLACEMENT IS THE
+    FIX, and the audit of 2026-11-18 shows why. Each of the measured questions
+    still missing its row already says the row's own name - its exact title or
+    an exact alias - and was nevertheless answered by a generic family that
+    shares ONE word with that name:
+
+      * "... a feature called \\"How much Jarvis may interrupt you\\"?" was
+        claimed by `_CAP_SAFETY`'s stop-everything pattern on "interrupt you";
+      * "... called \\"Also on my phone\\"" and "... called \\"Open an app on my
+        phone\\"" were claimed by `call-recording`: "called" stems to "call",
+        and "call" + "phone" IS that row's own two-word name "phone call";
+      * "... called \\"Jarvis starts the local model again by itself when it
+        dies\\"" was outscored by `start-the-model-lane`'s own "start ... local
+        model" words, so the quoted name lost to a near neighbour;
+      * the alarm/reminder family read "sound", "reminder", "asks" and "ring";
+        the read-a-link lane read "read ..."; the goals lane read "goals" and
+        the guide lane read "reminder ..." - so voice-training, coming-up,
+        reminder-asks, reminder-actions, photo-reminder, media-read,
+        read-web-page, find-phone and decks each got a confident answer about a
+        different ability (or, where the row was already found, a generic
+        message instead of the row's own words).
+
+    A question that says "feature" and quotes a feature's EXACT catalogue name
+    is that feature's question, whatever word another family also uses. Only
+    exact equality of the row's id, title or alias is taken - never a shared
+    word, a substring or a loose find - so this lane cannot claim another
+    row's question. `_explicit_feature_question` keeps the loose shapes, LAST
+    in the chain, exactly as before.
+    """
+    text = _feature_question_text(raw)
+    if not text:
+        return None
+    # These already have their own deterministic owners; taking them here would
+    # remove a better answer (the same exclusions `_explicit_feature_question`
+    # makes).
+    if re.search(r"\bgithub\b", text) or "crisis" in text:
+        return None
+    m = _FEAT_EXPLICIT.fullmatch(text)
+    if not m:
+        return None
+    area = next((g for g in (m.group("area"), m.group("area2"),
+                             m.group("area3")) if g), "")
+    row = _feature_exact_row(area)
+    if row is None:
+        return None
+    return Intent("capability_answer",
+                  {"id": str(row.get("id") or ""),
+                   "ask": bool(_CAP_ASKS_ABOUT_A_CARD.search(text))})
 
 
 def _explicit_feature_question(raw) -> Optional[Intent]:
@@ -11720,6 +12025,81 @@ def _run_cloud_provider_choose(f: dict) -> Result:
         return Result("The cloud provider could not be changed on this PC.",
                       "cloud_provider_choose")
     return Result(_cloud_choose_words(code, body, company), "cloud_provider_choose")
+
+
+# --- the hybrid/cloud settings in the owner's own words (2026-11-18) --------
+# ONE block for both jobs, and `jarvis_cloud_settings` is where the rules live:
+#
+#   * the QUESTIONS (which service is chosen, is escalation on, what the cap
+#     is and what was spent this month, what the switch actually does and what
+#     it still refuses) are answered from cloud-choice.json,
+#     escalate-cloud.json and chatbot\api-money.json, naming the file read and
+#     when it was last saved. No model, no guess, and a missing file is said as
+#     "not set up" with what that means.
+#   * the CHANGES call the door each setting already has, and nothing else:
+#     `jarvis_presets.apply_cloud` for the service (the Presets Cloud row's ONE
+#     change_own_config card), `jarvis_presets.cloud_escalate` for the switch
+#     (ON is one card, OFF is instant), and `jarvis_chatbot_limits.change` for
+#     the monthly cap (the same door `POST /api/chatbot/money` uses: a raise is
+#     one card at tier ask, a lowering is instant). Nothing is written before
+#     a card's yes, and this path approves nothing.
+#
+# A provider name this PC does not know is refused with the list read from
+# `jarvis_chatbot_api.PRESETS`. A name it DOES know is left to the older
+# cloud-provider door above, which already raises the same one card - the two
+# doors do not compete for one sentence.
+
+def _cloud_settings_prompt(s: str, text: str) -> Optional[Intent]:
+    """The hybrid/cloud settings sentence, or None (see jarvis_cloud_settings)."""
+    try:
+        import jarvis_cloud_settings as CS
+    except Exception:                                       # noqa: BLE001
+        return None
+    try:
+        got = CS.prompt(s, text)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if not got:
+        return None
+    fields = {k: v for k, v in got.items() if k != "intent"}
+    return Intent(str(got.get("intent") or CS.ANSWER), fields)
+
+
+def _run_cloud_settings(f: dict) -> Result:
+    """The fixed answer, read fresh from the PC's own files. No card, no write."""
+    try:
+        import jarvis_cloud_settings as CS
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud settings are not set up on this PC, so I cannot "
+                      "read them.", "cloud_settings")
+    return Result(CS.answer(str(f.get("shape") or "")), "cloud_settings")
+
+
+def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
+    """One change, through its own door. The reply is the door's own body.
+
+    The words are built by `jarvis_cloud_settings.change_words` from the body
+    the door returned, so a refused or timed-out card is never reported as a
+    change and a waiting card is never reported as on.
+    """
+    try:
+        import jarvis_cloud_settings as CS
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud settings are not set up on this PC, so nothing was "
+                      "changed.", "cloud_settings_change")
+    kind = str(f.get("kind") or "")
+    provider = str(f.get("provider") or "")
+    if kind == "provider":
+        status, body = CS.set_provider(provider)
+    elif kind == "escalation":
+        status, body = CS.set_escalation(f.get("on") is True)
+    elif kind == "cap":
+        status, body = CS.set_cap(f.get("dollars"), provider=provider,
+                                  peer=peer, local=local)
+    else:
+        return Result("Nothing was changed.", "cloud_settings_change")
+    return Result(CS.change_words(kind, status, body, provider=provider),
+                  "cloud_settings_change")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -14958,6 +15338,152 @@ def _self_github(s: str) -> Optional[Intent]:
             r"(?:please\s+)?(?:comment|open|create|file|re-?run|rerun)\b)", s):
         return Intent("github_self", {"shape": "action"})
     return None
+
+
+# --------------------------------------------------------------------------
+#   The owner's own READ-ONLY GitHub questions, answered with no model
+#   (2026-11-18, the owner's ruling after the live battery)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED FAILURE. On the live PC, 2026-11-18 17:57Z, eight GitHub
+# questions were asked and NONE of the answers the owner should have had came
+# out: one turn did call `github_list` and was refused the bare repository
+# name, seven turns called no tool at all, and "what is the latest commit on
+# main in Epic-Jarvis?" was answered with a false denial ("I don't have direct
+# access to your GitHub repositories"). A 9B model is measurably unreliable at
+# choosing a tool for these (the project's own settings-tool measurement, 0 of
+# 21 calls before its description said to call it); the deterministic lane
+# already answers the GitHub SELF-knowledge questions with no model, and these
+# are the same kind of question about data this PC can read itself.
+#
+# WHAT DECIDED THE SHAPE. (1) ONLY when the read row is really card-free
+# (`github_inspect` at "auto"), because these answers make a GitHub read with
+# no model in the loop and must never go round a card the owner put back - when
+# it asks, `_self_github_reads` returns None and the model's tool path raises
+# the card as before. (2) ONLY when a token is saved, so a PC with no GitHub
+# keeps its old path and its connect answer. (3) The reads go through
+# `jarvis_github`'s OWN planners and `run()`, so the token goes only to
+# api.github.com, the Q5 target check still runs, and the answer can only
+# repeat what GitHub's own answer said - never a guess. (4) They are reads, so
+# their names are in READ_ONLY_INTENTS.
+#
+# NOT INCLUDED, deliberately: the open-defect count. It reads a local file
+# (`docs/defect-register.tsv`) and another lane is giving it its own
+# deterministic answer this wave - two doors for one question would drift.
+_GITHUB_MY_PRS = re.compile(
+    r"(?:(?:what|which|show|list|tell\s+me)\s+(?:me\s+)?(?:are\s+|is\s+)?"
+    r"(?:my|the|all\s+(?:the|my))\s+(?:open\s+)?(?:pull\s*requests?|prs?)\b.*"
+    r"|(?:which|what)\s+(?:open\s+)?(?:pull\s*requests?|prs?)\s+(?:are\s+)?"
+    r"(?:ready\s+to\s+merge|open|waiting|unmerged|need(?:s)?\s+merging)\b.*"
+    r"|(?:what|which)\s+(?:open\s+)?(?:pull\s*requests?|prs?)\s+"
+    r"(?:do\s+i\s+have|are\s+mine)\b.*)\s*\??")
+_GITHUB_PR_CHECKS = re.compile(
+    r"(?:what|which|how)\b.*\b(?:failing|failed|wrong|broken|checks?|ci|status|"
+    r"running|pending|queued|green)\b.*\b(?:pull\s*request|pr)\s*#?(?P<n>\d{1,7})\b.*"
+    r"|(?:what|which)\b.*\b(?:pull\s*request|pr)\s*#?(?P<n2>\d{1,7})\b.*\b(?:"
+    r"failing|failed|checks?|ci|status|running|pending)\b.*")
+_GITHUB_MAIN_COMMIT = re.compile(
+    r"(?:(?:what|which)\s+(?:is|was)?\s*(?:the\s+)?latest\s+commit\b.*"
+    r"|(?:what|which)\s+(?:is|was)?\s*(?:the\s+)?last\s+commit\b.*"
+    r"|latest\s+commit\b.*)\bmain\b.*")
+_GITHUB_UNMERGED = re.compile(
+    r"(?:(?:which|what|are\s+there)\s+branches?\b.*\b(?:unmerged|not\s+merged|"
+    r"open|unpushed|unfinished)\b.*"
+    r"|(?:unmerged|not\s+merged)\s+(?:work|branches?)\b.*)\s*\??")
+
+
+def _github_reads_are_free() -> bool:
+    """True only when a GitHub READ really raises no card on this PC.
+
+    The tier is the shipped `github_inspect` row: "auto" when the owner has
+    left the reads card-free (the default), "ask" when the switchable "Read
+    your GitHub" row has put the card back. A tier that cannot be read is
+    treated as asking: a deterministic answer must never go round a card.
+    """
+    try:
+        import jarvis_framework
+        return str(jarvis_framework.action_tier("github_inspect")) == "auto"
+    except Exception:                        # noqa: BLE001 - unreadable asks
+        return False
+
+
+def _self_github_reads(s: str) -> Optional[Intent]:
+    """The owner's own GitHub READS, answered from jarvis_github with no model.
+
+    Whole-sentence shapes only. `None` whenever this PC cannot answer them
+    safely: no module, no token, or the read card switched back on - then the
+    sentence keeps its old path (the model, whose tool raises the card).
+    """
+    GH = _github_module()
+    if GH is None:
+        return None
+    shape, fields = None, {}
+    if _GITHUB_PR_CHECKS.search(s):
+        m = _GITHUB_PR_CHECKS.search(s)
+        number = (m.groupdict().get("n") or m.groupdict().get("n2") or "").strip()
+        if number:
+            shape, fields = "pr", {"number": number}
+    if shape is None and _GITHUB_MAIN_COMMIT.search(s):
+        shape = "main"
+    if shape is None and _GITHUB_UNMERGED.search(s):
+        shape = "unmerged"
+    if shape is None and _GITHUB_MY_PRS.search(s):
+        shape = "pulls"
+    if shape is None:
+        return None
+    try:
+        if not GH.connected():
+            return None
+    except Exception:                        # noqa: BLE001 - unknown is not yes
+        return None
+    if not _github_reads_are_free():
+        return None
+    return Intent("github_own_read", {"shape": shape, **fields})
+
+
+def _run_github_own_read(f: dict, peer=None, local=None) -> Result:
+    """Answer one owner GitHub read from GitHub's own answer, in plain words.
+
+    Nothing here is a guess: the plan and the request are `jarvis_github`'s,
+    `run()` performs the Q5 target check first, and anything that is not a
+    clean answer is said as the module said it - or, when it cannot answer,
+    said plainly rather than filled in by the model.
+    """
+    name = "github_own_read"
+    GH = _github_module()
+    if GH is None:
+        return Result(GITHUB_MISSING, name)
+    try:
+        repo = str(GH.OWN_REPO)
+        shape = str(f.get("shape") or "")
+        if shape == "pr":
+            plan = GH.plan_ci({"repo": repo, "pr": str(f.get("number") or "")})
+        elif shape == "main":
+            # The read Jarvis HAS that names a commit on a branch: the newest
+            # CI run on it, which carries its head commit.
+            plan = GH.plan_ci({"repo": repo, "branch": "main"})
+        else:                                # pulls, and unmerged's own list
+            plan = GH.plan_list({"scope": "pulls", "repo": repo})
+        out = GH.run(plan, approved=True)
+    except Exception as exc:                 # noqa: BLE001 - said, never guessed
+        return Result(f"I tried to read your GitHub ({type(exc).__name__}) and it "
+                      f"did not answer, so I will not guess. Nothing was changed.",
+                      name)
+    if not isinstance(out, dict) or out.get("ok") is not True:
+        why = str((out or {}).get("error") or "").strip() or "GitHub did not answer."
+        return Result("I could not read your GitHub, so I will not guess: " + why,
+                      name)
+    text = str(out.get("text") or "").strip()
+    if shape == "main":
+        text = (f"From the newest CI run on main in {repo} - the read Jarvis has "
+                f"that names a commit: " + text)
+    elif shape == "unmerged":
+        text = (f"The unmerged work on {repo} is in these open pull requests; a "
+                f"branch with no pull request is not something this read can see. "
+                + text)
+    else:
+        text = text + f" (read from {repo})"
+    return Result(text, name)
 
 
 #: The account-shaped questions, answered from jarvis_accounts - the same
@@ -27201,6 +27727,276 @@ def _run_recent_changes() -> Result:
     return Result(RC.answer(), "recent_changes")
 
 
+# ------------------------------------------------- the defect register (2026-11-18)
+#
+# The words and the reading for the three questions the block header at
+# `_defect_register` describes. Nothing here writes, cards or calls a model;
+# the one other file it opens is `tools/check_defect_register.py` beside the
+# register, whose own `parse_tsv()` is the count.
+
+#: The register's own path inside this repository, and the two env vars that can
+#: point at it when the backend runs from its installed folder. The checkout
+#: marker is the same narrow "this really is the repository" test
+#: `jarvis_self_improve.default_roots()` uses - never a scan of the owner's
+#: folders.
+_DEFECT_REGISTER_REL = "docs/defect-register.tsv"
+_DEFECT_REGISTER_ENV = "JARVIS_DEFECT_REGISTER"
+_REVIEW_REPO_ENV = "JARVIS_REVIEW_REPO"
+_CHECKOUT_MARKER = "scripts/apply-patches.ps1"
+
+#: How many open ids "what is open" reads out before it summarises. The
+#: register holds about forty; a spoken answer must stay short, and the COUNT is
+#: always said before any list so a shortened list cannot read as the whole one.
+_OPEN_LISTED = 40
+#: The longest evidence quote "what is DEF-nnn" carries. Enough to say what the
+#: defect is; bounded because the answer can be spoken aloud.
+_EVIDENCE_SHOWN = 320
+
+_MISSING_WORDS = {
+    "pointed": (
+        "I cannot count the defect register: the file JARVIS_DEFECT_REGISTER names "
+        "is not on this PC, so I cannot read it and I will not guess at a number. "
+        "Nothing was changed."),
+    "checkout-no-register": (
+        "I cannot count the defect register: the checkout this copy of Atlas runs "
+        "from has no docs/defect-register.tsv, so I cannot read it and I will not "
+        "guess at a number. Nothing was changed."),
+    "no-checkout": (
+        "I cannot count the defect register: docs/defect-register.tsv is not beside "
+        "this copy of Atlas, and this copy is not running from the repository "
+        "checkout, so I cannot read it and I will not guess at a number. Nothing "
+        "was changed."),
+}
+
+
+def _defect_register_named(path: Path) -> str:
+    """How the answer names the file it read - never the owner's account path.
+
+    The checkout's own register is named by its path INSIDE the checkout
+    (`docs/defect-register.tsv`) - the form the owner reads in a terminal, and
+    the one that does not put his Windows account name into a reply that also
+    travels to the phone (docs/ARCHITECTURE.md keeps such a folder off it). A
+    register named another way is named as it was given, because that is the
+    one the owner pointed at.
+    """
+    try:
+        parent = path.parent
+        if (parent.name == "docs"
+                and (parent.parent / _CHECKOUT_MARKER).is_file()
+                and path.name == Path(_DEFECT_REGISTER_REL).name):
+            return _DEFECT_REGISTER_REL
+    except OSError:
+        pass
+    return str(path)
+
+
+def _defect_register_location(backend_dir=None) -> tuple:
+    """(the register file, how to name it, why not) from the three named places.
+
+    `JARVIS_DEFECT_REGISTER` (the file itself) first, then `JARVIS_REVIEW_REPO`
+    (the checkout the review gates already use), then the checkout this module
+    runs from - `<backend>/..`, and ONLY when `scripts/apply-patches.ps1` and
+    `docs/` are both there. `backend_dir` exists so a suite can put the third
+    place over a made-up tree instead of the real one.
+
+    `why` is "pointed", "checkout-no-register" or "no-checkout"; the runner
+    turns it into one plain sentence. Nothing is read here - `is_file()` only.
+    """
+    pointed = str(os.environ.get(_DEFECT_REGISTER_ENV) or "").strip()
+    if pointed:
+        path = Path(pointed).expanduser()
+        if path.is_file():
+            return path, _defect_register_named(path), ""
+        return None, "", "pointed"
+    roots = []
+    review_repo = str(os.environ.get(_REVIEW_REPO_ENV) or "").strip()
+    if review_repo:
+        roots.append(Path(review_repo).expanduser())
+    here = (Path(backend_dir).resolve() if backend_dir
+            else Path(__file__).resolve().parent)
+    roots.append(here.parent)
+    for root in roots:
+        try:
+            if not (root / _CHECKOUT_MARKER).is_file():
+                continue
+            path = root / _DEFECT_REGISTER_REL
+            if path.is_file():
+                return path, _defect_register_named(path), ""
+            return None, "", "checkout-no-register"
+        except OSError:
+            continue
+    return None, "", "no-checkout"
+
+
+def _defect_register_checker(register: Path):
+    """`tools/check_defect_register.py` from the tree the register is in, or None.
+
+    Its own `parse_tsv()` is called on the register: the count this answer says
+    and the count the repository's checker prints are the same function's, so
+    they cannot drift apart. `parse_tsv()` returns every well-formed row AND
+    appends a problem for every malformed one - so a wrong column count is a
+    refusal here, never a row quietly left out of the count. No checker, no
+    number.
+
+    Loaded by compiling its SOURCE, not through the import machinery: an import
+    would write `tools/__pycache__` beside the checkout, and this answer is
+    read-only on the owner's PC - it may not leave a file behind. The checker is
+    standard-library-only and defines nothing at import but its one regex pair,
+    which is why running its module body is safe.
+    """
+    tool = register.parent.parent / "tools" / "check_defect_register.py"
+    if not tool.is_file():
+        return None
+    try:
+        import types
+        module = types.ModuleType("jarvis_defect_register_checker")
+        module.__file__ = str(tool)
+        source = tool.read_text(encoding="utf-8-sig")
+        exec(compile(source, str(tool), "exec"), module.__dict__)  # noqa: S102
+        return module
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _defect_rows_word(count: int) -> str:
+    return f"{count} row" if count == 1 else f"{count} rows"
+
+
+def _defect_no_checker_words(named: str) -> str:
+    return (f"I found {named} on this PC, but not tools/check_defect_register.py "
+            f"beside it - the checker this answer must use - so I cannot count it "
+            f"and I will not guess. Nothing was changed.")
+
+
+def _defect_problem_words(register: Path, named: str, date: str, problems) -> str:
+    """One refusal naming what the CHECKER said is wrong - never a count."""
+    said = []
+    for problem in problems[:2]:
+        text = " ".join(str(problem).replace(str(register), named).split())
+        if len(text) > 260:
+            text = text[:260].rstrip() + "..."
+        said.append(text)
+    more = len(problems) - len(said)
+    detail = "; ".join(said)
+    if more > 0:
+        detail += f"; and {more} more problem" + ("" if more == 1 else "s")
+    return (f"I found {named} on this PC and read it on {date}, but it is not well "
+            f"formed: {detail}. So I cannot count it, and I will not guess. "
+            f"Nothing was changed.")
+
+
+def _defect_count_words(rows: list, named: str, date: str) -> str:
+    """The COUNT - open, closed and rows in all, said from the parsed file."""
+    open_ids = {row["id"] for row in rows if row.get("status") == "open"}
+    open_count = len(open_ids)
+    total = len(rows)
+    closed = total - open_count
+    read = f"I read {named} on this PC on {date}."
+    if not total:
+        return ("The defect register has no rows on it: nothing is open and nothing "
+                "is closed. " + read)
+    if not open_count:
+        if total == 1:
+            return "Nothing is open in the defect register: its only row is closed. " + read
+        return (f"Nothing is open in the defect register: all {total} rows on it are "
+                f"closed. " + read)
+    return (f"The defect register has {open_count} open and {closed} closed - "
+            f"{_defect_rows_word(total)} in all. " + read)
+
+
+def _defect_open_words(rows: list, named: str, date: str) -> str:
+    """The OPEN LIST - the count first, then the ids, never only a shortened list."""
+    open_rows = [row for row in rows if row.get("status") == "open"]
+    read = f"I read {named} on this PC on {date}."
+    if not open_rows:
+        return ("Nothing is open in the defect register: no row on it has status "
+                "open. " + read)
+    ids = [str(row.get("id") or "") for row in open_rows]
+    shown = ids[:_OPEN_LISTED]
+    more = len(ids) - len(shown)
+    listing = ", ".join(shown) + (f", and {more} more" if more > 0 else "")
+    ask = f' Ask me "what is {shown[0]}" for one of them.'
+    return (f"{len(ids)} defects are open in the defect register. {read} "
+            f"They are: {listing}.{ask}")
+
+
+def _defect_one_words(rows: list, number: int, named: str, date: str) -> str:
+    """ONE row by id - its status, owner, files and a bounded evidence quote."""
+    wanted = f"DEF-{number:03d}"
+    found = None
+    for row in rows:
+        match = re.fullmatch(r"def-(\d+)", str(row.get("id") or "").lower())
+        if match and int(match.group(1)) == number:
+            found = row
+            break
+    if found is None:
+        return (f"There is no {wanted} in the defect register: I read {named} on this "
+                f"PC on {date} and it has {_defect_rows_word(len(rows))}, none with that "
+                f"id. So I cannot tell you about it, and I will not guess.")
+    parts = [f"{found.get('id') or wanted} is {found.get('status') or 'in the register'}."]
+    owner = str(found.get("owner") or "").strip()
+    claimed = str(found.get("claimed_at") or "").strip()
+    if owner and owner.lower() != "unclaimed":
+        parts.append(f"Its owner is {owner}"
+                     + (f", claimed on {claimed}" if claimed else "") + ".")
+    else:
+        parts.append("It is unclaimed.")
+    files = [p.strip() for p in str(found.get("files") or "").split(";") if p.strip()]
+    if files:
+        shown = "; ".join(files[:4])
+        if len(files) > 4:
+            shown += f"; and {len(files) - 4} more"
+        parts.append(f"Files: {shown}.")
+    evidence = " ".join(str(found.get("evidence") or "").split())
+    if evidence:
+        if len(evidence) > _EVIDENCE_SHOWN:
+            evidence = evidence[:_EVIDENCE_SHOWN].rstrip() + "..."
+        if not evidence.endswith((".", "!", "?")):
+            evidence += "."
+        parts.append(f"Evidence: {evidence}")
+    parts.append(f"I read {named} on this PC on {date}.")
+    return " ".join(parts)
+
+
+def _run_defect_register(f: dict, now: Optional[float] = None) -> Result:
+    """The count, the open list, or one row, read from docs/defect-register.tsv.
+
+    Read-only: the register is opened for reading, the checker beside it is
+    loaded from the same tree, and nothing is written, carded or sent to a
+    model. Every unreadable state is one plain sentence (see `_MISSING_WORDS`,
+    `_defect_no_checker_words` and `_defect_problem_words`) - never a number,
+    and never the "I don't know about your defect register" denial the live
+    battery measured on 2026-11-18.
+    """
+    ask = str((f or {}).get("ask") or "count")
+    when = time.time() if now is None else now
+    date = time.strftime("%Y-%m-%d", time.localtime(when))
+    register, named, why = _defect_register_location()
+    if register is None:
+        return Result(_MISSING_WORDS.get(why) or _MISSING_WORDS["no-checkout"],
+                      "defect_register")
+    checker = _defect_register_checker(register)
+    if checker is None:
+        return Result(_defect_no_checker_words(named), "defect_register")
+    problems = []
+    try:
+        rows = checker.parse_tsv(register, problems)
+    except Exception:                       # noqa: BLE001 - a crash is a refusal
+        rows, problems = [], [f"{named} could not be read"]
+    if problems:
+        return Result(_defect_problem_words(register, named, date, problems),
+                      "defect_register")
+    if ask == "open":
+        return Result(_defect_open_words(rows, named, date), "defect_register")
+    if ask == "one":
+        try:
+            number = int((f or {}).get("number"))
+        except (TypeError, ValueError):
+            number = -1
+        return Result(_defect_one_words(rows, number, named, date), "defect_register")
+    return Result(_defect_count_words(rows, named, date), "defect_register")
+
+
 def _run_heritage(f: dict) -> Result:
     """What makes Jarvis different, and what it borrowed from whom (Q4).
 
@@ -29180,6 +29976,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_provider_ask()
     if n == "cloud_provider_choose":
         return _run_cloud_provider_choose(f)
+    # The hybrid/cloud settings in the owner's own words (2026-11-18). The
+    # QUESTIONS read the PC's own three files (no model, no card, no write);
+    # the CHANGE calls the door the setting already has (the Presets Cloud
+    # row's card, the switch's own rule, or the money route's cap card), so it
+    # is deliberately NOT in READ_ONLY_INTENTS - it can raise a card and can
+    # change a setting.
+    if n == "cloud_settings":
+        return _run_cloud_settings(f)
+    if n == "cloud_settings_change":
+        return _run_cloud_settings_change(f, peer=peer, local=local)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "jobs_priority":
@@ -29382,6 +30188,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_where(f)
     if n == "recent_changes":
         return _run_recent_changes()
+    # The defect register's three questions (2026-11-18): read from
+    # `docs/defect-register.tsv` with the repository's own checker as the
+    # parser. Read-only and cardless - the register is opened for reading and
+    # nothing else - so no plan and no approval is involved.
+    if n == "defect_register":
+        return _run_defect_register(f, now)
     if n == "heritage":
         return _run_heritage(f)
     if n == "menu_visibility":
@@ -29663,6 +30475,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_connected(intent)
     if n == "github_self":
         return _run_github_self(f, peer=peer, local=local)
+    # The owner's own GitHub READS, no model (2026-11-18): the read itself is a
+    # fixed GET at the card-free `github_inspect` tier, and `_run_github_own_read`
+    # says GitHub's own answer rather than letting the model paraphrase it.
+    if n == "github_own_read":
+        return _run_github_own_read(f)
     # The turn after a connect-card save (2026-11-08, the owner's GitHub-token
     # honesty report): answered ONLY from the host's recorded test receipt and
     # the feature guide's own capability words - no model, no network, no card.
@@ -30337,6 +31154,14 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # is what invented the change in the trap in the first place.
     "phone_read_aloud_refused", "cloud_escalation_rule",
     "phone_memory_aloud_command",
+    # The hybrid/cloud settings QUESTIONS (2026-11-18): each answer is built
+    # from this PC's own cloud-choice.json, escalate-cloud.json and
+    # chatbot\api-money.json, with no secret, no model and no write (the module
+    # never touches Credential Manager), so a private chat gets the real state
+    # rather than a model's guess. The CHANGE (`cloud_settings_change`) is
+    # deliberately NOT here: it changes a setting or raises a card, and a
+    # private chat refuses that like every action.
+    "cloud_settings",
     # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
     # own hardware and answers in its module's fixed words - nothing written.
     "model_recommender",
@@ -30426,6 +31251,12 @@ READ_ONLY_INTENTS = frozenset({
     # they may not take away what "cancel that" would undo.
     "phone_read_aloud_refused", "cloud_escalation_rule",
     "phone_memory_aloud_command",
+    # The hybrid/cloud settings QUESTIONS (2026-11-18): they read the PC's own
+    # three settings files (cloud-choice, escalate-cloud, chatbot\api-money)
+    # and change nothing, so none may take away what "cancel that" would undo.
+    # The CHANGE (`cloud_settings_change`) is deliberately absent - it changes
+    # a setting or raises a card.
+    "cloud_settings",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
@@ -30586,6 +31417,12 @@ READ_ONLY_INTENTS = frozenset({
     # off, so it can clear "cancel that" only by what the card later does - the
     # answer itself writes nothing.
     "github_self", "accounts_answer",
+    # The owner's own GitHub READS (2026-11-18): open pull requests, one pull
+    # request's checks/failures, the newest run on main, and the unmerged work.
+    # Each is a fixed GET through jarvis_github (card-free at its own "auto"
+    # tier; when the owner puts the read card back the deterministic answer does
+    # not run at all), so none changes GitHub and none may clear "cancel that".
+    "github_own_read",
     # The four-way internet answer (2026-11-09): it reads jarvis_reach's own rows
     # and whether a GitHub token is saved, raises no card and opens no socket, so
     # it must not take away what "cancel that" undoes.
@@ -30626,6 +31463,10 @@ READ_ONLY_INTENTS = frozenset({
     # record to them.
     "recent_changes", "self_knowledge", "settings_explain_all", "settings_where",
     "heritage",
+    # The defect register's three answers (2026-11-18): the register is opened
+    # for reading and nothing else - no card, no write, no model - so a read
+    # must not take away what "cancel that" would undo.
+    "defect_register",
     # Where the chats are kept (2026-11-13): it reads the chat log's own
     # settings and opens its file to check it, and writes nothing, so "cancel
     # that" must not lose its record to it.
