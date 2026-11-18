@@ -320,6 +320,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 #: How an answer that raised a card ends. A "yes" said aloud approves
@@ -2187,6 +2188,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # record digest, BEFORE the update checker - that one answers whether an
     # update is AVAILABLE, never what the newest changes were.
     got = _recent_changes(s)
+    if got is not None:
+        return got
+    # --- the defect register (2026-11-18) ------------------------------------
+    # "How many open defects are in the register?" was answered by the live
+    # backend with "I don't know about your defect register without seeing it",
+    # although the register is a file in this repository. No lane read it, so
+    # the question reached the model; these three shapes are answered from
+    # `docs/defect-register.tsv` on this PC, with its path and read date named.
+    # Read-only and cardless - see the block header at `_defect_register`.
+    got = _defect_register(s)
     if got is not None:
         return got
     # --- "is there an update?", "what changed in the update?", "update Jarvis"
@@ -6100,6 +6111,163 @@ _RECENT_CHANGES = re.compile(
 def _recent_changes(s: str) -> Optional[Intent]:
     if _RECENT_CHANGES.fullmatch(s):
         return Intent("recent_changes")
+    return None
+
+
+# --------------------------------------------------------------------------
+#   The defect register, read from its own file (2026-11-18)
+# --------------------------------------------------------------------------
+# THE MEASURED FAILURE. Asked "How many open defects are in the register?", the
+# live Jarvis of 2026-11-18 answered "I don't know about your defect register
+# without seeing it. Do you have a file or database I can search? ..." - a
+# denial of the register that sits in this repository, while the only reader of
+# it (`tools/check_defect_register.py`) was a repo checker no chat path could
+# reach. Nothing here guessed a missing sentence: NO lane read the register at
+# all, so the question fell through to the model, and the model has no tool
+# that can count a file on this PC.
+#
+# WHAT IS ANSWERED. Three whole-sentence families, answered from
+# `docs/defect-register.tsv` on this PC with the path named and the date it was
+# read:
+#   * the COUNT - "how many open defects are in the register", "... are there",
+#     "how many defects are there";
+#   * the OPEN LIST - "what is open", "what defects are still open";
+#   * ONE ROW by id - "what is DEF-089", "is DEF-002 closed".
+# The number is the CHECKER's: `tools/check_defect_register.py`'s own
+# `parse_tsv()` is called on the file, never a second parser written here, so
+# the count chat says and the number the checker prints cannot drift apart.
+#
+# WHERE THE FILE IS, AND WHY IT CAN BE ABSENT. The backend runs from its
+# installed folder, which is not the git checkout - `jarvis_review.py`'s own
+# header says the same about the review gates. So the register is looked for in
+# ONE of three NAMED places, never by a scan of the owner's folders:
+#   1. `JARVIS_DEFECT_REGISTER` - the register file itself;
+#   2. `JARVIS_REVIEW_REPO` - the checkout the review gates already use;
+#   3. the checkout this module runs from (`<backend>/..`), and ONLY when it
+#      really is this repository (`scripts/apply-patches.ps1` beside `docs/`,
+#      the narrow marker `jarvis_self_improve.default_roots()` uses).
+# When none of them has it, the answer is one plain refusal - "the register is
+# not there, so I cannot count it" - which is what an installed copy with no
+# checkout beside it must say: never a number, and never the model's denial.
+#
+# HONESTY, THE PART THAT MATTERS MORE THAN THE COUNT. A missing file, a
+# missing checker, a header that is not the seven TAB columns, a row with the
+# wrong column count, a duplicate id or an invented status - every problem the
+# checker names is a REFUSAL in words. A wrong count is worse than "I cannot
+# read it", so NO state falls through to a guess.
+#
+# READ-ONLY. The register is opened for reading and nothing else: no card, no
+# write, no model and no network, and the one other file it opens is the
+# checker that lives beside it. The intent is in READ_ONLY_INTENTS, so a read
+# can never take away what "cancel that" would undo.
+#
+# This block is the GRAMMAR only; the reading lives in
+# `_run_defect_register` beside the other record answers.
+
+#: The register's own nouns: "the register", "the defect register", "your
+#: defect register". A bare "the register" is this register, because it is the
+#: only register chat answers from.
+_REGISTER = (r"(?:the\s+|this\s+|that\s+|my\s+|our\s+|your\s+)?"
+             r"(?:defects?\s+)?register")
+
+#: "how many (open) defects ..." - the count family, whole sentences only. An
+#: ordinary question that merely says "defects" ("how many defects are there in
+#: my code") has words this does not allow and keeps its own path.
+_DEFECT_COUNT = re.compile(
+    # The whole alternation is one group so the trailing "right now / today"
+    # words below apply to EVERY count shape, not only the last one (in a
+    # regex, `|` binds looser than concatenation - the first draft attached
+    # them to the bare shape alone and "how many defects are open right now"
+    # fell through to the model).
+    r"(?:"
+    # "how many open defects are in the register" / "... on the defect register"
+    r"how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"are\s+(?:in|on)\s+" + _REGISTER +
+    # "how many open defects are open in the register"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open)\s+)?defects?\s+"
+    r"are\s+(?:(?:currently|still|now)\s+)?open\s+(?:in|on)\s+" + _REGISTER +
+    # "how many open defects are there" / "... are there in the register"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"are\s+there(?:\s+(?:in|on)\s+" + _REGISTER + r")?" +
+    # "how many defects are open / left / outstanding"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+are\s+"
+    r"(?:(?:currently|still|now)\s+)?(?:open|left|outstanding|unfixed|unresolved)" +
+    # "how many open defects does the register have" / "... do we have"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"(?:does\s+" + _REGISTER + r"\s+have|do\s+(?:we|i|you)\s+have|"
+    r"have\s+(?:we|i|you)\s+got)" +
+    # "how many defects are recorded / filed / logged"
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+are\s+"
+    r"(?:recorded|filed|logged|on\s+file)" +
+    # "how many defects in the register" (no verb at all)
+    r"|how\s+many\s+(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+"
+    r"(?:in|on)\s+" + _REGISTER +
+    # "what is in the register", "what's on the defect register"
+    r"|what(?:'s|\s+is)\s+(?:in|on)\s+" + _REGISTER +
+    # "what is the number of open defects", "what's the open defect count"
+    r"|what(?:'s|\s+is)\s+the\s+(?:number\s+of\s+"
+    r"(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?"
+    r"|(?:(?:open|unfixed|unresolved|still\s+open|left)\s+)?defects?\s+(?:count|number))" +
+    # "how many open defects" on its own ("how many open defects, Jarvis?")
+    r"|how\s+many\s+(?:open|unfixed|unresolved|still\s+open|left)\s+defects?"
+    r")"
+    # trailing time/framing words that change nothing about the question
+    r"(?:\s+(?:right\s+now|now|currently|at\s+the\s+moment|today|in\s+total|"
+    r"on\s+the\s+register))?")
+
+#: "what is open" - the open-list family. The bare sentence is answered from
+#: this register because it is the only open/closed record chat reads; anything
+#: that names windows, apps or files has words this does not allow.
+_DEFECT_OPEN = re.compile(
+    # "what is open" / "what's open right now" / "what is still open"
+    r"what(?:'s|\s+is)\s+(?:(?:currently|still|now|right\s+now)\s+)?open"
+    r"(?:\s+(?:right\s+now|now|currently|at\s+the\s+moment|today))?"
+    # "what is open in the defect register" / "... on the register"
+    r"|what(?:'s|\s+is)\s+(?:(?:currently|still|now)\s+)?open\s+(?:in|on)\s+" + _REGISTER +
+    # "what defects are open", "which defects are still open"
+    r"|(?:what|which)\s+defects?\s+are\s+(?:(?:currently|still|now)\s+)?"
+    r"(?:open|left|outstanding)"
+    # "what are the open defects", "what are my open defects"
+    r"|what\s+are\s+(?:the\s+|my\s+|your\s+|all\s+the\s+)?open\s+defects?"
+    # "show me the open defects", "list open defects"
+    r"|(?:show|list|give)\s+(?:me\s+)?(?:the\s+|all\s+the\s+|all\s+)?open\s+defects?"
+    # "what open defects are there"
+    r"|what\s+open\s+defects?\s+are\s+there")
+
+#: One defect by id: DEF-089, def-089, DEF 089 or defect 89 - the register's own
+#: ids are `DEF-` plus digits, so the number is what identifies the row.
+_DEFECT_ID = r"def(?:ect)?[\s_-]?(\d{1,4})"
+_DEFECT_ONE = re.compile(
+    # "what is DEF-089", "what's DEF-089 about", "show me DEF-089", "tell me
+    # about DEF-089", "what about DEF-089", "what is DEF-089's status"
+    r"(?:what(?:'s|\s+is)|tell\s+me\s+about|show\s+me|what\s+about)\s+"
+    r"(?:the\s+)?(?:defect\s+)?" + _DEFECT_ID +
+    r"(?:'s)?(?:\s+(?:about|status|state|say|mean|again|then))?"
+    # "what is the status of DEF-089"
+    r"|what(?:'s|\s+is)\s+the\s+(?:status|state)\s+of\s+(?:the\s+)?(?:defect\s+)?"
+    + _DEFECT_ID +
+    # "is DEF-089 open / closed / fixed"
+    r"|is\s+(?:the\s+)?(?:defect\s+)?" + _DEFECT_ID +
+    r"\s+(?:still\s+)?(?:open|closed|fixed|unfixed|resolved|done)\b"
+    # "what does DEF-089 say"
+    r"|what\s+does\s+(?:the\s+)?(?:defect\s+)?" + _DEFECT_ID + r"\s+(?:say|mean)\b")
+
+
+def _defect_register(s: str) -> Optional[Intent]:
+    """The defect-register questions above, or None. See the block header.
+
+    Count first, then the open list, then one id - the three shapes cannot
+    overlap (the count's words are "how many", the list's are "what is open",
+    one id's carry a number), and each pattern is a WHOLE sentence."""
+    if _DEFECT_COUNT.fullmatch(s):
+        return Intent("defect_register", {"ask": "count"})
+    if _DEFECT_OPEN.fullmatch(s):
+        return Intent("defect_register", {"ask": "open"})
+    match = _DEFECT_ONE.fullmatch(s)
+    if match:
+        number = next((int(group) for group in match.groups() if group), None)
+        if number is not None:
+            return Intent("defect_register", {"ask": "one", "number": number})
     return None
 
 
@@ -27405,6 +27573,276 @@ def _run_recent_changes() -> Result:
     return Result(RC.answer(), "recent_changes")
 
 
+# ------------------------------------------------- the defect register (2026-11-18)
+#
+# The words and the reading for the three questions the block header at
+# `_defect_register` describes. Nothing here writes, cards or calls a model;
+# the one other file it opens is `tools/check_defect_register.py` beside the
+# register, whose own `parse_tsv()` is the count.
+
+#: The register's own path inside this repository, and the two env vars that can
+#: point at it when the backend runs from its installed folder. The checkout
+#: marker is the same narrow "this really is the repository" test
+#: `jarvis_self_improve.default_roots()` uses - never a scan of the owner's
+#: folders.
+_DEFECT_REGISTER_REL = "docs/defect-register.tsv"
+_DEFECT_REGISTER_ENV = "JARVIS_DEFECT_REGISTER"
+_REVIEW_REPO_ENV = "JARVIS_REVIEW_REPO"
+_CHECKOUT_MARKER = "scripts/apply-patches.ps1"
+
+#: How many open ids "what is open" reads out before it summarises. The
+#: register holds about forty; a spoken answer must stay short, and the COUNT is
+#: always said before any list so a shortened list cannot read as the whole one.
+_OPEN_LISTED = 40
+#: The longest evidence quote "what is DEF-nnn" carries. Enough to say what the
+#: defect is; bounded because the answer can be spoken aloud.
+_EVIDENCE_SHOWN = 320
+
+_MISSING_WORDS = {
+    "pointed": (
+        "I cannot count the defect register: the file JARVIS_DEFECT_REGISTER names "
+        "is not on this PC, so I cannot read it and I will not guess at a number. "
+        "Nothing was changed."),
+    "checkout-no-register": (
+        "I cannot count the defect register: the checkout this copy of Atlas runs "
+        "from has no docs/defect-register.tsv, so I cannot read it and I will not "
+        "guess at a number. Nothing was changed."),
+    "no-checkout": (
+        "I cannot count the defect register: docs/defect-register.tsv is not beside "
+        "this copy of Atlas, and this copy is not running from the repository "
+        "checkout, so I cannot read it and I will not guess at a number. Nothing "
+        "was changed."),
+}
+
+
+def _defect_register_named(path: Path) -> str:
+    """How the answer names the file it read - never the owner's account path.
+
+    The checkout's own register is named by its path INSIDE the checkout
+    (`docs/defect-register.tsv`) - the form the owner reads in a terminal, and
+    the one that does not put his Windows account name into a reply that also
+    travels to the phone (docs/ARCHITECTURE.md keeps such a folder off it). A
+    register named another way is named as it was given, because that is the
+    one the owner pointed at.
+    """
+    try:
+        parent = path.parent
+        if (parent.name == "docs"
+                and (parent.parent / _CHECKOUT_MARKER).is_file()
+                and path.name == Path(_DEFECT_REGISTER_REL).name):
+            return _DEFECT_REGISTER_REL
+    except OSError:
+        pass
+    return str(path)
+
+
+def _defect_register_location(backend_dir=None) -> tuple:
+    """(the register file, how to name it, why not) from the three named places.
+
+    `JARVIS_DEFECT_REGISTER` (the file itself) first, then `JARVIS_REVIEW_REPO`
+    (the checkout the review gates already use), then the checkout this module
+    runs from - `<backend>/..`, and ONLY when `scripts/apply-patches.ps1` and
+    `docs/` are both there. `backend_dir` exists so a suite can put the third
+    place over a made-up tree instead of the real one.
+
+    `why` is "pointed", "checkout-no-register" or "no-checkout"; the runner
+    turns it into one plain sentence. Nothing is read here - `is_file()` only.
+    """
+    pointed = str(os.environ.get(_DEFECT_REGISTER_ENV) or "").strip()
+    if pointed:
+        path = Path(pointed).expanduser()
+        if path.is_file():
+            return path, _defect_register_named(path), ""
+        return None, "", "pointed"
+    roots = []
+    review_repo = str(os.environ.get(_REVIEW_REPO_ENV) or "").strip()
+    if review_repo:
+        roots.append(Path(review_repo).expanduser())
+    here = (Path(backend_dir).resolve() if backend_dir
+            else Path(__file__).resolve().parent)
+    roots.append(here.parent)
+    for root in roots:
+        try:
+            if not (root / _CHECKOUT_MARKER).is_file():
+                continue
+            path = root / _DEFECT_REGISTER_REL
+            if path.is_file():
+                return path, _defect_register_named(path), ""
+            return None, "", "checkout-no-register"
+        except OSError:
+            continue
+    return None, "", "no-checkout"
+
+
+def _defect_register_checker(register: Path):
+    """`tools/check_defect_register.py` from the tree the register is in, or None.
+
+    Its own `parse_tsv()` is called on the register: the count this answer says
+    and the count the repository's checker prints are the same function's, so
+    they cannot drift apart. `parse_tsv()` returns every well-formed row AND
+    appends a problem for every malformed one - so a wrong column count is a
+    refusal here, never a row quietly left out of the count. No checker, no
+    number.
+
+    Loaded by compiling its SOURCE, not through the import machinery: an import
+    would write `tools/__pycache__` beside the checkout, and this answer is
+    read-only on the owner's PC - it may not leave a file behind. The checker is
+    standard-library-only and defines nothing at import but its one regex pair,
+    which is why running its module body is safe.
+    """
+    tool = register.parent.parent / "tools" / "check_defect_register.py"
+    if not tool.is_file():
+        return None
+    try:
+        import types
+        module = types.ModuleType("jarvis_defect_register_checker")
+        module.__file__ = str(tool)
+        source = tool.read_text(encoding="utf-8-sig")
+        exec(compile(source, str(tool), "exec"), module.__dict__)  # noqa: S102
+        return module
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _defect_rows_word(count: int) -> str:
+    return f"{count} row" if count == 1 else f"{count} rows"
+
+
+def _defect_no_checker_words(named: str) -> str:
+    return (f"I found {named} on this PC, but not tools/check_defect_register.py "
+            f"beside it - the checker this answer must use - so I cannot count it "
+            f"and I will not guess. Nothing was changed.")
+
+
+def _defect_problem_words(register: Path, named: str, date: str, problems) -> str:
+    """One refusal naming what the CHECKER said is wrong - never a count."""
+    said = []
+    for problem in problems[:2]:
+        text = " ".join(str(problem).replace(str(register), named).split())
+        if len(text) > 260:
+            text = text[:260].rstrip() + "..."
+        said.append(text)
+    more = len(problems) - len(said)
+    detail = "; ".join(said)
+    if more > 0:
+        detail += f"; and {more} more problem" + ("" if more == 1 else "s")
+    return (f"I found {named} on this PC and read it on {date}, but it is not well "
+            f"formed: {detail}. So I cannot count it, and I will not guess. "
+            f"Nothing was changed.")
+
+
+def _defect_count_words(rows: list, named: str, date: str) -> str:
+    """The COUNT - open, closed and rows in all, said from the parsed file."""
+    open_ids = {row["id"] for row in rows if row.get("status") == "open"}
+    open_count = len(open_ids)
+    total = len(rows)
+    closed = total - open_count
+    read = f"I read {named} on this PC on {date}."
+    if not total:
+        return ("The defect register has no rows on it: nothing is open and nothing "
+                "is closed. " + read)
+    if not open_count:
+        if total == 1:
+            return "Nothing is open in the defect register: its only row is closed. " + read
+        return (f"Nothing is open in the defect register: all {total} rows on it are "
+                f"closed. " + read)
+    return (f"The defect register has {open_count} open and {closed} closed - "
+            f"{_defect_rows_word(total)} in all. " + read)
+
+
+def _defect_open_words(rows: list, named: str, date: str) -> str:
+    """The OPEN LIST - the count first, then the ids, never only a shortened list."""
+    open_rows = [row for row in rows if row.get("status") == "open"]
+    read = f"I read {named} on this PC on {date}."
+    if not open_rows:
+        return ("Nothing is open in the defect register: no row on it has status "
+                "open. " + read)
+    ids = [str(row.get("id") or "") for row in open_rows]
+    shown = ids[:_OPEN_LISTED]
+    more = len(ids) - len(shown)
+    listing = ", ".join(shown) + (f", and {more} more" if more > 0 else "")
+    ask = f' Ask me "what is {shown[0]}" for one of them.'
+    return (f"{len(ids)} defects are open in the defect register. {read} "
+            f"They are: {listing}.{ask}")
+
+
+def _defect_one_words(rows: list, number: int, named: str, date: str) -> str:
+    """ONE row by id - its status, owner, files and a bounded evidence quote."""
+    wanted = f"DEF-{number:03d}"
+    found = None
+    for row in rows:
+        match = re.fullmatch(r"def-(\d+)", str(row.get("id") or "").lower())
+        if match and int(match.group(1)) == number:
+            found = row
+            break
+    if found is None:
+        return (f"There is no {wanted} in the defect register: I read {named} on this "
+                f"PC on {date} and it has {_defect_rows_word(len(rows))}, none with that "
+                f"id. So I cannot tell you about it, and I will not guess.")
+    parts = [f"{found.get('id') or wanted} is {found.get('status') or 'in the register'}."]
+    owner = str(found.get("owner") or "").strip()
+    claimed = str(found.get("claimed_at") or "").strip()
+    if owner and owner.lower() != "unclaimed":
+        parts.append(f"Its owner is {owner}"
+                     + (f", claimed on {claimed}" if claimed else "") + ".")
+    else:
+        parts.append("It is unclaimed.")
+    files = [p.strip() for p in str(found.get("files") or "").split(";") if p.strip()]
+    if files:
+        shown = "; ".join(files[:4])
+        if len(files) > 4:
+            shown += f"; and {len(files) - 4} more"
+        parts.append(f"Files: {shown}.")
+    evidence = " ".join(str(found.get("evidence") or "").split())
+    if evidence:
+        if len(evidence) > _EVIDENCE_SHOWN:
+            evidence = evidence[:_EVIDENCE_SHOWN].rstrip() + "..."
+        if not evidence.endswith((".", "!", "?")):
+            evidence += "."
+        parts.append(f"Evidence: {evidence}")
+    parts.append(f"I read {named} on this PC on {date}.")
+    return " ".join(parts)
+
+
+def _run_defect_register(f: dict, now: Optional[float] = None) -> Result:
+    """The count, the open list, or one row, read from docs/defect-register.tsv.
+
+    Read-only: the register is opened for reading, the checker beside it is
+    loaded from the same tree, and nothing is written, carded or sent to a
+    model. Every unreadable state is one plain sentence (see `_MISSING_WORDS`,
+    `_defect_no_checker_words` and `_defect_problem_words`) - never a number,
+    and never the "I don't know about your defect register" denial the live
+    battery measured on 2026-11-18.
+    """
+    ask = str((f or {}).get("ask") or "count")
+    when = time.time() if now is None else now
+    date = time.strftime("%Y-%m-%d", time.localtime(when))
+    register, named, why = _defect_register_location()
+    if register is None:
+        return Result(_MISSING_WORDS.get(why) or _MISSING_WORDS["no-checkout"],
+                      "defect_register")
+    checker = _defect_register_checker(register)
+    if checker is None:
+        return Result(_defect_no_checker_words(named), "defect_register")
+    problems = []
+    try:
+        rows = checker.parse_tsv(register, problems)
+    except Exception:                       # noqa: BLE001 - a crash is a refusal
+        rows, problems = [], [f"{named} could not be read"]
+    if problems:
+        return Result(_defect_problem_words(register, named, date, problems),
+                      "defect_register")
+    if ask == "open":
+        return Result(_defect_open_words(rows, named, date), "defect_register")
+    if ask == "one":
+        try:
+            number = int((f or {}).get("number"))
+        except (TypeError, ValueError):
+            number = -1
+        return Result(_defect_one_words(rows, number, named, date), "defect_register")
+    return Result(_defect_count_words(rows, named, date), "defect_register")
+
+
 def _run_heritage(f: dict) -> Result:
     """What makes Jarvis different, and what it borrowed from whom (Q4).
 
@@ -29596,6 +30034,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_where(f)
     if n == "recent_changes":
         return _run_recent_changes()
+    # The defect register's three questions (2026-11-18): read from
+    # `docs/defect-register.tsv` with the repository's own checker as the
+    # parser. Read-only and cardless - the register is opened for reading and
+    # nothing else - so no plan and no approval is involved.
+    if n == "defect_register":
+        return _run_defect_register(f, now)
     if n == "heritage":
         return _run_heritage(f)
     if n == "menu_visibility":
@@ -30854,6 +31298,10 @@ READ_ONLY_INTENTS = frozenset({
     # record to them.
     "recent_changes", "self_knowledge", "settings_explain_all", "settings_where",
     "heritage",
+    # The defect register's three answers (2026-11-18): the register is opened
+    # for reading and nothing else - no card, no write, no model - so a read
+    # must not take away what "cancel that" would undo.
+    "defect_register",
     # Where the chats are kept (2026-11-13): it reads the chat log's own
     # settings and opens its file to check it, and writes nothing, so "cancel
     # that" must not lose its record to it.
