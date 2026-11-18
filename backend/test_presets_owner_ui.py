@@ -123,6 +123,17 @@ class FakeModels:
     def _probe_asker(self, ref):
         return lambda prompt: "Paris"
 
+    def probe_refusal(self, model, url=None):
+        """The real steward's tripwire guard (DEF-088), mirrored.
+
+        The real one refuses ONE thing: a pooled three-card model at a lane that
+        is not the pooled lane. This stand-in has no lanes, no cards and no
+        owned model names, so nothing it is asked about is pooled and it refuses
+        nothing - the guard itself is driven for real, with a recording lane, in
+        backend/test_preset_switch_lane_guard.py.
+        """
+        return ""
+
     def switch_to(self, ref, why=""):
         verdict = self.gate.check("switch_model",
                                   {"from": self.state.get("current"), "to": ref,
