@@ -294,7 +294,11 @@ def _hud_lane_url() -> str:
             return str(lane)
     except Exception:                                          # noqa: BLE001
         pass
-    return os.environ.get("OLLAMA_URL") or ""
+    try:
+        import jarvis_models
+        return jarvis_models.ollama_url_on_this_pc() or ""
+    except Exception:                                          # noqa: BLE001
+        return ""
 
 
 def _loopback_url(url: Optional[str] = None) -> str:

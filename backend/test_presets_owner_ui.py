@@ -45,9 +45,17 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+#: `jarvis_models.py` is one of the owner's own files; the published base carries
+#: it, and the modules under test ask it for the one Ollama address (2026-11-18).
+import _base  # noqa: E402
+_base.put_on_path(_base.folder("jarvis_models.py"))
 TMP = tempfile.mkdtemp(prefix="presets-owner-ui-")
 os.environ["OPENJARVIS_CONFIG_DIR"] = TMP
 os.environ["JARVIS_RECEIPTS_DB"] = str(Path(TMP) / "receipts.db")
+#: AFTER the config folder is named: `jarvis_models` imports `jarvis_framework`,
+#: which fixes its config folder at import. Imported here so FakeModels can hand
+#: `_active_url()` the real resolver's own answer rather than a second copy.
+import jarvis_models as _REAL_MODELS  # noqa: E402
 
 import jarvis_model_lanes as L  # noqa: E402
 import jarvis_presets as P       # noqa: E402
@@ -111,6 +119,13 @@ class FakeModels:
 
     def current_model(self):
         return self.state.get("current")
+
+    def ollama_url_on_this_pc(self):
+        """The one address resolver (2026-11-18): the real module's own answer.
+
+        `jarvis_presets._active_url()` asks `jarvis_models` for it, so a stand-in
+        has to answer it too - with the real rule, not a second copy of it."""
+        return _REAL_MODELS.ollama_url_on_this_pc()
 
     def _read_state(self):
         return dict(self.state)

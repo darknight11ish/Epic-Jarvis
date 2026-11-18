@@ -322,7 +322,8 @@ def _loopback_url(url: Optional[str] = None) -> str:
     the host is not loopback. A remote host is not an error; it is simply never
     used, so no environment variable can point this module at another machine.
     """
-    for candidate in (url, os.environ.get("OLLAMA_URL"), DEFAULT_URL):
+    import jarvis_models
+    for candidate in (url, jarvis_models.ollama_url_on_this_pc(), DEFAULT_URL):
         text = (candidate or "").strip()
         if not text:
             continue
@@ -338,7 +339,8 @@ def _loopback_url(url: Optional[str] = None) -> str:
 
 def _lane() -> Tuple[str, str]:
     """(loopback URL, model name). The URL can never be a remote one."""
-    url = _loopback_url(_STATE["url"] or os.environ.get("OLLAMA_URL"))
+    import jarvis_models
+    url = _loopback_url(_STATE["url"] or jarvis_models.ollama_url_on_this_pc())
     model = str(_STATE["model"] or os.environ.get("JARVIS_LOCAL_MODEL")
                 or DEFAULT_MODEL).strip()
     return url, model

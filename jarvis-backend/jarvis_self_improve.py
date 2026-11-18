@@ -736,13 +736,19 @@ DEFAULT_NUM_CTX = 8192
 
 
 def _loopback_url(url: Optional[str] = None) -> str:
-    """`url`, or `OLLAMA_HOST`, or loopback - and loopback if the host is not.
+    """`url`, or `OLLAMA_URL` as the one resolver reads it, or loopback - and
+    loopback if the host is not.
 
     A remote host is not refused with an exception: it simply is not used, and
     the caller gets the loopback default. Nothing in this module can be pointed
     at another machine by an environment variable.
     """
-    for candidate in (url, os.environ.get("OLLAMA_HOST"), DEFAULT_URL):
+    try:
+        import jarvis_models
+        from_env = jarvis_models.ollama_url_on_this_pc()
+    except Exception:                                          # noqa: BLE001
+        from_env = ""
+    for candidate in (url, from_env, DEFAULT_URL):
         text = (candidate or "").strip()
         if not text:
             continue

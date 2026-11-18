@@ -385,7 +385,9 @@ def port() -> int:
 
 
 def main_url() -> str:
-    return (os.environ.get("OLLAMA_URL") or f"http://{HOST}:{MAIN_OLLAMA_PORT}").rstrip("/")
+    import jarvis_models
+    return (jarvis_models.ollama_url_on_this_pc()
+            or f"http://{HOST}:{MAIN_OLLAMA_PORT}").rstrip("/")
 
 
 def _is_loopback_url(url: str) -> bool:

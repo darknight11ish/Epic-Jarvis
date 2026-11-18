@@ -60,6 +60,15 @@ BACKEND = ROOT / "backend"
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+#: `jarvis_models.py` is one of the owner's own files: his backend folder has it
+#: and this repository's `backend/` never does (`.gitignore` refuses it), while
+#: the published base (`jarvis-backend/`) carries it. `jarvis_chatbot` now asks it
+#: for the one Ollama address (2026-11-18), so a clone's `python tools/...` run
+#: needs it importable; APPENDED, so a real copy beside the modules still wins.
+if not (BACKEND / "jarvis_models.py").is_file():
+    _base_models = ROOT / "jarvis-backend"
+    if _base_models.is_dir() and str(_base_models) not in sys.path:
+        sys.path.append(str(_base_models))
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-chatbot-cases-"))
 _fw = types.ModuleType("jarvis_framework")
 _fw.CONFIG_DIR = _TMP

@@ -3161,8 +3161,9 @@ def t_wire_study_into_the_quiz():
     # jarvis_quiz keeps its import rule: it does not import this module.
     src = (HERE / "jarvis_quiz.py").read_text(encoding="utf-8")
     imports = re.findall(r"^\s*(?:import|from)\s+(jarvis_\w+)", src, re.M)
-    check("jarvis_quiz.py still imports only jarvis_local_http and jarvis_wellbeing",
-          set(imports) <= {"jarvis_local_http", "jarvis_wellbeing"}, imports)
+    check("jarvis_quiz.py still imports only jarvis_local_http, jarvis_wellbeing and "
+          "the one address resolver",
+          set(imports) <= {"jarvis_local_http", "jarvis_wellbeing", "jarvis_models"}, imports)
     check("... and never the second-card module", "jarvis_second_card" not in re.sub(
         r'(?s)""".*?"""', "", src.replace("second_card.study_call", "")).replace(
         "# jarvis_second_card", ""), "the quiz names the second card")

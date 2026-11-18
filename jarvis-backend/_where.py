@@ -238,6 +238,38 @@ _REBUILT = _HERE / "rebuilt"
 if _REBUILT.is_dir() and str(_REBUILT) not in sys.path:
     sys.path.append(str(_REBUILT))
 
+#: `jarvis_models.py` is one of the owner's own files: it lives in the published
+#: base (`jarvis-backend/`) and in his backend folder, and this folder has never
+#: carried it (`backend/.gitignore` refuses it). Shipped modules now ask
+#: `jarvis_models.ollama_url_on_this_pc()` for the ONE address the chat uses
+#: (2026-11-18), so a suite that imports one of them needs that module
+#: importable even in a bare checkout.
+#:
+#: ONE FILE IS EXPOSED, NOT THE BASE FOLDER, and that is deliberate. Appending
+#: `jarvis-backend/` would make `jarvis_gate.py` and the other owner files
+#: importable in every suite, and `backend/test_decision_lab.py` proves
+#: `jarvis_gate` is NOT in `sys.modules` in a run with no owner files; measured
+#: on 2026-11-18, that append made its taint check fail. Nor is the module
+#: imported here: `jarvis_models` runs `import jarvis_framework`, which fixes its
+#: config folder at import time, and suites set `OPENJARVIS_CONFIG_DIR` after
+#: this module is imported - the eager version made
+#: `backend/test_approval_sign.py` fail five device checks. So a throwaway folder
+#: holding just `jarvis_models.py` is appended, created inside this run's own
+#: staging root (`_stage_a_direct_run` above points `tempfile` there), so the
+#: folder goes when the run does and the import happens where it is needed.
+_ONE_MODULE = Path(_b) / "jarvis_models.py"
+if not _ONE_MODULE.is_file():
+    _BASE_MODELS = REPO / "jarvis-backend" / "jarvis_models.py"
+    if _BASE_MODELS.is_file():
+        try:
+            import shutil as _shutil
+            import tempfile as _tempfile
+            _models_dir = Path(_tempfile.mkdtemp(prefix="jarvis-models-"))
+            _shutil.copy2(_BASE_MODELS, _models_dir / "jarvis_models.py")
+            sys.path.append(str(_models_dir))
+        except Exception:                                    # noqa: BLE001
+            pass
+
 
 def missing(*names: str) -> list[str]:
     """Which of these backend files are not where BACKEND says they are.
