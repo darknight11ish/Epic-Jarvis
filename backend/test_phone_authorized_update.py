@@ -946,9 +946,18 @@ def t_no_child_of_the_updater_is_given_the_pairing_token():
             else:
                 os.environ[name] = value
 
+    # Structural, by walking the syntax tree - NOT a search of the source text.
+    # A text search here would itself be a source pin (tools/check_no_source_pins),
+    # and a rename would break it without any behaviour changing.
+    copies = [n for n in ast.walk(ast.parse(src))
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+              and n.func.attr == "copy"
+              and isinstance(n.func.value, ast.Attribute)
+              and n.func.value.attr == "environ"
+              and isinstance(n.func.value.value, ast.Name)
+              and n.func.value.value.id == "os"]
     check("no copy of this process's environment is built anywhere",
-          "os.environ.copy()" not in src,
-          [l.strip() for l in src.splitlines() if "os.environ.copy" in l])
+          copies == [], [n.lineno for n in copies])
     calls = seen["calls"]
     check("both children are started with env= written where a reader sees it",
           len(calls) == 2 and all("env" in c["kwargs"] for c in calls), len(calls))
