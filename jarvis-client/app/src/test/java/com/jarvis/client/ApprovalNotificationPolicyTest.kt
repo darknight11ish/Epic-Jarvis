@@ -152,10 +152,18 @@ class ApprovalNotificationPolicyTest {
 
     @Test
     fun `a PC-only card, or one that needs a plan chosen, is Review not Approve`() {
-        val pcOnly = card("p1", "desktop_update")
-        assertTrue("desktop_update is on the PC-only list", pcOnly.pcOnly)
+        // `product_check`, not `desktop_update`: the update card left the PC-only
+        // list on 2026-11-18 (the owner: the phone may approve it with its own
+        // fingerprint), so it is no longer an example of a card only the PC can
+        // answer. It stays RISKY, so this phone still asks for the fingerprint.
+        val pcOnly = card("p1", "product_check")
+        assertTrue("product_check is on the PC-only list", pcOnly.pcOnly)
         assertTrue(plan(pcOnly).offers(Action.REVIEW))
         assertFalse(plan(pcOnly).offers(Action.APPROVE_IN_APP))
+        assertFalse(
+            "the update card is answerable from the phone now",
+            card("p2", "desktop_update").pcOnly,
+        )
 
         val choice = card(
             "c1",

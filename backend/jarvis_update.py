@@ -848,16 +848,15 @@ def obstacle(*, installed_now=None, published_now=None, tier_of=None,
         return _refusal(409, f"an update is already running: {busy}")
     if backend() is None:
         return _refusal(409, "I cannot find the Jarvis backend folder on this PC",
-                        reason=("the folder holding jarvis_hud.py was not found; set "
-                                "JARVIS_BACKEND to it (scripts\\install-backend.ps1 "
-                                "does that) and ask again"))
+                        reason=("the folder Jarvis runs from was not found. Run the "
+                                "installer's backend step once - it tells Jarvis where "
+                                "that folder is - then ask again"))
     if script() is None:
         return _refusal(409,
                         "I cannot find the folder this repository is cloned into",
-                        reason=("scripts\\update-jarvis.ps1 was not found; set "
-                                "JARVIS_REPO to the repository folder, or fill in the "
-                                "repository box on Settings -> Updates in the "
-                                "desktop app"))
+                        reason=("the updater was not found in this repository. Fill in "
+                                "the repository folder on the desktop app's Settings -> "
+                                "Updates page, then ask again"))
     here = installed_now()
     there = published_now()
     here_version = here.get("version") if isinstance(here, dict) else None
