@@ -36,8 +36,9 @@ over a TEMPORARY settings folder (never the owner's real files):
 4. NO KEY STORE. This module never reads Windows Credential Manager and never
    shows a key: it imports no key function and its files never hold a secret.
 
-The gate and the money-file rules are the real modules with their own
-functions monkeypatched, so the code paths under test are the real ones.
+The gate, the key store's presence check and the money-file rules are the real
+modules with their own functions monkeypatched, so the code paths under test are
+the real ones - and the suite never reads the owner's real credentials.
 """
 from __future__ import annotations
 
@@ -84,12 +85,18 @@ API.money_path = lambda: MONEY
 
 
 def clean():
-    """An empty settings folder: nothing chosen, nothing saved, no ledger."""
+    """An empty settings folder: nothing chosen, nothing saved, no ledger.
+
+    The key store is stood in for as well: `ready_for` is the one read that
+    would otherwise touch Windows Credential Manager through the existing
+    provider/cap routes' own view(), and this suite must never read the
+    owner's real credentials."""
     for path in (CHOICE, SWITCH, MONEY):
         try:
             path.unlink()
         except FileNotFoundError:
             pass
+    API.ready_for = lambda pid: ""
     L.configure(gate=None, tier_of=None, spawn=None, api=None, audit=None, now=None)
     P._gate = _real_gate
 
