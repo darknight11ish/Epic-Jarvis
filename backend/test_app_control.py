@@ -174,7 +174,11 @@ def wait_answered(limit=200):
 
 
 LOCAL_URL = "http://127.0.0.1:11436"
-LOCAL_URL_2 = "http://127.0.0.1:11435"
+# The other LOCAL lane this PC still has: the pooled three-card lane. The old
+# second everyday lane on :11435 was RETIRED on 2026-11-18 ("i dont need a
+# separate coding lane on any preset"), so it is no lane row any more.
+LOCAL_URL_2 = "http://127.0.0.1:11450"
+RETIRED_URL = "http://127.0.0.1:11435"    # kept only to prove it is NOT a lane
 ASK_STEP = {"action": "tap", "target": {"id": TARGET["id"], "text": "Search"}}
 
 
@@ -843,22 +847,33 @@ def t_plan_prompt_wraps_untrusted_screen_data():
 
 
 def t_plan_model_resolution_pins_the_best_local_general_model():
-    main_url, coding_url = LOCAL_URL, LOCAL_URL_2
-    ready = {main_url: {"qwen3.5:9b"}, coding_url: set()}
+    main_url, other_url = LOCAL_URL, LOCAL_URL_2
+    ready = {main_url: {"qwen3.5:9b"}, other_url: set()}
     url, model, lane, why = A.resolve_plan_model(
         FRAMEWORK, probe=lambda u: ready.get(u, set()))
     check("model: the Agentic + Vision model on the main lane is chosen first",
           (url, model, lane) == (main_url, "qwen3.5:9b", "main"), (url, model, lane, why))
     # The main lane is up but the model is not there; the same model on the
-    # other LOCAL lane wins over a different model on the main lane.
-    only_coding = {main_url: {"qwen3:8b"}, coding_url: {"qwen3.5:9b"}}
+    # other LOCAL lane this PC still has (the pooled :11450) wins over a
+    # different model on the main lane. This used to be :11435, which is now
+    # retired - the ordering rule itself did not change with the lane.
+    only_other = {main_url: {"qwen3:8b"}, other_url: {"qwen3.5:9b"}}
     url, model, lane, why = A.resolve_plan_model(
-        FRAMEWORK, probe=lambda u: only_coding.get(u, set()))
+        FRAMEWORK, probe=lambda u: only_other.get(u, set()))
     check("model: the same model on another local lane is the first fallback",
-          (url, model, lane) == (coding_url, "qwen3.5:9b", "coding"),
+          (url, model, lane) == (other_url, "qwen3.5:9b", "pooled"),
+          (url, model, lane, why))
+    # And the retired coding lane is NOT one of those lanes: a model that only
+    # :11435 serves is not found at all, so the planner refuses with its plain
+    # sentence instead of quietly reaching for a lane this program retired.
+    only_retired = {main_url: {"qwen3:8b"}, RETIRED_URL: {"qwen3.5:9b"}}
+    url, model, lane, why = A.resolve_plan_model(
+        FRAMEWORK, probe=lambda u: only_retired.get(u, set()))
+    check("model: the retired :11435 lane is no fallback, so that model is not found",
+          model == "" and "11435" not in (url or "") and "local" in why.lower(),
           (url, model, lane, why))
     # Neither lane has it; another local general model from the framework table.
-    alt = {main_url: {"qwen3:8b"}, coding_url: set()}
+    alt = {main_url: {"qwen3:8b"}, other_url: set()}
     with_live = {"app_control": {"enabled": True},
                  "live": {"model": "qwen3:8b", "fallback_model": "qwen3.5:9b"}}
     url, model, lane, why = A.resolve_plan_model(

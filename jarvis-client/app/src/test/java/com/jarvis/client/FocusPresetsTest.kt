@@ -205,9 +205,13 @@ class FocusPresetsTest {
         // is caught here rather than silently reworded on the phone alone.
         assertEquals("General", view.preset("general")!!.title)
         assertEquals("everyday questions, writing, life admin", view.preset("general")!!.focus)
-        assertEquals("qwen3.5:9b", view.preset("general")!!.model)
-        assertEquals("RTX 2060", view.preset("general")!!.lane.card)
-        assertEquals("the long-context card", view.preset("general")!!.lane.words)
+        // The everyday model moved on 2026-11-18: the owner's "each preset
+        // should be dedicated to one preset local ai model" put the 26B on the
+        // everyday lane, and that lane is all three cards now.
+        assertEquals("gemma4:26b-a4b-it-qat", view.preset("general")!!.model)
+        assertEquals("all three cards", view.preset("general")!!.lane.card)
+        assertEquals("the everyday lane", view.preset("general")!!.lane.words)
+        assertEquals(196608, view.preset("general")!!.context)
     }
 
     @Test
@@ -254,13 +258,21 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `Fast is qwen3_5_4b on the 2080 SUPER, and Coding is the heavy three-card preset`() {
+    fun `Fast is qwen3_5_4b on the everyday lane, and Coding is the heavy three-card preset`() {
         val fast = requireNotNull(view.preset("fast"))
         assertEquals("qwen3.5:4b", fast.model)
-        assertEquals("coding", fast.lane.key)
-        assertEquals("RTX 2080 SUPER", fast.lane.card)
+        // Since 2026-11-18 Fast shares the ONE everyday lane: the separate
+        // 2080 SUPER lane on 11435 is retired, so there is no "coding" card
+        // left to name. The window it is for did not change.
+        assertEquals("main", fast.lane.key)
+        assertEquals("all three cards", fast.lane.card)
+        assertEquals("the everyday lane", fast.lane.words)
         assertEquals(16384, fast.context)
-        assertTrue("the fast lane starts on demand", fast.apply.laneStart)
+        // The everyday lane is already running, so applying Fast starts nothing
+        // any more: the contract's own rule is `lane_start = lane != main`, and
+        // Fast's lane IS main now. The on-demand starter belonged to :11435.
+        assertFalse("the everyday lane is always on, so nothing starts on demand",
+            fast.apply.laneStart)
         assertFalse(fast.heavyMode)
 
         val coding = requireNotNull(view.preset("coding"))
@@ -347,7 +359,7 @@ class FocusPresetsTest {
         )
         val general = requireNotNull(old.preset("general"))
         assertEquals("/api/models/switch", FocusPresets.applyRoute(general))
-        assertEquals("{\"ref\":\"qwen3.5:9b\"}", FocusPresets.applyBody(general).toString())
+        assertEquals("{\"ref\":\"gemma4:26b-a4b-it-qat\"}", FocusPresets.applyBody(general).toString())
         assertNull(FocusPresets.blocker(old, general, stale = false, linkUp = true))
     }
 

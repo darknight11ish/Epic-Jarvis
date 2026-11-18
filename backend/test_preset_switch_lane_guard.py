@@ -57,9 +57,8 @@ sys.path.insert(0, str(HERE))
 # --- a fake lane first, so OLLAMA_URL can name it before anything imports ----
 CODER = "qwen3-coder-30b-a3b-ud-q3-k-xl"
 EVERYDAY = "gemma4:26b-a4b-it-qat"   # the General preset's model since 2026-11-18
-SECOND = "qwen3:8b"
+SECOND = "qwen3:8b"        # the retired coding lane's model, still in the fake's /api/tags
 LANE_CTX = 196608          # the everyday lane's window (jarvis_big_coder.LANES)
-SECOND_CTX = 16384
 LIVE_PORTS = (11434, 11435, 11436, 11450)
 
 TMP = Path(tempfile.mkdtemp(prefix="def088-guard-"))
@@ -232,15 +231,36 @@ def t_a_pooled_outgoing_model_is_never_probed_on_the_everyday_lane():
 
 
 def t_the_window_comes_from_the_lane_not_from_a_default():
+    """The reader answers a KNOWN lane's configured window, and None otherwise.
+
+    Until 2026-11-18 this read a SECOND lane's window (11435 = 16,384), and it
+    read it from the owner's LIVE lane: the check passed at the desk only
+    because this PC still ran `qwen3:8b` there, and CI - where nothing answers
+    on 11435 - failed it. That lane is now retired ("i dont need a separate
+    coding lane on any preset. each preset should be dedicated to one preset
+    local ai model"), so there is no second configured window to read and no
+    live port to read it from. What replaces it is the retirement itself plus
+    the rule that made the reader worth testing: it answers a lane's CONFIGURED
+    window when it knows the lane, and None - never Ollama's own default, never
+    a guessed number - when it does not.
+    """
     LANE.ps_rows = [_row(EVERYDAY, LANE_CTX)]
+    check("the program configures exactly ONE lane, the everyday one on 11436",
+          [int(getattr(lane, "port", 0) or 0) for lane in BIG.LANES] == [11436],
+          [getattr(lane, "port", None) for lane in BIG.LANES])
     check("11436's configured window is 196608",
           M.lane_num_ctx("http://127.0.0.1:11436") == LANE_CTX,
           M.lane_num_ctx("http://127.0.0.1:11436"))
-    check("11435's configured window is 16384",
-          M.lane_num_ctx("http://127.0.0.1:11435") == SECOND_CTX,
-          M.lane_num_ctx("http://127.0.0.1:11435"))
+    check("nothing configures the retired coding lane on 11435",
+          not [lane for lane in BIG.LANES
+               if int(getattr(lane, "port", 0) or 0) == 11435],
+          [(getattr(lane, "port", None), getattr(lane, "model", None))
+           for lane in BIG.LANES])
     check("a lane this repo has never seen answers its own served window",
           M.lane_num_ctx(LANE.url) == LANE_CTX, M.lane_num_ctx(LANE.url))
+    LANE.ps_rows = []
+    check("...and a lane holding nothing answers None, never a default window",
+          M.lane_num_ctx(LANE.url) is None, M.lane_num_ctx(LANE.url))
 
 
 def t_a_lane_holding_the_wrong_model_fails_the_apply():
