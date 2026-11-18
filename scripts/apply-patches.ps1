@@ -2233,6 +2233,34 @@ $PATCHES = @(
     # test_gate_touches.py, test_referee.py, test_screen_attach.py,
     # test_hud_manual_lane_gate.py).
     'activity-turn-guard.patch'
+    # local-model-guard.patch (2026-11-18) - A LOCAL TURN MUST BE ANSWERABLE.
+    # The measured defect (the owner's own PC, the night of 2026-11-17/18):
+    # `model-state.json` said the everyday model was the Coding preset's pooled
+    # three-card model, `jarvis_router.choose()` trusted it for a PRIVATE turn,
+    # and the turn was then refused by `jarvis_agent.local_model_refusal` - the
+    # honest spill refusal - so a private question got NO answer at all while
+    # staying correctly on this PC. The fix is in TWO places:
+    #   * the shipped `backend/rebuilt/jarvis_router.py` (and its
+    #     `jarvis-backend/` twin) validates the chosen model against the lane
+    #     the turn will really use BEFORE deciding, and when the saved model
+    #     cannot run there it answers with the model that lane is configured
+    #     for, saying so in the route detail under `degraded_from`;
+    #   * this patch is the ONE line that makes the HUD run that fallback
+    #     LOCALLY: `use_tools` becomes true for a local decision carrying
+    #     `inject_memory`. Without it the turn would fall to the plain relay
+    #     below, which resolves a lane name it does not know through
+    #     `jarvis_chatbot_api.lane_service()` - an unknown name maps to a
+    #     CLOUD provider - and a private prompt could have left the PC. That
+    #     hazard is why a router-only change must never ship.
+    # ONE hunk in jarvis_hud.py, editing two lines. It sits immediately before
+    # plugin-loader.patch (which MUST stay the last entry, tools/check_plugins.py)
+    # and its hunk context is chat-stream.patch's own added `use_tools` lines,
+    # so it goes after that one and adds no install block. It rewrites no
+    # jarvis_gate.py line and no table row; every suite that enumerates "the
+    # patches written after me" has had its name added (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'local-model-guard.patch'
     'plugin-loader.patch'
 )
 

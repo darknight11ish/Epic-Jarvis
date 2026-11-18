@@ -40493,3 +40493,61 @@ tool call in a chat turn, and the ordinary tool-call gate raises the card.
   name, explicit refusal, and a file that appears while the card is up), the
   sources unchanged, the action's ask line and gate rows, the loosened-tier
   belt, and the child's scrubbed environment.
+
+## 228. A local turn is answered by the model its lane is configured for, and `degraded_from` says what was replaced (2026-11-18)
+
+**What was wrong.** The measured failure on the owner's PC: a private question
+routed correctly to the local lane (`X-Jarvis-Route` gate `"taint"`, `where:
+"local"`) and produced **no answer at all**, because `model-state.json` named the
+Coding preset's pooled three-card model as the everyday model and
+`jarvis_agent.local_model_refusal` - correctly, and in the honest words the
+owner was shown - refused to load a pooled model on a one-card lane. Nothing
+left the PC; the turn was simply unanswerable because nothing had asked whether
+the model the router picked could run where it picked it.
+
+**What happens now.** `jarvis_router.choose()` validates the chosen local model
+against the lane the turn will really use, BEFORE the decision is returned,
+using that same refusal function as the authority. When the saved model is the
+one class of refusal a different model can fix (a pooled model at a lane that
+may not hold it), the decision names the model **that lane is configured for**
+instead: the lane table's own row for the lane's port, else the owner's
+`[intelligence] default_model`, else the everyday lane's own row. The spill
+refusal itself is unchanged - a pooled model on a one-card lane is still
+refused and never loaded; the fix chooses a different model, it never allows the
+spill.
+
+**The route detail.** `X-Jarvis-Route` carries the existing **`degraded_from`**
+field (the HUD already sends that key when a cloud lane steps down), one entry
+per replacement:
+
+```json
+"degraded_from": [{"lane": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+                   "model": "qwen3.5:9b",
+                   "code": "model_cannot_run_on_this_lane",
+                   "why": "Jarvis did not answer: ... it cannot run on the one-card lane ..."}]
+```
+
+`lane` is the model that was **asked for**, `model` is the model that **really
+runs** (and the header's own `lane` names it too), `code` is stable and `why`
+is the refusal in `jarvis_agent`'s own words; the top-level `reason` also names
+both models. The field is **omitted** when nothing was replaced, so an ordinary
+turn's header is exactly what it was before. No new route, field, action, tier
+or card: a cloud turn is not affected and is not pulled local.
+
+**Both halves are loaded together.** The HUD tells a local turn by
+`lane == local_model`, so a router-only fallback would make `use_tools` false
+and send the turn to the plain relay - where `jarvis_chatbot_api.lane_service()`
+maps an UNKNOWN lane name to a CLOUD provider (its default is DeepSeek). That is
+why `backend/local-model-guard.patch` ships in the same PR: one line in
+`jarvis_hud.py`, `use_tools = ((lane == local_model or
+decision.inject_memory) and _agent_ok)`, keeps a local fallback turn on the
+local answering loop. `inject_memory` is the signal because every local
+decision carries it and no cloud decision ever does.
+
+**Proof.** `backend/test_local_model_guard.py` (no network, no model, no card):
+the tainted turn answered by the lane's model and passing the same refusal
+`run_local_turn` makes; the one-card refusal still refusing; the ordinary
+turn's route-detail keys unchanged; a cloud turn still escalating, including
+when the saved local model is pooled; the pooled lane untouched; the unknown
+lane name resolving to a cloud provider; and the patched HUD's own
+`use_tools`/`is_cloud` expressions evaluated for each case.
