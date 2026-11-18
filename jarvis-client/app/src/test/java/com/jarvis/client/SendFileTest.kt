@@ -867,12 +867,15 @@ class SendFileTest {
         assertTrue("a failed save must not delete the copy", plate.contains("if (!saved) uri?.let"))
 
         // The model plate's 2026-11-09 truth: picking an installed model
-        // switches at once - no card is promised anywhere on that plate.
+        // raises no approval card. The 2026-11-18 wording audit removed
+        // "switches at once" from that sentence - "at once" reads as instant,
+        // while the measured cold load is 12 s to about a minute - so this
+        // pins the no-card fact instead of the phrase that was corrected.
         val brain = file("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt")
         assertFalse("the stale model-switch card promise is back",
             brain.contains("raises a card on Home"))
-        assertTrue("the plate does not say the switch happens at once",
-            brain.contains("switches at once"))
+        assertTrue("the plate does not say a model pick needs no approval card",
+            brain.contains("switches with no approval card"))
         assertTrue("the previous model is not offered one line above",
             brain.contains("Roll back to…"))
 
