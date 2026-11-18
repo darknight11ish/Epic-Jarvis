@@ -2537,6 +2537,8 @@
   ],
   "timed_out": "Timed out: Jarvis stopped waiting and refused it by itself.",
   "timed_out_next": "Ask the desktop to raise this again.",
+  "no_detail": "Jarvis did not describe this change. Refresh, or deny it and ask again.",
+  "refresh": "Refresh",
   "pc_only_actions": [
     "change_approval_policy",
     "handoff_bring_to_front",

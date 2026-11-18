@@ -89,6 +89,22 @@ class CardWordsContractTest {
     }
 
     @Test
+    fun `a card with no detail says the PC's words and offers the PC's Refresh`() {
+        // 2026-11-18, the blank cheque measured on the owner's phone: a card
+        // that cannot say what it would change draws this sentence and a Refresh
+        // where Approve was - and the desktop draws the same two, from the same
+        // jarvis_card_words.NO_DETAIL / REFRESH this fixture carries.
+        assertEquals(text("no_detail"), CardWords.NO_DETAIL)
+        assertEquals(text("refresh"), CardWords.REFRESH)
+        assertTrue(CardWords.NO_DETAIL.startsWith("Jarvis did not describe this change."))
+        assertTrue(CardWords.NO_DETAIL.endsWith("."))
+        // The card draws those constants, not a second copy typed in the UI.
+        assertTrue(source("ui/approval/ApprovalCard.kt").contains("CardDetail.MISSING_LINE"))
+        assertTrue(source("ui/approval/ApprovalCard.kt").contains("CardDetail.REFRESH"))
+        assertTrue(source("net/CardDetail.kt").contains("CardWords.NO_DETAIL"))
+    }
+
+    @Test
     fun `every action's title, as the PC serves it, is the card's title here`() {
         for (c in cases["titles"]!!.jsonArray) {
             val action = c.jsonObject["action"]!!.jsonPrimitive.content

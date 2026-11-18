@@ -31,6 +31,12 @@ the owner's ruling that the phone's cards must match the desktop's). The first
 is drawn by both apps; the second only by the phone, because on the PC the
 owner is already in front of the window that raises cards.
 
+`no_detail` and `refresh` are the words a card with NO READABLE DETAIL says, and
+the action drawn in Approve's place on it (2026-11-18, measured on the owner's
+phone: a cloud `change_own_config` card with no detail drew a normal Approve).
+Both apps draw them - a card that cannot say what it would change must not be
+approvable - so both fixtures carry the same one copy.
+
 `pc_only_actions` is `jarvis_owner_check.PC_ONLY_ACTIONS` - the cards the PC
 answers itself, with Windows Hello, and refuses from any other device. The
 phone keeps its own copy of that set (`net/PcOnlyActions.kt`) because a card
@@ -120,6 +126,10 @@ def build() -> dict:
         # sentence (see this file's docstring).
         "timed_out": W.TIMED_OUT,
         "timed_out_next": W.TIMED_OUT_NEXT,
+        # A card with no readable detail: the sentence both apps say and the
+        # action drawn in Approve's place (see this file's docstring).
+        "no_detail": W.NO_DETAIL,
+        "refresh": W.REFRESH,
         # The cards only the PC may approve (jarvis_owner_check), so the phone's
         # copy of that set cannot drift from the PC's without a red test.
         "pc_only_actions": sorted(OC.PC_ONLY_ACTIONS),
