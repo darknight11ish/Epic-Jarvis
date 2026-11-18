@@ -487,6 +487,38 @@ export { USER_ID_RE, MAX_USER_PRESETS };
  * it). Carrying them here is the fix for the 2026-10-27 contract audit's F1:
  * the menu offered Coding, the PC always answered 409, and nothing said why.
  */
+/** The dated live speed the PC measured on this preset's own lane (the
+ *  2026-11-17 run in `.dsh-scratch/wave21/preset-truth/`), or null when the PC
+ *  carries no trustworthy number for the row. A null row says "not measured";
+ *  it is NEVER given a guess or a figure borrowed from another model. */
+export function measuredTokS(row) {
+  const measured = row && typeof row === "object" && row.measured
+    && typeof row.measured === "object" ? row.measured : null;
+  const value = measured ? measured.tok_s : null;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** The row's visible speed, exactly what the owner reads: "38.1 tok/s", or
+ *  "not measured" when there is no dated number. */
+export function measuredTokSWords(row) {
+  const value = measuredTokS(row);
+  return value === null ? "not measured" : `${value} tok/s`;
+}
+
+/** The PC's own plain-words note for that number, as the row's tooltip:
+ *  "Measured 2026-11-17: 9.18 GiB, 0 spill, one card (RTX 2060), 196,608
+ *  context". Empty when the PC sent neither a date nor a note. */
+export function measuredTokSDetail(row) {
+  const measured = row && typeof row === "object" && row.measured
+    && typeof row.measured === "object" ? row.measured : null;
+  const note = measured && typeof measured.tok_s_note === "string"
+    ? measured.tok_s_note.trim() : "";
+  const on = measured && typeof measured.tok_s_on === "string"
+    ? measured.tok_s_on.trim() : "";
+  if (!note && !on) return "";
+  return on ? `Measured ${on}: ${note || "no note"}` : `Measured: ${note}`;
+}
+
 export function modelPresetRows(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   if (body.available === false) return [];
@@ -508,6 +540,10 @@ export function modelPresetRows(payload) {
         ? ((typeof row.heavy_words === "string" && row.heavy_words) || HEAVY_PRESET_WORDS)
         : "",
       pending: row.pending === true,
+      // The dated live speed, right in the row (owner's request, 2026-11-17):
+      // visible without a press, an expand or a hover. The note is the tooltip.
+      speedWords: measuredTokSWords(row),
+      speedDetail: measuredTokSDetail(row),
     }));
 }
 
@@ -1180,9 +1216,12 @@ export function mountHudPresets(options = {}) {
     group.appendChild(note("Local presets switch at once when you pick one - pick another to switch straight back. Coding and Medical (they pause both other models first) and Cloud (it changes where your words go) still ask for the PC's ONE approval card."));
     for (const row of rows) {
       const asking = pcBusy.preset === row.id;
+      // The PC's dated speed is IN the row (owner's request, 2026-11-17): no
+      // press, no expand, no hover. The note rides in the row's tooltip.
+      const hint = [row.focus, row.speedDetail].filter(Boolean).join(". ");
       const button = menuItem(
-        `${row.title}${asking ? " - asking..." : ""}`,
-        row.focus,
+        `${row.title} - ${row.speedWords}${asking ? " - asking..." : ""}`,
+        hint,
         () => { pickModelPreset(row.id, row.title); },
       );
       if (row.chosen) markChosen(button, row.focus);

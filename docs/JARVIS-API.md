@@ -26642,6 +26642,21 @@ the other two models paused while it runs). Both fields are additive: a reader t
 ignores them behaves exactly as before. `chosen` is the id last applied;
 `active_lane` is the lane chat is pointed at now.
 
+**The speed each preset row shows is DATED and the PC's own (added 2026-11-17).**
+Every preset's `measured` object now carries `tok_s`, `tok_s_on` and
+`tok_s_note` beside the older receipts it already had. `tok_s` is the decode
+rate this PC measured on that preset's real lane at its real context in the
+2026-11-17 live run (20:50-21:14 PDT; report
+`.dsh-scratch/wave21/preset-truth/REPORT.md`, every raw row in `rows.jsonl`
+beside it); `tok_s_on` is that run's date (`"2026-11-17"`); `tok_s_note` is the
+plain-words detail behind the figure - loaded size, spill, card(s), context,
+and the range where the row was measured twice, in which case `tok_s` is the
+LOW end of the range. Both apps draw the number from this one builder, so they
+cannot disagree. A row with no trustworthy measurement carries `tok_s: null`
+and the apps say "not measured" - never a guess and never a figure borrowed
+from a different model. The keys are additive: an older reader that ignores
+them behaves exactly as before.
+
 **`POST /api/work/apply` - the ONE asked action.** `{"preset": "<id>"}`: one
 `switch_model` approval card (never automatic). The lane is started on demand
 BEFORE that card - a lane that is down cannot answer the switch's installed-
