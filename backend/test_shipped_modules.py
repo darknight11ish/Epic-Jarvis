@@ -153,6 +153,15 @@ INDIRECT = {
     "markitdown": "imported only by the separate converter program jarvis_documents.py "
                   "starts (its _CHILD code), never by the backend itself - so a crafted "
                   "PDF is read in a process with no passwords in its environment",
+    "img2pdf": "imported only by the separate converter program "
+               "jarvis_image_convert.py starts (its _CHILD code, `python -I -B -c`, "
+               "no passwords in its environment) to put pictures into ONE PDF, never "
+               "by the backend itself - so a crafted picture is read in a process that "
+               "cannot see a token or a key",
+    "pikepdf": "img2pdf's own PDF assembler, imported only inside that same child "
+               "program (jarvis_image_convert.py's _CHILD code) to count the pages "
+               "back, never by the backend itself; named in requirements.txt so the "
+               "hash-locked requirements.lock holds it",
     "openpyxl": "imported only by the separate reader program jarvis_spending.py starts "
                 "(its _CHILD code, `python -I`, no passwords in its environment) for an Excel "
                 "bank export, never by the backend itself; MarkItDown brings it too",
