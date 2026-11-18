@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 183 rows from features/features.json.
+The owner's feature list, as data: 184 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5fb80f3a0d85c52fb73250550e8431c2486e969ba2e21c8b650d7e1236a6c255); the apps' Features pages read their own
+`features/features.json` (sha256 62771a1e3b6607b6b429ff74854d1b3e4c2edb75e10b7cf60e89677384c5b5e8); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5fb80f3a0d85c52fb73250550e8431c2486e969ba2e21c8b650d7e1236a6c255"
+SOURCE_SHA256 = "62771a1e3b6607b6b429ff74854d1b3e4c2edb75e10b7cf60e89677384c5b5e8"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -931,6 +931,18 @@ FEATURES = (
         "surface_reason": "The vault is on this PC, so the organizer is PC-only; the phone has no vault-organizer screen.",
         "aliases": ["vault organizer", "tidies up an obsidian vault with tags and maps of content"],
         "covers": ["vault-organizer"],
+    },
+    {
+        "id": "picture-conversion",
+        "group": "Notes and files",
+        "title": "Make a PDF from pictures, or change a picture's format",
+        "what": "Ask Jarvis to put one or more pictures into a single PDF, in the order you name them - or to save one picture as PNG, JPEG, WebP, AVIF or TIFF. A JPEG put into a PDF goes in byte for byte, so it is not re-encoded and no pixel changes; PNG and TIFF are stored with lossless compression. When the target is a picture format, the answer says the truth about quality: PNG and TIFF are lossless, JPEG, WebP and AVIF are lossy, and the card says so before you say yes.",
+        "where": "Chat, in either app: name the pictures' full paths, for example \"make one pdf from C:\\\\Users\\\\you\\\\Pictures\\\\a.jpg and b.png\", or \"save this picture as a jpeg\".",
+        "asks": "ONE card per new file written, under its own action: the card names every picture and the exact new file, and says whether the copy is lossless or lossy. Nothing that already exists is overwritten - a taken name gets a number like \"photo (2).pdf\" - and the original pictures are never changed.",
+        "limit": "Only pictures in a folder Jarvis may look in. A PDF takes at most 20 pictures of at most 100 MB each and 65,535 pixels a side; its page size follows each picture's own DPI, with no paper size, margins or page numbers. A picture with transparency saved as JPEG is flattened onto white, and the card says so. HEIC from a phone is not read - save it as JPEG first.",
+        "surface": "both",
+        "aliases": ["make a pdf from pictures", "convert an image to pdf", "convert a picture to another format", "change an image format"],
+        "covers": [],
     },
     {
         "id": "spending",

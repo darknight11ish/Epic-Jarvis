@@ -1592,6 +1592,14 @@ def _run_notes_search(args: dict, plan_obj, **_) -> dict:
 #: "What asks first" for reading files, not two. Offered only while the list
 #: has a folder in it (offered_tools), so an owner with none pays no tokens.
 FILES_TOOL = "my_files"
+#: The gate action ONE picture conversion is asked under (jarvis_image_convert.py,
+#: 2026-11-18; the owner's "to pdf from an image"). Every other action on this
+#: tool is a READ, decided under file_read's read-only line. Converting WRITES a
+#: new file, so it has its own action name and its own one-shot card rather than
+#: borrowing a read action - a card that said "opens the file; writes nothing
+#: back" for a write would be a lie. The shipped settings line (both copies) is
+#: "ask"; the module's prepare() refuses any other tier as a belt under the card.
+FILES_CONVERT_ACTION = "convert_images"
 #: One answer reads at most this many parts of documents - a part is at most
 #: jarvis_documents.PART_TOKENS (1,200), and the 8 GB card's whole working
 #: memory is about 8,000 tokens (docs/feasibility-2026-09-26/hardware.md).
@@ -1778,6 +1786,17 @@ def _prepare_my_files(args: dict):
             raise ValueError("say which words to look for in the recordings")
         return {"words": words.strip()}, \
             f"Search the stored words from recordings and videos: {words.strip()}"
+    if action == "convert":
+        # The ONE write this tool takes (jarvis_image_convert.py, 2026-11-18):
+        # pictures into one PDF, or one picture into another format. Decided
+        # under its own gate action (FILES_CONVERT_ACTION). prepare() reads the
+        # pictures' headers and works out the exact NEW file name - it writes
+        # nothing, and the conversion runs only after the ordinary card.
+        try:
+            import jarvis_image_convert as CONVERT
+        except Exception as exc:                  # noqa: BLE001
+            return None, f"Convert a picture (unavailable: {type(exc).__name__})"
+        return CONVERT.prepare(args)
     try:
         import jarvis_documents as DOCS
     except Exception as exc:
@@ -1853,6 +1872,20 @@ def _run_my_files(args: dict, plan_obj, **_) -> dict:
             result["injection"] = list(out.get("injection") or [])
             result["warning"] = str(out.get("warning") or "")
         return result
+    if action == "convert":
+        # The one WRITE action of this tool (jarvis_image_convert.py, 2026-11-18).
+        # `state` is what prepare() worked out and the card showed; the module
+        # writes ONE new file with O_EXCL and never replaces anything.
+        try:
+            import jarvis_image_convert as CONVERT
+        except Exception as exc:                  # noqa: BLE001
+            return {"ok": False, "error": f"the picture converter is not available "
+                                          f"here ({type(exc).__name__})"}
+        state = plan_obj if isinstance(plan_obj, dict) else None
+        if not state:
+            return {"ok": False, "error": "that conversion was not worked out, so "
+                                          "nothing was written."}
+        return CONVERT.convert(state)
     try:
         import jarvis_documents as DOCS
     except Exception as exc:                      # noqa: BLE001
@@ -6470,18 +6503,26 @@ TOOLS: dict = {
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
         "map: a folder's files and symbols, ranked for the question. "
         "read_media: one recording's words. search_media: stored spoken and "
-        "on-screen recording words.",
+        "on-screen recording words. convert: pictures to one PDF, or one "
+        "picture to another format.",
         {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["find", "search", "read", "map", "read_media",
-                                                  "search_media"]},
+                                                  "search_media", "convert"]},
             "words": {"type": "string", "description": "a few words; for read, the part; for map, "
                                                        "the question"},
             "path": {"type": "string", "description": "read / read_media: the full path; map: a "
                                                       "folder or a project id"},
-            "part": {"type": "integer", "description": "read: which part, from its list"}},
+            "part": {"type": "integer", "description": "read: which part, from its list"},
+            "paths": {"type": "array", "items": {"type": "string"},
+                      "description": "convert: the pictures, in order"},
+            "to": {"type": "string", "enum": ["pdf", "png", "jpeg", "webp", "avif", "tiff"],
+                   "description": "convert: the target"}},
          "required": ["action"]},
         _prepare_my_files, _run_my_files,
-        gate_lookup_name=lambda args: "file_read",
+        gate_lookup_name=lambda args: (
+            FILES_CONVERT_ACTION
+            if str((args or {}).get("action") or "").strip().lower() == "convert"
+            else "file_read"),
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
     # Read ONE source file inside a folder on "Folders Jarvis may look in", or
