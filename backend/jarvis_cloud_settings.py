@@ -479,14 +479,16 @@ def _escalation_words() -> str:
                 f"{_NEVER_SENT} Every privacy check and the monthly cap still run "
                 f"first. Say \"turn escalation off\" to stop it.")
     if not esc["exists"]:
-        state = "escalate-cloud.json is not there, so no switch has been saved"
+        head = ("No - escalation is off: escalate-cloud.json is not there, so no switch "
+                "has been saved.")
     elif esc.get("error"):
-        state = (f"escalate-cloud.json is there but {esc['error']}, so it counts as off")
+        head = (f"No - escalation is off: escalate-cloud.json is there but {esc['error']}, "
+                f"so it counts as off.")
     else:
-        state = f"escalate-cloud.json says off ({saved})"
-    return (f"No - escalation is off: {state}, so every cloud turn waits for your yes "
-            f"and I never send anything to the cloud by myself. (Even with the switch "
-            f"on, {_NEVER_SENT[0].lower() + _NEVER_SENT[1:]})")
+        head = (f"No - escalation is off: escalate-cloud.json says off ({saved}).")
+    return (head + " Every cloud turn waits for your yes, and I never send anything to "
+            "the cloud by myself. (Even with the switch on, "
+            f"{_NEVER_SENT[0].lower() + _NEVER_SENT[1:]})")
 
 
 def _cap_words() -> str:
