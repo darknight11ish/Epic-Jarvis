@@ -37,9 +37,9 @@ export const HOW_TO =
   "before you choose anything.";
 export const ONE_CARD =
   "Picking a local preset that is not heavy switches the model at once, and " +
-  "picking another switches straight back. The two heavy presets (they pause " +
-  "the other models first) and the cloud service row (it changes where your " +
-  "words go) still raise one approval card on the PC.";
+  "picking another switches straight back. A heavy preset (it pauses the " +
+  "other models first) and the cloud service row (it changes where your " +
+  "words go) still raise their one approval card on the PC.";
 export const ACTION = "Use this preset";
 export const CURRENT_WORDS = "Current";
 export const PICK_FIRST = "Pick a preset first.";

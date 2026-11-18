@@ -17,8 +17,8 @@ path keeps its card. The boundary and its reasoning sit above
 The ten local presets: the original five (General, General Uncensored, Coding,
 Agentic+Vision, Fast), four capability rows added 2026-10-27 at the owner's
 request - Reflective Coach, Pictures & Screens, Long Documents, Browser & Forms -
-and Medical Expert, appended tenth on 2026-11-09 (medgemma:27b, the second
-pooled row). They replace the five "work setups" in jarvis_work.py (decision
+and Medical Expert, appended tenth on 2026-11-09 (medgemma:27b, one of the
+pooled rows). They replace the five "work setups" in jarvis_work.py (decision
 2026-10-18).
 
 Every measured number below is from
@@ -28,18 +28,26 @@ Every measured number below is from
 Lanes (this PC, 2026-10-10 measurements):
   main    RTX 2060 12 GB, port 11436 - the long-context card
   coding  RTX 2080 SUPER 8 GB, port 11435 - the fast card
-  pooled  all three cards, port 11450 - the Coding preset's own lane (2026-11-02)
+  pooled  all three cards, port 11450 - the heavy presets' own lane (2026-11-02)
 The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
 lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
 its own pooled three-card lane on demand.
 
-Coding is the FIRST of the two heavy rows, and since 2026-11-02 it has a lane
+Coding is the FIRST of the FOUR heavy rows, and since 2026-11-02 it has a lane
 that can really hold it: a 14.8 GB model fits neither card alone, so its lane is
 ONE Ollama on
 its own port with all three cards visible (`jarvis_model_lanes.start_pooled_lane`),
 started by the apply and stopped by the next apply that is not heavy. The cost
 is stated in the preset's own words and on the card: the two lane models are
 paused while it runs and come back when it is stopped.
+
+2026-11-18: Reflective Coach and Pictures & Screens joined that heavy road, each
+naming its own measured pooled mode (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`), so
+deliberate thinking and pictures use all three cards instead of one. General and
+Fast did NOT move, and that is the decision rather than an omission: they are the
+owner's everyday driver, a pooled model costs a measured 31-55 s cold load, and
+heavy mode pauses the everyday lane while it runs - so moving them would make
+ordinary chat slower for no gain in a short answer.
 """
 from __future__ import annotations
 
@@ -104,8 +112,10 @@ class Preset:
     #: is here (`jarvis_model_lanes.start_pooled_lane`).
     heavy_words: str = ""
     #: The pooled mode this preset starts (`jarvis_model_lanes.
-    #: start_pooled_lane(mode=...)`), "" for a preset on a named lane. Only the
-    #: Medical row names one (2026-11-09); Coding keeps the lane's own default.
+    #: start_pooled_lane(mode=...)`), "" for a preset on a named lane. Four rows
+    #: name one: Coding keeps the lane's own default, Medical names `medical`,
+    #: and since 2026-11-18 Reflective Coach names `gemma4-26b-a4b` and Pictures
+    #: & Screens names `qwen3-vl-30b-a3b`.
     mode: str = ""
     words: tuple = ()       # trigger words for /api/work/recommend
     strong: tuple = ()
@@ -146,10 +156,11 @@ MEDICAL_MEASURED_WORDS = (
     "cards' memory, 0 B spilled, a 46.8 s cold load and 9.27 tokens a second "
     "(11.1 on the measured ~150-word explanation, 7.89 on the four-token answer)")
 
-#: The two measured pooled candidates the lane can load but NO preset points at
-#: (2026-11-09). They are availability, not a default change: nothing applies
-#: them until the owner picks one, and a test pins that no preset names either
-#: model. The numbers are the 2026-11-09 bench rows, spill included.
+#: The two measured pooled candidates, from the 2026-11-09 bench rows (spill
+#: included, never trimmed). Until 2026-11-18 they were availability only and no
+#: preset pointed at them; now Reflective Coach applies `gemma4-26b-a4b` and
+#: Pictures & Screens applies `qwen3-vl-30b-a3b`, so the numbers live here ONCE
+#: and `pooled_modes()` republishes them rather than the rows keeping a copy.
 GEMMA4_26B_MEASURED_WORDS = (
     "measured on this PC on 2026-11-09: 15.5 GiB loaded with 0.68 GiB (4.4%) "
     "spilled into system memory, 96% in the cards' memory, a 52.0 s cold load "
@@ -324,20 +335,37 @@ PRESETS = (
         id="reflect", title="Reflective Coach",
         focus="talking a difficult thought through",
         what="For talking something through: a calm listener that reflects what you "
-             "said first and asks one gentle question at a time. It is the same "
-             "measured model as General, on the 12 GB card with the same full window, "
-             "so a conversation is not cut off.",
-        cost="Same measured setup as General: qwen3.5:9b on the 2060 at 196,608 tokens, "
-             "44.9 tokens a second, 9.17 of the 12 GB, no spill. No model on this PC "
-             "has been measured for empathy or reflective quality, and nothing here "
-             "claims it; pair it with a matching manner in How Jarvis talks once that "
-             "wording is approved.",
+             "said first and asks one gentle question at a time. Since 2026-11-18 it "
+             "thinks on all three cards at once, so a difficult thought gets the whole "
+             "machine instead of one card.",
+        cost="HEAVY MODE: it needs all three cards at once as one pooled lane and pauses "
+             "the everyday and Fast models while it thinks. Measured on this PC on "
+             "2026-11-09: 15.5 GiB loaded with 0.68 GiB (4.4%) spilled into system "
+             "memory, 96% in the cards' memory, a 52.0 s cold load and 49.26 tokens a "
+             "second. No model on this PC has been measured for empathy or reflective "
+             "quality, and nothing here claims it.",
         worse="A model choice only - it changes no wording by itself. It is not a "
               "therapist: it gives no diagnosis, keeps no therapy record and the "
-              "crisis help stays exactly where it already is.",
-        model="qwen3.5:9b", lane="main", context=196608,
+              "crisis help stays exactly where it already is. Applying it pauses the "
+              "other models for about a minute, so it is for a session of thinking, "
+              "not for a quick question.",
+        model="gemma4:26b-a4b-it-qat", lane="pooled", context=32768,
+        heavy_mode=True, mode="gemma4-26b-a4b",
         prompt="balanced", diet="balanced",
-        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        measured={"tok_s": 49.26, "size_gib": 15.5, "spill_gib": 0.68,
+                  "spill_pct": 4.4, "vram_pct": 96, "cold_load_s": 52.0,
+                  "context_measured": 32768,
+                  "source": "model matrix 2026-11-09: gemma4:26b-a4b-it-qat at "
+                            "32,768 tokens loaded 15.5 GiB with 0.68 GiB (4.4%) "
+                            "spilled into system memory (96% in the cards' memory), "
+                            "a 52.0 s cold load and 49.26 tok/s. Same row as "
+                            "GEMMA4_26B_MEASURED_WORDS above; no empathy or "
+                            "reflective quality was measured."},
+        heavy_words="This preset needs all three cards at once as one pooled lane. While "
+                    "it runs, the everyday and Fast models are paused - they come back, "
+                    "proved from the model list, when you apply another preset. It loads "
+                    "about 15.5 GiB, spills 0.68 GiB into system memory, takes about "
+                    "52 s cold and writes about 49 tokens a second.",
         words=("reflect", "talk it through", "thinking out loud", "coach",
                "difficult thought"),
         strong=("talk something through", "reflective coach"),
@@ -345,20 +373,39 @@ PRESETS = (
     Preset(
         id="pictures", title="Pictures & Screens",
         focus="reading a screenshot or a picture",
-        what="For looking at a picture or a screenshot and talking about it: qwen3.5:9b, "
-             "whose vision capability is documented on this PC, on the 12 GB card. "
-             "Agentic + Vision is the version that also drives tools.",
-        cost="Same model and card as General at a 32,768-token window. Vision is "
-             "documented (the model reports completion/vision/tools/thinking and its "
-             "CLIP encoder runs on the 12 GB card); this row's window and speed are not "
-             "separately measured. The 2026-10-18 picture test belongs to "
-             "Agentic + Vision, not this row.",
-        worse="Picture quality through this row is not measured. Live phone-camera "
-              "frames are explicitly unmeasured, and the old qwen3-vl fallback (which "
-              "gave no answer on the desktop UI) is not used here.",
-        model="qwen3.5:9b", lane="main", context=32768,
+        what="For looking at a picture or a screenshot and talking about it: a 30B "
+             "vision model that uses all three cards at once. Agentic + Vision is the "
+             "version that also drives tools.",
+        cost="HEAVY MODE: it needs all three cards at once as one pooled lane and pauses "
+             "the everyday and Fast models while it works. Measured on this PC on "
+             "2026-11-09: 19.88 GiB loaded with 2.24 GiB (11.2%) spilled into system "
+             "memory, 89% in the cards' memory, a 54.8 s cold load and 33.1 tokens a "
+             "second.",
+        worse="Picture QUALITY through this row is not measured - the 2026-11-09 receipt "
+              "measured speed and memory, not whether its answers about a picture are "
+              "better than the 9B's. It is slower than the single-card row it replaces "
+              "(33.1 tokens a second against that card's measured 41.89 at this 32,768 "
+              "window on 2026-11-07), it spills 2.24 GiB into system memory, and it "
+              "pauses the other models for about a minute while it loads. Live "
+              "phone-camera frames are explicitly unmeasured.",
+        model="qwen3-vl:30b-a3b-instruct", lane="pooled", context=32768,
+        heavy_mode=True, mode="qwen3-vl-30b-a3b",
         prompt="balanced", diet="balanced",
         tools=("pictures",),
+        measured={"tok_s": 33.1, "size_gib": 19.88, "spill_gib": 2.24,
+                  "spill_pct": 11.2, "vram_pct": 89, "cold_load_s": 54.8,
+                  "context_measured": 32768,
+                  "source": "model matrix 2026-11-09: qwen3-vl:30b-a3b-instruct at "
+                            "32,768 tokens loaded 19.88 GiB with 2.24 GiB (11.2%) "
+                            "spilled into system memory (89% in the cards' memory), "
+                            "a 54.8 s cold load and 33.1 tok/s. Same row as "
+                            "QWEN3_VL_30B_MEASURED_WORDS above; picture quality "
+                            "was not measured."},
+        heavy_words="This preset needs all three cards at once as one pooled lane. While "
+                    "it runs, the everyday and Fast models are paused - they come back, "
+                    "proved from the model list, when you apply another preset. It loads "
+                    "about 19.88 GiB, spills 2.24 GiB into system memory, takes about "
+                    "55 s cold and writes about 33 tokens a second.",
         words=("picture", "screenshot", "screen", "image", "photo", "look at"),
         strong=("read this screenshot", "look at this picture"),
     ),
@@ -451,8 +498,10 @@ def pooled_modes() -> tuple:
     `jarvis_big_coder.MODES` owns coding/deep_think/creative. This is the preset
     layer's own extra rows: `medical`, derived from the Medical Preset row so its
     model and window are typed once, plus the two measured candidates
-    (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`) that NO preset points at - they are
-    availability for the owner's own measured choice, never a default change.
+    (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`). Until 2026-11-18 no preset pointed at
+    those two; now Reflective Coach applies the first and Pictures & Screens the
+    second, so their measured row is the ONE copy the preset and the lane both
+    read rather than two numbers that can drift.
     Read by `jarvis_model_lanes` and `jarvis_big_coder` through lazy imports.
     Never raises; `()` when the Medical row is absent (a trimmed backend).
     """
@@ -2931,9 +2980,14 @@ def recommendations() -> dict:
                     "coding": pooled,
                     "fast": f"{display}: display + Fast/Live lane, qwen3.5:4b",
                     "agentic_vision": f"{everyday}: Agentic+Vision, qwen3.5:9b with images",
-                    "reflect": f"{everyday}: Reflective Coach, qwen3.5:9b, 196,608 window",
-                    "pictures": f"{everyday}: Pictures & Screens, qwen3.5:9b with images, "
-                                f"32,768 window",
+                    "reflect": (f"{p.model} on ONE pooled lane (port "
+                                f"{POOLED_PLAN_PORT}) across ALL the cards at "
+                                f"{p.context:,} tokens: HEAVY MODE, it pauses the "
+                                f"other lanes' models while it runs"),
+                    "pictures": (f"{p.model} on ONE pooled lane (port "
+                                 f"{POOLED_PLAN_PORT}) across ALL the cards at "
+                                 f"{p.context:,} tokens: HEAVY MODE, it pauses the "
+                                 f"other lanes' models while it runs"),
                     "documents": f"{everyday}: Documents & Notes, qwen3.5:9b, 196,608 window",
                     "browser": f"{everyday}: Browser & Forms, qwen3.5:9b, 196,608 window",
                     "medical": (f"medgemma:27b on ONE pooled lane (port "
@@ -2953,8 +3007,10 @@ def recommendations() -> dict:
                     # headless lane (origin/main, 2026-11-05). Naming `headless`
                     # here would print a card the row no longer uses.
                     "agentic_vision": everyday,
-                    "reflect": everyday,
-                    "pictures": everyday,
+                    "reflect": (f"all the cards (pooled lane, port "
+                                f"{POOLED_PLAN_PORT})"),
+                    "pictures": (f"all the cards (pooled lane, port "
+                                 f"{POOLED_PLAN_PORT})"),
                     "documents": everyday,
                     "browser": everyday,
                     "medical": (f"all the cards (pooled lane, port "
@@ -2982,10 +3038,11 @@ def recommendations() -> dict:
                 # has always guarded it still guards something true.
                 "layout": ("everyday presets keep one lane per GPU (the everyday "
                            "lane, the monitor card's lane and the headless card's "
-                           f"lane); only the on-demand heavy Coding preset pools the "
-                           f"cards on port {POOLED_PLAN_PORT}, and the Medical preset "
-                           f"pools the same cards the same way. Agentic + Vision "
-                           f"stays on the "
+                           f"lane); only the on-demand heavy mode pools the "
+                           f"cards on port {POOLED_PLAN_PORT} - Coding, Reflective "
+                           f"Coach, Pictures & Screens and Medical - and each "
+                           f"pauses the other lanes' models while it runs. Agentic "
+                           f"+ Vision stays on the "
                            "everyday card, not the headless one: the 9B weights plus "
                            "the vision projector need about 7.00 GiB and an 8 GB card "
                            "with no monitor has 6.65 GiB free, so there is no window "
@@ -3006,14 +3063,16 @@ def recommendations() -> dict:
                              "on the everyday card",
                      "card": _role_words(cards, roles, "headless"), "context": 16384},
                 ],
-                "heavy_pooled": (f"on demand, the Coding preset pauses those three lanes "
-                                 f"and loads qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled "
-                                 f"lane on port {POOLED_PLAN_PORT} across all the cards. "
-                                 f"It is too big for one card, so this is one of the two "
-                                 f"cases where a model is split across cards; every other "
-                                 f"preset keeps one lane per GPU. The Medical preset "
-                                 f"pools the same cards the same way for medgemma:27b "
-                                 f"at 32,768 tokens."),
+                "heavy_pooled": (f"on demand, the heavy presets pause those three lanes "
+                                 f"and load ONE model on the same pooled lane on port "
+                                 f"{POOLED_PLAN_PORT} across all the cards: Coding "
+                                 f"(qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), "
+                                 f"Medical (medgemma:27b at 32,768), Reflective Coach "
+                                 f"(gemma4:26b-a4b-it-qat at 32,768) and Pictures & "
+                                 f"Screens (qwen3-vl:30b-a3b-instruct at 32,768). Each "
+                                 f"is too big for one card, which is why a heavy preset "
+                                 f"splits one model across the cards; every preset that "
+                                 f"is not heavy keeps one lane per GPU."),
                 "link_note": ("the third card likely sits on the B550 chipset through an "
                               "M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs "
                               "loading time, not a lane; each lane keeps its own model."),

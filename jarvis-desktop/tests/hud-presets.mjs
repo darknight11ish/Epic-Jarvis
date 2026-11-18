@@ -15,9 +15,10 @@
  *   - a SUCCESSFUL apply re-renders the page's lanes without throwing (P1-3 of
  *     the 2026-10-27 HUD audit: the three old lane modes are gone, but
  *     renderLanes() is still called from the apply and #lanes must stay);
- *   - Coding IS a button since 2026-11-02 (the PC's pooled both-card lane runs
- *     it), with its cost said underneath; it used to be drawn as words and
- *     refused by the stub (contract audit F1, the old stub pinned a fiction);
+ *   - every preset the contract calls `heavy_mode` IS a button since
+ *     2026-11-02 (the PC's pooled three-card lane runs it), with its cost said
+ *     underneath; it used to be drawn as words and refused by the stub
+ *     (contract audit F1, the old stub pinned a fiction);
  *   - the model chip reads the model IN USE: the chosen focus preset's own
  *     model at boot, not the PC's default (the owner's field report of
  *     2026-11-08, when the chip said qwen3.5:9b while Current Models said the
@@ -410,8 +411,10 @@ await check("the rail lists the PC's ten presets in the contract's order, titles
     `the rail's row count drifted from the contract (got ${rows.length}, the fixture has ${FIXTURE.presets.length})`);
   assert.deepEqual(rows.map((r) => r.id), FIXTURE.presets.map((p) => p.id), "preset order drifted from the PC's contract");
   assert.deepEqual(rows.map((r) => r.title), FIXTURE.presets.map((p) => p.title), "preset titles drifted");
-  // A heavy preset cannot run, so its model line is the PC's own refusal
-  // instead of a model it can never load (contract audit F1).
+  // A heavy preset's model cannot live on one card, so the rail's model line
+  // is the PC's own "needs all three cards" instead of a model it can never
+  // load there (contract audit F1). Heavy presets have been real choices since
+  // 2026-11-02; which ones they are comes from the contract, never a list here.
   assert.deepEqual(rows.map((r) => r.model),
     FIXTURE.presets.map((p) => (p.heavy_mode === true ? "needs all three cards" : p.model)),
     "models drifted");
@@ -994,17 +997,26 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
   // all say "Focus presets" (contract audit F5).
   assert.deepEqual(menu.headings.slice(0, 3), ["Focus presets", "Personality", "Built-in layouts"],
     `the PC's own lists do not come before the layouts: ${JSON.stringify(menu.headings)}`);
-  // Every preset is a row, including the heavy one (2026-11-02).
+  // Every preset is a row, including the heavy ones (2026-11-02).
   const live = FIXTURE.presets;
   assert.deepEqual(menu.model.map((r) => r.preset), live.map((p) => p.id),
     "the menu does not list the PC's presets in its order");
   assert.deepEqual(menu.model.map((r) => r.text), live.map((p) => p.title),
     "the presets' visible labels are not the PC's own titles");
-  assert.deepEqual(menu.costs.map((r) => r.preset), ["coding", "medical"],
-    `both heavy presets' costs are not said under them: ${JSON.stringify(menu.costs)}`);
-  // Coding and Medical are the two heavy rows (2026-11-09): each says the
-  // PC's own cost sentence - all three cards, the other models pause, and no
-  // refusal wording (they run, they do not refuse).
+  // WHICH ROWS ARE HEAVY COMES FROM THE CONTRACT, NEVER FROM A LIST HERE
+  // (2026-11-18). This used to pin ["coding", "medical"] by hand, so the next
+  // preset to gain or lose `heavy_mode` broke this check for a reason that was
+  // nothing to do with it - which is exactly what happened when Reflective
+  // Coach and Pictures & Screens became pooled rows. Deriving the list from the
+  // fixture proves the PROPERTY instead: the menu says a cost under every
+  // preset the data calls heavy, and under no other row. A list typed here
+  // would just go stale the same way again.
+  const heavyIds = live.filter((p) => p.heavy_mode === true).map((p) => p.id);
+  assert.deepEqual(menu.costs.map((r) => r.preset), heavyIds,
+    `the menu does not say a cost under exactly the contract's heavy presets ` +
+    `(wanted ${JSON.stringify(heavyIds)}, got ${JSON.stringify(menu.costs)})`);
+  // Each heavy row says the PC's own cost sentence - all three cards, the other
+  // models pause, and no refusal wording (they run, they do not refuse).
   for (const row of menu.costs) {
     assert.match(row.text, /all three cards at once/,
       `the PC's own heavy-mode sentence is missing under ${row.preset}: ${row.text}`);
@@ -1013,10 +1025,14 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
     assert.doesNotMatch(row.text, /refuses|cannot be used/,
       `the heavy cost still refuses ${row.preset}: ${row.text}`);
   }
-  assert.match(menu.costs[0].text, /needs all three cards at once as one pooled lane/,
-    `Coding's own heavy-mode sentence is missing: ${menu.costs[0].text}`);
-  assert.match(menu.costs[0].text, /paused/,
-    `Coding's heavy cost does not say the other models pause: ${menu.costs[0].text}`);
+  // Coding keeps its own sentence, found BY ID rather than by array position:
+  // a new heavy row must not be able to push it out of `[0]` and silently
+  // change what this check reads.
+  const codingCost = menu.costs.find((r) => r.preset === "coding") || {};
+  assert.match(codingCost.text || "", /needs all three cards at once as one pooled lane/,
+    `Coding's own heavy-mode sentence is missing: ${codingCost.text}`);
+  assert.match(codingCost.text || "", /paused/,
+    `Coding's heavy cost does not say the other models pause: ${codingCost.text}`);
   assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["general"],
     "the chosen mark is not the PC's chosen_preset");
   // The chosen item is a rectangle (class + border), and the word "(chosen)"

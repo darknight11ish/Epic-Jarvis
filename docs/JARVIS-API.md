@@ -26581,12 +26581,14 @@ integrated abilities to be preset choices that load the best local model for
 the job, so four capability rows joined the original five: **Reflective Coach**
 (talking a difficult thought through), **Pictures & Screens** (a screenshot or
 picture), **Documents & Notes** (long reading and study) and **Browser &
-Forms** (long pages and multi-step form work). All four run `qwen3.5:9b` on the
-RTX 2060 12 GB - Reflective Coach, Documents & Notes and Browser & Forms at
-196,608 tokens, the measured General setup (44.9 tokens a second, 9.17 of the
-12 GB, no spill), and Pictures & Screens at 32,768 tokens, whose window and
-speed are not separately measured (the model's vision capability is
-documented). **Fast** now runs `qwen3.5:4b` on the RTX 2080 SUPER (the `coding`
+Forms** (long pages and multi-step form work). Documents & Notes and Browser &
+Forms run `qwen3.5:9b` on the RTX 2060 12 GB at 196,608 tokens, the measured
+General setup (44.9 tokens a second, 9.17 of the 12 GB, no spill). **Since
+2026-11-18 Reflective Coach and Pictures & Screens are pooled heavy rows** -
+`gemma4:26b-a4b-it-qat` and `qwen3-vl:30b-a3b-instruct` - so deliberate
+thinking and pictures use all three cards; §145.1c has their measured numbers
+and the reason General and Fast deliberately stay on one card. **Fast** now
+runs `qwen3.5:4b` on the RTX 2080 SUPER (the `coding`
 lane) at 16,384 tokens, the window that lane serves; measured 2026-10-10 on the
 same card: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token
 window, the file 3.16 GB on disk. **Medical Expert** is the tenth row, appended
@@ -26630,7 +26632,9 @@ Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
 words}/context/helper/policy/measured/pending/heavy_mode/heavy_words/apply{action,
 switch_route,apply_route,lane_start,auto:false}`. A `pending` preset has no
 model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
-coder, and since 2026-11-09 Medical on `medgemma:27b` at 32,768) means the
+coder, Medical on `medgemma:27b` at 32,768 since 2026-11-09, and since
+2026-11-18 Reflective Coach and Pictures & Screens on their own measured pooled
+modes) means the
 preset's model needs ALL THREE cards as ONE pooled lane; since
 2026-11-02 that lane exists and the row is applicable like every other one,
 with `heavy_words` carrying the PC's own plain-words cost (all three cards, and
@@ -26852,6 +26856,55 @@ applied (`pooled_num_ctx()`), so a Medical turn asks for 32,768 tokens - the
 window the lane really loaded - never Coding's 49,152. Stopping the lane and
 `GET /api/work`'s lane state recognise `medgemma:27b` the same way, from the
 preset layer's own `pooled_modes()` rows.
+
+### 145.1c Reflective Coach and Pictures & Screens on the pooled lane (added 2026-11-18)
+
+**Two rows moved, and only two.** The owner's standing goal is that every
+preset should use more of the three installed cards. On 2026-11-18 **Reflective
+Coach** (`id: "reflect"`) and **Pictures & Screens** (`id: "pictures"`) left
+`qwen3.5:9b` on the 2060 and became pooled heavy rows on the same
+one-Ollama-on-port-11450 shape Coding and Medical already use:
+
+| row | model | mode | window | measured 2026-11-09 |
+|---|---|---|---:|---|
+| Reflective Coach | `gemma4:26b-a4b-it-qat` | `gemma4-26b-a4b` | 32,768 | 15.5 GiB, 0.68 GiB (4.4%) spilled, 96% in video memory, 52.0 s cold load, 49.26 tok/s |
+| Pictures & Screens | `qwen3-vl:30b-a3b-instruct` | `qwen3-vl-30b-a3b` | 32,768 | 19.88 GiB, 2.24 GiB (11.2%) spilled, 89% in video memory, 54.8 s cold load, 33.1 tok/s |
+
+Both numbers are the row `pooled_modes()` already carried for that model - the
+same 2026-11-09 bench receipt, spill included and never rounded away - and each
+preset's `measured` dict quotes it with a `source`. **Nothing was measured
+again for this change**: the receipt predates it, and the rows say so.
+
+**`qwen3.5:9b` is already multimodal** - it reports `completion, vision, tools,
+thinking` (docs/MODEL-TOPOLOGY.md) - so this is **not** a fix for a model that
+could not see: it moves the picture row to a larger, newer, purpose-built vision
+model that uses three cards instead of one. Vendor claims, NOT measured here:
+the research behind the choice puts `qwen3-vl:30b-a3b` at MMMU-Pro 75.1 and
+OCRBench 91.0, and `gemma4:26b-a4b` at MMLU-Pro 82.6 / GPQA 82.3 with native
+tool calling, both 3-4B active mixtures of experts. Those are the vendor's
+numbers and the reason the two models were picked, not a measurement of this PC.
+
+Each row's `mode` reaches `jarvis_model_lanes.start_pooled_lane`, so the model
+loaded, the window asked for, the card text and the stop all follow the preset
+the owner applied - the same road §145.1b describes for Medical. The cost is on
+the row and in `heavy_words`: all three cards, the everyday and Fast models
+paused while it runs, a cold load of about a minute, and (for Pictures) a real
+2.24 GiB spill.
+
+**Why General and Fast did not move.** They are the owner's daily driver, and a
+pooled model is not free: the measured cold loads are 31-55 s and heavy mode
+pauses the everyday lane while the model is resident, so moving them would make
+ordinary chat several times slower for an answer that did not need three cards.
+That is the decision, not an oversight - `decisions.d/2026-11-18-preset-cards.md`
+records it.
+
+**What was not measured.** Picture QUALITY is not measured for
+`qwen3-vl:30b-a3b-instruct`, and no model on this PC has been measured for
+empathy or reflective quality; both rows say so in their own `worse` words, and
+neither claims an improvement in answer quality - only the measured speed,
+memory and spill of the model each now runs. Documents & Notes and Browser &
+Forms are untouched, because no measured pooled candidate is strictly better
+for them and fits under about 17 GiB with no spill.
 
 ### 145.1 The Cloud row, the provider list, and the standing escalation switch (added 2026-10-27)
 
