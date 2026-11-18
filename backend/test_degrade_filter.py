@@ -49,6 +49,13 @@ if BASE is not None:
     _base.put_on_path(BASE)
     _base.say(BACKEND, "jarvis_hud.py")
 
+# The router is the SHIPPED module, not the published base's older copy: the
+# rate-limit test below drives the real `degrade()` against the owner's stale
+# config shape, and that is the behaviour under test. Inserted at 0 so it wins
+# over `jarvis-backend/jarvis_router.py` that _base may have put on the path.
+sys.path.insert(0, str(HERE / "rebuilt"))
+import jarvis_router as RT  # noqa: E402
+
 
 def missing(*names):
     """`_where.missing`, asked of the folder this run really reads."""
@@ -97,18 +104,21 @@ class Decision:
         self.lane, self.inject_memory, self.reason, self.gate = lane, inject, "r", "g"
 
 
-def run(*, start_lane, inject_memory, messages, codes, raw=None):
+def run(*, start_lane, inject_memory, messages, codes, raw=None, router=None,
+        lanes=None):
     """Drive the loop.
 
     `messages` is what the handler has built for this lane (filtered on a
     cloud turn). `raw` is what the CLIENT sent, which is what lives in
     body["messages"] and what the local-rebuild branch restores from - so it
     must be the unfiltered transcript, or the control below tests nothing.
-    `codes` is the HTTP status each _open call raises.
+    `codes` is the HTTP status each _open call raises. `router`/`lanes` default
+    to the stub below (two synthetic cloud names, so the loop really hops
+    cloud -> local -> cloud); a caller may pass the REAL router instead.
     """
     raw = messages if raw is None else raw
     LOCAL = "qwen3:8b"
-    LANES = ["jarvis-escalate", "jarvis-critic"]
+    LANES = (["jarvis-escalate", "cloud-next"] if lanes is None else list(lanes))
     seen = []
     it = iter(codes)
 
@@ -120,11 +130,12 @@ def run(*, start_lane, inject_memory, messages, codes, raw=None):
             return object()
         raise urllib.error.HTTPError("u", code, "e", {}, None)
 
-    router = types.SimpleNamespace(
-        # The worst case the loop's own comment says cannot happen. It is a
-        # contract with a module this loop never checks, so the test breaks it.
-        degrade=lambda lane, lanes, local: (
-            local if lane in lanes else LANES[1] if lane == local else None))
+    if router is None:
+        router = types.SimpleNamespace(
+            # A deliberately synthetic second cloud name: this suite is about
+            # the LOOP's message filtering, not about which lanes exist.
+            degrade=lambda lane, lanes, local: (
+                local if lane in lanes else LANES[1] if lane == local else None))
 
     ns = {
         "lanes": LANES, "local_model": LOCAL, "_open": _open,
@@ -193,7 +204,7 @@ def t_cloud_then_local_then_cloud():
                    raw=CLOUD_TURN, codes=[429, 503])
     lanes = [s[0] for s in seen]
     check("the loop really does hop cloud -> local -> cloud",
-          lanes == ["jarvis-escalate", "qwen3:8b", "jarvis-critic"], repr(lanes))
+          lanes == ["jarvis-escalate", "qwen3:8b", "cloud-next"], repr(lanes))
     check("nothing the assistant said reaches the second cloud lane",
           _leaks(seen) == [], f"leaked: {_leaks(seen)}")
     check("the second cloud lane sees user turns only",
@@ -239,9 +250,64 @@ def t_a_cloud_turn_that_never_degrades():
           len(ns["messages"]) == 2, repr(ns["messages"]))
 
 
+def t_a_rate_limited_turn_answers_on_this_pc():
+    """THE OWNER'S PC, 2026-11-18. A 429 from the ONE cloud lane must step to
+    THIS PC, not to a lane the code does not have.
+
+    The real `jarvis_router.degrade()` is driven against the shape the owner's
+    live jarvis-framework.toml still has - `degrade_chain = ["jarvis-escalate",
+    "jarvis-bulk", "jarvis-critic"]` - with the caller's own lane list being the
+    one real lane. BEFORE the fix, `degrade()` walked the dead names: the stale
+    chain contained the failing lane, so it returned "jarvis-bulk", the relay
+    opened it (lane_service() maps an unknown name to the CHOSEN service - a
+    second real cloud request), then "jarvis-critic", and only then local. This
+    test goes red on that tree: the second hop is not this PC.
+    """
+    stale = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]
+    keep = RT._cfg
+    RT._cfg = lambda section, key, default=None: (
+        stale if (section, key) == ("budget", "degrade_chain")
+        else keep(section, key, default))
+    try:
+        seen, ns = run(start_lane="jarvis-escalate", inject_memory=False,
+                       messages=[m for m in CLOUD_TURN if m["role"] == "user"],
+                       raw=CLOUD_TURN, codes=[429],
+                       router=RT, lanes=["jarvis-escalate"])
+    finally:
+        RT._cfg = keep
+    lanes = [s[0] for s in seen]
+    check("after a 429 the very next lane is THIS PC (no dead name in between)",
+          lanes == ["jarvis-escalate", "qwen3:8b"], repr(lanes))
+    check("... and the turn really was answered on this PC, not dropped",
+          ns["upstream"] is not None and ns["first_error"] is None,
+          repr((ns["upstream"], ns["first_error"])))
+    check("... and no request went to a name that is not a lane",
+          all(lane in ("jarvis-escalate", "qwen3:8b") for lane, _r, _c in seen),
+          repr(lanes))
+
+
+def t_a_short_chain_the_owner_chose_still_works():
+    """CONTROL: a correct shipped chain (one lane) reaches local on a 429."""
+    keep = RT._cfg
+    RT._cfg = lambda section, key, default=None: (
+        ["jarvis-escalate"] if (section, key) == ("budget", "degrade_chain")
+        else keep(section, key, default))
+    try:
+        seen, ns = run(start_lane="jarvis-escalate", inject_memory=False,
+                       messages=[m for m in CLOUD_TURN if m["role"] == "user"],
+                       raw=CLOUD_TURN, codes=[429],
+                       router=RT, lanes=["jarvis-escalate"])
+    finally:
+        RT._cfg = keep
+    check("a correct one-lane chain steps straight to this PC",
+          [s[0] for s in seen] == ["jarvis-escalate", "qwen3:8b"], repr(seen))
+
+
 if __name__ == "__main__":
     for fn in (t_cloud_then_local_then_cloud, t_local_with_memory_degrading_to_cloud,
-               t_the_local_rebuild_still_works, t_a_cloud_turn_that_never_degrades):
+               t_the_local_rebuild_still_works, t_a_cloud_turn_that_never_degrades,
+               t_a_rate_limited_turn_answers_on_this_pc,
+               t_a_short_chain_the_owner_chose_still_works):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

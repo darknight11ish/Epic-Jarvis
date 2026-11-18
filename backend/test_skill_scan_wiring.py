@@ -149,11 +149,16 @@ def t_the_patch_is_in_the_stack_at_the_right_position() -> None:
               name in names and names.index(name) < names.index("skill-scan-wiring.patch"))
     check("it is the LAST writer of jarvis_skills.py - only other files follow it",
           names.index("skill-scan-wiring.patch") + 1 < len(names)
-          and all(n in ("activity-turn-guard.patch", "plugin-loader.patch")
+          and all(n in ("activity-turn-guard.patch", "local-model-guard.patch",
+                        "plugin-loader.patch")
                   for n in names[names.index("skill-scan-wiring.patch") + 1:]),
           names[names.index("skill-scan-wiring.patch"):])
-    check("activity-turn-guard.patch is STILL the last core patch before the loader",
-          names[-2] == "activity-turn-guard.patch", names[-3:])
+    # local-model-guard.patch (2026-11-18) is a jarvis_hud.py-only patch
+    # appended after activity-turn-guard.patch, immediately before the loader.
+    check("local-model-guard.patch is STILL the last core patch before the loader",
+          names[-2] == "local-model-guard.patch", names[-3:])
+    check("... and activity-turn-guard.patch sits directly before it",
+          names[-3] == "activity-turn-guard.patch", names[-4:])
     check("plugin-loader.patch is still the last entry of all",
           names[-1] == "plugin-loader.patch", names[-3:])
 

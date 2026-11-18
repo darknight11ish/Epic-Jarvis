@@ -427,8 +427,13 @@ class FocusPresetsTest {
             FocusPresets.WAITING,
             FocusPresets.replyLine(202, buildJsonObject { }),
         )
+        // The 200 body carries no sentence of its own, and a 200 does not prove
+        // the switch happened (the caller re-reads the list), so the fallback
+        // must not claim "nothing else changed" - it says only that the PC
+        // answered and the list is being re-read.
         assertEquals(
-            "Preset applied. Your PC switched its chat lane; nothing else changed.",
+            "Preset applied. Your PC answered; the list is being re-read to show " +
+                "what is in use now.",
             FocusPresets.replyLine(
                 200,
                 buildJsonObject {

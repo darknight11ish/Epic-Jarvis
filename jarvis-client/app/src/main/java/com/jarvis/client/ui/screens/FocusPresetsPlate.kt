@@ -138,19 +138,23 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     Gap(8)
     Kicker(FocusPresets.TITLE, Modifier.semantics { heading() })
     Gap(4)
-    // What a preset changes, and the one rule the rows cannot show: a press
-    // either acts at once or raises a card. Everything else the old paragraph
-    // said is drawn on the row itself, or is said by the PC when the button is
-    // pressed (the audit of 2026-11-16, finding 5): a heavy preset's cost -
-    // the other models paused - sits on its own row above the button, each
-    // row's model line names its model and card, and the card says what it is
-    // when it appears. The old "Fast uses the 2080 SUPER" sentence was a
-    // hand-typed copy of the Fast row's own model line, so it is gone with the
-    // rest.
+    // What a preset changes, and the one rule the rows cannot show: picking a
+    // local row applies it straight away with NO card - every row since
+    // 2026-11-16, the heavy ones included - and only the same preset asked for
+    // in chat still raises its card. Everything else the old paragraph said is
+    // drawn on the row itself, or is said by the PC when the button is pressed
+    // (the audit of 2026-11-16, finding 5): a heavy preset's cost - the other
+    // models paused - sits on its own row above the button, and each row's
+    // model line names its model and card. The old "Fast uses the 2080 SUPER"
+    // sentence was a hand-typed copy of the Fast row's own model line, so it is
+    // gone with the rest.
     Text(
         "Presets choose the local model and card for the work you are about to do. " +
-            "Picking one that is not Coding or Medical switches at once; Coding and " +
-            "Medical raise one approval card.",
+            "Picking one applies the change straight away, with no approval card: the " +
+            "old model stops first, and cold loads on this PC measured about 12 " +
+            "seconds to about a minute. A heavy preset also fills all three cards " +
+            "while it runs - its row says what that costs. Asking for the same " +
+            "preset in chat still asks you first.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
     )

@@ -40494,7 +40494,64 @@ tool call in a chat turn, and the ordinary tool-call gate raises the card.
   sources unchanged, the action's ask line and gate rows, the loosened-tier
   belt, and the child's scrubbed environment.
 
-## 228. The hybrid/cloud settings, from chat: the questions answered from the PC's files, the changes through their own cards (2026-11-18)
+## 228. A local turn is answered by the model its lane is configured for, and `degraded_from` says what was replaced (2026-11-18)
+
+**What was wrong.** The measured failure on the owner's PC: a private question
+routed correctly to the local lane (`X-Jarvis-Route` gate `"taint"`, `where:
+"local"`) and produced **no answer at all**, because `model-state.json` named the
+Coding preset's pooled three-card model as the everyday model and
+`jarvis_agent.local_model_refusal` - correctly, and in the honest words the
+owner was shown - refused to load a pooled model on a one-card lane. Nothing
+left the PC; the turn was simply unanswerable because nothing had asked whether
+the model the router picked could run where it picked it.
+
+**What happens now.** `jarvis_router.choose()` validates the chosen local model
+against the lane the turn will really use, BEFORE the decision is returned,
+using that same refusal function as the authority. When the saved model is the
+one class of refusal a different model can fix (a pooled model at a lane that
+may not hold it), the decision names the model **that lane is configured for**
+instead: the lane table's own row for the lane's port, else the owner's
+`[intelligence] default_model`, else the everyday lane's own row. The spill
+refusal itself is unchanged - a pooled model on a one-card lane is still
+refused and never loaded; the fix chooses a different model, it never allows the
+spill.
+
+**The route detail.** `X-Jarvis-Route` carries the existing **`degraded_from`**
+field (the HUD already sends that key when a cloud lane steps down), one entry
+per replacement:
+
+```json
+"degraded_from": [{"lane": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+                   "model": "qwen3.5:9b",
+                   "code": "model_cannot_run_on_this_lane",
+                   "why": "<the refusal, in its own words> ... it cannot run on the one-card lane ..."}]
+```
+
+`lane` is the model that was **asked for**, `model` is the model that **really
+runs** (and the header's own `lane` names it too), `code` is stable and `why`
+is the refusal in `jarvis_agent`'s own words; the top-level `reason` also names
+both models. The field is **omitted** when nothing was replaced, so an ordinary
+turn's header is exactly what it was before. No new route, field, action, tier
+or card: a cloud turn is not affected and is not pulled local.
+
+**Both halves are loaded together.** The HUD tells a local turn by
+`lane == local_model`, so a router-only fallback would make `use_tools` false
+and send the turn to the plain relay - where `jarvis_chatbot_api.lane_service()`
+maps an UNKNOWN lane name to a CLOUD provider (its default is DeepSeek). That is
+why `backend/local-model-guard.patch` ships in the same PR: one line in
+`jarvis_hud.py`, `use_tools = ((lane == local_model or
+decision.inject_memory) and _agent_ok)`, keeps a local fallback turn on the
+local answering loop. `inject_memory` is the signal because every local
+decision carries it and no cloud decision ever does.
+
+**Proof.** `backend/test_local_model_guard.py` (no network, no model, no card):
+the tainted turn answered by the lane's model and passing the same refusal
+`run_local_turn` makes; the one-card refusal still refusing; the ordinary
+turn's route-detail keys unchanged; a cloud turn still escalating, including
+when the saved local model is pooled; the pooled lane untouched; the unknown
+lane name resolving to a cloud provider; and the patched HUD's own
+`use_tools`/`is_cloud` expressions evaluated for each case.
+## 229. The hybrid/cloud settings, from chat: the questions answered from the PC's files, the changes through their own cards (2026-11-18)
 
 The owner asked to be able to ask his PC, from the phone's chat, what the
 hybrid/cloud settings ARE and to change them: *"i should be able to ask jarvis
@@ -40507,7 +40564,7 @@ section is the contract for both. It adds **no route**, **no file writer** and
 **no second mechanism**: every change below calls the door the setting already
 has.
 
-### 228.1 The questions, answered from three files and never from a model
+### 229.1 The questions, answered from three files and never from a model
 
 The fast path (`/api/chat`, so the same answer on the PC and on the phone)
 claims these shapes before the model and answers them with fixed local words:
@@ -40545,7 +40602,7 @@ screen, a private question, a pasted secret and a conversation that has already
 read text from outside this PC never go to the cloud, and Lockdown, every
 privacy check and the monthly cap still run first.
 
-### 228.2 The changes: the doors that already exist, one card, nothing before a yes
+### 229.2 The changes: the doors that already exist, one card, nothing before a yes
 
 | What the owner asks | The door it calls | The card |
 |---|---|---|
@@ -40563,7 +40620,7 @@ six), refuses a service that cannot be used yet BEFORE any card, and writes
 answer is built from the door's own returned body - so a denied or timed-out
 card is reported as "not changed" and a waiting card is never reported as on.
 
-### 228.3 Honest limits
+### 229.3 Honest limits
 
 - **The money cap is the one people ask about**: it is readable from chat, and
   it IS changeable from chat because the route already existed - the chat path
@@ -40580,7 +40637,7 @@ card is reported as "not changed" and a waiting card is never reported as on.
 - **The two apps need no client change**: the answers and the cards ride
   `/api/chat`, so the phone gets them wherever it already has chat.
 
-### 228.4 Proof
+### 229.4 Proof
 
 `backend/test_cloud_settings_chat.py` - the suite this section rests on. It
 runs over a temporary settings folder (never the owner's real files) with the

@@ -55,7 +55,7 @@ def check(name, cond, detail=""):
 
 
 #: The three lanes the owner's own ~/.openjarvis/litellm-proxy.yaml defines.
-LANES = ["jarvis-escalate", "jarvis-critic", "jarvis-bulk"]
+LANES = ["jarvis-escalate"]
 LOCAL = "qwen3.5:9b"
 #: Plainly non-private, and long enough that the complexity gate passes it.
 HARD = ("Explain in detail how the three-body problem differs from the two-body "

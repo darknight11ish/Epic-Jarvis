@@ -2233,6 +2233,35 @@ $PATCHES = @(
     # test_gate_touches.py, test_referee.py, test_screen_attach.py,
     # test_hud_manual_lane_gate.py).
     'activity-turn-guard.patch'
+    # local-model-guard.patch (2026-11-18) - A LOCAL TURN MUST BE ANSWERABLE.
+    # The measured defect (the owner's own PC, the night of 2026-11-17/18):
+    # `model-state.json` said the everyday model was the Coding preset's pooled
+    # three-card model, `jarvis_router.choose()` trusted it for a PRIVATE turn,
+    # and the turn was then refused by `jarvis_agent.local_model_refusal` - the
+    # honest spill refusal - so a private question got NO answer at all while
+    # staying correctly on this PC. The fix is in TWO places:
+    #   * the shipped `backend/rebuilt/jarvis_router.py` (and its
+    #     `jarvis-backend/` twin) validates the chosen model against the lane
+    #     the turn will really use BEFORE deciding, and when the saved model
+    #     cannot run there it answers with the model that lane is configured
+    #     for, saying so in the route detail under `degraded_from`;
+    #   * this patch is the ONE line that makes the HUD run that fallback
+    #     LOCALLY: `use_tools` becomes true for a local decision carrying
+    #     `inject_memory`. Without it the turn would fall to the plain relay
+    #     below, which resolves a lane name it does not know through
+    #     `jarvis_chatbot_api.lane_service()` - an unknown name maps to a
+    #     CLOUD provider - and a private prompt could have left the PC. That
+    #     hazard is why a router-only change must never ship.
+    # ONE hunk in jarvis_hud.py, rewriting ONE line. It sits immediately before
+    # plugin-loader.patch (which MUST stay the last entry, tools/check_plugins.py)
+    # and its context is chat-stream.patch's own added `use_tools` lines and
+    # cloud-honesty.patch's crisis block below them, so it goes after both and
+    # adds no install block. It rewrites no
+    # jarvis_gate.py line and no table row; every suite that enumerates "the
+    # patches written after me" has had its name added (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'local-model-guard.patch'
     'plugin-loader.patch'
 )
 
@@ -6145,6 +6174,17 @@ if ($py) {
 #     an owner may always choose to be asked more, and a live value that is
 #     LOOSER than the shipped one stays tools/sync-framework-tiers.py's
 #     decision to report, not this script's to make;
+#   * THE ONE EXCEPTION, added 2026-11-18: a `[budget] degrade_chain` line
+#     that names a cloud lane this PC does not have. That is not a choice -
+#     the lane does not exist in the code any more (the owner's 2026-10-27
+#     decision collapsed three cloud lanes into ONE), and a fresh install gets
+#     the corrected line while an existing file keeps the stale one forever.
+#     The merger replaces exactly that one line with the shipped chain, and
+#     only when a name in it is neither a shipped chain name nor the configured
+#     local model. A chain the owner shortened, or an absent key, is left alone.
+#     `jarvis_router.degrade()` already drops a name it cannot serve, so this
+#     is the file being made honest, not the safety; the router carries the
+#     safety to the PC on the same update;
 #   * it refuses to write at all unless the result parses, every added line
 #     reads back, every existing tier is unchanged and no other section moved;
 #   * it keeps a dated copy of the file first, and prints its path.
@@ -6269,6 +6309,19 @@ if (-not (Test-Path -LiteralPath $cfgSrc)) {
                 Say "        the backend:" Cyan
                 Say "          py -3 `"$tierMerger`" --apply `"$cfgInUse`"" Cyan
                 Add-Note "$CONFIG_NAME is missing [autonomy.tiers] line(s) that this repository's copy has; the update did NOT add them, so those actions take unknown_action_tier ('ask') instead of their own tier. To add them: py -3 `"$tierMerger`" --apply `"$cfgInUse`""
+            }
+            # 2026-11-18: the merge has ONE other job - a [budget] degrade_chain
+            # that names a cloud lane this PC does not have (the stale
+            # three-lane list from before the 2026-10-27 decision). Said out
+            # loud because it is a line of the owner's own settings file that
+            # changed, even though it is a correction rather than a choice.
+            if ("$tierOut" -match 'Fixed the stale \[budget\] degrade_chain line in:') {
+                Ok "$CONFIG_NAME - [budget] degrade_chain named a cloud lane this PC does not have; it now names the shipped lane(s) only."
+                $script:State.Changed = $true
+            } elseif ("$tierOut" -match 'degrade_chain names a lane this PC does not have') {
+                Warn "$CONFIG_NAME - [budget] degrade_chain names a cloud lane this PC does not have, and the line could not be corrected automatically."
+                Say "        Nothing was changed. The router ignores the name, so a rate-limited turn cannot reach it; the file can be edited by hand to the line shown by:" Cyan
+                Say "          py -3 `"$(Join-Path $PatchDir '_config_diff.py')`" `"$cfgInUse`" `"$cfgSrc`"" Cyan
             }
         } elseif (-not (Test-Path -LiteralPath $tierMerger)) {
             Warn "'$tierMerger' is missing from this repository, so the missing [autonomy.tiers] lines were not added."

@@ -382,6 +382,13 @@ def t_the_patch_is_registered_last():
              # skill-scan-wiring.patch (2026-11-09, F5): five hunks, ALL in
              # jarvis_skills.py, and no hunk in jarvis_hud.py or jarvis_gate.py,
              # so it rewrites nothing this patch wrote.
+             # local-model-guard.patch (2026-11-18): ONE hunk in jarvis_hud.py -
+             # the `use_tools` line in do_POST, rewritten so a local turn whose saved
+             # model cannot run on this lane is answered LOCALLY, by the model the lane
+             # is configured for (jarvis_router's own fallback). It touches
+             # jarvis_gate.py not at all, so it rewrites nothing this patch wrote, and
+             # it sits immediately before plugin-loader.patch, the last entry of all.
+             "local-model-guard.patch",
              "skill-scan-wiring.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
