@@ -76,6 +76,12 @@ GLOBS = ("backend/test_*.py", "tools/check_*.py", "tools/test_*.py")
 
 #: A recorded ceiling per file. Absent = 0. May only go DOWN.
 SOURCE_PIN_CEILING: dict[str, int] = {
+    # The picture-conversion suite (2026-11-18): three source-text pins -
+    # it reads the shipped settings file and the published gate as text to
+    # prove the action's ask line, its tool->action row and its risk row are
+    # really there, and that is the same shape the other honesty suites
+    # carry. Recorded as debt, not approval; the ratchet only turns DOWN.
+    "backend/test_image_convert.py": 3,
     # The wave-4 rename/move suite (2026-10-31): two checked source pins in its
     # own suite; recorded as debt, like every other ceiling.
     "backend/test_notes_rename_move.py": 2,

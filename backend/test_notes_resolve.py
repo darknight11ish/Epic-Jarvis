@@ -10,12 +10,17 @@ vault writer and that RESOLUTION moves to `backend/jarvis_notes.py`, one place
 every note tool routes through:
 
     exact vault path -> case-insensitive basename -> the note's `aliases:`
-    -> refuse, listing the candidates
+    -> the note's own favourite flag -> refuse, listing the candidates
 
 with no daily-note fallback at any point, and with the refusal vocabulary
 (`case_variant_exists`, `ambiguous_section` + `candidates`, `content_preexists`)
 and the two boolean create options (`create_target_if_missing`,
 `reject_if_content_preexists`) rather than a second HTTP surface.
+
+The favourite tier is the one added here on 2026-11-18: "add this to my
+favourite note" names no note, and `favorite: true` in a note's front matter was
+already real and persisted - it is now what the words SELECT, and no more than
+that (no note content in a prompt, no change to a route or a plate).
 
 It also pins the vault's own daily-note settings: `.obsidian/daily-notes.json`
 is read for folder, format and template (the behaviour of
@@ -92,16 +97,38 @@ def check(name, cond, detail=""):
 
 def write(vault: Path, rel: str, text: str) -> Path:
     p = vault / rel
+    _require_scratch(vault)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(str(p), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
     return p
 
 
+def _require_scratch(path: Path) -> None:
+    """Refuse to touch anything that is not under THIS suite's scratch folder.
+
+    The owner's real vault lives at whatever `JARVIS_OBSIDIAN_VAULT` or
+    `[notes.obsidian]` names. Every test below builds its own vault under
+    `_TMP`; this check runs before the first byte is written and before the
+    vault is pointed at, so a mis-shaped path can never reach the real one.
+    """
+    try:
+        inside = (os.path.commonpath([os.path.realpath(str(_TMP)),
+                                      os.path.realpath(str(path))])
+                  == os.path.realpath(str(_TMP)))
+    except ValueError:                       # different drives on Windows
+        inside = False
+    if not inside:
+        raise RuntimeError(
+            "refusing to use a vault outside this suite's scratch folder: "
+            + str(path))
+
+
 def make_vault(settings=None, with_workout: bool = True,
                with_daily: bool = True, name: str = "") -> Path:
     """A fresh vault, set as THE vault. `settings` becomes daily-notes.json."""
     v = _TMP / (name or ("vault-" + secrets.token_hex(5)))
+    _require_scratch(v)
     (v / ".obsidian").mkdir(parents=True)
     if with_workout:
         write(v, WORKOUT, WORKOUT_TEXT)
@@ -240,6 +267,195 @@ def t_no_daily_note_fallback():
     before = (v / (TODAY + ".md")).read_text(encoding="utf-8")
     check("no fallback: ... and resolving wrote nothing",
           (v / (TODAY + ".md")).read_text(encoding="utf-8") == before)
+
+
+# --------------------------------------------------------------------------
+# 2b. THE FAVOURITE FLAG: a property the owner set, read as the resolver's LAST
+#     tier (2026-11-18)
+# --------------------------------------------------------------------------
+# The owner's own sentence is "add this to my favourite note". The flag is real
+# and persisted - a create writes `favorite: true`, and a carded `set_property`
+# edit writes it - but until this case existed nothing read it for anything
+# except one yes/no answer ("is my X note favourited?"). These cases make it
+# SELECT a note, through the existing tiers: the flag is a DESCRIPTION of a
+# note, so it is asked only after every name tier has said no.
+WORKOUT_TITLE = "Workout Log"
+FAVOURITE_NOTE_TEXT = (
+    "---\n"
+    "aliases:\n"
+    "  - workout log\n"
+    "  - my workout log\n"
+    "favorite: true\n"
+    "---\n\n# Workout Log\n\n- Light cardio.\n"
+)
+
+
+def t_favourite_one_note_resolves_and_says_its_name():
+    v = make_vault()
+    write(v, WORKOUT, FAVOURITE_NOTE_TEXT)
+    before = (v / WORKOUT).read_bytes()
+    got = N.resolve_note("my favourite note")
+    check("favourite: one flagged note resolves, at its own tier",
+          got.get("ok") and got.get("tier") == "favourite"
+          and got.get("path") == WORKOUT, got)
+    check("favourite: ... and the answer says which note it picked",
+          WORKOUT_TITLE in str(got.get("said") or "")
+          and "favourite" in str(got.get("said")), got.get("said"))
+    full = os.path.realpath(str(got.get("full") or ""))
+    check("favourite: ... the pick is a real file under THIS test's vault",
+          os.path.commonpath([full, os.path.realpath(str(v))])
+          == os.path.realpath(str(v)) and os.path.isfile(full), full)
+    check("favourite: ... and reading it changed nothing",
+          (v / WORKOUT).read_bytes() == before)
+    for phrase in ("favourite", "my favourite", "my favorite note",
+                   "the favourite notes", "my favourites"):
+        got = N.resolve_note(phrase)
+        check(f"favourite: {phrase!r} is the same pick",
+              got.get("ok") and got.get("tier") == "favourite"
+              and got.get("path") == WORKOUT, got)
+    # A hand-written British key is the flag too, exactly like Jarvis's US one.
+    write(v, WORKOUT, "---\nfavourite: true\n---\n\n# Workout Log\n")
+    got = N.resolve_note("my favourite note")
+    check("favourite: a hand-written `favourite: true` counts too",
+          got.get("ok") and got.get("path") == WORKOUT, got)
+    # A hidden folder is never read by `_vault_notes`, so its note is never a
+    # candidate: the one real favourite stays the only pick.
+    write(v, WORKOUT, FAVOURITE_NOTE_TEXT)
+    write(v, ".trash/Hidden.md", "---\nfavorite: true\n---\n\n# Hidden\n")
+    got = N.resolve_note("my favourite note")
+    check("favourite: a note in a hidden folder is never a candidate",
+          got.get("ok") and got.get("path") == WORKOUT, got)
+    # A `favorite:` line is a PROPERTY only inside a front matter that CLOSES;
+    # without the second `---` Obsidian reads it as body text, and so does this.
+    write(v, WORKOUT, "---\nfavorite: true\n\n# Workout Log\n")
+    got = N.resolve_note("my favourite note")
+    check("favourite: an UNCLOSED front matter is not a favourite",
+          got.get("ok") is False and got.get("code") == "not_found", got)
+    # The FIRST `favorite:` line wins, as YAML reads it - a later `true` cannot
+    # overrule an earlier `false`.
+    write(v, WORKOUT, "---\nfavorite: false\nfavorite: true\n---\n\n# Workout\n")
+    got = N.resolve_note("my favourite note")
+    check("favourite: the first `favorite:` line wins over a later one",
+          got.get("ok") is False and got.get("code") == "not_found", got)
+
+
+def t_favourite_three_notes_list_and_ask():
+    v = make_vault()
+    for rel, text in ((WORKOUT, FAVOURITE_NOTE_TEXT),
+                      ("Notes/Gym.md", "---\nfavorite: true\n---\n\n# Gym\n"),
+                      ("Welcome.md", "---\nfavorite: true\n---\n\n# Welcome\n")):
+        write(v, rel, text)
+    before = {rel: (v / rel).read_bytes()
+              for rel in (WORKOUT, "Notes/Gym.md", "Welcome.md")}
+    got = N.resolve_note("my favourite note")
+    check("favourite: three flagged notes ASK, never guess",
+          got.get("ok") is False and got.get("code") == "ambiguous_section", got)
+    check("favourite: ... every candidate is listed",
+          sorted(paths(got)) == sorted([WORKOUT, "Notes/Gym.md", "Welcome.md"]),
+          paths(got))
+    check("favourite: ... and nothing is chosen", not got.get("path"), got)
+    check("favourite: ... in the resolver's own two-or-more question words",
+          "3 notes" in str(got.get("reason"))
+          and "Say the folder and the note's name, so one is chosen."
+          in str(got.get("reason")), got.get("reason"))
+    check("favourite: ... and no note was written to",
+          all((v / rel).read_bytes() == data for rel, data in before.items()))
+
+
+def t_favourite_none_answers_honestly_and_creates_nothing():
+    v = make_vault()                  # Welcome, Gym, the daily note: none flagged
+    files_before = sorted(str(p.relative_to(v)) for p in v.rglob("*"))
+    got = N.resolve_note("my favourite note")
+    check("favourite: no flagged note is a plain not_found",
+          got.get("ok") is False and got.get("code") == "not_found", got)
+    check("favourite: ... it says plainly that no note is a favourite",
+          "No note in your vault is marked as a favourite"
+          in str(got.get("reason")), got.get("reason"))
+    check("favourite: ... it names what it looked for, and the words used",
+          "my favourite note" in str(got.get("reason"))
+          and "nothing was created" in str(got.get("reason")),
+          got.get("reason"))
+    check("favourite: ... it does not fall through to a fuzzy match",
+          not got.get("candidates") and not got.get("path"), got)
+    for phrase in ("favourite", "my favourite", "my favorites"):
+        got = N.resolve_note(phrase)
+        check(f"favourite: {phrase!r} with nothing flagged is refused",
+              got.get("ok") is False and got.get("code") == "not_found", got)
+    # A create-shaped lookup must not turn the description into a new note.
+    target = N.create_target("my favourite note", create_target_if_missing=True)
+    check("favourite: a create lookup is refused, not turned into a new note",
+          target.get("ok") is False and target.get("code") == "not_found"
+          and target.get("create") is not True, target)
+    check("favourite: ... and nothing at all was created",
+          sorted(str(p.relative_to(v)) for p in v.rglob("*")) == files_before)
+
+
+def t_favourite_never_overrides_a_named_note():
+    v = make_vault()
+    write(v, WORKOUT, FAVOURITE_NOTE_TEXT)          # the only favourite
+    got = N.resolve_note("Gym")
+    check("favourite: an explicit file name still resolves by its name",
+          got.get("ok") and got.get("tier") == "basename"
+          and got.get("path") == "Notes/Gym.md", got)
+    got = N.resolve_note("Welcome.md")
+    check("favourite: an explicit path still resolves by its path",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == "Welcome.md", got)
+    got = N.resolve_note("my favourite note")
+    check("favourite: the description still picks the flagged note",
+          got.get("ok") and got.get("tier") == "favourite"
+          and got.get("path") == WORKOUT, got)
+    # A note that explicitly CLAIMS the word as an alias is a name, and a name
+    # tier is asked before the flag tier, always.
+    write(v, "Notes/Other.md", "---\naliases:\n  - favourite\n---\n\n# Other\n")
+    got = N.resolve_note("my favourite")
+    check("favourite: a note that claims the word as an ALIAS wins over the flag",
+          got.get("ok") and got.get("tier") == "alias"
+          and got.get("path") == "Notes/Other.md", got)
+    # A note literally CALLED Favourite is a name too, and names win.
+    write(v, "Favourite.md", "# Favourite\n")
+    got = N.resolve_note("Favourite")
+    check("favourite: a note NAMED Favourite resolves at the basename tier",
+          got.get("ok") and got.get("tier") == "basename"
+          and got.get("path") == "Favourite.md", got)
+    got = N.resolve_note("Favourite.md")
+    check("favourite: ... and by its exact path when the path is said",
+          got.get("ok") and got.get("tier") == "path"
+          and got.get("path") == "Favourite.md", got)
+    # A NAME THAT LOOKS LIKE A PATH is a file name, never the flag: a create of
+    # `Favourite.md` still proposes that new note even though a favourite exists.
+    any_favourite = make_vault(name="v-any-fav-" + secrets.token_hex(4))
+    write(any_favourite, WORKOUT, FAVOURITE_NOTE_TEXT)
+    got = N.resolve_note("Favourite.md", vault=any_favourite)
+    check("favourite: a path-like name never reaches the flag tier",
+          got.get("ok") is False and got.get("code") == "not_found", got)
+    target = N.create_target("Favourite.md", create_target_if_missing=True,
+                             vault=any_favourite)
+    check("favourite: ... so creating a note called Favourite.md still works",
+          target.get("ok") and target.get("create") is True
+          and target.get("path") == "Favourite.md", target)
+
+
+def t_favourite_tier_does_not_fire_on_a_plain_note_question():
+    v = make_vault()
+    write(v, WORKOUT, FAVOURITE_NOTE_TEXT)
+    got = N.resolve_note("Welcome")
+    check("favourite: a plain note question still resolves by its name",
+          got.get("ok") and got.get("tier") == "basename"
+          and got.get("path") == "Welcome.md", got)
+    for phrase in ("garden bucket", "favourite colour", "the workout"):
+        got = N.resolve_note(phrase)
+        check(f"favourite: {phrase!r} is never answered with the favourite",
+              got.get("ok") is False and not got.get("path")
+              and got.get("tier") != "favourite", got)
+    got = N.resolve_note("favourite colour")
+    check("favourite: ... a phrase that merely mentions a favourite refuses",
+          got.get("code") == "not_found"
+          and 'No note in your vault is called "favourite colour".'
+          in str(got.get("reason")), got.get("reason"))
+    check("favourite: ... and the tier is stated last in the resolver's order",
+          N.RESOLVE_TIERS == ("path", "basename", "alias", "favourite"),
+          N.RESOLVE_TIERS)
 
 
 # --------------------------------------------------------------------------
@@ -403,6 +619,11 @@ TESTS = [
     t_refusal_lists_the_candidates,
     t_two_matches_ask_and_name_both,
     t_no_daily_note_fallback,
+    t_favourite_one_note_resolves_and_says_its_name,
+    t_favourite_three_notes_list_and_ask,
+    t_favourite_none_answers_honestly_and_creates_nothing,
+    t_favourite_never_overrides_a_named_note,
+    t_favourite_tier_does_not_fire_on_a_plain_note_question,
     t_content_preexists_and_the_two_options,
     t_case_variant_exists,
     t_absent_daily_notes_json_is_exactly_the_old_behaviour,

@@ -1002,7 +1002,13 @@ def t_the_tool_is_offered_only_with_a_folder():
     # with AG.estimate_tokens, which counts the JSON it would be sent as. The
     # budget is raised, never dropped: the guard stays and still fails a schema
     # that creeps.
-    check("its words fit the tool budget", AG.estimate_tokens(tool.schema()) <= 330,
+    # RAISED 330 -> 445 on 2026-11-18, by the same rule (a budget raised, never
+    # dropped), for the picture conversion: `convert` joined the tool as its one
+    # WRITE action - the action name, the `paths` array, the `to` enum and three
+    # short notes. Measured with AG.estimate_tokens on this tree: 430, so the
+    # 330 had no room at all. test_tool_text.py's own my_files pin moved with it
+    # (340 -> 445), which is where the measurement's note lives.
+    check("its words fit the tool budget", AG.estimate_tokens(tool.schema()) <= 445,
           AG.estimate_tokens(tool.schema()))
     check("it is a reading tool (outside text)", "my_files" not in AG._NOT_READING)
     fresh()
