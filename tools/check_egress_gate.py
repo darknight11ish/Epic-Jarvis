@@ -404,9 +404,6 @@ ALLOWED = {
         "a suite; the hosts are fixture and expected values in its fake-transport"
         " rows, and the real send for every one of them is jarvis_search.py, which"
         " asks the gate before the key is resolved",
-    "backend/test_egress_gate_checker.py":
-        "this checker's own suite: the hosts are fixture source it writes into a"
-        " temporary tree, and it opens no socket",
     "backend/test_youtube.py":
         "a suite; the host is an expected value and its own banned-call list refuses"
         " sockets",
