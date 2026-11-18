@@ -165,7 +165,7 @@ def t_provider_set_is_read_from_the_file_and_says_so():
               and "cloud-choice.json" in r and "saved " in r, r)
     r = words("which cloud provider am i using?") or ""
     check("... and it says a choice is not a connection",
-          "nothing is sent by itself" in r, r)
+          "nothing is sent by itself" in r.lower(), r)
     check("... no key or fragment appears",
           "sk-" not in r and "api key" not in r.lower(), r)
 
@@ -187,7 +187,7 @@ def t_am_i_on_cloud_answers_from_the_reality():
     r = words("am i on cloud?") or ""
     check("'am I on cloud?' -> this answer is local, the chosen service sends nothing "
           "by itself while the switch is off",
-          "written on this PC" in r and "nothing is sent by itself" in r
+          "written on this PC" in r and "nothing is sent by itself" in r.lower()
           and "every cloud turn waits for your yes" in r
           and "cloud-choice.json" in r, r)
     write_json(SWITCH, {"on": True})
@@ -195,7 +195,7 @@ def t_am_i_on_cloud_answers_from_the_reality():
     check("... with the standing switch on, it says a hard question may go without "
           "asking first, and never claims nothing is sent",
           "standing switch is ON" in r and "without asking you first" in r
-          and "nothing is sent by itself" not in r, r)
+          and "nothing is sent by itself" not in r.lower(), r)
 
 
 def t_escalation_state_off_is_plain():

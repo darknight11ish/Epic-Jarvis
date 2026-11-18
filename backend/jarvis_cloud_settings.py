@@ -225,7 +225,11 @@ def provider_for_words(words: str) -> str:
 
 
 def _who(pid: str) -> str:
-    """'DeepSeek (API) - model deepseek-flash at api.deepseek.com', or the id."""
+    """'DeepSeek (API) - model deepseek-flash at api.deepseek.com', or the id.
+
+    The service's own name is used when it already carries the company name
+    ("DeepSeek (API)", "ChatGPT (OpenAI API)"); otherwise the company leads.
+    """
     API = _api()
     if API is None:
         return pid
@@ -236,7 +240,9 @@ def _who(pid: str) -> str:
             model = str(API.model_for(pid)[0] or p.model)
         except Exception:                                   # noqa: BLE001
             pass
-        return f"{p.company} ({p.name}) - model {model} at {p.host}"
+        label = (p.name if p.company.lower() in str(p.name or "").lower()
+                 else f"{p.company} - {p.name}")
+        return f"{label} - model {model} at {p.host}"
     except Exception:                                       # noqa: BLE001
         return pid
 
@@ -396,19 +402,21 @@ def _default_cap_service() -> str:
     return _cap_service(money_state(), provider_state().get("provider") or "")
 
 
-def _send_rule(esc: dict) -> str:
-    """One honest clause for whether Jarvis may send by itself, from the file
+def _sending_sentence(esc: dict) -> str:
+    """One honest sentence for whether Jarvis may send by itself, from the file
     read. It never says "nothing is sent by itself" while the switch is ON."""
     if esc.get("on"):
-        return ("a hard question can go to the cloud without asking you first (the "
-                "standing switch is ON), after every privacy check and the monthly cap")
+        return ("Sending is still decided for each turn: the standing switch is ON, so "
+                "a hard question can go without asking you first, after every privacy "
+                "check and the monthly cap.")
     if esc.get("error"):
-        return ("nothing is sent by itself: the switch file cannot be read, so it counts "
-                "as off and every cloud turn waits for your yes")
+        return ("Nothing is sent by itself: the switch file cannot be read, so it counts "
+                "as off and every cloud turn waits for your yes.")
     if not esc.get("exists"):
-        return ("nothing is sent by itself: no switch has been saved, so every cloud "
-                "turn waits for your yes")
-    return "nothing is sent by itself: the switch is off, so every cloud turn waits for your yes"
+        return ("Nothing is sent by itself: no switch has been saved, so every cloud "
+                "turn waits for your yes.")
+    return ("Nothing is sent by itself: the switch is off, so every cloud turn waits "
+            "for your yes.")
 
 
 # ---------------------------------------------------------------------------
@@ -438,8 +446,8 @@ def _provider_words() -> str:
                 f"there is no cloud path at all. Pick one in the Presets menu, or say "
                 f"\"switch to DeepSeek as my cloud provider\".")
     return (f"Your cloud service is {_who(pid)}. I read that from cloud-choice.json "
-            f"({st['saved'] or 'no saved time readable'}). That is only a choice: "
-            f"{_send_rule(escalation_state())}.")
+            f"({st['saved'] or 'no saved time readable'}). That is only a choice. "
+            f"{_sending_sentence(escalation_state())}")
 
 
 def _on_cloud_words() -> str:
@@ -452,8 +460,8 @@ def _on_cloud_words() -> str:
                 ", so every answer is written by the model here.")
     return (f"This answer is written on this PC, not by a cloud service. "
             f"{_who(st['provider'])} is chosen for hard questions (cloud-choice.json, "
-            f"{st['saved'] or 'no saved time readable'}), but that choice sends nothing "
-            f"by itself: {_send_rule(esc)}.")
+            f"{st['saved'] or 'no saved time readable'}). "
+            f"{_sending_sentence(esc)}")
 
 
 def _escalation_words() -> str:
