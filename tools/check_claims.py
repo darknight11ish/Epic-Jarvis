@@ -92,10 +92,12 @@ THE SIX KINDS, each with a definite answer:
   * `grep:<path>:<pattern>` - this text is present. `<path>` may be a
     file or a directory (then every text file under it is read);
   * `absent:<path>:<pattern>` - this text is NOT present;
-  * `test:<suite>` - running this suite exits 0 AND it printed no skip that is
-    about the code rather than this machine (a bare `backend/...` name, a
-    repo-relative `*.py`, or a bare file name resolved under `backend/`; the
-    skip rule is the next paragraph);
+  * `test:<suite>` - running this suite exits 0, it PASSED at least one check
+    (or its whole body skipped for a limit of this machine named in
+    `ENVIRONMENT_SKIPS`; the zero-check rule is the paragraph after the next
+    one), AND it printed no skip that is about the code rather than this
+    machine (a bare `backend/...` name, a repo-relative `*.py`, or a bare file
+    name resolved under `backend/`; the skip rule is the next paragraph);
   * `number:<doc>:<path>:<value>` - the figure `<value>` is written in `<doc>`
     AND the same number appears in `<path>`, comparing digits only so
     `7,680` and `7680` and `60_000` are the same figure.
@@ -134,6 +136,29 @@ run names the suite, quotes the skip line and counts the rows that rest on it -
 whether or not `-v` was typed. That is the same rule as `docs/FIELD-TEST`'s
 "BLOCKED and NOT-TESTABLE are never counted as passes", applied to a suite: the
 row may stay proven, but the skip never reads as a pass.
+
+A SUITE THAT PASSED NOTHING IS NOT PROOF (2026-11-18, external review). The
+skip rule above reads the skips a suite PRINTS, so it cannot see the one shape
+that prints nothing at all: a suite that exits 0 having executed zero checks -
+a loop over an empty list, a guard that can never be true, a `main()` that
+returns before the first check. That suite is indistinguishable from one that
+verified the claim, which is the exact hole the whole register exists to keep
+shut. `backend/run_suites.py` has failed this shape since 2026-10-27
+(`suite_result`: "ANY suite that exits 0 having PASSED NOTHING is a FAILURE",
+`passed == 0`, no allowlist) - but that rule does not run in the `audit` job,
+which is where this register is checked, so the hole stayed open here. This
+check now holds the runner's rule too: it takes the suite's pass/fail/skip
+counts from THE RUNNER'S OWN PARSER (`backend/run_suites.py:counts`, imported,
+never re-written - two parsers would drift, and the drift would decide a
+claim) and withholds proof when `passed == 0`.
+
+ONE EXEMPTION, and it is the ruling's own: a suite whose whole body is skipped
+for a documented limit of this machine. That is the `ENVIRONMENT_SKIPS` case,
+not a hole - but it needs BOTH halves to be one. The suite's own path must be
+keyed there, AND the suite must have printed a skip this check accepts: an
+entry records why a skip happened, it cannot document a skip that never
+happened, so a silent suite cannot buy its silence back with an entry. A row
+proven this way is still named on every run, the way every accepted skip is.
 
 WHAT COUNTS AS "THERE". Every path a row names is judged against the TRACKED
 tree - `git ls-files` - and not against the folder this happens to run in. A
@@ -179,8 +204,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-REGISTER = REPO / "docs" / "CLAIMS.tsv"
+#: The checkout THIS FILE lives in, fixed for the whole run. `REPO` below is not
+#: always this: `--repo` repoints it at a copy of the repository to judge paths
+#: against, and a path fixed by the checker's own location -
+#: `backend/run_suites.py`, whose count parser this check imports - must keep
+#: pointing at the real checkout even then. A throwaway `--repo` has no
+#: `backend/run_suites.py`, and importing one from it would be a different parser
+#: than the runner's.
+CHECKOUT = Path(__file__).resolve().parent.parent
+
+#: What every path a row names is judged against: the checkout above, unless
+#: `--repo` points the run at a copy of it.
+REPO = CHECKOUT
+REGISTER = CHECKOUT / "docs" / "CLAIMS.tsv"
 
 #: The decision record, repo-relative, as a row spells it - and the folder the
 #: fragments not yet rolled into it live in. A `grep:`/`absent:` naming the
@@ -296,6 +332,12 @@ SKIP_MARKER = re.compile(r"^skip(ped)?(?=[ \t:]|$)", re.IGNORECASE)
 #: exists for ("this build of the tool has no ...", "the guard is not in this
 #: tree") - withholds proof. A new environmental skip needs its reason added
 #: here; until it is, its row is red, which is the honest direction.
+#:
+#: SINCE 2026-11-18 an entry here is also the ONLY thing that exempts a suite
+#: that passed nothing from the zero-check rule (see A SUITE THAT PASSED NOTHING
+#: IS NOT PROOF in the module docstring) - and even then only when the suite
+#: really printed the skip the entry covers. An entry cannot make an empty,
+#: silent suite a pass; it records why a skip happened, not that one happened.
 ENVIRONMENT_SKIPS = {
     "backend/test_data_backup.py": (
         "is not installed", "needs icacls", "is not nt",
@@ -335,6 +377,15 @@ ENVIRONMENT_SKIPS = {
 #: every run - a skip that only shows with `-v` is a skip a reader of the plain
 #: run never sees. Reset at the start of `main` (2026-11-13).
 ACCEPTED_ENVIRONMENT_SKIPS: list[tuple[str, str]] = []
+
+#: The counts every `test:` row's suite reported THIS RUN, appended by
+#: `check_test` and summed by `main` into one line. Two reasons it is printed:
+#: the zero-check rule reads these counts, so "N passed nothing" must be visible
+#: in the run's own words rather than only in a failure; and a green run that
+#: says how many checks it watched cannot be read as one that watched nothing
+#: (the same "nothing is wrong vs nothing was looked at" rule `--list` follows).
+#: Reset at the start of `main`, like the skip list above (2026-11-18).
+TEST_ROW_COUNTS: list[dict[str, int]] = []
 
 #: The summary line a suite may print for itself - `N passed, M skipped,
 #: K failed` in any order (test_media_index prints the skipped count last).
@@ -722,6 +773,87 @@ def accepted_environment_skips(suite: str, output: str) -> list[str]:
     return [" ".join(block.split()) for block in skip_blocks(output)]
 
 
+#: `backend/run_suites.py`'s own count parser, loaded on first use and cached.
+#: THE SAME PARSER, IMPORTED - never a second one written here (see
+#: `suite_counts`). None until the first `test:` row needs it, so a register
+#: with no `test:` row never pays for importing the runner (and the tools that
+#: load this file by path just to call `read_register`, like
+#: `tools/gen_about_claims.py`, keep doing exactly what they did).
+_RUNNER_COUNTS = None
+
+
+def suite_counts(output: str) -> dict[str, int]:
+    """{'passed': n, 'skipped': n, 'failed': n} for one suite's output.
+
+    THE RUNNER'S OWN PARSER, IMPORTED RATHER THAN RE-WRITTEN (2026-11-18). The
+    zero-check rule this file now holds is `backend/run_suites.py`'s own
+    (`suite_result`: `passed == 0` is a failure), and the count parser is
+    `run_suites.counts` - it reads the suite's own "N passed, M skipped, K
+    failed" summary, falls back to unittest's summary, and only then counts the
+    suite's own `ok`/`skip`/`FAIL` lines. A copy of that here would be a second
+    definition of "how many checks passed", and the day the two disagreed a
+    claim would be red (or green) because of a regex rather than because of the
+    code. So the module is imported and its function kept, with the runner's
+    rule beside it.
+
+    The import happens on FIRST USE, not at the top of this file: importing
+    `run_suites` imports `backend/_where.py`, which stages a direct suite run,
+    so it is the wrong thing for a comparison tool that only reads the register,
+    and for a `--repo` pointed at a scratch copy it must still be the real
+    checkout's runner (`CHECKOUT`, not the mutable `REPO`).
+    """
+    global _RUNNER_COUNTS
+    if _RUNNER_COUNTS is None:
+        backend = str(CHECKOUT / "backend")
+        if backend not in sys.path:
+            sys.path.insert(0, backend)
+        import run_suites
+        _RUNNER_COUNTS = run_suites.counts
+    return _RUNNER_COUNTS(output)
+
+
+def passed_nothing(suite: str, output: str,
+                   counts: dict[str, int] | None = None) -> str | None:
+    """Why a suite that exited 0 having PASSED NOTHING does not prove its row.
+
+    The skip rule reads what a suite PRINTS; this reads what its own counts say
+    it DID, and it exists because those are not the same set. A suite that
+    exits 0 having executed zero checks - the loop over an empty list, the guard
+    that can never be true, the `main()` that returns before the first check -
+    prints no skip either, so `skip_that_withholds_proof` has nothing to read
+    and the row used to be counted as proven. That is the one place a skip (or a
+    suite that has quietly lost every check it owns) could still hide, and this
+    is `backend/run_suites.py`'s own answer to it: `passed == 0` is a failure,
+    whatever was skipped and whether or not the reason is legitimate.
+
+    ONE EXEMPTION, the external ruling's own: a suite whose whole body is
+    skipped for a documented limit of THIS MACHINE. That is the
+    `ENVIRONMENT_SKIPS` case, and both halves must be there - the suite's own
+    path keyed in `ENVIRONMENT_SKIPS`, AND a skip the suite really printed that
+    `skip_that_withholds_proof` accepts. An entry records why a skip happened;
+    it cannot document a skip that never happened, so it must not turn silence
+    back into proof.
+
+    `counts` is the parser's answer when the caller already has it; None asks
+    for it here. Returns the failure sentence (naming the suite, its counts, and
+    the two legitimate fixes) or None.
+    """
+    counts = suite_counts(output) if counts is None else counts
+    if counts["passed"] > 0:
+        return None
+    if ENVIRONMENT_SKIPS.get(suite, ()) and accepted_environment_skips(suite, output):
+        return None
+    return (
+        f"{suite} exited 0 but PASSED NOTHING "
+        f"({counts['passed']} passed, {counts['skipped']} skipped, "
+        f"{counts['failed']} failed) - no check of it ran, so it proves no "
+        f"claim, and a skip is not a pass. Either make the suite run a check, "
+        f"or, if this machine genuinely cannot run it, record the environment "
+        f"skip - its reason and the date it was measured - under "
+        f"ENVIRONMENT_SKIPS for {suite}. `backend/run_suites.py` fails the same "
+        f"shape (`passed == 0`) everywhere else it runs a suite.")
+
+
 def exception_lines(text: str, limit: int = 2) -> list[str]:
     """The line(s) a Python traceback ENDS on, from a suite's stderr.
 
@@ -790,8 +922,9 @@ def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
 def check_test(suite: str, env: dict[str, str] | None = None):
     """Run one suite. Exiting 0 is necessary, never sufficient: a suite that
     printed a skip about the code (not about this machine) did not run that
-    check, so it did not prove the row. See A SKIP IS NOT PROOF in the module
-    docstring.
+    check, so it did not prove the row; and a suite that PASSED NOTHING at all
+    ran no check, so it proves nothing either. See A SKIP IS NOT PROOF and A
+    SUITE THAT PASSED NOTHING IS NOT PROOF in the module docstring.
 
     `env` is the environment to start the suite with - `main` builds it ONCE
     through `_suite_env`, so the note about the ignored ambient value is printed
@@ -816,12 +949,24 @@ def check_test(suite: str, env: dict[str, str] | None = None):
         return False, f"{suite} did not finish within {TEST_TIMEOUT}s"
     except OSError as err:
         return False, f"{suite} could not be run ({err})"
+    # The suite's own counts, from the runner's own parser, kept for `main`'s
+    # summary line: a run that watched no check must not read like a run that
+    # watched all of them (2026-11-18).
+    suite_relative = relative(chosen)
+    combined = (done.stdout or "") + "\n" + (done.stderr or "")
+    counts = suite_counts(combined)
+    TEST_ROW_COUNTS.append(counts)
     if done.returncode == 0:
-        suite_relative = relative(chosen)
-        combined = (done.stdout or "") + "\n" + (done.stderr or "")
         why = skip_that_withholds_proof(suite_relative, combined)
         if why is not None:
             return False, f"{suite} exited 0 but SKIPPED: {why}"
+        # `passed == 0` is the runner's own failure everywhere else (2026-10-27),
+        # and this is the caller it never reached: a suite that ran nothing is
+        # not proven by its exit code. One exemption - the machine-limit skip its
+        # own path is keyed for AND that it really printed (2026-11-18).
+        zero = passed_nothing(suite_relative, combined, counts)
+        if zero is not None:
+            return False, zero
         # An allowed skip is still a skip: collect it so `main` can name it and
         # count the rows that rest on it, whether or not `-v` was typed. The row
         # stays proven because the reason is a limit of this machine - but the
@@ -1021,9 +1166,10 @@ def main() -> int:
     # 2026-10-21, which this check did not (2026-10-25). Built here, once, so
     # the note is printed once rather than once per row.
     suite_env = _suite_env(args.use_env_backend)
-    # A second `main()` in one process (a test) starts with no skips carried over
-    # from the first.
+    # A second `main()` in one process (a test) starts with no skips or suite
+    # counts carried over from the first.
     ACCEPTED_ENVIRONMENT_SKIPS.clear()
+    TEST_ROW_COUNTS.clear()
 
     rows, problems = read_register(register)
     if not rows and not problems:
@@ -1117,6 +1263,21 @@ def main() -> int:
         for suite, (line, ids) in by_suite.items():
             print(f"  {suite}  (rows {', '.join(ids)})")
             print(f"      skip:  {line}")
+
+    # HOW MUCH THE `test:` ROWS ACTUALLY WATCHED (2026-11-18). The zero-check
+    # rule is decided one suite at a time; this line is the same fact at the
+    # scale of the run, so a register whose suites mostly proved nothing cannot
+    # read as a green run that proved everything. Printed whether the run is
+    # green or red - a red run's counts say what the red was measured on - and
+    # worded as what the suites REPORTED, never as what this check itself saw
+    # run inside them.
+    if TEST_ROW_COUNTS:
+        passed = sum(n["passed"] for n in TEST_ROW_COUNTS)
+        skipped = sum(n["skipped"] for n in TEST_ROW_COUNTS)
+        failed = sum(n["failed"] for n in TEST_ROW_COUNTS)
+        print(f"{len(TEST_ROW_COUNTS)} suite run(s) behind the `test:` rows "
+              f"reported {passed + skipped + failed} check(s): {passed} passed, "
+              f"{skipped} skipped, {failed} failed.")
 
     if regressed or closed or problems:
         return 1
