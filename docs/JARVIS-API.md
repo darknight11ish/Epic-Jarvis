@@ -40650,5 +40650,5 @@ writing nothing when denied, OFF instant and cardless; an unknown provider
 refused with the PRESETS list and no card; `set_provider` writing
 `cloud-choice.json` only after an approved card; the cap raise raising exactly
 ONE `raise_api_limit` card and leaving the money file alone when denied; the
-lowering instant and cardless; and no key store being touched, read out of the
-module's own code.
+lowering instant and cardless; and no key store being touched - proved with a runtime spy on
+`jarvis_chatbot_api.key_saved`, not by reading the module's source.
