@@ -2142,11 +2142,12 @@ jobs:
       # and path limit. That is the difference between a missing package and an
       # absent capability, and only the package belongs here.
       #
-      # COST, measured on the runner (2026-11-18): this install took 5.6 s in
-      # backend-shard (11:27:47.9 -> 11:27:53.6 on job 134764536276), which is
-      # not a timeout risk. The claims step's own work grows only by the checks
-      # the packages unlock, and the step without them took 7m13s in this job
-      # (job 134754547505), so the 15-minute ceiling keeps its headroom.
+      # COST, measured on the runner (2026-11-18): this install took 4.6 s in
+      # this job once it was added (12:51:56.4 -> 12:52:01.0 on job
+      # 134801878864; 5.6 s in backend-shard, job 134764536276), and the claims
+      # step that ran after it took 6m04s and exited 0 - against 7m13s without
+      # these packages on job 134754547505, so the extra checks the packages
+      # unlock are not a timeout risk either.
       - name: The Python test dependencies the required backend job installs
         run: python3 -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
       - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
