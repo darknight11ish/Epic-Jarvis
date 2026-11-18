@@ -5387,6 +5387,29 @@ what is missing is only the Settings screen agreeing about who turned it off.
   phone has raised, approved or reported this card, so the field test - ask from
   the phone, approve with a fingerprint, watch the PC update and come back - is
   owed, and JARVIS-API §226.5 says so rather than implying it happened.
+
+- **A recording can be attached in the phone's chat, and the desktop's attach
+  row still offers documents only - one-sided on purpose** (2026-11-18; the
+  owner's report that an `.m4a` voice memo could not be attached from the app's
+  chat "Attach a file" row; JARVIS-API §163). The cause was the phone's picker
+  being narrower than what the PC can read: the chat row offered the eight
+  document types, while `jarvis_media_read` already read eight audio formats
+  (`.wav .mp3 .m4a .aac .flac .ogg .opus .wma`) for a file in a listed folder.
+  The phone now offers those eight, the extension decides before any provider
+  MIME type (so an `.m4a` a picker types `application/octet-stream` still
+  attaches), and the bytes go to that SAME reader on the PC - transcribed
+  locally, never sent anywhere, never transcribed on the phone, and still
+  decided under the existing `read_files_readonly` gate before a byte is
+  touched. **The desktop HUD, every chat window and the Alt+Space bar were
+  deliberately NOT widened in this change:** their attach lists live in three
+  byte-identical copies of `jarvis_hud.html`, in `main.js` and in Rust's
+  `commands.rs` (`CHAT_ATTACH_KINDS`, `chat_attachment_problem`) with their own
+  tests; the owner's report was the phone's row; and nothing on the desktop
+  OFFERS a type the PC cannot read, so the desktop keeps its document-only list
+  until its own lane moves all three copies together. The backend reader, the
+  wire format and the permission gate are shared by both apps, so nothing here
+  is a second path, and `tools/check_parity.py` classifies nothing new (no
+  route).
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

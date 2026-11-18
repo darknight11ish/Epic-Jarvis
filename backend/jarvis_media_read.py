@@ -7,6 +7,19 @@ for a video a few sampled frames' on-screen text. It stores NOTHING: no index,
 no memory fact, no file. S2 (a searchable index) is a separate owner switch and
 is not built here.
 
+IT ALSO READS BYTES, NOT ONLY A PATH (2026-11-18). The chat's "Attach a file"
+row can now carry a recording, and those bytes are never written into a folder:
+the same reader is handed them directly (`read_media_bytes`). A WAV is decoded in
+memory; a COMPRESSED container (M4A, MP3, AAC, FLAC, OGG, OPUS, WMA, and the
+video formats) is copied to ONE private temp file for the length of the decode
+only, because ffmpeg cannot decode an MP4-family file from a pipe - its index
+(`moov`) may sit at the END of the file. Measured 2026-11-18: a 100 KB
+non-faststart `.m4a` fed to ffmpeg on stdin produced a 78-byte WAV header and
+"partial file", not a decode, while the same bytes through a real file decoded
+cleanly. That copy is named randomly (never the owner's name), deleted in a
+`finally` whether the decode worked or not, and never indexed, kept or logged.
+It is the ONLY place this module writes anything.
+
 WHAT IT REUSES, NEVER A NEW MODEL
 
   * Speech-to-text: the existing sherpa-onnx Parakeet TDT model through
@@ -25,7 +38,12 @@ HONEST LIMITS
   * One file, at most 10 minutes and 100 MB; at most ~20,000 characters of text.
   * Only files inside the owner's listed folders; links are resolved by the
     existing `jarvis_documents.allowed_path()` rule (hidden folders/protected
-    places refused) before this module is called.
+    places refused) before this module is called. The bytes door
+    (`read_media_bytes`) has no folder and no path: it is the one file the owner
+    attached to a chat turn, and it exists only for that turn.
+  * The bytes door's compressed formats need ONE private temp copy to be
+    decoded (see above); a WAV needs none. If the temp copy cannot be written,
+    nothing is read and the refusal says so.
   * A video's PICTURES are not understood: frames are only OCR'd for visible
     text, one every 10 seconds. Vision is not part of S1.
   * The only new prerequisite is ffmpeg, for anything that is not a WAV. It is
@@ -41,9 +59,12 @@ Standard library only. No network. No model is loaded at import time.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import wave
@@ -72,6 +93,13 @@ BUSY_WORDS = ("Not now: Jarvis is listening or speaking, so this recording was "
               "not opened. Ask again when the conversation is quiet.")
 NO_FFMPEG = ("This PC has no ffmpeg, so this file's sound cannot be read. A WAV "
              "file needs no ffmpeg; an MP3, M4A or video does.")
+NOT_MEDIA = ("that is not an audio or video file this reader knows (wav, mp3, "
+             "m4a, aac, flac, ogg, opus, wma, mp4, mkv, mov, webm, avi, m4v)")
+
+#: Where one compressed recording's private decode copy waits: the system temp
+#: folder, or JARVIS_MEDIA_STAGE_DIR when a suite needs to look in the folder
+#: after a read. It is never the owner's own folder and never a name they chose.
+STAGE_DIR_ENV = "JARVIS_MEDIA_STAGE_DIR"
 
 
 class Refused(Exception):
@@ -92,9 +120,7 @@ def prepare(args: dict):
         raise ValueError("say which recording or video file to read - its full path")
     ext = Path(path.strip()).suffix.lower()
     if ext not in MEDIA_EXTS:
-        raise ValueError("that is not an audio or video file this reader knows "
-                         "(wav, mp3, m4a, aac, flac, ogg, opus, wma, mp4, mkv, "
-                         "mov, webm, avi, m4v)")
+        raise ValueError(NOT_MEDIA)
     try:
         import jarvis_documents as DOCS
         got = DOCS.allowed_path(path.strip())
@@ -195,6 +221,41 @@ def _run_child(argv: list) -> bytes:
     return b"".join(chunks)
 
 
+def _wav_samples(handle) -> tuple:
+    """(samples, rate, seconds) from one OPEN wave handle - both doors' WAV half."""
+    channels = handle.getnchannels()
+    width = handle.getsampwidth()
+    rate = handle.getframerate()
+    raw = handle.readframes(handle.getnframes())
+    try:
+        import numpy as np
+    except Exception as exc:                      # noqa: BLE001
+        raise Refused(f"the sound could not be read ({type(exc).__name__}).")
+    if width == 2:
+        pcm = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+    elif width == 4:
+        pcm = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
+    elif width == 1:
+        pcm = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+    else:
+        raise Refused("this WAV's sample size is not one Jarvis reads.")
+    if channels > 1:
+        pcm = pcm.reshape(-1, channels).mean(axis=1)
+    return pcm, int(rate or 16000), len(pcm) / float(rate or 16000)
+
+
+def _decode_wav_bytes(raw: bytes):
+    """The WAV half of the bytes door: in memory - no ffmpeg and no file."""
+    try:
+        with wave.open(io.BytesIO(raw), "rb") as handle:
+            return _wav_samples(handle)
+    except Refused:
+        raise
+    except Exception as exc:                      # noqa: BLE001
+        raise Refused(f"that WAV could not be read ({type(exc).__name__}), so "
+                      f"nothing was read.")
+
+
 def _decode_default(path: str):
     """(samples, rate, seconds) for one media file. WAV is read in-process;
     every other format is decoded by the local ffmpeg as a bounded child."""
@@ -202,32 +263,15 @@ def _decode_default(path: str):
     if ext == ".wav":
         try:
             with wave.open(path, "rb") as handle:
-                channels = handle.getnchannels()
-                width = handle.getsampwidth()
-                rate = handle.getframerate()
-                raw = handle.readframes(handle.getnframes())
+                return _wav_samples(handle)
+        except Refused:
+            raise
         except Exception as exc:                  # noqa: BLE001
             raise Refused(f"that WAV could not be read ({type(exc).__name__}), so "
                           f"nothing was read.")
-        try:
-            import numpy as np
-        except Exception as exc:                  # noqa: BLE001
-            raise Refused(f"the sound could not be read ({type(exc).__name__}).")
-        if width == 2:
-            pcm = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
-        elif width == 4:
-            pcm = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
-        elif width == 1:
-            pcm = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
-        else:
-            raise Refused("this WAV's sample size is not one Jarvis reads.")
-        if channels > 1:
-            pcm = pcm.reshape(-1, channels).mean(axis=1)
-        return pcm, int(rate or 16000), len(pcm) / float(rate or 16000)
     exe = _ffmpeg()
     if not exe:
         raise Refused(NO_FFMPEG)
-    import io
     data = _run_child([exe, "-nostdin", "-v", "error",
                        "-protocol_whitelist", "file,pipe",
                        "-i", path, "-vn", "-ac", "1", "-ar", "16000",
@@ -375,6 +419,126 @@ def read_media(path, *, decode: Optional[Callable] = None,
             pass
 
 
+def _stage_dir() -> str:
+    """The folder ONE compressed decode's copy waits in: system temp, or the
+    suite's own folder when it says so. Never a folder the owner chose."""
+    return os.environ.get(STAGE_DIR_ENV) or tempfile.gettempdir()
+
+
+@contextlib.contextmanager
+def _staged_byte_copy(raw: bytes, ext: str):
+    """ONE private copy of a recording's bytes, for ONE decode, then removed.
+
+    A compressed container cannot be decoded from a pipe reliably: an MP4/M4A
+    keeps its index in a `moov` atom that may sit at the END of the file, and
+    ffmpeg's demuxer refuses such a stream with "partial file". Measured
+    2026-11-18 on a 100 KB `.m4a`: from stdin, ffmpeg exited 0 having written
+    only a 78-byte WAV header and a demuxing error; through a real file the same
+    bytes decoded. So this is the ONE temporary write in this module: a random
+    name (mode 0600 where the platform has modes), in the temp folder, deleted in
+    the `finally` whether the decode worked or not. Nothing here is indexed,
+    kept, named after the owner's file or logged.
+    """
+    path = ""
+    try:
+        try:
+            handle, path = tempfile.mkstemp(prefix="jarvis-media-read-",
+                                            suffix=ext or ".bin", dir=_stage_dir())
+            with os.fdopen(handle, "wb") as fh:
+                fh.write(raw)
+        except Exception as exc:                  # noqa: BLE001
+            raise Refused(f"that recording could not be prepared for reading "
+                          f"({type(exc).__name__}), so nothing was read.")
+        yield path
+    finally:
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+def read_media_bytes(raw, name, *, decode: Optional[Callable] = None,
+                     transcribe: Optional[Callable] = None,
+                     frames: Optional[Callable] = None,
+                     ocr: Optional[Callable] = None,
+                     owner_busy: Optional[Callable] = None,
+                     lock=None) -> dict:
+    """Read the words in ONE recording or video whose BYTES came with the
+    request - the chat attachment's door, with no path and no folder list.
+
+    `name` is the attachment's own name and its extension decides the format
+    (`.m4a`, `.mp3`, `.wav`, ... and the video formats). There is no location on
+    this PC for these bytes, so the result's `path` is that NAME, not a path.
+
+    Decoding: a WAV is read in memory (no ffmpeg, no file). Every compressed
+    format is staged to ONE private temp copy for the length of the decode (see
+    `_staged_byte_copy`), then removed. `decode(raw, ext)` is the seam the suite
+    drives; the default is the real in-memory WAV decode, or the local ffmpeg
+    over the staged copy - and a PC with no ffmpeg refuses with the EXISTING
+    `NO_FFMPEG` sentence, exactly as the path door does.
+
+    Everything else is `read_media`'s own rules: one read at a time, the owner
+    pause, the 10-minute and 100 MB caps, the same transcript and the same
+    returned shape. Never raises.
+    """
+    where = str(name or "")
+    ext = Path(where).suffix.lower()
+    base = {"ok": False, "path": where, "stored": False}
+    if ext not in MEDIA_EXTS:
+        return dict(base, error=NOT_MEDIA[:1].upper() + NOT_MEDIA[1:] + ".")
+    try:
+        raw = bytes(raw or b"")
+    except Exception:                             # noqa: BLE001
+        raw = b""
+    if not raw:
+        return dict(base, error="No sound was found in that file, so nothing was "
+                                "read.")
+    if len(raw) > MAX_BYTES:
+        return dict(base, error="That file is bigger than 100 MB, so nothing was "
+                                "read.")
+    busy = owner_busy or _owner_busy_default
+    try:
+        if busy():
+            return dict(base, reason="busy", error=BUSY_WORDS)
+    except Exception:                             # noqa: BLE001
+        pass
+    one = lock if lock is not None else READ_LOCK
+    got_lock = one.acquire(blocking=False)
+    if not got_lock:
+        return dict(base, reason="busy", error=BUSY_WORDS)
+    try:
+        return _read_bytes_locked(raw, where, ext, decode, transcribe, frames, ocr)
+    finally:
+        try:
+            one.release()
+        except Exception:                         # noqa: BLE001
+            pass
+
+
+def _read_bytes_locked(raw: bytes, where: str, ext: str, decode, transcribe,
+                       frames, ocr) -> dict:
+    try:
+        if ext == ".wav" and decode is None:
+            # A WAV needs no decoder child and no file: the sound is read from
+            # the bytes themselves, so there is nothing to stage at all.
+            return _read_result(where, ext, _decode_wav_bytes(raw),
+                                transcribe or _transcribe_default,
+                                lambda: [], ocr or _ocr_default)
+        with _staged_byte_copy(raw, ext) as staged:
+            decoded = decode(raw, ext) if decode is not None else _decode_default(staged)
+            return _read_result(where, ext, decoded,
+                                transcribe or _transcribe_default,
+                                lambda: (frames or _frames_default)(staged),
+                                ocr or _ocr_default)
+    except Refused as exc:
+        return {"ok": False, "path": where, "error": str(exc)}
+    except Exception as exc:                      # noqa: BLE001
+        return {"ok": False, "path": where,
+                "error": f"This file could not be read ({type(exc).__name__}), so "
+                         f"nothing was read."}
+
+
 def _read_locked(path: str, ext: str, decode: Callable, transcribe: Callable,
                  frames: Callable, ocr: Callable) -> dict:
     try:
@@ -382,52 +546,70 @@ def _read_locked(path: str, ext: str, decode: Callable, transcribe: Callable,
             raise Refused("That file is not there any more, so nothing was read.")
         if os.path.getsize(path) > MAX_BYTES:
             raise Refused("That file is bigger than 100 MB, so nothing was read.")
-        samples, rate, seconds = decode(path)
-        if seconds > MAX_SECONDS:
-            raise Refused("That recording is longer than 10 minutes, which is "
-                          "this reader's limit, so nothing was read.")
-        if not samples:
-            raise Refused("No sound was found in that file, so nothing was read.")
-        segments, used = [], 0
-        for start, end, piece, peak in _windows(samples, rate):
-            if peak < SILENCE_RMS:
-                continue
-            text = str(transcribe(piece, rate) or "").strip()
-            if not text:
-                continue
-            left = MAX_TEXT - used
-            if left <= 0:
-                break
-            segments.append({"start": round(start, 2), "end": round(end, 2),
-                             "text": text[:left]})
-            used += len(text[:left])
-        if not segments:
-            raise Refused("No speech was recognised in that file, so there is no "
-                          "transcript to show.")
-        ocr_parts = []
-        if ext in VIDEO_EXTS:
-            try:
-                for at, image in frames(path)[:MAX_FRAMES]:
-                    text = str(ocr(image) or "").strip()
-                    if text and used < MAX_TEXT:
-                        piece = text[: MAX_TEXT - used]
-                        ocr_parts.append({"at": round(float(at), 2), "text": piece})
-                        used += len(piece)
-            except Refused:
-                ocr_parts = []
-            except Exception:
-                ocr_parts = []
-        words = ("Read the transcript of one recording or video on this PC. The "
-                 "words are the file's own sound, not a summary; on-screen text "
-                 "is read where there is any.")
-        return {"ok": True, "path": path, "seconds": round(float(seconds), 2),
-                "segments": segments,
-                "text": "\n".join(seg["text"] for seg in segments)[:MAX_TEXT],
-                "ocr": ocr_parts[:MAX_FRAMES], "words": words,
-                "english_only": True, "stored": False}
+        return _read_result(path, ext, decode(path), transcribe,
+                            lambda: frames(path), ocr)
     except Refused as exc:
         return {"ok": False, "path": path, "error": str(exc)}
     except Exception as exc:                      # noqa: BLE001
         return {"ok": False, "path": path,
                 "error": f"This file could not be read ({type(exc).__name__}), so "
                          f"nothing was read."}
+
+
+def _read_result(where: str, ext: str, decoded, transcribe: Callable,
+                 frames: Callable, ocr: Callable) -> dict:
+    """The read itself, shared by both doors: `(samples, rate, seconds)` in,
+    the transcript out.
+
+    `frames()` is called only for a video, and only when there is a file the
+    decoder child can open - the bytes door passes a callable over its one
+    staged copy, the path door over the file it was given.
+    """
+    samples, rate, seconds = decoded
+    if seconds > MAX_SECONDS:
+        raise Refused("That recording is longer than 10 minutes, which is "
+                      "this reader's limit, so nothing was read.")
+    if samples is None or len(samples) == 0:
+        # `not samples` is wrong here: the default decoder returns a numpy
+        # array, and a multi-element array's truth value raises ValueError -
+        # which made EVERY real recording answer "could not be read
+        # (ValueError)" (found 2026-11-18, fixed with this change). The seam
+        # fakes return plain lists; len() is true for both shapes.
+        raise Refused("No sound was found in that file, so nothing was read.")
+    segments, used = [], 0
+    for start, end, piece, peak in _windows(samples, rate):
+        if peak < SILENCE_RMS:
+            continue
+        text = str(transcribe(piece, rate) or "").strip()
+        if not text:
+            continue
+        left = MAX_TEXT - used
+        if left <= 0:
+            break
+        segments.append({"start": round(start, 2), "end": round(end, 2),
+                         "text": text[:left]})
+        used += len(text[:left])
+    if not segments:
+        raise Refused("No speech was recognised in that file, so there is no "
+                      "transcript to show.")
+    ocr_parts = []
+    if ext in VIDEO_EXTS:
+        try:
+            for at, image in frames()[:MAX_FRAMES]:
+                text = str(ocr(image) or "").strip()
+                if text and used < MAX_TEXT:
+                    piece = text[: MAX_TEXT - used]
+                    ocr_parts.append({"at": round(float(at), 2), "text": piece})
+                    used += len(piece)
+        except Refused:
+            ocr_parts = []
+        except Exception:
+            ocr_parts = []
+    words = ("Read the transcript of one recording or video on this PC. The "
+             "words are the file's own sound, not a summary; on-screen text "
+             "is read where there is any.")
+    return {"ok": True, "path": where, "seconds": round(float(seconds), 2),
+            "segments": segments,
+            "text": "\n".join(seg["text"] for seg in segments)[:MAX_TEXT],
+            "ocr": ocr_parts[:MAX_FRAMES], "words": words,
+            "english_only": True, "stored": False}
