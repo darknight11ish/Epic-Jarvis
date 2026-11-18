@@ -744,7 +744,25 @@ def _inside(root: str, path: str) -> bool:
 #                  with a leading my/the/a/an and a trailing "note" ignored,
 #                  so "my workout log" and "the workout log" reach the same
 #                  note. An exact alias still beats a merely similar one.
-#   4. REFUSAL     `not_found`, with any near candidates (a title or alias that
+#   4. "favourite" the note's own YAML flag, `favorite: true` (2026-11-18).
+#                  "add this to my favourite note" names no note at all: it is
+#                  a DESCRIPTION of one, and the flag is the only thing in the
+#                  vault that answers it. One note marked a favourite resolves
+#                  and the answer says which note it picked; two or more are
+#                  `ambiguous_section` with every candidate listed and nothing
+#                  chosen; none is a plain refusal that names what was looked
+#                  for. This tier only fires when the owner's words ARE a
+#                  favourite word ("favourite"/"favorite"/"favourites", see
+#                  `_FAVOURITE_WORDS`), so "garden bucket" keeps refusing.
+#
+#                  WHY IT SITS LAST. A favourite is a quality of a note, not
+#                  its name, so it must never override the owner NAMING one:
+#                  every tier above has already run, and any explicit path,
+#                  file name or `aliases:` value wins over the flag. It is
+#                  also the only tier that could turn a would-be refusal into
+#                  a choice, so it can only help after the real name tiers
+#                  have said no - which is why it is here and not earlier.
+#   5. REFUSAL     `not_found`, with any near candidates (a title or alias that
 #                  contains the owner's words) listed in `candidates`.
 #
 # THE DAILY NOTE IS NEVER A FALLBACK. There is no branch here that reaches
@@ -780,7 +798,7 @@ def _inside(root: str, path: str) -> bool:
 #                                        still `content_preexists`.
 
 #: The order a name is resolved in, stated once so a report can print it.
-RESOLVE_TIERS = ("path", "basename", "alias")
+RESOLVE_TIERS = ("path", "basename", "alias", "favourite")
 #: Only the first bytes of a note can hold its YAML frontmatter.
 RESOLVE_HEAD_BYTES = 8192
 #: The most notes one resolution will look at, newest-first order is not kept
@@ -788,6 +806,21 @@ RESOLVE_HEAD_BYTES = 8192
 RESOLVE_MAX_NOTES = 2000
 _ALIAS_KEY_LEAD = re.compile(r"^(?:my|the|a|an)\s+", re.I)
 _ALIAS_KEY_TAIL = re.compile(r"\s+notes?$", re.I)
+#: The YAML keys that can carry the favourite flag. Jarvis only ever WRITES the
+#: US `favorite` (2026-11-16); the British `favourite` is READ too, so a note the
+#: owner wrote by hand counts - the same both-spellings rule the chat's own flag
+#: reader uses (`jarvis_quick._note_flag_state`). Read as top-level keys only.
+FAVOURITE_FLAG_KEYS = ("favorite", "favourite")
+#: What the owner calls the favourite note, as `_note_key` leaves it. The
+#: normaliser has already dropped "my/the/a/an" and a trailing "note"/"notes",
+#: so "my favourite note", "the favorite notes" and "favourites" all arrive
+#: here; nothing else does, which is what keeps this tier off a plain question.
+#: A note the owner numbered - "favourite 2" - is not in here and stays a real
+#: name for the tiers above.
+_FAVOURITE_WORDS = frozenset({
+    "favourite", "favorite", "favourites", "favorites",
+    "fav", "fave", "favs", "faves",
+})
 
 
 def _note_key(text) -> str:
@@ -879,6 +912,54 @@ def note_aliases(text: str) -> list:
         return []
 
 
+def _frontmatter_is_true(text: str, keys) -> bool:
+    """True when one note's CLOSED YAML frontmatter sets a top-level `keys` true.
+
+    The same reading rules as the chat's own flag reader
+    (`jarvis_quick._note_flag_state`, which cannot be imported here): a property
+    is a line that starts AT COLUMN 0, so a nested map's own key can never be
+    mistaken for the note's; the FIRST such line wins, as YAML does; and the
+    frontmatter must CLOSE with a second `---` before the value counts, because
+    Obsidian reads an unclosed block as body text, not as properties. Only the
+    note's first bytes are read, from the caller.
+    """
+    raw = str(text or "")
+    if not raw.startswith("---"):
+        return False
+    lines = raw.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return False
+    wanted = {str(k).casefold() for k in keys}
+    seen = False                          # a FALSE first line still wins
+    found = False
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return found
+        m = re.match(r"([A-Za-z0-9_.-]+)\s*:\s*(.*)$", line)
+        if not m or m.group(1).casefold() not in wanted:
+            continue
+        if seen:
+            continue                      # the first one wins, as YAML does
+        seen = True
+        value = m.group(2).strip().strip("\"'").casefold()
+        found = value in ("true", "yes", "on", "1")
+    return False                          # opened and never closed: not a property
+
+
+def note_is_favourite(text: str) -> bool:
+    """True when the note's own YAML frontmatter marks it a favourite.
+
+    A read of the note's first bytes, never a write, and never its body words.
+    A note whose frontmatter does not close is not a favourite (its `favorite:`
+    line is body text to Obsidian); a hand-written `favourite: true` counts
+    exactly like Jarvis's own `favorite: true`.
+    """
+    try:
+        return _frontmatter_is_true(str(text or ""), FAVOURITE_FLAG_KEYS)
+    except Exception:                                       # noqa: BLE001
+        return False
+
+
 def vault_root() -> tuple:
     """`(resolved vault Path, "")` or `(None, why)` - the ONE vault lookup."""
     try:
@@ -946,15 +1027,53 @@ def _row_public(row: dict) -> dict:
     return {"path": row.get("path", ""), "title": row.get("title", "")}
 
 
-def _match(row: dict, tier: str, aliases=None) -> dict:
-    return {"ok": True, "code": "resolved", "tier": tier,
-            "path": row["path"], "title": row["title"], "full": row["full"],
-            "aliases": list(aliases or []), "candidates": [_row_public(row)]}
+def _match(row: dict, tier: str, aliases=None, said: str = "") -> dict:
+    """One resolved note. `said` is the owner-facing sentence, when a tier has
+    one to give (only the favourite tier does: it picked without a name being
+    said, so the answer has to say which note it chose)."""
+    out = {"ok": True, "code": "resolved", "tier": tier,
+           "path": row["path"], "title": row["title"], "full": row["full"],
+           "aliases": list(aliases or []), "candidates": [_row_public(row)]}
+    if said:
+        out["said"] = said
+    return out
 
 
 def _refusal(code: str, reason: str, candidates=None) -> dict:
     return {"ok": False, "code": code, "reason": reason,
             "candidates": [_row_public(r) for r in (candidates or [])]}
+
+
+def _favourite_notes(notes: list) -> list:
+    """The vault rows whose own frontmatter marks them a favourite, in path order.
+
+    Read-only: each note's first `RESOLVE_HEAD_BYTES` is opened, the same bytes
+    the `aliases:` tier reads, and its body words are never looked at. The rows
+    come from `_vault_notes`, so a hidden folder, a "Protected from Jarvis" note
+    and anything whose real place is outside the vault can never be picked here.
+    """
+    hits = []
+    for row in notes:
+        try:
+            with open(row["full"], "rb") as fh:
+                head = fh.read(RESOLVE_HEAD_BYTES)
+        except OSError:
+            continue
+        if note_is_favourite(head.decode("utf-8", "replace")):
+            hits.append(row)
+    return hits
+
+
+def _is_favourite_phrase(text: str) -> bool:
+    """True when the owner's whole name for a note is just "favourite".
+
+    `_note_key` has already dropped "my/the/a/an" and a trailing "note", so
+    "my favourite note" and "favourites" are both the one word. A phrase that
+    LOOKS LIKE A PATH is deliberately not one: "favourite.md" names a file the
+    owner wants, and naming a file is a name tier's job, never the flag's.
+    """
+    return (not _looks_like_a_path(_norm_name(text))
+            and _note_key(text) in _FAVOURITE_WORDS)
 
 
 def _near_candidates(want: str, notes: list) -> list:
@@ -982,8 +1101,10 @@ def resolve_note(name, *, vault=None) -> dict:
     """Resolve ONE name to ONE note, or refuse - the ONE resolver.
 
     Returns a dict:
-      ok, code ("resolved" or a refusal code), tier ("path"/"basename"/"alias"),
-      path (vault-relative), title, full (absolute), aliases, candidates.
+      ok, code ("resolved" or a refusal code), tier ("path"/"basename"/"alias"/
+      "favourite"), path (vault-relative), title, full (absolute), aliases,
+      candidates, and - for the favourite tier only - `said`, the sentence that
+      names the note it picked.
     A refusal carries `code` (`not_found`, `ambiguous_section`,
     `case_variant_exists`, `no_vault`) and a plain `reason`; a two-or-more
     match refusal lists every `candidates` entry, and no note is picked.
@@ -1041,7 +1162,34 @@ def resolve_note(name, *, vault=None) -> dict:
                  + "; ".join(r["path"] for r, _a in alias_hits[:6])
                  + ". Say the folder and the note's name, so one is chosen."),
                 [r for r, _a in alias_hits])
-    # 4. Refuse, listing any near candidates. Never a daily-note fallback.
+    # 4. The note's own YAML favourite flag - a DESCRIPTION of a note, not a
+    # name for it, so it is asked only AFTER every name tier has said no
+    # (2026-11-18). "add this to my favourite note" names no note; the flag is
+    # the one thing in the vault that answers it. It fires only for the owner's
+    # favourite words (never for a path, which names a file), so "garden
+    # bucket" still falls through to the refusal below and no favourite is ever
+    # picked for a plain question.
+    if _is_favourite_phrase(want):
+        favourites = _favourite_notes(notes)
+        if len(favourites) == 1:
+            row = favourites[0]
+            return _match(row, "favourite",
+                          said=(f'Using "{row["title"]}", the only note in your '
+                                "vault marked as a favourite."))
+        if len(favourites) > 1:
+            return _refusal(
+                "ambiguous_section",
+                (f'{len(favourites)} notes in your vault are marked as '
+                 f'favourites, so "{want}" could be any of them: '
+                 + "; ".join(r["path"] for r in favourites[:6])
+                 + ". Say the folder and the note's name, so one is chosen."),
+                favourites)
+        return _refusal(
+            "not_found",
+            (f'No note in your vault is marked as a favourite, so "{want}" '
+             "names no note: nothing was chosen and nothing was created."),
+            [])
+    # 5. Refuse, listing any near candidates. Never a daily-note fallback.
     near = _near_candidates(want, notes)
     said = f'No note in your vault is called "{want}".'
     if near:
@@ -1109,6 +1257,10 @@ def create_target(name, *, create_target_if_missing: bool = False,
       * the note does not resolve and `create_target_if_missing` is True -
         `ok` with the proposed vault path, `create=True`. A case variant in
         that folder is `case_variant_exists`, refused.
+      * the one exception to that: a name that is only the owner's words for a
+        favourite note ("my favourite note") is a DESCRIPTION of an existing
+        note, so it is never turned into a new one - its `not_found` comes back
+        unchanged, whatever `create_target_if_missing` says.
       * anything else is `resolve_note`'s own refusal, unchanged.
 
     `create_target_if_missing` is False by default so a lookup never creates
@@ -1155,6 +1307,11 @@ def create_target(name, *, create_target_if_missing: bool = False,
         out.update({"existing": True, "create": False, "existing_empty": True})
         return out
     if got.get("code") != "not_found":
+        return got
+    if _is_favourite_phrase(name):
+        # "my favourite note" DESCRIBES an existing note; it never names a new
+        # one (2026-11-18). With no favourite in the vault, the answer is the
+        # resolver's honest refusal - never a new note called "favourite".
         return got
     if not create_target_if_missing:
         return got
