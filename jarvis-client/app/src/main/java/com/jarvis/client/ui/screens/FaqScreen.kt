@@ -48,9 +48,10 @@ import com.jarvis.client.ui.theme.LocalRadii
  *
  * Answers specific to THIS app — the one on the phone. The desktop program has
  * its own FAQ, in its own Settings window, because the two run into different
- * problems: this one is a thin client (its only models are small sound
- * models - the wake word, the end of speech and "stop" - and none of them
- * makes words), reached over a private mesh network (Tailscale or Meshnet), gated by the phone's
+ * problems: this one is a thin client (its small sound models - the wake word,
+ * the end of speech and "stop" - only listen for sounds, and none of them makes
+ * words; its optional Local AI screen runs a model file the owner brought),
+ * reached over a private mesh network (Tailscale or Meshnet), gated by the phone's
  * fingerprint sensor rather than its keyboard. A phone owner asking "does this run anything on my phone" needs a different
  * answer than a desktop owner asking the same question about their graphics
  * card.
@@ -75,15 +76,22 @@ private val FAQS = listOf(
         "Does this app run any AI on my phone?",
         // Used to answer "No." It was never true once the wake word came in:
         // three small sound models run here (voice/OrtWakeModels.kt,
-        // SmartTurn.kt, StopWord.kt). None of them makes words.
-        "Only small sound models. They listen for the \"hey Jarvis\" wake " +
-            "word, for the end of your sentence, and for \"stop\" while Jarvis " +
-            "is talking. They only listen for sounds: none of them turns " +
-            "speech into words. Everything else runs on your PC: checking it " +
-            "is your voice, writing down what you said, understanding it, " +
-            "and deciding what to say back. That order matters - a phone " +
-            "that wrote down your words itself would have done it before " +
-            "your PC could check it was your voice.",
+        // SmartTurn.kt, StopWord.kt). None of them makes words. Since
+        // 2026-11-13 there is also the optional Local AI chat (localai/),
+        // which runs a language model on the phone but is NOT speech and is
+        // not the normal chat - so it is named at the end, not denied.
+        "For the normal chat, only small sound models. They listen " +
+            "for the \"hey Jarvis\" wake word, for the end of your sentence, " +
+            "and for \"stop\" while Atlas is talking. They only listen for " +
+            "sounds: none of them turns speech into words. Everything else " +
+            "for that chat runs on your PC: checking it is your voice, " +
+            "writing down what you said, understanding it, and deciding " +
+            "what to say back. That order matters - a phone that wrote down " +
+            "your words itself would have done it before your PC could " +
+            "check it was your voice. There is also an optional Local AI " +
+            "chat (More, then Local AI): a model file you copy to this " +
+            "phone runs here, with no PC, and it is a separate chat that is " +
+            "off until you set it up.",
     ),
     Faq(
         "How do I use \"hey Jarvis\"?",
@@ -205,15 +213,22 @@ private val FAQS = listOf(
             "Windows Hello.",
     ),
     Faq(
-        "What does a Jarvis notification show on my lock screen?",
-        "Only that Jarvis is waiting on a decision — never the actual " +
+        "What does an Atlas notification show on my lock screen?",
+        "Only that Atlas is waiting on a decision — never the actual " +
             "content of what it wants to do. The real details stay hidden " +
-            "until you unlock the phone and open the app. The notification " +
-            "can have a Deny button, when refusing without reading is safe, " +
-            "but never an Approve button, on purpose: saying yes happens " +
-            "inside the app, where the risky ones ask for your fingerprint, " +
-            "and that is not a decision to make from a locked screen. The " +
-            "home-screen widget follows the same rule.",
+            "until you unlock the phone. Once it is unlocked, the " +
+            "notification can offer Deny, and an Approve button too: a " +
+            "small read-only card, like asking Atlas to search the web, " +
+            "can be settled right there, and every other card opens Atlas " +
+            "so you can confirm there, where the risky ones ask for your " +
+            "fingerprint. Nothing approves from a locked phone: Android " +
+            "will not let an Approve through until you unlock it. With App " +
+            "lock or \"Hide memory lists and chat history\" on, the " +
+            "notification says only that a decision is waiting and offers " +
+            "Review in Atlas instead of Approve, with Deny there too when " +
+            "refusing without reading is safe. The " +
+            "home-screen widget follows the same rule: Deny answers " +
+            "directly, and approving opens the app.",
     ),
     Faq(
         "Does Jarvis's spoken voice ever get sent to a company like Google?",
@@ -280,13 +295,15 @@ private val FAQS = listOf(
     Faq(
         "How do I know when there is a newer version?",
         // net/UpdateCheck.kt.
-        "Jarvis asks GitHub, at most every six hours, whether a newer build " +
+        "Atlas asks GitHub, at most every six hours, whether a newer build " +
             "is on the client-latest release page, and if there is one, a " +
-            "quiet line near the top of Home offers to open that page. It " +
-            "never downloads or installs anything: you install it yourself, " +
-            "the same way as before. The question to GitHub carries nothing " +
-            "about you or Jarvis. To stop it, open Platform checks and turn " +
-            "off Check for new versions on the This app card; that card also " +
+            "quiet line near the top of Home says so, with a Release page " +
+            "button. Platform checks, on the This app card, can download it: " +
+            "nothing downloads until you press Download, and nothing " +
+            "installs until you tap Install update and Android shows its own " +
+            "Install screen. The question to GitHub carries nothing about " +
+            "you or Atlas. To stop it, open Platform checks and turn off " +
+            "Check for new versions on the This app card; that card also " +
             "says if the last check failed.",
     ),
     Faq(
@@ -480,20 +497,23 @@ private fun AboutCard() {
             .padding(14.dp),
     ) {
         Text(
-            "About Jarvis",
+            "About Atlas",
             style = MaterialTheme.typography.titleSmall,
             color = chrome.textHi,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "A thin client to the Jarvis brain running on your own desktop, " +
+            "A thin client to Atlas, running on your own desktop, " +
                 "reached only over a private network between only the devices " +
                 "you own (Tailscale, or NordVPN's Meshnet), never the open " +
-                "internet. Only small sound models run on this phone, and " +
-                "none of them turns speech into words; there is no " +
-                "approve-all anywhere in this app, and " +
-                "anything risky still asks first, one at a time. " +
-                "\"What asks first\" on Brain lists exactly what asks and what does not.",
+                "internet. This phone turns no speech into words: the small " +
+                "sound models it runs only listen for the wake word, the end " +
+                "of your sentence and \"stop\". The optional Local AI chat " +
+                "(More, then Local AI) runs a model file on this phone " +
+                "instead, separately. There is no approve-all anywhere in " +
+                "this app, and anything risky still asks first, one at a " +
+                "time. \"What asks first\" on Brain lists exactly what asks " +
+                "and what does not.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
         )
