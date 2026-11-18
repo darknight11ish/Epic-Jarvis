@@ -60,6 +60,15 @@ BACKEND = ROOT / "backend"
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+#: THIS RUN MUST NOT WRITE BYTECODE INTO THE PUBLISHED BASE. The append below is what makes
+#: `jarvis_models.py` importable from `jarvis-backend/`, and importing it with bytecode on
+#: drops a `jarvis-backend/__pycache__/` folder beside it - which `backend/
+#: test_base_matches_repo.py` refuses ("no private, generated or superseded file is in the
+#: base"). Measured 2026-11-18: `python tools/gen_chatbot_cases.py --check` (exactly how
+#: `backend/test_chatbot_routes.py` runs it) re-created that folder, and the base suite then
+#: failed until it was deleted. A run that dirties its own tree is a trap for the next step
+#: that looks at it, which is ci.yml's own words about the same failure.
+sys.dont_write_bytecode = True
 #: `jarvis_models.py` is one of the owner's own files: his backend folder has it
 #: and this repository's `backend/` never does (`.gitignore` refuses it), while
 #: the published base (`jarvis-backend/`) carries it. `jarvis_chatbot` now asks it

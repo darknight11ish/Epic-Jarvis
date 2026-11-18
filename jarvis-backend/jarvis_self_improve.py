@@ -1440,8 +1440,9 @@ def _answer_contract(query: str, *, ask_ollama=None) -> tuple:
             "message": ("jarvis_ollama_contract.py is not in this backend, so the "
                         "contract cannot be read; nothing was changed"),
         }
-    # `_loopback_url()` with no argument checks OLLAMA_HOST and falls back to
-    # loopback, so this route cannot be pointed at another machine either.
+    # `_loopback_url()` with no argument asks the one resolver for OLLAMA_URL
+    # and falls back to loopback, so this route cannot be pointed at another
+    # machine either.
     report = contract.probe(model, url=_loopback_url(), ask=ask_ollama,
                             log=_quiet, when="self-improve route")
     return 200, {
