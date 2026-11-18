@@ -13897,8 +13897,10 @@ def with_picture_text(messages: list, *, keep_picture: bool,
 # The owner's decision, 2026-10-29: "file attachment in chat", both apps at once,
 # and the design's recommended defaults - a 2,500,000-byte raw cap, 12,000
 # characters of text to the model, no approval card (reusing `read_files_readonly`
-# for a card only when that row says ask), nothing written to disk, no new route,
-# images still on the picture path, no audio or video, no new Settings switch.
+# for a card only when that row says ask), one private decode copy for a RECORDING
+# that is removed before the read returns, no new route, images still on the
+# picture path, a recording read by the one audio reader (jarvis_media_read,
+# 2026-11-18) and never by the document converter, no new Settings switch.
 #
 # THE SHAPE, and it is the apps' wiring contract (docs/JARVIS-API.md, "A file in
 # a chat"): the newest user message carries a sibling field, never a content part -

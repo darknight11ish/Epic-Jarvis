@@ -129,12 +129,15 @@ class AttachFileTest {
     // -------------------------------------------------------------- kinds ---
 
     @Test
-    fun `the seven kinds, by extension, in both cases`() {
+    fun `the eight document kinds, by extension, in both cases`() {
         for (ext in listOf("pdf", "docx", "xlsx", "pptx", "md", "markdown", "txt", "csv")) {
             assertTrue(ext, AttachFile.kindOf("taxes.$ext") != null)
             assertTrue("$ext upper", AttachFile.kindOf("TAXES.${ext.uppercase()}") != null)
         }
+        // A video is NOT a chat attachment kind: a recording is, and only the
+        // eight audio formats jarvis_media_read reads (2026-11-18).
         assertNull(AttachFile.kindOf("holiday.mp4"))
+        assertNull(AttachFile.kindOf("holiday.mkv"))
         assertNull(AttachFile.kindOf("notes.zip"))
         assertNull(AttachFile.kindOf("id_rsa"))
         assertNull(AttachFile.kindOf(".env"))
@@ -143,12 +146,77 @@ class AttachFileTest {
     }
 
     @Test
-    fun `the picker offers only the kinds the PC reads, and nothing wild`() {
-        assertEquals(AttachFile.KINDS.map { it.mime }.distinct(), AttachFile.MIME_TYPES.toList())
+    fun `the eight recording kinds the PC reads, decided by the extension alone`() {
+        // The extension is the authority: the owner's `.m4a` voice memo has to
+        // resolve BEFORE any provider type is looked at, so a picker that says
+        // `application/octet-stream` (the real-world case) changes nothing.
+        val byExtension = mapOf(
+            "wav" to "audio/wav",
+            "mp3" to "audio/mpeg",
+            "m4a" to "audio/mp4",
+            "aac" to "audio/aac",
+            "flac" to "audio/flac",
+            "ogg" to "audio/ogg",
+            "opus" to "audio/opus",
+            "wma" to "audio/x-ms-wma",
+        )
+        for ((ext, mime) in byExtension) {
+            val kind = AttachFile.kindOf("voice memo.$ext")
+            assertNotNull("$ext is not a kind", kind)
+            assertEquals("$ext wire type", mime, kind!!.mime)
+            assertEquals("$ext should be a recording", "recording", kind.label)
+            assertNotNull("$ext upper", AttachFile.kindOf("VOICE MEMO.${ext.uppercase()}"))
+        }
+        // The owner's own file, from the extension alone - even when the picker
+        // knows nothing about it, and whatever it claims.
+        assertEquals(AttachFile.kindOf("memo.m4a"), AttachFile.kindFor("memo.m4a", null))
+        assertEquals(
+            AttachFile.kindOf("memo.m4a"),
+            AttachFile.kindFor("memo.m4a", "application/octet-stream"),
+        )
+        assertEquals(
+            "audio/mp4",
+            (AttachFile.picked(byteArrayOf(1), "memo.m4a", "application/octet-stream")
+                as AttachFile.Picked.Ok).file.mime,
+        )
+        // The alternate type strings a provider really reports are known to the
+        // kind too, so a file with NO extension can still be named by its type.
+        for (alt in listOf("audio/x-m4a", "audio/m4a")) {
+            assertEquals("$alt", AttachFile.kindOf("memo.m4a"), AttachFile.kindForMime(alt))
+        }
+    }
+
+    @Test
+    fun `the picker offers every type the PC reads, and nothing wild`() {
+        // Every kind's own wire type is offered by the one Attach row's picker,
+        // so a kind cannot be added without its type.
+        for (kind in AttachFile.KINDS) {
+            assertTrue(
+                "${kind.extension} is missing its type from the chat picker",
+                AttachFile.MIME_TYPES.contains(kind.mime),
+            )
+        }
+        assertEquals(
+            "the picker has a duplicate type",
+            AttachFile.MIME_TYPES.size,
+            AttachFile.MIME_TYPES.distinct().size,
+        )
+        // The recording types the PC reads and the picker must now offer - the
+        // exact three the owner's ask named, first of all `.m4a`.
+        for (mime in listOf(
+            "audio/mp4", "audio/x-m4a", "audio/mpeg", "audio/wav", "audio/x-wav",
+            "audio/aac", "audio/flac", "audio/ogg", "audio/opus", "audio/x-ms-wma",
+        )) {
+            assertTrue("$mime is missing from the chat picker", AttachFile.MIME_TYPES.contains(mime))
+        }
+        // ... and no wildcard crept in: every entry is a real, readable type.
         assertFalse(AttachFile.MIME_TYPES.contains("*/*"))
         assertFalse(AttachFile.MIME_TYPES.contains("image/*"))
         assertFalse(AttachFile.MIME_TYPES.contains("video/*"))
         assertFalse(AttachFile.MIME_TYPES.contains("audio/*"))
+        // A type the PC cannot read is still not offered.
+        assertFalse(AttachFile.MIME_TYPES.contains("application/zip"))
+        assertFalse(AttachFile.MIME_TYPES.contains("video/mp4"))
     }
 
     // --------------------- the Settings folder door: any file as a plain copy ---
@@ -172,7 +240,7 @@ class AttachFileTest {
     }
 
     @Test
-    fun `the folder door accepts any name, and KINDS stays document-only`() {
+    fun `the folder door accepts any name, and a photo still stays out of KINDS`() {
         for (ext in listOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp")) {
             assertNotNull("$ext", AttachFile.photoKindOf("holiday.$ext"))
             assertNotNull("$ext upper", AttachFile.photoKindOf("HOLIDAY.${ext.uppercase()}"))
@@ -181,7 +249,7 @@ class AttachFileTest {
                 AttachFile.photoKindOf("holiday.$ext")!!.mime,
                 AttachFile.transferKindFor("holiday.$ext", null).mime,
             )
-            // ...and the chat document list still does not claim it.
+            // ...and the chat kind list still does not claim it.
             assertNull("$ext must stay out of KINDS", AttachFile.kindOf("holiday.$ext"))
         }
         assertEquals("image/jpeg", AttachFile.photoKindOf("holiday.jpg")!!.mime)
@@ -190,7 +258,8 @@ class AttachFileTest {
         assertNull(AttachFile.photoKindOf("notes.zip"))
         assertNull(AttachFile.photoKindOf("scan"))
         // EVERY other type is a plain file on this door (2026-11-13) - the PC
-        // stores it unchanged and no reader opens it.
+        // stores it unchanged and no reader opens it. (A video is still such a
+        // plain file here: it is not a chat attachment kind.)
         for (name in listOf(
             "notes.zip", "tool.exe", "data.dat", "clip.mp4", "archive.tar.gz", "README",
         )) {
@@ -212,6 +281,13 @@ class AttachFileTest {
             "application/pdf",
             AttachFile.transferKindFor("taxes.pdf", "image/jpeg").mime,
         )
+        // ...and a recording keeps OUR audio type through it (the PC only stores
+        // these bytes on this door; the chat row is where they are read).
+        assertEquals(
+            "audio/mp4",
+            AttachFile.transferKindFor("voice memo.m4a", "application/octet-stream").mime,
+        )
+        assertEquals("recording", AttachFile.transferKindFor("voice memo.m4a", null).label)
         // A name with no extension is a plain file, not a photo: the PC decides
         // by the name.
         assertEquals("file", AttachFile.transferKindFor("scan", "image/png").label)
@@ -295,6 +371,10 @@ class AttachFileTest {
         assertFalse(AttachFile.goesToPicture("holiday.mp4", "video/mp4"))
         assertFalse(AttachFile.goesToPicture("taxes.zip", "application/pdf"))
         assertFalse(AttachFile.goesToPicture(null, "application/pdf"))
+        // A RECORDING is a file the PC reads, never a picture - whatever type
+        // the provider claims (2026-11-18).
+        assertFalse(AttachFile.goesToPicture("voice memo.m4a", "image/jpeg"))
+        assertFalse(AttachFile.goesToPicture("voice memo.m4a", "application/octet-stream"))
     }
 
     @Test
@@ -320,6 +400,11 @@ class AttachFileTest {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             (docx as AttachFile.Picked.Ok).file.mime,
         )
+        // The owner's `.m4a` voice memo: the canonical audio type goes on the
+        // wire, never the picker's `application/octet-stream` (2026-11-18).
+        val voice = AttachFile.picked(byteArrayOf(1), "voice memo.m4a", "application/octet-stream")
+        assertEquals("audio/mp4", (voice as AttachFile.Picked.Ok).file.mime)
+        assertEquals("voice memo.m4a", voice.file.name)
     }
 
     @Test
