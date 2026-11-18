@@ -56,6 +56,17 @@ drift apart:
     tools that really show/open something or really send something; the same
     "earlier/already" and question/conditional exemptions as the rest, so a
     true sentence is never corrected.
+  - card_claim(text) and card_correction(text, cards, waiting=None) (2026-11-18,
+    DEF-089) - a claim that an approval or confirmation card was raised: "I
+    have raised the approval card", "I've sent that for your approval", "check
+    your pending approvals", and the verb-first/passive "Created a card." Four
+    live replies said a card had been raised while GET /api/pending was empty
+    before and after every turn, because neither of the two families above can
+    see a card: "raised" is not in CLAIMS_DONE's verb list and a card is not in
+    _CLAIM_OBJECT. `cards` is how many approval cards THIS answer really raised
+    (None when the caller cannot tell, which corrects nothing); `waiting` is
+    the gate's live pending count when the caller can read one, used only so
+    the honest sentence may say nothing is waiting when that is true.
 
 "An action tool" is any tool that is not in READ_ONLY_TOOLS. The check is
 deliberately loose about WHICH action: an 8B model's wording ("I've set up
@@ -714,3 +725,172 @@ def surface_correction(text: str, steps) -> str:
             if not _ran_any_ok(steps, _SENT_TOOLS):
                 return SENT_CLAIM_CORRECTION
     return ""
+
+
+# --------------------------------------------------------------------------
+#   A claim that an APPROVAL CARD was raised (2026-11-18, DEF-089)
+# --------------------------------------------------------------------------
+#
+# MEASURED ON THE LIVE INSTALL, 2026-11-17/18 (the row's own evidence). Four
+# replies told the owner a card had been raised - "I have raised the approval
+# card" and friends - while GET /api/pending was empty before AND after the
+# turn, and no tool had run in those turns at all. Nothing in this module saw
+# it: CLAIMS_DONE needs one of its own verbs after "I've" and "raised" is not
+# one; _PASSIVE_CLAIM needs a named object from _CLAIM_OBJECT and a card is not
+# one; and no check here reads a card count. A reply that invents a card
+# teaches the owner to wait for one that will never come (or to believe a write
+# is sitting approved when nothing happened), which is exactly the "never claim
+# an action was taken that was not" rule the module exists for.
+#
+# WHAT BACKS IT. A claim about a card in THIS answer can only be backed by THIS
+# turn's own record, so `cards` is jarvis_agent._TurnWatch.cards - the count of
+# approval cards the answer really raised, the same number CARDS_PER_TURN is
+# enforced with, incremented by every path that puts a card on screen. There is
+# no list of card ids and none is needed: one card raised settles it.
+# `waiting` is jarvis_gate.pending()'s length when the agent half can read it.
+# It can never BACK a claim - a card this turn raised has been answered before
+# the answer is finalized - and it is used for two things: the sentence may say
+# "nothing is waiting for your approval" only when it is 0, and a card already
+# waiting from elsewhere leaves the answer alone, because then the owner is not
+# waiting for a card that will never come.
+#
+# THE EXEMPTIONS are this module's own, so an honest sentence is never
+# corrected (a wrong correction is worse than a missed one): a question ("shall
+# I raise a card?"), an offer, a condition and a future sentence are not
+# claims; "earlier"/"already" is left alone; and a mention inside quoted text or
+# a code span is not the assistant claiming anything.
+
+#: The words an approval card is called. A bare "card" is here on purpose:
+#: "I've raised a card" is one of the measured shapes, and the verb it rides
+#: ("raised") is not the verb of a birthday card. A greeting-card sentence
+#: ("I've created a birthday card") still cannot match, because the qualifier
+#: has to come BEFORE the noun.
+_CARD_QUALIFIED = (
+    r"(?:approval|confirmation|confirm|permission|consent)[\s-]+"
+    r"(?:card|request)"
+)
+_CARD_NOUN = r"(?:" + _CARD_QUALIFIED + r"|card)\b"
+#: The auxiliary words between the subject and the verb, written as whole
+#: alternatives rather than a free gap so a NEGATION cannot slip between them:
+#: "I haven't raised a card" and "I have not raised an approval card" have no
+#: room for the verb where this leaves it, and are never corrected.
+_CARD_AUX = (
+    r"(?:'ve|\s+(?:have|did))?"
+    r"(?:\s+(?:just|now|already|also|only|went\s+ahead\s+and))?"
+)
+#: What may sit between the verb and the noun: "raised a new card" and "raised
+#: the approval card" both match.
+_CARD_OBJ = r"(?:you\s+)?(?:a|an|the|one|another|that|this|your|its)?\s*(?:new\s+)?"
+
+#: "I have raised the approval card", "I've raised a card", "I have created an
+#: approval request", "I just queued your confirmation card".
+_CARD_RAISED = re.compile(
+    r"\b(?:i|we)" + _CARD_AUX + r"\s+"
+    r"(?:raised|created|opened|queued|put\s+up|brought\s+up)\s+"
+    + _CARD_OBJ + _CARD_NOUN, re.I)
+#: "I've sent that for your approval", "I have submitted it for approval",
+#: "I've put it up for your confirmation". `review` is deliberately NOT here:
+#: "sent it for review" can be an ordinary review, not a card.
+_CARD_SENT_FOR_APPROVAL = re.compile(
+    r"\b(?:i|we)" + _CARD_AUX + r"\s+"
+    r"(?:sent|submitted|posted|forwarded|passed|put)\s+"
+    r"(?:it|that|this|them)\s+(?:up\s+)?"
+    r"(?:to\s+you\s+|over\s+to\s+you\s+)?for\s+"
+    r"(?:your\s+|a\s+)?(?:approval|confirmation|yes)\b", re.I)
+#: "Check your pending approvals" - the measured phrasing - and the locator
+#: "it's in your pending approvals". The imperative half is anchored at the
+#: sentence start so app-navigation advice in the middle of a sentence ("to see
+#: it, check your pending approvals") is not read as a claim about a card.
+_CARD_PENDING = re.compile(
+    r"^\s*(?:please\s+|just\s+|now\s+)?"
+    r"(?:check|look\s+at|see|open|review|find)\s+(?:your|the)\s+"
+    r"(?:pending\s+)?(?:approvals?|approval\s+(?:list|queue|tab|page|screen))\b"
+    r"|\b(?:it|that|this|the\s+card|the\s+approval\s+card|your\s+card)\b"
+    r"(?:\s+is|'s|\s+will\s+be|\s+should\s+be|\s+has\s+been|\s+was)?\s+"
+    r"(?:now\s+)?(?:waiting\s+)?(?:in|under)\s+your\s+(?:pending\s+)?approvals?\b",
+    re.I)
+#: The plain shapes with no first-person subject: "Created an approval card.",
+#: "An approval card has been raised for you.", "The confirmation card is
+#: waiting for your yes." Sentence-initial, like _PASSIVE_CLAIM, because those
+#: are the shapes a short confirmation takes. A BARE "card" only takes the
+#: creation verbs: "The card is ready." alone is too weak to correct (it can be
+#: a game, a card trick, a greeting card), while "the approval card is ready"
+#: can only be this app's card.
+_CARD_PASSIVE = re.compile(
+    r"^\s*(?:an?|the|your|one)\s+(?:new\s+)?" + _CARD_QUALIFIED + r"\s+"
+    r"(?:has\s+been|have\s+been|is|are|was|were)\s+"
+    r"(?:raised|created|opened|waiting|pending|ready|up)\b"
+    r"|^\s*(?:an?|the|your|one)\s+(?:new\s+)?card\s+"
+    r"(?:has\s+been|have\s+been|is|are|was|were)\s+"
+    r"(?:raised|created|opened)\b"
+    r"|^\s*(?:raised|created|opened|queued)\s+"
+    r"(?:you\s+)?(?:an?|the|your)\s+(?:new\s+)?" + _CARD_NOUN, re.I)
+
+#: Quoted text and code spans, blanked before the patterns are read: a reply
+#: that says `the owner's words were "raise a card"` (or prints a code block) is
+#: not the assistant claiming a card was raised. Only the straight and curly
+#: DOUBLE quotes and backticks: an apostrophe is a contraction here ("I've") and
+#: stripping single-quoted spans would eat real claims with it.
+_QUOTED_TEXT = re.compile(
+    r"```[\s\S]*?```|`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d")
+
+
+def _unquoted(text: str) -> str:
+    """`text` with quoted and code spans blanked out (see _QUOTED_TEXT)."""
+    return _QUOTED_TEXT.sub(" ", text or "")
+
+
+def card_claim(text: str) -> bool:
+    """True when some sentence of `text` claims an approval card was raised."""
+    for m in _SENTENCE.finditer(_unquoted(text)):
+        sentence = m.group(0).strip()
+        if not sentence:
+            continue
+        if _EARLIER.search(sentence) or _NOT_A_CLAIM.search(sentence):
+            continue
+        if (_CARD_RAISED.search(sentence)
+                or _CARD_SENT_FOR_APPROVAL.search(sentence)
+                or _CARD_PENDING.search(sentence)
+                or _CARD_PASSIVE.search(sentence)):
+            return True
+    return False
+
+
+#: The correction when the turn knows nothing is waiting. It says what is true
+#: and gives the owner a step, because a bare "I did not raise a card" teaches
+#: them nothing: nothing is waiting, and asking again in a new message is the
+#: step that gets a real card up.
+CARD_CLAIM_CORRECTION = (
+    "(Correction - no approval card was raised in this answer: nothing is "
+    "waiting for your approval, and no card was shown in it. Ask again in a new "
+    "message if you want me to try again.)")
+#: The same correction for a caller that can see no card was raised but cannot
+#: read the live pending list: it must not claim "nothing is waiting", so it
+#: says only the part this turn really knows.
+CARD_CLAIM_CORRECTION_UNKNOWN_WAITING = (
+    "(Correction - no approval card was raised in this answer: no card was "
+    "shown in it, so nothing from this answer is waiting for a yes. Ask again "
+    "in a new message if you want me to try again.)")
+
+
+def card_correction(text: str, cards, waiting=None) -> str:
+    """The correction line for an answer that claims an approval card was
+    raised when THIS answer raised none, or "".
+
+    `cards` is how many cards the answer really raised
+    (jarvis_agent._TurnWatch.cards), or None when the caller cannot tell - an
+    unknown turn is never corrected, because guessing would be the wrong
+    direction. `waiting` is the number of approvals waiting right now, or None
+    when that read failed; it only chooses the wording that may say nothing is
+    waiting. A card already waiting leaves the claim alone: the owner is not
+    waiting for a card that will never come.
+    """
+    if cards is None or cards > 0:
+        return ""
+    if not card_claim(text):
+        return ""
+    if isinstance(waiting, int) and waiting > 0:
+        return ""
+    if waiting == 0:
+        return CARD_CLAIM_CORRECTION
+    return CARD_CLAIM_CORRECTION_UNKNOWN_WAITING

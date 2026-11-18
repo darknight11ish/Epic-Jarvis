@@ -18457,6 +18457,50 @@ def _grant_claim_line(text: str, watch) -> str:
     return ""
 
 
+def _card_claim_line(text: str, watch) -> str:
+    """The correction for an answer that says an approval card was raised when
+    THIS answer raised none (DEF-089, 2026-11-18), or "".
+
+    THE MEASURED FAILURE (field-test row B2, the row's own evidence): four live
+    replies told the owner a card had been raised while GET /api/pending was
+    empty both before and after the turn, and no tool had run - a reply that
+    invents a card teaches the owner to wait for one that will never come, or
+    to believe a write is sitting approved when nothing happened. Nothing in
+    the claim list above saw it: "raised" is not one of CLAIMS_DONE's verbs and
+    a card is not one of _CLAIM_OBJECT's nouns. `jarvis_claims.card_correction`
+    holds the patterns and the honest wording; this half supplies the two facts
+    a turn really has:
+
+    * `watch.cards` - the TURN's own card count (`_TurnWatch`), the same number
+      CARDS_PER_TURN is enforced with and incremented by every path that puts a
+      card on screen. It is the only thing that can settle a claim about this
+      answer. A caller that cannot tell (no watch, or a watch without a count)
+      is not guessed at: `cards` stays None and nothing is corrected.
+    * `jarvis_gate.pending()` - the LIVE waiting list (the same read
+      `jarvis_briefing._pending_count` makes). It cannot back a claim - a card
+      this turn raised has been answered before this runs - and is used only so
+      the sentence may say "nothing is waiting" when that is true, and so a card
+      already waiting leaves the answer alone.
+
+    Never raises: a missing jarvis_gate.py (this repository's own checkout has
+    none) or a broken jarvis_claims.py costs the line and nothing else.
+    """
+    cards = getattr(watch, "cards", None) if watch is not None else None
+    if cards is None:
+        return ""
+    waiting = None
+    try:
+        import jarvis_gate
+        waiting = len(jarvis_gate.pending() or [])
+    except Exception:                                        # noqa: BLE001
+        waiting = None
+    try:
+        import jarvis_claims
+        return jarvis_claims.card_correction(text, cards, waiting=waiting)
+    except Exception:                                        # noqa: BLE001
+        return ""
+
+
 def _setting_denial_line(text: str, owner_words: str) -> str:
     """The correction for "that setting is not available" when the owner's own
     words name a setting the settings tool can really change, or "". D5.
@@ -18773,6 +18817,15 @@ def _claim_corrections(text: str, steps: list, watch, enabled=None) -> list:
         line = ""
     if line:
         out.append(line)
+    # The approval-CARD claim (DEF-089, 2026-11-18) is the same shape: the
+    # TURN's own card count backs it (and the gate's pending list chooses the
+    # wording), so it is not in the loop above either, and is off its own try.
+    try:
+        line = _card_claim_line(text, watch)
+    except Exception:
+        line = ""
+    if line:
+        out.append(line)
     words = getattr(watch, "newest_own_words", "") or ""
     try:
         line = _setting_denial_line(text, words)
@@ -18833,7 +18886,7 @@ def _claim_corrections(text: str, steps: list, watch, enabled=None) -> list:
 #   must never be left out.
 def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
                      crisis: bool = False, crisis_repeat: bool = False,
-                     spoken: bool = False, enabled_tools=None) -> list:
+                     spoken: bool = False, enabled_tools=None, cards=None) -> list:
     """[(kind, line)] for every correction `text` needs, in the order they are
     said. The ONE list both the local answer and the cloud relay append.
 
@@ -18846,6 +18899,10 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
     `enabled_tools`, when the caller has one, is THIS turn's offered list, so
     the "that tool is switched off" line names a switch the turn really did not
     offer (a cloud relay passes none and the settings file is read instead).
+    `cards` is how many approval cards THIS answer raised, when the caller knows
+    that independently of `watch`: the cloud relay passes 0 (a cloud lane offers
+    no tools at all, so it cannot raise one). None means "this caller cannot
+    tell" and is never read as 0 - the card-claim line then says nothing.
     Never raises: each half is off its own `try`, and a missing module or a
     broken pattern costs that one line and nothing else.
     """
@@ -18879,13 +18936,23 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
     if line:
         kinds.append(("claim", line))
     words = str(owner_words or getattr(watch, "newest_own_words", "") or "")
+    # The approval-CARD claim needs the turn's own card count, which is not in
+    # the model's words: taken from the caller when it passes one, else from the
+    # turn's _TurnWatch. None means "this caller cannot tell", never zero - a
+    # guard that guesses here would add a wrong correction to a true answer.
+    known_cards = cards
+    if known_cards is None and watch is not None:
+        known_cards = getattr(watch, "cards", None)
     try:
         # The conversation id rides along so the approval-claim check can read
-        # the grant store; a caller with no watch leaves it empty and that check
-        # then says nothing (the state is unknown, never guessed).
+        # the grant store, and the card count so the card-claim check can read
+        # this turn's own cards (DEF-089); a caller with no watch leaves both
+        # empty and those checks then say nothing (the state is unknown, never
+        # guessed).
         holder = types.SimpleNamespace(
             newest_own_words=words,
-            conversation_id=getattr(watch, "conversation_id", "") if watch is not None else "")
+            conversation_id=getattr(watch, "conversation_id", "") if watch is not None else "",
+            cards=known_cards)
         for line in _claim_corrections(text, list(steps or ()), holder,
                                        enabled=enabled_tools):
             kinds.append(("claim", line))
@@ -18929,7 +18996,12 @@ def cloud_postscript(answer_text: str, messages=None) -> list:
     try:
         return postscript_lines(str(answer_text or ""), (),
                                 owner_words=words,
-                                spoken=(newest.get("provenance") == "voice"))
+                                spoken=(newest.get("provenance") == "voice"),
+                                # A cloud lane offers no tools at all, so THIS
+                                # answer cannot raise an approval card: the
+                                # card-claim line is told 0, not "unknown"
+                                # (DEF-089, 2026-11-18).
+                                cards=0)
     except Exception:
         return []
 
