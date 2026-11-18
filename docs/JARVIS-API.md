@@ -32286,7 +32286,9 @@ where your new note is yet" - no lookup happened at all.
 **The registry is the note's own frontmatter.** A name is resolved by ONE
 resolver, `jarvis_notes.resolve_note()`, in a stated order: the exact vault
 path the owner named, then the file name alone matched case-insensitively,
-then an exact value of the note's own YAML `aliases:` list, then a refusal that
+then an exact value of the note's own YAML `aliases:` list, then - for the
+owner's words that DESCRIBE a note rather than name it ("my favourite note") -
+the note's own `favorite: true` flag, then a refusal that
 lists any candidates. Obsidian reads `aliases:` natively (Properties, and `[[`
 completion), so it travels with the note and needs no index, no model and no
 earlier conversation. For the owner's own note:
@@ -32398,7 +32400,20 @@ every note's `aliases:`:
 3. `alias` - an exact value of the note's own YAML `aliases:` list, compared
    case-insensitively and with a leading my/the/a/an and a trailing "note"
    ignored, so "my workout log" and "the workout log" reach the same note.
-4. **refusal** - `not_found`, with any near candidates in `candidates`.
+4. `favourite` - the note's own YAML flag, `favorite: true` (added 2026-11-18).
+   "add this to my favourite note" names no note; it describes one, and this
+   is the only thing in the vault that answers it. One flagged note resolves
+   and the result carries a `said` sentence naming it; two or more are
+   `ambiguous_section` with every candidate listed and nothing chosen; none is
+   a `not_found` that says no note is marked a favourite. The tier fires only
+   when the owner's words ARE a favourite word ("favourite"/"favorite", their
+   plurals and short forms) and never for a name that looks like a path
+   (`Favourite.md` names a file), so a plain name question still refuses. It is
+   asked LAST because a favourite is a quality of a note, not its name: an
+   explicit path, file name or `aliases:` value always wins over the flag.
+   Reading a flag writes nothing and needs no card; this selects a note and
+   does not put its content in a prompt.
+5. **refusal** - `not_found`, with any near candidates in `candidates`.
 
 **There is no daily-note fallback at any point.** The resolver has no branch
 that knows what a daily note is; a name that matches nothing is a refusal. The
@@ -32422,9 +32437,12 @@ as request headers, as boolean arguments rather than a second HTTP surface:
 `create_target_if_missing` (default False - a lookup never creates anything; a
 create-shaped tool passes True) and `reject_if_content_preexists` (default
 True). Epic Jarvis never overwrites, so False only allows filling an EMPTY
-existing note; content is still `content_preexists`. `POST /api/notes/create`
-accepts both booleans; its refusals now carry the `code` and `candidates`
-above, and its strict collision behaviour is unchanged.
+existing note; content is still `content_preexists`. `create_target_if_missing`
+never turns the favourite words into a new note either: with no favourite in
+the vault, "my favourite note" comes back as the resolver's own refusal, so a
+create-shaped caller cannot make a note called `favourite.md`. `POST
+/api/notes/create` accepts both booleans; its refusals now carry the `code`
+and `candidates` above, and its strict collision behaviour is unchanged.
 
 **Daily-note settings are honoured.** `jarvis_note_capture.py` reads
 `.obsidian/daily-notes.json` for `folder`, `format` and `template`, following
