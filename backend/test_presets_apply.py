@@ -404,7 +404,7 @@ def t_get_work_serves_the_new_contract():
     check("... and a top-level lane/lane_status beside active_lane",
           "lane" in body and "lane_status" in body and "active_lane" in body
           and body["lane"]["key"] == "main"
-          and body["lane"]["card"] == "all three cards"
+          and body["lane"]["card"] == "RTX 2060"
           and "everyday lane" in body["lane"]["label"])
     check("... the hardware shape is the fixture's nested shape",
           sorted(body["hardware"]) == ["detected", "questionnaire"]

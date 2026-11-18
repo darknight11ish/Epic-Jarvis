@@ -101,8 +101,12 @@ LANES = {
     # runs the 9B long-window rows (Documents & Browser at 196,608 tokens) and
     # the short-window rows (Agentic + Vision and Fast at 16,384). General's 26B
     # needs all three cards, so it is NOT here - it names the pooled lane below,
-    # which is why a heavy preset pauses this one while it runs.
-    "main": {"key": "main", "card": "all three cards", "port": 11436,
+    # which is why a heavy preset pauses this one while it runs. THE CARD WORD
+    # IS THE ONE CARD THE TRACKED LOGON TASK PINS: `scripts/start-lane.ps1` with
+    # Windows Task Scheduler passes ONE -GpuUuid for 11436, so claiming more
+    # cards here would be a table the PC can never honour
+    # (`tools/check_lane_launcher.py`, required).
+    "main": {"key": "main", "card": "RTX 2060", "port": 11436,
              "words": "the everyday lane"},
     # The heavy presets' own lane: ONE Ollama that sees ALL THREE cards, started
     # on demand by the apply (never by a logon task, which would hold the cards
@@ -189,9 +193,10 @@ class Preset:
 #: The Medical mode's measured sentence, quoted from the one bench receipt. It is
 #: used by the card text and by `pooled_modes()`; no second copy exists.
 MEDICAL_MEASURED_WORDS = (
-    "measured on this PC on 2026-11-09: 17.31 GiB loaded entirely in the three "
-    "cards' memory, 0 B spilled, a 46.8 s cold load and 9.27 tokens a second "
-    "(11.1 on the measured ~150-word explanation, 7.89 on the four-token answer)")
+    "measured on this PC: 17.31 GiB loaded entirely in the three cards' memory "
+    "with 0 B spilled and a 46.8 s cold load (2026-11-09); the 2026-11-17 "
+    "re-measurement read 11.4-11.7 tokens a second, and the LOW end (11.4) is "
+    "the figure the row shows")
 
 #: The two measured pooled modes, from the 2026-11-09 bench rows (spill included,
 #: never trimmed). They were availability only until 2026-11-18; since then
@@ -209,9 +214,10 @@ GEMMA4_26B_MEASURED_WORDS = (
     "25.4-36.5 tokens a second (the LOW end is the figure the row shows) and a "
     "49.9 s cold load")
 QWEN3_VL_30B_MEASURED_WORDS = (
-    "measured on this PC on 2026-11-09: 19.88 GiB loaded with 2.24 GiB (11.2%) "
-    "spilled into system memory, 89% in the cards' memory, a 54.8 s cold load "
-    "and 33.1 tokens a second")
+    "measured on this PC: 19.88 GiB loaded with 2.24 GiB (11.2%) spilled into "
+    "system memory, 89% in the cards' memory and a 54.8 s cold load "
+    "(2026-11-09); the 2026-11-17 re-measurement read 14.6-25.4 tokens a "
+    "second, and the LOW end (14.6) is the figure the row shows")
 
 PRESETS = (
     Preset(
@@ -312,18 +318,19 @@ PRESETS = (
              "docs/MEASURED-2026-11-07-THREE-GPU.md.",
         worse="Applying it makes it the model chat uses, so the everyday 26B is NOT "
               "resident while it runs - it comes back when you apply another "
-              "preset, and that switch costs its cold load (about 50 seconds since "
-              "2026-11-18). It is "
+              "preset, and that switch is the everyday lane's own 9B reload, not "
+              "an instant swap. It is "
               "not a quick helper: it takes all three cards for as long as it is on, "
               "and nothing else can be loaded beside it. Measured about 59 tokens a "
               "second at 65,536 tokens, so the wider window is not offered.",
         model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=49152,
         prompt="coding", diet="coding", heavy_mode=True,
-        heavy_words="This preset needs all three cards at once as one pooled lane. While "
-                    "it runs, the everyday model is paused - it comes "
-                    "back, proved from the model list, when you apply another preset, "
-                    "and that reload takes about 50 seconds. "
-                    "Loading it takes about half a minute.",
+        heavy_words="This preset needs all three cards at once as one pooled lane. "
+                    "While it runs, the everyday model is paused - it comes "
+                    "back, proved from the model list, when you apply a preset that "
+                    "is not heavy, and that reload is the everyday lane's own 9B "
+                    "load, not an instant swap. Loading it takes about half a "
+                    "minute.",
         tools=("code", "files"),
         measured={"tok_s": 40.3, "tok_s_on": "2026-11-17",
                   "tok_s_note": "16.17 GiB, 0 spill, all three cards, 49,152 "
@@ -399,12 +406,13 @@ PRESETS = (
         what="The quickest preset: qwen3.5:4b at the 16,384-token window it is for, "
              "on the everyday lane. Since 2026-11-18 there is no separate fast "
              "card: applying it makes qwen3.5:4b the model chat uses, and going "
-             "back to General asks the lane for the everyday 26B again.",
+             "back to General starts the pooled three-card lane for its 26B again.",
         cost="Measured 2026-10-10 on an RTX 2080 SUPER: 77.1 tokens a second and "
              "4.15 GB of video memory at a 65,536-token window (the file is 3.16 GB "
-             "on disk). Since 2026-11-18 the everyday lane spans all three cards, so "
-             "that figure is the model's measurement on this PC rather than a fresh "
-             "one for the lane; this row keeps the 16,384-token window it is for.",
+             "on disk). Since 2026-11-18 Fast shares the ONE-card everyday lane "
+             "(the RTX 2060), so that 2080 SUPER figure is the model's own "
+             "measurement on this PC rather than a fresh one for the lane; this row "
+             "keeps the 16,384-token window it is for.",
         worse="The small model: fastest measured writer here, and the bench's three "
               "short prompts were only called broadly correct rather than scored. "
               "Chosen for waiting less, not for care. The 26B does not fit beside it "
@@ -419,8 +427,8 @@ PRESETS = (
                   "context": 65536,
                   "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 "
                             "SUPER (repo restatement: docs/WORK-SETUPS.md:29, "
-                            "jarvis_work.py:262); the everyday lane now spans all "
-                            "three cards and this row keeps 16,384"},
+                            "jarvis_work.py:262); the everyday lane is the one-card "
+                            "RTX 2060 and this row keeps 16,384"},
         words=("fast", "quick", "quickly", "short answer", "one-off", "hurry",
                "speed", "asap"),
         strong=("quick answer", "as fast as possible", "fast"),
@@ -432,17 +440,19 @@ PRESETS = (
              "said first and asks one gentle question at a time. Since 2026-11-18 it "
              "thinks on all three cards at once, so a difficult thought gets the whole "
              "machine instead of one card.",
-        cost="HEAVY MODE: it needs all three cards at once as one pooled lane and pauses "
-             "the everyday and Fast models while it thinks. Measured on this PC on "
-             "2026-11-09: 15.5 GiB loaded with 0.68 GiB (4.4%) spilled into system "
-             "memory, 96% in the cards' memory, a 52.0 s cold load and 49.26 tokens a "
-             "second. No model on this PC has been measured for empathy or reflective "
-             "quality, and nothing here claims it.",
+        cost="HEAVY MODE: it needs all three cards at once as one pooled lane and "
+             "pauses the everyday 9B model while it thinks. Measured on this PC: "
+             "15.5 GiB loaded with 0.68 GiB (4.4%) spilled into system memory, 96% "
+             "in the cards' memory and a 52.0 s cold load (2026-11-09); the "
+             "2026-11-17 re-measurement read 25.4-36.5 tokens a second, and the LOW "
+             "end (25.4) is the figure this row shows. No model on this PC has been "
+             "measured for empathy or reflective quality, and nothing here claims "
+             "it.",
         worse="A model choice only - it changes no wording by itself. It is not a "
               "therapist: it gives no diagnosis, keeps no therapy record and the "
               "crisis help stays exactly where it already is. Applying it pauses the "
-              "other models for about a minute, so it is for a session of thinking, "
-              "not for a quick question.",
+              "everyday model while it loads (about a minute), so it is for a session "
+              "of thinking, not for a quick question.",
         model="gemma4:26b-a4b-it-qat", lane="pooled", context=32768,
         heavy_mode=True, mode="gemma4-26b-a4b",
         prompt="balanced", diet="balanced",
@@ -456,14 +466,16 @@ PRESETS = (
                   "source": "model matrix 2026-11-09: gemma4:26b-a4b-it-qat at "
                             "32,768 tokens loaded 15.5 GiB with 0.68 GiB (4.4%) "
                             "spilled into system memory (96% in the cards' memory), "
-                            "a 52.0 s cold load and 49.26 tok/s. Same row as "
-                            "GEMMA4_26B_MEASURED_WORDS above; no empathy or "
-                            "reflective quality was measured."},
-        heavy_words="This preset needs all three cards at once as one pooled lane. While "
-                    "it runs, the everyday and Fast models are paused - they come back, "
-                    "proved from the model list, when you apply another preset. It loads "
-                    "about 15.5 GiB, spills 0.68 GiB into system memory, takes about "
-                    "52 s cold and writes about 49 tokens a second.",
+                            "a 52.0 s cold load and 49.26 tok/s; the 2026-11-17 "
+                            "re-measurement of the same row read 25.4-36.5 tok/s, "
+                            "low end shown. Same row as GEMMA4_26B_MEASURED_WORDS "
+                            "above; no empathy or reflective quality was measured."},
+        heavy_words="This preset needs all three cards at once as one pooled lane. "
+                    "While it runs, the everyday 9B model is paused - it comes back, "
+                    "proved from the model list, when you apply a preset that is not "
+                    "heavy. It loads about 15.5 GiB, spills 0.68 GiB into system "
+                    "memory, takes about 52 s cold and writes about 25 tokens a "
+                    "second (the low end of two 2026-11-17 runs).",
         words=("reflect", "talk it through", "thinking out loud", "coach",
                "difficult thought"),
         strong=("talk something through", "reflective coach"),
@@ -474,18 +486,20 @@ PRESETS = (
         what="For looking at a picture or a screenshot and talking about it: a 30B "
              "vision model that uses all three cards at once. Agentic + Vision is the "
              "version that also drives tools.",
-        cost="HEAVY MODE: it needs all three cards at once as one pooled lane and pauses "
-             "the everyday and Fast models while it works. Measured on this PC on "
-             "2026-11-09: 19.88 GiB loaded with 2.24 GiB (11.2%) spilled into system "
-             "memory, 89% in the cards' memory, a 54.8 s cold load and 33.1 tokens a "
-             "second.",
+        cost="HEAVY MODE: it needs all three cards at once as one pooled lane and "
+             "pauses the everyday 9B model while it works. Measured on this PC: "
+             "19.88 GiB loaded with 2.24 GiB (11.2%) spilled into system memory, 89% "
+             "in the cards' memory and a 54.8 s cold load (2026-11-09); the "
+             "2026-11-17 re-measurement read 14.6-25.4 tokens a second, and the LOW "
+             "end (14.6) is the figure this row shows.",
         worse="Picture QUALITY through this row is not measured - the 2026-11-09 receipt "
               "measured speed and memory, not whether its answers about a picture are "
               "better than the 9B's. It is slower than the single-card row it replaces "
-              "(33.1 tokens a second against that card's measured 41.89 at this 32,768 "
-              "window on 2026-11-07), it spills 2.24 GiB into system memory, and it "
-              "pauses the other models for about a minute while it loads. Live "
-              "phone-camera frames are explicitly unmeasured.",
+              "(14.6 tokens a second, the low end of two 2026-11-17 runs, against "
+              "that card's measured 41.89 at this 32,768 window on 2026-11-07), it "
+              "spills 2.24 GiB into system memory, and it pauses the everyday model "
+              "for about a minute while it loads. Live phone-camera frames are "
+              "explicitly unmeasured.",
         model="qwen3-vl:30b-a3b-instruct", lane="pooled", context=32768,
         heavy_mode=True, mode="qwen3-vl-30b-a3b",
         prompt="balanced", diet="balanced",
@@ -500,14 +514,16 @@ PRESETS = (
                   "source": "model matrix 2026-11-09: qwen3-vl:30b-a3b-instruct at "
                             "32,768 tokens loaded 19.88 GiB with 2.24 GiB (11.2%) "
                             "spilled into system memory (89% in the cards' memory), "
-                            "a 54.8 s cold load and 33.1 tok/s. Same row as "
-                            "QWEN3_VL_30B_MEASURED_WORDS above; picture quality "
-                            "was not measured."},
-        heavy_words="This preset needs all three cards at once as one pooled lane. While "
-                    "it runs, the everyday and Fast models are paused - they come back, "
-                    "proved from the model list, when you apply another preset. It loads "
-                    "about 19.88 GiB, spills 2.24 GiB into system memory, takes about "
-                    "55 s cold and writes about 33 tokens a second.",
+                            "a 54.8 s cold load and 33.1 tok/s; the 2026-11-17 "
+                            "re-measurement of the same row read 14.6-25.4 tok/s, "
+                            "low end shown. Same row as QWEN3_VL_30B_MEASURED_WORDS "
+                            "above; picture quality was not measured."},
+        heavy_words="This preset needs all three cards at once as one pooled lane. "
+                    "While it runs, the everyday 9B model is paused - it comes back, "
+                    "proved from the model list, when you apply a preset that is not "
+                    "heavy. It loads about 19.88 GiB, spills 2.24 GiB into system "
+                    "memory, takes about 55 s cold and writes about 14.6 tokens a "
+                    "second (the low end of two 2026-11-17 runs).",
         words=("picture", "screenshot", "screen", "image", "photo", "look at"),
         strong=("read this screenshot", "look at this picture"),
     ),
@@ -563,11 +579,12 @@ PRESETS = (
              "medical model on all three cards at once. It is not a doctor, gives no "
              "diagnosis and replaces no clinician.",
         cost="HEAVY MODE: it needs all three cards at once (17.31 GiB loaded entirely in "
-             "video memory, 0 B spilled) and pauses the everyday and Fast models while it "
-             "runs. It is slow: a 46.8 s cold load and 9.27 tokens a second on the measured "
-             "coding prompt (11.1 on the measured ~150-word explanation, 7.89 on the "
-             "four-token answer), so a long answer takes a while. Measured on this PC on "
-             "2026-11-09 (model-bench run 20261109-105956, the medgemma window row).",
+             "video memory, 0 B spilled) and pauses the everyday 9B model while it runs. "
+             "It is slow: a 46.8 s cold load, and the 2026-11-17 re-measurement read "
+             "11.4-11.7 tokens a second (the low end, 11.4, is the row's figure); the "
+             "older 2026-11-09 coding-prompt run read 9.27 (11.1 on the measured "
+             "~150-word explanation, 7.89 on the four-token answer). Measured on this PC "
+             "(model-bench run 20261109-105956, the medgemma window row).",
         worse="It has NO tool calling - `ollama show` reports no `tools` capability, so it "
               "cannot use Jarvis's tools, browser or files. It reports vision (pictures), "
               "but its picture quality is not measured here. It is not a doctor: no "
@@ -586,12 +603,15 @@ PRESETS = (
                   "tools": 0, "vision": "reported, not measured",
                   "source": "model matrix 2026-11-09 10:59:56, windows[1] medgemma: "
                             "18,588,222,089 B loaded, spill 0, load 46.8 s, summary "
-                            "decode 9.27 tok/s (long 11.1, short 7.89); no tools"},
-        heavy_words="This preset needs all three cards at once as one pooled lane. While it "
-                    "runs, the everyday and Fast models are paused - they come back, proved "
-                    "from the model list, when you apply another preset. It loads about "
-                    "17.31 GiB, takes about 47 s cold, writes slowly (about 9 tokens a "
-                    "second) and cannot use tools.",
+                            "decode 9.27 tok/s (long 11.1, short 7.89); the "
+                            "2026-11-17 re-measurement read 11.4-11.7, low end "
+                            "shown; no tools"},
+        heavy_words="This preset needs all three cards at once as one pooled lane. "
+                    "While it runs, the everyday 9B model is paused - it comes back, "
+                    "proved from the model list, when you apply a preset that is not "
+                    "heavy. It loads about 17.31 GiB, takes about 47 s cold, writes "
+                    "slowly (about 11 tokens a second on the row's 2026-11-17 "
+                    "re-measurement) and cannot use tools.",
         words=("medical", "medicine", "doctor", "symptom", "symptoms", "lab",
                "lab result", "prescription", "health", "clinical", "patient",
                "diagnosis"),
@@ -3259,7 +3279,7 @@ def recommendations() -> dict:
                 "link_note": ("the third card likely sits on the B550 chipset through an "
                               "M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs "
                               "loading time, not a lane: the everyday model is loaded "
-                              "once across all three cards, so the link is paid at "
+                              "once across all three cards on the pooled lane, so the link is paid at "
                               "load, not per token."),
                 "future_not_a_preset": ("Qwen3.8-27B pooled to 28 GB across cards is a future "
                                         "'max quality' experiment only; it is not a preset and "

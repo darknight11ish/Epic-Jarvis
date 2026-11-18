@@ -275,7 +275,9 @@ class FocusPresetsTest {
         // 2080 SUPER lane on 11435 is retired, so there is no "coding" card
         // left to name. The window it is for did not change.
         assertEquals("main", fast.lane.key)
-        assertEquals("all three cards", fast.lane.card)
+        // The everyday lane is ONE card: the tracked logon task pins the 2060
+        // with one -GpuUuid (tools/check_lane_launcher.py enforces it).
+        assertEquals("RTX 2060", fast.lane.card)
         assertEquals("the everyday lane", fast.lane.words)
         assertEquals(16384, fast.context)
         // The everyday lane is already running, so applying Fast starts nothing
