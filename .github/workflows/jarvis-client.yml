@@ -49,12 +49,16 @@ on:
 permissions:
   contents: read
 
-# a second push to the same pull request cancels the first: github.ref is
+# A second push to the same pull request cancels the first: github.ref is
 # refs/pull/<n>/merge there, one value for the whole pull request, and
 # refs/heads/main for the post-merge push, so the two never cancel each other.
+# MAIN MUST NOT CANCEL ITSELF - the same expression as ci.yml:46, for the same
+# reason: measured 2026-11-17, four merge commits in one wave lost their client
+# build to the next merge. A run that has started now always finishes; a run
+# still waiting can be replaced, because GitHub keeps one pending run per group.
 concurrency:
   group: jarvis-client-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
