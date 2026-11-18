@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b9325012e05670495f55f394f45664f39fc91e33",
- "built_at": "2026-11-17T14:16:06-08:00",
+ "ref": "0d99b9b18a7adc46701a9bdf5e7ddc8ffcba877b",
+ "built_at": "2026-11-18T15:04:33-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -202,6 +202,7 @@
     "backend/jarvis_chatbot_perplexity.py",
     "backend/jarvis_chatbot_routes.py",
     "backend/jarvis_chatbot_web.py",
+    "backend/jarvis_cloud_settings.py",
     "backend/jarvis_energy.py",
     "backend/jarvis_hardware.py",
     "backend/jarvis_hf_inspect.py",
@@ -222,7 +223,7 @@
     "backend/jarvis_work.py",
     "backend/rebuilt/jarvis_compute.py"
    ],
-   "file_count": 41,
+   "file_count": 42,
    "key_modules": [
     {
      "path": "backend/jarvis_model_lanes.py",
@@ -250,7 +251,8 @@
     "backend/test_chatbot_api.py",
     "backend/test_cloud_honesty.py",
     "backend/test_model_recommendations.py",
-    "backend/test_model_resources.py"
+    "backend/test_model_resources.py",
+    "backend/test_cloud_settings_chat.py"
    ],
    "docs": [
     "docs/MODEL-TOPOLOGY.md",
@@ -798,6 +800,8 @@
     "plugins/ready/tool-updates/plugin.json",
     "plugins/ready/tutorials/README.md",
     "plugins/ready/tutorials/plugin.json",
+    "plugins/ready/update/README.md",
+    "plugins/ready/update/plugin.json",
     "plugins/ready/upload/plugin.json",
     "plugins/ready/vault-organizer/README.md",
     "plugins/ready/vault-organizer/plugin.json",
@@ -812,7 +816,7 @@
     "skills/pdf-workflow/SKILL.md",
     "skills/reverse-engineer-anything/SKILL.md"
    ],
-   "file_count": 123,
+   "file_count": 125,
    "key_modules": [
     {
      "path": "backend/jarvis_plugins.py",
@@ -1720,6 +1724,8 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/PipWakeWordTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PlainErrorsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PlatformReadinessTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/PresetSpeedAbbreviationTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/PresetSpeedTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PresetsLandingTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PrivateAloudContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PrivateAloudTest.kt",
@@ -1949,7 +1955,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 1034,
+   "file_count": 1036,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -1989,12 +1995,13 @@
    "id": "desktop",
    "title": "The Tauri desktop shell and the HUD page",
    "group": "runtime",
-   "purpose": "The window on this PC: the Rust shell that holds the token and talks to the backend, and the HUD page - cards, Brain, History and the animal faces - it shows.",
+   "purpose": "The window on this PC: the Rust shell that holds the token and talks to the backend, the HUD page - cards, Brain, History and the animal faces - it shows, and the phone's road to asking for the same update that shell installs.",
    "files": [
     "backend/jarvis_animal.py",
     "backend/jarvis_hud.html",
     "backend/jarvis_sky.py",
     "backend/jarvis_sky_places.py",
+    "backend/jarvis_update.py",
     "backend/static/animal-shared.js",
     "backend/static/card-words.js",
     "backend/static/critter-monkey.js",
@@ -3254,8 +3261,12 @@
     "jarvis-desktop/tsconfig.bindings.json",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1262,
+   "file_count": 1263,
    "key_modules": [
+    {
+     "path": "backend/jarvis_update.py",
+     "summary": "jarvis_update.py - the phone asks Jarvis to update itself; ONE card decides."
+    },
     {
      "path": "backend/jarvis_animal.py",
      "summary": "jarvis_animal.py - every animal-face option in one place, shared by both apps."
@@ -3266,6 +3277,7 @@
     }
    ],
    "tests": [
+    "backend/test_phone_authorized_update.py",
     "backend/test_hud_static.py",
     "backend/test_animal.py",
     "backend/test_sky.py",
@@ -3513,9 +3525,10 @@
    "id": "media",
    "title": "Pictures and the owner's own media",
    "group": "runtime",
-   "purpose": "Pictures the owner asks for and attaches, reading the words in them, and searching the recordings and videos on this PC - all locally.",
+   "purpose": "Pictures the owner asks for and attaches, reading the words in them, turning pictures into ONE PDF or into another format, and searching the recordings and videos on this PC - all locally.",
    "files": [
     "backend/jarvis_chat_picture.py",
+    "backend/jarvis_image_convert.py",
     "backend/jarvis_media_index.py",
     "backend/jarvis_media_read.py",
     "backend/jarvis_obscura.py",
@@ -3524,7 +3537,7 @@
     "backend/jarvis_picture_card.py",
     "backend/jarvis_pictures.py"
    ],
-   "file_count": 8,
+   "file_count": 9,
    "key_modules": [
     {
      "path": "backend/jarvis_pictures.py",
@@ -3543,7 +3556,8 @@
     "backend/test_pictures.py",
     "backend/test_ocr_words.py",
     "backend/test_media_index.py",
-    "backend/test_media_read.py"
+    "backend/test_media_read.py",
+    "backend/test_image_convert.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -3872,11 +3886,13 @@
     "backend/test_chatbot_privacy.py",
     "backend/test_chatbot_routes.py",
     "backend/test_chatbot_sites.py",
+    "backend/test_check_lane_launcher.py",
     "backend/test_check_live_version_identity.py",
     "backend/test_child_env_spawns.py",
     "backend/test_ci_emulator_install.py",
     "backend/test_claims.py",
     "backend/test_clipboard.py",
+    "backend/test_cloud_degrade_chain.py",
     "backend/test_cloud_escalate_setting.py",
     "backend/test_cloud_honesty.py",
     "backend/test_cloud_honesty_state.py",
@@ -3884,6 +3900,7 @@
     "backend/test_cloud_lane_taint.py",
     "backend/test_cloud_one_turn.py",
     "backend/test_cloud_say_yes.py",
+    "backend/test_cloud_settings_chat.py",
     "backend/test_cloud_spend.py",
     "backend/test_cold_load.py",
     "backend/test_compaction.py",
@@ -3903,6 +3920,7 @@
     "backend/test_decision_lab.py",
     "backend/test_decks.py",
     "backend/test_def068_entry.py",
+    "backend/test_defect_register_answers.py",
     "backend/test_degrade_filter.py",
     "backend/test_deploy_hud_whitelist.py",
     "backend/test_devices.py",
@@ -3914,6 +3932,7 @@
     "backend/test_documents_owned.py",
     "backend/test_duet_d1.py",
     "backend/test_duet_d2.py",
+    "backend/test_egress_gate_checker.py",
     "backend/test_email.py",
     "backend/test_email_draft.py",
     "backend/test_email_send.py",
@@ -3971,6 +3990,7 @@
     "backend/test_github_authoring.py",
     "backend/test_github_ci_count.py",
     "backend/test_github_off_switch_card.py",
+    "backend/test_github_own_repo.py",
     "backend/test_github_parity.py",
     "backend/test_github_record.py",
     "backend/test_github_review.py",
@@ -4007,6 +4027,7 @@
     "backend/test_hud_server.py",
     "backend/test_hud_static.py",
     "backend/test_identity.py",
+    "backend/test_image_convert.py",
     "backend/test_import_history.py",
     "backend/test_import_understanding.py",
     "backend/test_inbox_tidy.py",
@@ -4043,6 +4064,7 @@
     "backend/test_live_voice_words.py",
     "backend/test_local_calendar.py",
     "backend/test_local_http.py",
+    "backend/test_local_model_guard.py",
     "backend/test_lockdown.py",
     "backend/test_log_isolation.py",
     "backend/test_log_retention.py",
@@ -4121,6 +4143,7 @@
     "backend/test_ollama_capability_contract.py",
     "backend/test_ollama_contract.py",
     "backend/test_ollama_direct.py",
+    "backend/test_ollama_url_routing.py",
     "backend/test_open_chat.py",
     "backend/test_optin_models.py",
     "backend/test_optin_roots.py",
@@ -4150,6 +4173,7 @@
     "backend/test_personality_creator.py",
     "backend/test_phone_app_allowlist.py",
     "backend/test_phone_app_launch.py",
+    "backend/test_phone_authorized_update.py",
     "backend/test_phone_fact_answers.py",
     "backend/test_phone_facts.py",
     "backend/test_phone_notifications.py",
@@ -4174,6 +4198,7 @@
     "backend/test_power_switch.py",
     "backend/test_preset_answers.py",
     "backend/test_preset_independence.py",
+    "backend/test_preset_switch_lane_guard.py",
     "backend/test_presets.py",
     "backend/test_presets_apply.py",
     "backend/test_presets_cloud.py",
@@ -4423,7 +4448,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 708,
+   "file_count": 719,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4821,12 +4846,45 @@
     "changelog.d/2026-11-16-research-search-both-languages.md",
     "changelog.d/2026-11-16-specta-hotkeys-pilot.md",
     "changelog.d/2026-11-17-browser-window-switch.md",
+    "changelog.d/2026-11-17-build-flake-def087.md",
+    "changelog.d/2026-11-17-client-build-on-main-is-not-cancelled.md",
     "changelog.d/2026-11-17-github-invented-targets-refused.md",
     "changelog.d/2026-11-17-note-flag-read-takes-the-folder.md",
+    "changelog.d/2026-11-17-notes-name-clause-boundary.md",
     "changelog.d/2026-11-17-pooled-start-order.md",
+    "changelog.d/2026-11-17-preset-speed-in-the-row.md",
+    "changelog.d/2026-11-17-preset-speed-on-the-phone.md",
     "changelog.d/2026-11-17-readme-claim-audit.md",
     "changelog.d/2026-11-17-three-surgical-defects.md",
     "changelog.d/2026-11-17-vault-note-risk-row.md",
+    "changelog.d/2026-11-18-a-card-claim-needs-a-card.md",
+    "changelog.d/2026-11-18-advisories-checker-doc.md",
+    "changelog.d/2026-11-18-audit-installs-backend-test-deps.md",
+    "changelog.d/2026-11-18-capability-answers-from-the-catalogue.md",
+    "changelog.d/2026-11-18-capability-questions-reach-the-catalogue.md",
+    "changelog.d/2026-11-18-capability-questions-reach-the-right-row.md",
+    "changelog.d/2026-11-18-claims-zero-check.md",
+    "changelog.d/2026-11-18-cloud-degrade-chain-names-a-lane-that-exists.md",
+    "changelog.d/2026-11-18-cloud-settings-from-chat.md",
+    "changelog.d/2026-11-18-def088-a2-preset-lane.md",
+    "changelog.d/2026-11-18-def089-def090-fieldtest.md",
+    "changelog.d/2026-11-18-defect-register-answers.md",
+    "changelog.d/2026-11-18-desktop-release-lockfile.md",
+    "changelog.d/2026-11-18-egress-gate-reads-code-not-prose.md",
+    "changelog.d/2026-11-18-everyday-26b-three-cards.md",
+    "changelog.d/2026-11-18-favourite-note-tier.md",
+    "changelog.d/2026-11-18-github-own-repo-without-the-owner.md",
+    "changelog.d/2026-11-18-lane-launcher-tracked-and-drift-check.md",
+    "changelog.d/2026-11-18-local-turn-can-always-answer.md",
+    "changelog.d/2026-11-18-ollama-url-routing.md",
+    "changelog.d/2026-11-18-phone-authorized-update.md",
+    "changelog.d/2026-11-18-phone-aware-catalogue-rows.md",
+    "changelog.d/2026-11-18-phone-copy-that-was-wrong.md",
+    "changelog.d/2026-11-18-pictures-to-pdf-and-format-conversion.md",
+    "changelog.d/2026-11-18-preset-cards.md",
+    "changelog.d/2026-11-18-preset-switch-guard.md",
+    "changelog.d/2026-11-18-recordings-in-chat.md",
+    "changelog.d/2026-11-18-unknown-lane-name-fails-closed.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -5081,8 +5139,37 @@
     "decisions.d/2026-11-16-preset-click-uncarded.md",
     "decisions.d/2026-11-16-research-one-query-per-language.md",
     "decisions.d/2026-11-17-browser-window-switch.md",
+    "decisions.d/2026-11-17-client-build-on-main-is-not-cancelled.md",
     "decisions.d/2026-11-17-github-targets-must-exist.md",
+    "decisions.d/2026-11-17-notes-name-clause-boundary.md",
+    "decisions.d/2026-11-17-one-preset-at-a-time.md",
+    "decisions.d/2026-11-17-preset-speed-in-the-row.md",
+    "decisions.d/2026-11-17-preset-speed-on-the-row.md",
     "decisions.d/2026-11-17-vault-note-risk-row.md",
+    "decisions.d/2026-11-18-a-card-claim-needs-a-card.md",
+    "decisions.d/2026-11-18-a-local-turn-can-always-answer.md",
+    "decisions.d/2026-11-18-an-exact-feature-name-beats-a-shared-word.md",
+    "decisions.d/2026-11-18-audit-installs-backend-test-deps.md",
+    "decisions.d/2026-11-18-capability-answers-from-the-catalogue.md",
+    "decisions.d/2026-11-18-capability-questions-reach-the-catalogue.md",
+    "decisions.d/2026-11-18-catalogue-rows-carry-the-phones-own-place.md",
+    "decisions.d/2026-11-18-claims-zero-check.md",
+    "decisions.d/2026-11-18-cloud-degrade-chain-may-only-name-a-real-lane.md",
+    "decisions.d/2026-11-18-cloud-settings-from-chat.md",
+    "decisions.d/2026-11-18-desktop-release-lockfile.md",
+    "decisions.d/2026-11-18-everyday-26b-three-cards.md",
+    "decisions.d/2026-11-18-favourite-note-tier.md",
+    "decisions.d/2026-11-18-github-own-repo-resolved-not-asked.md",
+    "decisions.d/2026-11-18-lane-launcher-tracked-and-drift-check.md",
+    "decisions.d/2026-11-18-lane-service-fails-closed.md",
+    "decisions.d/2026-11-18-local-facts-defect-register.md",
+    "decisions.d/2026-11-18-ollama-url-routing.md",
+    "decisions.d/2026-11-18-phone-authorized-update.md",
+    "decisions.d/2026-11-18-picture-conversion-card.md",
+    "decisions.d/2026-11-18-preset-cards.md",
+    "decisions.d/2026-11-18-preset-switch-guard.md",
+    "decisions.d/2026-11-18-recordings-in-chat.md",
+    "decisions.d/2026-11-18-the-egress-gate-reads-code-not-prose.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5588,7 +5675,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 1124,
+   "file_count": 1186,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5723,6 +5810,7 @@
     "backend/limits-read.patch",
     "backend/limits-settings.patch",
     "backend/live.patch",
+    "backend/local-model-guard.patch",
     "backend/log-scrub.patch",
     "backend/loopback-too.patch",
     "backend/manner.patch",
@@ -5850,6 +5938,7 @@
     "scripts/recover_from_claude_export.py",
     "scripts/rotate-android-signing-key.ps1",
     "scripts/setup-jarvis.ps1",
+    "scripts/start-lane.ps1",
     "scripts/test-update-jarvis.ps1",
     "scripts/update-jarvis.ps1",
     "scripts/verify_minisign.py",
@@ -5887,6 +5976,7 @@
     "tools/check_field_test_binaries.py",
     "tools/check_injection_chains.py",
     "tools/check_invoke_grants.py",
+    "tools/check_lane_launcher.py",
     "tools/check_lanes.py",
     "tools/check_literal_keys.py",
     "tools/check_live_awareness_sanity.py",
@@ -6148,7 +6238,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 536,
+   "file_count": 539,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6418,6 +6508,7 @@
     "jarvis-backend/jarvis_child_env.py",
     "jarvis-backend/jarvis_claims.py",
     "jarvis-backend/jarvis_clipboard.py",
+    "jarvis-backend/jarvis_cloud_settings.py",
     "jarvis-backend/jarvis_compaction.py",
     "jarvis-backend/jarvis_companion.py",
     "jarvis-backend/jarvis_compute.py",
@@ -6469,6 +6560,7 @@
     "jarvis-backend/jarvis_hud.html",
     "jarvis-backend/jarvis_hud.py",
     "jarvis-backend/jarvis_identity.py",
+    "jarvis-backend/jarvis_image_convert.py",
     "jarvis-backend/jarvis_inbox_tidy.py",
     "jarvis-backend/jarvis_initiative.py",
     "jarvis-backend/jarvis_injection.py",
@@ -6636,6 +6728,7 @@
     "jarvis-backend/jarvis_tutorials.py",
     "jarvis-backend/jarvis_ui_control.py",
     "jarvis-backend/jarvis_undo.py",
+    "jarvis-backend/jarvis_update.py",
     "jarvis-backend/jarvis_upload.py",
     "jarvis-backend/jarvis_vault.py",
     "jarvis-backend/jarvis_vault_organizer.py",
@@ -6674,7 +6767,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 344,
+   "file_count": 347,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6704,111 +6797,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "b9325012e05670495f55f394f45664f39fc91e33",
-   "date": "2026-11-17",
-   "subject": "fix(ollama): OLLAMA_URL must be this PC, and a cloud lane cannot borrow Jarvis's token (#1330)"
+   "sha": "0d99b9b18a7adc46701a9bdf5e7ddc8ffcba877b",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1386 from darknight11ish/fix/the-desktop-release-cannot-build-2026-11-18"
   },
   {
-   "sha": "2ffe919a721f5f979cf9f5bebe5e27fab8b64dd1",
-   "date": "2026-11-17",
-   "subject": "fix(ci): a required check could open a browser, so the window gets its own switch (#1347)"
+   "sha": "174749d6f095b4da1fd6f59452df4ae96eb8110b",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1383 from darknight11ish/fix/the-egress-gate-reads-code-not-prose-2026-11-18"
   },
   {
-   "sha": "90e818084904ef687053a774d53eb9c0cc8b176d",
-   "date": "2026-11-17",
-   "subject": "fix(github): refuse an invented repository, owner or branch before any request (#1348)"
+   "sha": "5cef9dae36912fc78bce2b58562665f222610277",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1381 from darknight11ish/fix/a-suite-that-passed-nothing-is-not-a-pass-2026-11-18"
   },
   {
-   "sha": "96f85a3b36da1b572e1290ae81dfc1c1516c4540",
-   "date": "2026-11-17",
-   "subject": "fix(notes): the pinned question takes the folder it was asked about (#1349)"
+   "sha": "aa542b9c5cd79e38c1d975bc9a0f9c50050c897c",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1382 from darknight11ish/fix/github-questions-use-the-known-repo-2026-11-18"
   },
   {
-   "sha": "c2072ce6d9ac9201c4f158dfae569ff35ebadca1",
-   "date": "2026-11-17",
-   "subject": "gate: classify edit_vault_note as local/reversible, and reword the unclassified warning (#1350)"
+   "sha": "40e93af61a9eaa3319b5094806a19589b3f45446",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1385 from darknight11ish/fix/jarvis-knows-what-is-in-its-own-record-2026-11-18"
   },
   {
-   "sha": "24ebfabb5b88e33bb0ca385f869ffa81a83edfc7",
-   "date": "2026-11-17",
-   "subject": "Merge pull request #1343 from darknight11ish/readme-audit-2026-11-17"
+   "sha": "384d49ca178bfdc1113d45060dd7026d84dcfa10",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1379 from darknight11ish/fix/the-last-capability-misses-2026-11-18"
   },
   {
-   "sha": "40f2e60029adc64ec876d9ff9153451081847b9a",
-   "date": "2026-11-17",
-   "subject": "Merge pull request #1340 from darknight11ish/feat/egress-second-round-2026-11-16"
+   "sha": "d25f65eef162dcd280fbfcd37f4581538853d024",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1384 from darknight11ish/fix/lane-service-fails-closed-2026-11-18"
   },
   {
-   "sha": "29582e925e52ef8a6f7a974276b170fe886f5c9f",
-   "date": "2026-11-17",
-   "subject": "Merge pull request #1346 from darknight11ish/fix/w2-surgical-2026-11-17"
+   "sha": "b5bf31e36d27e424a6f7c770288d104dfdf500c4",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1380 from darknight11ish/fix/catalogue-rows-say-where-things-really-are-2026-11-18"
   },
   {
-   "sha": "cce3dd2dc358e41a0ff1bef105b4c5a75849c22b",
-   "date": "2026-11-17",
-   "subject": "Merge origin/main into fix/w2-surgical-2026-11-17"
+   "sha": "f3156af3bc4b455ed2d66acee63318beeeb57166",
+   "date": "2026-11-18",
+   "subject": "Merge pull request #1376 from darknight11ish/feat/cloud-settings-from-chat-2026-11-18"
   },
   {
-   "sha": "f1258f1947e6ec0b8ba41d9077c6a749d7e2d44b",
-   "date": "2026-11-17",
-   "subject": "Merge pull request #1339 from darknight11ish/feat/job-priority-2026-11-16"
+   "sha": "860a5c86d775781ada8bef62132aa80f4bd1c75b",
+   "date": "2026-11-18",
+   "subject": "fix(release): name the main binary so tauri build can bundle the app"
   },
   {
-   "sha": "353928d6421a28affd2556bd7dfe61d006796bad",
-   "date": "2026-11-17",
-   "subject": "test(watch): the repo-watch double learns the real progress signature"
+   "sha": "b20882afb491034edf5bb4d35116dd09bd3148b5",
+   "date": "2026-11-18",
+   "subject": "fix(release): sync the desktop lockfile so npm ci can build the installer"
   },
   {
-   "sha": "3213e8e67dae6553c207344b090ef475ee1a3710",
-   "date": "2026-11-17",
-   "subject": "test(browser-guard): prove the import-only suite, instead of breaking the pin"
+   "sha": "f7af718e1737844f813925f11ae80971dbda4459",
+   "date": "2026-11-18",
+   "subject": "fix(egress): one allow-list entry per suite"
   },
   {
-   "sha": "453d921e01481f00ab6242e4d6a31fbd7b8efc28",
-   "date": "2026-11-17",
-   "subject": "Merge pull request #1345 from darknight11ish/fix/pooled-start-order"
+   "sha": "3d152e48cc6e61a2bcb993a7961d73e6f1b99d68",
+   "date": "2026-11-18",
+   "subject": "test(github): the tool-text pins carry one key each - the audit's literal-key check"
   },
   {
-   "sha": "7daa277d27d3b8e350cf75832f88b8ba034b6643",
-   "date": "2026-11-17",
-   "subject": "fix(email): find_quiet_threads read the clock with no time imported"
+   "sha": "c0a6b896a0bf4e2afadf3fa6b4c53626661743c2",
+   "date": "2026-11-18",
+   "subject": "fix(lane): an unknown lane name is not a cloud provider"
   },
   {
-   "sha": "7d4f5c3edc3a341b7640c8a5bbeae939e7c63b82",
-   "date": "2026-11-17",
-   "subject": "fix(watch): report the progress sentence as the note, not the fraction"
+   "sha": "269e17e8828fef48615651c7167f71d0d0df90a7",
+   "date": "2026-11-18",
+   "subject": "fix(chat): the defect register answers from its own file, or refuses"
   },
   {
-   "sha": "83435526d4f63d77538254f208cadaaccf6dd1a8",
-   "date": "2026-11-17",
-   "subject": "fix(notes): an append to a note the owner names needs no article"
+   "sha": "23e92b51ef1553db0bdae596384eeef2e229472d",
+   "date": "2026-11-18",
+   "subject": "docs: the cloud-settings record names the proof it actually uses"
   },
   {
-   "sha": "70b3b08c9c4e9926e82cf892f21da1fc4d426dc9",
-   "date": "2026-11-17",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/job-priority-2026-11-16"
+   "sha": "689dc3f4b39cc065ee8668eb596c18c60f9dd3f7",
+   "date": "2026-11-18",
+   "subject": "fix(egress): the gate reads code, not prose"
   },
   {
-   "sha": "70dba18ebf02d449209abba85e4bded91451657e",
-   "date": "2026-11-17",
-   "subject": "Merge remote-tracking branch 'origin/main' into readme-audit-2026-11-17"
+   "sha": "753592561e3bda380ff68714e8298afb20e10198",
+   "date": "2026-11-18",
+   "subject": "feat(chat): answer the owner's core GitHub reads deterministically, reads only resolve his own repo"
   },
   {
-   "sha": "7f74d5991a551274e9128b2d5e19c70ab68927fd",
-   "date": "2026-11-17",
-   "subject": "Merge pull request #1342 from darknight11ish/fix/taint-latch-memory-2026-11-16"
+   "sha": "f0cfdac9f7dffb2031e876485fc37ff0e427bb72",
+   "date": "2026-11-18",
+   "subject": "CONFLICT: docs/JARVIS-API.md. Both sides appended a new numbered section at the end: main carries #1378's section 228, and this branch carries its own 228. Both are kept - #1378's stays 228 and this branch's is renumbered 229 (228.x -> 229.x) - no words changed and nothing dropped. Resolution is pr-landing's, following the documented keep-both rule for an appended document, because the PR was conflicting and a conflicting PR gets no CI."
   },
   {
-   "sha": "bd1fe63b565b7ca51b73b9a31efef54c27220a0b",
-   "date": "2026-11-17",
-   "subject": "merge: keep the census, and allow the speed-record fixture main had just allowed"
+   "sha": "fe0b4db1e3db0ede96f60d1cfa5f04acd70445b9",
+   "date": "2026-11-18",
+   "subject": "claims(checker): a suite that passed nothing is not a pass"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1468
+   "files": 1483
   },
   {
    "path": "jarvis-desktop/",
@@ -6818,7 +6911,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 994
+   "files": 996
   },
   {
    "path": "docs/",
@@ -6828,22 +6921,22 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 358
+   "files": 391
   },
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 356
+   "files": 359
   },
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 292
+   "files": 293
   },
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 256
+   "files": 285
   },
   {
    "path": "videos/",
@@ -6853,7 +6946,7 @@
   {
    "path": "plugins/",
    "line": "drop-in features installed by putting a folder in place",
-   "files": 115
+   "files": 117
   },
   {
    "path": "jarvis-android/",
@@ -6873,7 +6966,7 @@
   {
    "path": "scripts/",
    "line": "the installer, the patch applier and the Windows checks",
-   "files": 23
+   "files": 24
   },
   {
    "path": ".claude/",
@@ -6927,8 +7020,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 6047,
-  "covered": 5562,
+  "tracked_files": 6133,
+  "covered": 5648,
   "excluded": 485,
   "subsystems": 27
  },
