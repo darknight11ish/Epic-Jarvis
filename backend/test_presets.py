@@ -138,16 +138,18 @@ def _three_card_block(*monitors):
 
 
 def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
-    """2026-11-04. The 3-GPU rows were placed by BLIND array index and the words
-    said "2080 SUPER #1 (card 1)" and "#2 (card 2)" - a number the owner cannot
-    see anywhere - while the Coding row still described the 30B coding model as
-    "the Coding lane (qwen3.5:4b helper)", wrong since 2026-11-02.
+    """2026-11-18. TWO LANES, BOTH ACROSS ALL THREE CARDS, ONE MODEL AT A TIME.
 
-    The fix is the hybrid topology rule: everyday presets keep one lane per GPU
-    (the everyday card, the monitor card, the headless card), and only the
-    on-demand Coding preset pools the cards. Which card is which must come from
-    a measured fact, so this drives a THREE-card answer where the monitor is on
-    the THIRD card in the array - the case a blind index cannot get right.
+    This check used to pin the older "hybrid" rule: everyday presets keep one
+    lane per GPU and only the coding model pools the cards. That rule - and the
+    words in `recommendations()` / `three_gpu_plan.layout` that stated it - is
+    what kept the retired 11435 lane looking necessary. The 3-GPU plan now says
+    what the code does: every named-lane row runs on the ONE everyday lane
+    across all three cards, the heavy rows run on the pooled lane and pause the
+    everyday model, and no row invents a per-card slot or an array position.
+
+    The role words are still checked against a real three-card answer, because
+    the pool's own words must not number identical cards.
     """
     real = P._detected_cards
     P._detected_cards = lambda: _three_card_block(None, False, True)
@@ -156,124 +158,90 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
     finally:
         P._detected_cards = real
     three = rec["by_gpu_count"]["3"]
-    check("the everyday rows are placed on the card with the most VRAM (the 2060), "
-          "not on index 0 by luck",
-          three["general"]["card_index"] == 0
-          and three["documents"]["card_index"] == 0
-          and three["browser"]["card_index"] == 0,
-          {k: v["card_index"] for k, v in three.items()})
-    check("2026-11-18: the two moved rows are on the POOLED lane in the 3-GPU plan - "
-          "the all-three-cards words, never a single-card role",
-          three["reflect"]["card"] == three["pictures"]["card"]
-          == three["coding"]["card"] == three["medical"]["card"]
-          == f"all the cards (pooled lane, port {P.POOLED_PLAN_PORT})"
-          and "HEAVY MODE" in three["reflect"]["note"]
-          and "HEAVY MODE" in three["pictures"]["note"],
-          {k: three[k]["card"] for k in ("reflect", "pictures", "coding", "medical")})
-    check("Fast goes to the card nvidia-smi says has the MONITOR - index 2 here, "
-          "which is not the index the old table used",
-          three["fast"]["card_index"] == 2, three["fast"])
-    check("Agentic+Vision stays on the 12 GB everyday card - index 0 - because its "
-          "9B weights plus the vision projector need about 7.00 GiB and an 8 GB "
-          "headless twin has only 6.65 GiB free",
-          three["agentic_vision"]["card_index"] == 0, three["agentic_vision"])
-    check("the 2080 SUPER that has the monitor is named by its own PCI address and "
-          "role, not by '#' and an array position - and the Agentic+Vision row names "
-          "the everyday card it really runs on",
-          "0000:0a:00.0" in three["fast"]["note"]
-          and "card with the monitor" in three["fast"]["note"]
-          and "0000:04:00.0" in three["agentic_vision"]["note"]
-          and "12 GB" in three["agentic_vision"]["note"]
-          and "2080 SUPER #" not in " ".join(r["note"] for r in three.values()),
-          (three["fast"]["note"], three["agentic_vision"]["note"]))
-    check("the Coding row names the REAL model on the POOLED lane, not the old "
-          "'qwen3.5:4b helper' that stopped being true on 2026-11-02",
-          "qwen3-coder-30b-a3b-ud-q3-k-xl" in three["coding"]["note"]
-          and "11450" in three["coding"]["note"]
-          and "qwen3.5:4b" not in three["coding"]["note"]
-          and three["coding"]["card"] == "all the cards (pooled lane, port 11450)",
-          three["coding"])
+    # The everyday lane is ONE card again, and its role words come from the same
+    # detected-card table the recommendations used.
+    _cards = _three_card_block(None, False, True)["cards"]
+    everyday_words = P._role_words(_cards, P._card_roles(_cards), "main")
+    pooled_words = f"all the cards (pooled lane, port {P.POOLED_PLAN_PORT})"
+    check("every named-lane 3-GPU row names the ONE everyday card",
+          all(three[k]["card"] == everyday_words
+              for k in ("general_uncensored", "fast",
+                        "agentic_vision", "documents", "browser")),
+          {k: three[k]["card"] for k in three})
+    check("... and every heavy row - General included - says the pooled lane on "
+          "all the cards",
+          all(three[k]["card"] == pooled_words
+              for k in ("general", "coding", "reflect", "pictures", "medical")),
+          {k: three[k]["card"] for k in three})
+    check("... General's row names the 32,768 window it really runs, and every "
+          "heavy row says it pauses the everyday model (never 'the other lanes')",
+          "32,768" in three["general"]["note"]
+          and all("pauses the everyday model" in three[k]["note"]
+                  for k in ("general", "coding", "reflect", "pictures", "medical")),
+          {k: three[k]["note"] for k in three})
+    check("... the rows never print an invented array position ('card 2')",
+          all(not re.match(r"^card \d+$", row["card"]) for row in three.values()),
+          {k: v["card"] for k, v in three.items()})
+    check("... and every named-lane row's `card` is the same words its own note "
+          "opens with (the heavy rows open with the model's name instead)",
+          all(row["note"].startswith(row["card"]) for row in three.values()
+              if P.by_id(row["preset"]).lane != "pooled"),
+          {k: (v["card"], v["note"]) for k, v in three.items()})
     plan = rec["three_gpu_plan"]
-    check("the layout states BOTH halves of the hybrid rule: everyday is one lane "
-          "per GPU, and only heavy Coding pools the cards on port 11450",
-          "one lane per GPU" in plan["layout"]
-          and "pooled" not in plan["layout"].split("only", 1)[0]
-          and "port 11450" in plan["layout"]
-          and "never one model split across three cards" not in plan["layout"],
-          plan["layout"])
-    check("... and the pooled exception is spelled out beside it, because a rule "
-          "that leaves it unsaid is the one that went stale",
+    check("the 3-GPU plan states the ONE-preset-at-a-time rule, not 'one lane per GPU'",
+          "one preset's model is loaded at a time" in plan["layout"].lower()
+          and "one lane per gpu" not in plan["layout"].lower()
+          and str(P.POOLED_PLAN_PORT) in plan["layout"]
+          and "all three" in plan["layout"], plan["layout"])
+    check("... and it says any preset may use all three cards, and that the heavy "
+          "presets pause the everyday model",
+          "any preset may use all three" in plan["layout"]
+          and "pooled" in plan["layout"]
+          and "pauses the everyday model" in plan["layout"], plan["layout"])
+    check("... the pooled exception is spelled out beside it, because a rule that "
+          "leaves it unsaid is the one that went stale",
           "qwen3-coder-30b-a3b-ud-q3-k-xl" in plan["heavy_pooled"]
-          and "11450" in plan["heavy_pooled"]
+          and str(P.POOLED_PLAN_PORT) in plan["heavy_pooled"]
           and "too big for one" in plan["heavy_pooled"], plan["heavy_pooled"])
-    check("the three plan cards are the three real cards, in role order",
+    check("... and the plan's cards are the two real lanes: the one-card "
+          "everyday lane and the all-three-card pooled lane",
           [c["role"].split(":")[0] for c in plan["cards"]]
-          == ["everyday lane", "monitor card's lane", "headless card's lane"]
-          and "0000:04:00.0" in plan["cards"][0]["card"]
-          and "0000:0a:00.0" in plan["cards"][1]["card"]
-          and "0000:07:00.0" in plan["cards"][2]["card"], plan["cards"])
-    check("... and the headless row states the arithmetic instead of claiming a lane "
-          "it cannot hold: Agentic+Vision needs about 7.00 GiB, the card has 6.65",
-          "Agentic+Vision" in plan["cards"][2]["role"]
-          and "7.00 GiB" in plan["cards"][2]["role"]
-          and "6.65 GiB" in plan["cards"][2]["role"]
-          and "Agentic + Vision stays on the everyday card" in plan["layout"],
-          (plan["cards"][2]["role"], plan["layout"]))
+          == ["everyday lane", "pooled lane, started on demand"]
+          and plan["cards"][0]["card"].startswith("NVIDIA GeForce RTX 2060")
+          and plan["cards"][1]["card"].startswith("all three cards"),
+          plan["cards"])
+    check("... with no invented headless lane from the old one-card-per-GPU plan",
+          "headless" not in json.dumps(plan["cards"]).lower()
+          and "one lane per GPU" not in plan["layout"], plan["cards"])
 
-    # A PC that does not report the display flag must not guess: the role falls
-    # back to the first non-everyday card and the words SAY nothing measured it.
+    # A PC that cannot report the display flag: the plan makes no claim about
+    # which card has the monitor, so there is nothing to get wrong.
     P._detected_cards = lambda: _three_card_block(None, None, None)
     try:
         unknown = P.recommendations()
     finally:
         P._detected_cards = real
-    three_unknown = unknown["by_gpu_count"]["3"]
-    check("no display flag anywhere: nothing is claimed about which twin has the "
-          "monitor, and the words say so",
-          "monitor not reported by this PC" in three_unknown["fast"]["note"]
-          and "card with the monitor" not in three_unknown["fast"]["note"],
-          three_unknown["fast"]["note"])
+    check("no display flag anywhere: the plan never guesses which card has the "
+          "monitor", "monitor" not in json.dumps(unknown["three_gpu_plan"]).lower(),
+          unknown["three_gpu_plan"])
 
-    # With only the two cards this PC really has, the third role must not be
-    # described as an installed card.
+    # Only the two cards this PC really has: the plan is about the lanes, so a
+    # missing third card must not become an invented one.
     P._detected_cards = lambda: {"count": 2, "source": "jarvis_hardware.detect()",
                                  "cards": _three_card_block(None, False, True)["cards"][:2]}
     try:
         two = P.recommendations()
     finally:
         P._detected_cards = real
-    check("two cards installed: the headless role says it is not installed yet, "
-          "instead of pretending a third card is there - and Agentic+Vision is not "
-          "placed on it",
-          "not installed yet" in two["three_gpu_plan"]["cards"][2]["card"]
-          and two["by_gpu_count"]["3"]["agentic_vision"]["card_index"] == 0,
-          two["three_gpu_plan"]["cards"][2])
-    # This check's invariant is "never an invented array position", NOT a
-    # particular card: origin/main moved Agentic+Vision to the everyday card
-    # (it needs about 7.00 GiB and a headless 8 GB card has 6.65 GiB free), so
-    # the role word it must print is the everyday one. The `card` field and the
-    # `note`'s opening must still be the same words (2026-11-05).
-    check("two cards installed: the Agentic+Vision ROW's own `card` is a role "
-          "word too, never the old invented 'card 2' from _row()'s fallback "
-          "(fixed 2026-11-05)",
-          not re.match(r"^card \d+$",
-                       two["by_gpu_count"]["3"]["agentic_vision"]["card"])
-          and two["by_gpu_count"]["3"]["agentic_vision"]["note"].startswith(
-              two["by_gpu_count"]["3"]["agentic_vision"]["card"]),
-          two["by_gpu_count"]["3"]["agentic_vision"])
-    check("... and NO 3-GPU row falls back to an array position at all: every "
-          "row names a role (the coding row names the pooled lane)",
-          all(not re.match(r"^card \d+$", row["card"])
-              for row in two["by_gpu_count"]["3"].values()),
-          {k: v["card"] for k, v in two["by_gpu_count"]["3"].items()})
-    check("... every non-pooled 3-GPU row's card is the same role word its own "
-          "note opens with, so the two fields cannot disagree",
-          all(row["note"].startswith(row["card"])
-              for row in two["by_gpu_count"]["3"].values()
-              if P.by_id(row["preset"]).lane != "pooled"),
-          {k: (v["card"], v["note"]) for k, v in two["by_gpu_count"]["3"].items()})
-    check("the pooled lane's port is ONE number, pinned to the two modules that "
-          "own it rather than typed three times",
+    three_two = two["by_gpu_count"]["3"]
+    check("two cards installed: no 3-GPU row falls back to an array position, and "
+          "the plan names the lanes rather than a card that is not there",
+          all(not re.match(r"^card \d+$", row["card"]) for row in three_two.values())
+          and all(not re.match(r"^card \d+$", c["card"] or "")
+                  for c in two["three_gpu_plan"]["cards"]),
+          {k: v["card"] for k, v in three_two.items()})
+    check("... and the pooled lane's port is ONE number, pinned to the two modules "
+          "that own it rather than typed three times",
           P.POOLED_PLAN_PORT == 11450, P.POOLED_PLAN_PORT)
     import jarvis_big_coder as BC
     import jarvis_model_lanes as L
@@ -307,6 +275,11 @@ def t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane():
           "the card with the monitor" not in words
           and "the card with no monitor" not in words
           and "the monitor is on the everyday card instead" in words, words)
+    # The 3-GPU plan no longer places a model on one physical card, so there is
+    # no per-card role for the rows to get wrong: every named-lane row is the
+    # everyday lane across all three cards. The helper-level facts above still
+    # matter (a lane would have to be drawn on ONE card again for a monitor claim
+    # to be needed), and the plan itself makes no monitor claim at all.
     real = P._detected_cards
     P._detected_cards = lambda: {"count": 3,
                                  "source": "jarvis_hardware.detect()",
@@ -316,49 +289,14 @@ def t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane():
     finally:
         P._detected_cards = real
     three = rec["by_gpu_count"]["3"]
-    fast = three["fast"]
-    check("the 3-GPU Fast row says where the monitor is; it is never labelled "
-          "the monitor lane on a card with no monitor",
-          "the monitor is on the everyday card instead" in fast["note"]
-          and "the monitor is on the everyday card instead" in fast["card"]
-          and "the card with the monitor" not in fast["note"]
-          and "the card with the monitor" not in fast["card"], fast)
-    plan = rec["three_gpu_plan"]["cards"]
-    check("the plan's display row is not called the monitor card's lane when the "
-          "monitor is on the everyday card",
-          "the card with the monitor" not in plan[1]["card"]
-          and "the monitor is on the everyday card instead" in plan[1]["card"]
-          and "monitor card's lane" not in plan[1]["role"], plan[1])
-    check("the headless row keeps the third card and names its own PCI address",
-          "0000:0a:00.0" in plan[2]["card"], plan[2])
-    check("... and Agentic+Vision, which cannot fit that 8 GB card, is on the "
-          "everyday card and names ITS PCI address - never the headless one",
-          three["agentic_vision"]["card_index"] == 0
-          and "0000:04:00.0" in three["agentic_vision"]["card"],
-          three["agentic_vision"])
-
-    # The same reported case with only the two cards this PC has: the other
-    # card gets the Fast lane and the third role stays honestly not installed.
-    P._detected_cards = lambda: {"count": 2,
-                                 "source": "jarvis_hardware.detect()",
-                                 "cards": _three_card_block(True, False, False)["cards"][:2]}
-    try:
-        two = P.recommendations()
-    finally:
-        P._detected_cards = real
-    rows = two["by_gpu_count"]["3"]
-    check("two cards with the monitor on the everyday one: no 3-GPU row invents "
-          "an array position",
-          all(not re.match(r"^card \d+$", row["card"]) for row in rows.values()),
-          {k: v["card"] for k, v in rows.items()})
-    check("... the Fast row is the other card and says where the monitor is",
-          "the monitor is on the everyday card instead" in rows["fast"]["card"]
-          and "the card with the monitor" not in rows["fast"]["card"], rows["fast"])
-    check("... and Agentic+Vision stays on the installed everyday card instead of "
-          "claiming a third card it cannot fit",
-          rows["agentic_vision"]["card_index"] == 0
-          and "not installed yet" not in rows["agentic_vision"]["card"],
-          rows["agentic_vision"])
+    check("no 3-GPU row is placed on a single card any more, so no row can be "
+          "labelled the monitor lane wrongly",
+          all("the monitor" not in row["card"] for row in three.values())
+          and all("the monitor" not in row["note"] for row in three.values()),
+          {k: v["card"] for k, v in three.items()})
+    check("... and the plan's lane rows make no claim about which card has the "
+          "monitor", "monitor" not in json.dumps(rec["three_gpu_plan"]).lower(),
+          rec["three_gpu_plan"])
 
 
 def t_every_pooled_preset_carries_a_measured_dict():
@@ -372,9 +310,10 @@ def t_every_pooled_preset_carries_a_measured_dict():
     the lane would load a model the preset never named.
     """
     pooled = [p for p in P.PRESETS if p.lane == "pooled"]
-    check("four presets take all three cards today: Coding, Reflective Coach, "
-          "Pictures & Screens and Medical",
-          [p.id for p in pooled] == ["coding", "reflect", "pictures", "medical"],
+    check("FIVE presets take all three cards today: General (joined 2026-11-18), "
+          "Coding, Reflective Coach, Pictures & Screens and Medical",
+          [p.id for p in pooled] == ["general", "coding", "reflect",
+                                     "pictures", "medical"],
           [p.id for p in pooled])
     check("... every one of them is heavy_mode",
           all(p.heavy_mode for p in pooled),
@@ -394,9 +333,9 @@ def t_every_pooled_preset_carries_a_measured_dict():
           [(p.id, p.measured.get("source")) for p in pooled])
     modes = {m["key"]: m for m in P.pooled_modes()}
     named = [p for p in pooled if p.mode]
-    check("three of the four name their own pooled mode, and Coding keeps the lane's "
-          "own default",
-          [p.id for p in named] == ["reflect", "pictures", "medical"]
+    check("four of the five name their own pooled mode (General shares Reflective "
+          "Coach's measured row), and Coding keeps the lane's own default",
+          [p.id for p in named] == ["general", "reflect", "pictures", "medical"]
           and P.by_id("coding").mode == "", [p.id for p in named])
     check("... every named mode is a row pooled_modes() publishes, at the SAME model "
           "and window the preset row states",
@@ -437,8 +376,38 @@ def main() -> int:
               and p["apply"]["apply_route"] == "/api/work/apply")
         check(f"{p['id']}: model and context are stated", bool(p["model"]) and int(p["context"]) > 0)
     gen = P.by_id("general")
-    check("General is qwen3.5:9b on the 2060 at 196,608",
-          gen.model == "qwen3.5:9b" and gen.context == 196608 and gen.lane == "main")
+    check("General is the 26B at 32,768 on the POOLED lane - a heavy preset, "
+          "because the everyday lane's one 12 GB card cannot hold it",
+          gen.model == "gemma4:26b-a4b-it-qat" and gen.context == 32768
+          and gen.lane == "pooled" and gen.heavy_mode is True
+          and gen.mode == "gemma4-26b-a4b"
+          and gen.measured["tok_s"] == 25.4
+          and gen.measured["tok_s_on"] == "2026-11-17"
+          and gen.measured["size_gib"] == 15.501
+          and gen.measured["vram_gib"] == 14.82
+          and gen.measured["spill_gib"] == 0.681
+          and gen.measured["cold_load_s"] == 49.9
+          and gen.measured["context_measured"] == 32768,
+          (gen.model, gen.measured))
+    check("... its speed is the DATED 2026-11-17 run, and the note says what was "
+          "measured and that the LOW end of two runs is the figure",
+          gen.measured["tok_s_on"] == "2026-11-17"
+          and "0.68 GiB spill" in gen.measured["tok_s_note"]
+          and "all three cards" in gen.measured["tok_s_note"]
+          and "32,768 context" in gen.measured["tok_s_note"]
+          and "25.4-36.5" in gen.measured["tok_s_note"], gen.measured["tok_s_note"])
+    check("... and its words say HEAVY MODE on the pooled lane and quote that "
+          "measured figure, with no two-card claim",
+          "HEAVY MODE" in gen.cost and "pooled lane" in gen.cost.lower()
+          and "15.50" in gen.cost and "0.68 GiB" in gen.cost and "25.4" in gen.cost
+          and "6.37" not in gen.cost and "46.10" not in gen.cost, gen.cost)
+    check("... and it tells the owner the everyday lane is paused while it runs",
+          "everyday" in (gen.heavy_words or "")
+          and "paused" in gen.heavy_words, gen.heavy_words)
+    check("... and its words say plainly what is NOT measured (picture quality, "
+          "general/tool-calling/vision rubric)",
+          "NOT measured" in gen.worse and "picture quality" in gen.worse
+          and "rubric" in gen.worse, gen.worse)
     cod = P.by_id("coding")
     check("Coding is heavy, on the pooled all-three-card lane",
           cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
@@ -454,18 +423,20 @@ def main() -> int:
           and cod.measured["spill_gib"] == 0.0
           and "49,152" in cod.cost and "zero CPU spill" in cod.cost,
           (cod.context, cod.measured))
-    check("... its words say the other models are PAUSED and name the honest cost, "
+    check("... its words say the everyday model is PAUSED and name the honest cost, "
           "never that a lane is still arriving",
-          "pauses the other lanes' models" in cod.cost
-          and "NOT resident" in cod.worse and "come back" in cod.worse
+          "pauses the everyday model" in cod.cost
+          and "NOT resident" in cod.worse and "comes back" in cod.worse
           and "arriving" not in (cod.what + cod.worse + cod.cost)
           and "all three cards" in cod.heavy_words
           and "paused" in cod.heavy_words, (cod.cost, cod.worse, cod.heavy_words))
-    check("Fast is qwen3.5:4b on the 2080 SUPER's coding lane at 16,384",
-          P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "coding"
+    check("Fast is qwen3.5:4b on the everyday lane at 16,384, never a second card",
+          P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "main"
           and P.by_id("fast").context == 16384
           and P.by_id("fast").measured["tok_s"] == 83.2
-          and P.by_id("fast").measured["context"] == 65536)
+          and P.by_id("fast").measured["context"] == 65536
+          and "no separate fast card" in P.by_id("fast").what,
+          (P.by_id("fast").lane, P.by_id("fast").what))
     gu = P.by_id("general_uncensored")
     check("General Uncensored now names the measured abliterated Qwen3.5 ref",
           gu.pending is False
@@ -494,8 +465,10 @@ def main() -> int:
           [(p["id"], p["measured"].get("tok_s_on")) for p in text_measured])
     ranged = {p["id"]: p["measured"] for p in text_measured
               if "two runs" in p["measured"].get("tok_s_note", "")}
-    check("... the four rows run twice carry their range, and tok_s is its LOW end",
-          set(ranged) == {"coding", "reflect", "pictures", "medical"}
+    check("... the rows run twice carry their range, and tok_s is its LOW end "
+          "(General's 26B row is the same twice-measured pooled load as "
+          "Reflective Coach's, so it carries the range too)",
+          set(ranged) == {"general", "coding", "reflect", "pictures", "medical"}
           and all(re.search(r"read " + re.escape(str(m["tok_s"])) + r"-",
                             m["tok_s_note"]) for m in ranged.values()),
           {k: v.get("tok_s_note") for k, v in ranged.items()})
@@ -591,7 +564,7 @@ def main() -> int:
           "and each row keeps the measured spill allowance its bench row gave it",
           modes[1]["model"] == P.by_id("reflect").model
           and modes[2]["model"] == P.by_id("pictures").model
-          and modes[1]["spill_allowance"] == round(0.68 * 1024 ** 3)
+          and modes[1]["spill_allowance"] == round(0.681 * 1024 ** 3)
           and modes[2]["spill_allowance"] == round(2.24 * 1024 ** 3),
           [m["model"] for m in modes])
     rec3 = P.recommendations()["by_gpu_count"]["3"]
@@ -636,12 +609,16 @@ def main() -> int:
         check(f"{n} GPU: unmeasured rows are labelled",
               all(r["measured"] or r["best_effort_not_tested"] for r in rows.values()),
               {k: (v["measured"], v["best_effort_not_tested"]) for k, v in rows.items()})
-    check("2-GPU mapping: General/Coding/Agentic on the 2060, Fast on the fast card",
-          rec["by_gpu_count"]["2"]["general"]["card_index"] == 0
-          and rec["by_gpu_count"]["2"]["coding"]["card_index"] == 0
-          and rec["by_gpu_count"]["2"]["agentic_vision"]["card_index"] == 0
-          and rec["by_gpu_count"]["2"]["fast"]["card_index"] == 1,
-          {k: v["card_index"] for k, v in rec["by_gpu_count"]["2"].items()})
+    check("2-GPU mapping: General is a heavy pooled-lane row like Coding, so its "
+          "row says so; everything else shares the one everyday lane",
+          rec["by_gpu_count"]["2"]["general"]["card"].startswith(
+              "all three cards (pooled lane")
+          and rec["by_gpu_count"]["2"]["general"]["measured"] is True
+          and rec["by_gpu_count"]["2"]["documents"]["measured"] is True
+          and rec["by_gpu_count"]["2"]["fast"]["measured"] is True
+          and {v["card_index"] for v in rec["by_gpu_count"]["2"].values()} == {0},
+          {k: (v["card_index"], v["best_effort_not_tested"])
+           for k, v in rec["by_gpu_count"]["2"].items()})
     check("1- and 3-GPU rows are best effort, not tested",
           all(r["best_effort_not_tested"] and not r["measured"]
               for n in ("1", "3") for r in rec["by_gpu_count"][n].values()),
@@ -662,19 +639,23 @@ def main() -> int:
           "note opens with, so no row names a card its note contradicts",
           three["agentic_vision"]["note"].startswith(three["agentic_vision"]["card"]),
           three["agentic_vision"])
-    check("3-GPU confirmed layout: Fast on the display card, Agentic+Vision on the "
-          "everyday card (it cannot fit an 8 GB card)",
-          three["fast"]["card_index"] == 1 and three["agentic_vision"]["card_index"] == 0,
-          {k: v["card_index"] for k, v in three.items()})
-    check("3-GPU plan is lane-per-GPU on three RTX cards, and says the x4 link",
+    check("3-GPU confirmed layout: every named-lane row is the ONE everyday card, "
+          "and every heavy row - General included - is the pooled lane",
+          three["fast"]["card"] == three["agentic_vision"]["card"]
+          == three["documents"]["card"]
+          and three["general"]["card"].startswith("all the cards (pooled lane")
+          and three["coding"]["card"].startswith("all the cards (pooled lane"),
+          {k: v["card"] for k, v in three.items()})
+    check("3-GPU plan states the ONE-preset-at-a-time rule on all three cards, and "
+          "says the x4 link",
           rec["three_gpu_plan"]["confirmed"] is True
-          and "lane per GPU" in rec["three_gpu_plan"]["layout"]
+          and "one preset's model is loaded at a time" in rec["three_gpu_plan"]["layout"].lower()
           and "PCIe 3.0 x4" in rec["three_gpu_plan"]["link_note"]
-          and len(rec["three_gpu_plan"]["cards"]) == 3, rec.get("three_gpu_plan"))
-    check("3-GPU layout states the HYBRID rule this repo really runs: everyday is "
-          "one lane per GPU, heavy Coding is the pooled lane",
-          "one lane per GPU" in rec["three_gpu_plan"]["layout"]
-          and "pools the cards" in rec["three_gpu_plan"]["layout"]
+          and len(rec["three_gpu_plan"]["cards"]) == 2, rec.get("three_gpu_plan"))
+    check("3-GPU layout says any preset may use all three cards and that only the "
+          "heavy ones pool them on the pooled lane",
+          "any preset may use all three" in rec["three_gpu_plan"]["layout"]
+          and "one lane per GPU" not in rec["three_gpu_plan"]["layout"]
           and str(P.POOLED_PLAN_PORT) in rec["three_gpu_plan"]["layout"],
           rec["three_gpu_plan"]["layout"])
     check("the stale 'never one model split across three cards' claim is gone, and "

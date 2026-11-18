@@ -111,8 +111,13 @@ import jarvis_voiceprint as VP  # noqa: E402
 FAILED, PASSED = [], []
 
 LOCAL = "qwen3.5:9b"
-#: The three cloud lanes the owner's own config defines (docs / litellm config).
-LANES = ["jarvis-escalate", "jarvis-critic", "jarvis-bulk"]
+#: The ONE cloud lane the owner's own config defines since 2026-10-27 (the
+#: three names collapsed into `jarvis-escalate`; docs/DECISIONS.md that date).
+#: A second name is kept as a SYNTHETIC "another cloud lane" the tests can put
+#: in a list: the router must drop it, and it must never turn up where a real
+#: lane belongs. It is deliberately not a name from the old config.
+LANES = ["jarvis-escalate"]
+OTHER = "cloud-next"
 CLOUD = LANES[0]
 #: Long and clause-heavy: the complexity gate alone would let it out, so a
 #: refusal below can only come from the gate named in that check.
@@ -442,11 +447,11 @@ def t_the_auto_router_path_obeys_the_same_authority():
 
 def t_degrade_never_walks_local_back_to_cloud():
     cases = (
-        [LOCAL, CLOUD, LANES[1]],
+        [LOCAL, CLOUD, OTHER],
         [CLOUD, LOCAL],
-        [CLOUD, LOCAL, LANES[1]],
+        [CLOUD, LOCAL, OTHER],
         [LOCAL],
-        [LANES[1], LANES[2], LOCAL],
+        [OTHER, CLOUD, LOCAL],
         ["qwen3:8b", CLOUD],
     )
     for lanes in cases:
@@ -462,7 +467,7 @@ def t_degrade_never_walks_local_back_to_cloud():
           got is None, repr(got))
     # From a cloud lane the degrade chain may go through other cloud lanes, but
     # it must reach local rather than cycle or return the refusing lane.
-    got = RT.degrade(CLOUD, lanes=[CLOUD, LOCAL, LANES[1]], local_model=LOCAL)
+    got = RT.degrade(CLOUD, lanes=[CLOUD, LOCAL, OTHER], local_model=LOCAL)
     check("degrade(cloud, [...]) never returns the lane that refused", got != CLOUD)
     check("degrade never returns an empty lane", bool(got))
 

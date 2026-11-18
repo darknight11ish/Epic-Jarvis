@@ -401,7 +401,7 @@ def t_waking_restores_the_chosen_pooled_lane_only_when_standby_stopped_it():
         # (ii) a preset that is not pooled: nothing is started.
         reset()
         started.clear()
-        JP.choice = lambda: "general"
+        JP.choice = lambda: "documents"
         S.set_mode("standby", gate_check=_auto, models=FakeModels(),
                    ollama=FakeOllama(), others=[engine(True)], wait_s=WAIT_S)
         S.set_mode("active", gate_check=_auto, ollama=FakeOllama(),

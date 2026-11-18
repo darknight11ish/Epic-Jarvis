@@ -112,8 +112,8 @@ class Engine:
         return {"stopped": True, "why": ""}
 
     def lane_lines(self):
-        return ["qwen3.5:9b at 196,608 tokens on the RTX 2060 (port 11436)",
-                "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (port 11435)"]
+        return [f"{lane.model} at {lane.ctx:,} tokens across {lane.card} "
+                f"(port {lane.port})" for lane in B.LANES]
 
 
 # ==========================================================================
@@ -236,7 +236,7 @@ def t_the_coding_start_is_still_the_exact_shipped_message():
     check("the shipped coding message is byte-identical",
           body.get("message") ==
           "The coding model is running across all three cards at 49,152 "
-          "tokens. The two lane models are paused and come back when you stop "
+          "tokens. The everyday model is paused and comes back when you stop "
           "it or apply another preset.", body.get("message"))
 
 
@@ -301,7 +301,7 @@ def t_stopping_the_coding_lane_keeps_the_shipped_message():
     check("and the shipped coding stop message is byte-identical",
           body["message"].startswith(
               "The coding model is stopped, the three-card server this app "
-              "started is stopped, and both lane models are back: "),
+              "started is stopped, and the everyday model is back: "),
           body["message"])
 
 

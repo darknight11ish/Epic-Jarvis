@@ -99,8 +99,11 @@ def t_the_cards_are_mapped_to_the_preset_lanes_and_intake_is_honest():
         {"name": "Mystery card", "used": True},          # no size: not measured
     ]
     got = M.measured_gpus(detect=lambda: rows)
-    check("the 2060 is the main lane and the 2080 SUPER the coding lane",
-          [g["role"] for g in got] == ["main", "coding"], got)
+    check("the everyday lane is ONE card - the 12 GB RTX 2060 ('main') - the "
+          "other measured card is only reachable through the on-demand pooled "
+          "lane ('pooled'), and no card is a coding lane any more",
+          [g["role"] for g in got] == ["main", "pooled"]
+          and "coding" not in [g["role"] for g in got], got)
     check("a card Ollama dropped (used false) is not offered as measured",
           all("Intel" not in g["name"] for g in got), got)
     check("a card with no measured size is not offered at all",
@@ -157,8 +160,10 @@ def t_every_card_nvidia_smi_reports_is_in_the_measured_list():
           "log names", len(got) == 3, got)
     check("... each with its own real VRAM (12 + 8 + 8, not one 8)",
           [g["vram_gb"] for g in got] == [12.0, 8.0, 8.0], got)
-    check("... and its real lane: the 2060 is main, both 2080 SUPERs coding",
-          [g["role"] for g in got] == ["main", "coding", "coding"], got)
+    check("... and its real lane: the everyday lane is ONE card - the 12 GB "
+          "2060 ('main') - while the two 8 GB cards are only reachable through "
+          "the on-demand pooled lane ('pooled'), so none is a coding lane",
+          [g["role"] for g in got] == ["main", "pooled", "pooled"], got)
     check("... so a 10 GB model fits the 2060 where one 8 GB card said no",
           M._fit_label(10 * 1024, got)[0] == "fits", M._fit_label(10 * 1024, got))
     check("... and the pooled figure is the PC's 28 GB, not 8",

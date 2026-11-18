@@ -36,6 +36,13 @@ WHAT IS CHECKED HERE
      the one in use, and reads the result back. Without that call this whole
      fix is a script nobody runs, which is exactly what
      `tools/sync-framework-tiers.py` was: correct, and never invoked.
+  3. THE ONE STALE VALUE (2026-11-18): a `[budget] degrade_chain` that names a
+     cloud lane the code does not have - the owner's live file still said
+     `["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]` months after the
+     2026-10-27 decision kept ONE lane. The merge replaces exactly that line
+     with the shipped chain, preserves CRLF and every other byte, leaves a
+     chain the owner shortened (or one naming his own local model) alone, and
+     refuses to guess at a value split over several lines.
 
 A check that only proved (1) would pass on the very script that caused the
 owner's failure, so (2) is here beside it.
@@ -234,6 +241,140 @@ def t_the_merge_adds_only_what_is_missing():
           r3.stdout + r3.stderr)
 
 
+def _stage_chain_merge(d: Path, live_text: str, shipped_text: str) -> tuple:
+    """Stage the merger beside a controlled shipped file; return (merger, live)."""
+    source = HERE / "_apply_toml_tiers.py"
+    stage = d / "backend"
+    (stage / "rebuilt").mkdir(parents=True, exist_ok=True)
+    merger = stage / source.name
+    merger.write_bytes(source.read_bytes())
+    (stage / "rebuilt" / "jarvis-framework.toml").write_text(
+        shipped_text, encoding="utf-8", newline="\n")
+    live = d / "jarvis-framework.toml"
+    live.write_bytes(live_text.replace("\n", "\r\n").encode("utf-8"))
+    return merger, live
+
+
+#: What a fresh install gets: the ONE lane (the owner's 2026-10-27 decision).
+SHIPPED_CHAIN = """\
+[autonomy.tiers]
+send_email = "ask"
+
+[budget]
+requests_per_minute = 15
+requests_per_day = 800
+degrade_chain = ["jarvis-escalate"]
+
+[intelligence]
+default_model = "qwen3.5:9b"
+"""
+
+#: The owner's live file on 2026-11-18, in the relevant part: the stale
+#: three-lane chain, the caps it never read, and a comment that mentions the
+#: key as prose (which must not be mistaken for the line itself).
+LIVE_CHAIN = """\
+# the owner's own settings file
+[intelligence]
+default_model = "qwen3.5:9b"
+
+[budget]
+requests_per_minute = 15
+requests_per_day = 800
+on_minute_limit_hit = "degrade_to_next_lane_silently"
+on_day_limit_hit = "hold_local_until_reset_and_notify"
+degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]
+
+[autonomy.tiers]
+send_email = "ask"
+
+# prose: degrade_chain is the step-down list, and jarvis-bulk is not a lane
+"""
+
+
+def t_the_merge_fixes_a_degrade_chain_that_names_gone_lanes():
+    """THE LIVE DEFECT, 2026-11-18. The deploy never overwrites a settings line,
+    so a corrected `degrade_chain` reached a fresh install and never the owner's
+    file. The merge now fixes exactly that one line, and nothing else."""
+    source = HERE / "_apply_toml_tiers.py"
+    if not source.is_file():
+        check("backend/_apply_toml_tiers.py ships in this repository", False)
+        return
+    if tomllib is None:
+        return skip("no tomllib/tomli, so the result could not be read back")
+    d = _tmp()
+    merger, live = _stage_chain_merge(d, LIVE_CHAIN, SHIPPED_CHAIN)
+    was = live.read_bytes()
+    r = subprocess.run([sys.executable, str(merger), "--apply", str(live)],
+                       capture_output=True, text=True, timeout=120)
+    raw = live.read_bytes()
+    after = raw.decode("utf-8-sig")
+    cfg = tomllib.loads(after)
+    check("the merge succeeds", r.returncode == 0, r.stdout + r.stderr)
+    check("... the stale chain is now the shipped ONE lane",
+          (cfg.get("budget") or {}).get("degrade_chain") == ["jarvis-escalate"],
+          cfg.get("budget"))
+    check("... and it says which names it removed",
+          "jarvis-bulk" in r.stdout and "jarvis-critic" in r.stdout, r.stdout)
+    check("... every other [budget] value is untouched",
+          all((cfg.get("budget") or {}).get(k) == v for k, v in {
+              "requests_per_minute": 15, "requests_per_day": 800,
+              "on_minute_limit_hit": "degrade_to_next_lane_silently",
+              "on_day_limit_hit": "hold_local_until_reset_and_notify"}.items()),
+          cfg.get("budget"))
+    check("... the owner's [intelligence] and [autonomy.tiers] are untouched",
+          (cfg.get("intelligence") or {}).get("default_model") == "qwen3.5:9b"
+          and (cfg.get("autonomy") or {}).get("tiers") == {"send_email": "ask"}, cfg)
+    check("... the prose comment that names degrade_chain did not fool it",
+          after.count("# prose: degrade_chain is the step-down list") == 1, after)
+    check("... the file's line endings survive (nothing else was rewritten)",
+          raw.count(b"\r") == was.count(b"\r"), (raw.count(b"\r"), was.count(b"\r")))
+    check("... only the one line changed, every other line kept its order",
+          [ln for ln in after.replace("\r\n", "\n").splitlines()
+           if ln != 'degrade_chain = ["jarvis-escalate"]']
+          == [ln for ln in LIVE_CHAIN.splitlines()
+              if ln != 'degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]'],
+          after)
+    backups = list(d.glob("jarvis-framework.toml.backup-*"))
+    check("... a copy from before the change is kept and is the real old bytes",
+          len(backups) == 1 and backups[0].read_bytes() == was, [p.name for p in backups])
+
+    second = live.read_bytes()
+    r2 = subprocess.run([sys.executable, str(merger), "--apply", str(live)],
+                        capture_output=True, text=True, timeout=120)
+    check("running it again says there is nothing to do and rewrites nothing",
+          r2.returncode == 0 and "Nothing to add" in r2.stdout
+          and live.read_bytes() == second, r2.stdout + r2.stderr)
+
+    # A chain the OWNER shortened, or one naming his own local model, is his
+    # choice and is left alone: the repair only removes names that cannot exist.
+    for label, chain in (("an empty chain", "[]"),
+                         ("a chain naming the local model",
+                          '["jarvis-escalate", "qwen3.5:9b"]')):
+        d2 = _tmp()
+        text = LIVE_CHAIN.replace(
+            'degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]',
+            "degrade_chain = " + chain)
+        merger2, live2 = _stage_chain_merge(d2, text, SHIPPED_CHAIN)
+        before2 = live2.read_bytes()
+        r3 = subprocess.run([sys.executable, str(merger2), "--apply", str(live2)],
+                            capture_output=True, text=True, timeout=120)
+        check(f"{label} is left exactly as it is",
+              r3.returncode == 0 and live2.read_bytes() == before2, r3.stdout + r3.stderr)
+
+    # A value split over several lines is not guessed at.
+    d3 = _tmp()
+    multiline = LIVE_CHAIN.replace(
+        'degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]',
+        'degrade_chain = [\n  "jarvis-escalate",\n  "jarvis-bulk",\n]')
+    merger3, live3 = _stage_chain_merge(d3, multiline, SHIPPED_CHAIN)
+    before3 = live3.read_bytes()
+    r4 = subprocess.run([sys.executable, str(merger3), "--apply", str(live3)],
+                        capture_output=True, text=True, timeout=120)
+    check("a degrade_chain split over several lines is refused, not rewritten",
+          r4.returncode == 0 and live3.read_bytes() == before3
+          and "left exactly as it is" in r4.stdout, r4.stdout + r4.stderr)
+
+
 def t_the_patcher_calls_the_merge_on_the_file_in_use():
     """The half that was missing: a correct script nobody runs changes nothing."""
     ps1 = REPO / "scripts" / "apply-patches.ps1"
@@ -267,6 +408,10 @@ def t_the_patcher_calls_the_merge_on_the_file_in_use():
     check("a missing tier line that could not be added ends the run as a PROBLEM",
           "Add-Problem" in step and "[autonomy.tiers] line(s)" in step,
           "an unadded tier line must not pass silently")
+    check("... and a corrected [budget] degrade_chain is reported as a real change",
+          "Fixed the stale" in step and "degrade_chain" in step
+          and "State.Changed" in step,
+          "a line of the owner's settings file changed and nothing said so")
     check("the owner's other settings are still only PRINTED, never merged",
           "_config_diff.py" in step
           and "stays yours to add" in step,
@@ -275,6 +420,7 @@ def t_the_patcher_calls_the_merge_on_the_file_in_use():
 
 def main():
     for fn in (t_the_merge_adds_only_what_is_missing,
+               t_the_merge_fixes_a_degrade_chain_that_names_gone_lanes,
                t_the_patcher_calls_the_merge_on_the_file_in_use):
         print(f"\n--- {fn.__name__} ---")
         try:

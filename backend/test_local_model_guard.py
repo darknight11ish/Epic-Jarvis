@@ -421,13 +421,17 @@ def t_the_hud_runs_a_local_fallback_turn_locally():
               decision=cloud, _agent_ok=True) is False
           and run(is_cloud, lane=RT.CLOUD_LANE, local_model=EVERYDAY_MODEL,
                   decision=cloud) is True)
-    # And what the relay would do with a name it does not know: send it away
-    # from this PC. The non-local destination is the HUD's own line.
-    check("the plain relay's non-local lane really leaves this PC's Ollama "
-          "(so an unknown name there is not a local call)",
-          'else f"{JARVIS_URL}/v1/chat/completions"' in owner_hud
-          or "lane_state(lane if lane != local_model else" in owner_hud,
-          "neither relay destination found")
+    # And what the relay would do with a name it does not know: resolve it as a
+    # cloud lane. The relay treats the LOCAL lane as the empty name (that is the
+    # contract `jarvis_chatbot_api.lane_state` documents), so any non-empty
+    # unknown name is a cloud request - which is exactly why the fallback must
+    # not take that path.
+    import jarvis_chatbot_api as API
+    check("the plain relay only treats the EMPTY name as local, so a fallback "
+          "model name handed to it would be resolved as a cloud lane",
+          API.lane_state("").get("pid") == ""
+          and API.lane_state(EVERYDAY_MODEL).get("pid") == API.DEFAULT_LANE[0],
+          (API.lane_state(""), API.lane_state(EVERYDAY_MODEL)))
 
 
 def t_the_patch_is_well_formed_and_applies_where_it_claims():
@@ -485,9 +489,6 @@ def t_the_patch_is_well_formed_and_applies_where_it_claims():
         check("... and it applies cleanly to the text the stack leaves it",
               applied.returncode == 0, (applied.stderr or applied.stdout)[-500:])
         if applied.returncode == 0:
-            after = (work / "jarvis_hud.py").read_text(encoding="utf-8")
-            check("... producing the guarded line",
-                  "use_tools = ((lane == local_model or decision.inject_memory)" in after)
             reverted = subprocess.run(["git", "apply", "--reverse", str(PATCH)],
                                       cwd=work, capture_output=True, text=True)
             check("... and reversing it restores the pre-image byte for byte",

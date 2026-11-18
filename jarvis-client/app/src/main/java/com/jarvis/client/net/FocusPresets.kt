@@ -93,8 +93,8 @@ object FocusPresets {
      */
     const val HEAVY_COST =
         "This preset needs all three cards at once as one pooled lane. While it runs, " +
-            "the everyday and Fast models are paused - they come back when you apply " +
-            "another preset. Loading it takes about half a minute."
+            "the everyday model is paused - it comes back when you apply another " +
+            "preset. Loading it takes up to about a minute."
     const val APPLY_UNPUBLISHED =
         "The PC has not published this preset's apply action yet, so nothing can be asked here."
     const val STALE =

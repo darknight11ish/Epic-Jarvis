@@ -218,9 +218,8 @@ def main():
           "qwen3.5:9b" not in reply, reply)
     check("owner phrase: it says both cards",
           "both cards" in reply.lower(), reply)
-    check("owner phrase: it says the pooled both-card lane is the plan",
-          "one pooled lane" in reply and "RTX 2060" in reply
-          and "RTX 2080 SUPER" in reply, reply)
+    check("owner phrase: it says ONE pooled lane across the cards is the plan",
+          "one pooled lane" in reply and "all three cards" in reply.lower(), reply)
     check("owner phrase: it says ONE approval card is needed",
           "ONE approval card" in reply and "nothing switches" in reply, reply)
     check("owner phrase: it says it is not live until the code is deployed",

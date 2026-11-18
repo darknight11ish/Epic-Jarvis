@@ -40524,7 +40524,7 @@ per replacement:
 "degraded_from": [{"lane": "qwen3-coder-30b-a3b-ud-q3-k-xl",
                    "model": "qwen3.5:9b",
                    "code": "model_cannot_run_on_this_lane",
-                   "why": "Jarvis did not answer: ... it cannot run on the one-card lane ..."}]
+                   "why": "<the refusal, in its own words> ... it cannot run on the one-card lane ..."}]
 ```
 
 `lane` is the model that was **asked for**, `model` is the model that **really
