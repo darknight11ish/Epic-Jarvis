@@ -3366,6 +3366,47 @@ _RISK.update({
 })
 
 # --------------------------------------------------------------------------
+#   The picture converter's gate rows (jarvis_image_convert.py, 2026-11-18)
+# --------------------------------------------------------------------------
+# THE ROWS ARE HERE, AT THE END OF THE FILE, for the reason the `_RISK` blocks
+# above give: almost every line inside `_RISK`, `_TOOL_ACTIONS` and
+# `_NO_RULE_FROM_DENIAL` is some earlier patch's hunk context, and the very end
+# of this file is the one region no earlier patch's hunk claims. All three
+# updates run at import, before any `check()` call, so the gate sees the rows
+# exactly as if they sat inside the literals.
+#
+# WHY. `convert_images` is the action the one picture conversion is asked under
+# (`jarvis_image_convert.ACTION`, reached from jarvis_agent.py's `my_files` tool
+# action `convert`: pictures into ONE PDF, or one picture into another format).
+# It has its own "ask" line in both shipped settings copies, so it asks every
+# time whether or not this table knows it - but with NO row it took the gate's
+# unclassified fallback, and its card said the action was treated as permanent
+# and able to leave this PC. Neither is true: the conversion writes ONE NEW file
+# beside the pictures (inside a folder the owner already listed), reads no
+# network and no token, and changes nothing that already exists - the new file
+# can be deleted again, which is the whole change. "yes" and "local" is the pair
+# `create_logseq_page` and `create_joplin_note` already carry for the same
+# reason. The row loosens NOTHING: the tier line is untouched, so the card is
+# still raised every time.
+_TOOL_ACTIONS.update({
+    # `action_for_tool` needs this line, or the lookup name the tool hands over
+    # ("convert_images", an action name and not a tool name) answers
+    # "unclassified_tool": the card would not be the one this module raises and
+    # the Reach page would call it unclassified - the same gap gate-tool-actions
+    # -gap.patch fixed for the older tools.
+    "convert_images": "convert_images",
+})
+# A denial of one conversion is about THAT one new file, never a standing rule.
+# The module's own prepare() refuses any tier but "ask", so the card always
+# asks a person and a proposed memory would be meaningless.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "convert_images",  # jarvis_image_convert.py acts only on tier "ask": ONE card per new file (2026-11-18)
+}
+_RISK.update({
+    "convert_images": ("yes", "local", "writes ONE new file beside your pictures on this PC - one PDF made from them, or one picture saved in another format; no picture and no existing file is changed or overwritten (a new name is used instead), nothing is deleted and nothing is sent anywhere, and the new file can be deleted again, which is the whole change"),
+})
+
+# --------------------------------------------------------------------------
 #   The file-to-phone card's denial row (jarvis_send_file.py, 2026-11-14)
 # --------------------------------------------------------------------------
 # A denial of "send this file to my phone" is about THAT file, never a
@@ -3440,5 +3481,4 @@ _RISK.update({
 UNCLASSIFIED_WARNING = ("Unclassified action - never runs on its own, and a "
                         "swipe cannot approve it")
 _UNKNOWN_RISK = ("no", "outbound", UNCLASSIFIED_WARNING)
-
 

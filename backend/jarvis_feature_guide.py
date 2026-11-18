@@ -2811,6 +2811,11 @@ REASON_CODES = ("command", "no-command", "credentials", "app-local",
 #: a silent omission, and also fails if an id named here IS controllable
 #: (that would be a stale excuse). The reasons say WHY, not "not supported".
 NO_COMMAND_REASON = {
+    # The picture conversion (2026-11-18): one sentence in a chat and its own
+    # approval card. There is no stored setting - the card IS the yes - so the
+    # reason says that rather than claiming a control that does not exist.
+    "picture-conversion": ("not-a-setting",
+                           "One sentence in a chat and its own approval card: there is nothing to turn on or off. The card names every picture, the exact new file, and whether the copy is lossless or lossy.", "none-needed"),
     "media-transport": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "parking": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "places": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),

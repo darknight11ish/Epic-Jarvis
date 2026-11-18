@@ -176,7 +176,21 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # default, so this cost is paid on a turn only while the
                    # owner leaves it in `[tools].enabled`. 340 keeps 11 tokens
                    # of headroom, the same shape as the exceptions above.
-                   "my_files": 340,
+                   # RAISED 340 -> 445 on 2026-11-18, by the same rule and with
+                   # the measurement beside it, for the picture conversion
+                   # (`convert`: pictures into ONE PDF, or one picture into
+                   # another format; jarvis_image_convert.py). Measured on this
+                   # tree with this module's own estimate_tokens rule: 430, so
+                   # the old 340 had no room at all - the action name, the
+                   # `paths` array, the `to` enum and their three short notes
+                   # are about 100 tokens. Nothing else in the list grew. No
+                   # smaller shape stays honest: a single `path` string would
+                   # make the model join several full Windows paths with a
+                   # separator it has to guess, and the format list is how it
+                   # picks the target. The cost is paid only on a turn that
+                   # opens the `documents` group, never on the sixteen
+                   # measured above.
+                   "my_files": 445,
                    # set_reminder (2026-11-09, wave 13): the parameter text now
                    # carries the rule that fixed the owner's live bug - the
                    # whole sentence became the reminder's title - so it says the

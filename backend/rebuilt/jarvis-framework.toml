@@ -553,6 +553,16 @@ unprotect_item            = "ask"
 # the tier; THIS line does. Keep it "ask" - that is the one card per save, and
 # it is a deliberate decision rather than a fallback.
 edit_vault_note           = "ask"
+# Picture conversion (jarvis_image_convert.py, 2026-11-18; the owner's "to pdf
+# from an image"): ONE new file per conversion - pictures into one PDF, or one
+# picture into another format. The module's prepare() refuses any tier but
+# "ask" (the belt shape jarvis_send_file.py uses), so this line cannot become a
+# standing yes; a denied, expired or refused card writes nothing. The gate has
+# its OWN risk row for this name - the end-of-file `_RISK.update({...})` block
+# in jarvis-backend/jarvis_gate.py, "yes"/"local", because nothing that already
+# exists is changed and the new file can be deleted again. THIS line is what
+# makes it ask. Must stay "ask".
+convert_images            = "ask"
 
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in

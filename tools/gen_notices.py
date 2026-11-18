@@ -372,6 +372,12 @@ PY_NAMES = {
     "apache license 2.0": "Apache-2.0",
     "mpl-2.0": "MPL-2.0",
     "mozilla public license 2.0 (mpl 2.0)": "MPL-2.0",
+    # img2pdf 0.6.3's own metadata names exactly this, and the research lane
+    # confirmed the LGPL-3.0 SPDX identifier on the project's own pages
+    # (2026-11-18, the picture conversion). Without this key the generator kept
+    # the words and listed the package under "LICENCES A PERSON MUST CONFIRM",
+    # which would leave a person to re-find an answer that is already known.
+    "gnu lesser general public license v3 (lgplv3)": "LGPL-3.0",
     "psf-2.0": "PSF-2.0",
     "psfl": "PSF-2.0",
     "python software foundation license": "PSF-2.0",

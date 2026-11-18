@@ -1310,7 +1310,7 @@
   "type": "function",
   "function": {
    "name": "my_files",
-   "description": "Find and read the owner's own files, only in folders they listed. find: file names. search: words inside notes/text. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). map: a folder's files and symbols, ranked for the question. read_media: one recording's words. search_media: stored spoken and on-screen recording words. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
+   "description": "Find and read the owner's own files, only in folders they listed. find: file names. search: words inside notes/text. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). map: a folder's files and symbols, ranked for the question. read_media: one recording's words. search_media: stored spoken and on-screen recording words. convert: pictures to one PDF, or one picture to another format. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -1322,7 +1322,8 @@
        "read",
        "map",
        "read_media",
-       "search_media"
+       "search_media",
+       "convert"
       ]
      },
      "words": {
@@ -1336,6 +1337,25 @@
      "part": {
       "type": "integer",
       "description": "read: which part, from its list"
+     },
+     "paths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "convert: the pictures, in order"
+     },
+     "to": {
+      "type": "string",
+      "enum": [
+       "pdf",
+       "png",
+       "jpeg",
+       "webp",
+       "avif",
+       "tiff"
+      ],
+      "description": "convert: the target"
      }
     },
     "required": [

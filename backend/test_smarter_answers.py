@@ -937,6 +937,132 @@ def t_the_phone_screen_claim_gets_the_line_in_a_turn():
                   for _kind, line in wired), wired)
 
 
+# --------------------------------------------------------------------------
+#   7. a claim that an APPROVAL CARD was raised (2026-11-18, DEF-089)
+# --------------------------------------------------------------------------
+# THE FIELD TEST, row B2. Four replies told the owner "I have raised the
+# approval card" (and the shapes beside it) while GET /api/pending was empty
+# before AND after every turn, and no tool had run in those turns at all.
+# `jarvis_claims` could not see it: "raised" is not one of CLAIMS_DONE's verbs
+# and a card is not one of _CLAIM_OBJECT's nouns, so the row's exact sentence
+# passed every check unmodified. What settles it is a fact the TURN already
+# has - `_TurnWatch.cards`, the same count CARDS_PER_TURN is enforced with -
+# so the correction is driven by that count, never by what the model says.
+def _with_gate_pending(rows, fn):
+    """Run `fn()` with a stand-in `jarvis_gate` module whose `pending()` answers
+    `rows`; the real module is an owner file this checkout does not carry (the
+    published base holds it), so the pending read needs a double to be driven."""
+    saved = sys.modules.get("jarvis_gate")
+    fake = types.ModuleType("jarvis_gate")
+    fake.pending = lambda: list(rows)
+    sys.modules["jarvis_gate"] = fake
+    try:
+        return fn()
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = saved
+
+
+CARDS_MEASURED = ("I have raised the approval card.",
+                  "I've raised a card.",
+                  "Check your pending approvals.",
+                  "I've sent that for your approval.")
+CARDS_PLAIN = ("Raised a card for you.",
+               "Created an approval request.",
+               "An approval card has been created for you.",
+               "A confirmation card is waiting for your approval.",
+               "It's in your pending approvals.")
+
+
+def t_a_card_claim_needs_the_turn_to_have_raised_one():
+    for said in CARDS_MEASURED + CARDS_PLAIN:
+        check(f"no card raised: the claim is corrected: {said!r}",
+              CL.card_correction(said, 0, waiting=0) == CL.CARD_CLAIM_CORRECTION,
+              CL.card_correction(said, 0, waiting=0))
+        check(f"... a card THIS answer raised backs it: {said!r}",
+              CL.card_correction(said, 1, waiting=0) == "")
+        check(f"... a card already waiting leaves it alone: {said!r}",
+              CL.card_correction(said, 0, waiting=1) == "")
+    check("a turn that cannot tell its cards is never corrected",
+          CL.card_correction("I have raised the approval card.", None, waiting=0) == "")
+    check("... and an unreadable pending list claims only what the turn knows",
+          CL.card_correction("I have raised the approval card.", 0, waiting=None)
+          == CL.CARD_CLAIM_CORRECTION_UNKNOWN_WAITING
+          and "nothing is waiting" not in CL.CARD_CLAIM_CORRECTION_UNKNOWN_WAITING,
+          CL.CARD_CLAIM_CORRECTION_UNKNOWN_WAITING)
+    check("the correction says what is true and what to do, not just no",
+          "nothing is waiting for your approval" in CL.CARD_CLAIM_CORRECTION
+          and "Ask again in a new message" in CL.CARD_CLAIM_CORRECTION,
+          CL.CARD_CLAIM_CORRECTION)
+    # A wrong correction after a true sentence is worse than a missed one
+    # (this module's own rule): a question, an offer, a condition, a future,
+    # a negation, a claim about something else, a quoted mention and a code
+    # span are all left alone.
+    for said in ("Shall I raise an approval card?",
+                 "Should I raise a card?",
+                 "Would you like me to raise a card?",
+                 "I can raise an approval card if you want.",
+                 "Let me know if you want me to raise a card.",
+                 "I'll raise a card once you confirm.",
+                 "I will raise the approval card after you approve.",
+                 "If I have raised a card, you will see it in your pending approvals.",
+                 "I haven't raised a card.",
+                 "I have not raised an approval card.",
+                 "I have not created an approval card yet.",
+                 "I already raised the approval card this morning.",
+                 "I raised the issue with Alex.",
+                 "I've created a birthday card for your mother.",
+                 'The owner said "I have raised the approval card."',
+                 'The reply read "check your pending approvals"',
+                 "Only the example is quoted: `I have raised the approval card.`"):
+        check(f"not a card claim: {said!r}",
+              CL.card_correction(said, 0, waiting=0) == "",
+              CL.card_correction(said, 0, waiting=0))
+    check("one claim in a longer answer is caught, and the line is said once",
+          CL.card_correction(
+              "I can't create repositories from chat. I have raised the approval "
+              "card. I've raised a card. Check your pending approvals.",
+              0, waiting=0) == CL.CARD_CLAIM_CORRECTION,
+          CL.card_correction(
+              "I can't create repositories from chat. I have raised the approval "
+              "card. I've raised a card. Check your pending approvals.",
+              0, waiting=0))
+
+
+def t_the_card_claim_gets_the_line_in_a_turn():
+    """The row's exact sentence through the real local turn, then through the
+    same `postscript_lines` list both lanes call. The turn's card count decides
+    it: 0 corrects, 1 leaves the answer alone, and a readable empty pending list
+    is what lets the correction say nothing is waiting."""
+    res, blob = _with_gate_pending([], lambda: _turn("I have raised the approval card."))
+    text = TA.answer_text([blob])
+    check("the measured sentence ends with the card correction",
+          text.startswith("I have raised the approval card")
+          and text.endswith(CL.CARD_CLAIM_CORRECTION), text)
+    check("... and it is not reported as an undone-action claim",
+          res["claimed_undone"] is False, res["claimed_undone"])
+    watch = types.SimpleNamespace(cards=0, newest_own_words="", conversation_id="")
+    lines = [line for _kind, line in AG.postscript_lines(
+        "I have raised the approval card.", watch=watch)]
+    check("... the same list also corrects it when the gate cannot be read",
+          lines == [CL.CARD_CLAIM_CORRECTION_UNKNOWN_WAITING], lines)
+    backed = types.SimpleNamespace(cards=1, newest_own_words="", conversation_id="")
+    lines = [line for _kind, line in AG.postscript_lines(
+        "I have raised the approval card.", watch=backed)]
+    check("... a turn that really raised a card gets no line at all",
+          lines == [], lines)
+    lines = _with_gate_pending([], lambda: [line for _kind, line in AG.postscript_lines(
+        "I have raised the approval card.", watch=watch)])
+    check("... a readable empty pending list is told to the owner",
+          lines == [CL.CARD_CLAIM_CORRECTION], lines)
+    lines = _with_gate_pending([{"id": "640e98b6b984"}], lambda: [
+        line for _kind, line in AG.postscript_lines(
+            "I have raised the approval card.", watch=watch)])
+    check("... and a card already waiting leaves the answer alone", lines == [], lines)
+
+
 if __name__ == "__main__":
     for fn in (t_a_small_result_is_unchanged,
                t_one_long_text_keeps_its_start_and_end,
@@ -976,7 +1102,9 @@ if __name__ == "__main__":
                t_the_announcement_detector_is_conservative,
                t_an_announcement_after_a_tool_gets_one_nudge,
                t_a_screen_or_sent_claim_needs_the_turn_to_back_it,
-               t_the_phone_screen_claim_gets_the_line_in_a_turn):
+               t_the_phone_screen_claim_gets_the_line_in_a_turn,
+               t_a_card_claim_needs_the_turn_to_have_raised_one,
+               t_the_card_claim_gets_the_line_in_a_turn):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
