@@ -9,10 +9,12 @@
 | 1 | NVIDIA GeForce RTX 2080 SUPER | 8,192 MiB |
 | 2 | NVIDIA GeForce RTX 2080 SUPER | 8,192 MiB |
 
-The 2060 has no monitor and holds the everyday model. One 2080 SUPER has the
-monitor and runs the desktop; the other 2080 SUPER is headless. All three are
-Turing (compute capability 7.5), so all three clear the cache and
-flash-attention floor. Ryzen 9 3900X. Windows 11.
+The 2060 has no monitor. One 2080 SUPER has the monitor and runs the desktop;
+the other 2080 SUPER is headless. All three are Turing (compute capability
+7.5), so all three clear the cache and flash-attention floor. Ryzen 9 3900X.
+Windows 11. **Since 2026-11-18 the everyday model is
+`gemma4:26b-a4b-it-qat` at 196,608 tokens across ALL THREE cards** - it no
+longer fits the 2060 alone, which is the live reading below.
 
 **The two-card reading stays as the dated record it is.** Measured 2026-10-05
 ([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)): the RTX
@@ -62,10 +64,82 @@ second card" below); nothing else here has been rewritten from measurement.
 
 ---
 
-## The live reading: three cards, two ports, two context windows (2026-11-16)
+## The live reading: ONE everyday lane across all three cards (2026-11-18)
 
-Read from the running PC on 2026-11-16, not calculated. This is the reading to
-use today; every section below keeps the date it was measured.
+**The owner's decision, in their own words:** *"i dont need a separate coding
+lane on any preset. each preset should be dedicated to one preset local ai
+model."* From 2026-11-18 there is **one always-on lane and no second
+single-card lane**:
+
+- **Port 11436 is the everyday lane, and it now sees ALL THREE cards.** It
+  holds `gemma4:26b-a4b-it-qat` at **196,608 tokens**.
+- **Port 11450 is the pooled heavy lane** (Coding, Medical), unchanged: one
+  Ollama with no card pin, started on demand, with the everyday lane paused
+  first.
+- **Port 11435 is retired.** The coding lane (`qwen3:8b` at 16,384) is no
+  longer started or restored by this repository's code, and no preset names
+  it. The Fast preset moved onto the everyday lane at 16,384.
+
+**Measured on this PC on 2026-11-17/18, across all three cards at 196,608
+tokens:**
+
+| What | Measured |
+|---|---:|
+| Loaded | **17.50 GiB** |
+| In the cards' memory (`size_vram`) | **16.58 GiB** |
+| Spilled into system memory | **0.92 GiB** |
+| Writing speed (thinking-token throughput) | **46.10 tok/s** |
+| Same model, a real-answer control at a 32,768-token window | **45.66 tok/s** |
+| Cold load | **56.5 s** |
+
+**Why all three cards: the same window on TWO cards spilled 6.37 GiB and fell
+to 15.75-16.76 tok/s.** That two-card figure is the measured reason the
+everyday model needs all three cards - it is not a preference, and it is why
+the separate single-card coding lane could not survive.
+
+**What `/api/show` reports:** `completion`, `vision`, `tools` and `thinking`,
+plus a real 573M-parameter image projector (`projector_type gemma4v`,
+`has_vision_encoder true`). That is a fact about what the model file carries,
+not a quality result.
+
+**What is NOT measured, and is therefore NOT claimed here or in either app:**
+the 26B's **picture quality**, and its **general, tool-calling and vision
+rubric results**. The capability list says the model *can* accept pictures and
+call tools; it says nothing about how well. The General preset's own `worse`
+line in `jarvis_presets.PRESETS` says the same in the app.
+
+**What has NOT happened yet: the live machine.** This change is code and
+documentation. The logon task `Jarvis Ollama - Everyday model (RTX 2060)`
+still starts 11436 pinned to the 2060 alone (`CUDA_VISIBLE_DEVICES=<2060
+uuid>`), and one 12 GB card cannot hold 17.50 GiB - on two cards the same
+window already spilled 6.37 GiB. Re-wiring that task to all three cards is the
+deploy step, deliberately not done from this change. Until it is done, the
+everyday lane cannot hold the measured load.
+
+**What the code does today.** `jarvis_presets.LANES` has `main` (port 11436,
+"all three cards") and `pooled` (11450); `jarvis_big_coder.LANES` has ONE
+entry, so its pause and restore only ever touch 11436 and nothing tries to
+start a second lane; `backend/test_presets_lanes.py` fails if a preset's
+`lane`/`model` and `jarvis_big_coder.LANES` disagree in either direction.
+
+**The measured 0.92 GiB of spill is allowed on restore.**
+`jarvis_big_coder.restore_lanes` refuses more than a lane's own measured
+allowance; the everyday lane carries `round(0.92 * 1024 ** 3)` bytes, so the
+model comes back to the window it was measured at instead of being refused for
+the spill that measurement recorded. Every other caller keeps the original
+zero-spill rule.
+
+---
+
+## The earlier live reading: three cards, two ports, two context windows (2026-11-16)
+
+**This is the 2026-11-16 reading and stays as that day's record.** For the
+everyday model it is superseded by the 2026-11-18 reading above; the ports and
+the 11434 server below are still the same.
+
+Read from the running PC on 2026-11-16, not calculated. This **was** the
+reading to use on that day; the 2026-11-18 reading above is the one to use now,
+and every section below keeps the date it was measured.
 
 - **Port 11436 is the everyday lane.** `GET http://127.0.0.1:11436/api/ps`
   reported `qwen3.5:9b` loaded with **`ctx=196608`**. This is the lane Jarvis's
@@ -921,6 +995,11 @@ Eight presets keep the model, card and window they have today; only Coding
 changes lane and window, and no preset changes model tonight. The
 quantisation is what each file reports to `ollama show`.
 
+**This table is the 2026-11-05 plan, kept as history.** It is what was planned
+on that day, not what runs now: the current rows - including the everyday 26B
+across all three cards and the retired 11435 lane - are in the 2026-11-18 live
+reading at the top of this page.
+
 | Preset | Model and quantisation | Context | Lane | Planned change |
 |---|---|---:|---|---|
 | `general` | `qwen3.5:9b`, Q4_K_M | 196,608 | 2060 12 GB, port 11436 | none - unchanged |
@@ -1166,6 +1245,12 @@ carries the small models alone.
 | **11436** | Windows logon task `Jarvis Ollama - Everyday model (RTX 2060)` | `powershell -NoProfile -File %LOCALAPPDATA%\JarvisOllama\start-lane.ps1 -Lane main -Port 11436 -GpuUuid GPU-1ba04124-... -ContextLength 196608`; that script sets `CUDA_VISIBLE_DEVICES=<uuid>` and `OLLAMA_VULKAN=0` itself |
 | **11435** | logon task `Jarvis Ollama - Coding model (RTX 2080 Super)`, not running at the time | `start-lane.ps1 -Lane coding -Port 11435 -GpuUuid GPU-e4283ff2-...` (the display 2080 SUPER) |
 
+**The 11435 row is RETIRED as of 2026-11-18.** No preset names that lane any
+more, and `jarvis_big_coder.LANES` holds one entry, so the code never pauses
+or restores it. Whether the logon task is deleted is the deploy step's call;
+nothing in this repository starts it. The 2026-11-07 rows above are kept as
+that day's measurement.
+
 `start-lane.ps1` and both tasks live in `%LOCALAPPDATA%\JarvisOllama` and Task
 Scheduler - **outside this repository** - so no change here can move the 11434
 server. The change that actually needs making is a **logon task that starts that
@@ -1399,10 +1484,13 @@ as the recommended step.
 
 ### What it does not do
 
-**It does not** move the **Fast preset**, which runs
+**It does not** (as of 2026-11-07) move the **Fast preset**, which then ran
 `qwen3.5:4b` on the Coding lane (11435, the *display* 2080 SUPER); that lane is
-unchanged. It cannot give 11434 models bigger than 8 GiB - those belong on the
-2060's lane. The recommended task-scoped route leaves every other CUDA program
+unchanged. **Corrected 2026-11-18:** that lane is retired, and the Fast preset
+now runs `qwen3.5:4b` at 16,384 tokens on the everyday lane (11436) - see the
+2026-11-18 live reading at the top of this page. It cannot give 11434 models
+bigger than 8 GiB - those belong on the 2060's lane. The recommended
+task-scoped route leaves every other CUDA program
 on this PC alone; only the old Option A route would have changed the user's
 global environment, and Jarvis's own Ollama children are unaffected either way
 because each sets its own card (the everyday lane by UUID, the pooled Coding

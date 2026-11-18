@@ -4,26 +4,33 @@
 
 WHAT THIS IS ABOUT
 
-`jarvis_big_coder.py` is the one model on this PC that needs BOTH graphics
-cards, so it can never sit beside the owner's two live lanes. The whole feature
-is therefore a contract about ORDER and EVIDENCE, and this suite is what holds
-it:
+`jarvis_big_coder.py` is the one model on this PC that needs ALL THREE graphics
+cards, so it can never sit beside the owner's one always-on lane. The whole
+feature is therefore a contract about ORDER and EVIDENCE, and this suite is
+what holds it:
 
   1. it is OFF by default, and a start while it is off touches nothing at all;
-  2. the pause is ANNOUNCED before anything on either card is touched, and the
-     announcement names both lanes, their models and their contexts;
-  3. BOTH lanes must be proved gone from /api/ps before the model is loaded -
-     a lane that will not go means NOTHING is loaded;
+  2. the pause is ANNOUNCED before anything on the cards is touched, and the
+     announcement names the everyday lane, its model and its context;
+  3. the lane must be proved gone from /api/ps before the model is loaded - a
+     lane that will not go means NOTHING is loaded;
   4. the model must load with ZERO spill at the measured context, or it is
-     unloaded again and the lanes are put back. This MODE passes no allowance,
+     unloaded again and the lane is put back. This MODE passes no allowance,
      so for it zero spill is the whole rule; the Coding preset's pooled lane is
      the one measured exception and `load_coder`'s own test proves its bound;
   5. at NO point are the model and a lane model resident together (the trace
      below is checked step by step, not just at the end);
-  6. stopping puts both lanes back EXACTLY: 11436 qwen3.5:9b at 196608 on the
-     RTX 2060 and 11435 qwen3:8b at 16384 on the RTX 2080 SUPER, proved from
-     /api/ps - right model, right context, zero spill;
+  6. stopping puts the everyday lane back EXACTLY: 11436
+     gemma4:26b-a4b-it-qat at 196608 across all three cards, with its measured
+     0.92 GiB of spill allowed and no more, proved from /api/ps - right model,
+     right context, spill within the allowance;
   7. a lane that does not come back is REPORTED as a failure, never glossed.
+
+THE RETIRED SECOND LANE. The coding lane on port 11435 (`qwen3:8b` at 16384)
+was retired on 2026-11-18 (the owner: "i dont need a separate coding lane on
+any preset. each preset should be dedicated to one preset local ai model"), so
+`LANES` holds ONE entry and this suite proves nothing pauses, restores or
+starts a second one.
 
 Nothing in the suite touches the owner's PC: every /api/ps and every load is a
 fake world, and the suite's own config folder is a temporary directory it
@@ -66,17 +73,17 @@ def skip(why):
 # --------------------------------------------------------------------------
 
 LANE_11436 = B.LANES[0]
-LANE_11435 = B.LANES[1]
 
 
 class World:
-    """Three Ollama servers as dictionaries. `ports[port]` maps a model name
+    """Two Ollama servers as dictionaries: the everyday lane on 11436 and the
+    mode's own three-card server on 11450. `ports[port]` maps a model name
     to its /api/ps row, or is None when the server does not answer."""
 
     def __init__(self):
         self.ports = {
-            11436: {LANE_11436.model: self.row(LANE_11436.model, LANE_11436.ctx)},
-            11435: {LANE_11435.model: self.row(LANE_11435.model, LANE_11435.ctx)},
+            11436: {LANE_11436.model: self.row(LANE_11436.model, LANE_11436.ctx,
+                                              LANE_11436.spill_allowance)},
             11450: {},
         }
         self.trace = []          # every call, in order
@@ -94,7 +101,7 @@ class World:
 
     def snapshot(self, what):
         code = B.MODEL in (self.ports.get(11450) or {})
-        lanes = sorted(n for p in (11436, 11435) for n in (self.ports.get(p) or {}))
+        lanes = sorted(n for n in (self.ports.get(11436) or {}))
         self.snapshots.append((what, code, lanes))
 
     # -- the module's four HTTP faces, all faked ---------------------------
@@ -211,18 +218,20 @@ def t_the_switch_is_off_by_default():
         shutil.rmtree(cfg, ignore_errors=True)
 
 
-def t_the_card_names_both_lanes():
-    """The announcement has to say WHICH two models stop and what they come
-    back at - the owner is deciding whether to interrupt his own assistant."""
+def t_the_card_names_the_everyday_lane():
+    """The announcement has to say WHICH model stops and what it comes back at
+    - the owner is deciding whether to interrupt his own assistant."""
     words = B.card_text_start()
     check("the card names the model and all three cards it needs",
           B.MODEL in words and "ALL THREE" in words)
     for lane in B.LANES:
-        check(f"the card names {lane.model} at {lane.ctx} on the {lane.card}",
+        check(f"the card names {lane.model} at {lane.ctx:,} across {lane.card}",
               lane.model in words and f"{lane.ctx:,}" in words and lane.card in words,
               words)
     check("the card says the context is the largest with no spill", "spill" in words)
     check("the card says nothing is downloaded", "downloaded" in words)
+    check("... and nothing in it claims a second lane is paused",
+          words.count("pausing") == len(B.LANES), words)
 
 
 def t_turning_it_on_is_one_card_and_off_is_immediate():
@@ -271,8 +280,8 @@ def t_a_start_while_it_is_off_touches_nothing():
             code, out = B.start(by="test", gate_check=lambda *a, **k: Verdict(True))
             check("a start while the switch is off is refused (409)", code == 409, str(out))
             check("... nothing was unloaded, loaded or started", w.trace == [], str(w.trace))
-            check("... and both lanes are exactly as they were",
-                  LANE_11436.model in w.ports[11436] and LANE_11435.model in w.ports[11435])
+            check("... and the everyday lane is exactly as it was",
+                  LANE_11436.model in w.ports[11436])
     finally:
         shutil.rmtree(cfg, ignore_errors=True)
 
@@ -317,9 +326,9 @@ def t_the_pause_is_announced_before_anything_is_touched():
             check("the pause is ANNOUNCED before the first unload",
                   "announce" in kinds and "unload" in kinds
                   and kinds.index("announce") < kinds.index("unload"), str(w.trace))
-            check("... and before the both-cards server is even started",
+            check("... and before the three-card server is even started",
                   kinds.index("announce") < kinds.index("server_start"), str(w.trace))
-            check("... and the announcement says the lanes are pausing",
+            check("... and the announcement says the lane is pausing",
                   published and published[0][1].get("state") == "pausing", str(published))
             check("... and it carries the card's own words, lane by lane",
                   published and all(lane.model in published[0][1]["words"] for lane in B.LANES),
@@ -337,11 +346,12 @@ def t_the_pause_really_happens_before_the_load():
             _turn_on(cfg)
             code, out = B.start(by="test", gate_check=lambda *a, **k: Verdict(True))
             order = [c[0] for c in w.trace]
-            check("both lanes are unloaded before the model is loaded",
-                  order.count("unload") == 2 and order.index("load") > max(
+            check("the everyday lane is unloaded before the model is loaded",
+                  order.count("unload") == len(B.LANES) and order.index("load") > max(
                       i for i, k in enumerate(order) if k == "unload"), str(w.trace))
             check("every step was proved from /api/ps, and the proof is in the answer",
-                  len(out.get("paused", [])) == 2 and len(out.get("proof", [])) == 1, str(out))
+                  len(out.get("paused", [])) == len(B.LANES)
+                  and len(out.get("proof", [])) == 1, str(out))
             check("the model is loaded at the measured context, naming it",
                   any(c[0] == "load" and c[2] == B.MODEL and c[3] == B.NUM_CTX for c in w.trace),
                   str(w.trace))
@@ -364,13 +374,12 @@ def t_the_model_is_never_resident_beside_a_lane():
                   not together, str(together))
             check("the snapshots cover the whole start (a run that recorded nothing "
                   "would pass the check above for the wrong reason)",
-                  len(w.snapshots) >= 4
+                  len(w.snapshots) >= 3
                   and any("unload" in what for what, _c, _l in w.snapshots)
                   and any("load" in what for what, _c, _l in w.snapshots),
                   str(w.snapshots))
-            check("after the start, the model is loaded and the lanes are not",
-                  B.MODEL in w.ports[11450]
-                  and not w.ports[11436] and not w.ports[11435])
+            check("after the start, the model is loaded and the everyday lane is not",
+                  B.MODEL in w.ports[11450] and not w.ports[11436])
     finally:
         shutil.rmtree(cfg, ignore_errors=True)
 
@@ -390,18 +399,18 @@ def t_a_lane_that_will_not_pause_stops_the_whole_start():
                   code == 409 and LANE_11436.model in out.get("error", ""), str(out))
             check("NOTHING was loaded", not any(c[0] == "load" and c[2] == B.MODEL
                                                 for c in w.trace), str(w.trace))
-            check("the lane that WAS paused is put back",
-                  any(c[0] == "load" and c[2] == LANE_11435.model for c in w.trace),
+            check("the everyday lane is loaded back, so the PC is left as it was",
+                  any(c[0] == "load" and c[2] == LANE_11436.model for c in w.trace),
                   str(w.trace))
-            check("both lanes are resident again", bool(w.ports[11436]) and bool(w.ports[11435]))
+            check("the everyday lane is resident again", bool(w.ports[11436]))
             check("the model is nowhere", not w.ports.get(11450))
     finally:
         shutil.rmtree(cfg, ignore_errors=True)
 
 
-def t_a_load_that_spills_is_undone_and_the_lanes_come_back():
-    """The measured promise is ZERO spill at 28,672. If this machine cannot
-    give it both cards, the mode says so and leaves nothing behind."""
+def t_a_load_that_spills_is_undone_and_the_lane_comes_back():
+    """The measured promise is ZERO spill for this mode. If this machine cannot
+    give it all three cards, the mode says so and leaves nothing behind."""
     cfg = tempfile.mkdtemp(prefix="big-coder-cfg-")
     try:
         _fresh_switch(cfg)
@@ -413,9 +422,9 @@ def t_a_load_that_spills_is_undone_and_the_lanes_come_back():
             check("a spilled load is refused (503) and says why",
                   code == 503 and "spill" in out.get("error", ""), str(out))
             check("the model is unloaded again", not w.ports[11450])
-            check("both lanes are back", bool(w.ports[11436]) and bool(w.ports[11435]))
-            check("and the answer carries the restored lanes' proof",
-                  len(out.get("restored", [])) == 2, str(out))
+            check("the everyday lane is back", bool(w.ports[11436]))
+            check("and the answer carries the restored lane's proof",
+                  len(out.get("restored", [])) == len(B.LANES), str(out))
     finally:
         shutil.rmtree(cfg, ignore_errors=True)
 
@@ -433,7 +442,7 @@ def t_a_load_at_the_wrong_context_is_undone():
                   code == 503 and "8192" in out.get("error", "")
                   and str(B.NUM_CTX) in out.get("error", ""), str(out))
             check("nothing is left loaded", not w.ports[11450])
-            check("both lanes are back", bool(w.ports[11436]) and bool(w.ports[11435]))
+            check("the everyday lane is back", bool(w.ports[11436]))
     finally:
         shutil.rmtree(cfg, ignore_errors=True)
 
@@ -498,10 +507,10 @@ def t_the_measured_allowance_is_one_window_and_not_a_general_rule():
         shutil.rmtree(cfg, ignore_errors=True)
 
 
-def t_stop_puts_both_lanes_back_exactly():
-    """The owner's own two rows, proved from /api/ps: right model, right
-    context, zero spill - and it goes through the /api/ps the module really
-    reads, not a summary of it."""
+def t_stop_puts_the_everyday_lane_back_exactly():
+    """The owner's own row, proved from /api/ps: right model, right context,
+    spill within the measured allowance - and it goes through /api/ps the
+    module really reads, not a summary of it."""
     cfg = tempfile.mkdtemp(prefix="big-coder-cfg-")
     try:
         _fresh_switch(cfg)
@@ -513,17 +522,17 @@ def t_stop_puts_both_lanes_back_exactly():
             code, out = B.stop(by="test")
             check("stop reports success", code == 200 and out["ok"] is True, str(out))
             check("the model is gone from /api/ps", B.MODEL not in (w.ports[11450] or {}))
-            check("the both-cards server this mode started is stopped", w.ports[11450] is None)
-            for lane in (LANE_11435, LANE_11436):
+            check("the three-card server this mode started is stopped", w.ports[11450] is None)
+            for lane in (LANE_11436,):
                 row = w.ports[lane.port].get(lane.model)
                 check(f"port {lane.port} has {lane.model} back at {lane.ctx}",
                       row is not None and int(row["context_length"]) == lane.ctx, str(row))
-                check(f"... and it is entirely in video memory (zero spill, port {lane.port})",
-                      row is not None and row["size_vram"] == row["size"],
-                      str(row))
-            check("the answer says both models are back, with the two rows",
-                  "qwen3.5:9b" in out["message"] and "qwen3:8b" in out["message"]
-                  and len(out["restored"]) == 2, str(out))
+                check("... and its spill is within the lane's measured allowance",
+                      row is not None and 0 <= row["size"] - row["size_vram"]
+                      <= lane.spill_allowance, str(row))
+            check("the answer says the everyday model is back, with its row",
+                  LANE_11436.model in out["message"]
+                  and len(out["restored"]) == len(B.LANES), str(out))
             check("running() is now false - and it is read from /api/ps",
                   B.running() is False)
     finally:
@@ -535,7 +544,8 @@ def t_a_lane_that_does_not_come_back_is_reported():
     wrong context, or with spill, is a 503 naming it."""
     cases = (
         ("wrong context", {"load_ctx_override": {11436: 2048}}, "2048"),
-        ("spill", {"lane_spill": {11436: 500_000_000}}, "spill"),
+        ("spill over the measured allowance",
+         {"lane_spill": {11436: LANE_11436.spill_allowance + 500_000_000}}, "spill"),
     )
     for why, setting, expect in cases:
         cfg = tempfile.mkdtemp(prefix="big-coder-cfg-")
@@ -572,11 +582,12 @@ def t_status_changes_nothing():
             check("GET /api/big-coder answers 200", code == 200)
             check("it reports the switch, the model and the context",
                   out["on"] is True and out["model"] == B.MODEL and out["num_ctx"] == B.NUM_CTX)
-            check("it reports both lanes and their live state",
-                  len(out["lanes"]) == 2
+            check("it reports the everyday lane and its live state",
+                  len(out["lanes"]) == len(B.LANES)
                   and out["lanes"][0]["loaded"] == [LANE_11436.model], str(out["lanes"]))
             check("it says what a start would do, in order",
-                  len(out["what_a_start_would_do"]) == 3, str(out["what_a_start_would_do"]))
+                  len(out["what_a_start_would_do"]) == len(B.LANES) + 1,
+                  str(out["what_a_start_would_do"]))
             check("it loaded nothing and unloaded nothing", w.trace == [], str(w.trace))
             check("... and did not rewrite the switch",
                   Path(cfg, B.SWITCH_FILE).read_bytes() == before)
@@ -748,11 +759,12 @@ def t_the_patch_order_allow_lists_carry_the_newest_patch_too():
 
 def t_the_both_cards_server_is_the_one_this_mode_owns():
     """The server this mode starts must be a DIFFERENT process on a DIFFERENT
-    port from both lanes, with CUDA_VISIBLE_DEVICES removed, OLLAMA_VULKAN=0
-    and OLLAMA_SCHED_SPREAD=1 - the three settings that make the load really
-    use every card (measured 2026-11-07: without the spread flag Ollama fills
-    only as many cards as it needs, and the third card sat empty)."""
-    check("the mode's port is neither lane's",
+    port from the everyday lane, with CUDA_VISIBLE_DEVICES removed,
+    OLLAMA_VULKAN=0 and OLLAMA_SCHED_SPREAD=1 - the three settings that make
+    the load really use every card (measured 2026-11-07: without the spread
+    flag Ollama fills only as many cards as it needs, and the third card sat
+    empty)."""
+    check("the mode's port is not the everyday lane's",
           B.BIG_PORT not in [lane.port for lane in B.LANES], str(B.BIG_PORT))
     env = B._child_env(B.BIG_PORT)
     check("CUDA_VISIBLE_DEVICES is REMOVED, so Ollama sees every card",
@@ -787,7 +799,7 @@ def t_a_direct_server_start_pauses_the_lanes_first():
 
     def fake_pause(*, url_for=B._url):
         calls.append("pause")
-        return {"ok": True, "why": "", "proof": ["both lanes proved gone"]}
+        return {"ok": True, "why": "", "proof": ["the lane proved gone"]}
 
     def fake_popen(argv, **kw):
         popped.append((list(argv), dict(kw)))
@@ -801,7 +813,7 @@ def t_a_direct_server_start_pauses_the_lanes_first():
         got = B.server_start()
     finally:
         (B.pause_lanes, B.ps, B.subprocess.Popen, B.time.sleep) = real
-    check("a direct server_start pauses the two lanes BEFORE it starts",
+    check("a direct server_start pauses the everyday lane BEFORE it starts",
           got.get("ok") is True and calls == ["pause"] and len(popped) == 1,
           (got, calls, popped))
     check("... and its own answer says what it paused",
@@ -817,7 +829,7 @@ def t_a_start_that_cannot_pause_starts_nothing():
     started = []
 
     def refuse(*, url_for=B._url):
-        return {"ok": False, "why": "qwen3.5:9b on port 11436 is still resident"}
+        return {"ok": False, "why": f"{LANE_11436.model} on port 11436 is still resident"}
 
     def never_start(*a, **k):
         started.append(a)
@@ -830,7 +842,7 @@ def t_a_start_that_cannot_pause_starts_nothing():
         got = B.server_start()
     finally:
         (B.pause_lanes, B.ps, B.subprocess.Popen) = real
-    check("a start that cannot pause the lanes starts NOTHING",
+    check("a start that cannot pause the lane starts NOTHING",
           got.get("ok") is False and not started
           and "would not pause" in got.get("why", ""), got)
 
@@ -875,7 +887,7 @@ def t_the_card_count_is_read_and_said_plainly():
 
 
 def main() -> int:
-    for fn in (t_the_switch_is_off_by_default, t_the_card_names_both_lanes,
+    for fn in (t_the_switch_is_off_by_default, t_the_card_names_the_everyday_lane,
                t_turning_it_on_is_one_card_and_off_is_immediate,
                t_a_start_while_it_is_off_touches_nothing,
                t_a_start_refuses_while_a_task_is_running,
@@ -883,10 +895,10 @@ def main() -> int:
                t_the_pause_really_happens_before_the_load,
                t_the_model_is_never_resident_beside_a_lane,
                t_a_lane_that_will_not_pause_stops_the_whole_start,
-               t_a_load_that_spills_is_undone_and_the_lanes_come_back,
+               t_a_load_that_spills_is_undone_and_the_lane_comes_back,
                t_a_load_at_the_wrong_context_is_undone,
                t_the_measured_allowance_is_one_window_and_not_a_general_rule,
-               t_stop_puts_both_lanes_back_exactly,
+               t_stop_puts_the_everyday_lane_back_exactly,
                t_a_lane_that_does_not_come_back_is_reported,
                t_status_changes_nothing,
                t_the_one_post_answers_and_refuses_what_it_should,

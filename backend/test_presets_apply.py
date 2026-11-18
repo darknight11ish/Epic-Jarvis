@@ -103,7 +103,7 @@ def t_general_success_one_card_and_order():
           code == 200 and out["changed"] is True
           and [c[0] for c in d.calls] == ["start", "switch", "set_url", "choice"], d.calls)
     check("the one switch is the preset's model on the main lane",
-          d.calls[1] == ("switch", "qwen3.5:9b")
+          d.calls[1] == ("switch", P.by_id("general").model)
           and d.calls[2] == ("set_url", "http://127.0.0.1:11436"), d.calls)
     check("the chosen preset is persisted", d.choice == "general")
 
@@ -150,14 +150,14 @@ def t_pooled_num_ctx_follows_the_applied_preset():
         L.pooled_mode_now = real_now
 
 
-def t_fast_starts_the_coding_lane_on_demand():
+def t_fast_starts_the_everyday_lane_on_demand():
     d = Deps()
     code, out = apply({"preset": "fast"}, d)
-    check("Fast asks for exactly the coding lane, never both",
-          code == 200 and d.calls[0] == ("start", "coding")
+    check("Fast asks for the everyday lane only - there is no second lane to ask",
+          code == 200 and d.calls[0] == ("start", "main")
           and sum(1 for c in d.calls if c[0] == "start") == 1, d.calls)
-    check("... and the chat lane is pointed at :11435",
-          d.calls[2] == ("set_url", "http://127.0.0.1:11435"), d.calls)
+    check("... and the chat lane is pointed at :11436",
+          d.calls[2] == ("set_url", "http://127.0.0.1:11436"), d.calls)
 
 
 def t_refusals_change_nothing():
@@ -391,7 +391,8 @@ def t_get_work_serves_the_new_contract():
     check("... and a top-level lane/lane_status beside active_lane",
           "lane" in body and "lane_status" in body and "active_lane" in body
           and body["lane"]["key"] == "main"
-          and "RTX 2060" in body["lane"]["label"])
+          and body["lane"]["card"] == "all three cards"
+          and "everyday lane" in body["lane"]["label"])
     check("... the hardware shape is the fixture's nested shape",
           sorted(body["hardware"]) == ["detected", "questionnaire"]
           and sorted(body["hardware"]["detected"]) == ["cards", "count", "source"],
@@ -423,7 +424,7 @@ def main() -> int:
     for fn in (t_default_unchanged_without_a_call, t_general_success_one_card_and_order,
                t_medical_starts_the_pooled_lane_in_its_own_mode,
                t_pooled_num_ctx_follows_the_applied_preset,
-               t_fast_starts_the_coding_lane_on_demand, t_refusals_change_nothing,
+               t_fast_starts_the_everyday_lane_on_demand, t_refusals_change_nothing,
                t_lane_start_failure_stops_before_the_switch,
                t_switch_failure_rolls_back_lane_and_choice, t_install_wires_only_the_apply_route,
                t_nothing_to_restore_is_not_a_restore,

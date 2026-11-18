@@ -22,24 +22,37 @@ pooled row). They replace the five "work setups" in jarvis_work.py (decision
 2026-10-18).
 
 Every measured number below is from
-.dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it);
-`measured is None` means NOT measured for that model - never a guess.
+.dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it),
+except the everyday 26B figures, which were measured on this PC on 2026-11-17/18
+for the owner's 2026-11-18 decision; `measured is None` means NOT measured for
+that model - never a guess.
 
-Lanes (this PC, 2026-10-10 measurements):
-  main    RTX 2060 12 GB, port 11436 - the long-context card
-  coding  RTX 2080 SUPER 8 GB, port 11435 - the fast card
-  pooled  all three cards, port 11450 - the Coding preset's own lane (2026-11-02)
-The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
-lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
-its own pooled three-card lane on demand.
+Lanes (this PC, 2026-11-18):
+  main    ALL THREE cards, port 11436 - the everyday lane, the ONLY always-on
+          lane. Since 2026-11-18 it holds gemma4:26b-a4b-it-qat at 196,608
+          tokens: measured on this PC on 2026-11-17/18 at 17.50 GiB loaded,
+          16.58 GiB in the cards' memory, 0.92 GiB spilled, 46.10 tokens a
+          second (a real-answer control at 32,768 read 45.66) and a 56.5 s cold
+          load.
+  pooled  all three cards, port 11450 - the heavy presets' own lane, started on
+          demand (2026-11-02). It carries ONE heavy model at a time and pauses
+          the everyday lane first; bringing the everyday 26B back afterwards
+          costs about 57 seconds.
+
+There is NO second single-card lane since 2026-11-18. The coding lane on port
+11435 (`qwen3:8b` at 16,384) is RETIRED, because the everyday model now needs
+every card: the owner's words are "i dont need a separate coding lane on any
+preset. each preset should be dedicated to one preset local ai model." Every
+preset below names exactly one model and exactly one lane, and the Fast row
+moved from the retired coding lane to the everyday lane.
 
 Coding is the FIRST of the two heavy rows, and since 2026-11-02 it has a lane
 that can really hold it: a 14.8 GB model fits neither card alone, so its lane is
 ONE Ollama on
 its own port with all three cards visible (`jarvis_model_lanes.start_pooled_lane`),
 started by the apply and stopped by the next apply that is not heavy. The cost
-is stated in the preset's own words and on the card: the two lane models are
-paused while it runs and come back when it is stopped.
+is stated in the preset's own words and on the card: the everyday model is
+paused while it runs and comes back when it is stopped.
 """
 from __future__ import annotations
 
@@ -55,14 +68,17 @@ EVIDENCE = (".dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md",
             ".dsh-scratch/android-verify/MODEL-STRATEGY-2026-10-10.md")
 
 LANES = {
-    "main": {"key": "main", "card": "RTX 2060", "port": 11436,
-             "words": "the long-context card"},
-    "coding": {"key": "coding", "card": "RTX 2080 SUPER", "port": 11435,
-               "words": "the fast card"},
-    # The Coding preset's own lane: ONE Ollama that sees ALL THREE cards, started
+    # The only always-on lane, and since 2026-11-18 it is ALL THREE CARDS: the
+    # everyday model is `gemma4:26b-a4b-it-qat` at 196,608 tokens, measured on
+    # this PC at 17.50 GiB loaded / 16.58 GiB in video memory, which no single
+    # card can hold. `card` says "all three cards" because there is no single
+    # card it lives on; the logon task's card wiring is the deploy step.
+    "main": {"key": "main", "card": "all three cards", "port": 11436,
+             "words": "the everyday lane"},
+    # The heavy presets' own lane: ONE Ollama that sees ALL THREE cards, started
     # on demand by the apply (never by a logon task, which would hold the cards
-    # against the two lanes the assistant runs on). `card` says "all three cards"
-    # because there is no single card it lives on; its port and words are
+    # against the everyday lane). `card` says "all three cards" because there is
+    # no single card it lives on; its port and words are
     # `jarvis_model_lanes`' own, pinned to agree by test.
     "pooled": {"key": "pooled", "card": "all three cards", "port": 11450,
                "words": "one model across all three cards"},
@@ -146,10 +162,12 @@ MEDICAL_MEASURED_WORDS = (
     "cards' memory, 0 B spilled, a 46.8 s cold load and 9.27 tokens a second "
     "(11.1 on the measured ~150-word explanation, 7.89 on the four-token answer)")
 
-#: The two measured pooled candidates the lane can load but NO preset points at
-#: (2026-11-09). They are availability, not a default change: nothing applies
-#: them until the owner picks one, and a test pins that no preset names either
-#: model. The numbers are the 2026-11-09 bench rows, spill included.
+#: The two measured pooled rows the lane can load (2026-11-09), quoted from the
+#: one bench receipt per row. Since 2026-11-18 `gemma4:26b-a4b-it-qat` is ALSO
+#: the everyday preset's model - but on the everyday lane at 196,608 tokens,
+#: not through this 32,768-token pooled row. So no preset APPLIES either row;
+#: both stay availability for the owner's own measured choice. The numbers are
+#: the 2026-11-09 bench rows, spill included.
 GEMMA4_26B_MEASURED_WORDS = (
     "measured on this PC on 2026-11-09: 15.5 GiB loaded with 0.68 GiB (4.4%) "
     "spilled into system memory, 96% in the cards' memory, a 52.0 s cold load "
@@ -163,17 +181,43 @@ PRESETS = (
     Preset(
         id="general", title="General", focus="everyday questions, writing, life admin",
         what="The everyday preset: questions, writing, checking things, your own "
-             "paperwork - one balanced setup instead of a separate admin preset.",
-        cost="qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking "
-             "9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 "
-             "tokens a second, not the fastest.",
-        worse="Not the quickest and not the picture specialist; it thinks before it "
-              "answers, so a short answer allowance can cut it off before it "
-              "speaks - at the 1,024 tokens every window gets it answered all of "
-              "the general, tool-calling and vision checks (6/6, 5/5, 1/1).",
-        model="qwen3.5:9b", lane="main", context=196608,
+             "paperwork - one balanced setup instead of a separate admin preset. "
+             "Since 2026-11-18 it is the 26B model across all three cards at the "
+             "same full window.",
+        cost="gemma4:26b-a4b-it-qat runs across all three cards and holds 196,608 "
+             "tokens there: 17.50 GiB loaded, 16.58 GiB in the cards' memory and "
+             "0.92 GiB spilled into system memory. It writes at 46.10 tokens a "
+             "second (a real-answer control at 32,768 read 45.66) and takes about "
+             "57 seconds to load cold. On two cards the same window spilled 6.37 "
+             "GiB and fell to 15.75-16.76 tokens a second, which is why it needs "
+             "all three. Measured on this PC on 2026-11-17/18.",
+        worse="It fills all three cards, so every heavy preset that is applied "
+              "afterwards pauses it, and returning to General costs its cold load "
+              "(about 57 seconds). `ollama show` reports completion, vision, tools "
+              "and thinking and a real 573M-parameter image projector, so pictures "
+              "and tools are not lost - but its picture quality and its general, "
+              "tool-calling and vision rubric results are NOT measured on this PC, "
+              "so nothing here claims them. It thinks before it answers, so a short "
+              "answer allowance can cut it off before it speaks.",
+        model="gemma4:26b-a4b-it-qat", lane="main", context=196608,
         prompt="balanced", diet="balanced",
-        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        measured={"tok_s": 46.10, "tok_s_control_32k": 45.66,
+                  "size_gib": 17.50, "vram_gib": 16.58, "spill_gib": 0.92,
+                  "cold_load_s": 56.5, "context_measured": 196608,
+                  "two_card_tok_s": [15.75, 16.76], "two_card_spill_gib": 6.37,
+                  "capabilities": ["completion", "vision", "tools", "thinking"],
+                  "vision_projector_params": 573000000,
+                  "source": "measured on this PC on 2026-11-17/18 across all three "
+                            "cards at 196,608 tokens: 17.50 GiB loaded, size_vram "
+                            "16.58 GiB, 0.92 GiB spilled, 46.10 tok/s thinking-token "
+                            "throughput; the real-answer control at a 32,768-token "
+                            "window read 45.66 tok/s; cold load 56.5 s. The same "
+                            "window on two cards measured 16.52 GiB with 6.37 GiB "
+                            "spilled at 15.75-16.76 tok/s, which is why all three "
+                            "cards are required. /api/show reports completion, "
+                            "vision, tools and thinking and a real 573M-parameter "
+                            "image projector (projector_type gemma4v, "
+                            "clip.has_vision_encoder true)"},
         words=("everyday", "general", "quick question", "writing", "admin",
                "paperwork", "letter", "statement", "form", "tax", "email", "inbox"),
         strong=("everyday use", "quick questions", "life admin", "my admin"),
@@ -208,8 +252,8 @@ PRESETS = (
              "coding jobs: the 30B coding model on ONE lane that sees all three cards, "
              "started on demand by this apply.",
         cost="HEAVY MODE: it fills ALL THREE GPUs (16.17 GiB of video memory here, with the "
-             "same q8_0 cache the two live lanes use, and nothing pushed into system "
-             "RAM) and pauses the other lanes' models while it works, for about 32 s on "
+             "same q8_0 cache the everyday lane uses, and nothing pushed into system "
+             "RAM) and pauses the everyday model while it works, for about 32 s on "
              "a cold load. Measured 2026-11-07 at 49,152 tokens on all three cards: "
              "83.8 tokens a second after a 900-word prompt, prompt ~1,644 tokens a "
              "second, zero CPU spill. The same-night two-card control (same q8_0 cache) "
@@ -221,17 +265,19 @@ PRESETS = (
              "zero spill and no spill allowance. The older figures (76.2 tok/s at "
              "28,672; 80.4 at 32,768 with 323.5 MiB spilled) are kept in "
              "docs/MEASURED-2026-11-07-THREE-GPU.md.",
-        worse="Applying it makes it the model chat uses, so the Fast/Live and "
-              "Agentic+Vision models are NOT resident while it runs - they come back "
-              "when you apply another preset, and that switch costs a reload. It is "
+        worse="Applying it makes it the model chat uses, so the everyday 26B is NOT "
+              "resident while it runs - it comes back when you apply another "
+              "preset, and that switch costs its cold load (about 57 seconds since "
+              "2026-11-18). It is "
               "not a quick helper: it takes all three cards for as long as it is on, "
               "and nothing else can be loaded beside it. Measured about 59 tokens a "
               "second at 65,536 tokens, so the wider window is not offered.",
         model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=49152,
         prompt="coding", diet="coding", heavy_mode=True,
         heavy_words="This preset needs all three cards at once as one pooled lane. While "
-                    "it runs, the everyday and Fast models are paused - they come "
-                    "back, proved from the model list, when you apply another preset. "
+                    "it runs, the everyday model is paused - it comes "
+                    "back, proved from the model list, when you apply another preset, "
+                    "and that reload takes about 57 seconds. "
                     "Loading it takes about half a minute.",
         tools=("code", "files"),
         measured={"tok_s": 83.8, "rubric": "6/6 coding rubric", "size_gib": 16.2,
@@ -298,24 +344,28 @@ PRESETS = (
     ),
     Preset(
         id="fast", title="Fast", focus="the quickest short answers",
-        what="The quickest preset: qwen3.5:4b on the 2080 SUPER at the 16,384-token "
-             "window its lane serves, while the 2060 keeps the general model warm for "
-             "when you switch back.",
-        cost="Measured 2026-10-10 on this same card: 77.1 tokens a second and 4.15 GB "
-             "of video memory at a 65,536-token window (the file is 3.16 GB on disk). "
-             "The Fast lane starts at 16,384 tokens today, so this row keeps that "
-             "window; the bigger measurement is why the card has room to spare.",
+        what="The quickest preset: qwen3.5:4b at the 16,384-token window it is for, "
+             "on the everyday lane. Since 2026-11-18 there is no separate fast "
+             "card: applying it makes qwen3.5:4b the model chat uses, and going "
+             "back to General asks the lane for the everyday 26B again.",
+        cost="Measured 2026-10-10 on an RTX 2080 SUPER: 77.1 tokens a second and "
+             "4.15 GB of video memory at a 65,536-token window (the file is 3.16 GB "
+             "on disk). Since 2026-11-18 the everyday lane spans all three cards, so "
+             "that figure is the model's measurement on this PC rather than a fresh "
+             "one for the lane; this row keeps the 16,384-token window it is for.",
         worse="The small model: fastest measured writer here, and the bench's three "
               "short prompts were only called broadly correct rather than scored. "
-              "Chosen for waiting less, not for care; its first request after a cold "
-              "load is slow on this card.",
-        model="qwen3.5:4b", lane="coding", context=16384,
+              "Chosen for waiting less, not for care. The 26B does not fit beside it "
+              "on the same three cards, so switching back to General costs the "
+              "everyday model's cold load (about 57 seconds).",
+        model="qwen3.5:4b", lane="main", context=16384,
         prompt="fast", diet="fast",
         measured={"tok_s": 77.1, "size_gib": 3.16, "vram_gib": 4.15, "spill_gib": 0.0,
                   "context": 65536,
                   "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 "
                             "SUPER (repo restatement: docs/WORK-SETUPS.md:29, "
-                            "jarvis_work.py:262); the Fast lane serves 16,384"},
+                            "jarvis_work.py:262); the everyday lane now spans all "
+                            "three cards and this row keeps 16,384"},
         words=("fast", "quick", "quickly", "short answer", "one-off", "hurry",
                "speed", "asap"),
         strong=("quick answer", "as fast as possible", "fast"),
@@ -450,9 +500,12 @@ def pooled_modes() -> tuple:
 
     `jarvis_big_coder.MODES` owns coding/deep_think/creative. This is the preset
     layer's own extra rows: `medical`, derived from the Medical Preset row so its
-    model and window are typed once, plus the two measured candidates
-    (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`) that NO preset points at - they are
+    model and window are typed once, plus the two measured rows
+    (`gemma4-26b-a4b`, `qwen3-vl-30b-a3b`) that NO preset APPLIES - they are
     availability for the owner's own measured choice, never a default change.
+    The gemma4 row carries the same model the everyday preset names (since
+    2026-11-18) at this lane's smaller 32,768-token window; the everyday preset
+    is a different lane, not this row.
     Read by `jarvis_model_lanes` and `jarvis_big_coder` through lazy imports.
     Never raises; `()` when the Medical row is absent (a trimmed backend).
     """

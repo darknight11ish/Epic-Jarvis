@@ -8,15 +8,15 @@
       "id": "general",
       "title": "General",
       "focus": "everyday questions, writing, life admin",
-      "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset.",
-      "cost": "qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking 9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 tokens a second, not the fastest.",
-      "worse": "Not the quickest and not the picture specialist; it thinks before it answers, so a short answer allowance can cut it off before it speaks - at the 1,024 tokens every window gets it answered all of the general, tool-calling and vision checks (6/6, 5/5, 1/1).",
-      "model": "qwen3.5:9b",
+      "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset. Since 2026-11-18 it is the 26B model across all three cards at the same full window.",
+      "cost": "gemma4:26b-a4b-it-qat runs across all three cards and holds 196,608 tokens there: 17.50 GiB loaded, 16.58 GiB in the cards' memory and 0.92 GiB spilled into system memory. It writes at 46.10 tokens a second (a real-answer control at 32,768 read 45.66) and takes about 57 seconds to load cold. On two cards the same window spilled 6.37 GiB and fell to 15.75-16.76 tokens a second, which is why it needs all three. Measured on this PC on 2026-11-17/18.",
+      "worse": "It fills all three cards, so every heavy preset that is applied afterwards pauses it, and returning to General costs its cold load (about 57 seconds). `ollama show` reports completion, vision, tools and thinking and a real 573M-parameter image projector, so pictures and tools are not lost - but its picture quality and its general, tool-calling and vision rubric results are NOT measured on this PC, so nothing here claims them. It thinks before it answers, so a short answer allowance can cut it off before it speaks.",
+      "model": "gemma4:26b-a4b-it-qat",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 196608,
       "helper": null,
@@ -26,10 +26,26 @@
         "tools": []
       },
       "measured": {
-        "tok_s": 44.9,
-        "size_gib": 6.1,
-        "vram_gib": 9.17,
-        "spill_gib": 0.0
+        "tok_s": 46.1,
+        "tok_s_control_32k": 45.66,
+        "size_gib": 17.5,
+        "vram_gib": 16.58,
+        "spill_gib": 0.92,
+        "cold_load_s": 56.5,
+        "context_measured": 196608,
+        "two_card_tok_s": [
+          15.75,
+          16.76
+        ],
+        "two_card_spill_gib": 6.37,
+        "capabilities": [
+          "completion",
+          "vision",
+          "tools",
+          "thinking"
+        ],
+        "vision_projector_params": 573000000,
+        "source": "measured on this PC on 2026-11-17/18 across all three cards at 196,608 tokens: 17.50 GiB loaded, size_vram 16.58 GiB, 0.92 GiB spilled, 46.10 tok/s thinking-token throughput; the real-answer control at a 32,768-token window read 45.66 tok/s; cold load 56.5 s. The same window on two cards measured 16.52 GiB with 6.37 GiB spilled at 15.75-16.76 tok/s, which is why all three cards are required. /api/show reports completion, vision, tools and thinking and a real 573M-parameter image projector (projector_type gemma4v, clip.has_vision_encoder true)"
       },
       "pending": false,
       "heavy_mode": false,
@@ -52,9 +68,9 @@
       "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 196608,
       "helper": null,
@@ -93,8 +109,8 @@
       "title": "Coding",
       "focus": "code, files, debugging, multi-step work",
       "what": "For writing and fixing code, reading a project, and long tool-driven coding jobs: the 30B coding model on ONE lane that sees all three cards, started on demand by this apply.",
-      "cost": "HEAVY MODE: it fills ALL THREE GPUs (16.17 GiB of video memory here, with the same q8_0 cache the two live lanes use, and nothing pushed into system RAM) and pauses the other lanes' models while it works, for about 32 s on a cold load. Measured 2026-11-07 at 49,152 tokens on all three cards: 83.8 tokens a second after a 900-word prompt, prompt ~1,644 tokens a second, zero CPU spill. The same-night two-card control (same q8_0 cache) at 32,768 tokens read 60.6 tokens a second with a 69.6 s cold load; the 2026-11-03 shipped record used the default f16 cache and read 80.4 at a 36.0 s load, so it is not a like-for-like baseline. Against the control the three-card window is about 38% faster; against the older record the gain is small - the real change is the 16,384-token wider window with zero spill and no spill allowance. The older figures (76.2 tok/s at 28,672; 80.4 at 32,768 with 323.5 MiB spilled) are kept in docs/MEASURED-2026-11-07-THREE-GPU.md.",
-      "worse": "Applying it makes it the model chat uses, so the Fast/Live and Agentic+Vision models are NOT resident while it runs - they come back when you apply another preset, and that switch costs a reload. It is not a quick helper: it takes all three cards for as long as it is on, and nothing else can be loaded beside it. Measured about 59 tokens a second at 65,536 tokens, so the wider window is not offered.",
+      "cost": "HEAVY MODE: it fills ALL THREE GPUs (16.17 GiB of video memory here, with the same q8_0 cache the everyday lane uses, and nothing pushed into system RAM) and pauses the everyday model while it works, for about 32 s on a cold load. Measured 2026-11-07 at 49,152 tokens on all three cards: 83.8 tokens a second after a 900-word prompt, prompt ~1,644 tokens a second, zero CPU spill. The same-night two-card control (same q8_0 cache) at 32,768 tokens read 60.6 tokens a second with a 69.6 s cold load; the 2026-11-03 shipped record used the default f16 cache and read 80.4 at a 36.0 s load, so it is not a like-for-like baseline. Against the control the three-card window is about 38% faster; against the older record the gain is small - the real change is the 16,384-token wider window with zero spill and no spill allowance. The older figures (76.2 tok/s at 28,672; 80.4 at 32,768 with 323.5 MiB spilled) are kept in docs/MEASURED-2026-11-07-THREE-GPU.md.",
+      "worse": "Applying it makes it the model chat uses, so the everyday 26B is NOT resident while it runs - it comes back when you apply another preset, and that switch costs its cold load (about 57 seconds since 2026-11-18). It is not a quick helper: it takes all three cards for as long as it is on, and nothing else can be loaded beside it. Measured about 59 tokens a second at 65,536 tokens, so the wider window is not offered.",
       "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
       "lane": {
         "key": "pooled",
@@ -125,7 +141,7 @@
       },
       "pending": false,
       "heavy_mode": true,
-      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday and Fast models are paused - they come back, proved from the model list, when you apply another preset. Loading it takes about half a minute.",
+      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday model is paused - it comes back, proved from the model list, when you apply another preset, and that reload takes about 57 seconds. Loading it takes about half a minute.",
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -144,9 +160,9 @@
       "model": "qwen3.5:9b",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 16384,
       "helper": null,
@@ -190,15 +206,15 @@
       "id": "fast",
       "title": "Fast",
       "focus": "the quickest short answers",
-      "what": "The quickest preset: qwen3.5:4b on the 2080 SUPER at the 16,384-token window its lane serves, while the 2060 keeps the general model warm for when you switch back.",
-      "cost": "Measured 2026-10-10 on this same card: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token window (the file is 3.16 GB on disk). The Fast lane starts at 16,384 tokens today, so this row keeps that window; the bigger measurement is why the card has room to spare.",
-      "worse": "The small model: fastest measured writer here, and the bench's three short prompts were only called broadly correct rather than scored. Chosen for waiting less, not for care; its first request after a cold load is slow on this card.",
+      "what": "The quickest preset: qwen3.5:4b at the 16,384-token window it is for, on the everyday lane. Since 2026-11-18 there is no separate fast card: applying it makes qwen3.5:4b the model chat uses, and going back to General asks the lane for the everyday 26B again.",
+      "cost": "Measured 2026-10-10 on an RTX 2080 SUPER: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token window (the file is 3.16 GB on disk). Since 2026-11-18 the everyday lane spans all three cards, so that figure is the model's measurement on this PC rather than a fresh one for the lane; this row keeps the 16,384-token window it is for.",
+      "worse": "The small model: fastest measured writer here, and the bench's three short prompts were only called broadly correct rather than scored. Chosen for waiting less, not for care. The 26B does not fit beside it on the same three cards, so switching back to General costs the everyday model's cold load (about 57 seconds).",
       "model": "qwen3.5:4b",
       "lane": {
-        "key": "coding",
-        "card": "RTX 2080 SUPER",
-        "port": 11435,
-        "words": "the fast card"
+        "key": "main",
+        "card": "all three cards",
+        "port": 11436,
+        "words": "the everyday lane"
       },
       "context": 16384,
       "helper": null,
@@ -213,7 +229,7 @@
         "vram_gib": 4.15,
         "spill_gib": 0.0,
         "context": 65536,
-        "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 SUPER (repo restatement: docs/WORK-SETUPS.md:29, jarvis_work.py:262); the Fast lane serves 16,384"
+        "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 SUPER (repo restatement: docs/WORK-SETUPS.md:29, jarvis_work.py:262); the everyday lane now spans all three cards and this row keeps 16,384"
       },
       "pending": false,
       "heavy_mode": false,
@@ -222,7 +238,7 @@
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
         "apply_route": "/api/work/apply",
-        "lane_start": true,
+        "lane_start": false,
         "auto": false
       }
     },
@@ -236,9 +252,9 @@
       "model": "qwen3.5:9b",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 196608,
       "helper": null,
@@ -274,9 +290,9 @@
       "model": "qwen3.5:9b",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 32768,
       "helper": null,
@@ -309,9 +325,9 @@
       "model": "qwen3.5:9b",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 196608,
       "helper": null,
@@ -347,9 +363,9 @@
       "model": "qwen3.5:9b",
       "lane": {
         "key": "main",
-        "card": "RTX 2060",
+        "card": "all three cards",
         "port": 11436,
-        "words": "the long-context card"
+        "words": "the everyday lane"
       },
       "context": 196608,
       "helper": null,
@@ -473,7 +489,7 @@
       "1": {
         "general": {
           "preset": "general",
-          "model": "qwen3.5:9b",
+          "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
           "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
@@ -585,11 +601,11 @@
       "2": {
         "general": {
           "preset": "general",
-          "model": "qwen3.5:9b",
+          "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
           "card": "NVIDIA GeForce RTX 2080 SUPER",
           "context": 196608,
-          "tok_s": 44.9,
+          "tok_s": 46.1,
           "measured": true,
           "best_effort_not_tested": false,
           "note": "the agreed 2-GPU mapping: main model on the 2060"
@@ -697,7 +713,7 @@
       "3": {
         "general": {
           "preset": "general",
-          "model": "qwen3.5:9b",
+          "model": "gemma4:26b-a4b-it-qat",
           "card_index": 0,
           "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0), 8 GB",
           "context": 196608,

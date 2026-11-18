@@ -140,7 +140,7 @@ the apps is how he finds out it was used.
 
 THE POOLED LANE IS THE ONE EXCEPTION, and it is the opposite argument
 (2026-11-02). Starting the Coding preset's three-card lane UNLOADS the owner's
-two models and then makes the 30B the model chat uses, so it raises ONE
+everyday model and then makes the 30B the model chat uses, so it raises ONE
 `switch_model` card - the same action and the same `from`/`to`/`why` detail
 `jarvis_models.switch_to` sends - BEFORE it unloads anything, and a denied card
 changes nothing at all. No new gate action, no tier row, no second card: the
@@ -236,7 +236,7 @@ def start_lane(lane_key, **kwargs) -> tuple:
 # fits NEITHER single-card lane, at any context. There is no third logon task
 # and there must not be one: a pooled lane is only ever wanted for one model
 # while the owner is coding, and a task that starts with Windows would hold all
-# three cards against the two lanes the assistant actually runs on.
+# three cards against the one always-on lane the assistant actually runs on.
 #
 # So the pooled lane is the ONE Ollama this PC starts on demand, on its own
 # port, with NO card pin at all - which is what lets the engine see all three
@@ -251,15 +251,15 @@ def start_lane(lane_key, **kwargs) -> tuple:
 # rather than leaving it to the model switch:
 #
 #   1. the lane already holds the model -> nothing is started, nothing changes;
-#   2. a multi-step task is running -> refused in words (pausing the lanes
-#      under it would break it);
+#   2. a multi-step task is running -> refused in words (pausing the everyday
+#      lane under it would break it);
 #   3. ONE card, action `switch_model` - the SAME action and the SAME detail
 #      `jarvis_models.switch_to` raises, so the owner reads the same card he
 #      reads for any other model change. It names the model, all three
-#      cards, and the two lane models it is about to pause;
+#      cards, and the everyday model it is about to pause;
 #   4. the pause is ANNOUNCED (event bus + audit log) BEFORE the first unload;
-#   5. the three-card server is started, BOTH lane models are unloaded and
-#      proved gone from `/api/ps` - by the pause AND by a read of each lane's
+#   5. the three-card server is started, the everyday model is unloaded and
+#      proved gone from `/api/ps` - by the pause AND by a read of the lane's
 #      own `/api/ps` taken HERE, because a claimed pause is not a proved one
 #      (2026-11-17 live) - and only then is the model loaded - at THIS
 #      lane's own measured rung (49,152 tokens since 2026-11-07; 32,768 from
@@ -267,11 +267,11 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #      measurement accepted passed to `load_coder` as
 #      `allow_spill`. A load that comes up at another context, spills past this
 #      one measured cap, or does not say how much it spilled, is unloaded again
-#      and every lane is put back. A caller that passes no allowance - every
+#      and the lane is put back. A caller that passes no allowance - every
 #      other one - still gets the zero-spill rule exactly as before;
 #   6. ANY failure after the card puts back what it took, in the order the live
 #      PC of 2026-11-17 needed: the pooled model is unloaded and its server
-#      STOPPED FIRST, then both lane models are asked back, retried once, and
+#      STOPPED FIRST, then the everyday model is asked back, retried once, and
 #      only a restore the engine proved from `/api/ps` is reported. `changed:
 #      false` is only ever said beside the restores that were really seen, and a
 #      lane that did not come back is named plainly.
@@ -287,12 +287,13 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #
 # STOPPING is immediate and takes no card: it is the reversal, and a reversal
 # that needs permission is a reversal that happens too late. It unloads the
-# model, stops the server THIS process started, and puts both lanes back
-# exactly as they were - model, context and zero spill - proved from
-# `/api/ps`. A lane that does not come back is said plainly, never glossed.
+# model, stops the server THIS process started, and puts the everyday lane back
+# exactly as it was - model, context and the spill its own measurement allows -
+# proved from `/api/ps`. A lane that does not come back is said plainly, never
+# glossed.
 #
-# WHAT IS NOT HIDDEN. While the pooled lane runs, the everyday and Fast models
-# are NOT resident: that is the cost the preset's own words state, and the
+# WHAT IS NOT HIDDEN. While the pooled lane runs, the everyday model is NOT
+# resident: that is the cost the preset's own words state, and the
 # card says it before a single unload. A server left answering on the port by
 # an earlier process is used as it is and is NOT stopped by `stop_pooled_lane`
 # (the same rule `jarvis_big_coder.server_start` follows) - its model is
@@ -573,8 +574,8 @@ def pooled_card_text(*, mode: str = "coding", engine=None) -> str:
     """The card the owner reads before anything is unloaded, in plain words.
 
     The pause half is `jarvis_big_coder.card_text_start()`'s own words - the
-    same model, the same cards, the same two lane models and contexts - because
-    it is the same pause, and two descriptions of one action would drift. What
+    same model and window for the same lane - because it is the same pause, and
+    two descriptions of one action would drift. What
     this lane passes it is what is THIS mode's own measurement: the window it
     asks for and the words for that measurement, so the card describes the load
     that will really happen. The last line is this lane's own: what changes
@@ -588,12 +589,12 @@ def pooled_card_text(*, mode: str = "coding", engine=None) -> str:
                                 measured_words=measured,
                                 mode=profile["key"])
             + "\n\nWhile it runs, chat uses it. Applying another preset, or "
-              "stopping it, unloads it and puts both models back exactly as "
-              "they were.")
+              "stopping it, unloads it and puts the everyday model back exactly "
+              "as it was.")
 
 
-#: How many times the two lane models are asked back before an answer says a
-#: lane did not come back. TWO, not one. The live PC of 2026-11-17 is the
+#: How many times the everyday lane is asked back before an answer says it did
+#: not come back. TWO, not one. The live PC of 2026-11-17 is the
 #: reason: the first restore answered "qwen3.5:9b is not loaded on port 11436"
 #: while that lane was still settling the unload this start had just asked for,
 #: and the owner's own retry half a minute later applied cleanly. The second
@@ -610,12 +611,15 @@ def _lane_field(lane, name, default=None):
 
 
 def _lane_rows(engine) -> tuple:
-    """The two lane rows the engine owns, never a copy of the ports or models.
+    """The lane rows the engine owns, never a copy of the ports or models.
 
     A stand-in engine in a suite may answer `LANES` itself; one that does not
     gets the shipped list from `jarvis_big_coder`, which is the module that owns
-    the owner's own two lanes. Empty only when neither can be read, which no
-    shipped install can be.
+    the owner's always-on lane. That list holds ONE row since 2026-11-18 (the
+    coding lane on 11435 is retired), and this function never assumes a count -
+    the pause, the proof and the restore below all loop over whatever it
+    returns. Empty only when neither can be read, which no shipped install can
+    be.
     """
     rows = tuple(getattr(engine, "LANES", ()) or ())
     if rows:
@@ -675,7 +679,8 @@ def _lanes_still_loaded(engine) -> tuple:
 
 
 def _put_lanes_back(engine) -> dict:
-    """Ask both lane models back, retried once, and answer what was proved.
+    """Ask the everyday lane's model back, retried once, and answer what was
+    proved.
 
     {"ok", "restored", "not_restored", "proof", "why"}. `restored` is the proof
     the engine's own restore gave from `/api/ps`; a restore that says a model
@@ -718,7 +723,7 @@ def _undo_pooled_start(engine, *, profile: dict, port: int) -> dict:
     {"ok", "restored", "not_restored", "proof", "why", "pooled_clear"}
 
     THE ORDER IS THE FIX (2026-11-17). The pooled model is unloaded and the
-    three-card server is STOPPED FIRST, before the two lane models are asked
+    three-card server is STOPPED FIRST, before the everyday model is asked
     back: the live failure answered "qwen3.5:9b is not loaded on port 11436"
     while the server the start had just launched was still up and could still
     hold what the restore needed. Only then are the lanes restored, retried and
@@ -862,9 +867,9 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                        f"({type(exc).__name__})")}
     srv = srv if isinstance(srv, dict) else {}
     if not srv.get("ok"):
-        # The engine's own server_start pauses the two lanes BEFORE it launches
-        # (2026-11-08), so this failure can already have unloaded them. Put them
-        # back: this used to answer and leave the everyday lane down.
+        # The engine's own server_start pauses the everyday lane BEFORE it
+        # launches (2026-11-08), so this failure can already have unloaded it.
+        # Put it back: this used to answer and leave the everyday lane down.
         undo = _undo_pooled_start(eng, profile=profile, port=port)
         return _start_refused(
             503,
@@ -893,7 +898,7 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                    "back.")
         undo = _undo_pooled_start(eng, profile=profile, port=port)
         return _start_refused(
-            409, error=(why or "the two lane models would not pause"), undo=undo,
+            409, error=(why or "the everyday lane would not pause"), undo=undo,
             extra={"paused": list(paused.get("proof") or []) + pause_proof,
                    "still": still})
 
@@ -936,8 +941,8 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
         "url": srv.get("url") or pooled_url(), "model": profile["model"],
         "num_ctx": profile["num_ctx"],
         "message": (f"The {what} model is running across all three cards at "
-                    f"{profile['num_ctx']:,} tokens. The two lane models are "
-                    f"paused and come back when you stop it or apply another "
+                    f"{profile['num_ctx']:,} tokens. The everyday model is "
+                    f"paused and comes back when you stop it or apply another "
                     f"preset."),
         "paused": list(paused.get("proof") or []) + pause_proof,
         "proof": [str(p) for p in (loaded.get("proof") or ()) if str(p)],
@@ -989,11 +994,11 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
     Ollama already answering on the port is left alone, and only its model is
     unloaded - which is what frees the cards.
 
-    `restore=False` skips putting the two lane models back, and that is for
+    `restore=False` skips putting the everyday model back, and that is for
     STANDBY (`sleep()` below), not a shortcut: standby exists to empty the
-    cards, so reloading `qwen3.5:9b` and the Fast model as part of the stop
+    cards, so reloading the everyday 26B as part of the stop
     would undo the thing it was asked to do. Every other caller wants the
-    lanes back and keeps the default.
+    lane back and keeps the default.
     """
     eng = _engine(engine)
     # ONE read of /api/ps decides everything below: whether anything is loaded,
@@ -1023,7 +1028,7 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
         back = eng.restore_lanes()
     else:
         back = {"ok": True, "why": "", "wrong": [],
-                "proof": ["the two lane models were left stopped: the caller is "
+                "proof": ["the everyday model was left stopped: the caller is "
                           "freeing the cards"]}
     with _POOLED_LOCK:
         held = dict(_POOLED)
@@ -1036,10 +1041,10 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
                      "unloaded": gone["proof"], "restored": back["proof"]}
     what = "coding" if profile["key"] == "coding" else profile["label"].lower()
     message = (f"The {what} model is stopped, the three-card server this "
-               f"app started is stopped, and both lane models are back: "
+               f"app started is stopped, and the everyday model is back: "
                + "; ".join(eng.lane_lines())) if restore else (
         f"The {what} model is stopped and the three-card server this app "
-        "started is stopped; the two lane models were left stopped, because "
+        "started is stopped; the everyday model was left stopped, because "
         "the cards are being freed.")
     return 200, {
         "ok": True, "changed": was_running, "running": False, "lane": POOLED_KEY,
@@ -1063,9 +1068,9 @@ def sleep(why: str = "Jarvis is on standby", *, engine=None,
     through the whole night while every smaller model was freed.
 
     WHY `restore=False` AND WHY THE READ COMES FIRST. `stop_pooled_lane()`
-    puts the two lane models back, which is right when a preset change asks
+    puts the everyday model back, which is right when a preset change asks
     for it and wrong here: standby is emptying the cards, so reloading
-    `qwen3.5:9b` and the Fast model would undo it. And the lane is only
+    the everyday 26B would undo it. And the lane is only
     touched when `/api/ps` on port 11450 actually holds its model - a read,
     never a remembered flag - so a lane that is already down costs nothing
     and a backend that restarted since cannot claim a stop it did not do.

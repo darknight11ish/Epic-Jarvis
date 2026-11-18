@@ -1061,8 +1061,8 @@ def t_no_preset_default_is_changed_by_this_work():
           getattr(coding, "model", None))
     check("the Coding preset's window is unchanged",
           int(coding.context) == 49152, getattr(coding, "context", None))
-    check("the General preset still runs qwen3.5:9b",
-          general is not None and general.model == "qwen3.5:9b",
+    check("the General preset runs the 26B the owner chose on 2026-11-18",
+          general is not None and general.model == "gemma4:26b-a4b-it-qat",
           getattr(general, "model", None))
     check("the General preset's window is unchanged",
           int(general.context) == 196608, getattr(general, "context", None))

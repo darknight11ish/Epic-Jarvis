@@ -371,8 +371,24 @@ def main() -> int:
               and p["apply"]["apply_route"] == "/api/work/apply")
         check(f"{p['id']}: model and context are stated", bool(p["model"]) and int(p["context"]) > 0)
     gen = P.by_id("general")
-    check("General is qwen3.5:9b on the 2060 at 196,608",
-          gen.model == "qwen3.5:9b" and gen.context == 196608 and gen.lane == "main")
+    check("General is the 26B on the everyday lane across all three cards at 196,608",
+          gen.model == "gemma4:26b-a4b-it-qat" and gen.context == 196608
+          and gen.lane == "main"
+          and gen.measured["tok_s"] == 46.10
+          and gen.measured["tok_s_control_32k"] == 45.66
+          and gen.measured["size_gib"] == 17.50
+          and gen.measured["vram_gib"] == 16.58
+          and gen.measured["spill_gib"] == 0.92
+          and gen.measured["cold_load_s"] == 56.5
+          and gen.measured["two_card_spill_gib"] == 6.37
+          and gen.measured["two_card_tok_s"] == [15.75, 16.76],
+          (gen.model, gen.measured))
+    check("... and its words say the two-card figure is WHY it needs all three cards",
+          "6.37" in gen.cost and "all three" in gen.cost.lower(), gen.cost)
+    check("... and its words say plainly what is NOT measured (picture quality, "
+          "general/tool-calling/vision rubric)",
+          "NOT measured" in gen.worse and "picture quality" in gen.worse
+          and "rubric" in gen.worse, gen.worse)
     cod = P.by_id("coding")
     check("Coding is heavy, on the pooled all-three-card lane",
           cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
@@ -388,18 +404,20 @@ def main() -> int:
           and cod.measured["spill_gib"] == 0.0
           and "49,152" in cod.cost and "zero CPU spill" in cod.cost,
           (cod.context, cod.measured))
-    check("... its words say the other models are PAUSED and name the honest cost, "
+    check("... its words say the everyday model is PAUSED and name the honest cost, "
           "never that a lane is still arriving",
-          "pauses the other lanes' models" in cod.cost
-          and "NOT resident" in cod.worse and "come back" in cod.worse
+          "pauses the everyday model" in cod.cost
+          and "NOT resident" in cod.worse and "comes back" in cod.worse
           and "arriving" not in (cod.what + cod.worse + cod.cost)
           and "all three cards" in cod.heavy_words
           and "paused" in cod.heavy_words, (cod.cost, cod.worse, cod.heavy_words))
-    check("Fast is qwen3.5:4b on the 2080 SUPER's coding lane at 16,384",
-          P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "coding"
+    check("Fast is qwen3.5:4b on the everyday lane at 16,384, never a second card",
+          P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "main"
           and P.by_id("fast").context == 16384
           and P.by_id("fast").measured["tok_s"] == 77.1
-          and P.by_id("fast").measured["context"] == 65536)
+          and P.by_id("fast").measured["context"] == 65536
+          and "no separate fast card" in P.by_id("fast").what,
+          (P.by_id("fast").lane, P.by_id("fast").what))
     gu = P.by_id("general_uncensored")
     check("General Uncensored now names the measured abliterated Qwen3.5 ref",
           gu.pending is False
@@ -464,14 +482,17 @@ def main() -> int:
     check("... and it is appended LAST, so the nine older rows keep their order",
           P.PRESET_IDS[-1] == "medical" and len(P.PRESETS) == 10, P.PRESET_IDS)
     modes = P.pooled_modes()
-    check("pooled_modes(): three named rows - Medical from its Preset row, and two "
-          "measured candidates nothing points at",
+    check("pooled_modes(): three named rows - Medical from its Preset row, the "
+          "everyday model's own smaller pooled window, and one candidate nothing "
+          "applies",
           [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "qwen3-vl-30b-a3b"]
           and modes[0]["model"] == med.model and modes[0]["num_ctx"] == med.context
           and [m["num_ctx"] for m in modes] == [32768, 32768, 32768]
           and all(m["needs_cards"] == 3 for m in modes), modes)
-    check("... no preset points at either candidate: availability, not a default change",
-          all(m["model"] not in {p.model for p in P.PRESETS} for m in modes[1:])
+    check("... the qwen3-vl candidate is still availability no preset applies, and "
+          "the gemma4 row is the everyday model at this lane's 32,768 window",
+          modes[2]["model"] not in {p.model for p in P.PRESETS}
+          and modes[1]["model"] == P.by_id("general").model
           and modes[1]["spill_allowance"] > 0 and modes[2]["spill_allowance"] > 0,
           [m["model"] for m in modes])
     rec3 = P.recommendations()["by_gpu_count"]["3"]

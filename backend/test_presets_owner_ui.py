@@ -94,7 +94,8 @@ class FakeModels:
     MAX_HISTORY = 20
 
     def __init__(self, gate, installed=("m-one", "m-two", "qwen3.5:4b",
-                                       "qwen3.5:9b"), current="m-one"):
+                                       "qwen3.5:9b", "gemma4:26b-a4b-it-qat"),
+                 current="m-one"):
         self.gate = gate
         self.installed = list(installed)
         self.state = {"current": current, "switches": []}
@@ -360,7 +361,7 @@ def t_route_applies_local_preset_with_no_card():
           gate.calls == [], gate.calls)
     check("... starts the preset's lane once and points chat at it",
           [c[0] for c in calls] == ["stop_pooled", "start"]
-          and calls[1] == ("start", "coding"), calls)
+          and calls[1] == ("start", "main"), calls)
     check("... writes exactly one new preset_apply receipt",
           len(after) == before + 1
           and after[0].get("tool_name") == P.OWNER_RECEIPT_TOOL, after[:1])
@@ -432,7 +433,7 @@ def t_undo_puts_the_previous_preset_back():
           (receipt.get("before") or {}).get("preset") == "general", receipt)
     check("... Undo runs with no card and puts General back",
           undone.get("ok") is True and P.choice() == "general"
-          and models.state.get("current") == "qwen3.5:9b"
+          and models.state.get("current") == P.by_id("general").model
           and gate.calls == [],
           (undone, P.choice(), models.state.get("current"), gate.calls))
     check("... the chat lane is back on the long-context card",
@@ -645,7 +646,7 @@ def t_undo_of_a_heavy_click_puts_the_previous_preset_back():
           (code, out.get("previous_preset"), receipt))
     check("... Undo runs with no card and puts General, its model and its lane back",
           undone.get("ok") is True and P.choice() == "general"
-          and models.state.get("current") == "qwen3.5:9b"
+          and models.state.get("current") == P.by_id("general").model
           and gate.calls == [],
           (undone, P.choice(), models.state.get("current"), gate.calls))
     check("... the chat lane is back on the long-context card",
