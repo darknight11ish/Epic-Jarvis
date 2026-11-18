@@ -453,7 +453,12 @@ jobs:
       # knew. With py-fsrs installed it runs 351 checks here. `fsrs==6.3.2`
       # exactly, the version backend/requirements.lock pins for Python 3.12
       # (its golden numbers are backend/decks_fsrs_golden.json).
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
+      # img2pdf and pikepdf are here for backend/test_image_convert.py (the picture
+      # conversion, 2026-11-18). The PDF half imports img2pdf, and pikepdf is
+      # img2pdf's own PDF assembler; without both, that suite's PDF checks would
+      # SKIP by name, and a skipped check is never a pass. Versions from
+      # backend/requirements.lock, like every other package on this line.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2 img2pdf==0.6.3 pikepdf==10.13.0.post1
       # PLAYWRIGHT IS NOT INSTALLED HERE ANY MORE (removed 2026-11-17). It was
       # added on 2026-10-27 (the partner test-health corrections) because
       # backend/run_suites.py fails any suite that exits 0 having PASSED nothing,
@@ -723,7 +728,12 @@ jobs:
           python-version: "3.12"
       # The same versions the required backend job installs, so a suite that
       # runs here (now or after a re-take) gets the same environment.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
+      # img2pdf and pikepdf are here for backend/test_image_convert.py (the picture
+      # conversion, 2026-11-18). The PDF half imports img2pdf, and pikepdf is
+      # img2pdf's own PDF assembler; without both, that suite's PDF checks would
+      # SKIP by name, and a skipped check is never a pass. Versions from
+      # backend/requirements.lock, like every other package on this line.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2 img2pdf==0.6.3 pikepdf==10.13.0.post1
       - name: The three suites that need the owner's own files - SKIPPED, and said so
         run: |
           set +e

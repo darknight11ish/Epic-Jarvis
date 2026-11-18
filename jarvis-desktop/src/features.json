@@ -1637,6 +1637,26 @@
     "lesson_id": "vault-organizer"
   },
   {
+    "id": "picture-conversion",
+    "group": "Notes and files",
+    "title": "Make a PDF from pictures, or change a picture's format",
+    "what": "Ask Jarvis to put one or more pictures into a single PDF, in the order you name them - or to save one picture as PNG, JPEG, WebP, AVIF or TIFF. A JPEG put into a PDF goes in byte for byte, so it is not re-encoded and no pixel changes; PNG and TIFF are stored with lossless compression. When the target is a picture format, the answer says the truth about quality: PNG and TIFF are lossless, JPEG, WebP and AVIF are lossy, and the card says so before you say yes.",
+    "where": "Chat, in either app: name the pictures' full paths, for example \"make one pdf from C:\\\\Users\\\\you\\\\Pictures\\\\a.jpg and b.png\", or \"save this picture as a jpeg\".",
+    "asks": "ONE card per new file written, under its own action: the card names every picture and the exact new file, and says whether the copy is lossless or lossy. Nothing that already exists is overwritten - a taken name gets a number like \"photo (2).pdf\" - and the original pictures are never changed.",
+    "limit": "Only pictures in a folder Jarvis may look in. A PDF takes at most 20 pictures of at most 100 MB each and 65,535 pixels a side; its page size follows each picture's own DPI, with no paper size, margins or page numbers. A picture with transparency saved as JPEG is flattened onto white, and the card says so. HEIC from a phone is not read - save it as JPEG first.",
+    "surface": "both",
+    "aliases": [
+      "make a pdf from pictures",
+      "convert an image to pdf",
+      "convert a picture to another format",
+      "change an image format"
+    ],
+    "covers": [],
+    "gate": [
+      "convert_images"
+    ]
+  },
+  {
     "id": "spending",
     "group": "Money and health",
     "title": "Spending summaries",

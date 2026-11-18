@@ -111,6 +111,10 @@
       "title": "Jarvis wants to delete one conversation from this PC"
     },
     {
+      "action": "convert_images",
+      "title": "Jarvis wants to make a PDF from pictures, or change a picture's format"
+    },
+    {
       "action": "create_joplin_note",
       "title": "Jarvis wants to add a note in Joplin"
     },
@@ -893,6 +897,18 @@
       "notice": {
         "title": "Jarvis wants to delete one conversation from this PC",
         "summary": "Jarvis wants to delete one conversation.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "convert_images",
+      "notice": {
+        "title": "Jarvis wants to make a PDF from pictures, or change a picture's format",
+        "summary": "Jarvis wants to convert pictures to a PDF or another format.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

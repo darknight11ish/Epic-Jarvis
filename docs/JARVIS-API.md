@@ -40412,3 +40412,66 @@ prove the start sits after that check). The phase markers and the failure
 banners are read OUT of `scripts/update-jarvis.ps1`, so a renamed step or a
 reworded ending fails a test instead of leaving the phone on a phase nobody
 updates.
+
+## 227. Pictures into one PDF, and one picture into another format (added 2026-11-18)
+
+The owner's ask of 2026-11-18 - *"Can Jarvis convert certain formats of files to
+other formats? like to pdf from an image and so forth?"* - answered with the
+research lane's report (`docs/`'s research note): the PDF half uses **img2pdf**
+and the picture-format half uses **Pillow** (already installed). It is the
+existing `my_files` tool's action `convert`, decided under its **own** gate
+action, `convert_images`. It has **no HTTP route of its own**: the work is one
+tool call in a chat turn, and the ordinary tool-call gate raises the card.
+
+* **Both apps' chats can ask** - it is a backend tool and the work is on the
+  PC: "make one pdf from C:\...\a.jpg and C:\...\b.png", or "save this
+  picture as a jpeg". No route was added, so `tools/check_parity.py` has
+  nothing new to classify.
+* **ONE approval card per conversion, at tier "ask".** `convert_images = "ask"`
+  ships in both copies of `jarvis-framework.toml`; the base gate carries the
+  action's tool->action row, its risk row ("yes"/"local": one NEW file, nothing
+  that exists is changed) and the rule that a denial is about that one file,
+  not a standing yes. The module's own `prepare()` refuses any tier but "ask"
+  before it does anything, so a loosened settings file cannot make a file write
+  cardless. The card names every source picture and the exact new file.
+* **Never overwrite, always say which.** A name that is already taken gets a
+  numbered sibling (`photo (2).pdf`), the same rule the phone uploader and the
+  Notion importer use, and the card says the old name was taken and a new one
+  was used. A path the model named explicitly that exists is REFUSED rather
+  than renamed behind the owner's back. The destination is opened with
+  `O_CREAT | O_EXCL` at the moment of writing, so even a file that appears
+  while the card is up is never replaced - the conversion is refused instead.
+* **The PDF half is lossless, and the suite proves it the only way that means
+  anything:** a JPEG's own bytes are inside the produced PDF byte for byte
+  (img2pdf copies the compressed stream; Pillow's `save(..., "PDF")` would
+  re-encode through its JPEG encoder and default to 72 dpi, which is why it is
+  not used). A PNG/TIFF is stored with lossless compression; the card says
+  which of those is happening. The source pictures are only ever READ.
+* **The picture half tells the truth about quality.** PNG and TIFF are lossless;
+  JPEG, WebP and AVIF are LOSSY and the sentence says the copy is "not
+  identical to the original". A picture with transparency saved as JPEG is
+  flattened onto WHITE, because JPEG cannot store transparency, and the card
+  and result both say "flattened onto white" in those words. HEIC is not read.
+* **Limits, in the module's own words:** only pictures inside a folder on
+  "Folders Jarvis may look in"; one picture at a time for a format change, up
+  to 20 pictures and 400 MB together for one PDF (100 MB each, 200 megapixels
+  each); a PDF page follows the picture's own DPI, with no paper size, margins
+  or page numbers; a picture wider or taller than 65,535 pixels cannot go in a
+  PDF and is refused plainly.
+* **The child-program boundary:** the conversion runs in a separate Python
+  program (`sys.executable -I -B -c`) with a scrubbed environment
+  (`jarvis_child_env`, so no token or key travels), a 120-second wall clock, a
+  64 KB answer cap and the explicit file names only. The child writes one
+  temporary file; the backend process then creates the destination itself with
+  O_EXCL and deletes the temporary.
+* **Dependencies and licences:** `img2pdf` (LGPL-3.0) and `pikepdf` (MPL-2.0,
+  bundles QPDF) are in `backend/requirements.txt` and hash-pinned in
+  `backend/requirements.lock`; both are pip dependencies of a local app, not
+  code shipped in it, and `THIRD-PARTY-NOTICES.txt` credits them (and, for the
+  first time, FFmpeg, which a shipped media reader requires but never bundles).
+* **Proof:** `backend/test_image_convert.py` - the JPEG's bytes inside the PDF,
+  two pictures in order, the flatten-onto-white sentence, a text file called
+  `.png` refused by content, an existing target never overwritten (numbered
+  name, explicit refusal, and a file that appears while the card is up), the
+  sources unchanged, the action's ask line and gate rows, the loosened-tier
+  belt, and the child's scrubbed environment.
