@@ -1879,6 +1879,18 @@ SHIPPED = (
     # entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED,
     # above jarvis_bench.py, which stays LAST.
     "jarvis_update.py",
+    # Picture conversion (jarvis_image_convert.py, 2026-11-18; the owner's "to
+    # pdf from an image and so forth", settled by the research lane's report).
+    # TWO jobs in one module, each writing ONE NEW file after ONE approval card:
+    # pictures into one PDF, and one picture into another format. The PDF half
+    # uses img2pdf, which copies a JPEG's own compressed bytes into the PDF -
+    # nothing is re-encoded, and that losslessness is the point; Pillow's own
+    # PDF writer would re-encode through its JPEG encoder. The picture half uses
+    # Pillow and calls JPEG, WebP and AVIF lossy in the sentence the owner
+    # reads. The work runs in a bounded child program with a scrubbed
+    # environment, and the destination is opened with O_EXCL so no existing
+    # file can be replaced. Its suite is backend/test_image_convert.py.
+    "jarvis_image_convert.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

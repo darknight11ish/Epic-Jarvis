@@ -838,6 +838,10 @@ HARD_LIMITS = frozenset({
     # and a standing "yes to any file from any device" is exactly the bulk
     # approval rule 4 forbids, which is why it is on this list as well.
     "receive_uploaded_document",
+    # Picture conversion (jarvis_image_convert.py, 2026-11-18): writes ONE new
+    # file on this PC per conversion, and its prepare() refuses any tier but
+    # "ask" - a file write must never be possible with nobody asked.
+    "convert_images",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -880,6 +884,10 @@ MUST_ASK = frozenset({
     # card is raised at `begin`, before a byte is written, and `request_begin`
     # refuses anything but tier "ask" rather than take a looser line as consent.
     "receive_uploaded_document",
+    # Picture conversion (jarvis_image_convert.py, 2026-11-18; the owner's "to
+    # pdf from an image"): ONE new file per conversion, and prepare() refuses
+    # any tier but "ask" before the card, so it really does ask every time.
+    "convert_images",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -1106,7 +1114,16 @@ GROUPS = (
                                 # card names the file, its size and the folder it
                                 # goes into. It sits here with the other cards a
                                 # device is the caller for.
-                                "receive_uploaded_document"]),
+                                "receive_uploaded_document",
+                                # Picture conversion (jarvis_image_convert.py,
+                                # 2026-11-18): ONE card per new file WRITTEN on
+                                # this PC - pictures into one PDF, or one picture
+                                # saved in another format. The card names every
+                                # source and the exact new file, and says plainly
+                                # whether the copy is lossless. Its one tier line
+                                # is "ask" and the module refuses any other tier,
+                                # so the page says "Always asks" honestly.
+                                "convert_images"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,

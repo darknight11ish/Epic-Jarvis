@@ -430,6 +430,13 @@ LESSON_EXEMPT = {
     # paraphrase the card the owner is already reading; it lands with the
     # phone's field-test pass, if it is still wanted then.
     "phone-settings-backup": "one Settings card whose own lines say what goes in, what never goes in and that the password is the only way back; the dialogs repeat the one warning, so a lesson would paraphrase the card",
+    # The picture conversion (2026-11-18) is one sentence in a chat and its own
+    # approval card: "make one pdf from these pictures", or "save this picture
+    # as a jpeg". The card names every source and the exact new file and says
+    # whether the copy is lossless or lossy, and the answer repeats it after the
+    # write - so a lesson would paraphrase the card the owner is already
+    # reading. The same reasoning media-read's entry above gives.
+    "picture-conversion": "it is one sentence in a chat - name the pictures and the target - and the approval card names them back and says whether the copy is lossless or lossy; the module docstring and the tool description are the lesson",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

@@ -3264,6 +3264,14 @@ $SHIPPED = @(
     # entry, in the same position, is in backend/_where.py's SHIPPED, above
     # jarvis_bench.py, which stays LAST.
     'jarvis_update.py'
+    # Picture conversion (jarvis_image_convert.py, 2026-11-18; the owner's "to
+    # pdf from an image and so forth"). Pictures into ONE PDF (img2pdf copies
+    # a JPEG's own compressed bytes in - nothing is re-encoded), or one picture
+    # into another format (Pillow; JPEG/WebP/AVIF are called lossy in the
+    # sentence the owner reads). The work is a bounded child program with a
+    # scrubbed environment, and no existing file is ever overwritten. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_image_convert.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

@@ -588,17 +588,18 @@ SUBSYSTEMS = (
         "group": "runtime",
         "areas": ("backend",),
         "purpose": "Pictures the owner asks for and attaches, reading the words in "
-                   "them, and searching the recordings and videos on this PC - all "
-                   "locally.",
+                   "them, turning pictures into ONE PDF or into another format, and "
+                   "searching the recordings and videos on this PC - all locally.",
         "modules": (
             "jarvis_pictures", "jarvis_picture_card", "jarvis_chat_picture",
             "jarvis_photo_remind", "jarvis_ocr", "jarvis_media_index",
-            "jarvis_media_read", "jarvis_obscura",
+            "jarvis_media_read", "jarvis_obscura", "jarvis_image_convert",
         ),
         "paths": (),
         "key_modules": ("jarvis_pictures", "jarvis_ocr", "jarvis_media_index"),
         "tests": ("backend/test_pictures.py", "backend/test_ocr_words.py",
-                  "backend/test_media_index.py", "backend/test_media_read.py"),
+                  "backend/test_media_index.py", "backend/test_media_read.py",
+                  "backend/test_image_convert.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/JARVIS-API.md"),
     },
     {

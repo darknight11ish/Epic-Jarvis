@@ -453,7 +453,12 @@ jobs:
       # knew. With py-fsrs installed it runs 351 checks here. `fsrs==6.3.2`
       # exactly, the version backend/requirements.lock pins for Python 3.12
       # (its golden numbers are backend/decks_fsrs_golden.json).
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
+      # img2pdf and pikepdf are here for backend/test_image_convert.py (the picture
+      # conversion, 2026-11-18). The PDF half imports img2pdf, and pikepdf is
+      # img2pdf's own PDF assembler; without both, that suite's PDF checks would
+      # SKIP by name, and a skipped check is never a pass. Versions from
+      # backend/requirements.lock, like every other package on this line.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2 img2pdf==0.6.3 pikepdf==10.13.0.post1
       # PLAYWRIGHT IS NOT INSTALLED HERE ANY MORE (removed 2026-11-17). It was
       # added on 2026-10-27 (the partner test-health corrections) because
       # backend/run_suites.py fails any suite that exits 0 having PASSED nothing,
@@ -723,7 +728,12 @@ jobs:
           python-version: "3.12"
       # The same versions the required backend job installs, so a suite that
       # runs here (now or after a re-take) gets the same environment.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
+      # img2pdf and pikepdf are here for backend/test_image_convert.py (the picture
+      # conversion, 2026-11-18). The PDF half imports img2pdf, and pikepdf is
+      # img2pdf's own PDF assembler; without both, that suite's PDF checks would
+      # SKIP by name, and a skipped check is never a pass. Versions from
+      # backend/requirements.lock, like every other package on this line.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2 img2pdf==0.6.3 pikepdf==10.13.0.post1
       - name: The three suites that need the owner's own files - SKIPPED, and said so
         run: |
           set +e
@@ -2108,22 +2118,48 @@ jobs:
       # register is stale rather than the code. Without that second half the
       # register rots exactly like the prose it replaced.
       # check_claims.py RUNS the suite a `test:` row names, so this job has to be
-      # able to run it - and it could not. Row E06 names
-      # `test:backend/test_backup.py`, which drives the encrypted backup's
-      # AES-GCM/Argon2id path, and `backend/jarvis_backup.py:321-323` imports
-      # `cryptography` to do it. On a job that installed nothing the suite ended
-      # "159 passed, 32 failed" and the step below told the owner a true `built`
-      # claim had stopped holding. It had not - the `backend` job installs this
-      # same package (its own step, above) and passes the identical tree, which
-      # is the whole difference between the two jobs.
+      # able to run it. Row E06 names `test:backend/test_backup.py`, which
+      # drives the encrypted backup's AES-GCM/Argon2id path, and
+      # `backend/jarvis_backup.py:321-323` imports `cryptography` to do it. On a
+      # job that installed nothing the suite ended "159 passed, 32 failed" and
+      # the step below told the owner a true `built` claim had stopped holding.
+      # It had not - the `backend` job installs this same package (its own step,
+      # above) and passes the identical tree.
       #
-      # THIS LIST IS "WHAT THE SUITES A CLAIM NAMES NEED", not a copy of the
-      # backend job's. It holds one package because one row's suite needs one.
-      # A commit that adds a row naming a suite with another dependency adds it
-      # here too, or that row will read as a broken claim rather than as a job
-      # that cannot run its check.
-      - name: The package the suites a claim names need
-        run: python3 -m pip install --disable-pip-version-check cryptography==50.0.1
+      # THE WHOLE ENVIRONMENT IS COPIED FROM THE backend JOB NOW (2026-11-18),
+      # not one package at a time. "THIS LIST IS WHAT THE SUITES A CLAIM NAMES
+      # NEED" turned out to be the wrong frame: a suite a `test:` row names can
+      # need a package no earlier row needed, and then this job reads a real
+      # check's SKIP as a broken BUILD. Measured on PR #1366: the attach-audio
+      # suite grew a real WAV decode that imports numpy, numpy was absent here,
+      # the suite printed `SKIP numpy is not installed ...`, and this step
+      # reported claim C123 as no longer holding while the required `backend`
+      # job passed the identical tree. The claim had not regressed - the two
+      # jobs disagreed because they ran two different Pythons. A claim checked
+      # in one environment has one answer, so this step installs the SAME
+      # package list at the SAME pinned versions as the required backend job's
+      # own step (`backend-shard` above - it spells `python`, this job spells
+      # `python3`). A commit that adds a dependency any claim's suite needs adds
+      # it to BOTH lines, or the two jobs start giving two answers again.
+      #
+      # NOT A RELAXATION OF THE SKIP RULE. tools/check_claims.py is untouched: a
+      # skip that is about the code still withholds proof and still fails the
+      # row, and an environmental skip is still named on every run. What changed
+      # is that this machine can now RUN the check - never that a skip counts.
+      # The four Windows-only checks in test_data_backup.py (rows F06, F08, F10,
+      # F11) still skip on this Linux runner and are still printed by name; they
+      # cannot be installed, because they need Windows' own ACLs, drive letters
+      # and path limit. That is the difference between a missing package and an
+      # absent capability, and only the package belongs here.
+      #
+      # COST, measured on the runner (2026-11-18): this install took 4.6 s in
+      # this job once it was added (12:51:56.4 -> 12:52:01.0 on job
+      # 134801878864; 5.6 s in backend-shard, job 134764536276), and the claims
+      # step that ran after it took 6m04s and exited 0 - against 7m13s without
+      # these packages on job 134754547505, so the extra checks the packages
+      # unlock are not a timeout risk either.
+      - name: The Python test dependencies the required backend job installs
+        run: python3 -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
       - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
         run: python3 ../../tools/check_claims.py
       # docs/DEFECT-REGISTER.md and docs/defect-register.tsv are the board the

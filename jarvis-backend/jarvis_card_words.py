@@ -348,6 +348,9 @@ TITLES = {
     # "the whole vault, both apps"): one save replaces the WHOLE text of one
     # note in his own vault, so it asks every time.
     "edit_vault_note": "change a note in your Obsidian vault",
+    # --- picture conversion (jarvis_image_convert.py, 2026-11-18): ONE card per
+    # file written - pictures into one PDF, or one picture into another format.
+    "convert_images": "make a PDF from pictures, or change a picture's format",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -591,6 +594,10 @@ SUMMARY = {
     "unprotect_item": "stop protecting a folder, file or program",
     # --- the Obsidian notes editor (2026-10-31): one save, one card
     "edit_vault_note": "change a note in your Obsidian vault",
+    # Picture conversion (jarvis_image_convert.py, 2026-11-18): ONE new file,
+    # one card. The title says which way in the full card; the glance stays at
+    # nine words.
+    "convert_images": "convert pictures to a PDF or another format",
     # jarvis_self_portrait.py (2026-11-03): ONE kept conversation from this PC,
     # after ONE card; the learned facts are kept.
     "conversation_clear": "delete one conversation",

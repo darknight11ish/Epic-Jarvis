@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 183 rows from features/features.json.
+The owner's feature list, as data: 184 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 38f358e15d650f42c9e2b7c9df13af4889017ddd82cd91d59b8b8bc7455ccc0b); the apps' Features pages read their own
+`features/features.json` (sha256 b249c5990585095e94808ea2289d4431f1d3e5a97069a8cad6b38b720a3cda71); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "38f358e15d650f42c9e2b7c9df13af4889017ddd82cd91d59b8b8bc7455ccc0b"
+SOURCE_SHA256 = "b249c5990585095e94808ea2289d4431f1d3e5a97069a8cad6b38b720a3cda71"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -933,6 +933,18 @@ FEATURES = (
         "covers": ["vault-organizer"],
     },
     {
+        "id": "picture-conversion",
+        "group": "Notes and files",
+        "title": "Make a PDF from pictures, or change a picture's format",
+        "what": "Ask Jarvis to put one or more pictures into a single PDF, in the order you name them - or to save one picture as PNG, JPEG, WebP, AVIF or TIFF. A JPEG put into a PDF goes in byte for byte, so it is not re-encoded and no pixel changes; PNG and TIFF are stored with lossless compression. When the target is a picture format, the answer says the truth about quality: PNG and TIFF are lossless, JPEG, WebP and AVIF are lossy, and the card says so before you say yes.",
+        "where": "Chat, in either app: name the pictures' full paths, for example \"make one pdf from C:\\\\Users\\\\you\\\\Pictures\\\\a.jpg and b.png\", or \"save this picture as a jpeg\".",
+        "asks": "ONE card per new file written, under its own action: the card names every picture and the exact new file, and says whether the copy is lossless or lossy. Nothing that already exists is overwritten - a taken name gets a number like \"photo (2).pdf\" - and the original pictures are never changed.",
+        "limit": "Only pictures in a folder Jarvis may look in. A PDF takes at most 20 pictures of at most 100 MB each and 65,535 pixels a side; its page size follows each picture's own DPI, with no paper size, margins or page numbers. A picture with transparency saved as JPEG is flattened onto white, and the card says so. HEIC from a phone is not read - save it as JPEG first.",
+        "surface": "both",
+        "aliases": ["make a pdf from pictures", "convert an image to pdf", "convert a picture to another format", "change an image format"],
+        "covers": [],
+    },
+    {
         "id": "spending",
         "group": "Money and health",
         "title": "Spending summaries",
@@ -1550,10 +1562,10 @@ FEATURES = (
         "id": "focus-presets",
         "group": "The PC itself",
         "title": "Focus presets",
-        "what": "Ten presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through and Pictures & Screens for screenshots and pictures, both on the all-three-cards pooled lane since 2026-11-18; Documents & Notes for long reading and study and Browser & Forms for long pages and multi-step forms, both on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
+        "what": "Ten presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through and Pictures & Screens for screenshots and pictures, both on the all-three-cards pooled lane since 2026-11-18; Documents & Notes for long reading and study and Browser & Forms for long pages and multi-step forms, both keeping qwen3.5:9b at 196,608 tokens on the one-card everyday lane). General is the 26B on the pooled three-card lane at 32,768 tokens, and Fast runs the small qwen3.5:4b on the everyday lane.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
-        "asks": "Opening the list changes nothing. A local preset switches at once when picked in either app's own list - it is your own click and picking another switches straight back - and writes a receipt naming the preset it replaced. A heavy preset also starts the pooled three-card lane with that same press, pausing the other models until you switch away. Asked for in chat or by voice the same preset still raises one approval card, and the separate Cloud row still asks for its own card.",
-        "limit": "An apply of a local preset picked in either app's own list starts its lane and switches the model at once, with no card (2026-11-09, widened to the heavy rows on 2026-11-16); the same preset asked for in chat or by voice still raises one card, and a switch that fails rolls the lane and the saved preset back. General, Coding, Reflective Coach, Pictures & Screens and Medical are the five heavy rows: each needs the pooled three-card lane, which exists and really starts with that row's own model, and each pauses the everyday model while it runs. Coding runs at the 49,152-token window measured on this PC on 2026-11-07 with no spill; Medical runs medgemma:27b at the 32,768-token window measured on 2026-11-09, 17.31 GiB with 0 B spilled, writing at 11.4 tokens a second (the low end of 11.4-11.7); Reflective Coach and Pictures & Screens run their own measured pooled modes at 32,768 tokens, measured on 2026-11-09 at 15.5 GiB with 0.68 GiB spilled and 19.88 GiB with 2.24 GiB spilled, and on 2026-11-17 at 25.4 tokens a second (the low end of 25.4-36.5) and 14.6 (the low end of 14.6-25.4). A 15-minute real coding session after deployment is the next test: the measurement configured the window, it did not fill it. The Cloud row beside these ten is a separate cloud service choice, described in its own row, and it still asks.",
+        "asks": "Opening the list changes nothing. A local preset switches at once when picked in either app's own list - it is your own click and picking another switches straight back - and writes a receipt naming the preset it replaced. A heavy preset also starts the pooled three-card lane with that same press, pausing the everyday model until you switch away. Asked for in chat or by voice the same preset still raises one approval card, and the separate Cloud row still asks for its own card.",
+        "limit": "An apply of a local preset picked in either app's own list starts its lane and switches the model at once, with no card (2026-11-09, widened to the heavy rows on 2026-11-16); the same preset asked for in chat or by voice still raises one card, and a switch that fails rolls the lane and the saved preset back. There are five heavy rows now - General, Coding, Reflective Coach, Pictures & Screens and Medical - and each needs the pooled three-card lane, which really starts with that row's own model and pauses the everyday model while it runs. General is the one the everyday driver uses: it runs gemma4:26b-a4b-it-qat at a 32,768-token window on the pooled lane, because the everyday lane is ONE card (the RTX 2060) and a 15.5 GiB model there would spill; Documents & Notes and Browser & Forms keep qwen3.5:9b at 196,608 tokens on that one-card everyday lane, which is why the lane still exists. Coding runs at the 49,152-token window measured on this PC on 2026-11-07 with no spill; Medical runs medgemma:27b at the 32,768-token window measured on 2026-11-09, 17.31 GiB with 0 B spilled, and its 2026-11-17 re-measurement wrote 11.4 tokens a second (the low end of 11.4-11.7); Reflective Coach and Pictures & Screens use the same measured pooled lane at 32,768 tokens: their 2026-11-09 memory receipts are 15.5 GiB with 0.68 GiB spilled and 19.88 GiB with 2.24 GiB spilled, and their 2026-11-17 speeds are 25.4 (the low end of 25.4-36.5) and 14.6 (the low end of 14.6-25.4). A 15-minute real coding session after deployment is the next test: the measurement configured the window, it did not fill it. The Cloud row beside these ten is a separate cloud service choice, described in its own row, and it still asks.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
