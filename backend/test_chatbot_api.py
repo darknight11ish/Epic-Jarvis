@@ -65,11 +65,14 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
     refusal ends the conversation as `egress_blocked` in the gate's own words
     and nothing reaches the server, while a loopback endpoint still sends.
   - THE CHECKER THAT KEEPS IT THAT WAY: `tools/check_egress_gate.py` is a
-    CENSUS of every file that names an outbound host: each mention must either
-    ask the gate or be on the allow-list with a written reason (and each
-    allow-list path also covers its byte-identical base copy). This suite
-    proves it is wired into CI's `audit` job and that it exits 0 on this tree -
-    a checker nobody runs is exactly the failure the gate exists to prevent.
+    CENSUS of every file that names an outbound host in REAL CODE: each mention
+    must either ask the gate in code or be on the allow-list with a written
+    reason (and each allow-list path also covers its byte-identical base copy).
+    Since 2026-11-18 it walks `ast`, so a host named only in a docstring or a
+    `#` comment is documentation and is not counted - see
+    `backend/test_egress_gate_checker.py`. This suite proves it is wired into
+    CI's `audit` job and that it exits 0 on this tree - a checker nobody runs is
+    exactly the failure the gate exists to prevent.
   - THE BROWSER EXCEPTION IS NAMED, NOT GENERAL (2026-11-16): a chatbot web
     page has no API key and no monthly cap on this PC, so the gate takes ONE
     claim, `no_money_cap`, and only from the caller named in

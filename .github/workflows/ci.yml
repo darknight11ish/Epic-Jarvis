@@ -2246,15 +2246,21 @@ jobs:
       # sender decided for itself whether it was allowed to. That decision now
       # lives in ONE place (`backend/jarvis_egress_gate.py`, asked by
       # `check_egress`), and this walks every .py under backend/, jarvis-backend/
-      # and tools/ that names one of those hosts: it must either name
-      # `check_egress` in the same file or be on the checker's ALLOWED list with
-      # a written reason. The list is a CENSUS, not a six-host net: it names
+      # and tools/ that names one of those hosts IN REAL CODE: it must either
+      # name `check_egress` in code in the same file or be on the checker's
+      # ALLOWED list with a written reason. Since 2026-11-18 the walk is over
+      # `ast`, not the raw text: a host named only in a docstring or a `#`
+      # comment is documentation, is counted in the run's ignored line, and
+      # does not fail - a gate that made an author delete an example from a
+      # docstring was teaching the wrong lesson (the ruling, exercised by
+      # backend/test_egress_gate_checker.py, which also proves a real code
+      # literal still fails). The list is a CENSUS, not a six-host net: it names
       # every outbound host the tree spells, each allow-list path covers its
       # byte-identical base copy (measured, not assumed), and an unlisted host
       # name fails the run. `jarvis_search.py` in both copies asked the gate
       # once its own lane wired it. The HUD spells no host at all - it posts to
       # whatever address the lane data hands it at runtime - which is the limit
-      # the checker's own docstring states a text check cannot see. An unlisted
+      # the checker's own docstring states a syntax check cannot see. An unlisted
       # host name fails with the file and line, rather than being a warning a
       # fast reader scrolls past - which is exactly how six providers and four
       # senders came to have their own rules in the first place.
