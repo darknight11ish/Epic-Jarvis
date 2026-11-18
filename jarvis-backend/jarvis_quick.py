@@ -17742,14 +17742,30 @@ _CREATE_NOTE_HEAD = re.compile(
     # did not read it at all - so nothing was created and the tail of the
     # sentence went into the daily note instead.
     r"(?:that'?s\s+|that\s+is\s+)?(?:called|named|titled)\s+(?P<rest>.+)$")
-#: Where a title stops. Each of these opens the NEXT clause of the same
-#: request, not part of the name. A bare "and" is deliberately NOT a boundary
-#: ("a note called Salt and Pepper"), and neither is a bare "on" ("a note
-#: called Notes on Physics").
-_TITLE_STOPS = (
+#: WHERE A NOTE'S NAME ENDS AND THE REST OF THE REQUEST BEGINS (2026-11-18).
+#:
+#: ONE list, shared by BOTH readers that pull a note's name out of a sentence:
+#: `_note_title_and_rest` below (the "create a note called X ..." reader) and
+#: `_note_append_name` (the append reader's name cut, below it). A sentence
+#: whose name still swallows a clause is fixed HERE, once, for both readers -
+#: do not write a second extractor.
+#:
+#: The owner's two measured sentences depend on this list, and each rule they
+#: need is named in it:
+#:   "make a note for me called Mood Log and have this be one of my favorite
+#:    notes" - the `and have this ...` rule ends the name at `Mood Log`; before
+#:    it the whole tail became the file name (measured 2026-11-18).
+#:   "add to the mood log and make a note for today and put today's date and
+#:    say that I'm feeling okay, ..." - the `and make ...` rule ends the name
+#:    at `mood log`; before it the append reader offered "mood log and make a
+#:    note for today and put today's date and say" to the resolver.
+#:
+#: A bare "and" is deliberately NOT a boundary ("a note called Salt and
+#: Pepper"), and neither is a bare "on" ("a note called Notes on Physics").
+_NOTE_NAME_BOUNDARIES = (
     re.compile(r","),
     re.compile(r"\s+and\s+(?=(?:then\s+)?(?:pin|unpin|add|put|write|say|saying|use|set|"
-               r"favourite|favorite|unfavourite|unfavorite)\b)"),
+               r"favourite|favorite|unfavourite|unfavorite|make|create|have\s+this)\b)"),
     re.compile(r"\s+(?=(?:pin|unpin)\b)"),
     re.compile(r"\s+(?=(?:with|saying|containing)\s)"),
     re.compile(r"\s+(?=(?:using|dated)\s+(?:today|todays|today's|yesterday|tomorrow|\d|"
@@ -17767,6 +17783,19 @@ _PIN_CLAUSE = re.compile(
 _FAVOURITE_CLAUSE = re.compile(
     r"^(?P<how>unfavourite|unfavorite|favourite|favorite)\s+"
     r"(?:it|this(?:\s+note)?|the\s+note|the\s+new\s+note)\b")
+#: The same separate `favorite` property, said as a DESCRIPTION rather than the
+#: "favourite it" verb above (2026-11-18): "and have this be one of my favorite
+#: notes" / "and make this one of my favourites". The owner's measured sentence
+#: is the first shape, and before this rule the phrase became part of the new
+#: note's NAME instead of setting the property. A whole clause only, so a body
+#: sentence that merely mentions a favourite keeps its words.
+_FAVOURITE_PHRASE = re.compile(
+    r"^(?:(?:have|make)\s+(?:this|it)(?:\s+note)?(?:\s+be)?\s+(?:a\s+|an\s+)?"
+    r"(?:one\s+of\s+)?(?:my\s+)?"
+    r"(?P<how>unfavourite|unfavorite|favourite|favorite)(?:s|\s+notes?)?"
+    r"|(?:this|it)\s+is\s+(?:a\s+|an\s+)?(?:one\s+of\s+)?(?:my\s+)?"
+    r"(?P<how2>unfavourite|unfavorite|favourite|favorite)(?:s|\s+notes?)?"
+    r")\s*[.!?]?\s*$")
 _FAVOURITE_KEY = "favorite"
 #: A date clause's lead word. "add"/"put"/"with" are also body verbs, so a
 #: date is taken only when a real date phrase follows - "add milk" stays body.
@@ -17951,11 +17980,28 @@ def _note_title_and_rest(rest: str):
     """(title, the words after it) split at the first clause boundary."""
     rest = str(rest or "").strip()
     cut = len(rest)
-    for rx in _TITLE_STOPS:
+    for rx in _NOTE_NAME_BOUNDARIES:
         m = rx.search(rest)
         if m and m.start() < cut:
             cut = m.start()
     return rest[:cut], rest[cut:]
+
+
+def _note_append_name(raw: str) -> str:
+    """The note's name from an append sentence, cut at the first boundary.
+
+    "add to the mood log and make a note for today and put today's date and say
+    that I'm feeling okay ..." hands the append matcher a NAME that runs through
+    the next two instructions and stops at that "that". The name ends where the
+    next instruction begins (`_NOTE_NAME_BOUNDARIES`, the same list the create
+    reader uses); the words the matcher read as the entry's TEXT - after the
+    "that" - are untouched, so the owner's commas and nuance stay content.
+
+    A trailing joining word is not part of a name either: "add to my log and
+    pin it that ..." cuts to "my log and", which trims back to "my log".
+    """
+    name, _rest = _note_title_and_rest(str(raw or ""))
+    return re.sub(r"\s+(?:and|then)\s*$", "", name).strip()
 
 
 def _note_create_clauses(rest: str, now: float):
@@ -17979,6 +18025,14 @@ def _note_create_clauses(rest: str, now: float):
         m = _FAVOURITE_CLAUSE.match(rest)
         if m:
             favourite = m.group("how") in ("favourite", "favorite")
+            rest = rest[m.end():]
+            continue
+        m = _FAVOURITE_PHRASE.match(rest)
+        if m:
+            # "have this be one of my favorite notes": the same separate
+            # `favorite` property, described instead of requested by its verb.
+            said = m.group("how") or m.group("how2")
+            favourite = said in ("favourite", "favorite")
             rest = rest[m.end():]
             continue
         got = _note_date_clause(rest, now)
@@ -19454,23 +19508,23 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
             return False
 
     m = _NOTE_APPEND_TO_THAT.fullmatch(s)
-    if (m and (_says_note or _named_note_exists(m.group("name")))
-            and not _list_owns_name(m.group("name"))):
+    name = _note_append_name(m.group("name")) if m else ""
+    if name and (_says_note or _named_note_exists(name)) and not _list_owns_name(name):
         # The words are filed under TODAY's date heading (newest last). `now`
         # is the turn's own clock, so the heading is the day the owner said it
         # and a test can fix it; no model, no earlier conversation.
-        return Intent("note_append", {"name": m.group("name").strip(),
+        return Intent("note_append", {"name": name,
                                       "text": m.group("text").strip(),
                                       "dated": _note_iso_day(now)})
     m = _NOTE_APPEND_COLON.fullmatch(s)
-    if (m and (_says_note or _named_note_exists(m.group("name")))
-            and not _list_owns_name(m.group("name"))):
-        return Intent("note_append", {"name": m.group("name").strip(),
+    name = _note_append_name(m.group("name")) if m else ""
+    if name and (_says_note or _named_note_exists(name)) and not _list_owns_name(name):
+        return Intent("note_append", {"name": name,
                                       "text": m.group("text").strip()})
     m = _NOTE_APPEND_PLAIN.fullmatch(s)
-    if (m and (_says_note or _named_note_exists(m.group("name")))
-            and not _list_owns_name(m.group("name"))):
-        return Intent("note_append", {"name": m.group("name").strip(),
+    name = _note_append_name(m.group("name")) if m else ""
+    if name and (_says_note or _named_note_exists(name)) and not _list_owns_name(name):
+        return Intent("note_append", {"name": name,
                                       "text": m.group("text").strip()})
     # "pin my Workout Log note" / "unpin ..." (2026-11-09). An EXISTING note is
     # an edit, so it rides the customize route's own set_property /
