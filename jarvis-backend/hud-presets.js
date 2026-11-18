@@ -47,8 +47,8 @@
  *   * A LOCAL MODEL PRESET IS THE OWNER'S OWN CLICK (2026-11-09). Applying one
  *     starts its lane and switches the model AT ONCE: the PC keeps its ONE
  *     `switch_model` card for the model/chat path and for the rows that are
- *     not a quick, reversible switch - the two heavy presets (Coding first,
- *     Medical second; each pauses both other models as one pooled lane) and
+ *     not a quick, reversible switch - the heavy presets (each pauses both
+ *     other models as one pooled lane) and
  *     Cloud (it changes where the owner's words go, and its card is
  *     `change_own_config`). The chosen mark still comes from a REFETCH
  *     of the PC's own `chosen_preset`, never from this click, so the menu can
@@ -921,8 +921,8 @@ export function mountHudPresets(options = {}) {
   /** ONE model-preset click. A LOCAL preset is the owner's own reversible
    *  click (2026-11-09), so it switches at once and the refetched contract
    *  decides the mark. The PC still raises its ONE `switch_model` card for the
-   *  rows that are not a quick switch - the two heavy presets (Coding first,
-   *  Medical second; each pauses both other models as one pooled lane) and the
+   *  rows that are not a quick switch - the heavy presets (each pauses both
+   *  other models as one pooled lane) and the
    *  Cloud row (`change_own_config`) - so this says what to expect from the row
    *  that was pressed, and never marks anything from the click itself.
    *
