@@ -19094,15 +19094,21 @@ the plan card, both now on main.
 **What is not here yet, said plainly:** running a benchmark's command (the
 fence, build step 6) - a coding benchmark's command is kept as words and
 marked `"runnable": false`; Jarvis changing code (`project_edit`, after the
-12 GB card is measured); the project chat context and project-labelled
-facts (step 4); the chat-history `project` column (step 4 - nothing can
-set it until `/api/chat` carries a project id); and anything the Shareable
-switch would one day let out (it is a switch only; nothing is ever sent).
-Goals (section 59) are on main now, but the link is not built yet: a
-project still keeps a list of goal ids on its own side, unchecked, and
-neither app can set or show them; the goals.db `project` column, the
-`GET /api/goals?project=` filter and a goal step's measure are still to come
-(cohesiveness audit, 2026-09-29).
+12 GB card is measured); a fact learned inside a project chat labelling
+itself (the label table is the owner's own tap, 2026-10-15); and the two apps'
+project pickers on their chat surfaces (the API carries the field since
+2026-11-19 - 88.7 - but no chat box sends it yet, ARCHITECTURE section 8).
+**The project chat context, the project-labelled facts and the chat-history
+`project` column are BUILT since 2026-11-19** (88.7): a chat that names a
+project gets that project's context, and its history row is tagged through the
+existing Project Mode route. **A goal step's `measure` against a project
+benchmark is BUILT** (2026-09-30, 101.1), and 88.7's "what's next" reads it.
+Still to come, unchanged: the goals.db `project` column and
+`GET /api/goals?project=<id>` (the cohesiveness audit's 2026-09-29 item - the
+project's own list of goal ids is the link that exists, and a step's `measure`
+needs neither). **This paragraph said the chat context and a step's measure
+were "still to come" until 2026-11-19; both had stopped being true**, the
+measure on 2026-09-30 and the context in this lane.
 
 ### 88.1 Who may do what, and which ask first
 
@@ -19272,6 +19278,106 @@ when Jarvis made the mark).
 
 **Kept in backups and checked by data health** (§45, §49) since the same
 audit: `projects.db` was missing from both.
+
+### 88.7 A chat that belongs to a project (built 2026-11-19)
+
+The owner approved the project-scoped chat lane: a conversation can be about
+one project, and Jarvis then answers with that project's own context and its
+own facts, and answers two of the owner's everyday sentences on this PC.
+`jarvis_projects.py`'s `chat_scope()` resolves the request and `jarvis_quick.py`
+answers the deterministic half; the HUD (`jarvis_hud.py`) adds the project
+context to a local turn and scopes what memory may enter. One rule governs all
+of it: **a turn that names no project is exactly the turn it was before**, byte
+for byte - no context block, no memory change, and no new key in
+`X-Jarvis-Route`. The control is `backend/test_project_chat.py`.
+
+**The body.** `POST /api/chat` may carry an optional `project`: the project's
+**id** (`32` lowercase hex characters, the store's own shape) or the project's
+**own name**, as one line of text. Both are resolved by the projects store's own
+lookup (`resolve_ref`): the id first, then a whole-name match with case and
+spacing ignored. It is never a prefix, a closest match or a first guess. An
+absent key and an empty string both mean "no project".
+
+**A reference that names nothing is refused, and nothing is written.** An id
+that is not a project, a name nothing is called, a name two projects are
+called (an edited database could hold what the store refuses to create), a
+value that is not text, or a projects store that cannot be read: the HUD
+answers **400** `{"error": "<plain sentence>", "project": null}` before a quick
+answer, a model or any write; the fast path answers the same sentence as a
+**`project_unknown`** answer with no card and no write. The refusal names the
+reference that was asked for, or the ids of both matching projects.
+
+**What a scoped local turn is given.** One extra SYSTEM message, on the PC
+only, with a hard cap of 2,400 characters (the 8 GB card's context budget,
+`docs/PROJECTS-DESIGN.md` section 1; the cap says in its own line when it had
+to cut the rest):
+
+- the project's instructions, in the owner's words (1,500 characters at most);
+- the project notes the owner pinned for it (10 x 200 characters at most);
+- the work list's title, and the next open step of each linked goal;
+- the latest number of each benchmark - **never a private (health or money)
+  one**: those are counted and named nowhere, because a prompt is somewhere;
+- it is quoted as information about the project, never as an instruction.
+
+**What memory a scoped turn may use (the read-only first slice).** The owner's
+rule is that a fact learned in a project chat belongs to that project. This
+lane ships the READ half, and writes no memory at all:
+
+- unlabelled personal facts are recalled exactly as an ordinary turn recalls
+  them;
+- the project's own labelled facts may be used, read through `jarvis_memory`'s
+  existing `used_view` (so a forgotten fact says so, an erased one carries no
+  words, and an Off topic stays out);
+- a fact labelled to **another** project is dropped - the control that keeps
+  two projects' facts apart;
+- a fact whose labels cannot be proved (a projects store that cannot be read,
+  a recalled fact with no id) means **no** remembered facts for that turn:
+  the safe direction, never a guess;
+- **rule 1 is unchanged.** The block is added only on a local turn
+  (`inject_memory`), it is a `system` message, and the existing cloud cut
+  strips every system message - before the model and again on every degrade
+  hop that lands on a cloud lane. `jarvis_quick.recall_for_project()` says
+  `[]` for a turn that may leave the PC, and a pinned test proves the HUD
+  orders the insert before the cut.
+
+Not built, and said so on the page rather than implied: a fact learned in a
+project chat **labelling itself**. The label table is the owner's own tap
+(2026-10-15); the background learner does not write it. That is the half the
+design's own build note calls "still to come", and it stays out of this PR.
+
+**`X-Jarvis-Route`.** A scoped turn carries, additively and only when it named
+a project: `project` (`{"id", "name"}`), `project_context` (`"added"` or
+`"none"`), and, when memory used none, `project_memory_held_back` (the plain
+reason). A turn with no project carries none of them - the header is byte for
+byte what it was.
+
+**The two sentences, answered without a model.**
+
+| Sentence | Answer | Card |
+|---|---|---|
+| "what's next on this project", "what should I do next on this project", "what is left on this project", "what does this project need next" | A READ from `projects.db`, `goals.db` and `schedule.db` on this PC, naming those stores and the date it read (the same "say what you read" rule the defect-register answer follows). Then: the work list's open items, the linked goals still open with their next step (a step whose benchmark number reached its target says so - it is never ticked), and the benchmarks due a new number (none yet, or the newest older than **7 days**). A private benchmark is counted, never named. Read-only: no card, nothing ticked, nothing written. | none |
+| "log 41 against tests", "record 12.5 kg against weight", "log 5 for 5k time" (and today/yesterday) | ONE card showing the project, the benchmark, the number and the date. **Nothing is logged until the card's yes**; the yes writes through `Projects.log` - the same method the log route calls, `source: "words"` - and no raw SQL, no command, no test. | ONE, `change_own_config` at tier `ask` (the Projects feature's existing class; **no new card class**) |
+
+The write refuses, writing nothing, when: the benchmark does not exist in
+**this** project (the message lists the project's number benchmarks), two
+benchmarks fit the words, the benchmark is a coding command (its numbers come
+from running it), the number is not a number or the date is not a date, the
+card cannot be raised, or `change_own_config` is not tier `ask`. A health or
+money benchmark's answer is `private` (kept on screen, never read aloud), like
+every other life number. "Which number?" is answered honestly for "log this
+number against tests" with no number in it - it never invents one. A benchmark
+of another project can never receive the number, and a second card for the same
+benchmark while one waits is refused.
+
+**The older cardless lane is untouched.** "I ran 5 km" / "log 5 km run" still
+logs at once with no card when the chat names no project. A project-scoped chat
+matches those words inside **its own** project only: it never falls back to
+another project's benchmark, and when nothing in its project fits it refuses in
+words.
+
+**Not in this lane:** the desktop and phone chat boxes do not send `project`
+yet (their project pickers are the next slice; ARCHITECTURE section 8 records
+the one-sidedness), and no route, no goal schema and no card class is new.
 
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 

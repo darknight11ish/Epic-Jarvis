@@ -2971,6 +2971,20 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **No chat box offers a project yet** (2026-11-19, projects build step 4's
+  first slice). `POST /api/chat` accepts an optional `project` (the project's
+  id or its own name, resolved by the projects store; a reference that names
+  nothing, or two, is refused and nothing is written), and a scoped turn is
+  given that project's own context and its own memory - see
+  `docs/JARVIS-API.md` section 88.7. **Neither app's chat surface sends the
+  field yet**: the desktop's HUD page and the Alt+Space bar, and the phone's
+  chat, build no project picker in this PR, so they are the same turn they
+  always were (the API's guarantee for a request with no `project`). The
+  picker is the next slice for each app, and until then the API is the only
+  way to scope a chat. No route is added, so `tools/check_parity.py` has
+  nothing to classify: this is the API's half, deliberately one-sided for
+  now.
+
 - **Call recording is split by hardware, and each half is one-sided on
   purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
   'record call' ... transcribe it ... identify the speakers ... store all of it

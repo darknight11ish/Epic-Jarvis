@@ -1,7 +1,9 @@
 # Projects: design (2026-09-28)
 
-Status: **build steps 1 and 2 built on the backend, and step 3 - the
-screens in both apps - built (2026-09-28); see "Build notes" at the end.** For the owner's decision "Projects,
+Status: **build steps 1 and 2 built on the backend, step 3 - the
+screens in both apps - built (2026-09-28), and step 4's first slice - a chat
+that belongs to a project - built (2026-11-19); see "Build notes" at the end.**
+For the owner's decision "Projects,
 like Claude's Projects and more" (`CLAUDE.md`, 2026-09-28): both coding and
 life projects, and Jarvis does real work on the PC with a card for every
 change. Queued after the chatbot driver. Written by the studio's designer;
@@ -94,8 +96,9 @@ such as `.git` stay unread.
   under the project with Forget (the memory module's own Forget, so the fact
   stops being recalled everywhere), Erase the words, and "Move to personal
   memory". The other half of step 4 - a fact learned in a project chat being
-  labelled by itself - is not built: it waits for `/api/chat` to carry a
-  project id.
+  labelled by itself - is not built; `/api/chat` now carries the project id it
+  needs (2026-11-19), and a scoped chat's memory READS are scoped to the
+  project, but the background learner still writes no label.
 - **Project notes** are the owner's own pinned lines for one project ("the
   server uses port 8080") - like "Always keep in mind", per project, small,
   no card (the owner writes them).
@@ -396,6 +399,56 @@ its name again.
 (`jarvis_backup.SOURCE_DBS`) and the data-health check now include
 `projects.db`. See the CHANGELOG for the rest.
 
-**Still not built:** the chat-history `project` column and project chat
-context (step 4), `project_edit` (steps 5 and 7), running a benchmark
-(step 6), the goals.db link (after the continuation branch merges).
+**Still not built:** `project_edit` (steps 5 and 7), running a benchmark
+(step 6), the goals.db `project` column, and a fact learned in a project
+chat labelling itself. **Step 4's first slice is now built - see below.**
+
+### Step 4, first slice (2026-11-19): a chat can belong to a project
+
+**Built:** `/api/chat` carries an optional `project` (the project's id, or the
+project's own name, resolved by `jarvis_projects.resolve_ref` - never guessed;
+a reference that names nothing, or two, is refused by name and nothing is
+written). A scoped turn gets ONE system line on this PC: the project's
+instructions, the notes the owner pinned, the work list's title, the open goal
+steps and the latest non-private benchmark numbers, hard-capped at 2,400
+characters. `docs/JARVIS-API.md` section 88.7 is the route-level contract.
+
+**The memory half, and why it is the read-only slice.** The owner's rule is
+that a fact learned in a project chat belongs to that project. This lane ships
+the READ half and writes no memory: an unlabelled personal fact is recalled as
+before, this project's own labelled facts may be used (read through
+`jarvis_memory`'s existing `used_view`), a fact labelled to another project is
+dropped, and a fact whose label cannot be proved is not used at all. Nothing
+labels a newly learned fact by itself: the label table is the owner's own tap
+(2026-10-15), and the background learner is deliberately left alone in this PR
+- it writes memory, and a scoped write needs its own decision and its own
+tests. The app-facing half of the design's step 4 (Brain's project facts) is
+unchanged from 2026-10-15.
+
+**Rule 1 stays proven.** The project block and every recalled fact are added
+only on a LOCAL turn; the block is a `system` message, and the existing cloud
+cut strips every system message before a cloud model and again on every
+degrade hop that lands on one. `jarvis_quick.recall_for_project(local=False)`
+returns no facts at all, and a pinned test in `backend/test_project_chat.py`
+holds the HUD's insert-before-cut order.
+
+**The owner's two sentences, deterministic where they can be.** "What's next
+on this project" is a READ of `projects.db`, `goals.db` and `schedule.db` that
+names the stores and the date it read (the defect-register answer's own rule),
+then the work list's open items, the linked goals still open with their next
+step, and the benchmarks due a new number (7 days, or none yet); a private
+health or money benchmark is counted, never named. "Log 41 against tests" is
+ONE `change_own_config` card (the class Shareable/Auto-Route already use - no
+new card class); the yes writes through the store's own `log` exactly as the
+log route does (`source: "words"`), and an unknown benchmark, two fitting
+names, a coding command's benchmark or a tier that is not `ask` is refused,
+with nothing logged. A goal step's `measure` needed no change: it was built on
+2026-09-30 (`docs/JARVIS-API.md` 101.1), and "what's next" reads it - so this
+lane adds **no** schema and **no** route.
+
+**One-sided on purpose:** the desktop and phone chat boxes do not send
+`project` yet. The field is in the API, the HUD's route header says plainly
+which project an answer belonged to (or carries nothing when none did), and
+the pickers on both apps are the next slice - recorded in
+`docs/ARCHITECTURE.md` section 8.
+
