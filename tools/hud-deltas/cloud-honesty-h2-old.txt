@@ -1,0 +1,3 @@
+                     and _agent_ok)
+        # The degrade loop below opens its own connection to negotiate a
+        # lane; jarvis_agent.run_local_turn makes its own requests entirely,

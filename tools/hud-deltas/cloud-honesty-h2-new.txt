@@ -1,0 +1,43 @@
+                     and _agent_ok)
+        if _crisis_turn and lane != local_model and _agent_ok:
+            # cloud-honesty.patch (2026-10-28, the AI-safety audit's H1 and
+            # M1, the half no correction can fix after the fact). A cloud lane
+            # makes no tool calls and is the one lane where nothing can be
+            # verified - so a distress message sent to one is a distress
+            # message answered by a third party with no help line, on the
+            # turn where the line matters most. Rule 1 of this project says
+            # it does not leave this PC at all, and the router's own private
+            # backstop already refuses it unless a lane was picked BY HAND -
+            # which is exactly the hole F-01 was found in (2026-10-27) and
+            # which must not be the only thing standing between a crisis
+            # message and a cloud provider.
+            #
+            # So the turn is answered HERE. The route header says so rather
+            # than pretending the owner's pick was honoured: `where` is
+            # "local" (set by the local branch below), `lane` names the model
+            # that really answered, and `cloud_refused` says why. The reply
+            # itself carries the fixed help text, because jarvis_agent's own
+            # crisis check runs on these same words.
+            #
+            # `_agent_ok` is required for the rebind to mean anything: without
+            # jarvis_agent.py there is no local answering loop to hand the
+            # turn to, and `use_tools` could not become True. That case is a
+            # backend too old to have the module this whole patch stack
+            # depends on; it keeps the plain local relay, which at least never
+            # sends the words anywhere.
+            lane = local_model
+            route_header["lane"] = lane
+            route_header["cloud_refused"] = "crisis"
+            route_header["reason"] = (str(route_header.get("reason") or "")
+                                      + "; answered on this PC: a message like this is never "
+                                        "sent to a cloud provider")
+            if is_cloud:
+                # The payload was built cloud-shaped (user turns only, no
+                # memory). Rebuild it as a local turn would have been - the
+                # same rebuild the degrade loop makes (body's own transcript).
+                messages = body.get("messages") or []
+                is_cloud = False
+            payload = _build_payload(lane)
+            use_tools = True
+        # The degrade loop below opens its own connection to negotiate a
+        # lane; jarvis_agent.run_local_turn makes its own requests entirely,
