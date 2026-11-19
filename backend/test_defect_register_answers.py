@@ -55,7 +55,15 @@ hard-codes the number, because the register changes):
      makes nothing, raises no card, and the fixture tree is unchanged;
   9. the decoy questions ("how many models are installed", "what windows are
      open", "how many defects are there in my code") keep their own paths;
- 10. `jarvis_quick.py` and its published `jarvis-backend/` twin are identical.
+ 10. `jarvis_quick.py` and its published `jarvis-backend/` twin are identical;
+ 11. **THE MEASURED FIELD FAILURE OF 2026-11-19** - the HUD's own call,
+     `jarvis_quick.answer_turn`, answers the owner's bare sentence (a request
+     with NO `provenance` tag, the shape a script posts) from the register,
+     with the fixture's count and the file's name; the tagged owner's words
+     still answer the same; and the control shows the widening is READ-ONLY
+     and does not swallow everything - an unrelated question, an ACTION and an
+     app-sent (system-message) or pasted body all still return None and reach
+     the model.
 
 No model runs, no network, no owner file is touched: every fixture is under the
 suite's own temporary folder and the register path is handed in through
@@ -572,6 +580,141 @@ def t_the_published_twin_is_byte_identical():
           f"{a} vs {b}")
 
 
+# --------------------------------------------------------------------------
+#   12. THE HUD'S OWN CHAT PATH (the measured 2026-11-19 failure)
+# --------------------------------------------------------------------------
+# A client posted the owner's sentence the way a script does:
+#
+#     {"messages": [{"role": "user", "content": "How many open defects are in
+#                    the register?"}]}
+#
+# - NO `provenance` tag. `jarvis_quick.answer_turn` (the exact function
+# `jarvis_hud.py`'s /api/chat handler calls before `jarvis_agent` runs) found
+# no owner's-own words, returned None, and the question reached the model. The
+# model cannot read `docs/defect-register.tsv` and offered the `check_records`
+# tool instead ("I can run a read-only check on your repository's records").
+# The lane itself was healthy all along: `Q.match` and `_run_defect_register`
+# both answered from the file in one short sentence.
+#
+# THIS SECTION DRIVES THE HUD'S OWN CALL, not `Q.match` alone - and each
+# assertion is a way the fix could silently stop working:
+#   * the bare sentence (no tag) IS answered by the register, with the
+#     fixture's own count and the file's name and read date;
+#   * the owner's own TAGGED words still answer, with the same words;
+#   * the control: an unrelated question, an ACTION, a pasted body and a body
+#     carrying an app's own `system` message all still return None (the model
+#     or a tool gets them), so the widening cannot have swallowed everything.
+_MISSING = object()
+
+
+def _answer_turn(sentence: str, *, provenance=_MISSING, extra=None):
+    """One HUD-shaped /api/chat turn, through the function the HUD calls."""
+    msg = {"role": "user", "content": sentence}
+    if provenance is not _MISSING:
+        msg["provenance"] = provenance
+    body = {"messages": [msg]}
+    if extra:
+        body.update(extra)
+    return Q.answer_turn(body, sched=Sched(), now=NOW)
+
+
+def t_the_hud_chat_path_answers_the_bare_sentence():
+    root, register = _checkout(GOOD)
+    with _point_at(register):
+        res = _answer_turn("How many open defects are in the register?")
+        check("answer_turn (the HUD's own call) answers the bare sentence",
+              res is not None, repr(res))
+        said = str(getattr(res, "reply", "") or "")
+        check("... through the defect_register lane",
+              getattr(res, "intent", None) == "defect_register", repr(getattr(res, "intent", None)))
+        check("... with the fixture's own count: 2 open and 1 closed",
+              _counts(said) == (2, 1), said[:240])
+        check("... naming the file it read",
+              "docs/defect-register.tsv" in said, said[:240])
+        check("... and the date it read it",
+              DATE in said, said[:240])
+        check("... and never the measured denial",
+              FALSE_DENIAL not in said.lower(), said[:240])
+        # The owner's own tagged words are unchanged - the same answer.
+        tagged = _answer_turn("How many open defects are in the register?",
+                              provenance="typed")
+        check("the owner's own tagged words answer the same words",
+              tagged is not None and str(tagged.reply) == said, repr(tagged))
+        # And the two other sentences the field test measured, same path.
+        for sentence in ("How many defects are open?", "what is DEF-001"):
+            got = _answer_turn(sentence)
+            check(f"the measured sentence {sentence!r} answers from the register",
+                  got is not None and got.intent == "defect_register", repr(got))
+            check(f"... and names the file for {sentence!r}",
+                  "docs/defect-register.tsv" in str(getattr(got, "reply", "")),
+                  str(getattr(got, "reply", ""))[:200])
+
+
+def t_the_untagged_widening_is_read_only_and_does_not_swallow_everything():
+    root, register = _checkout(GOOD)
+    sentence = "How many open defects are in the register?"
+    with _point_at(register):
+        # CONTROL 1: an unrelated question is still the model's.
+        check("an unrelated untagged question still goes to the model",
+              _answer_turn("tell me a joke about cats") is None)
+        # CONTROL 2: an ACTION is still the model's - the owner's own words
+        # are what unlock an action, and no tag means no answer here.
+        check("an untagged ACTION still goes to the model (no card, no timer)",
+              _answer_turn("set a timer for 10 minutes") is None)
+        # CONTROL 3: the app's own text refuses the whole fast path, as before.
+        check("an app-sent system message still refuses the whole fast path",
+              Q.answer_turn({"messages": [
+                  {"role": "system", "content": "x"},
+                  {"role": "user", "content": sentence}]},
+                  sched=Sched(), now=NOW) is None)
+        # CONTROL 4: a TAG of any kind keeps its existing rule - only a
+        # MISSING tag is read as an untagged question.
+        check("a pasted body still goes to the model",
+              _answer_turn(sentence, provenance="pasted") is None)
+        check("a share/clipboard turn riding with the words still goes to the model",
+              Q.answer_turn({"messages": [
+                  {"role": "user", "content": "x", "provenance": "clipboard"},
+                  {"role": "user", "content": sentence}]},
+                  sched=Sched(), now=NOW) is None)
+        check("a private chat keeps its own stricter rule",
+              _answer_turn(sentence, extra={"private": True}) is None)
+        # CONTROL 5: the gate is the EXPLICIT record-read list, not
+        # READ_ONLY_INTENTS. `chat_tag` is in READ_ONLY_INTENTS (it has nothing
+        # for "cancel that" to take back) and its handler FILES the chat - so an
+        # untagged "label this chat Work" must not be answered here, and this
+        # was a real regression the first draft of the fix caused
+        # (backend/test_chat_tags.py caught it).
+        check("the gate is a subset of READ_ONLY_INTENTS",
+              Q.UNTAGGED_RECORD_READS <= Q.READ_ONLY_INTENTS,
+              sorted(Q.UNTAGGED_RECORD_READS - Q.READ_ONLY_INTENTS))
+        check("... but it does NOT include the chat-filing answer",
+              "chat_tag" in Q.READ_ONLY_INTENTS
+              and "chat_tag" not in Q.UNTAGGED_RECORD_READS)
+        check("an untagged 'label this chat Work' is not answered here (it files)",
+              _answer_turn("label this chat Work") is None)
+        check("an untagged client command ('open a chat') is not answered here",
+              _answer_turn("open a chat") is None)
+        # The gate is a FAMILY of record reads, not a special case for one
+        # sentence: a second member answers the same untagged shape...
+        got = _answer_turn("what changed in your last update?")
+        check("a second record read answers untagged too (the gate is a family)",
+              got is not None and got.intent == "recent_changes", repr(got))
+        # ...while a deterministic read that is deliberately NOT on the list
+        # (it reads machine state rather than this project's record) keeps the
+        # old rule: an untagged request goes to the model.
+        check("a deterministic read OUTSIDE the gate keeps the old rule",
+              _answer_turn("how many models are installed") is None)
+        # And the OLD reader itself is untouched: an untagged message is still
+        # NOT the owner's own words (test_github_tools_by_chat.py pins this too).
+        check("newest_own_words is unchanged: untagged is still not the owner's",
+              Q.newest_own_words({"messages": [{"role": "user", "content": sentence}]})
+              is None)
+        check("... and a tagged one still is",
+              Q.newest_own_words({"messages": [
+                  {"role": "user", "content": sentence, "provenance": "typed"}]})
+              == sentence)
+
+
 def main():
     print("=" * 74)
     print("jarvis_quick - the defect register answers from its own file")
@@ -591,6 +734,10 @@ def main():
         ("other questions keep their own path", t_other_questions_keep_their_own_path),
         ("the real register agrees with its file",
          t_the_real_register_agrees_with_its_own_file),
+        ("the HUD's chat path answers the bare sentence",
+         t_the_hud_chat_path_answers_the_bare_sentence),
+        ("the untagged widening is read-only and narrow",
+         t_the_untagged_widening_is_read_only_and_does_not_swallow_everything),
         ("the published twin", t_the_published_twin_is_byte_identical),
     ]
     for name, fn in tests:
