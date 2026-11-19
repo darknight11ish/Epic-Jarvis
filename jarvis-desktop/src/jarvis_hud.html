@@ -9833,18 +9833,27 @@ async function apprPoll(){
     if(deadline !== null) el.dataset.deadline = String(deadline);
     el.innerHTML = apprCardHtml(p, Date.now());
     const yes = el.querySelector(".yes");
+    // A card with no readable detail draws Refresh where Approve would be
+    // (2026-11-18): re-read the queue, approve nothing. A read, so it is never
+    // held by a stale link - only decisions are.
+    const refresh = el.querySelector(".refresh");
+    if(refresh){
+      refresh.onclick = () => apprPoll();
+      refresh.title = APPR_NO_DETAIL;
+    }
     // A request cut off before it reached this card cannot be approved from
     // it: what is shown is not all of what would run.
-    if(apprCutOff(p)){ yes.disabled = true; yes.dataset.cutoff = "1"; }
+    if(yes && apprCutOff(p)){ yes.disabled = true; yes.dataset.cutoff = "1"; }
     // Already past its deadline when it was drawn (an old row still in the
     // queue): no buttons at all, and the line below says the shared sentence
     // the moment apprTick runs. The gate is not waiting for either answer.
     if(deadline !== null && apprExpired(deadline, Date.now())){
       el.dataset.expired = "1";
-      yes.hidden = true;
+      if(yes) yes.hidden = true;
       el.querySelector(".no").hidden = true;
+      if(refresh) refresh.hidden = true;
     }
-    if(apprReplace(p) && !apprCutOff(p)){
+    if(yes && apprReplace(p) && !apprCutOff(p)){
       // Review ruling 8.2: TWO presses. The first arms the card and sends
       // nothing at all - the button then says "Confirm replace", so a person
       // reading the button sees the state change as well as the heading.
@@ -9858,7 +9867,7 @@ async function apprPoll(){
         }
         apprDecide(p.id, true, el);
       };
-    } else {
+    } else if(yes){
       yes.onclick = () => apprDecide(p.id, true, el);
     }
     el.querySelector(".no").onclick  = () => apprDecide(p.id, false, el);
@@ -9893,6 +9902,11 @@ function apprCardHtml(p, now){
   if(detail && typeof detail === "object") detail = JSON.stringify(detail, null, 2);
   detail = detail || "";
   try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
+  // WHETHER THIS CARD SAYS WHAT IT IS ASKING FOR (2026-11-18). The same rule
+  // the phone draws: a readable detail keeps the ordinary Approve; a card with
+  // no readable detail says so and offers Refresh instead (apprDetailWords
+  // above holds the reading). Deny is drawn either way.
+  const described = apprDetailWords(detail).length > 0;
   const raised = apprRaised(p.raised);
   const risk = p.risk && typeof p.risk === "object" ? p.risk : null;
   // One card on every screen (card-words.js): the label, then the PC's own
@@ -9907,7 +9921,13 @@ function apprCardHtml(p, now){
       + (raised.source ? `<div class="src">from ${apprEscape(raised.source)}</div>` : "")
       + `<div class="src">Take your time: nothing runs until you decide.</div></div>`;
   }
-  html += `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`;
+  if(described){
+    html += `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`;
+  }else{
+    // The blank cheque, said out loud: no body is invented and no yes is
+    // offered - the only ways forward are a re-read or a refusal.
+    html += `<div class="det">${apprEscape(APPR_NO_DETAIL)}</div>`;
+  }
   html += `<div class="risk">${apprEscape(apprRiskLine(risk))}</div>`;
   if(apprReplace(p)){
     // Plain words, never colour alone - and the same words the quickbar and
@@ -9920,9 +9940,17 @@ function apprCardHtml(p, now){
       + `so it cannot be approved here. Deny it and ask Jarvis for a shorter plan.</div>`;
   }
   // Deny on the left, Approve on the right: the same order on every screen.
+  // A card with no readable detail has NO Approve to press (2026-11-18) - it
+  // draws Refresh in that place, because the owner can still re-read the queue
+  // and a yes to something the card cannot show would approve a blank cheque.
   html += `<div class="left"></div>`
-    + `<div class="btns"><button class="no">Deny</button>`
-    + `<button class="yes">Approve</button></div>`;
+    + `<div class="btns"><button class="no">Deny</button>`;
+  if(described){
+    html += `<button class="yes">Approve</button>`;
+  }else{
+    html += `<button class="refresh">${apprEscape(APPR_REFRESH)}</button>`;
+  }
+  html += `</div>`;
   return html;
 }
 
@@ -9987,6 +10015,23 @@ function apprExpired(deadline, now){
  * is held to that module's fallbackTitle. */
 const APPR_TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself.";
 
+/* WHAT A CARD WITH NO READABLE DETAIL SAYS, and the action drawn where Approve
+ * would be (2026-11-18). Measured on the owner's phone: a waiting
+ * `change_own_config` card about his cloud settings drew no detail at all and
+ * still drew a normal Approve - a blank cheque for a change nobody could see.
+ * The desktop had the same hole: apprDescribe() fell back to "(no detail)" and
+ * the card still offered Approve. A card that cannot say what it would change
+ * must not be approvable, so the card says this sentence and offers Refresh in
+ * Approve's place, keeping Deny (refusing needs no reading).
+ *
+ * Both are `CARD_NO_DETAIL` / `CARD_REFRESH` in card-words.js, letter for
+ * letter - that module is the desktop's half of the fixture
+ * tools/gen_card_words_cases.py writes from backend/jarvis_card_words.py, and
+ * tests/card-words.mjs holds the three together, so the PC and the phone say
+ * the same words (the phone's `net/CardDetail.kt`). */
+const APPR_NO_DETAIL = "Jarvis did not describe this change. Refresh, or deny it and ask again.";
+const APPR_REFRESH = "Refresh";
+
 /* The gate keeps json.dumps(detail)[:4000]: text that long that no longer
  * parses was cut off on the way here. */
 function apprCutOff(p){
@@ -10033,9 +10078,13 @@ function apprTick(){
     if(gone && !el.dataset.expired){
       // Once per card, not once a second: hiding a button is a state change.
       el.dataset.expired = "1";
-      const yes = el.querySelector(".yes"), no = el.querySelector(".no");
+      const yes = el.querySelector(".yes"), no = el.querySelector(".no"),
+            refresh = el.querySelector(".refresh");
       if(yes) yes.hidden = true;
       if(no) no.hidden = true;
+      // A no-detail card's only controls are Deny and Refresh; an expired card
+      // draws neither (the reason replaces them - DEF-010's rule, both apps).
+      if(refresh) refresh.hidden = true;
     }
     if(!line) return;
     const left = Math.ceil((deadline - now) / 1000);
@@ -10297,6 +10346,79 @@ function apprDescribe(p, detail){
   if(d && d.prompt) return d.prompt;
   if(p.prompt) return p.prompt;
   return detail || "(no detail)";
+}
+
+/* Whether a card's own `detail` can be read in words - the desktop's one copy
+ * of the phone's `net/CardDetail` rule (2026-11-18). The notice's summary/body
+ * are built from the ACTION NAME and the risk table, never the payload, so they
+ * can say "change one of its settings" but never which one; `detail` is the
+ * only field that names the change. A command, a plan or a sentence is readable
+ * word for word, and JSON is said in plain words - never drawn raw, the same
+ * body rule the phone's `CardBodyWords` keeps - so a card is "described" by the
+ * same standard on both clients.
+ *
+ * tests/approvals-contract.mjs lifts this and drives the shapes both clients
+ * read; card-words.mjs holds the two sentences to the PC's own copy. */
+function apprDetailWords(detail){
+  if(detail === null || detail === undefined) return "";
+  if(typeof detail === "object") return apprObjectWords(detail);
+  const text = String(detail).trim();
+  if(!text) return "";
+  const machine = (text.startsWith("{") && text.endsWith("}"))
+    || (text.startsWith("[") && text.endsWith("]"));
+  if(!machine) return text;
+  let d = null;
+  try{ d = JSON.parse(text); }catch(e){ return ""; }
+  if(Array.isArray(d)) return apprListWords(d);
+  if(d && typeof d === "object") return apprObjectWords(d);
+  return "";
+}
+
+function apprFieldWords(value){
+  if(value === null || value === undefined) return "";
+  if(typeof value !== "object") return String(value).trim();
+  if(Array.isArray(value)){
+    return value.map(apprFieldWords).filter(Boolean).join(", ");
+  }
+  const parts = [];
+  for(const [k, v] of Object.entries(value)){
+    const words = apprFieldWords(v);
+    if(words) parts.push(`${apprLabel(k)}: ${words}`);
+  }
+  return parts.join("; ");
+}
+
+function apprLabel(key){
+  const words = String(key || "").split(/[ _-]+/).filter(Boolean).join(" ");
+  return words ? words.replace(/^./, (c) => c.toUpperCase()) : "";
+}
+
+function apprObjectWords(obj){
+  const fields = [];
+  for(const [k, v] of Object.entries(obj || {})){
+    const key = String(k || "").trim().toLowerCase();
+    if(!key) continue;
+    const words = apprFieldWords(v);
+    if(words) fields.push([key, words]);
+  }
+  if(!fields.length) return "";
+  const sentenceKeys = new Set(["from", "to", "why", "reason"]);
+  const oneSentence = fields.every(([k]) => sentenceKeys.has(k))
+    && fields.some(([k]) => k === "from" || k === "to");
+  if(oneSentence){
+    return fields.map(([k, v]) => (k === "why" || k === "reason") ? `(${v})` : `${k} ${v}`)
+      .join(" ").replace(/^./, (c) => c.toUpperCase());
+  }
+  return fields.map(([k, v]) => `${apprLabel(k)}: ${v}`).join("\n");
+}
+
+function apprListWords(list){
+  return (Array.isArray(list) ? list : []).map((v) => {
+    if(v === null || v === undefined) return "";
+    if(Array.isArray(v)) return apprListWords(v);
+    if(typeof v === "object") return apprObjectWords(v);
+    return String(v).trim();
+  }).filter(Boolean).join("\n");
 }
 
 async function apprDecide(id, ok, el){

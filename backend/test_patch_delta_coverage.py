@@ -100,9 +100,6 @@ EXEMPT = {
     "attention-settings.patch":
         "not in the published base; its hunks read the owner's own HUD dispatch "
         "lines, so a probe needs a live read",
-    "cloud-honesty.patch":
-        "the published base cannot prove it and its hunk reads the owner's own "
-        "HUD; a probe would have to be invented",
     "gate-outcome.patch":
         "the published base cannot prove it and its hunks read the owner's own "
         "gate; what is missing is owner-only text",

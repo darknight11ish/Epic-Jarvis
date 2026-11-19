@@ -65,6 +65,23 @@ object CardWords {
      */
     const val TIMED_OUT_NEXT = "Ask the desktop to raise this again."
 
+    /**
+     * WHAT A CARD WITH NO READABLE DETAIL SAYS (2026-11-18, measured on the
+     * owner's phone: a waiting `change_own_config` card about his cloud settings
+     * drew no detail at all and still drew a normal Approve - a blank cheque).
+     *
+     * A card that cannot say what it would change must not be approvable, so
+     * both apps say this sentence and draw [REFRESH] in Approve's place, keeping
+     * Deny. It is the PC's `jarvis_card_words.NO_DETAIL`, word for word - the
+     * same one-source rule as [TIMED_OUT] - so the phone and the desktop cannot
+     * word the blank cheque two different ways. `net/CardDetail` is the one
+     * place the rule is decided.
+     */
+    const val NO_DETAIL = "Jarvis did not describe this change. Refresh, or deny it and ask again."
+
+    /** The action drawn in Approve's place on that card - the PC's own word. */
+    const val REFRESH = "Refresh"
+
     /** "Open the card" - the line on every screen but Home while a card waits. */
     const val OPEN_CARD = "Open the card"
 

@@ -312,7 +312,12 @@ async function openHud(browser, options = {}) {
           // page's 30 s poll (and apprPoll on the event) paints it; the test
           // clicks Approve, which posts /api/approve - then this resolves.
           state.pending = [{ id: 42, action: "switch_model", raised: { text: "Switch the model for Coding?" },
-            source: "the HUD", reversible: "yes", reach: "local" }];
+            source: "the HUD", reversible: "yes", reach: "local",
+            // The change itself, in the gate's `switch_model` shape - a card
+            // with no readable detail draws Refresh instead of Approve since
+            // 2026-11-18, and this check is about the preset flow reaching
+            // /api/approve.
+            detail: { from: "qwen3.5:9b", to: "qwen3.5:35b", why: "the Coding preset" } }];
           await new Promise((resolve) => { state.applyWait = resolve; });
           state.pending = [];
         }
