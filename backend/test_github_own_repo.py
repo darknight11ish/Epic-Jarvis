@@ -49,7 +49,12 @@ WHAT THIS SUITE PROVES, all read-only and with no network and no real token:
      that says a bare name is fine and Jarvis fills in the owner - the 2026-11-18
      instruction lives in the tool's own description, not in the lane prompt;
   7. a write planned from the bare name shows the FULL name on its card, and a
-     read's plan is otherwise byte-for-byte what the full name produced.
+     read's plan is otherwise byte-for-byte what the full name produced;
+  8. the three causes of the 2026-11-18 live field failure are gone: a list
+     longer than the read cap comes back as the list it states, a "latest
+     commit" answer carries the newest run's own 40-hex head commit and its
+     subject, and "Which pull requests on Epic-Jarvis are ready to merge?"
+     reaches the deterministic lane in the fast path's own shape.
 """
 from __future__ import annotations
 
@@ -948,6 +953,164 @@ def t_the_live_battery_tool_calls_answer_real_data():
 
 
 # --------------------------------------------------------------------------
+#   9. The 2026-11-18 field failure: the list, the commit, and the readiness
+# --------------------------------------------------------------------------
+#
+# The failed live battery (`.dsh-scratch/wave21/coverage/GITHUB-FIELD-FAIL.md`)
+# measured three product causes on the deployed b8de6ef15:
+#
+#   (a) a hard byte cut with NO paging: one `GET .../pulls?per_page=20` was
+#       227,073 characters for the ten open rows, over `MAX_BYTES`, so the JSON
+#       could not be parsed and the answer was the cut sentence with no number
+#       in it at all;
+#   (b) "what is the latest commit on main" was answered with CI-run prose that
+#       never rendered the run's head commit, so the SHA was never in the answer;
+#   (c) "Which pull requests on Epic-Jarvis are ready to merge?" did not match
+#       `_GITHUB_MY_PRS` (the "on Epic-Jarvis" sits in the middle), so it went to
+#       the model and came back asking the owner for owner/name.
+#
+# Each test below fails on the tree of b8de6ef15 for exactly its cause.
+
+def _run_plan(plan, fetch):
+    """`GH.run` for one planner, with the fake token and an injected fetch."""
+    with _Token():
+        return GH.run(plan, fetch=fetch, approved=True)
+
+
+class _CappedFake(FakeGitHub):
+    """FakeGitHub that applies the read layer's own cut to an oversized body.
+
+    The real transport reads at most `MAX_BYTES` and appends `CUT_MARKER`
+    (`_capped_text`), so a fake that hands the whole body over would test a
+    world in which the field failure cannot happen. This cuts the SAME way, so
+    an over-cap answer arrives exactly as the live one did.
+    """
+
+    def __call__(self, method, url, *, headers=None, body=None, timeout=None):
+        status, text = super().__call__(method, url, headers=headers,
+                                        body=body, timeout=timeout)
+        raw = str(text or "")
+        if len(raw) > GH.MAX_BYTES:
+            return status, raw[:GH.MAX_BYTES] + GH.CUT_MARKER
+        return status, text
+
+
+def t_a_list_over_the_read_cap_still_returns_every_row():
+    """A list longer than the old cap comes back as the list, page by page.
+
+    BEFORE THE FIX: `GH.run(GH.plan_list(...))` answered `CUT_ANSWER` - "GitHub's
+    answer was longer than Jarvis reads in one go" - because ONE GET held all ten
+    rows (227,073 characters in the field battery against a 200,000 cap) and the
+    cut JSON could not be parsed. Not one pull request number was in the answer.
+    """
+    numbers = list(range(1390, 1400))
+    rows = [{"number": n, "title": f"fix: thing {n}", "state": "open",
+             "user": {"login": "owner"}, "body": "x" * 24_000} for n in numbers]
+    whole = json.dumps(rows)
+    check("the fixture list really is bigger than one read",
+          len(whole) > GH.MAX_BYTES, len(whole))
+    fetch = _CappedFake(routes=[
+        ("per_page=5&page=1", (200, json.dumps(rows[:5]))),
+        ("per_page=5&page=2", (200, json.dumps(rows[5:]))),
+        ("per_page=20", (200, whole))])
+    out = _run_plan(GH.plan_list({"scope": "pulls", "repo": OWN}), fetch)
+    text = str(out.get("text", ""))
+    check("the answer is the list, not the cut sentence",
+          out.get("ok") is True and GH.CUT_ANSWER not in text, text[:300])
+    missing = [n for n in numbers if f"#{n} " not in text]
+    check("every row the answer says it has is really in it", not missing, missing)
+    check("... and it states the count it really read",
+          "10 open pull request(s)" in text, text.splitlines()[:1])
+    check("... because GitHub was asked for pages, not one cut answer",
+          len([c for c in fetch.calls
+               if "per_page=5&page=" in c["url"]]) >= 2, fetch.urls())
+
+
+def t_the_latest_commit_answer_names_the_sha_and_its_subject():
+    """The newest run's own head commit is in the answer, with its subject.
+
+    The run object is the shape `gh api .../actions/runs?branch=main` returns;
+    measured live on 2026-11-18 its `head_sha` was the same 40-hex commit
+    `gh api .../commits/main` names, which is why the branch read can answer the
+    question at all. BEFORE THE FIX: the answer said only how the newest run
+    ended - "The newest CI run (...) passed." - so no SHA was in it.
+    """
+    sha = "53e44f22b92c59bda2a79ae622bec67555f8ae2b"
+    subject = "Merge pull request #1372 from darknight11ish/chore/installer"
+    run_doc = {"id": 4242, "name": "Generated files on main",
+               "status": "completed", "conclusion": "success",
+               "head_branch": "main", "head_sha": sha,
+               "head_commit": {"message": subject + "\n\nand the body"}}
+    fetch = FakeGitHub(routes=[
+        ("/branches/main", (200, json.dumps({"name": "main"}))),
+        ("/actions/runs", (200, json.dumps({"workflow_runs": [run_doc]})))])
+    intent, reply = _quick("What is the latest commit on main in Epic-Jarvis?",
+                           fetch)
+    reply = reply or ""
+    check("'latest commit on main': answered with no model",
+          intent is not None and intent.name == "github_own_read",
+          intent.name if intent else None)
+    found = re.findall(r"\b[0-9a-f]{40}\b", reply)
+    check("the answer carries the newest run's FULL 40-hex commit",
+          bool(found) and found[0] == sha, found)
+    check("... and that commit's subject, in words", subject in reply, reply[:400])
+    check("... said as the newest run's own commit, never a guessed tip",
+          "newest run's head commit is" in reply, reply[:400])
+
+
+def t_ready_to_merge_on_the_owners_repository_reaches_the_fast_path():
+    """"Which pull requests on Epic-Jarvis are ready to merge?" is the lane's.
+
+    BEFORE THE FIX this sentence did not match `_GITHUB_MY_PRS`, so it fell to
+    the model, which asked the owner for owner/name. It now reaches the
+    deterministic lane in the fast path's own shape and reads the PR cockpit -
+    the same per-pull-request merge state and checks the merge gate uses - with
+    the over-cap open list paged in, so every open PR is still named.
+    """
+    numbers = list(range(1390, 1400))
+    prs = [{"number": n, "title": f"fix: thing {n}", "state": "open",
+            "body": "x" * 24_000,
+            "mergeable": n == numbers[0],
+            "mergeable_state": "clean" if n == numbers[0] else "blocked",
+            "draft": False, "head": {"sha": f"{n:040x}", "ref": f"fix/{n}"},
+            "base": {"ref": "main"}} for n in numbers]
+    whole = json.dumps(prs)
+    check("the fixture open list really is bigger than one read",
+          len(whole) > GH.MAX_BYTES, len(whole))
+    green = {"check_runs": [
+        {"name": name, "status": "completed", "conclusion": "success"}
+        for name in GH.REQUIRED_CHECKS]}
+    routes = [
+        ("per_page=5&page=1", (200, json.dumps(prs[:5]))),
+        ("per_page=5&page=2", (200, json.dumps(prs[5:]))),
+        ("&per_page=10", (200, whole))]
+    for pr in prs:
+        routes.append((f"/pulls/{pr['number']}", (200, json.dumps(pr))))
+        routes.append((f"/commits/{pr['head']['sha']}/check-runs",
+                       (200, json.dumps(green))))
+    fetch = _CappedFake(routes=routes)
+    question = "Which pull requests on Epic-Jarvis are ready to merge?"
+    intent, reply = _quick(question, fetch)
+    reply = reply or ""
+    check(f"{question!r}: reaches the deterministic lane",
+          intent is not None and intent.name == "github_own_read",
+          intent.name if intent else None)
+    check("... in the fast path's own shape, with the readiness read",
+          getattr(intent, "f", {}).get("shape") == "ready",
+          getattr(intent, "f", None))
+    missing = [n for n in numbers if f"#{n} " not in reply]
+    check("... naming every open pull request, the cut list paged in",
+          not missing, missing)
+    check("... the one GitHub says is clean is called merge-ready",
+          "merge-ready" in reply and f"#{numbers[0]} " in reply, reply[:300])
+    check("... and it never asks the owner for owner/name",
+          "owner/name" not in reply, reply[:300])
+    check("... it reads the pull request's own state, as readiness needs",
+          len([c for c in fetch.calls if "/pulls/1390" in c["url"]]) >= 1,
+          fetch.urls())
+
+
+# --------------------------------------------------------------------------
 
 def main() -> int:
     try:
@@ -965,6 +1128,9 @@ def main() -> int:
             t_the_fast_path_is_not_used_while_the_read_card_is_on()
             t_the_live_battery_questions_offer_the_github_tool_they_need()
             t_the_live_battery_tool_calls_answer_real_data()
+            t_a_list_over_the_read_cap_still_returns_every_row()
+            t_the_latest_commit_answer_names_the_sha_and_its_subject()
+            t_ready_to_merge_on_the_owners_repository_reaches_the_fast_path()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")
