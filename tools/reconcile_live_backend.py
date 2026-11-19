@@ -97,7 +97,9 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        file's shape no longer matches a hunk's own pre-image, that ONE hunk is
        carried as an `adapted_hunks` OLD -> NEW pair of literal blocks
        (local-model-guard.patch, 2026-11-18: a one-line HUD rewrite whose context
-       holds a cloud-honesty block this PC does not carry). The anchors are a
+       holds cloud-honesty's absent block; and cloud-honesty.patch's own crisis
+       block, whose pre-image holds the line local-model-guard rewrites). The
+       anchors are a
        small data table (`DELTA_TABLE`) - today app-control's route block before
        `if route == "/api/memory/decide":`, setup's install block and plugin-loader's
        block in their stack order, and the four 2026-10-27 patches (cloud-escalate,
@@ -1030,6 +1032,56 @@ LOCAL_MODEL_GUARD_PROBES = (
     "use_tools = ((lane == local_model or decision.inject_memory)",
 )
 
+#: cloud-honesty.patch (2026-10-28, #937) - THE CRISIS-ROUTE REBINDING AND THE
+#: HONEST POSTSCRIPT, and the one patch this PC has been running without since the
+#: day it merged. THE MEASURED SILENT MISS (read-only, 2026-11-18): all three of
+#: its hunk pre-images appear EXACTLY ONCE in the owner's live `jarvis_hud.py`,
+#: all three post-images 0 times, and the live file matches 3 of its 87 added
+#: lines - the three are bare `#` comment lines that occur in every Python file.
+#: With no entry here, the fallback rule finds four of its added lines in OTHER
+#: code (`route_header["lane"] = lane`, `if is_cloud:`, `messages = body.get(...)`,
+#: `payload = _build_payload(lane)`) and answers ALREADY_PRESENT, so every deploy
+#: since 2026-10-28 skipped the whole patch without a word. The patch's three
+#: hunks:
+#:   1. the /api/chat wellbeing check asks `jarvis_wellbeing.crisis_in_turn` (the
+#:      NEWEST USER MESSAGE, whatever its provenance) instead of testing
+#:      `messages[-1]` itself, so the calm panel and the help line agree;
+#:   2. a crisis turn that was picked onto a CLOUD lane is answered HERE instead:
+#:      `lane = local_model`, `route_header["cloud_refused"] = "crisis"`, the
+#:      reason says so, the cloud-shaped payload is rebuilt as a local one and the
+#:      agent loop runs (`use_tools = True`). 40 added lines after the `use_tools`
+#:      assignment - the SAME region local-model-guard.patch rewrites, which is
+#:      why this hunk is adapted below;
+#:   3. the cloud stream's tail gains the local answer's honesty lines
+#:      (`jarvis_agent.cloud_postscript`, through `CloudAnswer.close(tail=...)`).
+#:
+#: WHY HUNK 2 IS ADAPTED. Its own six-line pre-image includes the split
+#: `use_tools` assignment that local-model-guard.patch (#1378) rewrites, and the
+#: owner's PC gets #1378's deploy first. The pair below inserts the 40 added lines
+#: after the ONE line both shapes share (`and _agent_ok)`), keeping the two
+#: degrade-loop comment lines after them as the closing boundary - so it is the
+#: right insertion point on the live HUD BEFORE #1378's deploy (the measured
+#: state), AFTER it, and on a file that still holds the patch's own pre-image.
+#: `git apply` is the oracle: the suite proves the staged bytes are exactly what
+#: the real patch makes of both shapes. Hunks 1 and 3 replay their own pre-images,
+#: each of which appears exactly once in the live HUD.
+#:
+#: SAFE ON ALL THREE STATES: the three probes (one per region) make an applied
+#: file ALREADY_PRESENT with nothing staged; an absent file gets each hunk exactly
+#: once; a duplicated, half-applied or differently edited file is refused, never
+#: guessed at.
+CLOUD_HONESTY_H2_OLD_FILE = "cloud-honesty-h2-old.txt"
+CLOUD_HONESTY_H2_NEW_FILE = "cloud-honesty-h2-new.txt"
+CLOUD_HONESTY_H2_PROBES = (
+    "if _crisis_turn and lane != local_model and _agent_ok:",
+    'route_header["cloud_refused"] = "crisis"',
+)
+CLOUD_HONESTY_PROBES = (
+    "_crisis_turn = bool(jarvis_wellbeing.crisis_in_turn(messages))",
+    'route_header["cloud_refused"] = "crisis"',
+    "line for _kind, line in _cg_agent.cloud_postscript(",
+)
+
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
 #:   or_probes: a second set that proves presence when a LATER patch in the stack
@@ -1928,6 +1980,31 @@ DELTA_TABLE = {
                  "replace_file": AUTOLEARN_EXTRACT_EOF_OLD_FILE,
                  "probes": ("def _intake_fault_visible(rows: list) -> list:",)},
             ),
+        },
+    },
+    # cloud-honesty.patch (2026-10-28, #937): the patch the tool has silently
+    # skipped since it merged. Its pre-images all appear once in the live HUD and
+    # its post-images zero times, but with no entry the fallback rule found four of
+    # its added lines in other code and reported ALREADY_PRESENT - so the crisis
+    # turn rebinding (`cloud_refused: "crisis"`) and the honest cloud postscript
+    # have never reached this PC, while every deploy said the patch was in. The
+    # 3 of 87 added lines the live file does match are bare `#` comment lines
+    # (recorded twice: `cloud-honesty 3/80` on 2026-10-31 and after the 2026-11-14
+    # deploy). Three hunks: hunks 1 and 3 replay their own pre-images; hunk 2's
+    # pre-image contains the `use_tools` assignment local-model-guard.patch
+    # rewrites, so it is the adapted pair above (the same insertion point on both
+    # shapes, with `git apply` as the suite's oracle). The probes are one
+    # post-image line from each region, so an applied file stages nothing and a
+    # half-edited or duplicated file is refused.
+    "cloud-honesty.patch": {
+        "jarvis_hud.py": {
+            "probes": CLOUD_HONESTY_PROBES,
+            "hunks": True,
+            "adapted_hunks": {
+                2: {"file": CLOUD_HONESTY_H2_NEW_FILE,
+                    "replace_file": CLOUD_HONESTY_H2_OLD_FILE,
+                    "probes": CLOUD_HONESTY_H2_PROBES},
+            },
         },
     },
     # local-model-guard.patch (2026-11-18, #1378): the deploy's measured blocker -
