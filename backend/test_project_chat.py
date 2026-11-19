@@ -126,6 +126,16 @@ def _enclosed_by(node, *words) -> bool:
     return False
 
 
+def _guarded_by(node, *words) -> bool:
+    """Is `node` inside ast.If tests that mention every word, in any nesting?"""
+    seen = set()
+    for p in _parents(node):
+        if isinstance(p, ast.If):
+            test = ast.unparse(p.test)
+            seen.update(w for w in words if w in test)
+    return seen == set(words)
+
+
 def _route_header_assigns(key: str) -> list:
     tree, _ = _hud()
     out = []
@@ -566,7 +576,7 @@ def t_rule_1_a_cloud_turn_gets_no_project_memory():
     prompt_calls = _calls("_jq.project_prompt")
     check("the HUD builds the project context block only on a local turn",
           bool(prompt_calls) and
-          all(_enclosed_by(c, "decision.inject_memory", "_project") for c in prompt_calls),
+          all(_guarded_by(c, "decision.inject_memory", "_project") for c in prompt_calls),
           [ast.unparse(c)[:120] for c in prompt_calls])
     blocks = [n for n in ast.walk(_hud()[0]) if isinstance(n, ast.Assign)
               and any(ast.unparse(t) == "_proj_msg" for t in n.targets)
@@ -581,7 +591,7 @@ def t_rule_1_a_cloud_turn_gets_no_project_memory():
     check("the scoped facts are filtered by a shipped, tested function",
           bool(recall_calls))
     check("the fact scoping sits INSIDE the local-memory condition",
-          all(_enclosed_by(c, "decision.inject_memory", "jarvis_side_memory")
+          all(_guarded_by(c, "decision.inject_memory", "jarvis_side_memory")
               for c in recall_calls),
           [ast.unparse(c)[:120] for c in recall_calls])
     # The cloud cuts (the relay's own and the degrade loop's) rebuild

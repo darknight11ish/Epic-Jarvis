@@ -5120,30 +5120,6 @@ class Handler(BaseHTTPRequestHandler):
                 # re-latch below still keeps a REAL outside-text latch alive on
                 # every turn, memory-injected turns included.
                 server_block = recalled
-        # projects.patch step 4 (2026-11-19): the project's own context, as ONE
-        # more `system` message just before the newest question - the owner's
-        # instructions, the notes they pinned for this project, the work list,
-        # the open goal steps and the latest NON-private numbers (a health or
-        # money number is never named: a prompt is somewhere).
-        #
-        # LOCAL TURNS ONLY. `decision.inject_memory` is the same rule recalled
-        # facts already obey: a cloud lane is decided with it False, so this
-        # block is never built for one; and because the block is a `system`
-        # message, the cloud cut above and the degrade loop's own cut strip it
-        # even if a hop that started local lands on a cloud lane later. A
-        # temporary or private chat gets none (its own rule: nothing recalled).
-        if _project.get("given") and _project.get("ok") and decision.inject_memory \
-                and not _temporary_chat(body):
-            try:
-                import jarvis_quick as _jq
-                _proj_text = _jq.project_prompt(_project)
-            except Exception:                       # noqa: BLE001 - no block, no crash
-                _proj_text = ""
-            if _proj_text:
-                _proj_msg = {"role": "system", "content": _proj_text}
-                messages = (messages[:-1] + [_proj_msg, messages[-1]]
-                            if messages else [_proj_msg])
-                _project_context_added = True
         if GATING:
             # Keep an active latch alive while the conversation continues, so
             # it expires N minutes after the LAST turn, not the first.
@@ -5186,10 +5162,46 @@ class Handler(BaseHTTPRequestHandler):
         if _project.get("given") and _project.get("ok"):
             route_header["project"] = {"id": _project.get("id"),
                                        "name": _project.get("name") or ""}
-            route_header["project_context"] = (
-                "added" if _project_context_added else "none")
             if _project_memory_why:
                 route_header["project_memory_held_back"] = _project_memory_why
+        # projects.patch step 4 (2026-11-19): the project's own context, as ONE
+        # more `system` message just before the newest question - the owner's
+        # instructions, the notes they pinned for this project, the work list,
+        # the open goal steps and the latest NON-private numbers (a health or
+        # money number is never named: a prompt is somewhere).
+        #
+        # ADDED AFTER `payload` IS BUILT, and that is load-bearing: `payload`
+        # is the request handed to jarvis_agent as "what the APP asked for",
+        # and a system message there is read as text the app sent
+        # (`jarvis_agent._TurnWatch.app_context`, the 2026-11-16 defect: it
+        # made the owner's own turn count as shaped from outside and refused a
+        # setting change). The model still receives the block through
+        # `messages`, the turn's own transcript. `_request_for_agent` strips
+        # only the recalled-facts turn from the request, so this block must
+        # never be in it - being built after the payload is what guarantees
+        # that, and the plain-relay fallback (used only on a backend without
+        # chat-stream's jarvis_agent) is the one path that will not carry it.
+        #
+        # LOCAL TURNS ONLY. `decision.inject_memory` is the rule recalled
+        # facts already obey: a cloud lane is decided with it False, so this
+        # block is never built for one; and because the block is a `system`
+        # message, the cloud cut above and the degrade loop's own cut strip it
+        # even if a hop that started local lands on a cloud lane later. A
+        # temporary or private chat gets none (its own rule: nothing recalled).
+        if _project.get("given") and _project.get("ok"):
+            if decision.inject_memory and not _temporary_chat(body):
+                try:
+                    import jarvis_quick as _jq
+                    _proj_text = _jq.project_prompt(_project)
+                except Exception:                   # noqa: BLE001 - no block, no crash
+                    _proj_text = ""
+                if _proj_text:
+                    _proj_msg = {"role": "system", "content": _proj_text}
+                    messages = (messages[:-1] + [_proj_msg, messages[-1]]
+                                if messages else [_proj_msg])
+                    _project_context_added = True
+            route_header["project_context"] = ("added" if _project_context_added
+                                               else "none")
 
         def _completions_url(lane: str) -> str:
             # The local lane talks to Ollama directly, which has spoken this
