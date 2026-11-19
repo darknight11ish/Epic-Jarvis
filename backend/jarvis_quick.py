@@ -15390,6 +15390,23 @@ _GITHUB_UNMERGED = re.compile(
     r"(?:(?:which|what|are\s+there)\s+branches?\b.*\b(?:unmerged|not\s+merged|"
     r"open|unpushed|unfinished)\b.*"
     r"|(?:unmerged|not\s+merged)\s+(?:work|branches?)\b.*)\s*\??")
+#: "Which pull requests on Epic-Jarvis are ready to merge?" is a READINESS
+#: question, not the plain list: the open list does not say which of them can
+#: merge. It is answered by `jarvis_github`'s read-only PR cockpit
+#: (`plan_scan_prs`), which reads each pull request's own merge state and checks
+#: - the same verdict the merge gate uses - so the answer is GitHub's own, never
+#: a guess. The middle words are limited to phrases naming the OWNER'S
+#: repository, so a sentence about a foreign repo falls through to the model,
+#: whose tool resolves a real owner/name; the owner's own repo is never
+#: substituted for one he named (#1348, #1382). The field battery asks the
+#: sentence with "on Epic-Jarvis" in the middle, which `_GITHUB_MY_PRS` does not
+#: match - so that question used to reach the model and get asked for owner/name
+#: (`.dsh-scratch/wave21/coverage/GITHUB-FIELD-FAIL.md`).
+_GITHUB_READY = re.compile(
+    r"(?:which|what)\s+(?:open\s+)?(?:pull\s*requests?|prs?)\b"
+    r"(?:\s+(?:on|in|for)\s+(?:epic[\s-]?jarvis|my\s+(?:own\s+)?repo(?:sitory)?|"
+    r"this\s+(?:repo|repository)|github))?"
+    r"\s+(?:are|is)\s+(?:ready\s+(?:to|for)\s+merge|merge[\s-]?ready)\b.*")
 
 
 def _github_reads_are_free() -> bool:
@@ -15427,6 +15444,8 @@ def _self_github_reads(s: str) -> Optional[Intent]:
         shape = "main"
     if shape is None and _GITHUB_UNMERGED.search(s):
         shape = "unmerged"
+    if shape is None and _GITHUB_READY.search(s):
+        shape = "ready"
     if shape is None and _GITHUB_MY_PRS.search(s):
         shape = "pulls"
     if shape is None:
@@ -15462,6 +15481,11 @@ def _run_github_own_read(f: dict, peer=None, local=None) -> Result:
             # The read Jarvis HAS that names a commit on a branch: the newest
             # CI run on it, which carries its head commit.
             plan = GH.plan_ci({"repo": repo, "branch": "main"})
+        elif shape == "ready":
+            # Readiness is a per-pull-request fact, not the open list: this is
+            # the read-only PR cockpit the model would have used, so the answer
+            # is GitHub's own merge state for each one (2026-11-18).
+            plan = GH.plan_scan_prs({"repo": repo})
         else:                                # pulls, and unmerged's own list
             plan = GH.plan_list({"scope": "pulls", "repo": repo})
         out = GH.run(plan, approved=True)
@@ -15481,7 +15505,8 @@ def _run_github_own_read(f: dict, peer=None, local=None) -> Result:
         text = (f"The unmerged work on {repo} is in these open pull requests; a "
                 f"branch with no pull request is not something this read can see. "
                 + text)
-    else:
+    elif shape != "ready":
+        # The cockpit's own first line already names the repository.
         text = text + f" (read from {repo})"
     return Result(text, name)
 

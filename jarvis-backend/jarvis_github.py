@@ -290,6 +290,18 @@ PER_PAGE = 20
 #: already reads, and the answer says how many of how many it is showing.
 RUNS_PER_PAGE = 5
 
+#: How many rows ONE PAGE of a pull-request / issue / repository list read asks
+#: for when the single `PER_PAGE` read was CUT at `MAX_BYTES`. A pull request row
+#: carries its whole body and both repositories' objects, so the cap is reached by
+#: COUNT, not by one huge row: a ten-row open pull request list measured
+#: 227,073 characters against a 200,000 cap on 2026-11-18 (and the field run's
+#: ten were reported even larger), so the JSON could not be parsed and the answer
+#: was `CUT_ANSWER` with no numbers in it (the diagnosis is
+#: `.dsh-scratch/wave21/coverage/GITHUB-FIELD-FAIL.md`). Five rows fit one
+#: read, and `_list_pages` re-reads the SAME list five at a time ONLY after that
+#: cut - an ordinary list still costs its one read.
+LIST_PAGE = 5
+
 #: The GitHub REST API version this module speaks. Sent on every request so a
 #: future change to GitHub's defaults cannot silently change what is read.
 API_VERSION = "2022-11-28"
@@ -4561,6 +4573,19 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
 
     if r.ci:
         return _ci_result(r, answers, fetch, token, headers, log=log)
+    if (r.action == ACTION_INSPECT and r.scope in ("pulls", "issues", "repos")
+            and answers and CUT_MARKER in str(answers[-1][1] or "")):
+        # A LIST BIGGER THAN ONE READ IS READ AGAIN IN PAGES, NOT REFUSED
+        # (2026-11-18). The cap is a hard byte cut on one GET, so a long list
+        # arrives as unparseable JSON even though GitHub answered it. A ten-row
+        # open pull request list measured 227,073 characters against the
+        # 200,000 cap (the field run's ten were reported even larger) and the
+        # reply was `CUT_ANSWER` - "longer than Jarvis
+        # reads in one go" - with no number in it. `_paged_list_result` reads the
+        # same list again a few rows at a time and joins the pages, so the answer
+        # is the list and every row it states. ONLY after a cut: a small list
+        # still costs its one read.
+        return _paged_list_result(r, fetch, token, headers)
     return {"ok": True, "text": _said(r, answers)}
 
 
@@ -4914,6 +4939,17 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
     passing the sha straight into `plan_merge_pr`.
     """
     doc, err = _read(fetch, r.steps[0].path if r.steps else "", headers, token)
+    list_truncated = False
+    if err == CUT_ANSWER:
+        # The open pull requests are more than ONE read holds - a ten-row list
+        # measured 227,073 characters against the 200,000 cap on 2026-11-18 (the
+        # field run's ten were reported even larger) - so the same list is read
+        # again in pages instead of refusing the cockpit the owner asked for.
+        # `MAX_PRS` is the most this read names, and the header says "at least"
+        # when that many was reached (the list may hold more).
+        doc, err, list_truncated = _list_pages(
+            fetch, r.steps[0].path if r.steps else "", headers, token,
+            limit=max(MAX_PRS, LIST_PAGE))
     if err:
         return {"ok": False, "error": err}
     if not isinstance(doc, list):
@@ -4925,7 +4961,12 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
     prs = [p for p in doc if isinstance(p, dict)][:MAX_PRS]
     if not prs:
         return {"ok": True, "text": f"There are no open pull requests on {r.repo}."}
-    lines = [f"{len(prs)} open pull request(s) on {r.repo}:"]
+    # "At least" when the read stopped at the cap or a page had to be salvaged:
+    # a count without it would claim the whole list was measured.
+    head = (f"At least {len(prs)} open pull request(s) on {r.repo}:"
+            if list_truncated else
+            f"{len(prs)} open pull request(s) on {r.repo}:")
+    lines = [head]
     counts = {}
     for pr in prs:
         number = str(pr.get("number") or "").strip()
@@ -6745,11 +6786,14 @@ def _created_repo_words(doc) -> str:
     return said
 
 
-def _repos_words(doc) -> str:
+def _repos_words(doc, *, at_least: bool = False) -> str:
     items = _list(doc)
     if not items:
         return "That GitHub token cannot see any repositories."
-    out = [f"Your {len(items)} most recently updated repositories:"]
+    if at_least:
+        out = [f"Your most recently updated repositories (at least {len(items)}):"]
+    else:
+        out = [f"Your {len(items)} most recently updated repositories:"]
     for repo in items:
         if not isinstance(repo, dict):
             continue
@@ -6759,13 +6803,14 @@ def _repos_words(doc) -> str:
     return "\n".join(out)
 
 
-def _pulls_words(doc, state: str = "") -> str:
+def _pulls_words(doc, state: str = "", *, at_least: bool = False) -> str:
     """The pull request list, saying the state that was really asked for."""
     state = state if state in STATES else "open"
     items = _list(doc)
     if not items:
         return f"There are no {STATE_WORDS[state]} pull requests on that repository."
-    out = [f"{len(items)} {STATE_WORDS[state]} pull request(s):"]
+    out = [f"{'At least ' if at_least else ''}{len(items)} "
+           f"{STATE_WORDS[state]} pull request(s):"]
     for pr in items:
         if not isinstance(pr, dict):
             continue
@@ -6776,7 +6821,7 @@ def _pulls_words(doc, state: str = "") -> str:
     return "\n".join(out)
 
 
-def _issues_words(doc, state: str = "") -> str:
+def _issues_words(doc, state: str = "", *, at_least: bool = False) -> str:
     """The issue list, saying the state that was really asked for.
 
     GitHub's issues endpoint answers pull requests too; they are filtered out
@@ -6788,7 +6833,8 @@ def _issues_words(doc, state: str = "") -> str:
              if isinstance(i, dict) and "pull_request" not in i]
     if not items:
         return f"There are no {STATE_WORDS[state]} issues on that repository."
-    out = [f"{len(items)} {STATE_WORDS[state]} issue(s):"]
+    out = [f"{'At least ' if at_least else ''}{len(items)} "
+           f"{STATE_WORDS[state]} issue(s):"]
     for issue in items:
         title = _clean_github_text(issue.get("title"), wrap=False)
         out.append(f'  #{issue.get("number")} {title}')
@@ -6827,6 +6873,34 @@ def _newest_run(doc) -> tuple:
     name = _clean_github_text(newest.get("name"), wrap=False) or "a workflow"
     branch = _clean_github_text(newest.get("head_branch"), wrap=False)
     return newest, name, (f" on {branch}" if branch else "")
+
+
+def _ci_commit_line(newest: dict) -> str:
+    """The newest run's own head commit, in words - the read that NAMES a commit.
+
+    THE MEASURED FAILURE (2026-11-18). "What is the latest commit on main?" is
+    answered by this module's branch CI read - the read the quick lane has that
+    names a commit - and the answer used to say only how the newest RUN ended.
+    No commit was in it at all, so the field battery's sha check could never
+    pass (`GITHUB-FIELD-FAIL.md`). A workflow run carries its `head_sha` and that
+    commit's message, so both are said, AS THE RUN'S OWN COMMIT: this read did
+    not measure the tip of the branch, and the answer must not claim it did.
+
+    Returns "" when GitHub named no usable 40-hex commit, so the answer is
+    exactly what it was before rather than half a fact.
+    """
+    sha = str((newest or {}).get("head_sha") or "").strip().lower()
+    if not _SHA.match(sha):
+        return ""
+    subject = ""
+    head_commit = (newest or {}).get("head_commit")
+    if isinstance(head_commit, dict):
+        message = str(head_commit.get("message") or "")
+        first = message.splitlines()[0].strip() if message.strip() else ""
+        subject = _clean_github_text(first, limit=MAX_TITLE_CHARS, wrap=False)
+    if subject:
+        return f"\nThe newest run's head commit is {sha}: {subject}"
+    return f"\nThe newest run's head commit is {sha}."
 
 
 def _ci_failed_lines(headline: str, evidence: dict) -> list:
@@ -6964,6 +7038,12 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
     `evidence` is `_ci_failing_checks` for the newest run: it carries the ONE
     log excerpt (and nothing about which checks failed when that run passed), so
     a commit whose red check came from another workflow is still named correctly.
+
+    AND THE COMMIT THE BRANCH FORM IS ABOUT (2026-11-18): the branch/repository
+    answer ends with `_ci_commit_line` - the newest run's own head sha and
+    subject - because this read is the one that answers "what is the latest
+    commit on main?". The pull request form does not need it: its sentences are
+    already about the checks on the commit it names.
     """
     runs = doc.get("workflow_runs") if isinstance(doc, dict) else None
     runs = [x for x in (runs or ()) if isinstance(x, dict)]
@@ -7026,20 +7106,26 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
     status = str(newest.get("status") or "")
     conclusion = str(newest.get("conclusion") or "")
     if status and status != "completed":
-        return f"The newest CI run ({name}{where}) is still going: {status}."
-    if conclusion == "success":
-        return f"The newest CI run ({name}{where}) passed."
-    if conclusion in ("failure", "timed_out", "startup_failure"):
+        said = f"The newest CI run ({name}{where}) is still going: {status}."
+    elif conclusion == "success":
+        said = f"The newest CI run ({name}{where}) passed."
+    elif conclusion in ("failure", "timed_out", "startup_failure"):
         # 2026-11-14: the names of the failing checks and ONE bounded excerpt of
         # the first failing check's log, instead of only "it failed". Both were
         # read by `run()` (`_ci_failing_checks`) from the run's own jobs.
-        return "\n".join(_ci_failed_lines(
+        said = "\n".join(_ci_failed_lines(
             f"The newest CI run ({name}{where}) failed.", evidence or {}))
-    if conclusion == "cancelled":
-        return f"The newest CI run ({name}{where}) was cancelled."
-    if conclusion:
-        return f"The newest CI run ({name}{where}) finished as {conclusion}."
-    return f"The newest CI run ({name}{where}) has not finished yet."
+    elif conclusion == "cancelled":
+        said = f"The newest CI run ({name}{where}) was cancelled."
+    elif conclusion:
+        said = f"The newest CI run ({name}{where}) finished as {conclusion}."
+    else:
+        said = f"The newest CI run ({name}{where}) has not finished yet."
+    # AND THE RUN'S OWN COMMIT, because a branch read is what answers "what is the
+    # latest commit on main?" (2026-11-18, the field battery). It is said last so
+    # every sentence above keeps its exact words, and it is the ONLY commit this
+    # read can honestly name.
+    return said + _ci_commit_line(newest)
 
 
 def _salvaged_runs(text: str) -> tuple:
@@ -7076,6 +7162,136 @@ def _salvaged_runs(text: str) -> tuple:
             runs.append(item)
         pos = end
     return runs, total
+
+
+def _salvaged_array(text: str) -> list:
+    """The complete rows at the FRONT of a JSON array answer the cap CUT.
+
+    The same salvage `_salvaged_runs` does for a `workflow_runs` answer, for the
+    list scopes whose answer is a bare array (`pulls`, `issues`, `repos`). A cut
+    JSON document cannot be parsed whole, but the complete objects at its front
+    can be read one at a time - so even a page that was itself oversized answers
+    with the rows it really holds instead of claiming GitHub sent nothing.
+    """
+    body = str(text or "")
+    start = body.find("[")
+    if start < 0:
+        return []
+    decoder = json.JSONDecoder()
+    rows, pos = [], start + 1
+    while pos < len(body):
+        while pos < len(body) and body[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(body) or body[pos] in "]}":
+            break
+        try:
+            item, end = decoder.raw_decode(body, pos)
+        except ValueError:
+            break
+        if isinstance(item, dict):
+            rows.append(item)
+        pos = end
+    return rows
+
+
+def _list_pages(fetch: Callable, path: str, headers: dict, token: str, *,
+                limit: int = PER_PAGE) -> tuple:
+    """(rows, error, incomplete) for one LIST read, read again page by page.
+
+    WHY THIS EXISTS (2026-11-18). A list read asks for `PER_PAGE` rows in ONE
+    answer, and the read layer applies a hard byte cut (`MAX_BYTES`) to that one
+    answer. A pull request row carries its whole body and both repositories'
+    objects, so the cap is reached by COUNT, not by one huge row: a ten-row
+    open pull request list measured 227,073 characters against the 200,000 cap
+    on 2026-11-18 (the field run's ten were reported even larger), the JSON
+    could not be parsed, and the answer became
+    `CUT_ANSWER` - "longer than Jarvis reads in one go" - about a list GitHub
+    had really sent. This reads the SAME list `LIST_PAGE` rows at a time (a page
+    of five fits one read) and joins the pages, de-duplicated by their own
+    number/name, up to `limit` rows.
+
+    Called ONLY after a cut, so an ordinary - small - list still costs exactly
+    its one read. `error` is "" when every page was read, and `incomplete` says
+    the answer may be SHORT: the read reached `limit` rows, or a page was itself
+    cut and only its complete front rows could be salvaged. Nothing here ever
+    assumes the whole list was read when it was not.
+    """
+    base = re.sub(r"([?&])per_page=\d+", r"\1",
+                  str(path or "")).rstrip("&?")
+    pages = max(1, limit // LIST_PAGE)
+    rows, seen, incomplete = [], set(), False
+    for page in range(1, pages + 1):
+        sep = "&" if "?" in base else "?"
+        url = _address(f"{base}{sep}per_page={LIST_PAGE}&page={page}")
+        if not url:
+            return rows, ("Jarvis will not send a request to an address it did "
+                          "not write itself, so nothing was sent."), True
+        try:
+            status, text, _answer_headers = _fetched(
+                fetch("GET", url, headers=headers, body=None, timeout=TIMEOUT))
+        except Exception as exc:             # noqa: BLE001 - the NAME only
+            return rows, (f"api.github.com did not answer "
+                          f"({type(exc).__name__}), so nothing was changed."), True
+        if status < 200 or status >= 300:
+            return rows, _plain_failure(status, token=token), True
+        text = _scrub(text, token)
+        cut = CUT_MARKER in str(text or "")
+        doc = _salvaged_array(text) if cut else _payload(text)
+        if not isinstance(doc, list):
+            return rows, (_nothing_sent() if not str(text or "").strip()
+                          else _unreadable()), True
+        incomplete = incomplete or cut
+        for row in doc:
+            if not isinstance(row, dict):
+                continue
+            key = str(row.get("number") or row.get("name")
+                      or row.get("full_name") or "")
+            if key:
+                if key in seen:
+                    continue
+                seen.add(key)
+            rows.append(row)
+        if cut:
+            # The page's own tail was lost; keep reading so the NEXT page is
+            # still covered, and say at the end that the answer may be short.
+            continue
+        if len(doc) < LIST_PAGE:
+            return rows[:limit], "", incomplete
+    return rows[:limit], "", True
+
+
+def _paged_list_result(r: Request, fetch: Callable, token: str,
+                       headers: dict) -> dict:
+    """The list answer when the single read was CUT: the same list in pages.
+
+    The SHAPE is decided first, exactly as `_said` does (2026-11-15): a paged
+    answer is still the pull request - or issue, or repository - list that was
+    asked for, never the cut sentence about one answer that was one read too
+    big. Every row the answer states is a row it really read, and when the read
+    could not cover the whole list the answer SAYS so instead of presenting a
+    short list as the whole one.
+    """
+    path = r.steps[0].path if r.steps else ""
+    rows, err, incomplete = _list_pages(fetch, path, headers, token)
+    if not rows:
+        return ({"ok": False, "error": err} if err
+                else {"ok": True, "text": CUT_ANSWER})
+    scope = str(getattr(r, "scope", "") or "")
+    state = str(getattr(r, "state", "") or "")
+    if scope == "issues":
+        text = _issues_words(rows, state, at_least=incomplete)
+    elif scope == "pulls":
+        text = _pulls_words(rows, state, at_least=incomplete)
+    else:
+        text = _repos_words(rows, at_least=incomplete)
+    if err:
+        text += ("\n  (Then the next page could not be read: "
+                 + str(err).strip() + ")")
+    elif incomplete:
+        text += (f"\n  (GitHub's list is longer than one read: at most "
+                 f"{len(rows)} rows were read, {LIST_PAGE} at a time, so some "
+                 f"may be missing.)")
+    return {"ok": True, "text": text}
 
 
 def _runs_list_words(text: str) -> str:
