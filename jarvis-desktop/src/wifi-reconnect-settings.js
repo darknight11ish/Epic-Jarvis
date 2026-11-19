@@ -15,6 +15,18 @@
  * from the PC's answer, never from the click - a save that did not happen reads
  * as not saved.
  *
+ * ONE READER, USED BY BOTH THE TICK AND THE LINE (fixed 2026-11-18). The PC
+ * names its state in ONE field, `enabled` (a JSON boolean): `jarvis_wifi.state()`,
+ * `set_enabled()` and `request_enabled()` all send it, and the two Rust commands
+ * pass that body on unchanged. This page used to tick the box from a field
+ * called `on`, which no answer has ever carried, while it worded the line from
+ * the PC's `words` field - so a switch that was really ON showed "On ..." (or
+ * "The auto Wi-Fi reconnect is already on. Nothing was changed." after a click)
+ * over an unticked box, every time. `readWifi()` below is now the ONLY reader of
+ * the PC's yes-or-no; `paint()` ticks from its `on` and `describe()` words the
+ * line from the same `on`, so the tick and the sentence cannot name different
+ * states again. `tests/wifi-reconnect.mjs` drives that with a fake PC.
+ *
  * WHAT THIS PAGE NEVER DOES: it never shows a network name, a password or a key,
  * and it never asks the PC to connect to anything. The switch is the owner's
  * control; the two-hourly attempt belongs to the PC.
@@ -26,6 +38,40 @@ const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 const $ = (id) => document.getElementById(id);
 
+/* ── The words this page itself says ────────────────────────────────────── */
+
+/** The line when the PC says ON. Its state word comes from `on`, not from a
+ *  backend sentence, so it cannot name a state the tick does not show. */
+export const ON_SAID =
+  "On. While this PC has no internet, Jarvis tries a saved password-protected " +
+  "Wi-Fi network it already knows, every 2 hours.";
+
+/** The line when the PC says OFF. */
+export const OFF_SAID =
+  "Off. Jarvis will not touch this PC's Wi-Fi choice. Turning it back on " +
+  "restores the default you asked for.";
+
+/** The line while turning it ON waits for its ONE approval card. */
+export const WAITING =
+  "Waiting for your approval card in the Jarvis bar — the switch stays " +
+  "off until it is approved.";
+
+/** The page's own sentence for a PC answer it cannot read - never "off". */
+export const UNREADABLE =
+  "Jarvis answered, but not in a way this app can read, so it will not say " +
+  "whether the Wi-Fi reconnect is on. Update the backend by running " +
+  "apply-patches.ps1.";
+
+/** The page's own sentence for a switch the PC itself could not read. */
+export const DAMAGED =
+  "Jarvis could not read its saved Wi-Fi reconnect setting on this PC, so it " +
+  "will not say whether it is on. Say \"turn on the auto Wi-Fi reconnect\" to " +
+  "write the saved setting again.";
+
+/** One line of the PC's own words, trimmed; never a non-string. */
+const text = (value) => (typeof value === "string" ? value.trim() : "");
+
+/** An error in words, never a bridge error or JSON. */
 function problemWords(error) {
   const said = String((error && error.message) || error || "").trim();
   if (!said || /[{}<>]|::|not allowed|undefined|null/i.test(said) || said.length > 400) {
@@ -34,96 +80,131 @@ function problemWords(error) {
   return said;
 }
 
-/** The line under the switch, from the PC's own answer. */
-function describe(view) {
-  if (!view || typeof view !== "object") return "";
-  if (view.on === false) {
-    return "Off. Jarvis will not touch this PC's Wi-Fi choice. Turning it back on " +
-      "restores the default you asked for.";
+/* ── The ONE reader of the PC's yes-or-no ───────────────────────────────── */
+
+/**
+ * `get_wifi_reconnect`'s / `set_wifi_reconnect`'s answer, read once, so the
+ * checkbox and the line below it can never read two different fields.
+ *
+ * `on` is the PC's own `enabled` field and nothing else:
+ *   - a boolean there is the state, on or off;
+ *   - a body without one is UNKNOWN (`on: null`, `known: false`), never "off";
+ *   - `known: false` from the PC (its saved setting file is damaged, so it is
+ *     failing safe) is also not a state this page may claim;
+ *   - `available: false` is a PC without the route, said in its own words.
+ *
+ * `words` is the PC's own sentence and `last_words` its last check; they are
+ * DETAIL only. Neither may decide the tick or the state word.
+ */
+export function readWifi(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  if (a.available === false) {
+    return {
+      available: false, readable: false, known: false, on: null, waiting: false,
+      why: text(a.why) || UNREADABLE, words: "", last_words: "",
+    };
   }
-  if (typeof view.words === "string" && view.words.trim()) return view.words.trim();
-  return "On. While this PC has no internet, Jarvis tries a saved password-protected " +
-    "Wi-Fi network it already knows, every 2 hours.";
+  const readable = typeof a.enabled === "boolean";
+  const on = readable ? a.enabled : null;
+  return {
+    available: true,
+    readable,
+    known: readable && a.known !== false,
+    on,
+    waiting: a.waiting === true,
+    why: "",
+    words: text(a.words),
+    last_words: text(a.last_words),
+  };
 }
 
-/** What the last check actually did, when the PC reports one. */
-function lastWords(view) {
+/**
+ * The line under the switch. Every state word here comes from the SAME `on`
+ * the box is ticked from; the PC's words are used only where there is no
+ * on/off to name (a waiting card) or where the PC itself could not answer.
+ */
+export function describe(view) {
   if (!view || typeof view !== "object") return "";
-  if (typeof view.last_words === "string" && view.last_words.trim()) {
-    return view.last_words.trim();
-  }
-  return "";
+  if (view.available === false) return view.why || UNREADABLE;
+  if (!view.known) return view.readable ? DAMAGED : UNREADABLE;
+  if (view.waiting === true) return view.words || WAITING;
+  if (view.on !== true) return OFF_SAID;
+  return view.last_words ? ON_SAID + " Last check: " + view.last_words : ON_SAID;
 }
 
+/* ── The page ───────────────────────────────────────────────────────────── */
+
+let view = readWifi(null);
 let busy = false;
 
-function paint(view, extra) {
+function paint(next, extra) {
+  view = next || readWifi(null);
   const box = $("wifi-reconnect-switch");
   const line = $("wifi-reconnect-status");
-  const known = Boolean(view && view.known !== false && view.available !== false);
+  const usable = view.available !== false && view.known === true;
   if (box) {
-    box.checked = known && view.on === true;
-    box.disabled = busy || !known;
+    box.checked = usable && view.on === true;
+    box.disabled = busy || !usable;
   }
   if (!line) return;
-  if (extra) {
-    line.textContent = extra;
-    return;
-  }
-  if (view && view.available === false) {
-    line.textContent = view.why || "";
-    return;
-  }
-  if (!known) {
-    line.textContent = (view && (view.why || view.words)) || "";
-    return;
-  }
-  const last = lastWords(view);
-  line.textContent = describe(view) + (last ? " Last check: " + last : "");
+  line.textContent = typeof extra === "string" ? extra : describe(view);
+}
+
+function syncEnabled() {
+  const box = $("wifi-reconnect-switch");
+  if (!box) return;
+  box.disabled = busy || !(view.available !== false && view.known === true);
 }
 
 async function load() {
   try {
     if (!IS_TAURI) throw new Error("no desktop backend");
-    const reply = await TAURI.core.invoke("get_wifi_reconnect");
-    paint(reply);
+    paint(readWifi(await TAURI.core.invoke("get_wifi_reconnect")));
   } catch (error) {
-    paint({ known: false, available: false, why: problemWords(error) });
+    paint(readWifi({ available: false, why: problemWords(error) }));
   }
 }
 
 async function save(on) {
   if (busy) return;
   busy = true;
-  // RULING Q4.4 (2026-11-08): turning it ON raises ONE approval card, so the
-  // switch stays off until that card is answered; OFF needs no card at all.
-  paint({ known: true, on: !on },
-    on ? "Waiting for your approval card in the Jarvis bar — the switch stays " +
-         "off until it is approved."
-       : "Turning it off…");
+  // While the PC answers, the box shows what the click really means: turning it
+  // ON waits for ONE approval card, so the box cannot show ON yet; OFF is
+  // immediate.
+  paint(readWifi({ enabled: !on }), on ? WAITING : "Turning it off…");
   try {
-    const reply = await TAURI.core.invoke("set_wifi_reconnect", { enabled: on });
-    paint(reply);
+    paint(readWifi(await TAURI.core.invoke("set_wifi_reconnect", { enabled: on })));
   } catch (error) {
-    // A save that did not happen is shown as not saved, then the real state is
-    // read back from the PC so the box never keeps a lie.
-    const line = $("wifi-reconnect-status");
-    if (line) line.textContent = problemWords(error);
+    const said = problemWords(error);
     try {
-      const back = await TAURI.core.invoke("get_wifi_reconnect");
-      paint(back);
+      // A save that did not happen is shown as not saved, and the real state is
+      // read back from the PC so the box never keeps a lie.
+      paint(readWifi(await TAURI.core.invoke("get_wifi_reconnect")));
     } catch (ignored) {
-      paint({ known: false, available: false, why: problemWords(error) });
+      paint(readWifi({ available: false, why: said }));
     }
+    const line = $("wifi-reconnect-status");
+    if (line) line.textContent = said;
   } finally {
     busy = false;
-    const box = $("wifi-reconnect-switch");
-    if (box) box.disabled = false;
+    // Re-enable from the state last read - never a blanket `false`, which would
+    // make an unreadable switch clickable again.
+    syncEnabled();
   }
 }
 
-const box = $("wifi-reconnect-switch");
-if (box) {
+function wire() {
+  const box = $("wifi-reconnect-switch");
+  if (!box) return;
   box.addEventListener("change", () => save(Boolean(box.checked)));
   load();
+}
+
+if (typeof document !== "undefined" && typeof globalThis.document === "object") {
+  // The page is one document; this module is loaded once at the end of it.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wire);
+  } else {
+    wire();
+  }
 }
