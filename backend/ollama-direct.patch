@@ -22,7 +22,7 @@
      return headers
  
  
-@@ -2842,6 +2852,88 @@
+@@ -2842,6 +2852,104 @@
              "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
          )
  
@@ -82,6 +82,22 @@
 +                raise urllib.error.HTTPError(
 +                    "jarvis://no-such-lane", 404, "no such lane", None,
 +                    io.BytesIO(refusal.encode("utf-8")))
++            # 2026-11-19, the external review's ruling 6.5. The cloud answer is
++            # BOUNDED, not truncated: jarvis_chatbot_api composes ONE body for
++            # every cloud request - the concise-by-default instruction in front
++            # of the owner's newest turn, and max_tokens at the 4,096 / 8,192
++            # ceiling (coding and deep-analysis turns get the larger one). It is
++            # called HERE, in the one function every hop of the degrade loop
++            # builds its request through, so no caller can miss it. It runs
++            # before the cap below on purpose: that call can only LOWER the
++            # bound, never raise it. A local lane, or one this PC cannot pay
++            # for, comes back unchanged.
++            try:
++                body.update(_api.cloud_request_body(
++                    body, _state,
++                    complexity=float(getattr(decision, "complexity", 0.0) or 0.0)))
++            except Exception:
++                pass
 +            # A provider's address and key come from ONE call, but the key is
 +            # a SECOND read of Credential Manager and can come back empty.
 +            # `_auth_headers` would then fall back to Jarvis's own pairing

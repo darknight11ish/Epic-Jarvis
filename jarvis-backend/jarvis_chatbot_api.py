@@ -1158,6 +1158,10 @@ def cloud_request_cap(state: dict, asked: int) -> int:
     limit:
       * `Preset.thinking_inside` and cap > 0 -> `cap + REASONING_ROOM`
       * every other service, or no cap      -> the caller's `asked`, untouched.
+    Since 2026-11-19 a request composer (`cloud_request_body`, external review
+    ruling 6.5) may have recorded `state["max_tokens_ceiling"]` already; that
+    number can only LOWER the result. A state without the key - every caller
+    that existed before that change - gets exactly the answer described above.
     `state` is `lane_state()`'s answer; never raises."""
     try:
         p = PRESETS.get(str((state or {}).get("pid") or ""))
@@ -1166,8 +1170,181 @@ def cloud_request_cap(state: dict, asked: int) -> int:
     except (TypeError, ValueError):
         return 0
     if p is not None and getattr(p, "thinking_inside", False) and cap > 0:
-        return cap + REASONING_ROOM
-    return asked
+        got = cap + REASONING_ROOM
+    else:
+        got = asked
+    # A bound the request composer already chose (2026-11-19, the external
+    # review's ruling 6.5) can only LOWER this request: the ceiling is a lid,
+    # never a raise. States built before that change carry no key at all, so
+    # every existing caller's answer is byte for byte what it was.
+    try:
+        ceiling = int((state or {}).get("max_tokens_ceiling") or 0)
+    except (TypeError, ValueError):
+        ceiling = 0
+    return min(got, ceiling) if ceiling > 0 else got
+
+
+# ============================================================================
+#   A cloud answer is BOUNDED, not truncated (2026-11-19, external review 6.5)
+# ============================================================================
+#
+# THE MEASUREMENT THIS ANSWERS. One escalated turn on the owner's PC cost
+# between $0.002747 and $0.0039, and it was almost entirely OUTPUT: 2,152
+# completion tokens against 84 prompt tokens, about 99% of the bill. A cost per
+# turn is therefore a LENGTH control - and the review's point is that cutting a
+# hard answer short costs MORE than the tokens it saves, because the answer is
+# not usable and the owner pays a second time to ask again.
+#
+# SO THE BOUND IS A CEILING, NOT A SQUEEZE. A standard escalation may ask for at
+# most CLOUD_ANSWER_CEILING (4,096) word-pieces, and a coding or deep-analysis
+# one at most CLOUD_ANSWER_CEILING_DEEP (8,192) - generous next to the 2,152 the
+# measured turn actually wrote, so a hard answer is not cut off by them. The
+# text that asks for the short answer goes with EVERY cloud request, and it asks
+# for the shortest answer that FULLY answers the question rather than a shorter
+# one.
+#
+# WHERE IT IS SENT. `cloud_request_body()` is the ONE place a cloud request's
+# messages and `max_tokens` are composed, and the HUD relay calls it on every
+# hop of the degrade loop (`ollama-direct.patch`), so every escalation gets the
+# same instruction and the same ceiling - not one caller, not one lane.
+CLOUD_CONCISE_INSTRUCTION = (
+    "Answer the owner's question directly and concisely. Lead with the answer, "
+    "keep only the detail that makes it correct and useful, and stop when it is "
+    "answered. Do not restate the question, do not pad, and do not write an "
+    "essay unless the question asks for one. A hard question still gets a "
+    "complete answer - work through what it needs - but say it in as few words "
+    "as the answer allows."
+)
+
+#: The most word-pieces one cloud answer may ask for. A SAFETY CEILING, not a
+#: target: the measured escalated turn wrote 2,152 and was not cut short by
+#: either number. The deep ceiling is for coding and deep-analysis turns, whose
+#: answers are working-out as much as prose.
+CLOUD_ANSWER_CEILING = 4096
+CLOUD_ANSWER_CEILING_DEEP = 8192
+
+#: The router's own 0-1 complexity score at which a turn counts as deep. That
+#: score's 0.40 threshold is the shipped `[routing] complexity_threshold`; 0.70
+#: is half way from there to the top of the scale (the same span
+#: `jarvis_router.tokens_for_turn` already grows an answer across), and it is
+#: the band of long, clause-heavy questions that explicitly ask for reasoning
+#: ("prove", "explain", "step by step") - the shape of the field battery's
+#: hardest questions.
+CLOUD_DEEP_COMPLEXITY = 0.70
+
+
+def cloud_answer_ceiling(*, deep: bool = False) -> int:
+    """The `max_tokens` ceiling for one cloud answer: 4,096, or 8,192 deep."""
+    return int(CLOUD_ANSWER_CEILING_DEEP if deep else CLOUD_ANSWER_CEILING)
+
+
+def cloud_deep_turn(text: str, *, complexity: float = 0.0) -> bool:
+    """Is this a coding or deep-analysis turn - the second `max_tokens` tier?
+
+    TWO EXISTING SIGNALS, no new classifier:
+      * the router's own complexity score (`jarvis_router.complexity()`, whose
+        0.40 threshold already decides whether a turn may escalate at all),
+        passed in as `complexity` when the caller already has it; and
+      * the Coding preset's own trigger words and applied state, which
+        `jarvis_presets` already owns (`/api/work/recommend` matches those
+        words) - read through `jarvis_router.is_coding_turn()`, so this and the
+        2-strike fallback share ONE coding definition.
+    An unreadable signal reads as "standard": a smaller ceiling is the
+    conservative direction for the month's limit, and the ceiling is a bound
+    either way, never the answer's length.
+    """
+    try:
+        c = float(complexity or 0.0)
+    except (TypeError, ValueError):
+        c = 0.0
+    if c >= CLOUD_DEEP_COMPLEXITY:
+        return True
+    try:
+        import jarvis_router as _router
+        return bool(_router.is_coding_turn(text))
+    except Exception:
+        return False
+
+
+def cloud_answer_bound(state: dict, *, deep: bool = False, asked: int = 0) -> int:
+    """The `max_tokens` ONE cloud lane may be sent: the tier ceiling, lowered to
+    what the month's money check already priced for this lane.
+
+    `asked` is what the caller would have sent (the relay's own default), and it
+    is passed through `cloud_request_cap()` - the existing rule - so the answer
+    here can only ever be SMALLER than the request the money check priced, never
+    larger and never past the owner's monthly limit. A service that bills hidden
+    reasoning inside `max_tokens` (DeepSeek) is bounded on the whole reply;
+    every other service keeps the caller's own cap and the ceiling can only
+    lower it.
+    """
+    ceiling = cloud_answer_ceiling(deep=deep)
+    try:
+        priced = int(cloud_request_cap(state, int(asked or 0)) or 0)
+    except (TypeError, ValueError):
+        priced = 0
+    if priced > 0:
+        ceiling = min(ceiling, priced)
+    return max(1, int(ceiling))
+
+
+def cloud_request_body(body: dict, state: Optional[dict] = None, *,
+                       complexity: float = 0.0) -> dict:
+    """The ONE place a cloud lane's request body is composed. Never raises.
+
+    THE BOUND AND THE INSTRUCTION (2026-11-19, the external review's ruling
+    6.5). The request is sent with `max_tokens` = `cloud_answer_bound(...)` - the
+    4,096 / 8,192 ceiling, lowered by what the money check priced - and with
+    `CLOUD_CONCISE_INSTRUCTION` as its ONE system message, so a hard answer is
+    bounded without being truncated and the model is told to say it briefly.
+
+    THE MESSAGES. The cloud lane already carries the owner's newest turn and
+    nothing else (`cloud-one-turn.patch`); this puts the instruction directly in
+    front of it. Only `role == "user"` messages are ever carried, so the privacy
+    promise is unchanged - the instruction is Jarvis's own words, never the
+    owner's data, and the question travels word for word.
+
+    `state` is `lane_state()`'s answer (service, model, url, key, cap), or None
+    to read this thread's own resolved lane. When it names no usable cloud lane
+    the body is returned UNCHANGED, so a local lane, and a lane that cannot be
+    sent, are exactly what they were.
+
+    The chosen number is recorded on `state` as `max_tokens_ceiling`, so the
+    relay's own `cloud_request_cap()` call a moment later (same request, same
+    dict) can only lower it again - it can never re-inflate the request past
+    the bound.
+    """
+    out = dict(body or {})
+    try:
+        lane = dict(state if state is not None else last_lane_state() or {})
+    except Exception:
+        lane = {}
+    if not (lane.get("url") and lane.get("key")):
+        return out
+    messages = out.get("messages")
+    users = ([m for m in messages
+              if isinstance(m, dict) and m.get("role") == "user"]
+             if isinstance(messages, list) else [])
+    text = str(users[-1].get("content") or "") if users else ""
+    deep = cloud_deep_turn(text, complexity=complexity)
+    try:
+        asked = int(out.get("max_tokens") or 0)
+    except (TypeError, ValueError):
+        asked = 0
+    bound = cloud_answer_bound(lane, deep=deep, asked=asked)
+    out["max_tokens"] = bound
+    if users:
+        # The instruction is the request's one system message; the owner's
+        # newest question follows it, byte for byte.
+        out["messages"] = ([{"role": "system", "content": CLOUD_CONCISE_INSTRUCTION}]
+                           + users[-1:])
+    try:
+        lane["max_tokens_ceiling"] = bound
+        if state is not None:
+            state["max_tokens_ceiling"] = bound
+    except Exception:
+        pass
+    return out
 
 
 def reply_cap(pid: str, model: str, left: float, next_chars: int, next_messages: int,
