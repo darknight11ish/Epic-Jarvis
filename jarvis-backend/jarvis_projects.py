@@ -1942,7 +1942,8 @@ class Projects:
         row, like a project note. Nothing of the project's current columns
         changes except `changed`."""
         if not isinstance(body, dict):
-            raise ValueError('need {"title": ..., "status": ..., "due_date": ...}')
+            raise ValueError("a milestone needs a title, and may have a status and "
+                             "a due date")
         title = _one_line(body.get("title"), MAX_MILESTONE_TITLE, "a milestone's title",
                           required=True)
         status = str(body.get("status") or "planned")
@@ -1980,8 +1981,8 @@ class Projects:
     def add_work_item(self, project_id: str, body: dict) -> dict:
         """One step that can be started. No card: the owner's own row."""
         if not isinstance(body, dict):
-            raise ValueError('need {"title": ..., "status": "backlog", "priority": ..., '
-                             '"due_date": ...}')
+            raise ValueError("a work item needs a title, and may have a status, a "
+                             "priority and a due date")
         title = _one_line(body.get("title"), MAX_WORK_TITLE, "a work item's title",
                           required=True)
         detail = _text(body.get("detail"), MAX_WORK_DETAIL, "a work item's detail")
