@@ -255,6 +255,13 @@ def t_the_other_corrections_reach_the_cloud_lane_too():
     calc = [line for _kind, line in AG.cloud_postscript(
         "I have calculated the product of 8347 and 2914 to be 24,321,158.", [])]
     check("a calculation nobody worked out is corrected on a cloud lane", calc, calc)
+    # DEF-089 (2026-11-18): a cloud lane offers no tools at all, so it can raise
+    # no approval card - a claim that one was raised there is unbackable by
+    # construction, and must reach the same card-claim line the local turn gets.
+    card = [line for _kind, line in AG.cloud_postscript(
+        "I have raised the approval card.", [])]
+    check("a raised-card claim on a cloud lane is corrected",
+          card == [CL.CARD_CLAIM_CORRECTION_UNKNOWN_WAITING], card)
 
 
 # --------------------------------------------------------------------------

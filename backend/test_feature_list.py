@@ -424,6 +424,63 @@ def t_lesson_and_settings_anchors_are_real():
           C.settings_covers_problems([good], known_settings={"settings.ask-first"}) == [])
 
 
+def t_the_phones_own_places_are_named():
+    """Rule 10, and the five rows the phone awareness audit ranked most likely.
+
+    The audit (`PHONE-GAPS.md`, 2026-11-18) found 32 `both` rows naming a PC
+    Brain tab and never the phone, and six sending the phone reader to a
+    Settings section the phone's Settings screen does not draw. The rows are
+    words, so the fix is words - and this holds them to the phone's OWN sources:
+    `BrainSections.kt`'s seven headings, `ui/OpenPlace.kt`'s section-to-place
+    decisions and `SettingsScreen.kt`'s real item keys. It would fail on the
+    tree the audit read (those `where` sentences named `Brain, Work` or
+    `Settings, Hardware and models` and nothing else).
+    """
+    rows = C.entries()
+    by_id = {e["id"]: e for e in rows if isinstance(e, dict) and e.get("id")}
+    bad = C.phone_place_problems(rows)
+    check("CONTROL: no `both` row names only the PC's Brain tabs", not bad, bad[:3])
+    bad = C.phone_place_problems(
+        [{"id": "synthetic", "surface": "both", "where": "Brain, Work, Today."}])
+    check("a made-up `both` row naming only a PC Brain tab FAILS and is named",
+          any("synthetic" in x and "Brain, Work" in x for x in bad), bad)
+    good = {"id": "synthetic", "surface": "both",
+            "where": "PC: Brain, Work, Today. Phone: Brain, Money and time, Today."}
+    check("a `both` row that names the phone's place passes",
+          C.phone_place_problems([good]) == [])
+    desktop = {"id": "synthetic", "surface": "desktop", "where": "Brain, Work, Today."}
+    check("a desktop-only row is not asked for a phone place",
+          C.phone_place_problems([desktop]) == [])
+
+    # The five the audit ranked most likely to be hit, each with the PC-only
+    # Settings section it used to send the phone reader to. The phone's own
+    # sources prove both halves: that its Settings really has no such row, and
+    # where it really has the feature.
+    likeliest = {
+        "hardware": "hardware",
+        "second-card": "second-card",
+        "big-model": "big-model",
+        "spending": "spending",
+        "briefing": "briefing-settings",
+    }
+    items = C.phone_settings_item_keys()
+    headings = C.phone_brain_headings()
+    check("the phone's Brain really has its seven headings", len(headings) == 7, headings)
+    for fid, section in likeliest.items():
+        why = str(by_id[fid].get("where") or "")
+        phone_words = why.split("Phone:", 1)[1] if "Phone:" in why else ""
+        check(f"{fid}: the phone's Settings really has no `{section}` row",
+              section not in items)
+        check(f"{fid}: the row tells the phone reader where the phone has it",
+              bool(phone_words.strip()), why)
+        check(f"{fid}: the phone clause sends him to a Brain heading, not Settings",
+              bool(phone_words) and "settings" not in phone_words.lower(), phone_words)
+        place = C.phone_place_of_section(section)
+        check(f"{fid}: the phone clause names the heading the phone really draws",
+              place is not None and place[0] in phone_words,
+              f"real place: {place}; phone clause: {phone_words!r}")
+
+
 if __name__ == "__main__":
     for fn in (t_the_list_is_complete_and_true,
                t_the_check_is_sensitive_both_directions,
@@ -433,7 +490,8 @@ if __name__ == "__main__":
                t_a_taught_row_must_name_words_its_lesson_uses,
                t_evidence_anchors_are_real_and_line_numbers_are_not,
                t_a_card_claim_needs_an_ask_tier_gate,
-               t_lesson_and_settings_anchors_are_real):
+               t_lesson_and_settings_anchors_are_real,
+               t_the_phones_own_places_are_named):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

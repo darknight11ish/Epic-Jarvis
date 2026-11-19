@@ -157,6 +157,36 @@ allow-list below is what keeps "curated for reading" from meaning
 "incomplete": every id in it says, in one line, what it is and why the owner
 never presses it directly. It is deliberately as small as the truth allows.
 
+RULE 10: A `where` MUST NOT SEND A PHONE READER TO A PLACE THE PHONE LACKS
+(2026-11-18)
+
+The phone awareness audit (`PHONE-GAPS.md`, `origin/main` `4398324cf`) found two
+places where the catalogue's own words mislead a reader holding the phone:
+
+  * **the PC's Brain tabs.** 32 `both` rows said `Brain, Work`, `Brain, Memory`,
+    `Brain, Now`, `Brain, Model`, `Brain, Projects` or `Brain, History` and never
+    named the phone at all. The phone's Brain is ONE scroll with seven headings
+    ("Waiting for you", "What Jarvis knows about you", "What Jarvis is doing",
+    "Money and time", "Your projects and goals", "Your learning", "Jarvis on your
+    PC") and no tabs, so the same three words are a dead end there; and
+  * **Settings sections the phone's Settings screen does not draw.** Six `both`
+    rows sent the reader to `Settings, Hardware and models`, `Second graphics
+    card`, `Big model (slow)`, `Spending`, `Morning briefing` or `What this
+    backend supports` - all PC-only Settings cards. The phone draws four of them
+    on its Brain and has no screen for the other two.
+
+The rule this checker can hold is the mechanical half: a `both` row that names a
+PC Brain tab must say where the phone has it in the SAME sentence, and the
+phone's place is read from the phone's own sources - `BrainSections.kt`'s seven
+headings, `ui/OpenPlace.kt`'s section-to-place decisions and
+`SettingsScreen.kt`'s real item keys - never retyped here. The five rows the
+audit ranked most likely (hardware, second-card, big-model, spending, briefing)
+are held to those sources by `backend/test_feature_list.py`, including that the
+phone's Settings really has no row for the section the row used to name. What
+the checker cannot judge is whether the plate named after a real heading is the
+right plate; that sentence is for a person to read in the diff, the same limit
+`surface_reason` states above.
+
 Run through `backend/run_suites.py test_feature_list.py`, which is how CI runs
 it with the other Python suites.
 """
@@ -184,6 +214,21 @@ TUTORIALS_PY = ROOT / "backend" / "jarvis_tutorials.py"
 SETTINGS_REGISTRY = ROOT / "backend" / "jarvis_settings_registry.py"
 JARVIS_API = ROOT / "docs" / "JARVIS-API.md"
 FRAMEWORK_TOML = ROOT / "backend" / "rebuilt" / "jarvis-framework.toml"
+#: Rule 10 reads the phone's own screens: the seven Brain headings and which
+#: plates sit under them, the phone's decision table for where a PC Settings
+#: section opens, and the item keys its Settings screen really draws.
+BRAIN_SECTIONS_KT = (
+    ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+    / "client" / "ui" / "screens" / "BrainSections.kt"
+)
+OPEN_PLACE_KT = (
+    ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+    / "client" / "ui" / "OpenPlace.kt"
+)
+PHONE_SETTINGS_KT = (
+    ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+    / "client" / "ui" / "screens" / "SettingsScreen.kt"
+)
 
 #: Rule 8: what a row may point at as evidence. A FILE that exists, a SYMBOL
 #: that is really defined inside the file named before it, or a ROUTE the API
@@ -430,6 +475,13 @@ LESSON_EXEMPT = {
     # paraphrase the card the owner is already reading; it lands with the
     # phone's field-test pass, if it is still wanted then.
     "phone-settings-backup": "one Settings card whose own lines say what goes in, what never goes in and that the password is the only way back; the dialogs repeat the one warning, so a lesson would paraphrase the card",
+    # The picture conversion (2026-11-18) is one sentence in a chat and its own
+    # approval card: "make one pdf from these pictures", or "save this picture
+    # as a jpeg". The card names every source and the exact new file and says
+    # whether the copy is lossless or lossy, and the answer repeats it after the
+    # write - so a lesson would paraphrase the card the owner is already
+    # reading. The same reasoning media-read's entry above gives.
+    "picture-conversion": "it is one sentence in a chat - name the pictures and the target - and the approval card names them back and says whether the copy is lossless or lossy; the module docstring and the tool description are the lesson",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each
@@ -1309,6 +1361,148 @@ def gate_problems(rows: list, root: Path = ROOT, gaps=None, tiers=None) -> list:
     return bad
 
 
+def pc_brain_tab_titles() -> list:
+    """The PC Brain's own tabs, read from the shared menu catalogue.
+
+    `jarvis-desktop/src/menu-catalog.js` (generated from `backend/jarvis_menus.py`
+    by `tools/gen_menu_cases.py`) carries one `brain.tab.<name>` entry per tab
+    the PC's Brain draws, with the title it is drawn under. The phone's Brain has
+    no tabs at all - it has seven headings with plates under them - so a path
+    that says `Brain, Work` is a PC path and nothing else.
+    """
+    text = MENU_CATALOG.read_text(encoding="utf-8")
+    start = text.index("export const MENUS")
+    block = text[start:text.index("export const NEVER_HIDE", start)]
+    tabs = re.findall(r'"id": "brain\.tab\.[^"]+",\s*"title": "([^"]+)"',
+                      block, re.S)
+    if len(tabs) < 8:
+        raise AssertionError(
+            f"read only {len(tabs)} brain tab titles from menu-catalog.js - the parse broke")
+    return tabs
+
+
+def _brain_sections_block() -> str:
+    """`BrainSections.kt`'s SECTIONS list, as text (the phone's 7 headings)."""
+    text = BRAIN_SECTIONS_KT.read_text(encoding="utf-8")
+    start = text.index("val SECTIONS: List<Section> = listOf(")
+    end = text.index("\n    )\n", start)
+    return text[start:end]
+
+
+def phone_brain_headings() -> list:
+    """The phone's real Brain headings, in the order the screen draws them.
+
+    Read from `BrainSections.kt` itself, never retyped: if a heading is renamed
+    on the phone, a catalogue row that names the old one has to be fixed rather
+    than quietly pointing at a heading that is gone.
+    """
+    headings = re.findall(r'title = "([^"]+)"', _brain_sections_block())
+    if len(headings) != 7:
+        raise AssertionError(
+            f"read {len(headings)} Brain headings from BrainSections.kt - expected the "
+            "phone's 7")
+    return headings
+
+
+def _plate_headings() -> dict:
+    """plate key -> the phone heading it is drawn under (`BrainSections.kt`)."""
+    out, heading = {}, None
+    for line in _brain_sections_block().splitlines():
+        found = re.search(r'title = "([^"]+)"', line)
+        if found:
+            heading = found.group(1)
+        plate = re.search(r'Plate\("([^"]+)"', line)
+        if plate:
+            out[plate.group(1)] = heading
+    if len(out) < 40:
+        raise AssertionError(f"read only {len(out)} plates from BrainSections.kt - the parse broke")
+    return out
+
+
+def phone_place_of_section(section_id: str):
+    """Where the phone really has a PC Settings section: (heading, plate) or None.
+
+    `ui/OpenPlace.kt` is the phone's own closed decision table for "open <a
+    Settings section>", written once and held to the registry by
+    `OpenPlaceTest`. `Where.Go(Screen.BRAIN, "<plate>")` means the phone draws it
+    on the Brain (the heading comes from `BrainSections.kt`); a `Screen.SETTINGS`
+    decision means the phone has its own Settings row and the section name is
+    true on both apps. None means this file makes no Brain decision for it.
+    """
+    text = OPEN_PLACE_KT.read_text(encoding="utf-8")
+    start = text.index("private val PLACES")
+    end = text.index("val PC_ONLY", start)
+    block = text[start:end]
+    found = re.search(r'"%s"\s+to\s+Where\.Go\(Screen\.(\w+),\s*"([^"]*)"\)'
+                      % re.escape(section_id), block)
+    if not found or found.group(1) != "BRAIN":
+        return None
+    plate = found.group(2)
+    heading = _plate_headings().get(plate)
+    if heading is None:
+        raise AssertionError(
+            f"OpenPlace.kt sends {section_id!r} to Brain plate {plate!r}, which "
+            "BrainSections.kt does not place under a heading")
+    return heading, plate
+
+
+def phone_settings_item_keys() -> set:
+    """The item keys the phone's Settings screen really draws.
+
+    `SettingsScreen.kt`'s own `item(key = "...")` calls. A registry section id
+    that is not here is not a Settings row on the phone, whatever its display
+    name says - which is exactly how a "Settings, Hardware and models" path
+    dead-ends on the phone.
+    """
+    text = PHONE_SETTINGS_KT.read_text(encoding="utf-8")
+    keys = set(re.findall(r'item\(key = "([^"]+)"', text))
+    if len(keys) < 20:
+        raise AssertionError(
+            f"read only {len(keys)} Settings item keys from the phone's SettingsScreen.kt "
+            "- the parse broke")
+    return keys
+
+
+def phone_place_problems(rows: list) -> list:
+    """Rule 10: a `both` row must say where the PHONE has the feature.
+
+    The 2026-11-18 phone awareness audit counted the rows that sent the owner to
+    a place only the PC has: 32 `both` rows named a PC Brain tab (`Brain, Work`,
+    `Brain, Memory`, `Brain, Now`, `Brain, Model`, `Brain, Projects`,
+    `Brain, History`) and never mentioned the phone at all, and six more named a
+    Settings section the phone's Settings screen does not draw. The phone's Brain
+    is ONE scroll with seven headings and no tabs; a reader following "Brain,
+    Work, Today" on the phone finds no Work tab and no way onward.
+
+    This half is the machine-checkable part of that finding: a `both` row whose
+    `where` names a PC Brain tab path must say where the phone has it in the same
+    sentence (`Phone: Brain, <one of the phone's headings>, <plate>`). It says
+    nothing about a `desktop`/`phone` row, where naming one app's place is the
+    point, and it does not invent a phone place: the test beside it
+    (`backend/test_feature_list.py`) reads the headings from `BrainSections.kt`
+    and the settings-section decisions from `ui/OpenPlace.kt`, so the words are
+    held to the phone's real screens.
+    """
+    tabs = pc_brain_tab_titles()
+    tab_path = re.compile(
+        r"Brain,\s*(?:" + "|".join(re.escape(t) for t in tabs) + r")\b")
+    bad = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("surface") != "both":
+            continue
+        fid = row.get("id", "?")
+        why = str(row.get("where") or "")
+        if "phone" in why.lower():
+            continue
+        found = tab_path.search(why)
+        if found:
+            bad.append(
+                f"{fid}: `where` names only the PC's Brain ({found.group(0)!r}) - the "
+                "phone's Brain has no tabs, so say where the phone has it in the same "
+                "sentence (\"Phone: Brain, <heading>, <place>.\")")
+    return bad
+
+
 def problems() -> list:
     """Everything wrong, in one list, each line naming what to fix."""
     got = entries()
@@ -1317,7 +1511,8 @@ def problems() -> list:
             + internal_problems(known) + copy_problems() + teaching_problems(got, known)
             + lesson_problems(got) + pending_problems(got) + keyword_problems(got)
             + anchor_problems(got) + gate_problems(got)
-            + lesson_anchor_problems(got) + settings_covers_problems(got))
+            + lesson_anchor_problems(got) + settings_covers_problems(got)
+            + phone_place_problems(got))
 
 
 def main() -> int:
@@ -1357,6 +1552,8 @@ def main() -> int:
          f"({len(lessons)} lessons)", lesson_anchor_problems(got)),
         ("every `settings.*` token in `covers` is a real settings/menu id in one "
          "app's registry", settings_covers_problems(got)),
+        ("a `both` row that names a PC Brain tab also says where the phone has it "
+         "- the phone's Brain has no tabs", phone_place_problems(got)),
     ]
     failed = 0
     for name, bad in checks:

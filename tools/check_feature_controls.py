@@ -739,9 +739,14 @@ def main(argv=None):
     # phrase to reach (the same `app-local` class as Floating Jarvis, Quick
     # Settings tiles, the screen rate and picture-in-picture) - so 17 + 1 -> 18
     # PC-Only, 182 + 1 -> 183 features. Measured from the contract, not chosen.
+    # 2026-11-18 (the picture conversion): "Make a PDF from pictures, or change
+    # a picture's format" joined as ONE Command-Only row - it is one sentence in
+    # a chat and its own approval card, with nothing stored to turn on or off,
+    # so there is no setting to read; 107 + 1 -> 108 Command-Only, 183 + 1 ->
+    # 184 features. Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 18,
-        LAB_COMMAND: 107, LAB_ALWAYS: 12,
+        LAB_COMMAND: 108, LAB_ALWAYS: 12,
     }
     # THE MESSAGE IS BUILT FROM THE PIN, NEVER RETYPED (2026-11-13 audit,
     # finding 4). The two literals that used to sit in the messages below said

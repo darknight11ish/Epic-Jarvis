@@ -84,6 +84,28 @@ imported base-only modules and left `jarvis-backend/__pycache__`, which
 forces that switch, and end to end that a suite it starts can import a module
 and leave no `__pycache__` behind.
 
+And a suite that PASSED NOTHING is not a pass (2026-11-18, external review).
+The skip rule reads what a suite PRINTS, so a suite that exits 0 having run no
+check at all - and so printed no skip either - used to prove its row, which is
+the one hole the whole claims register exists to keep shut. `backend/run_suites.py`
+already fails that shape everywhere it runs a suite (`passed == 0`, no allowlist,
+2026-10-27); the claims checker is the caller it never reached. So this file also
+proves:
+
+  * a `built` row whose suite exits 0 having PASSED NOTHING -> exit 1, naming the
+    suite, its counts, and the two legitimate fixes (make the suite run a check,
+    or record the environment skip with a reason and a date);
+  * the same fixture - nothing passed - is PROVEN when the suite's whole body is
+    a skip this machine's `ENVIRONMENT_SKIPS` entry covers and the suite really
+    printed it, and NOT proven when the entry exists but the suite printed
+    nothing: an entry records why a skip happened, not that one happened;
+  * a suite that prints a skip AND passes checks is unchanged, and a normal
+    passing suite is unchanged;
+  * the counts are `backend/run_suites.py`'s own parser, imported rather than
+    copied, and the zero predicate is the runner's `passed == 0`;
+  * the real register's run REPORTS the totals it watched, so a green run cannot
+    be read as one that watched no check.
+
 And on the real register, four things the checker cannot say about itself:
 
   * it exits 0 today, so the first run after this lands is green;
@@ -218,6 +240,15 @@ def t_the_committed_register_is_green():
           "unverifiable",
           all(word in out for word in ("built", "still open", "unverifiable")),
           out[-800:])
+    # The zero-check rule (2026-11-18) is decided one suite at a time; this is
+    # the same fact at the scale of the run, so a green register cannot be read
+    # as one whose suites watched nothing. It is also how many checks the change
+    # was measured against, which is the number the report quotes.
+    check("the run reports how many checks the `test:` rows actually watched, "
+          "with the passed / skipped / failed split",
+          re.search(r"\d+ suite run\(s\) behind the `test:` rows reported "
+                    r"\d+ check\(s\): \d+ passed, \d+ skipped, \d+ failed\.", out)
+          is not None, out[-1500:])
 
 
 def t_list_prints_every_row_it_checked():
@@ -558,10 +589,17 @@ def t_the_five_kinds_all_answer_on_a_real_row():
 
     The `test:` row points at a throwaway suite rather than at a real one: a
     real suite can need packages this container has not installed, and pointing
-    it at THIS file would run this file again, for ever.
+    it at THIS file would run this file again, for ever. It prints one real pass
+    in its own summary, because since 2026-11-18 a suite that exits 0 having
+    PASSED NOTHING is not proof - the zero-check rule would (correctly) fail a
+    fixture that reported no check, and this row is about the `test:` KIND
+    answering at all, not about the zero rule (which has its own tests below).
     """
     suite = Path(tempfile.mkstemp(suffix=".py")[1])
-    suite.write_text("import sys\nprint('a throwaway suite')\nsys.exit(0)\n",
+    suite.write_text("import sys\n"
+                     "print('ok  a throwaway check')\n"
+                     "print('1 passed, 0 skipped, 0 failed')\n"
+                     "sys.exit(0)\n",
                      encoding="utf-8")
     rows = {
         "file": "file:backend/jarvis_tidy.py",
@@ -649,6 +687,7 @@ def t_a_skip_count_with_no_reason_is_not_proof():
           code == 1, out)
     check("... and says how many were reported and how many could be read",
           "1 skipped check(s) according to its own summary" in out, out)
+
 
 
 def t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it():
@@ -769,6 +808,128 @@ def t_the_owner_check_skip_is_named_and_not_counted_as_a_pass():
           out[-1200:])
     check("... and says out loud that the skipped check is NOT a pass",
           "NOT counted as a pass" in out, out[-1200:])
+
+# ---------------------------------------------------------------------------
+#   A `test:` row cannot be proven by a suite that PASSED NOTHING (2026-11-18)
+# ---------------------------------------------------------------------------
+# The skip rule above reads the skips a suite PRINTS. A suite that exits 0
+# having run no check at all prints no skip either, so before this rule it was
+# indistinguishable from one that verified the claim - the one hole the register
+# exists to keep shut. backend/run_suites.py already failed this shape
+# everywhere it runs a suite (2026-10-27); the claims checker is the caller that
+# rule never reached.
+
+def t_a_suite_that_passed_nothing_is_not_proof():
+    """The bite, in the two shapes a suite can pass nothing: it prints its own
+    zero summary, or it prints nothing at all. Both exited 0 and both read as
+    proven before 2026-11-18."""
+    for label, body in (
+            ("prints a zero summary",
+             "print('0 passed, 0 skipped, 0 failed')"),
+            ("prints nothing at all",
+             "print('a suite whose checks all vanished')")):
+        suite = fake_suite(body)
+        path = register_with(
+            f"X18\ta claim an empty suite cannot prove\ttest:{suite}\tbuilt\t"
+            f"CLAUDE.md:1\n")
+        code, out = run(str(path))
+        check(f"a `built` row whose suite exits 0 having passed NOTHING "
+              f"({label}) exits 1", code == 1, out)
+        check(f"... and names the suite ({label})", str(suite) in out, out)
+        check(f"... and says it PASSED NOTHING, with the counts it reported "
+              f"({label})", "PASSED NOTHING" in out
+              and "0 passed, 0 skipped, 0 failed" in out, out)
+        check(f"... and gives the first legitimate fix: make the suite run a "
+              f"check ({label})", "make the suite run a check" in out, out)
+        check(f"... and the second: record the environment skip, with its "
+              f"reason and the date ({label})",
+              "record the environment skip" in out
+              and "reason and the date" in out
+              and "ENVIRONMENT_SKIPS" in out, out)
+        check(f"... and never prints the happy 'still holds' line ({label})",
+              "still holds" not in out, out)
+
+
+def t_a_documented_environment_skip_is_the_zero_check_exemption():
+    """The ruling's other half, end to end through the REAL allow-list.
+
+    The fixture lives at a repo-relative path the allow-list is keyed to, inside
+    a throwaway `--repo`, so this proves the checker's own `ENVIRONMENT_SKIPS`
+    entry is what excuses a suite that passed nothing - without touching the real
+    tree.
+
+    Three cases, and the third is the boundary: an entry excuses a suite that
+    PRINTED the skip it covers, never a suite that printed nothing. An entry
+    records why a skip happened; it cannot document a skip that never happened.
+    """
+    fake_repo = Path(tempfile.mkdtemp(prefix="claims-zero-guard-"))
+    (fake_repo / "backend").mkdir()
+    suite = fake_repo / "backend" / "test_owner_check.py"
+
+    # 1. The whole body is the documented machine-limit skip: the
+    #    ENVIRONMENT_SKIPS case, not a hole, so the row stays proven.
+    suite.write_text(f"print({OWNER_CHECK_SKIP!r})\n"
+                     f"print('0 passed, 1 skipped, 0 failed')\n",
+                     encoding="utf-8")
+    path = register_with(
+        "X19\ta claim proven by a whole-body documented skip\t"
+        "test:backend/test_owner_check.py\tbuilt\tCLAUDE.md:1\n")
+    code, out = run("--repo", str(fake_repo), str(path))
+    check("a `built` row whose suite passed nothing because its whole body is a "
+          "documented machine-limit skip exits 0 (the ENVIRONMENT_SKIPS case, "
+          "not a hole)", code == 0, out[-1200:])
+    check("... and is counted as built, not withheld", "1 built" in out,
+          out[-1200:])
+    check("... and the plain run still NAMES the suite and quotes the skip",
+          "backend/test_owner_check.py" in out
+          and "on Windows the real check would raise a real prompt" in out,
+          out[-1200:])
+    check("... and still says the skipped check is NOT counted as a pass",
+          "NOT counted as a pass" in out, out[-1200:])
+
+    # 2. A skip beside checks that really ran: unchanged by the zero rule.
+    suite.write_text(f"print({OWNER_CHECK_SKIP!r})\n"
+                     f"print('5 passed, 1 skipped, 0 failed')\n",
+                     encoding="utf-8")
+    code, out = run("--repo", str(fake_repo), str(path))
+    check("a suite that prints a skip AND passes checks is unchanged: exits 0",
+          code == 0, out[-1200:])
+    check("... and its row is built", "1 built" in out, out[-1200:])
+
+    # 3. The entry alone is not a licence for silence: the same keyed path, the
+    #    same entry, and a suite that prints nothing is still not a pass.
+    suite.write_text("print('a suite that skipped everything without saying "
+                     "so')\n", encoding="utf-8")
+    code, out = run("--repo", str(fake_repo), str(path))
+    check("an ENVIRONMENT_SKIPS entry alone does NOT excuse a silent suite that "
+          "passed nothing: the row exits 1", code == 1, out[-1200:])
+    check("... and the message is the zero-check sentence, not a skip one",
+          "PASSED NOTHING" in out and "exited 0 but SKIPPED" not in out,
+          out[-1200:])
+
+
+def t_the_zero_check_rule_reads_the_runners_own_parser():
+    """The counts and the `passed == 0` predicate are backend/run_suites.py's,
+    imported - never re-written here. Two parsers would drift, and the drift
+    would decide whether a claim is proven."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+    sys.path.insert(0, str(REPO / "backend"))
+    import run_suites
+
+    sample = "5 passed, 2 skipped, 1 failed"
+    check("the counts a claim's suite is judged by are the runner's own answer",
+          check_claims.suite_counts(sample) == run_suites.counts(sample),
+          (check_claims.suite_counts(sample), run_suites.counts(sample)))
+    check("... and it is the runner's very function, not a copy that can drift",
+          check_claims._RUNNER_COUNTS is run_suites.counts,
+          check_claims._RUNNER_COUNTS)
+    check("... its zero rule is the runner's: a summary with no pass is a "
+          "failure", check_claims.passed_nothing(
+              "backend/test_x.py", "0 passed, 0 skipped, 0 failed") is not None)
+    check("... while any real pass at all proves the row",
+          check_claims.passed_nothing(
+              "backend/test_x.py", "1 passed, 0 skipped, 0 failed") is None)
 
 
 # ---------------------------------------------------------------------------
@@ -1017,6 +1178,9 @@ if __name__ == "__main__":
                t_a_skip_count_with_no_reason_is_not_proof,
                t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it,
                t_the_owner_check_skip_is_named_and_not_counted_as_a_pass,
+               t_a_suite_that_passed_nothing_is_not_proof,
+               t_a_documented_environment_skip_is_the_zero_check_exemption,
+               t_the_zero_check_rule_reads_the_runners_own_parser,
                t_the_parser_offers_the_opt_in_flag,
                t_the_ambient_backend_variable_is_ignored_unless_asked_for,
                t_the_model_loaders_are_forced_offline_like_the_runner,

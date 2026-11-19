@@ -212,6 +212,10 @@ SUBSYSTEMS = (
             "jarvis_chatbot_limits", "jarvis_chatbot_local",
             "jarvis_chatbot_metaai", "jarvis_chatbot_perplexity",
             "jarvis_chatbot_routes", "jarvis_chatbot_web",
+            # The hybrid/cloud settings from chat (2026-11-18): the chosen
+            # service, the standing switch and the monthly cap, read from this
+            # PC's own three files and changed through the doors above.
+            "jarvis_cloud_settings",
         ),
         "paths": ("backend/rebuilt/jarvis_compute.py",
                   "backend/jarvis-primary.Modelfile"),
@@ -222,7 +226,8 @@ SUBSYSTEMS = (
                   "backend/test_hardware.py", "backend/test_chatbot_api.py",
                   "backend/test_cloud_honesty.py",
                   "backend/test_model_recommendations.py",
-                  "backend/test_model_resources.py"),
+                  "backend/test_model_resources.py",
+                  "backend/test_cloud_settings_chat.py"),
         "docs": ("docs/MODEL-TOPOLOGY.md", "docs/HARDWARE-PROFILES.md",
                  "docs/SECOND-CARD.md", "docs/BIG-MODEL.md"),
     },
@@ -583,17 +588,18 @@ SUBSYSTEMS = (
         "group": "runtime",
         "areas": ("backend",),
         "purpose": "Pictures the owner asks for and attaches, reading the words in "
-                   "them, and searching the recordings and videos on this PC - all "
-                   "locally.",
+                   "them, turning pictures into ONE PDF or into another format, and "
+                   "searching the recordings and videos on this PC - all locally.",
         "modules": (
             "jarvis_pictures", "jarvis_picture_card", "jarvis_chat_picture",
             "jarvis_photo_remind", "jarvis_ocr", "jarvis_media_index",
-            "jarvis_media_read", "jarvis_obscura",
+            "jarvis_media_read", "jarvis_obscura", "jarvis_image_convert",
         ),
         "paths": (),
         "key_modules": ("jarvis_pictures", "jarvis_ocr", "jarvis_media_index"),
         "tests": ("backend/test_pictures.py", "backend/test_ocr_words.py",
-                  "backend/test_media_index.py", "backend/test_media_read.py"),
+                  "backend/test_media_index.py", "backend/test_media_read.py",
+                  "backend/test_image_convert.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/JARVIS-API.md"),
     },
     {

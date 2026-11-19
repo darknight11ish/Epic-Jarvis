@@ -69,7 +69,34 @@ WHAT THIS SUITE CHECKS
      phrase nowhere - and every row the matcher names is a real catalogue row;
   7. it is read-only: `capability_answer` is in READ_ONLY_INTENTS (a private
      chat hands it to the model), the intent carries no card, route or action,
-     and a private chat gets None.
+     and a private chat gets None;
+  8. THE THREE MEASURED FALSE-DENIAL QUESTIONS (2026-11-18, CHAT-GAPS section
+     4): "Can you send a file from my PC to my phone?", "Can you read my phone
+     notifications?" and "Can you add up my spending?" (with "Can you check my
+     bank export?"). All three reached the local model while the catalogue had
+     the row and its real steps, so the model could answer "I can't" about
+     something that exists. Each must answer from its row's own what/where and
+     its own rule, and every widened lead has a negative control that must keep
+     the path it had before - including "can you write a nice email for my
+     boss?", pinned to the writer's own path by `test_chat_honesty.py`;
+  9. THE "and" REGRESSION (2026-11-18, CHAT-GAPS section 6): the explicit
+     feature lane used to short-circuit on "and" before trying `_FEAT_EXPLICIT`,
+     which sent all six measured feature questions with "and" in the subject to
+     the model (49 catalogue rows were in that blast radius). Every one of the
+     six must now reach its row and quote its words, and action sentences that
+     contain "and" must keep the deterministic path they already had.
+ 10. THE LAST FOURTEEN MEASURED QUESTIONS (2026-11-18, CHAT-GAPS 1b): PR #1377
+     took the measured reach from 159/180 to 166/180; these 14 were what was
+     left, and FOUR of them answered the WRONG CATALOGUE ROW - a confident
+     answer about a different ability, which is worse than no answer. Each now
+     reaches its own row and quotes that row's `what`/`where`, never the wrong
+     row, never the old family's answer; the row that used to win a shared word
+     keeps its own question; and the audit's three traps stay closed.
+ 11. THE BEFORE/AFTER SWEEP (2026-11-18): every row's aliases, title and id
+     words in 35 ordinary question shapes - 5410 questions - measured on
+     origin/main at 8a20b523c and again after the change. A row may gain reach,
+     never lose it: 4429 -> 4476 own-row answers, 53 changed, 47 gained, 0
+     regressed. The full per-row baseline is pinned below as a ratchet.
 
 No model runs, no network, no owner file is touched: the answers read the
 catalogue and a made-up scheduler only.
@@ -298,6 +325,246 @@ OUTSIDE = (
     "how do I fix a leaking tap",
 )
 
+#: THE THREE MEASURED FALSE-DENIAL QUESTIONS (2026-11-18, CHAT-GAPS section 4).
+#: Each one fell to the local model while the catalogue had the row with the
+#: real steps, so the model could answer "I can't" about something that exists:
+#:   * the PC -> phone file question - `_CAP_CAN_YOU_TO_PC` is one-way (only
+#:     toward this PC), and `send_file_to_phone` is a real tool, so the mirror
+#:     direction the `file-from-pc` row describes was missed;
+#:   * phone notifications and spending were both named in the measured model
+#:     denials of 2026-11-06.
+#: `_CAP_CAN_YOU_NAMED` (jarvis_quick) claims each in `_explicit_feature_question`
+#: only - the last lane in `match()`, after every action path declined - and the
+#: required phrase is the row's own rule, which the false denial hid.
+FALSE_DENIAL = (
+    ("Can you send a file from my PC to my phone?", "file-from-pc",
+     "one approval card per file"),
+    ("Can you send me a file from my PC?", "file-from-pc",
+     "one approval card per file"),
+    ("Can you read my phone notifications?", "phone-notifications",
+     "off by default"),
+    ("Can you add up my spending?", "spending", "no card"),
+    ("Can you check my bank export?", "spending", "no card"),
+)
+
+#: THE "and" REGRESSION (2026-11-18, CHAT-GAPS section 6). Every one of these
+#: fell to the model because `_explicit_feature_question` short-circuited on
+#: "and" before `_FEAT_EXPLICIT` was tried; the audit measured all six. Two of
+#: them ("lets you ...", "lets Jarvis ...") also needed the speaker's frame
+#: ("lets you") taken off the subject, or the row was replaced by the honest
+#: "I do not have that one" - still deterministic, still wrong.
+AND_QUESTIONS = (
+    ("Do you have a feature that lets you type a question and Jarvis answers "
+     "in the box?", "typing"),
+    ('Do you have a feature called "The whole conversation, and carrying it '
+     'on"?', "chat-thread"),
+    ('Do you have a feature called "People and things"?', "memory-people"),
+    ("Do you have a feature that lets Jarvis stop acting, and says so, rather "
+     "than guessing?", "stale-link"),
+    ('Do you have a feature called "Small Python scripts for sums and averages"?',
+     "data-sandbox"),
+    ("Do you have a feature that shows content risk and the audit chain?", "trust"),
+)
+
+#: NEGATIVE CONTROLS for every widened lead (2026-11-18). A lead may only claim
+#: the one false-denial question it was written for; each sentence here keeps the
+#: path it had BEFORE the lead existed. `None` as the name means "no
+#: deterministic answer, so the model / its real tool keeps it" - the path those
+#: sentences already had. `field`/`value` pin the field that path carries.
+NARROW = (
+    # a writing request is the writer's, never `email-send` - the trap the
+    # audit measured when a bare "can you" lead was considered.
+    ("can you write a nice email for my boss?", None, None, None),
+    # the file lead requires "from my PC": the plain action shape toward the
+    # phone keeps its path, and a named file is the real send_file door.
+    ("Can you send a file to my phone?", None, None, None),
+    ("can you send report.pdf from my desktop to my phone", "send_file",
+     "query", "report.pdf"),
+    ("send report.pdf from my desktop to my phone", "send_file",
+     "query", "report.pdf"),
+    # the file lead's destination must be the phone: "to my boss" is not it
+    ("Can you send a file from my PC to my boss?", None, None, None),
+    # the notification lead is read-only and needs "phone notifications": the
+    # smartwatch question belongs to the phone-watch row and keeps reminder_notify
+    ("Can you show my phone notifications on my watch?", "reminder_notify",
+     None, None),
+    # the spending lead needs spending/bank-export words: the spending DOOR and
+    # the email read keep their own deterministic answers
+    ("how much did I spend last month", "honest_chat", "row", "spending"),
+    ("Can you read my email?", "honest_chat", "shape", "capability_off"),
+    # a real sum is not "spending"
+    ("Can you add 2 and 3?", None, None, None),
+)
+
+#: Action sentences that contain "and" and already had a deterministic path:
+#: the short-circuit was removed from the FEATURE lane only, so these must be
+#: untouched (the audit's "it cannot steal an action path" claim, pinned).
+AND_ACTIONS = (
+    ("remind me to call mum and dad at 5pm", "reminder_set"),
+    ("add milk and eggs to my shopping list", "todo_add"),
+    ("turn on the lights and the fan", "honest_chat"),
+)
+
+#: THE LAST FOURTEEN MEASURED QUESTIONS (2026-11-18, CHAT-GAPS section 1b:
+#: 166/180 after PR #1377, these 14 left). Each already says its own row's
+#: EXACT catalogue name - its title, or an exact alias - and was nevertheless
+#: answered from somewhere else, because a generic family shares ONE word with
+#: that name, or because the generic scorer read the shared word as the name:
+#:
+#:   * "called" stems to "call", and "call" + "phone" is `call-recording`'s own
+#:     two-word name "phone call" - so "Also on my phone" and "Open an app on my
+#:     phone" both landed on call-recording;
+#:   * "interrupt you" is `_CAP_SAFETY`'s stop-everything phrase, so "How much
+#:     Jarvis may interrupt you" was answered "Yes - Stop everything";
+#:   * "start ... local model" outscored the quoted name, so the automatic
+#:     restart question answered the manual start row;
+#:   * the reminder family reads "sound", "reminder", "asks me ..." and "ring";
+#:     the read-a-link lane reads "read ..."; the goals lane reads "goals" and
+#:     the guide lane reads "reminder ...".
+#:
+#: Columns: (measured question, the row it must answer from, the row it must
+#: NOT answer from - None when the old answer named no catalogue row at all,
+#: the old intent name it must no longer be - None when the old answer had the
+#: right intent name but the wrong row).
+FIXED_MISSES = (
+    ("Do you have a feature that lets Jarvis learn what you sound like, so it "
+     "only listens to you?", "voice-training", None, "reminder_sound"),
+    ('Do you have a feature called "Timers, alarms, reminders and lists"?',
+     "coming-up", None, "reminder_capability"),
+    ('Do you have a feature called "A reminder that asks you a question"?',
+     "reminder-asks", None, "reminder_capability"),
+    ('Do you have a feature called "How much Jarvis may interrupt you"?',
+     "attention-budget", "stop-everything", None),
+    ('Do you have a feature called "Read the words in a recording or video"?',
+     "media-read", None, "read_link"),
+    ('Do you have a feature called "Photo to reminder"?',
+     "photo-reminder", None, "reminder_capability"),
+    ('Do you have a feature called "Goals"?', "goals", None, "goal_capability"),
+    ('Do you have a feature called "Also on my phone"?',
+     "also-on-phone", "call-recording", None),
+    ("Do you have a feature that lets Jarvis make your phone ring, to help you "
+     "find it?", "find-phone", None, "reminder_sound"),
+    ('Do you have a feature called "Open an app on your phone"?',
+     "phone-apps", "call-recording", None),
+    ('Do you have a feature called "Jarvis starts the local model again by '
+     'itself when it dies"?', "restart-the-model-lane",
+     "start-the-model-lane", None),
+    ('Do you have a feature called "A reminder that opens something, or asks '
+     'to do one task"?', "reminder-actions", None, "reminder_capability"),
+    ('Do you have a feature called "Read one web page out loud"?',
+     "read-web-page", None, "read_link"),
+    ("Do you have a feature that asks me my saved study questions again on a "
+     "schedule?", "decks", "reminder-asks", None),
+)
+
+#: THE ROWS THAT MUST NOT BE STOLEN (2026-11-18). The exact-name lane answers a
+#: question only when it quotes a row's own EXACT catalogue name, so the row
+#: that used to win a shared word must keep its own question, and a generic
+#: family's own shape must keep its own answer. Columns: (sentence, intent
+#: name, row id or None when the intent names no catalogue row).
+EXACT_NAME_NEIGHBOURS = (
+    ('Do you have a feature called "Record a phone call and file it as a note"?',
+     "capability_answer", "call-recording"),
+    ('Do you have a feature called "Start the local model when it is not '
+     'running"?', "capability_answer", "start-the-model-lane"),
+    ("Do you have a feature for reminder buttons?",
+     "capability_answer", "reminder-asks"),
+    ("Can you stop mid-answer?", "capability_answer", "stop-everything"),
+    ("Can you read my phone notifications?", "capability_answer",
+     "phone-notifications"),
+    ("what sound does a reminder make?", "reminder_sound", None),
+)
+
+#: EVERY ORDINARY SHAPE'S OWN-ROW REACH on origin/main at 8a20b523c - the merge
+#: this lane started from - measured before any change here: how many of the 35
+#: questions built from that row's own aliases, title and id words answer from
+#: that row THROUGH THE CATALOGUE LANE (see `CATALOGUE_INTENTS`). 4429 of 5410
+#: in total. THIS IS A RATCHET: a row may gain reach, never lose it (the fix
+#: measured 4476 after, 53 changed answers, 47 gained, 0 regressed).
+#: Regenerate only when a catalogue name is deliberately changed, and then the
+#: diff must explain every loss.
+BASELINE_REACH = {k: int(v) for k, v in (
+    pair.split(":") for pair in """
+typing:19 prompt-coach:13 talk-button:22 wake-word:12 read-aloud:22 spoken-style:13 voice-training:17
+voice-check:22 custom-voices:22 manner:29 write-like-me:19 anti-slop:39 interrupt:18 live:12 live-extras:22
+talk-to-type:37 chat-thread:31 temporary-chat:37 private-chat:13 history-search:37 briefing:26 coming-up:10
+reminder-asks:33 today:12 widgets:21 jobs:12 now:12 attention-budget:28 focus:12 media-transport:31
+memory-tab:13 memory-saved:19 memory-waiting:13 memory-known:13 memory-people:13 people-dossier:13
+pinned-facts:13 between-us:12 topics:21 memory-learning:13 wiki:12 deep-questions:13 memory-as-of:24
+import-chats:22 history:12 chat-tags:22 forget-range:13 galaxy:18 media-read:33 places:24 look-at-this:22
+watch-with-me:21 picture-mode:22 photo-reminder:11 live-camera:13 quiz:18 pictures:13 search-audio-video:32
+decks:16 notes-write:22 notes-editor:76 folders:21 documents:36 tutorials:12 pc-help:13 web-search:12
+browser-engine:22 github-watchlist:22 connected-github:36 chatbot:12 support:38 projects:12 goals:10
+progress:12 file-from-pc:45 document-from-phone:97 notion-import:112 vault-organizer:31 picture-conversion:43
+spending:21 retirement:21 chatbot-money:13 sensitive-facts:13 crisis-help:23 parking:39 price-radar:51
+habit-checkins:58 mood-log:58 product-check:61 home-status:13 lights:21 locks:11 calendar:12 jarvis-calendar:12
+weather-sky:13 email-read:13 email-send:22 email-drafts:22 inbox-tidy:13 news-and-page-watches:14 connection:21
+devices:21 phone-notifications:22 phone-watch:19 phone-settings-backup:40 phone-floating:28 phone-pip:13
+phone-tiles:22 phone-screen-rate:13 also-on-phone:12 find-phone:17 phone-limits:13 phone-apps:60
+call-recording:40 appearance:12 crash-notes:13 faces:12 animal-options:13 first-run:28 setup-questionnaire:31
+menu-visibility:31 shortcuts:12 models:12 compute:12 skills:21 model-memory:13 notifications:12 start-jarvis:12
+work-tab:13 job-list:31 hardware:13 focus-presets:23 cloud-escalation:65 second-card:22 big-model:13 updates:21
+tool-updates:13 settings-file:29 backend-supports:13 about:11 hud-window:13 backup:27 accounts:13 reach:28
+undo:12 past-approvals:22 limits:23 settings-by-asking:13 start-the-model-lane:31 restart-the-model-lane:30
+clipboard-time-machine:31 file-history:40 reminder-actions:46 thinking-levels:30 calculator:24 open-programs:31
+github-research:32 computer-control:23 browser-control:22 shell-commands:41 read-web-page:33
+reverse-engineering:22 android-builder:31 docker-containers:34 model-knowledge:76 voicestudio:30
+wifi-auto-reconnect:43 creator-mode:31 approvals:12 what-asks-first:22 app-lock:13 captcha-handoff:13
+stale-link:18 stop-everything:12 trust:18 rush-latch:22 outside-text:24 settings-entry:13 data-sandbox:28
+protected-items:66 propose-plan:31 card-summary:28 receipts:27 plugin-switch:43
+""".split())}
+
+
+#: The intents that ANSWER FROM A CATALOGUE ROW. `honest_chat` also carries an
+#: `f["row"]` for a real settings read, and whether it does depends on the
+#: settings folder it reads - so the sweep counts a question as reaching its
+#: row only when a catalogue answer names it. Without this the sweep would
+#: measure this PC's config as much as the matcher (measured: one `spending`
+#: shape answered `honest_chat` with the row in the scratch env and without it
+#: under the suite's own temp config dir - a false regression).
+CATALOGUE_INTENTS = frozenset({
+    "capability_answer", "feature_explain", "feature_detail",
+    "feature_capabilities", "feature_what", "feature_state", "feature_use",
+    "feature_where", "feature_limits", "feature_asks", "feature_app",
+    "feature_why", "feature_change", "feature_difference", "feature_on_off",
+    "feature_switch", "feature_howto", "feature_train", "feature_how_works",
+    "feature_overview", "feature_overview_about", "features_list",
+    "feature_groups", "feature_detail_capability", "feature_row",
+    "feature_guide",
+})
+
+
+def _ordinary_shapes(row):
+    """The audit's 35 ordinary questions for one catalogue row.
+
+    Every alias in ten question shapes, the title in ten, the id words in five
+    - a person's ordinary words, never the row's title pasted inside a wrapper.
+    This is the scratch sweep (`matrix.py` / `battery_for`) that measured the
+    baseline above, kept here so the ratchet is the same instrument.
+    """
+    out = []
+    for alias in (row.get("aliases") or ()):
+        alias = str(alias).strip().rstrip(".")
+        if not alias:
+            continue
+        for shape in ("Can you %s?", "Do you have a way to %s?",
+                      "Do you have a feature for %s?", "How do I %s?",
+                      "Can I %s?", "Does Jarvis %s?", "What is %s?",
+                      "Where is %s?", "How do I use %s?", "Tell me about %s."):
+            out.append(shape % alias)
+    title = str(row.get("title") or "").strip().rstrip(".")
+    for shape in ("What is %s?", "How do I use %s?", "Where is %s?",
+                  "Is %s on?", "Tell me about %s.", "Do you have a feature for %s?",
+                  "Can you %s?", "What are the limits of %s?",
+                  "Does %s ask first?", "Explain %s."):
+        out.append(shape % title)
+    idwords = str(row.get("id") or "").replace("-", " ")
+    for shape in ("What is %s?", "Can you %s?", "How do I %s?",
+                  "Do you have a feature for %s?", "Tell me about %s."):
+        out.append(shape % idwords)
+    return out
+
+
 #: The measured crisis sentence and the words the wrong answer contained.
 CRISIS_SENT = ("Do you have a feature that answers with crisis help lines if "
                "a message sounds like a crisis? Answer in one sentence.")
@@ -342,6 +609,16 @@ class Sched:
 def _row_of(reply_or_intent):
     """The row id a matched intent names, or None."""
     return reply_or_intent.f.get("id") if reply_or_intent is not None else None
+
+
+def _ids_of(reply_or_intent):
+    """Every catalogue row id a matched intent names - one row or several."""
+    if reply_or_intent is None:
+        return []
+    f = reply_or_intent.f or {}
+    out = [f["id"]] if f.get("id") else []
+    out += list(f.get("ids") or ())
+    return out
 
 
 def _answer(sentence):
@@ -479,6 +756,239 @@ def t_the_phone_door_and_a_pc_only_row_are_both_said_plainly():
 
 
 # --------------------------------------------------------------------------
+#   1c. the three measured false-denial questions (CHAT-GAPS section 4)
+# --------------------------------------------------------------------------
+def t_the_three_measured_false_denial_questions():
+    """Each must answer from the catalogue row, not fall to the model.
+
+    Before the leads existed all five sentences below returned None from
+    `match()`, so the local model answered - and that model was measured
+    denying all three feature classes on this PC (2026-11-06).
+    """
+    for sentence, row_id, rule in FALSE_DENIAL:
+        res, intent = _answer(sentence)
+        check(f"false denial is answered from the catalogue: {sentence!r}",
+              _row_of(intent) == row_id, f"{_row_of(intent)} != {row_id}")
+        if res is None:
+            continue
+        row = BY_ID[row_id]
+        check(f"... quoting the row's own what: {sentence!r}",
+              _quote(row, "what") in res.reply, res.reply[:220])
+        check(f"... quoting the row's own where: {sentence!r}",
+              _quote(row, "where") in res.reply, res.reply[:240])
+        low = res.reply.lower()
+        check(f"... with its own rule ({rule!r}) and no denial: {sentence!r}",
+              rule in low and not any(d in low for d in DENIALS),
+              res.reply[:260])
+        # THE REAL ROUTE, not only match(): /api/chat calls `answer_turn`, and
+        # the question must come back from there with the same row - a fixed
+        # `match()` that the request path never asks is no fix at all. The
+        # route hands back a `Result` (not the Intent), so the row is read off
+        # the answer's own quoted `what`, which only that row carries.
+        body = {"messages": [{"role": "user", "content": sentence,
+                              "provenance": "typed"}]}
+        turn = Q.answer_turn(body, sched=Sched())
+        check(f"... and /api/chat's own route answers it without the model: "
+              f"{sentence!r}",
+              turn is not None and turn.intent == "capability_answer"
+              and _quote(row, "what") in turn.reply,
+              None if turn is None else (turn.intent, turn.reply[:160]))
+
+
+def t_the_false_denial_leads_stay_narrow():
+    """Every widened lead has a control that keeps the path it had before.
+
+    The audit's trap is measured: a bare "can you ..." capability lead would
+    claim "can you write a nice email for my boss?" as `email-send`, which
+    `backend/test_chat_honesty.py` pins to the writer's own path. So each lead
+    is the words of ONE question, and every sentence here is a neighbour that
+    must not move.
+    """
+    for sentence, expected, field, value in NARROW:
+        intent = Q.match(sentence)
+        name = None if intent is None else intent.name
+        check(f"a widened lead did not claim its control: {sentence!r}",
+              name == expected, f"{name!r} != {expected!r}")
+        if field is not None and intent is not None:
+            got = (intent.f or {}).get(field)
+            check(f"... and it still carries its own {field}: {sentence!r}",
+                  got == value, f"{field}={got!r}")
+        # ... and the request route keeps it too (/api/chat calls answer_turn).
+        body = {"messages": [{"role": "user", "content": sentence,
+                              "provenance": "typed"}]}
+        turn = Q.answer_turn(body, sched=Sched())
+        turn_name = None if turn is None else turn.intent
+        check(f"... and /api/chat's route keeps that path: {sentence!r}",
+              turn_name == expected, f"{turn_name!r} != {expected!r}")
+
+
+# --------------------------------------------------------------------------
+#   1d. the "and" regression (CHAT-GAPS section 6)
+# --------------------------------------------------------------------------
+def t_a_feature_question_with_and_reaches_its_row():
+    """The explicit feature lane no longer short-circuits on "and".
+
+    Before the fix every sentence below returned None from `match()` (the
+    model answered), because `_explicit_feature_question` refused any text
+    containing "and" before trying `_FEAT_EXPLICIT`. It was redundant: the
+    two-part matcher ran earlier and this lane runs last in `match()`.
+    """
+    for sentence, row_id in AND_QUESTIONS:
+        label = sentence[:54] + ("..." if len(sentence) > 54 else "")
+        res, intent = _answer(sentence)
+        check(f"an 'and' feature question reaches its row: {label}",
+              _row_of(intent) == row_id, f"{_row_of(intent)} != {row_id}")
+        if res is None:
+            continue
+        low = res.reply.lower()
+        check(f"... answered from the row's own words, never 'not that one': "
+              f"{label}",
+              _quote(BY_ID[row_id], "what") in res.reply
+              and "do not have that one" not in low
+              and "i do not have" not in low, res.reply[:220])
+    # Removing the short-circuit from the FEATURE lane must not touch a
+    # sentence that already has a deterministic owner - that is the audit's
+    # "this lane runs last, so it cannot steal an action path" claim, pinned.
+    for sentence, expected in AND_ACTIONS:
+        intent = Q.match(sentence)
+        name = None if intent is None else intent.name
+        check(f"an 'and' action keeps its own path: {sentence!r}",
+              name == expected, f"{name!r} != {expected!r}")
+
+
+# --------------------------------------------------------------------------
+#   1e. the LAST fourteen measured questions (CHAT-GAPS 1b, 166/180 -> 180/180)
+# --------------------------------------------------------------------------
+def t_the_last_fourteen_measured_questions_reach_their_rows():
+    """Each of these names its own row exactly and used to answer elsewhere.
+
+    The fix is `_named_feature_question` (`jarvis_quick`): a question that says
+    "feature" and quotes a catalogue row's EXACT id, title or alias is that
+    row's question, and it now runs before the generic families that share one
+    word with the name. Before it, these 14 were the measured 166/180:
+      * four answered a WRONG CATALOGUE ROW - the worst kind of answer, a
+        confident sentence about a different ability (attention-budget ->
+        stop-everything; also-on-phone and phone-apps -> call-recording;
+        restart-the-model-lane -> start-the-model-lane, and decks ->
+        reminder-asks);
+      * the other nine were answered by another deterministic family (the
+        reminder sound/capability family, the read-a-link lane, the goals lane)
+        or did not answer from the row's own words at all.
+    """
+    for sentence, row_id, wrong_row, old_intent in FIXED_MISSES:
+        label = sentence[:54] + ("..." if len(sentence) > 54 else "")
+        res, intent = _answer(sentence)
+        check(f"a measured miss reaches its row: {label}",
+              _row_of(intent) == row_id, f"{_row_of(intent)} != {row_id}")
+        if wrong_row is not None:
+            # THE WRONG ROW IT MUST NO LONGER RESOLVE TO - read from the ids,
+            # never from the answer's prose (a row's name can appear in another
+            # row's words).
+            check(f"... never the row that used to win ({wrong_row}): {label}",
+                  wrong_row not in _ids_of(intent), str(_ids_of(intent)))
+        if old_intent is not None:
+            # The old answer was a DIFFERENT deterministic family - a real
+            # answer, about the wrong ability. It must be gone, not only outranked.
+            name = None if intent is None else intent.name
+            check(f"... and not the old answer ({old_intent}): {label}",
+                  name != old_intent, f"{name!r}")
+        if res is None:
+            continue
+        row = BY_ID[row_id]
+        check(f"... quoting the row's own what: {label}",
+              _quote(row, "what") in res.reply, res.reply[:220])
+        check(f"... quoting the row's own where: {label}",
+              _quote(row, "where") in res.reply, res.reply[:240])
+        low = res.reply.lower()
+        check(f"... with no denial and no invented app: {label}",
+              not any(d in low for d in DENIALS)
+              and not any(i in low for i in INVENTED), res.reply[:220])
+        # The real request route, not only match(): /api/chat calls answer_turn.
+        body = {"messages": [{"role": "user", "content": sentence,
+                              "provenance": "typed"}]}
+        turn = Q.answer_turn(body, sched=Sched())
+        check(f"... and /api/chat's own route answers it: {label}",
+              turn is not None and turn.intent == "capability_answer"
+              and _quote(row, "what") in turn.reply,
+              None if turn is None else (turn.intent, turn.reply[:160]))
+
+
+def t_the_exact_name_lane_steals_no_other_row_s_question():
+    """Fixing a shared word must leave the other row's own question alone.
+
+    The four wrong-row answers shared a word; the row that used to win it must
+    keep its own question, and the generic families above must keep their own
+    shapes. Only an EXACT catalogue name is claimed, so none of these moved.
+    """
+    for sentence, expected_intent, expected_row in EXACT_NAME_NEIGHBOURS:
+        intent = Q.match(sentence)
+        name = None if intent is None else intent.name
+        got_row = _row_of(intent)
+        check(f"an exact-name fix left its neighbour alone: {sentence[:46]}",
+              name == expected_intent and got_row == expected_row,
+              f"{name!r}/{got_row!r} != {expected_intent!r}/{expected_row!r}")
+    # The audit's three traps, verbatim: the lane must not widen to catch them.
+    for sentence in ("can you write a nice email for my boss?",
+                     "Can you send a file to my phone?",
+                     "Can you add 2 and 3?"):
+        check(f"the trap stays closed: {sentence!r}",
+              Q.match(sentence) is None, repr(Q.match(sentence)))
+
+
+# --------------------------------------------------------------------------
+#   1f. the before/after sweep over EVERY row's ordinary shapes
+# --------------------------------------------------------------------------
+def t_no_ordinary_shape_lost_its_row():
+    """Every row's aliases, title and id words, in ordinary question shapes.
+
+    5410 questions (184 rows: 10 forms per alias, 10 title forms, 5 id forms).
+    This is the sweep that measured origin/main at 8a20b523c before the change
+    and the fixed tree after, so a regression is a row that used to be
+    reachable by its own ordinary words and no longer is:
+      * before: 4429/5410 questions answered from their own row;
+      * after:  4476/5410; 53 answers changed, 47 gained their own row,
+        0 regressed, and 6 multi-row answers lost a second row they should
+        never have named (they answered two rows because "and" split the
+        subject, e.g. "Do you have a feature for Click and type in another
+        program?" named computer-control AND talk-to-type; it now names only
+        computer-control).
+    "Answered from their own row" means a CATALOGUE answer names it (see
+    `CATALOGUE_INTENTS`): the sweep must measure the matcher, not this PC's
+    settings folder.
+    BOTH TREES: `backend/` and the published base `jarvis-backend/` were swept
+    separately and gave the identical 4476. That is not surprising - the two
+    matcher files are byte-identical (asserted below) and `check_stale_twins`
+    holds every shipped twin - so one in-process run on the checkout's copy is
+    enough here.
+    """
+    twin = REPO / "jarvis-backend" / "jarvis_quick.py"
+    check("the swept matcher has a byte-identical twin in jarvis-backend",
+          twin.is_file() and twin.read_bytes() == (HERE / "jarvis_quick.py").read_bytes())
+    total, below, gained_rows = 0, [], []
+    for row in C.FEATURES:
+        got = 0
+        for sentence in _ordinary_shapes(row):
+            intent = Q.match(sentence)
+            if (intent is not None and intent.name in CATALOGUE_INTENTS
+                    and row["id"] in _ids_of(intent)):
+                got += 1
+        total += got
+        base = BASELINE_REACH.get(row["id"])
+        if base is not None and got < base:
+            below.append("%s %d<%d" % (row["id"], got, base))
+        if base is not None and got > base:
+            gained_rows.append(row["id"])
+    check(f"the sweep has the {len(BASELINE_REACH)}-row baseline's reach: "
+          f"{total} own-row answers (baseline {sum(BASELINE_REACH.values())})",
+          total >= sum(BASELINE_REACH.values()),
+          f"{total} < {sum(BASELINE_REACH.values())}")
+    check("no ordinary shape lost its row (0 regressions required)",
+          not below, "; ".join(below[:8]))
+    check("the sweep measured a gain, not only a preserved total",
+          len(gained_rows) >= 10, f"{len(gained_rows)} rows gained")
+
+
+# --------------------------------------------------------------------------
 #   2. the 25 measured availability questions
 # --------------------------------------------------------------------------
 def t_the_measured_availability_questions():
@@ -585,10 +1095,13 @@ def t_outside_the_catalogue_falls_through():
 
 
 # --------------------------------------------------------------------------
-#   6. every one of the 183 rows answers from itself
+#   6. every one of the 184 rows answers from itself
 # --------------------------------------------------------------------------
+# 184 since 2026-11-18, the picture-conversion row (pictures into one PDF, or
+# one picture into another format). The pin is the catalogue's real length, so
+# a row that is added without an answer of its own words fails here.
 def t_every_catalogue_row_answers_from_its_own_words():
-    check("the catalogue has its 183 rows", len(C.FEATURES) == 183,
+    check("the catalogue has its 184 rows", len(C.FEATURES) == 184,
           len(C.FEATURES))
     missing = []
     for row in C.FEATURES:
@@ -612,11 +1125,18 @@ def t_every_catalogue_row_answers_from_its_own_words():
 
 def t_every_row_the_matcher_names_is_a_real_row():
     named = set()
-    for entry in TRAPS + AVAILABILITY + HOWTO + INVERSIONS:
+    questions = list(TRAPS) + list(AVAILABILITY) + list(HOWTO) + list(INVERSIONS)
+    questions += [(q, r) for q, r, _ in FALSE_DENIAL]
+    questions += list(AND_QUESTIONS)
+    for entry in questions:
         intent = Q.match(entry[0])
         if intent is not None:
             named.add(_row_of(intent))
     for _, row_id, _ in INVERSIONS:
+        named.add(row_id)
+    for _, row_id, _ in FALSE_DENIAL:
+        named.add(row_id)
+    for _, row_id in AND_QUESTIONS:
         named.add(row_id)
     for row_id in ("crisis-help", "memory-saved", "models", "settings-by-asking",
                    "approvals", "shell-commands", "what-asks-first"):
@@ -731,6 +1251,12 @@ def main():
     for fn in (t_the_owner_trap_sentences,
                t_the_owner_s_phone_file_question,
                t_the_phone_door_and_a_pc_only_row_are_both_said_plainly,
+               t_the_three_measured_false_denial_questions,
+               t_the_false_denial_leads_stay_narrow,
+               t_a_feature_question_with_and_reaches_its_row,
+               t_the_last_fourteen_measured_questions_reach_their_rows,
+               t_the_exact_name_lane_steals_no_other_row_s_question,
+               t_no_ordinary_shape_lost_its_row,
                t_the_measured_availability_questions,
                t_the_measured_howto_questions,
                t_the_four_dangerous_inversions,

@@ -385,6 +385,11 @@ REQUIRED_CHECKS = ("rust", "frontend", "backend", "backend-windows",
 #: case-insensitively: `darknight11ish/epic-jarvis` is the same repository.
 OWN_REPO = "darknight11ish/Epic-Jarvis"
 
+#: OWN_REPO's own name, without the owner - how the owner says it when he is not
+#: reading GitHub's "owner/name" form ("Epic-Jarvis", "the Epic-Jarvis repo").
+#: `_check_repo` resolves that name to the full form (2026-11-18).
+OWN_REPO_NAME = OWN_REPO.split("/", 1)[1]
+
 #: How many workflow runs one `github_ci_status` read asks for. It is
 #: deliberately SMALLER than `PER_PAGE` (the 2026-11-11 Q-G ruling): a run list
 #: carries a lot of JSON per run, and the read layer caps any answer at
@@ -1683,7 +1688,100 @@ def capabilities_line() -> str:
 # --------------------------------------------------------------------------
 
 
-def _check_repo(repo: str) -> str:
+#: THE OWNER'S OWN REPOSITORY, SAID WITHOUT ITS OWNER (2026-11-18). The measured
+#: failure this answers, on the owner's live PC: he asked in chat "What are my
+#: open pull requests on Epic-Jarvis?" and the model DID call `github_list` -
+#: `~/.openjarvis/logs/jarvis-2026-11-18.jsonl` records one `agent.chain` step
+#: `{"tool": "github_list", "ran": false, "ok": false, "outcome": "unknown"}` -
+#: but the call carried the bare name "Epic-Jarvis", `_check_repo` refused it
+#: for having no owner, and the model relayed that as a question to the owner:
+#: "I need the full repository name in the format owner/name. Could you tell me
+#: who owns the Epic-Jarvis repository?" The owner is `darknight11ish` in this
+#: module's own `OWN_REPO`; he should never be asked who owns his own repo.
+#:
+#: So `_check_repo` resolves the three ways a person names it without the owner:
+#:
+#:   * the bare name, case-insensitively and with or without the hyphen
+#:     ("Epic-Jarvis", "epic-jarvis", "Epic Jarvis") - alone, or inside a
+#:     request sentence the model copied;
+#:   * a self phrase that can only mean the asking owner's repository - "my
+#:     repo", "my repository", "my open PRs", "my issues", "this repo",
+#:     "this repository";
+#:   * the full name, which is canonicalised to OWN_REPO when it is the same
+#:     repository.
+#:
+#: AND NOTHING ELSE IS EVER SUBSTITUTED. A name that is NOT OWN_REPO passes
+#: through exactly as typed (a full `owner/name`), or is refused with the same
+#: ask/format words as before (anything else). That is the Q5 ruling of
+#: 2026-11-17 - `decisions.d/2026-11-17-github-targets-must-exist.md` - and it
+#: is why a request that names a foreign repository ("some-other-org/widgets")
+#: does NOT become the owner's: a wrong-repo answer is worse than a question.
+_OWN_REPO_WORD = re.compile(r"\bepic[\s-]?jarvis\b", re.I)
+#: A self phrase: "my repo", "my own GitHub repository", "my open PRs",
+#: "my issues", "this repo", "this repository", "our repository". Deliberately
+#: a whole phrase for "my"/"this"/"our" and the ONE noun class it can mean here;
+#: "my project" is NOT one of them, because the owner has more than one project
+#: and a project's folder is not a repository.
+_OWN_REPO_SELF = re.compile(
+    r"\bmy\s+(?:own\s+)?(?:github\s+)?(?:repositor(?:y|ies)|repos?|"
+    r"(?:open\s+)?(?:prs?|pull\s+requests?)|(?:open\s+)?issues?)\b"
+    r"|\bthis\s+(?:project'?s\s+)?(?:github\s+)?(?:repositor(?:y|ies)|repos?)\b"
+    r"|\bour\s+(?:github\s+)?(?:repositor(?:y|ies)|repos?)\b",
+    re.I)
+#: A repository named IN FULL inside a sentence the model copied from the
+#: request ("the PRs on some-other-org/widgets"). When one is there it is the
+#: repository that was asked for, so it is never replaced by OWN_REPO.
+_FULL_NAME_IN_WORDS = re.compile(
+    r"(?<![A-Za-z0-9_.-])"
+    r"([A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_.-]{1,100})"
+    r"(?![A-Za-z0-9_.-])")
+
+
+def repo_from_words(text) -> str:
+    """OWN_REPO when `text` names only the owner's own repository, else "".
+
+    `text` is either a repository argument the model passed ("Epic-Jarvis",
+    "my repo", "darknight11ish/Epic-Jarvis") or the owner's own request words
+    - the tool layer hands this function the newest message's own words so a
+    call that left the repository out can be filled in (2026-11-18).
+
+    It returns "" - meaning "Jarvis cannot name a repository from this" - in
+    every other case, and the caller keeps whatever it already had. That is
+    what makes the control safe: a FULL name in the words is respected, and a
+    name that is not OWN_REPO is NOT returned here, so it can never be replaced
+    by the owner's. The words "who owns Epic-Jarvis" resolve to OWN_REPO; the
+    words "on some-other-org/widgets" do not.
+    """
+    low = " ".join(str(text or "").replace("\u2019", "'").split()).lower()
+    if not low:
+        return ""
+    named = [m.group(1) for m in _FULL_NAME_IN_WORDS.finditer(low)
+             if _REPO.fullmatch(m.group(1))]
+    if named:
+        # An explicitly named repository is the one that was asked for. The
+        # owner's own full name is the same repository in any case; any OTHER
+        # full name is left to the caller exactly as it was given.
+        return OWN_REPO if named[0].lower() == OWN_REPO.lower() else ""
+    if _OWN_REPO_WORD.search(low) or _OWN_REPO_SELF.search(low):
+        return OWN_REPO
+    return ""
+
+
+#: What every GitHub tool's own description tells the model about naming the
+#: owner's own repository without its owner (2026-11-18). It lives HERE, beside
+#: `repo_from_words` that keeps it true, and `jarvis_agent.Tool.__init__` adds
+#: it to every GitHub tool whose schema has a `repo` argument - one home, and
+#: no tool can be written without it. The project's rule is that the "call it,
+#: do not ask first" instruction is in the tool's own description, never in the
+#: lane system prompt (`docs/ARCHITECTURE.md`, "An explicit action request
+#: reaches its gating tool"); the measured 9B model answers this class of
+#: request in words unless the tool text itself says to call it.
+REPO_ARG_HINT = (f'"Epic-Jarvis" (that is {OWN_REPO}), or "my repo"/"this '
+                 f'repository", is a valid repository: Jarvis fills in the owner, '
+                 f'so call the tool - do not ask who owns it. ')
+
+
+def _check_repo(repo: str, *, read: bool = False) -> str:
     """The repository a card names - or an ASK, never a guess (2026-11-17, Q5).
 
     The name must come from the request itself: there is no repository that is
@@ -1692,8 +1790,22 @@ def _check_repo(repo: str) -> str:
     is how a card gets raised for a repository the owner never meant - so an
     absent name is refused BEFORE a card exists, in words that say what could
     not be resolved and ask for it.
+
+    READS MAY ASSUME THE OWNER'S OWN REPOSITORY; WRITES MAY NOT (2026-11-18,
+    the owner's ruling 5.2 and decision #1348). `read=True` - passed by the five
+    read-only planners only - resolves the owner's OWN repository when he named
+    it without GitHub's "owner/name" form: its bare name ("Epic-Jarvis",
+    case-insensitively) or a self phrase ("my repo", "this repository", "my
+    open PRs"). `repo_from_words` above holds the rule and the measured failure
+    that made it necessary; a name that is NOT OWN_REPO is never replaced by it.
+    A WRITE planner calls this with the default `read=False` and keeps EXACTLY
+    its old rule: a bare name that is not a full `owner/name` is refused and
+    asked about, because a card built from an ambiguous name is how a change
+    lands on a repository nobody named - the Q5 target rule and #1348 together.
     """
     repo = str(repo or "").strip()
+    if read:
+        repo = repo_from_words(repo) or repo
     if not repo:
         raise GitHubError(
             'Jarvis could not tell which repository this is about: no repository '
@@ -2615,7 +2727,7 @@ def plan_list(args: Optional[dict] = None) -> Request:
             touches="Nothing on GitHub changes; this only reads.",
             scope=scope,
         )
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     if scope in SCOPE_NOUNS:
         path = (f"{_repo_path(repo)}/{scope}?state={state}"
                 f"&per_page={PER_PAGE}")
@@ -2642,7 +2754,7 @@ def plan_list(args: Optional[dict] = None) -> Request:
 def plan_read_file(args: Optional[dict] = None) -> Request:
     """Read ONE file's text, at an optional branch or commit."""
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     path = _check_path(args.get("path"))
     ref = _check_ref(args["ref"]) if str(args.get("ref") or "").strip() else ""
     query = f"?ref={urllib.parse.quote(ref, safe='')}" if ref else ""
@@ -2670,7 +2782,7 @@ def plan_ci(args: Optional[dict] = None) -> Request:
     all digits, so no address comes from fetched text.
     """
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     pr = str(args.get("pr") or "").strip()
     branch = str(args.get("branch") or "").strip()
     if pr and branch:
@@ -2844,7 +2956,7 @@ def plan_scan_prs(args: Optional[dict] = None) -> Request:
     on its head commit. Capped at `MAX_PRS`, reads only, no body.
     """
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     step = Step("GET", f"{_repo_path(repo)}/pulls?state=open&per_page={MAX_PRS}")
     return Request(
         ACTION_INSPECT,
@@ -3326,7 +3438,7 @@ def plan_pr_detail(args: Optional[dict] = None) -> Request:
     from the pull request itself, never from how many rows happened to parse.
     """
     args = args or {}
-    repo = _check_repo(args.get("repo"))
+    repo = _check_repo(args.get("repo"), read=True)
     number = _check_number(args.get("number"), "pull request")
     steps = (
         Step("GET", f"{_repo_path(repo)}/pulls/{number}"),

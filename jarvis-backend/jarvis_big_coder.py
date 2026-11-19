@@ -22,30 +22,36 @@ THE OWNER'S DECISION, WHICH THIS FILE IMPLEMENTS AND DOES NOT RE-LITIGATE
 
   1. It is OFF by default. Nothing loads and nothing downloads until the owner
      turns the switch on AND asks for the mode.
-  2. It is NEVER resident beside the two live lanes. The two lanes are paused
-     (both models unloaded, proved from /api/ps) BEFORE it is loaded, and if a
-     lane will not go, the mode refuses and loads NOTHING.
+  2. It is NEVER resident beside the everyday lane. That lane is paused (its
+     model unloaded, proved from /api/ps) BEFORE it is loaded, and if the lane
+     will not go, the mode refuses and loads NOTHING.
   3. The pause is announced BEFORE it starts - the card the owner sees names
-     both lanes, their models and their contexts, and the sentence goes out
+     the everyday lane, its model and its context, and the sentence goes out
      before the first unload.
-  4. When the mode ends, the two lanes come back EXACTLY as they were:
-     11436 qwen3.5:9b at 196608 on the RTX 2060, and 11435 qwen3:8b at 16384
-     on the RTX 2080 SUPER. That is PROVED from /api/ps - model, context and
-     zero spill - and a lane that does not come back is reported as a failure
-     rather than glossed over.
+  4. When the mode ends, the everyday lane comes back EXACTLY as it was:
+     11436 qwen3.5:9b at 196608 on the RTX 2060, with zero spill. That is
+     PROVED from /api/ps - model, context and spill - and a lane that does
+     not come back is reported as a failure rather than glossed over. Since
+     2026-11-18 there is ONE always-on lane: the coding lane on 11435
+     (`qwen3:8b` at 16384) is RETIRED, so nothing here pauses or restores a
+     second lane. General's 26B is NOT on this lane - it is a heavy preset on
+     the pooled lane (port 11450), because the everyday lane is pinned to the
+     single 12 GB RTX 2060 and a 15.50 GiB model there would spill.
 
 REUSE, NOT A SECOND SUPERVISOR
 
 `jarvis_power_switch.py` already knows how to unload a lane, load a model and
 prove it from /api/ps, and how to preload one at the lane's own context instead
 of Ollama's small default. None of that is re-invented here. The one thing this
-mode needs that nothing else does is a server that can SEE every card: the two
-lane servers are pinned, one card each, so the model cannot be loaded on either
-of them without spilling. This file starts ONE `ollama serve` for the mode,
-with no `CUDA_VISIBLE_DEVICES` (every card) and `OLLAMA_VULKAN=0` (without
-which CUDA_VISIBLE_DEVICES silently falls back to Vulkan onto the other card -
-`jarvis_picture_card.py` records that trap), on its own port, and stops it when
-the mode ends. It never touches the lane servers, which are the owner's.
+mode needs that nothing else does is a server that can SEE every card: the
+everyday lane is the owner's own server on port 11436, and since 2026-11-18 it
+is the one always-on lane, so a model can never be loaded beside it without
+two copies fighting for the same cards. This file starts ONE `ollama serve` for
+the mode, with no `CUDA_VISIBLE_DEVICES` (every card) and `OLLAMA_VULKAN=0`
+(without which CUDA_VISIBLE_DEVICES silently falls back to Vulkan onto the
+other card - `jarvis_picture_card.py` records that trap), on its own port, and
+stops it when the mode ends. It never touches the lane server, which is the
+owner's.
 
 WHAT IS GATED (rule 4)
 
@@ -60,12 +66,13 @@ WHAT IS GATED (rule 4)
 REFUSED, WITH THE REASON, NEVER SILENTLY
 
   * the switch is off;
-  * a multi-step task is running (pausing the lanes under it would break it);
+  * a multi-step task is running (pausing the everyday lane under it would
+    break it);
   * a lane is still resident after being asked to unload - the mode will not
     run beside it, and nothing is loaded;
   * the model loads with any spill (`size_vram < size`) beyond the caller's own
     measured allowance - or at the wrong context - and it is unloaded again and
-    the lanes are restored. This mode never passes an allowance, so for it that
+    the lane is restored. This mode never passes an allowance, so for it that
     is any spill at all; the one measured exception is the Coding preset's
     pooled lane, which passes its own cap to `load_coder` (2026-11-03);
   * a lane does not come back exactly as it was - said plainly, with what
@@ -130,15 +137,27 @@ class Lane(NamedTuple):
     card: str
     uuid: str
     why: str
+    #: Bytes of that lane's load this code will accept outside video memory.
+    #: 0 is the rule for the everyday lane, as it always was: 11436 holds the
+    #: 9B at 196,608 and it fits the 2060. (A HEAVY preset's measured spill is
+    #: allowed by the pooled lane's own mode row, not here, because General's
+    #: 26B runs on 11450 now - see `jarvis_presets`.)
+    spill_allowance: int = 0
 
 
-#: The owner's two live lanes, exactly as they must come back. The order is
-#: the order they are paused and restored in.
+#: The owner's ONE always-on lane, exactly as it must come back. The coding
+#: lane on port 11435 (`qwen3:8b` at 16384) is RETIRED as of 2026-11-18 - the
+#: owner's words are "i dont need a separate coding lane on any preset. each
+#: preset should be dedicated to one preset local ai model." - so this tuple
+#: holds one entry and nothing here pauses, restores or starts a second lane.
+#: It is the RTX 2060 at 11436 and it still exists because Documents & Notes
+#: and Browser & Forms keep the 9B at 196,608 tokens there. General's 26B is a
+#: HEAVY preset on the pooled lane (11450), not on this one: the 2060 cannot
+#: hold 15.50 GiB, and external review ruled on 2026-11-18 that it must not be
+#: pointed here.
 LANES = (
     Lane(11436, "qwen3.5:9b", 196608, "RTX 2060",
          "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee", "the everyday lane"),
-    Lane(11435, "qwen3:8b", 16384, "RTX 2080 SUPER",
-         "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6", "the second lane"),
 )
 
 
@@ -534,8 +553,8 @@ def _child_env(port: int) -> dict:
     env["OLLAMA_KEEP_ALIVE"] = "-1"
     env["OLLAMA_NUM_PARALLEL"] = "1"
     env["OLLAMA_MAX_LOADED_MODELS"] = "1"
-    # The KV cache format the measurements used, and the same one the two live
-    # lane servers run (start-lane.ps1): q8_0. Measured on this PC 2026-11-07 at
+    # The KV cache format the measurements used, and the same one the everyday
+    # lane server runs (start-lane.ps1): q8_0. Measured on this PC 2026-11-07 at
     # 49,152 tokens across three cards: q8_0 = 16.17 GiB, the default f16 =
     # 18.07 GiB, both with zero spill, so the window fits either way - q8_0 is
     # chosen because it leaves 1.9 GiB more room on the 8 GB cards.
@@ -550,16 +569,16 @@ def server_start(port: int = BIG_PORT, *, pause=None) -> dict:
     {"ok", "url", "owned", "why", "paused"}. Never raises.
 
     THE MODE'S OWN PREMISE, ENFORCED HERE (2026-11-08). The card and the docs
-    say this mode "pauses the two models running now" and never runs beside a
-    lane. That was only done by the higher apply/preset path - so a DIRECT
+    say this mode "pauses the everyday model" and never runs beside a lane.
+    That was only done by the higher apply/preset path - so a DIRECT
     `server_start()` (a recovery, a fallback, a hand-run repair) started the
     three-card server while a lane still held a copy of the same 30B. Measured
     live tonight: 11436 held qwen3-coder at 10,679,610,244 B of 14,442,446,190 B
     (74%, 26% CPU) while 11450 held the same model fully in video memory - two
     copies of a 13.8 GB model on a 28 GB PC, and the HUD's spill warning. So the
-    pause is part of STARTING the server now, not of one caller's flow: the two
-    lane models are unloaded and PROVED gone first, and if either will not go,
-    NOTHING is started (the same refusal `start()` gives). `pause` is the
+    pause is part of STARTING the server now, not of one caller's flow: the
+    everyday lane's model is unloaded and PROVED gone first, and if it will not
+    go, NOTHING is started (the same refusal `start()` gives). `pause` is the
     injectable seam for the suites; it never touches the owner's PC there.
 
     A server already answering on the port is used as it is and NOT paused
@@ -576,12 +595,12 @@ def server_start(port: int = BIG_PORT, *, pause=None) -> dict:
         paused = (pause or pause_lanes)()
     except Exception as exc:                     # noqa: BLE001 - said, never swallowed
         return {"ok": False, "url": url, "owned": False,
-                "why": (f"the two lane models could not be paused "
+                "why": (f"the everyday lane could not be paused "
                         f"({type(exc).__name__}), so the three-card server was NOT started")}
     if not isinstance(paused, dict) or paused.get("ok") is not True:
         why = (paused or {}).get("why") if isinstance(paused, dict) else ""
         return {"ok": False, "url": url, "owned": False, "paused": paused,
-                "why": ("the two lane models would not pause, so the three-card "
+                "why": ("the everyday lane would not pause, so the three-card "
                         "server was NOT started: " + (why or "a lane is still resident"))}
     env = _child_env(port)
     try:
@@ -637,7 +656,7 @@ def server_stop() -> dict:
 
 
 def lane_lines() -> list:
-    return [f"{lane.model} at {lane.ctx:,} tokens on the {lane.card} (port {lane.port})"
+    return [f"{lane.model} at {lane.ctx:,} tokens across {lane.card} (port {lane.port})"
             for lane in LANES]
 
 
@@ -674,10 +693,10 @@ def cards_words(cards: Optional[list]) -> str:
                 "started.")
     if n is not None and n > NEEDS_CARDS:
         return (f"It needs all three graphics cards; this PC has {n}, so the big model is "
-                "split across all of them, and the two models running now are paused first, "
-                "and they are put back exactly as they are when you stop:")
-    return ("It needs ALL THREE graphics cards, so the two models running now are paused "
-            "first, and they are put back exactly as they are when you stop:")
+                "split across all of them, and the everyday model running now is paused "
+                "first, and it is put back exactly as it is when you stop:")
+    return ("It needs ALL THREE graphics cards, so the everyday model running now is "
+            "paused first, and it is put back exactly as it is when you stop:")
 
 
 def cards_note(cards: Optional[list], *, num_ctx: Optional[int] = None) -> str:
@@ -729,8 +748,8 @@ def card_text_off() -> str:
     needs = ("all three graphics cards" if (n is None or n == NEEDS_CARDS)
              else f"at least three graphics cards (this PC has {n})")
     return ("Turn the big coding model on as a choice you can use. It is OFF until you "
-            f"start it, it needs {needs}, and it pauses the two running "
-            "models while it is on. Nothing loads until you start it.")
+            f"start it, it needs {needs}, and it pauses the everyday model while it is "
+            "on. Nothing loads until you start it.")
 
 
 def _announce(words: str) -> None:
@@ -756,11 +775,12 @@ def announce_pause(words: str) -> None:
 
 
 def pause_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
-    """Unload both lane models and prove from /api/ps that they are gone.
+    """Unload the everyday lane's model and prove from /api/ps that it is gone.
     {"ok", "why", "unloaded", "still", "proof"}. Never raises.
 
-    `ok` is False when ANY lane is still resident: the mode must not run beside
-    a lane, so the caller refuses and puts back what this took."""
+    `ok` is False when ANY lane is still resident (since 2026-11-18 `LANES`
+    holds one): the mode must not run beside a lane, so the caller refuses and
+    puts back what this took."""
     unloaded, still, proof = [], [], []
     for lane in LANES:
         url = url_for(lane.port)
@@ -895,8 +915,9 @@ def unload_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
 
 
 def restore_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
-    """Put both lanes back EXACTLY as they were and prove it from /api/ps:
-    the right model per lane, at the right context, with zero spill.
+    """Put the everyday lane back EXACTLY as it was and prove it from
+    /api/ps: the right model, at the right context, with no spill beyond the
+    lane's own measured allowance (0 for every lane but the everyday 26B).
 
     {"ok", "why", "proof", "wrong"}. Never raises. A lane that does not come
     back is named, and `ok` is False - the caller says so rather than claiming
@@ -918,17 +939,21 @@ def restore_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
         spill = _spill(row)
         proof.append(f"port {lane.port}: {lane.model} ctx={row.get('context_length')} "
                      f"(intended {lane.ctx}) size={row.get('size')} "
-                     f"size_vram={row.get('size_vram')} spill={spill}")
+                     f"size_vram={row.get('size_vram')} spill={spill} "
+                     f"(allowed {lane.spill_allowance})")
         if ctx is not None and ctx != lane.ctx:
             wrong.append(f"{lane.model} came back at {ctx}, not {lane.ctx}, on port "
                          f"{lane.port}")
-        if spill is None or spill > 0:
-            wrong.append(f"{lane.model} came back with spill ({spill} B) on port "
-                         f"{lane.port}")
+        # 0 is the rule the everyday lane keeps: the 9B at 196,608 fits the
+        # 2060 with no spill, so any spill is a failed restore. A heavy preset's
+        # measured allowance lives on the pooled lane's own mode row instead.
+        if spill is None or spill > lane.spill_allowance:
+            wrong.append(f"{lane.model} came back with spill ({spill} B, allowed "
+                         f"{lane.spill_allowance} B) on port {lane.port}")
     why = ""
     if wrong:
-        why = ("The two models were not put back exactly as they were: "
-               + "; ".join(wrong) + ". Start them from the Power screen, or restart Jarvis.")
+        why = ("The everyday lane was not put back exactly as it was: "
+               + "; ".join(wrong) + ". Start it from the Power screen, or restart Jarvis.")
     return {"ok": not wrong, "why": why, "proof": proof, "wrong": wrong}
 
 
@@ -1057,12 +1082,13 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
           url_for: Callable[[int], str] = _url,
           start_server: Optional[Callable] = None,
           mode: str = DEFAULT_MODE) -> tuple:
-    """Start the mode: announce, pause both lanes, load the 30B on all three cards.
+    """Start the mode: announce, pause the everyday lane, load the 30B on all
+    three cards.
 
     The order is the contract, and it is why this function is one function:
-    the announcement goes out BEFORE the first unload, both lanes are proved
-    paused before anything is loaded, and ANY failure puts back what was taken
-    and loads nothing. Returns (http status, body)."""
+    the announcement goes out BEFORE the first unload, the everyday lane is
+    proved paused before anything is loaded, and ANY failure puts back what was
+    taken and loads nothing. Returns (http status, body)."""
     try:
         m = mode_profile(mode)
     except ValueError as exc:
@@ -1089,17 +1115,17 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
     live = (tasks or _running_tasks)()
     if live:
         return 409, {"ok": False, "running": False,
-                     "error": ("a task is running - stop it first, or pausing the two models "
-                               "would break it")}
+                     "error": ("a task is running - stop it first, or pausing the everyday "
+                               "model would break it")}
     words = card_text_start(mode=m.key)
     verdict = (gate_check or _gate)(
         ACTION_POWER, {"text": words},
-        f"pause both model lanes and load {m.model}, asked from {by or 'an app'}")
+        f"pause the everyday lane and load {m.model}, asked from {by or 'an app'}")
     if not getattr(verdict, "allowed", False):
         return 200, {"ok": False, "running": False, "changed": False,
                      "outcome": str(getattr(verdict, "outcome", "refused")),
                      "message": "Not started - nothing was paused and nothing was loaded."}
-    # THE ANNOUNCEMENT, before anything on either card is touched.
+    # THE ANNOUNCEMENT, before anything on the cards is touched.
     _announce(words)
     srv = (start_server or server_start)()
     if not srv.get("ok"):
@@ -1134,19 +1160,19 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
                  "mode": m.key, "model": m.model, "num_ctx": m.num_ctx,
                  "message": (
                      f"The big coding model is running on all three cards at "
-                     f"{m.num_ctx:,} tokens. The two models are paused and come "
+                     f"{m.num_ctx:,} tokens. The everyday model is paused and comes "
                      f"back when you stop it."
                      if m.key == DEFAULT_MODE else
                      f"The {m.label.lower()} model ({m.model}) is running on all "
-                     f"three cards at {m.num_ctx:,} tokens. The two models are "
-                     f"paused and come back when you stop it."),
+                     f"three cards at {m.num_ctx:,} tokens. The everyday model is "
+                     f"paused and comes back when you stop it."),
                  "paused": paused["proof"], "proof": loaded["proof"]}
 
 
 def stop(*, by: str = "", url_for: Callable[[int], str] = _url,
          mode: Optional[str] = None) -> tuple:
     """Stop the mode: unload the 30B, stop the server this mode started, and
-    put both lanes back exactly as they were - proved from /api/ps. Returns
+    put the everyday lane back exactly as it was - proved from /api/ps. Returns
     (http status, body)."""
     current = running_mode()
     try:
@@ -1179,10 +1205,10 @@ def stop(*, by: str = "", url_for: Callable[[int], str] = _url,
     return 200, {"ok": True, "running": False, "changed": True,
                  "mode": target.key,
                  "message": (
-                     "The big coding model is stopped and the two models are back: "
+                     "The big coding model is stopped and the everyday model is back: "
                      if target.key == DEFAULT_MODE else
-                     f"The {target.label.lower()} model is stopped and the two "
-                     "models are back: ") + "; ".join(lane_lines()),
+                     f"The {target.label.lower()} model is stopped and the everyday "
+                     "model is back: ") + "; ".join(lane_lines()),
                  "unloaded": gone["proof"], "restored": back["proof"]}
 
 

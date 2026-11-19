@@ -936,7 +936,9 @@ fun BrainScreen(
                                     }
                                     Text(
                                         "Quiet still answers but starts nothing itself. Standby frees " +
-                                            "the graphics card; the next answer takes 5-15 seconds. " +
+                                            "the graphics cards, and the next answer waits while the " +
+                                            "model loads again: measured cold loads on this PC ran from " +
+                                            "about 12 seconds to about a minute, depending on the model. " +
                                             "To go on standby every night, see Standby schedule under Coming up.",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = chrome.textLo,
@@ -1732,26 +1734,30 @@ private fun RetryButton(onRetry: (() -> Unit)?) {
 }
 
 /**
- * The installed models, with a switch and an install that both ASK.
+ * The installed models, with a switch and an install.
  *
  * The owner's 2026-09-18 amendment to the standing rules allowed changing the
  * local model from the phone; the 2026-09-20 one allowed installing a model
  * by typing its name. The catalogue is still not allowed - the list is
  * whatever the desktop already holds, and there is nothing to browse for
- * what could be installed. `Use` and `Install` each raise an approval card
- * (tier `ask` on the server) on Home, so the change is decided the same way
- * every other change is, and nothing downloads or switches until it is
- * approved. `Roll back` is tier `auto` and never waits, because returning to
- * the previous model is the safe direction.
+ * what could be installed. `Install` raises an approval card (tier `ask` on
+ * the server) on Home, so the change is decided the same way every other
+ * change is, and nothing downloads until it is approved. `Use` raises no card
+ * on a current PC (the owner's reversible-click rule of 2026-11-09, claim
+ * C139); an older PC that still raises `switch_model` is reported by
+ * [ApprovalWaiting] only when a card really appeared. `Roll back` is tier
+ * `auto` and never waits, because returning to the previous model is the safe
+ * direction.
  *
  * After an ask, the plate says the card is waiting and where, with a link to
  * it when the caller supplies one. The link only opens Home; it approves
  * nothing.
  *
  * The cost is said on the plate rather than discovered: a swap unloads one
- * model and loads another, which the desktop's own topology doc measures at
- * six to ten seconds of silence. That is a scene change, not a route - fine
- * once per mode, wrong per request.
+ * model and loads another, which the 2026-11-17 measurement on this PC put
+ * between about 12 seconds (the smallest model) and about a minute (the
+ * largest). That is a scene change, not a route - fine once per mode, wrong
+ * per request.
  */
 @Composable
 private fun ModelsPlate(
@@ -1795,11 +1801,13 @@ private fun ModelsPlate(
         }
         Gap(8)
         Text(
-            "Use switches at once - there is no card and nothing to approve. A " +
-                "switch takes six to ten seconds while one model unloads and the " +
-                "next loads, which is fine once and wrong for every question. The " +
-                "model you were on is one line above as \"Roll back to…\", so " +
-                "coming back is one tap.",
+            "Use switches with no approval card. The model that was running " +
+                "stops first, then the new one loads: measured cold loads on " +
+                "this PC ran from about 12 seconds for the smallest model to " +
+                "about 50 seconds for the 26B, and about a minute at worst. " +
+                "Fine once per job, wrong for every question. The model you " +
+                "were on is one line above as \"Roll back to…\", so coming " +
+                "back is one tap.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textLo,
         )

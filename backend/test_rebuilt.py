@@ -1066,7 +1066,7 @@ class Recall(unittest.TestCase):
 
 class Router(unittest.TestCase):
 
-    LANES = ["jarvis-escalate", "jarvis-bulk"]
+    LANES = ["jarvis-escalate"]
 
     def test_the_private_backstop_catches_both_spellings(self):
         """The list otherwise uses American terms (ssn, social security) and
@@ -1180,7 +1180,7 @@ class Router(unittest.TestCase):
         keeps it local."""
         long_q = ("explain in detail and compare the trade-offs, step by step, "
                   "why this design was chosen " * 4)
-        lanes = ["jarvis-escalate", "jarvis-vision", "jarvis-bulk"]
+        lanes = ["jarvis-escalate", "jarvis-vision", "cloud-next"]
         fresh = RT.Budget(path=None)
         # CONTROL: the same question with no picture does escalate, so the
         # assertion below is about the picture and nothing else.
@@ -1210,8 +1210,8 @@ class Router(unittest.TestCase):
         lane, for a turn that had already fallen back to local because the
         local model refused or timed out. Local must have nothing beneath it,
         whatever `lanes` or the configured chain contains."""
-        for lanes in (["local", "jarvis-escalate", "jarvis-bulk"],
-                     ["jarvis-escalate", "local", "jarvis-bulk"],
+        for lanes in (["local", "jarvis-escalate", "cloud-next"],
+                     ["jarvis-escalate", "local", "cloud-next"],
                      self.LANES):
             self.assertIsNone(RT.degrade("local", lanes, "local"),
                               f"local leaked to a cloud lane via {lanes}")
@@ -1219,7 +1219,8 @@ class Router(unittest.TestCase):
         # that direction is the documented, real use of local appearing in
         # the list. Stubbed degrade_chain, not the module's shipped default:
         # the real chain is ["jarvis-escalate"] alone since 2026-10-27 (it was
-        # ["jarvis-escalate","jarvis-bulk","jarvis-critic"]), which does not
+        # ["jarvis-escalate","jarvis-bulk","jarvis-critic"] before the owner's
+        # decision collapsed the three cloud lanes into one), which does not
         # contain "local" at all, and a name IN that chain means degrade()
         # prefers it over any custom `lanes` this test passes - exactly as
         # documented, and not what this control is checking.
@@ -1232,7 +1233,9 @@ class Router(unittest.TestCase):
 
     def test_degrade_never_returns_its_own_input(self):
         """jarvis_hud retries with the result. Returning the input is an
-        infinite retry against a service that is already refusing."""
+        infinite retry against a service that is already refusing. The two
+        removed lane names are kept as INPUTS on purpose: an old config can
+        still hand one in, and it must not come back out."""
         for lane in ["jarvis-escalate", "jarvis-bulk", "jarvis-critic",
                      "local", "unknown-lane", ""]:
             nxt = RT.degrade(lane, self.LANES, "local")

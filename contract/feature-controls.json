@@ -19,7 +19,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 183,
+  "feature_count": 184,
   "features": [
     {
       "id": "typing",
@@ -240,7 +240,7 @@
       "name": "Jarvis reads its answers aloud",
       "group": "Talking",
       "surface": "both",
-      "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. Settings, The big HUD window, \"Read replies out loud\" turns the automatic reading off and back on, and saying \"stop reading your replies out loud\" in chat or Jarvis Live does the same (\"read your replies out loud\" turns it back on). The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; the same card's \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
+      "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. PC: Settings, The big HUD window, \"Read replies out loud\" turns the automatic reading off and back on. Phone: there is no Settings row for it - the phone reads an answer aloud when you tap Read out loud on it, and its own setting for reading remembered answers aloud is changed by chat: say \"stop reading remembered answers out loud\", and \"read everything out loud\" turns it back on. The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; the same card's \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1133,7 +1133,7 @@
       "name": "The morning briefing",
       "group": "Talking",
       "surface": "both",
-      "where": "Set it up in Settings, Morning briefing. The latest one is in Brain, Work, Morning briefing.",
+      "where": "PC: Settings, Morning briefing, to set it up; the latest one is in Brain, Work, Morning briefing. Phone: Brain, Money and time, Morning briefing.",
       "control": {
         "type": "title",
         "setting_keys": [
@@ -1292,7 +1292,7 @@
       "name": "Today",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Work, Today.",
+      "where": "PC: Brain, Work, Today. Phone: Brain, Money and time, Today.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1394,7 +1394,7 @@
       "name": "Background jobs",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Work, Background jobs.",
+      "where": "PC: Brain, Work, Background jobs. Phone: Brain, What Jarvis is doing, Background jobs.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1445,7 +1445,7 @@
       "name": "What Jarvis is doing right now",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Now.",
+      "where": "PC: Brain, Now. Phone: Brain, What Jarvis is doing, Doing.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1496,7 +1496,7 @@
       "name": "How much Jarvis may interrupt you",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Now, Attention budget. The brief appears in the Jarvis bar.",
+      "where": "PC: Brain, Now, Attention budget. The brief appears in the Jarvis bar. Phone: Brain, the Attention budget line below the headings.",
       "control": {
         "type": "adjust",
         "setting_keys": [],
@@ -1562,7 +1562,7 @@
       "name": "Focus session",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Work, Focus session. Snooze, \"I'm doing research\", pause and stop by voice.",
+      "where": "PC: Brain, Work, Focus session. Phone: Brain, What Jarvis is doing, Focus session. Snooze, \"I'm doing research\", pause and stop by voice.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1666,7 +1666,7 @@
       "name": "The Memory tab",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory.",
+      "where": "PC: Brain, Memory. Phone: Brain, What Jarvis knows about you, plus Waiting for you.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1717,7 +1717,7 @@
       "name": "Facts Jarvis saved by itself",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Saved automatically. The switch that governs it is also in Settings, Learning.",
+      "where": "PC: Brain, Memory, Saved automatically. Phone: Brain, What Jarvis knows about you, Saved automatically. The switch that governs it is also in Settings, Learning.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -1774,7 +1774,7 @@
       "name": "Facts waiting for your yes",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Waiting for you - or the card that appears.",
+      "where": "PC: Brain, Memory, Waiting for you - or the card that appears. Phone: Brain, Waiting for you - or the card that appears.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1826,7 +1826,7 @@
       "name": "What Jarvis knows about you",
       "group": "Memory",
       "surface": "desktop",
-      "where": "Brain, Memory, What Jarvis knows about you.",
+      "where": "PC: Brain, Memory, What Jarvis knows about you - the full list, every fact by topic, each with Forget and Erase the words. Phone: Brain, What Jarvis knows about you - the saved facts in the lists under that heading; this one full list is the PC's.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1930,7 +1930,7 @@
       "name": "Person dossier",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, People and things - click (or tap) a person's name.",
+      "where": "PC: Brain, Memory, People and things - click a person's name. Phone: Brain, What Jarvis knows about you, People and things - tap a person's name.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1981,7 +1981,7 @@
       "name": "Always keep in mind",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Always keep in mind.",
+      "where": "PC: Brain, Memory, Always keep in mind. Phone: Brain, What Jarvis knows about you, Always keep in mind.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2032,7 +2032,7 @@
       "name": "Between us",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Between us.",
+      "where": "PC: Brain, Memory, Between us. Phone: Brain, What Jarvis knows about you, Between us.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2083,7 +2083,7 @@
       "name": "Topics",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Topics.",
+      "where": "PC: Brain, Memory, Topics. Phone: Brain, What Jarvis knows about you, Topics.",
       "control": {
         "type": "adjust",
         "setting_keys": [],
@@ -2143,7 +2143,7 @@
       "name": "The learning switches",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Learning. The two switches are also in Settings, Learning.",
+      "where": "PC: Brain, Memory, Learning. The two switches are also in Settings, Learning. Phone: Brain, What Jarvis knows about you, What Jarvis remembers; the two switches are also in the phone's Settings, Learning.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -2200,7 +2200,7 @@
       "name": "The wiki Jarvis builds",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Wiki.",
+      "where": "PC: Brain, Memory, Wiki. Phone: Brain, What Jarvis knows about you, Wiki.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2251,7 +2251,7 @@
       "name": "Deep questions",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Deep questions.",
+      "where": "PC: Brain, Memory, Deep questions. Phone: Brain, Jarvis on your PC, Deep questions.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2302,7 +2302,7 @@
       "name": "What did I believe on this date?",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, What did I believe on this date?",
+      "where": "PC: Brain, Memory, What did I believe on this date? Phone: Brain, What Jarvis knows about you, What did I believe on this date?",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2353,7 +2353,7 @@
       "name": "Bring in old chats",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Bring in old chats.",
+      "where": "PC: Brain, Memory, Bring in old chats. The phone has no screen for it - bring chats in on the PC.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2459,7 +2459,7 @@
       "name": "Chat tags",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, History, Chat tags.",
+      "where": "PC: Brain, History, Chat tags. Phone: the History screen's Chat tags and tag editor.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2510,7 +2510,7 @@
       "name": "Forget a time frame",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, History, Forget a time frame.",
+      "where": "PC: Brain, History, Forget a time frame. Phone: Brain, What Jarvis knows about you, Forget a time frame.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2993,7 +2993,7 @@
       "name": "Quiz me on a text",
       "group": "Screen and pictures",
       "surface": "both",
-      "where": "Brain, Work, Quiz me on a text.",
+      "where": "PC: Brain, Work, Quiz me on a text. Phone: Brain, Your learning, Quiz me on a text.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3152,7 +3152,7 @@
       "name": "My study decks",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Work, My study decks.",
+      "where": "PC: Brain, Work, My study decks. Phone: Brain, Your learning, My study decks.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3398,6 +3398,59 @@
         "reason_code": "not-a-setting",
         "owner": "none-needed",
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "picture-conversion",
+      "name": "Make a PDF from pictures, or change a picture's format",
+      "group": "Notes and files",
+      "surface": "both",
+      "where": "Chat, in either app: name the pictures' full paths, for example \"make one pdf from C:\\\\Users\\\\you\\\\Pictures\\\\a.jpg and b.png\", or \"save this picture as a jpeg\".",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Make a PDF from pictures, or change a picture's format",
+        "turn_off": "turn off Make a PDF from pictures, or change a picture's format",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": "about",
+        "location": "Settings > about jarvis",
+        "search": [
+          "about jarvis",
+          "Make a PDF from pictures, or change a picture's format"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": "about",
+        "location": "Settings > about jarvis",
+        "search": [
+          "about jarvis",
+          "make a pdf from pictures, or change a picture's format"
+        ],
+        "found": true
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "One sentence in a chat and its own approval card: there is nothing to turn on or off. The card names every picture, the exact new file, and whether the copy is lossless or lossy.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Make a PDF from pictures, or change a picture's format",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "One sentence in a chat and its own approval card: there is nothing to turn on or off. The card names every picture, the exact new file, and whether the copy is lossless or lossy.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
       },
@@ -3743,7 +3796,7 @@
       "name": "Talk to a chatbot for me",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Work, Talk to a chatbot for me. \"Ask several and compare\" puts one question to several at once.",
+      "where": "PC: Brain, Work, Talk to a chatbot for me. Phone: Brain, What Jarvis is doing, Talk to a chatbot for me. \"Ask several and compare\" puts one question to several at once.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3794,7 +3847,7 @@
       "name": "Deal with customer support for me",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Work, Chat with customer support for me.",
+      "where": "PC: Brain, Work, Chat with customer support for me. Phone: Brain, What Jarvis is doing, Chat with customer support for me.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3845,7 +3898,7 @@
       "name": "Projects",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Projects.",
+      "where": "PC: Brain, Projects. Phone: Brain, Your projects and goals, Projects.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3896,7 +3949,7 @@
       "name": "Goals",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Projects, Goals. Ask in chat for a short plan if you want one drafted first.",
+      "where": "PC: Brain, Projects, Goals. Phone: Brain, Your projects and goals, Goals. Ask in chat for a short plan if you want one drafted first.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3947,7 +4000,7 @@
       "name": "Progress",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Projects, Progress.",
+      "where": "PC: Brain, Projects, Progress. Phone: Brain, Your projects and goals, Progress.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4205,7 +4258,7 @@
       "name": "Spending summaries",
       "group": "Money and health",
       "surface": "both",
-      "where": "Settings, Spending, for the layouts and categories; the table appears when the file is read.",
+      "where": "PC: Settings, Spending, for the layouts and categories. Phone: Brain, Money and time, Spending - it shows the table the PC reads; the layouts and categories are set on the PC.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4258,7 +4311,7 @@
       "name": "Retirement what-if",
       "group": "Money and health",
       "surface": "both",
-      "where": "Brain, Work, Retirement what-if.",
+      "where": "PC: Brain, Work, Retirement what-if. Phone: Brain, Money and time, Retirement what-if.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4308,8 +4361,8 @@
       "id": "chatbot-money",
       "name": "Chatbot keys and a monthly money limit",
       "group": "Money and health",
-      "surface": "desktop",
-      "where": "Settings, Chatbot API keys - the keys, the limits and the price list.",
+      "surface": "both",
+      "where": "PC: Settings, Chatbot API keys - the keys, the limits and the price list. Phone: Brain, Money and time, Chatbot money limits - the spend and the limit are readable there; the keys and limits are set on the PC.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4362,7 +4415,7 @@
       "name": "Health and money facts wait for your yes",
       "group": "Money and health",
       "surface": "both",
-      "where": "The card that appears, or Brain, Memory, Waiting for you.",
+      "where": "The card that appears, or PC: Brain, Memory, Waiting for you. Phone: Brain, Waiting for you; the card appears on the phone too.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4837,7 +4890,7 @@
       "name": "Read your own calendar",
       "group": "Home",
       "surface": "desktop",
-      "where": "Settings, Accounts - the private calendar link (\"Secret address in iCal format\"). Then just ask.",
+      "where": "PC: Settings, Accounts - the private calendar link (\"Secret address in iCal format\"), to set it up. Just ask - \"what's coming up\" is answered from either app's chat; the private link itself is set on the PC.",
       "control": {
         "type": "adjust",
         "setting_keys": [],
@@ -5152,8 +5205,8 @@
       "id": "email-drafts",
       "name": "Save a draft to your Drafts folder",
       "group": "Home",
-      "surface": "desktop",
-      "where": "Ask Jarvis to draft it, then answer the card.",
+      "surface": "both",
+      "where": "Ask Jarvis to draft it in either app, then answer the card; the PC puts it in your Drafts folder.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -5787,7 +5840,7 @@
       "name": "Ring my phone",
       "group": "Phone",
       "surface": "both",
-      "where": "Say \"ring my phone\" to Jarvis on the PC.",
+      "where": "Say \"ring my phone\" in either app; the phone rings on its alarm channel.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -6530,7 +6583,7 @@
       "name": "Compute",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Brain, Model, Compute.",
+      "where": "PC: Brain, Model, Compute. Phone: Brain, Jarvis on your PC, Compute.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -6581,7 +6634,7 @@
       "name": "Skills",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Brain, Model, Skills. And Settings, Skills on the PC: install one from a folder or a .zip, import your Hermes skills, turn one off and back on, or edit one.",
+      "where": "PC: Brain, Model, Skills, and Settings, Skills: install one from a folder or a .zip, import your Hermes skills, turn one off and back on, or edit one. Phone: Brain, Jarvis on your PC, Skills - the list is there; installing and editing are the PC's.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -6804,7 +6857,7 @@
       "name": "The Work tab",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Brain, Work.",
+      "where": "PC: Brain, Work. The phone has no Work tab: the same plates sit under Brain's own headings - Focus session and Background jobs under What Jarvis is doing; Today, Morning briefing and Coming up under Money and time; Quiz me on a text and My study decks under Your learning.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -6906,7 +6959,7 @@
       "name": "Hardware and models",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Hardware and models.",
+      "where": "PC: Settings, Hardware and models. Phone: Brain, Jarvis on your PC, Hardware.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -7074,7 +7127,7 @@
       "name": "The second graphics card",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Second graphics card.",
+      "where": "PC: Settings, Second graphics card. Phone: Brain, Jarvis on your PC, Second graphics card.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -7135,7 +7188,7 @@
       "name": "The big model (slow)",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Big model (slow).",
+      "where": "PC: Settings, Big model (slow). Phone: Brain, Jarvis on your PC, Big model (slow).",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -7357,7 +7410,7 @@
       "name": "What this backend supports",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, What this backend supports.",
+      "where": "PC: Settings, What this backend supports. Phone: Brain, Jarvis on your PC, This backend.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8112,7 +8165,7 @@
       "id": "reminder-actions",
       "name": "A reminder that opens something, or asks to do one task",
       "group": "The PC itself",
-      "surface": "desktop",
+      "surface": "both",
       "where": "PC: Reminders, Then. Phone: shows a note and the one card; no way to create or edit one.",
       "control": {
         "type": "refused",
@@ -14412,7 +14465,7 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 107,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 108,
     "Switchable / Adjustable (Typed & Settings)": 44,
     "PC-Only Setting (Honest Refusal on Phone)": 18,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,

@@ -24,9 +24,13 @@ The claims, one line each:
     name it, and the backup carries the record (encrypted at rest, with its own
     key) rather than excluding it;
   * the HTTP helper refuses a non-loopback address (and accepts this PC);
-  * the lane probe says "down", "running" and "model not installed yet"
-    without ever opening a socket, and the model's fallback names :11436;
-  * a consult strips MedGemma's leaked thinking markers and returns
+  * the lane and the model are RESOLVED, never typed: `current_lane()` asks
+    `jarvis_models.current_model()` and the lane table, the module carries no
+    port and no model as a default (the 11435 lane it used to type is retired),
+    the lane probe says "down", "running" and "model not installed yet"
+    without ever opening a socket, and the fallback names the resolved model
+    and lane;
+  * a consult strips the model's leaked thinking markers and returns
     authority "none";
   * the FHIR checker passes a good bundle and fails each named defect, with a
     positive control beside every negative; a model's answers can never change
@@ -62,6 +66,11 @@ require_shipped("jarvis_medical_advocate.py")
 
 import jarvis_medical_advocate as MED  # noqa: E402
 import jarvis_second_card as SC  # noqa: E402
+
+#: The model the everyday preset names since 2026-11-18. The suite
+#: never types a model of its own into the module - it only fakes the
+#: resolver's answer.
+EVERYDAY = "gemma4:26b-a4b-it-qat"
 import jarvis_backup as BACKUP  # noqa: E402
 
 
@@ -601,14 +610,58 @@ class SeparationTests(_StoreCase):
 # --------------------------------------------------------------------------
 
 class LaneTests(_StoreCase):
+    """The lane client asks the resolvers, never a constant (2026-11-18).
 
-    def test_loopback_guard_refuses_other_hosts_and_accepts_this_pc(self):
-        for bad in ("http://192.168.1.5:11435", "http://example.com",
-                    "https://127.0.0.1.example.com:11435", ""):
-            with self.assertRaises(ValueError):
-                MED._loopback_url(bad)
-        self.assertEqual(MED._loopback_url("http://127.0.0.1:11435"),
-                         "http://127.0.0.1:11435")
+    THE DEFECT THIS REPLACES: the module used to type
+    `http://127.0.0.1:11435` and `medgemma1.5:4b-it-q4_K_M` as its defaults.
+    The 11435 lane was RETIRED on 2026-11-18, so that default would have
+    pointed at a port nothing listens on and a model the lane table no longer
+    owns - silently, because a down lane only reads as "not running".
+    """
+
+    #: A resolved lane, the shape `current_lane()` returns.
+    def _lane(self, model=EVERYDAY, url="http://127.0.0.1:11436",
+              num_ctx=32768, why=""):
+        return {"url": url, "model": model, "num_ctx": num_ctx, "why": why}
+
+    def test_the_module_names_no_model_and_no_port_as_a_default(self):
+        """The one property that keeps the retirement from breaking it again."""
+        self.assertFalse(hasattr(MED, "LANE_URL"),
+                         "the module still carries a LANE_URL default")
+        self.assertFalse(hasattr(MED, "MEDGEMMA_MODEL"),
+                         "the module still carries a MEDGEMMA_MODEL default")
+        self.assertFalse(hasattr(MED, "PRIMARY_LANE"),
+                         "the module still carries a PRIMARY_LANE default")
+        self.assertTrue(callable(MED.current_lane))
+
+    def test_current_lane_asks_the_resolvers_and_the_lane_table(self):
+        import jarvis_presets as P
+        resolved = types.SimpleNamespace(active_chat_url=lambda: "",
+                                         lane_num_ctx=lambda url: None)
+        models = types.SimpleNamespace(
+            ollama_url_on_this_pc=lambda: "http://127.0.0.1:11436",
+            current_model=lambda: EVERYDAY)
+        with mock.patch.dict(sys.modules, {"jarvis_models": models,
+                                           "jarvis_presets": resolved}):
+            # The preset row that names the everyday model supplies the window;
+            # a trimmed backend (no presets) would fall back to the lane table,
+            # which is the OTHER copy of the same number.
+            resolved.PRESETS = [types.SimpleNamespace(id="general", lane="main",
+                                                      model=EVERYDAY, context=32768)]
+            resolved.LANES = {"main": {"port": 11436}}
+            out = MED.current_lane()
+        self.assertEqual(out["url"], "http://127.0.0.1:11436")
+        self.assertEqual(out["model"], EVERYDAY)
+        self.assertEqual(out["num_ctx"], 32768)
+
+    def test_no_model_chosen_is_said_rather_than_guessed(self):
+        models = types.SimpleNamespace(
+            ollama_url_on_this_pc=lambda: "http://127.0.0.1:11436",
+            current_model=lambda: None)
+        with mock.patch.dict(sys.modules, {"jarvis_models": models}):
+            out = MED.current_lane()
+        self.assertEqual(out["model"], "")
+        self.assertIn("No local model is chosen", out["why"])
 
     def test_lane_probe_is_killed_before_any_real_socket(self):
         seen = {}
@@ -616,50 +669,74 @@ class LaneTests(_StoreCase):
         def fake(url, payload=None, timeout=2.0):
             seen["url"] = url
             seen["timeout"] = timeout
-            return {"models": [{"name": MED.MEDGEMMA_MODEL}]}
+            return {"models": [{"name": EVERYDAY}]}
 
-        with mock.patch.object(SC, "_http_json", fake), \
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake), \
                 mock.patch("socket.socket.connect",
                            side_effect=AssertionError("a real socket was opened")):
             status = MED.lane_status()
         self.assertTrue(status["available"])
-        self.assertEqual(seen["url"], MED.LANE_URL + "/api/tags")
+        self.assertEqual(seen["url"], "http://127.0.0.1:11436/api/tags")
         self.assertAlmostEqual(seen["timeout"], 0.20)
-        self.assertEqual(status["model"], MED.MEDGEMMA_MODEL)
+        self.assertEqual(status["model"], EVERYDAY)
         self.assertIn("not an authority", status["note"])
 
-    def test_lane_down_is_a_calm_false_note_and_names_the_primary_lane(self):
+    def test_lane_down_is_a_calm_false_note_and_names_the_resolved_lane(self):
         def fake(url, payload=None, timeout=2.0):
             raise OSError("connection refused")
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake):
             status = MED.lane_status()
         self.assertFalse(status["available"])
         self.assertIn("not running", status["note"])
-        self.assertIn(MED.PRIMARY_LANE, status["note"])
+        self.assertIn(EVERYDAY, status["note"])
+        self.assertIn("11436", status["note"])
         self.assertEqual(set(status), {"available", "lane_url", "model", "note"})
 
     def test_lane_up_without_the_model_says_not_installed(self):
         def fake(url, payload=None, timeout=2.0):
             return {"models": [{"name": "qwen3.5:9b"}]}
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake):
             status = MED.lane_status()
         self.assertFalse(status["available"])
         self.assertIn("not installed", status["note"].casefold())
-        self.assertIn(MED.MEDGEMMA_MODEL, status["note"])
+        self.assertIn(EVERYDAY, status["note"])
 
     def test_lane_up_with_the_model_is_available(self):
         def fake(url, payload=None, timeout=2.0):
-            return {"models": [{"name": MED.MEDGEMMA_MODEL}]}
+            return {"models": [{"name": EVERYDAY}]}
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake):
             self.assertTrue(MED.lane_status()["available"])
             # The positive control another way: a different name is not it.
             fake_other = lambda url, payload=None, timeout=2.0: {
                 "models": [{"name": "medgemma:4b"}]}
             with mock.patch.object(SC, "_http_json", fake_other):
                 self.assertFalse(MED.lane_status()["available"])
+
+    def test_no_model_chosen_is_a_calm_false_and_never_asks(self):
+        asked = []
+
+        def fake(url, payload=None, timeout=2.0):
+            asked.append(url)
+            return {"models": []}
+
+        lane = self._lane(model="", num_ctx=None,
+                          why="No local model is chosen on this PC yet.")
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: lane), \
+                mock.patch.object(SC, "_http_json", fake):
+            status = MED.lane_status()
+            out = MED.consult_local_medgemma("q")
+        self.assertFalse(status["available"])
+        self.assertIn("No local model is chosen", status["note"])
+        self.assertFalse(out["ok"])
+        self.assertIn("No local model is chosen", out["note"])
+        self.assertEqual(asked, [])
 
     def test_lane_status_refuses_a_foreign_address(self):
         with self.assertRaises(ValueError):
@@ -671,38 +748,59 @@ class LaneTests(_StoreCase):
         def fake(url, payload=None, timeout=2.0):
             return {"response": "<unused94> thought about it <unused95>The answer."}
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake):
             out = MED.consult_local_medgemma("what is this?")
         self.assertTrue(out["ok"])
         self.assertEqual(out["response"], "The answer.")
         self.assertNotIn("<unused94>", out["response"])
         self.assertNotIn("<unused95>", out["response"])
         self.assertEqual(out["authority"], "none")
-        self.assertEqual(out["model_used"], MED.MEDGEMMA_MODEL)
+        self.assertEqual(out["model_used"], EVERYDAY)
 
     def test_consult_keeps_an_answer_after_an_unclosed_thinking_marker(self):
         def fake(url, payload=None, timeout=2.0):
             return {"response": "The answer.<unused94> and then it kept thinking"}
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake):
             out = MED.consult_local_medgemma("q")
         self.assertEqual(out["response"], "The answer.")
         self.assertNotIn("unused94", out["response"])
 
-    def test_consult_failure_returns_the_fallback_naming_11436(self):
+    def test_consult_failure_returns_the_fallback_naming_the_resolved_model(self):
         def down(url, payload=None, timeout=2.0):
             raise OSError("connection refused")
 
         for fake in (down, lambda url, payload=None, timeout=2.0: {"response": ""},
                      lambda url, payload=None, timeout=2.0: {}):
-            with mock.patch.object(SC, "_http_json", fake):
+            with mock.patch.object(MED, "current_lane",
+                                   lambda *a, **k: self._lane()), \
+                    mock.patch.object(SC, "_http_json", fake):
                 out = MED.consult_local_medgemma("q")
             self.assertFalse(out["ok"])
             self.assertTrue(out["fallback_to_primary"])
             self.assertEqual(out["model_used"], "primary_local_fallback")
             self.assertEqual(out["response"], "")
-            self.assertIn(":11436", out["note"])
+            self.assertIn(EVERYDAY, out["note"])
+            self.assertIn("11436", out["note"])
             self.assertNotIn("11435", out["note"])
+
+    def test_consult_refuses_rather_than_guessing_an_unknown_window(self):
+        """DEF-088's rule: a probe that names no num_ctx reloads at the default."""
+        asked = []
+
+        def fake(url, payload=None, timeout=2.0):
+            asked.append(url)
+            return {"response": "x"}
+
+        lane = self._lane(num_ctx=None)
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: lane), \
+                mock.patch.object(SC, "_http_json", fake):
+            out = MED.consult_local_medgemma("q")
+        self.assertFalse(out["ok"])
+        self.assertIn("cannot be named", out["note"])
+        self.assertEqual(asked, [])
 
     def test_consult_latches_before_it_calls_the_model(self):
         order = []
@@ -715,7 +813,8 @@ class LaneTests(_StoreCase):
             order.append("model")
             return {"response": "an answer"}
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane", lambda *a, **k: self._lane()), \
+                mock.patch.object(SC, "_http_json", fake):
             MED.consult_local_medgemma("q", taint_latch=latch)
         self.assertEqual(order, ["latch", "model"])
 
@@ -779,7 +878,11 @@ class LaneTests(_StoreCase):
             seen["timeout"] = timeout
             return {"response": "an answer"}
 
-        with mock.patch.object(SC, "_http_json", fake):
+        with mock.patch.object(MED, "current_lane",
+                               lambda *a, **k: {"url": "http://127.0.0.1:11436",
+                                                "model": EVERYDAY,
+                                                "num_ctx": 32768, "why": ""}), \
+                mock.patch.object(SC, "_http_json", fake):
             out = MED.consult_local_medgemma("q", taint_latch=lambda: True)
         self.assertTrue(out["ok"], out)
         self.assertGreaterEqual(seen["timeout"], 120.0)

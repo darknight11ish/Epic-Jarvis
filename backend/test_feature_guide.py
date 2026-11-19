@@ -1614,6 +1614,17 @@ BOTH_PC_ONLY_SENTENCES = {
                     "change the PC's setting."),
     "connection": ("Its setting is in Settings, Connection. It is changed on the PC; "
                    "the phone has the feature but cannot change the PC's setting."),
+    # chatbot-money joined on 2026-11-18 (the phone awareness audit, gap 13): the
+    # row said `surface: desktop` while the phone draws the whole read - every
+    # service's limit, what is spent, what is left (`net/Money.kt`,
+    # `ui/screens/MoneyPlate.kt`, Brain -> Money and time), which is
+    # docs/ARCHITECTURE.md section 8's own "The READ is on both apps now; the
+    # WRITE is the desktop's alone". So the surface says both, the label stays
+    # PC-Only Setting (the keys and limits are the PC's), and the sentence must
+    # keep saying that: the phone HAS the feature, it just cannot change it.
+    "chatbot-money": ("Its setting is in Settings, Chatbot API keys. It is changed "
+                      "on the PC; the phone has the feature but cannot change the "
+                      "PC's setting."),
 }
 #: The row whose SHARED document the phone writes: `appearance` is still a
 #: PC-Only-labelled setting with no typed control, and the phone's Appearance
@@ -1658,7 +1669,12 @@ BOTH_TYPED_SENTENCES = {
 #: thing (`appearance`, `phone-floating`). `faces` left this set when the
 #: contract gave it a typed control; `phone-floating` joined it on 2026-10-29
 #: (the settings wrong-app audit's finding 6) when its row became `surface: both`.
-BOTH_PC_ONLY_IDS = ("appearance", "chat-thread", "connection", "phone-floating")
+#: `chatbot-money` joined on 2026-11-18 (the phone awareness audit, gap 13) for
+#: the same reason phone-floating did: its `surface` said `desktop` while the
+#: phone really draws the read, so it is now a both-apps PC-Only-labelled row and
+#: its pinned sentence above says exactly that.
+BOTH_PC_ONLY_IDS = ("appearance", "chat-thread", "chatbot-money", "connection",
+                    "phone-floating")
 #: The garble shape itself: a Settings path swallowed by " on this PC" in the same
 #: clause. It is what `settings_path_words()` produced when a prose `where` was
 #: split at its first comma and glued together.
@@ -1715,15 +1731,15 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
     built from `surface`: the PC's Settings is named as a place, and the phone is
     not said to lack the feature.
 
-    The set is pinned exactly, and it is three since this branch: asking for a
-    face by name works on both apps, so `faces` has a real typed control and the
-    contract labels it "Switchable / Adjustable (Typed & Settings)". It moved to
-    BOTH_TYPED_SENTENCES rather than being dropped, and its phone half is still
-    checked below.
+    The set is pinned exactly, and it is five since 2026-11-18: `chatbot-money`
+    joined when the phone awareness audit (gap 13) corrected its `surface` from
+    `desktop` to `both` - the phone draws the read of the limits and the spend,
+    while the keys and limits stay the PC's (docs/ARCHITECTURE.md section 8 says
+    the same in its "Chatbot money limits" row). It was four before that change.
     """
     both_pc = [row for row in SOURCE if row["surface"] == "both"
                and FG.label_for(row) == FG.LABEL_PC_ONLY]
-    check("exactly the four pinned rows are both-apps PC-Only settings",
+    check("exactly the five pinned rows are both-apps PC-Only settings",
           sorted(r["id"] for r in both_pc) == list(BOTH_PC_ONLY_IDS),
           [r["id"] for r in both_pc])
     for fid, want in BOTH_PC_ONLY_SENTENCES.items():
@@ -2385,11 +2401,24 @@ _WHERE_OPENERS = frozenset({
 
 
 def _real_place_names() -> tuple:
-    """(Settings card names, Brain pane names) read from the real files."""
+    """(Settings card names, Brain pane names) read from the real files.
+
+    The Brain names are BOTH apps' real places since 2026-11-18 (the phone
+    awareness audit): a `both` row now says where the phone has the feature as
+    well, and the phone's Brain is one scroll with seven headings and no tabs -
+    "Brain, Money and time, Today" is a real pane on the phone exactly as
+    "Brain, Work, Today" is on the PC. So the phone's heading titles are read
+    from `BrainSections.kt` here, beside the PC's menu titles, and a row may name
+    either app's real place. `tools/check_feature_list.py`'s rule 10 is what
+    stops a `both` row naming ONLY the PC's tabs.
+    """
     html = (REPO / "jarvis-desktop" / "src" / "settings.html").read_text(
         encoding="utf-8", errors="replace")
     menu = (REPO / "jarvis-desktop" / "src" / "menu-catalog.js").read_text(
         encoding="utf-8", errors="replace")
+    phone_brain = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com"
+                   / "jarvis" / "client" / "ui" / "screens" / "BrainSections.kt"
+                   ).read_text(encoding="utf-8", errors="replace")
     settings = set()
     for _href, title in re.findall(r'<a href="#([a-z0-9-]+)">([^<]+)</a>', html):
         settings.add(_norm_place(title))
@@ -2399,6 +2428,14 @@ def _real_place_names() -> tuple:
         for name in section.names:
             settings.add(_norm_place(name))
     brains = {_norm_place(t) for t in re.findall(r'"title": "([^"]+)"', menu)}
+    # The phone's seven headings (`title = "..."` inside BrainSections.kt's
+    # SECTIONS). Reading the file means a renamed heading fails this test rather
+    # than silently leaving a stale name accepted.
+    headings = re.findall(r'title = "([^"]+)"', phone_brain)
+    if len(headings) != 7:
+        check("the phone's seven Brain headings were read, not assumed",
+              False, len(headings))
+    brains |= {_norm_place(t) for t in headings}
     return settings, brains
 
 

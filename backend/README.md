@@ -21269,3 +21269,30 @@ read from `jarvis_rea.ACTION_ORDER` so the two cannot drift), `backend/
 jarvis_claims.py`, `backend/jarvis_reach.py`, `backend/jarvis_feature_catalogue.py`,
 `skills/reverse-engineer-anything/SKILL.md`, `docs/JARVIS-API.md` section 148,
 `docs/ARCHITECTURE.md`. Tests: `backend/test_rea.py`.
+
+**The local model guard - a local turn can always answer (2026-11-18).**
+`local-model-guard.patch`, ONE hunk in `jarvis_hud.py`, paired with the shipped
+`backend/rebuilt/jarvis_router.py`. The measured defect: the owner's PC had the
+Coding preset's pooled three-card model saved as the everyday model (the live
+install's own preset apply; PR #1361 removes that half from the repository),
+so a private question routed correctly local and was then refused by
+`jarvis_agent.local_model_refusal` - honestly, with nothing sent anywhere, and
+with NO ANSWER AT ALL. The router now validates the chosen model against the
+lane the turn will really use before it decides, and when the saved model is a
+pooled one at a one-card lane it names the model that lane is configured for
+instead, carrying `degraded_from` in the route detail (`lane` = asked for,
+`model` = really used, `code` = `model_cannot_run_on_this_lane`, `why` = the
+refusal). The spill refusal is untouched. The patch is the HUD half and is not
+optional: the HUD tells a local turn by `lane == local_model`, so a fallback
+model name alone would make `use_tools` false and send the turn to the plain
+relay, where `jarvis_chatbot_api.lane_service()` maps an UNKNOWN lane name to a
+CLOUD provider - a private prompt could have left the PC. The one rewritten
+line is `use_tools = ((lane == local_model or decision.inject_memory) and
+_agent_ok)`; `inject_memory` is the signal because every local decision carries
+it and no cloud decision ever does. It sits immediately before
+`plugin-loader.patch` (which must stay the last entry) and its context is
+chat-stream.patch's own `use_tools` lines and cloud-honesty.patch's crisis
+block, so it invents no line of the owner's original file
+(`tools/check_patch_original_text.py` measures 0). Proved by
+`backend/test_local_model_guard.py`; documented in `docs/JARVIS-API.md`
+section 228.

@@ -5157,8 +5157,8 @@ function demoGraph(){
   const link = (a,b,kind="") => l.push({source:a,target:b,kind});
 
   add("core","Atlas","core",{weight:6});
-  ["qwen3:8b","jarvis-escalate","jarvis-critic","jarvis-bulk"].forEach((m,i)=>{
-    add("model:"+m,m,"model",{weight:3,meta:i?"cloud lane · via proxy":"local · ollama"});
+  ["qwen3:8b","jarvis-escalate"].forEach((m,i)=>{
+    add("model:"+m,m,"model",{weight:3,meta:i?"cloud lane · the service you chose":"local · ollama"});
     link("core","model:"+m,"runs");
   });
 
@@ -8685,11 +8685,11 @@ window.addEventListener("jarvis:cloud-escalate", e => {
  *  the pooled three-card lane existed the PC answered 409 for it, so this drew a
  *  disabled button saying so (2026-10-27, contract audit F1). The lane is here,
  *  so the button is offered like every other one and says what choosing it
- *  does: all three cards, and the other two models paused while it runs. The five
+ *  does: all three cards, and the everyday model paused while it runs. The five
  *  rows stay: the order and the count are the PC's. */
 const HEAVY_PRESET_WORDS = "This preset needs all three cards at once as one "
-  + "pooled lane. While it runs, the other two models are paused - they "
-  + "come back when you apply another preset. Loading it takes about half a minute.";
+  + "pooled lane. While it runs, the everyday model is paused - it comes back "
+  + "when you apply another preset. Loading it takes up to about a minute.";
 
 /** The PC's dated live speed for one rail row: "38.1 tok/s", or "not measured"
  *  when the PC carries no trustworthy number for it. NEVER a guess and never a

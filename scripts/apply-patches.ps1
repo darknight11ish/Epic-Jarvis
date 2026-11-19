@@ -2233,6 +2233,35 @@ $PATCHES = @(
     # test_gate_touches.py, test_referee.py, test_screen_attach.py,
     # test_hud_manual_lane_gate.py).
     'activity-turn-guard.patch'
+    # local-model-guard.patch (2026-11-18) - A LOCAL TURN MUST BE ANSWERABLE.
+    # The measured defect (the owner's own PC, the night of 2026-11-17/18):
+    # `model-state.json` said the everyday model was the Coding preset's pooled
+    # three-card model, `jarvis_router.choose()` trusted it for a PRIVATE turn,
+    # and the turn was then refused by `jarvis_agent.local_model_refusal` - the
+    # honest spill refusal - so a private question got NO answer at all while
+    # staying correctly on this PC. The fix is in TWO places:
+    #   * the shipped `backend/rebuilt/jarvis_router.py` (and its
+    #     `jarvis-backend/` twin) validates the chosen model against the lane
+    #     the turn will really use BEFORE deciding, and when the saved model
+    #     cannot run there it answers with the model that lane is configured
+    #     for, saying so in the route detail under `degraded_from`;
+    #   * this patch is the ONE line that makes the HUD run that fallback
+    #     LOCALLY: `use_tools` becomes true for a local decision carrying
+    #     `inject_memory`. Without it the turn would fall to the plain relay
+    #     below, which resolves a lane name it does not know through
+    #     `jarvis_chatbot_api.lane_service()` - an unknown name maps to a
+    #     CLOUD provider - and a private prompt could have left the PC. That
+    #     hazard is why a router-only change must never ship.
+    # ONE hunk in jarvis_hud.py, rewriting ONE line. It sits immediately before
+    # plugin-loader.patch (which MUST stay the last entry, tools/check_plugins.py)
+    # and its context is chat-stream.patch's own added `use_tools` lines and
+    # cloud-honesty.patch's crisis block below them, so it goes after both and
+    # adds no install block. It rewrites no
+    # jarvis_gate.py line and no table row; every suite that enumerates "the
+    # patches written after me" has had its name added (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'local-model-guard.patch'
     'plugin-loader.patch'
 )
 
@@ -2460,6 +2489,7 @@ $SHIPPED = @(
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
     'jarvis_chatbot_limits.py'   # chatbot-limits.patch: the monthly money limits and the price list, set from the PC's app - a raise is ONE card plus Windows Hello, a lowering and a price correction are not; GET/POST /api/chatbot/money, PC only
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
+    'jarvis_cloud_settings.py'   # the hybrid/cloud settings from chat (2026-11-18): the chosen service, the standing escalation switch and the monthly cap are read from the PC's own files (cloud-choice.json, escalate-cloud.json, chatbot\api-money.json) and answered with the file and its date; a change goes through jarvis_presets.apply_cloud / cloud_escalate or jarvis_chatbot_limits.change - the same cards the Presets menu and the money route raise - so no route and no write of its own; jarvis_quick.py calls it
     # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
     'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
@@ -3263,6 +3293,14 @@ $SHIPPED = @(
     # entry, in the same position, is in backend/_where.py's SHIPPED, above
     # jarvis_bench.py, which stays LAST.
     'jarvis_update.py'
+    # Picture conversion (jarvis_image_convert.py, 2026-11-18; the owner's "to
+    # pdf from an image and so forth"). Pictures into ONE PDF (img2pdf copies
+    # a JPEG's own compressed bytes in - nothing is re-encoded), or one picture
+    # into another format (Pillow; JPEG/WebP/AVIF are called lossy in the
+    # sentence the owner reads). The work is a bounded child program with a
+    # scrubbed environment, and no existing file is ever overwritten. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_image_convert.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate
@@ -6136,6 +6174,17 @@ if ($py) {
 #     an owner may always choose to be asked more, and a live value that is
 #     LOOSER than the shipped one stays tools/sync-framework-tiers.py's
 #     decision to report, not this script's to make;
+#   * THE ONE EXCEPTION, added 2026-11-18: a `[budget] degrade_chain` line
+#     that names a cloud lane this PC does not have. That is not a choice -
+#     the lane does not exist in the code any more (the owner's 2026-10-27
+#     decision collapsed three cloud lanes into ONE), and a fresh install gets
+#     the corrected line while an existing file keeps the stale one forever.
+#     The merger replaces exactly that one line with the shipped chain, and
+#     only when a name in it is neither a shipped chain name nor the configured
+#     local model. A chain the owner shortened, or an absent key, is left alone.
+#     `jarvis_router.degrade()` already drops a name it cannot serve, so this
+#     is the file being made honest, not the safety; the router carries the
+#     safety to the PC on the same update;
 #   * it refuses to write at all unless the result parses, every added line
 #     reads back, every existing tier is unchanged and no other section moved;
 #   * it keeps a dated copy of the file first, and prints its path.
@@ -6260,6 +6309,19 @@ if (-not (Test-Path -LiteralPath $cfgSrc)) {
                 Say "        the backend:" Cyan
                 Say "          py -3 `"$tierMerger`" --apply `"$cfgInUse`"" Cyan
                 Add-Note "$CONFIG_NAME is missing [autonomy.tiers] line(s) that this repository's copy has; the update did NOT add them, so those actions take unknown_action_tier ('ask') instead of their own tier. To add them: py -3 `"$tierMerger`" --apply `"$cfgInUse`""
+            }
+            # 2026-11-18: the merge has ONE other job - a [budget] degrade_chain
+            # that names a cloud lane this PC does not have (the stale
+            # three-lane list from before the 2026-10-27 decision). Said out
+            # loud because it is a line of the owner's own settings file that
+            # changed, even though it is a correction rather than a choice.
+            if ("$tierOut" -match 'Fixed the stale \[budget\] degrade_chain line in:') {
+                Ok "$CONFIG_NAME - [budget] degrade_chain named a cloud lane this PC does not have; it now names the shipped lane(s) only."
+                $script:State.Changed = $true
+            } elseif ("$tierOut" -match 'degrade_chain names a lane this PC does not have') {
+                Warn "$CONFIG_NAME - [budget] degrade_chain names a cloud lane this PC does not have, and the line could not be corrected automatically."
+                Say "        Nothing was changed. The router ignores the name, so a rate-limited turn cannot reach it; the file can be edited by hand to the line shown by:" Cyan
+                Say "          py -3 `"$(Join-Path $PatchDir '_config_diff.py')`" `"$cfgInUse`" `"$cfgSrc`"" Cyan
             }
         } elseif (-not (Test-Path -LiteralPath $tierMerger)) {
             Warn "'$tierMerger' is missing from this repository, so the missing [autonomy.tiers] lines were not added."

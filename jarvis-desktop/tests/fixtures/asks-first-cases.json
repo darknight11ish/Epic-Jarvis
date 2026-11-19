@@ -1225,6 +1225,17 @@
        "tier": "ask",
        "title": "Save a document your phone sent",
        "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -3986,6 +3997,17 @@
        "tier": "ask",
        "title": "Save a document your phone sent",
        "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -6742,6 +6764,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Save a document your phone sent",
+       "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
        "windows_hello": false
       }
      ],
@@ -9511,6 +9544,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Save a document your phone sent",
+       "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
        "windows_hello": false
       }
      ],
@@ -12282,6 +12326,17 @@
        "tier": "ask",
        "title": "Save a document your phone sent",
        "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -15048,6 +15103,17 @@
        "tier": "ask",
        "title": "Save a document your phone sent",
        "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -17807,6 +17873,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Save a document your phone sent",
+       "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
        "windows_hello": false
       }
      ],
@@ -20572,6 +20649,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Save a document your phone sent",
+       "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
        "windows_hello": false
       }
      ],
@@ -23349,6 +23437,17 @@
        "tier": "ask",
        "title": "Save a document your phone sent",
        "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -26114,6 +26213,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Save a document your phone sent",
+       "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
        "windows_hello": false
       }
      ],
@@ -28888,6 +28998,17 @@
        "tier": "ask",
        "title": "Save a document your phone sent",
        "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -31653,6 +31774,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Save a document your phone sent",
+       "windows_hello": false
+      },
+      {
+       "action": "convert_images",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "convert_images",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a PDF from pictures, or change a picture's format",
        "windows_hello": false
       }
      ],

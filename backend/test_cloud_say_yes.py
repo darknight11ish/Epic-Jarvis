@@ -248,7 +248,7 @@ _POST = '''\
 '''
 
 #: The three lanes the owner's own ~/.openjarvis/litellm-proxy.yaml defines.
-LANES = ["jarvis-escalate", "jarvis-critic", "jarvis-bulk"]
+LANES = ["jarvis-escalate"]
 
 
 def _patch_text() -> str:

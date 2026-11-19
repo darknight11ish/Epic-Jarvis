@@ -102,7 +102,8 @@ class FakeModels:
     MAX_HISTORY = 20
 
     def __init__(self, gate, installed=("m-one", "m-two", "qwen3.5:4b",
-                                       "qwen3.5:9b"), current="m-one"):
+                                       "qwen3.5:9b", "gemma4:26b-a4b-it-qat"),
+                 current="m-one"):
         self.gate = gate
         self.installed = list(installed)
         self.state = {"current": current, "switches": []}
@@ -386,7 +387,7 @@ def t_route_applies_local_preset_with_no_card():
           gate.calls == [], gate.calls)
     check("... starts the preset's lane once and points chat at it",
           [c[0] for c in calls] == ["stop_pooled", "start"]
-          and calls[1] == ("start", "coding"), calls)
+          and calls[1] == ("start", "main"), calls)
     check("... writes exactly one new preset_apply receipt",
           len(after) == before + 1
           and after[0].get("tool_name") == P.OWNER_RECEIPT_TOOL, after[:1])
@@ -430,14 +431,42 @@ def t_a_failed_switch_removes_its_receipt():
 
 
 def restore_with_lane_stubs(receipt_id):
-    """Undo one receipt while the lane steps are stubbed, as an apply is."""
+    """Undo one receipt while EVERY lane step is stubbed, as an apply is.
+
+    THE DECISION THIS HARNESS ENCODES (2026-11-18): undo, with no card, DOES
+    restore a heavy preset - General, Coding, Reflective Coach and the rest -
+    because it rides the SAME road a preset click in the app rides. A HEAVY
+    preset on that road has been cardless since the owner's own ruling of
+    2026-11-16 ("when i change the model on the jarvis app it still sends me an
+    approval card. that shouldnt happen if i manually press the preset change"):
+    the press IS the approval. Undo is a fresh press on a receipt the owner can
+    see, so it is the same shape, and the start keeps every guard it always
+    had - it refuses while a multi-step task runs, it will not run beside a
+    resident model, and it proves the load from `/api/ps` or rolls back. What
+    that road uses for a heavy row is `_start_lane_for_the_owner` (the
+    on-demand pooled lane), not `_default_start_lane`; both are stubbed here,
+    so the undo is exercised with no socket, no model and no lane - exactly
+    what this suite proves. Nothing here starts a real lane.
+    """
     calls, start, stop = stub_lane()
-    real = P._default_start_lane, P._default_stop_pooled
+    started = []
+
+    def owner_start(key, mode=""):
+        started.append(("start", key) if not mode else ("start", key, mode))
+        return 200, {"ok": True, "changed": True}
+
+    real = (P._default_start_lane, P._default_stop_pooled,
+            P._start_lane_for_the_owner)
     P._default_start_lane, P._default_stop_pooled = start, stop
+    P._start_lane_for_the_owner = owner_start
     try:
-        return R.undo(receipt_id)
+        out = R.undo(receipt_id)
     finally:
-        P._default_start_lane, P._default_stop_pooled = real
+        (P._default_start_lane, P._default_stop_pooled,
+         P._start_lane_for_the_owner) = real
+    if isinstance(out, dict):
+        out["_lane_starts"] = started
+    return out
 
 
 def t_undo_puts_the_previous_preset_back():
@@ -456,14 +485,19 @@ def t_undo_puts_the_previous_preset_back():
           and owner_switches == ["qwen3.5:4b"], (code, out, owner_switches))
     check("... its receipt records General as the preset before",
           (receipt.get("before") or {}).get("preset") == "general", receipt)
-    check("... Undo runs with no card and puts General back",
+    check("... Undo runs with no card and re-applies General as a HEAVY preset "
+          "through the same owner-press road a preset click uses, starting the "
+          "pooled lane in General's own mode",
           undone.get("ok") is True and P.choice() == "general"
-          and models.state.get("current") == "qwen3.5:9b"
-          and gate.calls == [],
+          and models.state.get("current") == P.by_id("general").model
+          and gate.calls == []
+          and undone.get("_lane_starts") == [("start", "pooled",
+                                              "gemma4-26b-a4b")],
           (undone, P.choice(), models.state.get("current"), gate.calls))
-    check("... the chat lane is back on the long-context card",
+    check("... the chat lane is back on the pooled lane General now runs on "
+          "(:11450), because that is the lane its heavy apply started",
           json.loads((Path(TMP) / "presets-active-lane.json").read_text(
-              encoding="utf-8")).get("base_url") == "http://127.0.0.1:11436",
+              encoding="utf-8")).get("base_url") == "http://127.0.0.1:11450",
           (Path(TMP) / "presets-active-lane.json").read_text(encoding="utf-8"))
     check("... and the same receipt cannot be undone twice",
           (twice.get("ok") is False
@@ -669,14 +703,17 @@ def t_undo_of_a_heavy_click_puts_the_previous_preset_back():
           code == 200 and out.get("previous_preset") == "general"
           and (receipt.get("before") or {}).get("preset") == "general",
           (code, out.get("previous_preset"), receipt))
-    check("... Undo runs with no card and puts General, its model and its lane back",
+    check("... Undo runs with no card and re-applies General, its model and its "
+          "pooled lane through that same owner-press road",
           undone.get("ok") is True and P.choice() == "general"
-          and models.state.get("current") == "qwen3.5:9b"
-          and gate.calls == [],
+          and models.state.get("current") == P.by_id("general").model
+          and gate.calls == []
+          and undone.get("_lane_starts") == [("start", "pooled",
+                                              "gemma4-26b-a4b")],
           (undone, P.choice(), models.state.get("current"), gate.calls))
-    check("... the chat lane is back on the long-context card",
+    check("... the chat lane is back on the pooled lane General now runs on",
           json.loads((Path(TMP) / "presets-active-lane.json").read_text(
-              encoding="utf-8")).get("base_url") == "http://127.0.0.1:11436",
+              encoding="utf-8")).get("base_url") == "http://127.0.0.1:11450",
           (Path(TMP) / "presets-active-lane.json").read_text(encoding="utf-8"))
     check("... and Coding itself was never routed through the owner model switch",
           owner_switches == [], owner_switches)
@@ -694,9 +731,12 @@ def t_undo_of_a_heavy_click_puts_the_previous_preset_back():
           code2 == 200 and out2.get("previous_preset") == "coding"
           and (receipt2.get("before") or {}).get("preset") == "coding"
           and R.is_undoable(receipt2) is True, (code2, receipt2))
-    check("... Undo puts Coding back with no card, on its pooled lane",
+    check("... Undo puts Coding back with no card, through the owner-press road "
+          "and on its pooled lane (Coding keeps the lane's own 49,152 default, so "
+          "the start names no mode)",
           back.get("ok") is True and P.choice() == "coding"
           and models.state.get("current") == P.by_id("coding").model
+          and back.get("_lane_starts") == [("start", "pooled")]
           and json.loads((Path(TMP) / "presets-active-lane.json").read_text(
               encoding="utf-8")).get("base_url") == "http://127.0.0.1:11450"
           and gate.calls == [],
@@ -771,11 +811,12 @@ def t_a_pooled_lane_that_will_not_start_changes_nothing():
 
 
 def t_every_named_lane_preset_click_is_still_uncarded():
-    """The six presets on a named lane: unchanged - no card, a receipt, its lane."""
+    """The five presets on a named lane: unchanged - no card, a receipt, its lane."""
     named = [p for p in P.PRESETS if not p.heavy_mode]
-    check("there are six presets on a named lane today (Reflective Coach and "
-          "Pictures & Screens moved to the pooled lane on 2026-11-18)",
-          [p.id for p in named] == ["general", "general_uncensored", "agentic_vision",
+    check("there are FIVE presets on a named lane today (Reflective Coach and "
+          "Pictures & Screens moved to the pooled lane on 2026-11-18, and General "
+          "followed them on the review's ruling)",
+          [p.id for p in named] == ["general_uncensored", "agentic_vision",
                                     "fast", "documents", "browser"],
           [p.id for p in named])
     for p in named:
@@ -870,10 +911,10 @@ def t_every_preset_on_the_contract_is_covered():
              for kw in call.keywords if kw.arg == "gate"]
     check("the owner lane start is the ONLY place a gate is passed to the pooled "
           "lane", bool(gated))
-    check("Coding, Reflective Coach, Pictures & Screens and Medical are the four heavy "
-          "presets today, so they are the four the click rule covers",
+    check("General, Coding, Reflective Coach, Pictures & Screens and Medical are "
+          "the FIVE heavy presets today, so they are the five the click rule covers",
           [p.id for p in P.PRESETS if p.heavy_mode]
-          == ["coding", "reflect", "pictures", "medical"]
+          == ["general", "coding", "reflect", "pictures", "medical"]
           and len(P.PRESETS) == 10,
           [p.id for p in P.PRESETS if p.heavy_mode])
 

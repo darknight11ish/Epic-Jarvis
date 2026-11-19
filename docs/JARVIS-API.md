@@ -27146,10 +27146,16 @@ cloud row (`lane_status`), the one `change_own_config` card's words
 company and key state instead of hard-wired DeepSeek). A chosen Mistral, OpenAI,
 Groq, xAI or OpenRouter therefore can never send to DeepSeek - and a chosen
 provider whose key is not saved keeps the old behaviour: no lane is offered, and
-the PC's own sentence says why. A lane name this module does not know resolves
-to the chosen service too (one cloud service per PC), and only to
-`DEFAULT_LANE` while no choice is recorded. **There is no Anthropic service in
-this tree**; the six are openai, deepseek, mistral, xai, openrouter and groq.
+the PC's own sentence says why. **A lane name this module does not know names NO
+service (2026-11-18, the owner's ruling that `lane_service` must fail closed)**:
+it used to resolve to the chosen service, or to `DEFAULT_LANE` while no choice
+was recorded, so a lane field holding a local model's name could have sent a
+private turn to a cloud service. It now returns `("", "")` - no service, no
+model - and `lane_state` hands the caller no address and no key, so the turn is
+answered on this PC. `DEFAULT_LANE` is the default for the empty name and for a
+real lane while no choice is recorded, never a destination for an unknown name.
+**There is no Anthropic service in this tree**; the six are openai, deepseek,
+mistral, xai, openrouter and groq.
 
 **The fixed chat answers: see the six, and change the choice.**
 `cloud_provider_list` (READ-ONLY) answers "which cloud providers can I use?",
@@ -27174,7 +27180,9 @@ Tests: `backend/test_options_understanding.py` (the chosen-provider proof for
 all six patched in memory, the key answer naming the chosen provider, the chat
 door's `change_own_config` card and its refusal-before-card, and
 reach/card/answer/lane agreement after a chosen Mistral),
-`backend/test_chatbot_api.py` (the lane's transport).
+`backend/test_chatbot_api.py` (the lane's transport, and the fail-closed proof
+added 2026-11-18: an unknown lane name means `("", "")` and a private turn
+cannot obtain a cloud URL from it).
 
 **Q7 P0 - the privacy backstop is harder to get past (2026-11-07).**
 `jarvis_router._PRIVATE_TERMS` gains home address, street address, mailing
@@ -32286,7 +32294,9 @@ where your new note is yet" - no lookup happened at all.
 **The registry is the note's own frontmatter.** A name is resolved by ONE
 resolver, `jarvis_notes.resolve_note()`, in a stated order: the exact vault
 path the owner named, then the file name alone matched case-insensitively,
-then an exact value of the note's own YAML `aliases:` list, then a refusal that
+then an exact value of the note's own YAML `aliases:` list, then - for the
+owner's words that DESCRIBE a note rather than name it ("my favourite note") -
+the note's own `favorite: true` flag, then a refusal that
 lists any candidates. Obsidian reads `aliases:` natively (Properties, and `[[`
 completion), so it travels with the note and needs no index, no model and no
 earlier conversation. For the owner's own note:
@@ -32398,7 +32408,20 @@ every note's `aliases:`:
 3. `alias` - an exact value of the note's own YAML `aliases:` list, compared
    case-insensitively and with a leading my/the/a/an and a trailing "note"
    ignored, so "my workout log" and "the workout log" reach the same note.
-4. **refusal** - `not_found`, with any near candidates in `candidates`.
+4. `favourite` - the note's own YAML flag, `favorite: true` (added 2026-11-18).
+   "add this to my favourite note" names no note; it describes one, and this
+   is the only thing in the vault that answers it. One flagged note resolves
+   and the result carries a `said` sentence naming it; two or more are
+   `ambiguous_section` with every candidate listed and nothing chosen; none is
+   a `not_found` that says no note is marked a favourite. The tier fires only
+   when the owner's words ARE a favourite word ("favourite"/"favorite", their
+   plurals and short forms) and never for a name that looks like a path
+   (`Favourite.md` names a file), so a plain name question still refuses. It is
+   asked LAST because a favourite is a quality of a note, not its name: an
+   explicit path, file name or `aliases:` value always wins over the flag.
+   Reading a flag writes nothing and needs no card; this selects a note and
+   does not put its content in a prompt.
+5. **refusal** - `not_found`, with any near candidates in `candidates`.
 
 **There is no daily-note fallback at any point.** The resolver has no branch
 that knows what a daily note is; a name that matches nothing is a refusal. The
@@ -32422,9 +32445,12 @@ as request headers, as boolean arguments rather than a second HTTP surface:
 `create_target_if_missing` (default False - a lookup never creates anything; a
 create-shaped tool passes True) and `reject_if_content_preexists` (default
 True). Epic Jarvis never overwrites, so False only allows filling an EMPTY
-existing note; content is still `content_preexists`. `POST /api/notes/create`
-accepts both booleans; its refusals now carry the `code` and `candidates`
-above, and its strict collision behaviour is unchanged.
+existing note; content is still `content_preexists`. `create_target_if_missing`
+never turns the favourite words into a new note either: with no favourite in
+the vault, "my favourite note" comes back as the resolver's own refusal, so a
+create-shaped caller cannot make a note called `favourite.md`. `POST
+/api/notes/create` accepts both booleans; its refusals now carry the `code`
+and `candidates` above, and its strict collision behaviour is unchanged.
 
 **Daily-note settings are honoured.** `jarvis_note_capture.py` reads
 `.obsidian/daily-notes.json` for `folder`, `format` and `template`, following
@@ -40412,3 +40438,225 @@ prove the start sits after that check). The phase markers and the failure
 banners are read OUT of `scripts/update-jarvis.ps1`, so a renamed step or a
 reworded ending fails a test instead of leaving the phone on a phase nobody
 updates.
+
+## 227. Pictures into one PDF, and one picture into another format (added 2026-11-18)
+
+The owner's ask of 2026-11-18 - *"Can Jarvis convert certain formats of files to
+other formats? like to pdf from an image and so forth?"* - answered with the
+research lane's report (`docs/`'s research note): the PDF half uses **img2pdf**
+and the picture-format half uses **Pillow** (already installed). It is the
+existing `my_files` tool's action `convert`, decided under its **own** gate
+action, `convert_images`. It has **no HTTP route of its own**: the work is one
+tool call in a chat turn, and the ordinary tool-call gate raises the card.
+
+* **Both apps' chats can ask** - it is a backend tool and the work is on the
+  PC: "make one pdf from C:\...\a.jpg and C:\...\b.png", or "save this
+  picture as a jpeg". No route was added, so `tools/check_parity.py` has
+  nothing new to classify.
+* **ONE approval card per conversion, at tier "ask".** `convert_images = "ask"`
+  ships in both copies of `jarvis-framework.toml`; the base gate carries the
+  action's tool->action row, its risk row ("yes"/"local": one NEW file, nothing
+  that exists is changed) and the rule that a denial is about that one file,
+  not a standing yes. The module's own `prepare()` refuses any tier but "ask"
+  before it does anything, so a loosened settings file cannot make a file write
+  cardless. The card names every source picture and the exact new file.
+* **Never overwrite, always say which.** A name that is already taken gets a
+  numbered sibling (`photo (2).pdf`), the same rule the phone uploader and the
+  Notion importer use, and the card says the old name was taken and a new one
+  was used. A path the model named explicitly that exists is REFUSED rather
+  than renamed behind the owner's back. The destination is opened with
+  `O_CREAT | O_EXCL` at the moment of writing, so even a file that appears
+  while the card is up is never replaced - the conversion is refused instead.
+* **The PDF half is lossless, and the suite proves it the only way that means
+  anything:** a JPEG's own bytes are inside the produced PDF byte for byte
+  (img2pdf copies the compressed stream; Pillow's `save(..., "PDF")` would
+  re-encode through its JPEG encoder and default to 72 dpi, which is why it is
+  not used). A PNG/TIFF is stored with lossless compression; the card says
+  which of those is happening. The source pictures are only ever READ.
+* **The picture half tells the truth about quality.** PNG and TIFF are lossless;
+  JPEG, WebP and AVIF are LOSSY and the sentence says the copy is "not
+  identical to the original". A picture with transparency saved as JPEG is
+  flattened onto WHITE, because JPEG cannot store transparency, and the card
+  and result both say "flattened onto white" in those words. HEIC is not read.
+* **Limits, in the module's own words:** only pictures inside a folder on
+  "Folders Jarvis may look in"; one picture at a time for a format change, up
+  to 20 pictures and 400 MB together for one PDF (100 MB each, 200 megapixels
+  each); a PDF page follows the picture's own DPI, with no paper size, margins
+  or page numbers; a picture wider or taller than 65,535 pixels cannot go in a
+  PDF and is refused plainly.
+* **The child-program boundary:** the conversion runs in a separate Python
+  program (`sys.executable -I -B -c`) with a scrubbed environment
+  (`jarvis_child_env`, so no token or key travels), a 120-second wall clock, a
+  64 KB answer cap and the explicit file names only. The child writes one
+  temporary file; the backend process then creates the destination itself with
+  O_EXCL and deletes the temporary.
+* **Dependencies and licences:** `img2pdf` (LGPL-3.0) and `pikepdf` (MPL-2.0,
+  bundles QPDF) are in `backend/requirements.txt` and hash-pinned in
+  `backend/requirements.lock`; both are pip dependencies of a local app, not
+  code shipped in it, and `THIRD-PARTY-NOTICES.txt` credits them (and, for the
+  first time, FFmpeg, which a shipped media reader requires but never bundles).
+* **Proof:** `backend/test_image_convert.py` - the JPEG's bytes inside the PDF,
+  two pictures in order, the flatten-onto-white sentence, a text file called
+  `.png` refused by content, an existing target never overwritten (numbered
+  name, explicit refusal, and a file that appears while the card is up), the
+  sources unchanged, the action's ask line and gate rows, the loosened-tier
+  belt, and the child's scrubbed environment.
+
+## 228. A local turn is answered by the model its lane is configured for, and `degraded_from` says what was replaced (2026-11-18)
+
+**What was wrong.** The measured failure on the owner's PC: a private question
+routed correctly to the local lane (`X-Jarvis-Route` gate `"taint"`, `where:
+"local"`) and produced **no answer at all**, because `model-state.json` named the
+Coding preset's pooled three-card model as the everyday model and
+`jarvis_agent.local_model_refusal` - correctly, and in the honest words the
+owner was shown - refused to load a pooled model on a one-card lane. Nothing
+left the PC; the turn was simply unanswerable because nothing had asked whether
+the model the router picked could run where it picked it.
+
+**What happens now.** `jarvis_router.choose()` validates the chosen local model
+against the lane the turn will really use, BEFORE the decision is returned,
+using that same refusal function as the authority. When the saved model is the
+one class of refusal a different model can fix (a pooled model at a lane that
+may not hold it), the decision names the model **that lane is configured for**
+instead: the lane table's own row for the lane's port, else the owner's
+`[intelligence] default_model`, else the everyday lane's own row. The spill
+refusal itself is unchanged - a pooled model on a one-card lane is still
+refused and never loaded; the fix chooses a different model, it never allows the
+spill.
+
+**The route detail.** `X-Jarvis-Route` carries the existing **`degraded_from`**
+field (the HUD already sends that key when a cloud lane steps down), one entry
+per replacement:
+
+```json
+"degraded_from": [{"lane": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+                   "model": "qwen3.5:9b",
+                   "code": "model_cannot_run_on_this_lane",
+                   "why": "<the refusal, in its own words> ... it cannot run on the one-card lane ..."}]
+```
+
+`lane` is the model that was **asked for**, `model` is the model that **really
+runs** (and the header's own `lane` names it too), `code` is stable and `why`
+is the refusal in `jarvis_agent`'s own words; the top-level `reason` also names
+both models. The field is **omitted** when nothing was replaced, so an ordinary
+turn's header is exactly what it was before. No new route, field, action, tier
+or card: a cloud turn is not affected and is not pulled local.
+
+**Both halves are loaded together.** The HUD tells a local turn by
+`lane == local_model`, so a router-only fallback would make `use_tools` false
+and send the turn to the plain relay - where `jarvis_chatbot_api.lane_service()`
+maps an UNKNOWN lane name to a CLOUD provider (its default is DeepSeek). That is
+why `backend/local-model-guard.patch` ships in the same PR: one line in
+`jarvis_hud.py`, `use_tools = ((lane == local_model or
+decision.inject_memory) and _agent_ok)`, keeps a local fallback turn on the
+local answering loop. `inject_memory` is the signal because every local
+decision carries it and no cloud decision ever does.
+
+**Proof.** `backend/test_local_model_guard.py` (no network, no model, no card):
+the tainted turn answered by the lane's model and passing the same refusal
+`run_local_turn` makes; the one-card refusal still refusing; the ordinary
+turn's route-detail keys unchanged; a cloud turn still escalating, including
+when the saved local model is pooled; the pooled lane untouched; the unknown
+lane name resolving to a cloud provider; and the patched HUD's own
+`use_tools`/`is_cloud` expressions evaluated for each case.
+## 229. The hybrid/cloud settings, from chat: the questions answered from the PC's files, the changes through their own cards (2026-11-18)
+
+The owner asked to be able to ask his PC, from the phone's chat, what the
+hybrid/cloud settings ARE and to change them: *"i should be able to ask jarvis
+through chat on phone to change the provider and adjust these particular
+settings and get clarity."*
+
+`backend/jarvis_cloud_settings.py` is a NEW MODULE shipped whole (no patch of
+its own; jarvis_quick.py's fast path calls it). It does two jobs, and this
+section is the contract for both. It adds **no route**, **no file writer** and
+**no second mechanism**: every change below calls the door the setting already
+has.
+
+### 229.1 The questions, answered from three files and never from a model
+
+The fast path (`/api/chat`, so the same answer on the PC and on the phone)
+claims these shapes before the model and answers them with fixed local words:
+
+| What the owner asks | What is read |
+|---|---|
+| "which cloud provider am I using?" / "what cloud provider am I using?" / "am I on cloud?" / "am I using the cloud?" | `<settings>/cloud-choice.json` (`jarvis_presets.CLOUD_CHOICE_FILE`, written by the Presets Cloud row's own apply) |
+| "is escalation on?" / "will you send things to the cloud by yourself?" / "is cloud escalation on?" | `<settings>/escalate-cloud.json` (`jarvis_presets.CLOUD_ESCALATE_FILE`; absent, unreadable or corrupt reads as OFF) |
+| "what's my cap?" / "what is my spending limit?" | `<settings>/chatbot/api-money.json` - the `limits` table through `jarvis_chatbot_api.limit_of` |
+| "how much have I spent this month?" / "how much have I spent?" | the same file's `months` ledger through `jarvis_chatbot_api.spent_of`/`month_key`; this month's total and answer count, plus any earlier month the ledger holds |
+| "what does escalation actually do?" / "what can go to the cloud?" / "what is the standing switch?" | the switch file, plus the fixed refusal rule the router enforces |
+
+Every answer NAMES the file it read and when that file was last saved (for
+example "Read from chatbot\api-money.json (saved 31 Oct 2026)"), so a sentence
+can be checked instead of trusted. Every answer is read fresh on the call - no
+cache, no model, no guess. The questions are marked read-only
+(`READ_ONLY_INTENTS`) and are also answered in a private chat
+(`_PRIVATE_DETERMINISTIC_READS`), because they read the PC's own settings and
+write nothing.
+
+**When a file is missing the answer says "not set up" in plain words and what
+that means**, never an empty or confident sentence:
+
+- no `cloud-choice.json`: the cloud service is not set up, there is no cloud
+  path at all, and every answer is written by the model on this PC;
+- no `escalate-cloud.json`: escalation is off - no switch has been saved - so
+  every cloud turn waits for the owner's yes;
+- no `chatbot\api-money.json`: no cap is set up and no paid cloud service can
+  be used; a chosen service with no cap is said to be NOT used at all, because a
+  missing cap is not "unlimited".
+
+"What escalation actually does" always carries the refusal list the router's
+gates enforce: email, files, notes, credentials, stored memory, a picture, the
+screen, a private question, a pasted secret and a conversation that has already
+read text from outside this PC never go to the cloud, and Lockdown, every
+privacy check and the monthly cap still run first.
+
+### 229.2 The changes: the doors that already exist, one card, nothing before a yes
+
+| What the owner asks | The door it calls | The card |
+|---|---|---|
+| "turn escalation on" / "start escalating" / "switch the cloud switch on" (and the new OFF spellings) | `jarvis_presets.cloud_escalate(on=...)` - the exact function the Presets Cloud row's switch calls | ON: ONE `change_own_config` card, tier `ask`, and nothing written before the yes. OFF: instant and cardless - the existing rule. ON with no cloud service chosen is refused BEFORE a card. |
+| "set my cap to $5" / "raise my cap to $50" / "lower my cap to $5" / "set my DeepSeek cap to $5" | `jarvis_chatbot_limits.change({"action": "raise_limit", "service": <short>, "dollars": N})` - the exact function behind `POST /api/chatbot/money` | The cap module decides the direction from the amount against the cap it already holds: an amount ABOVE today's cap raises ONE `raise_api_limit` card (tier `ask`; Windows Hello on the PC or the asking phone's own fingerprint) and writes nothing before the yes; an amount at or below it only spends less, so it applies at once with no card. No cap is ever approved here. |
+| "change my cloud provider to <a name this PC does not know>" | the module refuses it with the list read from `jarvis_chatbot_api.PRESETS` | no card, no write |
+| provider changes for a KNOWN service ("switch to openrouter", "use mistral as my cloud provider") | the existing cloud-provider door in `jarvis_quick.py`, which calls `jarvis_presets.apply_cloud` - the Presets Cloud row's ONE card | unchanged; the new module deliberately leaves those sentences to it, so two doors never compete for one sentence |
+
+`jarvis_presets.apply_cloud` remains reachable through our module's
+`set_provider()` too: it refuses a name this PC does not know (and names the
+six), refuses a service that cannot be used yet BEFORE any card, and writes
+`cloud-choice.json` only after the card's yes.
+
+**Nothing is written before an approval card's yes on any path**, and the change
+answer is built from the door's own returned body - so a denied or timed-out
+card is reported as "not changed" and a waiting card is never reported as on.
+
+### 229.3 Honest limits
+
+- **The money cap is the one people ask about**: it is readable from chat, and
+  it IS changeable from chat because the route already existed - the chat path
+  reuses `jarvis_chatbot_limits.change`, the same door as
+  `POST /api/chatbot/money`. Raising a cap from the phone still needs that
+  phone's signed approval (the existing rule); lowering one needs nothing.
+- **A missing save is not the same as an unreadable one**: "not set up" (no
+  file) and "cannot be read" (a file that is there but broken) are different
+  sentences, because deleting a file forgets a setting while a broken one
+  must not read as off-and-nothing-happened.
+- **No key is ever read**: the module never calls
+  `jarvis_chatbot_api.key_saved` or Windows Credential Manager, and no answer
+  contains a key or a fragment of one.
+- **The two apps need no client change**: the answers and the cards ride
+  `/api/chat`, so the phone gets them wherever it already has chat.
+
+### 229.4 Proof
+
+`backend/test_cloud_settings_chat.py` - the suite this section rests on. It
+runs over a temporary settings folder (never the owner's real files) with the
+REAL `jarvis_quick.py`, `jarvis_cloud_settings.py`, `jarvis_presets.py`,
+`jarvis_chatbot_api.py` and `jarvis_chatbot_limits.py`: every question shape in
+each state (file present/absent/broken), the exact evidence sentences, "not set
+up" and what it means, the refusal list; the older doors keeping their own
+sentences; the switch ON raising exactly ONE `change_own_config` card and
+writing nothing when denied, OFF instant and cardless; an unknown provider
+refused with the PRESETS list and no card; `set_provider` writing
+`cloud-choice.json` only after an approved card; the cap raise raising exactly
+ONE `raise_api_limit` card and leaving the money file alone when denied; the
+lowering instant and cardless; and no key store being touched - proved with a runtime spy on
+`jarvis_chatbot_api.key_saved`, not by reading the module's source.

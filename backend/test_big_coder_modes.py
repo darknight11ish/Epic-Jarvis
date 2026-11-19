@@ -153,8 +153,8 @@ def t_no_preset_default_is_changed():
           presets["coding"].model == "qwen3-coder-30b-a3b-ud-q3-k-xl")
     check("the Coding preset's window is still 49,152",
           int(presets["coding"].context) == 49152)
-    check("the General preset still runs qwen3.5:9b",
-          presets["general"].model == "qwen3.5:9b")
+    check("the General preset runs the 26B the owner chose on 2026-11-18",
+          presets["general"].model == "gemma4:26b-a4b-it-qat")
     check("no new mode is offered as a preset row",
           all(m.model not in {p.model for p in P.PRESETS}
               for m in B.MODES if m.key != "coding"))
@@ -290,7 +290,7 @@ def t_start_carries_the_mode_and_refuses_a_second_one():
         check("and the shipped coding message is unchanged",
               body2.get("message") == (
                   "The big coding model is running on all three cards at "
-                  "49,152 tokens. The two models are paused and come back when "
+                  "49,152 tokens. The everyday model is paused and comes back when "
                   "you stop it."), body2.get("message"))
         B.running_mode = lambda: "creative"
         code3, body3 = B.start(gate_check=lambda *a, **k: Allow(),

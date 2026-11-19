@@ -706,16 +706,28 @@ def _presets_module():
         return None
 
 
+#: The words `jarvis_presets.LANES` uses for a lane that is on EVERY card. On
+#: 2026-11-18 the everyday lane became that lane, so every card belongs to it.
+ALL_CARDS_WORDS = "all three cards"
+
+
 def _role_for(name: str) -> str:
-    """Which preset lane this card is the named card of, from
-    `jarvis_presets.LANES` - main is the long-context card, coding is the fast
-    one - and "unassigned" for a card no lane names."""
+    """Which preset lane this card belongs to, from `jarvis_presets.LANES`.
+
+    A lane whose `card` says "all three cards" is on EVERY card, so every card
+    belongs to it - since 2026-11-18 that is the everyday lane ("main") and the
+    separate coding lane is retired, so "main" is the honest answer for all of
+    them rather than "unassigned". A lane naming a single card still matches by
+    that card's name, so this keeps working if a single-card lane returns.
+    """
     low = str(name or "").lower()
     presets = _presets_module()
     lanes = getattr(presets, "LANES", None) if presets else None
     if isinstance(lanes, dict):
         for key, lane in lanes.items():
             card = str((lane or {}).get("card") or "").lower()
+            if card == ALL_CARDS_WORDS:
+                return str(key)
             if card and card in low:
                 return str(key)
     return "unassigned"

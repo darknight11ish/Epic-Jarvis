@@ -5842,12 +5842,16 @@ def t_the_activity_turn_guard_is_carried_by_its_six_hunks():
             (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8"),
             "PATCHES")
         at = patches.index(ACTIVITY_PATCH) if ACTIVITY_PATCH in patches else -1
+        # local-model-guard.patch (2026-11-18) is appended after the activity
+        # guard and immediately before the loader; the loader must stay last of
+        # all, and the guard must still be walked before it.
         check("the stack registers it immediately BEFORE plugin-loader.patch (the "
               "position the tool walks)",
-              at >= 1 and at + 1 < len(patches)
-              and patches[at + 1] == "plugin-loader.patch"
+              at >= 1 and at + 2 < len(patches)
+              and patches[at + 1] == "local-model-guard.patch"
+              and patches[at + 2] == "plugin-loader.patch"
               and patches[-1] == "plugin-loader.patch",
-              patches[max(at - 1, 0):at + 2])
+              patches[max(at - 1, 0):at + 3])
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -5889,6 +5893,157 @@ def t_the_real_live_hud_gets_the_card_fields_and_the_activity_guard_read_only():
           staged == {} or R.rehearse(staged) == [], R.rehearse(staged))
     check("... and the real live files were not written (read-only plan)",
           {name: (live / name).read_bytes() for name in before} == before)
+
+
+# --------------------------------------------------------------------------
+#   15c. the lane-launcher preflight (2026-11-18)
+# --------------------------------------------------------------------------
+
+class _StubVerdict:
+    """A preflight verdict as the deploy path uses it.
+
+    The real verdict is a dataclass from `tools/check_lane_launcher.py`. This
+    stub keeps the deploy's own contract testable without a machine: the deploy
+    only reads `.failed`, `.lines()` and `.two_step_lines()`.
+    """
+
+    def __init__(self, failed=False, lines=(), two_step=()):
+        self.failed = failed
+        self._lines = list(lines)
+        self._two_step = list(two_step)
+
+    def lines(self):
+        return list(self._lines)
+
+    def two_step_lines(self):
+        return list(self._two_step)
+
+
+def _lane_block(*gpu_uuids):
+    return _StubVerdict(
+        failed=True,
+        lines=["1. the repo's lane table vs the tracked logon tasks: FAIL",
+               "FAIL: lane 'main' says its card is 'all three cards', but the "
+               "logon task 'Jarvis Ollama - Everyday model (RTX 2060)' passes "
+               "only 1 -GpuUuid"],
+        two_step=["2-step deploy: update the lane task",
+                  "  task: Jarvis Ollama - Everyday model (RTX 2060)",
+                  "  -GpuUuid it should carry: " + ",".join(gpu_uuids)])
+
+
+def t_a_lane_launcher_disagreement_refuses_the_one_step_deploy():
+    """The 2026-11-18 hole: a lane table the PC's logon task cannot honour.
+
+    When the preflight says the repository and the machine disagree, the deploy
+    must refuse BEFORE planning (nothing written, no backup folder), print the
+    explicit "2-step deploy: update the lane task" block with the exact task and
+    the exact -GpuUuid value, and only continue when the override is passed."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        before = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        verdict = _lane_block("GPU-aaaaaaaa", "GPU-bbbbbbbb", "GPU-cccccccc")
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           lane_preflight=lambda: verdict)
+        text = "\n".join(lines)
+        check("a lane-launcher disagreement refuses the dry run (exit 2)",
+              code == 2, (code, lines[-10:]))
+        check("... nothing was planned, so nothing may be written",
+              "PLANNED CHANGES:" not in text
+              and "SHIPPED (" not in text, lines[-10:])
+        check("... it says REFUSED and why",
+              "REFUSED:" in text and "one-step deploy" in text, lines[-10:])
+        check("... it prints the explicit 2-step block",
+              "2-step deploy: update the lane task" in text, lines[-10:])
+        check("... naming the exact task",
+              "Jarvis Ollama - Everyday model (RTX 2060)" in text, lines[-10:])
+        check("... and the exact -GpuUuid value it should carry",
+              "GPU-aaaaaaaa,GPU-bbbbbbbb,GPU-cccccccc" in text, lines[-10:])
+        after = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        check("... and the live folder was not touched", after == before)
+        check("... and no backup folder was made",
+              not any(p.name.startswith("_jarvis-deploy-backup-tool-")
+                      for p in live.iterdir()))
+
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=False, out_lines=lines2,
+                            lane_preflight=lambda: verdict,
+                            allow_lane_launcher_mismatch=True)
+        text2 = "\n".join(lines2)
+        check("--allow-lane-launcher-mismatch proceeds to the ordinary plan",
+              code2 == 0 and "PLANNED CHANGES:" in text2, (code2, lines2[-8:]))
+        check("... and says the disagreement is NOT fixed",
+              "NOT fixed" in text2, lines2[-8:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_not_checked_lane_preflight_does_not_block():
+    """Absent live launcher (fresh machine, CI runner) is NOT a pass AND no refusal."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        verdict = _StubVerdict(lines=[
+            "1. the repo's lane table vs the tracked logon tasks: PASS",
+            "2. the tracked copy vs the live launcher: NOT CHECKED",
+            "   not checked: no live launcher on this machine",
+        ])
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           lane_preflight=lambda: verdict)
+        text = "\n".join(lines)
+        check("a NOT CHECKED preflight does not refuse the deploy", code == 0,
+              (code, lines[-8:]))
+        check("... its exact sentence is printed",
+              "not checked: no live launcher on this machine" in text, lines[-8:])
+        check("... and it was not mistaken for a pass (no override needed)",
+              "REFUSED:" not in text and "2-step deploy" not in text, lines[-8:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_real_lane_guard_runs_in_the_deploy_path():
+    """No injection: the real checker is wired in, and a checkout without the
+    tracked launcher (a fixture tree, an older ref) is NOT CHECKED, not refused."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines)
+        text = "\n".join(lines)
+        check("the deploy path runs the real lane-launcher preflight",
+              "LANE LAUNCHER PREFLIGHT" in text, lines[-12:])
+        check("... a tree with no tracked launcher is reported NOT CHECKED",
+              "not checked" in text.lower(), lines[-12:])
+        check("... and it does not refuse a fixture tree", code == 0,
+              (code, lines[-8:]))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_cli_lane_flag_reaches_the_deploy():
+    """--allow-lane-launcher-mismatch is CLI plumbing: main() must pass it through."""
+    root = tmpdir()
+    try:
+        _repo, live, _show = make_fixture_pc(root)
+        seen = {}
+
+        def fake_deploy(repo_path, live_path, **kw):
+            seen.clear()
+            seen.update(kw)
+            return 0
+
+        with mock.patch.object(R, "run_deploy", fake_deploy):
+            code = R.main(["--backend-path", str(live),
+                           "--allow-lane-launcher-mismatch"])
+            check("main() passes --allow-lane-launcher-mismatch to run_deploy",
+                  code == 0 and seen.get("allow_lane_launcher_mismatch") is True, seen)
+            R.main(["--backend-path", str(live)])
+            check("... and it is False when the flag is absent",
+                  seen.get("allow_lane_launcher_mismatch") is False, seen)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def main():
@@ -5974,7 +6129,11 @@ def main():
                t_a_probe_failure_keeps_the_complete_write_and_names_the_backup,
                t_cli_rollback_restores_from_a_backup_folder,
                t_the_bench_patch_is_carried_not_false_greened,
-               t_the_auto_learn_fault_routes_are_carried_not_false_greened):
+               t_the_auto_learn_fault_routes_are_carried_not_false_greened,
+               t_a_lane_launcher_disagreement_refuses_the_one_step_deploy,
+               t_a_not_checked_lane_preflight_does_not_block,
+               t_the_real_lane_guard_runs_in_the_deploy_path,
+               t_the_cli_lane_flag_reaches_the_deploy):
         fn()
     print()
     if FAILED:

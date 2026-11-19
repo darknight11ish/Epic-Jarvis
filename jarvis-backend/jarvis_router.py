@@ -36,7 +36,7 @@ import json
 import re
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from pathlib import Path
 from typing import Optional
 
@@ -480,9 +480,23 @@ class Decision:
     #: ask for is ever presented as an answer. See jarvis_chatbot_api's
     #: CloudAnswer. False on every local turn and on the per-turn "yes".
     auto: bool = False
+    #: Set ONLY when this turn's local model could not run on the lane it will
+    #: really use and the model that lane is configured for answered instead
+    #: (2026-11-18): one entry per replacement, in the shape
+    #: `{"lane": <asked for>, "model": <really used>, "code":
+    #: "model_cannot_run_on_this_lane", "why": <the refusal, words>}`. The
+    #: route detail already carries the field of that name when the HUD steps a
+    #: cloud lane down, so it is the same key and a new reader (or the owner
+    #: reading X-Jarvis-Route) sees one list either way. `as_dict()` OMITS it
+    #: when it is empty, so an ordinary turn's route detail is byte for byte
+    #: what it was before this field existed.
+    degraded_from: Optional[list] = None
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        detail = asdict(self)
+        if not detail.get("degraded_from"):
+            detail.pop("degraded_from", None)
+        return detail
 
 
 def is_local_lane(lane: str, local_model: str = "") -> bool:
@@ -518,6 +532,248 @@ _REMOTE_TAG = re.compile(r":(?:[^:/]*-)?cloud$", re.I)
 def is_remote_model(name: str) -> bool:
     """Is this an Ollama model that is answered off this machine?"""
     return bool(_REMOTE_TAG.search(str(name or "").strip()))
+
+
+# --------------------------------------------------------------------------
+#   Which model may run on the lane this turn will use (2026-11-18)
+# --------------------------------------------------------------------------
+#
+# THE DEFECT THIS EXISTS FOR, measured live on the owner's PC the night of
+# 2026-11-17/18. `~/.openjarvis/model-state.json` said the everyday model was
+# `qwen3-coder-30b-a3b-ud-q3-k-xl` - the Coding preset's pooled three-card
+# model, written there by the live install's own preset apply (the repository
+# half of that is PR #1361). A private question then routed CORRECTLY to the
+# local lane and got NO ANSWER AT ALL:
+#
+#     jarvis_agent.local_model_refusal refused to load a pooled model on the
+#     one-card lane, in the honest words the owner was shown, and NOTHING had
+#     asked whether the model the router picked could run where it picked it.
+#
+# The refusal is right and stays right (the spill it prevents is real). The
+# missing half was this: a local turn must always be answerable, so when the
+# SAVED model is one this lane cannot hold, the turn is answered by the model
+# the lane itself is configured for - said out loud in the route detail, never
+# silently.
+#
+# NOTHING HERE DECIDES WHICH MODELS ARE POOLED, OR WHICH LANES MAY HOLD THEM.
+# `jarvis_presets.is_pooled_model` is the one hand-written predicate for the
+# first question, and `jarvis_agent.local_model_refusal` is the one place that
+# turns it into a sentence; `jarvis_agent._pooled_model_name` is the same
+# question as the refusal's own check asks it, size families included. So this
+# DELEGATES to the refusal and asks it whether the replacement fits too, rather
+# than keeping a second list that could drift from it in the direction that
+# matters (a name this file thought was safe). The ports/models themselves are
+# read from `jarvis_model_lanes` and `jarvis_big_coder`, which own them.
+#
+# ONLY THE ONE CLASS OF REFUSAL A DIFFERENT MODEL CAN FIX IS TREATED. A cloud
+# model named as the local one, or an OLLAMA_URL that points at another
+# machine, are refused exactly as before: neither is answered by loading some
+# other model on a lane that is not even this PC.
+
+
+def _default_local_url() -> str:
+    """This PC's own default Ollama address: `OLLAMA_URL`, or Ollama's default.
+
+    It asks `jarvis_models.ollama_url_on_this_pc()` - the ONE resolver every
+    shipped module uses since PR #1330 - rather than reading the environment
+    here: that resolver refuses a host that is not this PC, and
+    `backend/test_ollama_url_routing.py` fails any SECOND direct read of
+    `OLLAMA_URL` in the base, in whatever module (its own docstring explains
+    why a checked address is not a constant). The lane module's own default is
+    the fallback for a backend too old to have the resolver.
+    """
+    try:
+        import jarvis_models
+        url = str(jarvis_models.ollama_url_on_this_pc() or "").strip().rstrip("/")
+        if url:
+            return url
+    except Exception:
+        pass
+    try:
+        import jarvis_model_lanes
+        return str(jarvis_model_lanes.DEFAULT_OLLAMA_URL)
+    except Exception:
+        return "http://127.0.0.1:11434"
+
+
+def local_lane_url(default: str = "") -> str:
+    """The address a LOCAL turn on this PC will be sent to.
+
+    The HUD picks it from the applied preset (`jarvis_presets.active_chat_url`:
+    the named lane, normally 11436, or the on-demand pooled lane at 11450),
+    falling back to the checked `OLLAMA_URL` resolver
+    (`jarvis_models.ollama_url_on_this_pc`). Asking the same function here is what makes
+    "the lane it will run on" a measured fact rather than an assumption - and
+    it also picks up that function's own repair of a persisted pointer at the
+    pooled port when nothing is listening there (a read, one TCP connect at
+    most, and at most one small file write; it never starts a lane and never
+    asks a model anything). Never raises.
+    """
+    base = str(default or "").strip().rstrip("/") or _default_local_url()
+    try:
+        import jarvis_presets
+        return str(jarvis_presets.active_chat_url(base) or base).strip().rstrip("/")
+    except Exception:
+        return base
+
+
+def lane_port(lane_url) -> Optional[int]:
+    """The loopback port a lane address names, or None. The lane module's own."""
+    try:
+        import jarvis_model_lanes
+        return jarvis_model_lanes.port_of(str(lane_url or ""))
+    except Exception:
+        return None
+
+
+def _configured_everyday_model() -> str:
+    """`[intelligence] default_model` from the owner's `config.toml`, or "".
+
+    The model the HUD calls "the everyday model" when no approved switch has
+    overridden it (`jarvis_hud` reads this very key as its own default). Read
+    here so the fallback is the model the PC is CONFIGURED for, not one this
+    file remembers. Never raises.
+    """
+    try:
+        import tomllib
+    except Exception:                                            # pragma: no cover
+        try:
+            import tomli as tomllib                              # type: ignore
+        except Exception:
+            return ""
+    try:
+        base = Path(fw.CONFIG_DIR) if fw is not None else Path.home() / ".openjarvis"
+    except Exception:
+        base = Path.home() / ".openjarvis"
+    try:
+        data = tomllib.loads((base / "config.toml").read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    row = data.get("intelligence") if isinstance(data, dict) else None
+    if not isinstance(row, dict):
+        return ""
+    return str(row.get("default_model") or "").strip()
+
+
+def lane_configured_model(lane_url: str = "") -> str:
+    """The model the local lane at `lane_url` is configured for, or "".
+
+    The lane's own tables, in the order they can answer:
+
+      1. `jarvis_big_coder.LANES` - the owner's live lanes, each row naming the
+         model that lane MUST come back holding (that table's own words:
+         "exactly as they must come back"), matched by the lane's port;
+      2. `[intelligence] default_model` in the owner's `config.toml` - what
+         "the everyday model" is configured to be, which is the key the HUD
+         itself falls back to when no switch is recorded;
+      3. the everyday lane's own row in `jarvis_big_coder.LANES`, for an
+         address no row names - which is what Ollama's plain default port,
+         11434, is on this PC.
+
+    No model name is typed here; every one is read. The caller still asks the
+    refusal whether the answer fits (see `local_model_fallback`).
+    """
+    port = lane_port(lane_url)
+    try:
+        import jarvis_big_coder as big
+        rows = list(getattr(big, "LANES", ()) or ())
+    except Exception:
+        rows = []
+    if port:
+        for row in rows:
+            try:
+                if int(getattr(row, "port", 0) or 0) != int(port):
+                    continue
+            except Exception:
+                continue
+            model = str(getattr(row, "model", "") or "").strip()
+            if model:
+                return model
+    model = _configured_everyday_model()
+    if model:
+        return model
+    for row in rows:
+        model = str(getattr(row, "model", "") or "").strip()
+        if model:
+            return model
+    return ""
+
+
+def model_refusal_here(model: str, lane_url: str = "") -> str:
+    """Why the local turn would refuse `model` at `lane_url`, in words, or "".
+
+    The ONE authority on that question is `jarvis_agent.local_model_refusal`:
+    it is what `run_local_turn` itself calls before a request is sent, so a
+    router that agrees with it can never hand a turn over that will then be
+    refused. This asks it rather than re-deriving its three refusals. A router
+    with no `jarvis_agent` beside it answers "" (nothing refused): that is a
+    backend too old to have the module the whole local turn runs through, and
+    inventing a refusal there would be worse than staying as it was.
+    """
+    lane_url = (str(lane_url or "").strip().rstrip("/") or local_lane_url())
+    try:
+        import jarvis_agent
+        return str(jarvis_agent.local_model_refusal(lane_url, str(model or "")) or "")
+    except Exception:
+        return ""
+
+
+#: The `code` value `Decision.degraded_from` carries for a model this lane
+#: cannot hold. Stable, short, and never the refusal sentence itself (that is
+#: `why`, whose words belong to jarvis_agent).
+MODEL_CANNOT_RUN_HERE = "model_cannot_run_on_this_lane"
+
+
+def local_model_fallback(model: str, lane_url: str = "") -> dict:
+    """The lane's own model when `model` cannot run on this lane; {} otherwise.
+
+    The returned dict is the entry the route detail carries under
+    `degraded_from`::
+
+        {"lane":  <the model that was asked for>,
+         "model": <the model that will really run>,
+         "code":  "model_cannot_run_on_this_lane",
+         "why":   <the refusal, in jarvis_agent's own words>}
+
+    {} means "nothing to do", and it is the answer in three cases:
+
+      * the lane can hold `model` - the refusal says nothing;
+      * the refusal is not the one a different MODEL can fix (a cloud model
+        named as the local model, or a lane on another machine) - substituting
+        a model there would answer a question the refusal is not asking;
+      * no configured model for that lane fits it either - then the honest
+        refusal stands rather than a second invalid choice being made.
+
+    Never raises and never sends anything: no model is loaded, no lane started.
+    """
+    wanted = str(model or "").strip()
+    if not wanted:
+        return {}
+    lane_url = str(lane_url or "").strip().rstrip("/") or local_lane_url()
+    try:
+        import jarvis_agent
+    except Exception:
+        return {}
+    refusal = model_refusal_here(wanted, lane_url)
+    if not refusal:
+        return {}
+    # THE REFUSAL'S OWN CHECK FOR THE ONE FIXABLE CLASS. `_pooled_model_name`
+    # is what `local_model_refusal` used to produce this sentence; asking the
+    # same helper keeps this in step with the refusal including the `30b`/`27b`
+    # size families, so a pooled model this repository has never seen is
+    # treated exactly as the refusal treats it.
+    try:
+        if not jarvis_agent._pooled_model_name(wanted):
+            return {}
+    except Exception:
+        return {}
+    usable = lane_configured_model(lane_url)
+    if not usable or usable == wanted:
+        return {}
+    if model_refusal_here(usable, lane_url):
+        return {}
+    return {"lane": wanted, "model": usable, "code": MODEL_CANNOT_RUN_HERE,
+            "why": refusal}
 
 
 #: choose()'s reason when the configured local model is a cloud one.
@@ -806,9 +1062,38 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
     local_is_local = is_local_lane(local, local_model)
 
     def local_decision(gate: str, why: str) -> Decision:
-        return Decision(local, why, gate, c,
-                        inject_memory=local_is_local,
-                        tainted=conversation_tainted)
+        d = Decision(local, why, gate, c,
+                     inject_memory=local_is_local,
+                     tainted=conversation_tainted)
+        return _a_model_this_lane_can_run(d)
+
+    def _a_model_this_lane_can_run(d: Decision) -> Decision:
+        """Answer locally with a model this lane can hold (2026-11-18).
+
+        Every local gate below returns through here, so no gate can be the one
+        that forgot to check. The check happens when the DECISION is made and
+        not in `jarvis_agent.run_local_turn`, because that is where the choice
+        of model is made (the saved model came in as `local_model`) and because
+        the route detail is built from this object: the model asked for, the
+        model that will really answer, and why are all in the detail BEFORE a
+        single token is generated, so tonight's hour of tracing cannot happen
+        again. Nothing here can turn a local gate into a cloud one - the lane
+        stays `local` and the replacement is a model on this PC.
+        """
+        replacement = local_model_fallback(d.lane)
+        if not replacement:
+            return d
+        wanted, usable = replacement["lane"], replacement["model"]
+        return replace(
+            d, lane=usable,
+            reason=(f"{d.reason}; the saved model {wanted} cannot run on the lane "
+                    f"this turn uses on this PC, so {usable}, the model that lane "
+                    f"is configured for, answered instead"),
+            # The lane this turn runs on IS this PC's local lane, whatever the
+            # replacement model's NAME looks like: is_local_lane()'s name test
+            # cannot be asked of a name it has never seen, so it is not used.
+            inject_memory=True,
+            degraded_from=[replacement])
 
     # Gate -1, before every other (security audit H1, 2026-09-25): the
     # "local" lane is one of Ollama's cloud models. Every gate below would
@@ -943,6 +1228,24 @@ def degrade(lane: str, lanes: Optional[list] = None,
     otherwise the caller's own `lanes` list, and local is always the floor -
     checked FIRST, unconditionally, before `chain` or `lanes` is even read.
 
+    A CONFIG CAN NAME A LANE THAT NO LONGER EXISTS, AND THAT IS NOT A LANE.
+    The chain is an owner's file and outlives the code that wrote it: on the
+    owner's PC it still read `["jarvis-escalate", "jarvis-bulk",
+    "jarvis-critic"]` long after the 2026-10-27 decision collapsed the three
+    cloud lanes into one, and the patcher never overwrites an existing config
+    line (backend/_apply_toml_tiers.py repairs it now, and the repository's own
+    copy has been right since that decision). A stale name in this chain was
+    not a harmless label: `jarvis_chatbot_api.lane_service()` maps a name it
+    does not know to the CHOSEN service, so one 429 stepped the relay through
+    two more real requests to the same provider under names that are not lanes
+    - and the lane that finally answered was not in the caller's `lanes` list,
+    so `jarvis_hud` did not count the call against the budget either. So the
+    chain is FILTERED to names this module can actually serve - the cloud
+    lane(s) `cloud_lanes()` keeps from the caller's list, plus the local model
+    as the floor - before it is walked. A name that is dropped was going to be
+    refused by `cloud_lanes()` anyway; dropping it here means the refusal lands
+    on the next REAL lane, and the bottom is local.
+
     THAT ORDERING IS THE FIX. It used to be checked last: `order` was built
     from `chain` or `lanes`, and if `lane` (already equal to `local`) happened
     to appear inside that list with something after it, the walk returned
@@ -960,7 +1263,15 @@ def degrade(lane: str, lanes: Optional[list] = None,
     local = local_model or "local"
     if lane == local:
         return None
-    chain = list(_cfg("budget", "degrade_chain", []) or [])
+    # The names this call can actually reach: the ONE cloud lane (or none) from
+    # the caller's own list, plus the local floor. A `[budget] degrade_chain`
+    # entry outside this set names a lane that does not exist any more; walking
+    # to it used to mean a real request to the chosen provider under a name that
+    # is not a lane (see the docstring). It is dropped, never substituted.
+    serviceable = set(cloud_lanes(lanes))
+    serviceable.add(local)
+    chain = [str(n or "") for n in (_cfg("budget", "degrade_chain", []) or [])]
+    chain = [n for n in chain if n in serviceable]
     order = chain if lane in chain else list(lanes or [])
 
     # Seen lanes are skipped, so a chain that lists a lane twice - or a

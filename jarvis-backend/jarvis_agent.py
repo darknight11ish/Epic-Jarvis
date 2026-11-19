@@ -1142,6 +1142,36 @@ def _github_capabilities_words() -> str:
 GITHUB_CAPABILITIES_WORDS = _github_capabilities_words()
 
 
+def _github_repo_arg_hint() -> str:
+    """The one sentence every GitHub tool's description carries about the
+    owner's OWN repository, or "" on a backend older than the resolver.
+
+    (2026-11-18, the date's measured failure is written at
+    `jarvis_github.repo_from_words`.) The text lives in
+    `jarvis_github.REPO_ARG_HINT`, beside the resolver that makes it true - the
+    same arrangement `_github_capabilities_words` above uses, and wrapped for
+    the same reason: `jarvis_agent.py` must import on a PC whose backend
+    predates that resolver. An empty answer leaves the descriptions exactly as
+    they were before this change.
+    """
+    try:
+        import jarvis_github as GH
+        if not hasattr(GH, "repo_from_words"):
+            return ""
+        return str(getattr(GH, "REPO_ARG_HINT", "") or "")
+    except Exception:                        # noqa: BLE001 - older backend is a state
+        return ""
+
+
+#: The 2026-11-18 sentence, appended by `Tool.__init__` to every GitHub tool
+#: that takes a `repo` argument. It is the "call it, do not ask first"
+#: instruction for the owner's own repository - the model may pass a bare
+#: "Epic-Jarvis" or "my repo" and the tool fills in the owner - and it lives in
+#: the TOOL's own description, never in LANE_SYSTEM (docs/ARCHITECTURE.md,
+#: "An explicit action request reaches its gating tool").
+GITHUB_REPO_ARG_HINT = _github_repo_arg_hint()
+
+
 class _GitHubNoToken:
     """What a GitHub planner returns when no token is saved yet.
 
@@ -1592,6 +1622,14 @@ def _run_notes_search(args: dict, plan_obj, **_) -> dict:
 #: "What asks first" for reading files, not two. Offered only while the list
 #: has a folder in it (offered_tools), so an owner with none pays no tokens.
 FILES_TOOL = "my_files"
+#: The gate action ONE picture conversion is asked under (jarvis_image_convert.py,
+#: 2026-11-18; the owner's "to pdf from an image"). Every other action on this
+#: tool is a READ, decided under file_read's read-only line. Converting WRITES a
+#: new file, so it has its own action name and its own one-shot card rather than
+#: borrowing a read action - a card that said "opens the file; writes nothing
+#: back" for a write would be a lie. The shipped settings line (both copies) is
+#: "ask"; the module's prepare() refuses any other tier as a belt under the card.
+FILES_CONVERT_ACTION = "convert_images"
 #: One answer reads at most this many parts of documents - a part is at most
 #: jarvis_documents.PART_TOKENS (1,200), and the 8 GB card's whole working
 #: memory is about 8,000 tokens (docs/feasibility-2026-09-26/hardware.md).
@@ -1778,6 +1816,17 @@ def _prepare_my_files(args: dict):
             raise ValueError("say which words to look for in the recordings")
         return {"words": words.strip()}, \
             f"Search the stored words from recordings and videos: {words.strip()}"
+    if action == "convert":
+        # The ONE write this tool takes (jarvis_image_convert.py, 2026-11-18):
+        # pictures into one PDF, or one picture into another format. Decided
+        # under its own gate action (FILES_CONVERT_ACTION). prepare() reads the
+        # pictures' headers and works out the exact NEW file name - it writes
+        # nothing, and the conversion runs only after the ordinary card.
+        try:
+            import jarvis_image_convert as CONVERT
+        except Exception as exc:                  # noqa: BLE001
+            return None, f"Convert a picture (unavailable: {type(exc).__name__})"
+        return CONVERT.prepare(args)
     try:
         import jarvis_documents as DOCS
     except Exception as exc:
@@ -1853,6 +1902,20 @@ def _run_my_files(args: dict, plan_obj, **_) -> dict:
             result["injection"] = list(out.get("injection") or [])
             result["warning"] = str(out.get("warning") or "")
         return result
+    if action == "convert":
+        # The one WRITE action of this tool (jarvis_image_convert.py, 2026-11-18).
+        # `state` is what prepare() worked out and the card showed; the module
+        # writes ONE new file with O_EXCL and never replaces anything.
+        try:
+            import jarvis_image_convert as CONVERT
+        except Exception as exc:                  # noqa: BLE001
+            return {"ok": False, "error": f"the picture converter is not available "
+                                          f"here ({type(exc).__name__})"}
+        state = plan_obj if isinstance(plan_obj, dict) else None
+        if not state:
+            return {"ok": False, "error": "that conversion was not worked out, so "
+                                          "nothing was written."}
+        return CONVERT.convert(state)
     try:
         import jarvis_documents as DOCS
     except Exception as exc:                      # noqa: BLE001
@@ -2601,6 +2664,18 @@ class Tool:
                  gate_lookup_name: Optional[Callable[[dict], str]] = None,
                  instead: Optional[dict] = None):
         self.name = name
+        # The 2026-11-18 sentence about the owner's OWN repository (see
+        # REPO_ARG_HINT in jarvis_github.py) rides on EVERY GitHub tool that
+        # takes a `repo` argument. Added here, in the one constructor, rather
+        # than typed into sixteen literals: a tool can then never be written
+        # without the "pass the bare name, do not ask who owns it" instruction
+        # the measured live failure needed. `github_create_repo` names no
+        # repository to read, so it does not carry it, and a backend older than
+        # the resolver leaves GITHUB_REPO_ARG_HINT empty and changes nothing.
+        if (GITHUB_REPO_ARG_HINT and name in GITHUB_TOOLS
+                and isinstance(parameters, dict)
+                and "repo" in (parameters.get("properties") or {})):
+            description = description.rstrip() + " " + GITHUB_REPO_ARG_HINT
         self.description = description
         self.parameters = parameters
         self.prepare = prepare
@@ -5906,6 +5981,8 @@ TOOLS: dict = {
     # ask, which is the same fail-safe.
     "github_list": Tool(
         "github_list",
+        "Call this when the owner asks what is on their GitHub - their repositories, "
+        "their open pull requests or issues, or its recent workflow runs. "
         "List ONE fixed thing on GitHub: your repositories (\"repos\"), a "
         "repository's pull requests (\"pulls\") or issues (\"issues\") in open "
         "(default), closed or all state, or its recent workflow runs (\"runs\"). "
@@ -5939,6 +6016,8 @@ TOOLS: dict = {
         _prepare_github_read_file, _run_github),
     "github_ci_status": Tool(
         "github_ci_status",
+        "Call this when the owner asks what CI says, or what checks are failing or "
+        "still running, on a branch or a pull request. "
         "How CI went: the newest workflow run for a repository and branch, or for "
         "a pull request. When that run failed, it names the checks that failed and "
         "shows ONE bounded excerpt of the first failing check's log - the end of "
@@ -6013,6 +6092,8 @@ TOOLS: dict = {
     # reads card-free from Settings (the switchable `github_inspect` row).
     "github_pr_scan": Tool(
         "github_pr_scan",
+        "Call this when the owner asks which pull requests are ready to merge, or "
+        "what is blocking one. "
         "The pull request cockpit: list the open pull requests on one repository and "
         "say, for each one, whether it can be merged - merge-ready, blocked, "
         "conflicted, running or draft - and which required check is holding it. It "
@@ -6155,6 +6236,8 @@ TOOLS: dict = {
     # files, commits, comments and reviews, five fixed GETs, nothing but GET.
     "github_pr_detail": Tool(
         "github_pr_detail",
+        "Call this when the owner asks what is failing on a pull request, or for "
+        "one pull request's details, files, commits or reviews. "
         "Read ONE pull request in full: its title, body, state, draft and "
         "mergeable flags, its head commit and base branch, and then its changed "
         "files WITH THEIR UNIFIED DIFF (bounded: at most 20 files and 60,000 "
@@ -6470,18 +6553,26 @@ TOOLS: dict = {
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
         "map: a folder's files and symbols, ranked for the question. "
         "read_media: one recording's words. search_media: stored spoken and "
-        "on-screen recording words.",
+        "on-screen recording words. convert: pictures to one PDF, or one "
+        "picture to another format.",
         {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["find", "search", "read", "map", "read_media",
-                                                  "search_media"]},
+                                                  "search_media", "convert"]},
             "words": {"type": "string", "description": "a few words; for read, the part; for map, "
                                                        "the question"},
             "path": {"type": "string", "description": "read / read_media: the full path; map: a "
                                                       "folder or a project id"},
-            "part": {"type": "integer", "description": "read: which part, from its list"}},
+            "part": {"type": "integer", "description": "read: which part, from its list"},
+            "paths": {"type": "array", "items": {"type": "string"},
+                      "description": "convert: the pictures, in order"},
+            "to": {"type": "string", "enum": ["pdf", "png", "jpeg", "webp", "avif", "tiff"],
+                   "description": "convert: the target"}},
          "required": ["action"]},
         _prepare_my_files, _run_my_files,
-        gate_lookup_name=lambda args: "file_read",
+        gate_lookup_name=lambda args: (
+            FILES_CONVERT_ACTION
+            if str((args or {}).get("action") or "").strip().lower() == "convert"
+            else "file_read"),
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
     # Read ONE source file inside a folder on "Folders Jarvis may look in", or
@@ -11823,7 +11914,13 @@ TOOL_HINTS = {
                     r"\bissues?\b", r"\bworkflow runs?\b", r"\bmy repos\b"),
     "github_read_file": (r"\bgithub\b", r"\bfile\b", r"\bsource\b", r"\breadme\b"),
     "github_ci_status": (r"\bgithub\b", r"\bci\b", r"\bchecks?\b", r"\bworkflow\b",
-                         r"\bbuild\b", r"\bactions?\b", r"\bfailed\b"),
+                         r"\bbuild\b", r"\bactions?\b", r"\bfailed\b",
+                         # 2026-11-18: "what is the latest commit on main?" is
+                         # answered by the newest workflow run, which names its
+                         # head commit - without this word the diet hid every
+                         # GitHub tool for that question and the model denied
+                         # having access at all (the live 17:57 battery).
+                         r"\bcommit\b"),
     "github_comment": (r"\bgithub\b", r"\bcomment\b", r"\bpull request\b", r"\bissue\b",
                        r"\breply\b"),
     "github_open_issue": (r"\bgithub\b", r"\bopen\b[\s\S]{0,20}\bissue\b",
@@ -11848,7 +11945,11 @@ TOOL_HINTS = {
     "review_changes": (r"\breview\b", r"\bbranch\b", r"\bchange set\b",
                       r"\brisk flags?\b", r"\bpull request\b", r"\bpacket\b"),
     "check_records": (r"\brecords?\b", r"\bchangelog\b", r"\bready to push\b",
-                            r"\bbookkeeping\b", r"\bcheck(?:s)? (?:the|my) records\b"),
+                            r"\bbookkeeping\b", r"\bcheck(?:s)? (?:the|my) records\b",
+                            # 2026-11-18, the live battery's "how many open
+                            # defects are in the register?": this tool reads the
+                            # register itself, so its words must offer it.
+                            r"\bdefects?\b", r"\bregister\b"),
     # The 2026-11-10 22:30 ruling's Step 2 actions: their own words, so
     # `tool_diet` can tell them apart. Every one keeps `github`, because that
     # word alone must not summon all sixteen to every GitHub question.
@@ -18457,6 +18558,50 @@ def _grant_claim_line(text: str, watch) -> str:
     return ""
 
 
+def _card_claim_line(text: str, watch) -> str:
+    """The correction for an answer that says an approval card was raised when
+    THIS answer raised none (DEF-089, 2026-11-18), or "".
+
+    THE MEASURED FAILURE (field-test row B2, the row's own evidence): four live
+    replies told the owner a card had been raised while GET /api/pending was
+    empty both before and after the turn, and no tool had run - a reply that
+    invents a card teaches the owner to wait for one that will never come, or
+    to believe a write is sitting approved when nothing happened. Nothing in
+    the claim list above saw it: "raised" is not one of CLAIMS_DONE's verbs and
+    a card is not one of _CLAIM_OBJECT's nouns. `jarvis_claims.card_correction`
+    holds the patterns and the honest wording; this half supplies the two facts
+    a turn really has:
+
+    * `watch.cards` - the TURN's own card count (`_TurnWatch`), the same number
+      CARDS_PER_TURN is enforced with and incremented by every path that puts a
+      card on screen. It is the only thing that can settle a claim about this
+      answer. A caller that cannot tell (no watch, or a watch without a count)
+      is not guessed at: `cards` stays None and nothing is corrected.
+    * `jarvis_gate.pending()` - the LIVE waiting list (the same read
+      `jarvis_briefing._pending_count` makes). It cannot back a claim - a card
+      this turn raised has been answered before this runs - and is used only so
+      the sentence may say "nothing is waiting" when that is true, and so a card
+      already waiting leaves the answer alone.
+
+    Never raises: a missing jarvis_gate.py (this repository's own checkout has
+    none) or a broken jarvis_claims.py costs the line and nothing else.
+    """
+    cards = getattr(watch, "cards", None) if watch is not None else None
+    if cards is None:
+        return ""
+    waiting = None
+    try:
+        import jarvis_gate
+        waiting = len(jarvis_gate.pending() or [])
+    except Exception:                                        # noqa: BLE001
+        waiting = None
+    try:
+        import jarvis_claims
+        return jarvis_claims.card_correction(text, cards, waiting=waiting)
+    except Exception:                                        # noqa: BLE001
+        return ""
+
+
 def _setting_denial_line(text: str, owner_words: str) -> str:
     """The correction for "that setting is not available" when the owner's own
     words name a setting the settings tool can really change, or "". D5.
@@ -18773,6 +18918,15 @@ def _claim_corrections(text: str, steps: list, watch, enabled=None) -> list:
         line = ""
     if line:
         out.append(line)
+    # The approval-CARD claim (DEF-089, 2026-11-18) is the same shape: the
+    # TURN's own card count backs it (and the gate's pending list chooses the
+    # wording), so it is not in the loop above either, and is off its own try.
+    try:
+        line = _card_claim_line(text, watch)
+    except Exception:
+        line = ""
+    if line:
+        out.append(line)
     words = getattr(watch, "newest_own_words", "") or ""
     try:
         line = _setting_denial_line(text, words)
@@ -18833,7 +18987,7 @@ def _claim_corrections(text: str, steps: list, watch, enabled=None) -> list:
 #   must never be left out.
 def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
                      crisis: bool = False, crisis_repeat: bool = False,
-                     spoken: bool = False, enabled_tools=None) -> list:
+                     spoken: bool = False, enabled_tools=None, cards=None) -> list:
     """[(kind, line)] for every correction `text` needs, in the order they are
     said. The ONE list both the local answer and the cloud relay append.
 
@@ -18846,6 +19000,10 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
     `enabled_tools`, when the caller has one, is THIS turn's offered list, so
     the "that tool is switched off" line names a switch the turn really did not
     offer (a cloud relay passes none and the settings file is read instead).
+    `cards` is how many approval cards THIS answer raised, when the caller knows
+    that independently of `watch`: the cloud relay passes 0 (a cloud lane offers
+    no tools at all, so it cannot raise one). None means "this caller cannot
+    tell" and is never read as 0 - the card-claim line then says nothing.
     Never raises: each half is off its own `try`, and a missing module or a
     broken pattern costs that one line and nothing else.
     """
@@ -18879,13 +19037,23 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
     if line:
         kinds.append(("claim", line))
     words = str(owner_words or getattr(watch, "newest_own_words", "") or "")
+    # The approval-CARD claim needs the turn's own card count, which is not in
+    # the model's words: taken from the caller when it passes one, else from the
+    # turn's _TurnWatch. None means "this caller cannot tell", never zero - a
+    # guard that guesses here would add a wrong correction to a true answer.
+    known_cards = cards
+    if known_cards is None and watch is not None:
+        known_cards = getattr(watch, "cards", None)
     try:
         # The conversation id rides along so the approval-claim check can read
-        # the grant store; a caller with no watch leaves it empty and that check
-        # then says nothing (the state is unknown, never guessed).
+        # the grant store, and the card count so the card-claim check can read
+        # this turn's own cards (DEF-089); a caller with no watch leaves both
+        # empty and those checks then say nothing (the state is unknown, never
+        # guessed).
         holder = types.SimpleNamespace(
             newest_own_words=words,
-            conversation_id=getattr(watch, "conversation_id", "") if watch is not None else "")
+            conversation_id=getattr(watch, "conversation_id", "") if watch is not None else "",
+            cards=known_cards)
         for line in _claim_corrections(text, list(steps or ()), holder,
                                        enabled=enabled_tools):
             kinds.append(("claim", line))
@@ -18929,7 +19097,12 @@ def cloud_postscript(answer_text: str, messages=None) -> list:
     try:
         return postscript_lines(str(answer_text or ""), (),
                                 owner_words=words,
-                                spoken=(newest.get("provenance") == "voice"))
+                                spoken=(newest.get("provenance") == "voice"),
+                                # A cloud lane offers no tools at all, so THIS
+                                # answer cannot raise an approval card: the
+                                # card-claim line is told 0, not "unknown"
+                                # (DEF-089, 2026-11-18).
+                                cards=0)
     except Exception:
         return []
 
@@ -19435,6 +19608,67 @@ def _protection_path_args(name: str, args: dict) -> str:
     return ""
 
 
+def _github_repo_call(call: dict, every: dict, watch) -> dict:
+    """`call`, with the owner's own repository filled in when it was left out.
+
+    THE OTHER HALF OF THE 2026-11-18 FAILURE. The measured live turn called
+    `github_list` with the BARE name "Epic-Jarvis"; `jarvis_github._check_repo`
+    now resolves that (and "my repo", "this repository") itself, so the call
+    the model really made works. This answers the case where the model leaves
+    `repo` out entirely, because the owner named no repository at all - "what
+    are my open PRs?" - and the tool's schema cannot be filled by the model:
+    the tool layer fills it from the owner's OWN newest words, through the same
+    `jarvis_github.repo_from_words` resolver.
+
+    Bounded on purpose. It applies to the READ tools ONLY (`GITHUB_READ_TOOLS`):
+    reads may assume the owner's own repository, WRITES may not (the owner's
+    2026-11-18 ruling 5.2 and decision #1348) - a write must name its target in
+    full, because a change built from an assumed repository is worse than a
+    question, and its planner keeps that rule. Only when `repo` is absent or
+    blank (a repository the model did pass is the planner's to validate,
+    exactly as before); and only from `watch.newest_own_words`, which is the
+    newest message's words ONLY when they are the owner's own (typed or spoken)
+    - never a pasted or clipboard caption, never an earlier turn's message,
+    never a setting or a guess. A foreign repository named in those words is NOT
+    filled in (the resolver returns ""), so its ask/refusal stays exactly as it
+    was.
+    """
+    fn = call.get("function") if isinstance(call, dict) else None
+    if not isinstance(fn, dict):
+        return call
+    name = str(fn.get("name") or "")
+    if name not in GITHUB_READ_TOOLS or name not in every:
+        return call
+    raw = fn.get("arguments")
+    if isinstance(raw, str):
+        try:
+            args = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            return call
+    else:
+        args = raw
+    if not isinstance(args, dict):
+        return call
+    if str(args.get("repo") or "").strip():
+        return call
+    sent, _why = _parameters_to_send(every[name])
+    if not isinstance(sent, dict) or "repo" not in (sent.get("properties") or {}):
+        return call
+    words = str(getattr(watch, "newest_own_words", "") or "")
+    if not words:
+        return call
+    try:
+        import jarvis_github as GH
+        repo = GH.repo_from_words(words)
+    except Exception:                     # noqa: BLE001 - older backend is a state
+        return call
+    if not repo:
+        return call
+    fixed = dict(call)
+    fixed["function"] = dict(fn, arguments=json.dumps(dict(args, repo=repo)))
+    return fixed
+
+
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
               tell_owner: Optional[Callable[[str], None]] = None,
@@ -19459,6 +19693,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # in it, and nothing is put to anyone (jarvis_stop_all.py).
         _refuse_stopped(name, call, convo, steps, say_step, watch, tell_owner)
         return
+    # 2026-11-18: a GitHub call that left the repository out gets the owner's
+    # OWN one from his own newest words - see _github_repo_call. Before
+    # check_call, because the schema marks `repo` required on most of these
+    # tools and the empty field is exactly the state that has to be filled.
+    call = _github_repo_call(call, every, watch)
+    fn = (call.get("function") or {})
     # Checked BEFORE prepare() and the gate: a call whose arguments are not
     # JSON, not an object, or wrong for the tool's own schema is never
     # prepared and never raises a card (see check_call). It used to become

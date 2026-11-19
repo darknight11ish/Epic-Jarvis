@@ -180,7 +180,17 @@ def benchmarks() -> dict:
 
 def bench_for(model) -> Optional[dict]:
     """One measured row for `model`: the PC's own benchmark first, then the preset
-    row's measured fields. Always says WHICH source and WHICH context it is."""
+    row's measured fields. Always says WHICH source and WHICH context it is.
+
+    2026-11-18: a preset row may carry a `measured` dict with NO rate in it -
+    Agentic + Vision records latency only - and it must not hide a later row's
+    real tokens a second. Before the everyday preset moved off qwen3.5:9b the
+    General row came first and this never showed; now the 9B's rate-less
+    Agentic + Vision row would, and the true figure (44.9 at 196,608) lives in
+    the Documents/Browser rows. So a row WITH a rate wins, and a rate-less row
+    is still returned when no row has one, because its latency and its words
+    are measured facts too. General's own 26B row carries its 2026-11-17 rate
+    (25.4 tok/s, the low end of two runs), so it is never the rate-less case."""
     ref = str(model or "")
     rows = benchmarks()
     row = rows.get(ref)
@@ -189,14 +199,18 @@ def bench_for(model) -> Optional[dict]:
         out["source"] = "benchmark route on this PC"
         out["measured_here"] = True
         return out
+    fallback = None
     for preset in presets():
         if str(preset.get("model") or "") == ref and preset.get("measured"):
             out = dict(preset["measured"])
             out["source"] = "the preset row's measured figures"
             out["measured_here"] = True
             out["context_tokens"] = preset.get("context")
-            return out
-    return None
+            if out.get("tok_s") is not None or out.get("tokens_per_s") is not None:
+                return out
+            if fallback is None:
+                fallback = out
+    return fallback
 
 
 def _tokens_words(row: dict) -> str:
