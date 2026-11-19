@@ -5,7 +5,7 @@ WHY THIS EXISTS (measured 2026-10-30 on the owner's PC)
 
 `main` is green and the deploy through `tools/reconcile_live_backend.py` moved
 the live backend onto today's SHIPPED modules and HUD deltas with 0 refusals.
-Four pieces still could not arrive, because they are **base-file or
+Five pieces still could not arrive, because they are **base-file or
 patch-carried** content that only `scripts/apply-patches.ps1` would carry - and
 that patcher refuses 37 patches on this drifted install:
 
@@ -39,10 +39,24 @@ that patcher refuses 37 patches on this drifted install:
    hunk's two-line pre-image no longer exists here. The change is therefore
    carried as six exact pieces, applied as ONE write (one backup, one
    compile), so it cannot land half done.
+5. **jarvis_gate.py** - the Obsidian notes editor's one `_RISK` row
+   (`edit_vault_note`; PR #1350, merged 2026-11-17). The published base has it
+   in an end-of-file `_RISK.update({...})` block; the live gate measured
+   2026-11-19 still predates it, so `risk_for()` returned the unclassified
+   fallback (`"no"`, `"outbound"`, `classified` False). The action keeps its
+   shipped "ask" tier either way - the row changes no tier - but an
+   unclassified card is treated as RISKY, so approving the owner's own note
+   append demands Windows Hello. A local, reversible note write was getting
+   the maximum friction of a permanent, outbound action, and anything
+   scripted (the field battery) can never approve it. Measured 2026-11-19:
+   the battery's FAVOURITES section seeded one favourite note, the favourite
+   tier resolved it and the append card was raised correctly, then
+   `POST /api/approve` answered 403 "The Windows Hello check could not be
+   shown just now" and the append job timed out.
 
-All four repairs are exact, anchored, idempotent edits. Nothing is guessed: if
-an anchor is missing or appears more than once the tool refuses; if a repair is
-already present it says so and writes nothing; every write is backed up first
+Every repair here is an exact, anchored, idempotent edit. Nothing is guessed:
+if an anchor is missing or appears more than once the tool refuses; if a repair
+is already present it says so and writes nothing; every write is backed up first
 and the result must compile or it is rolled back.
 
 THE CARD TIMER IS TWO HUNKS, NOT ONE (measured 2026-10-30). The patch it copies
@@ -108,6 +122,7 @@ USAGE
     python -B tools/repair_live_backend_gaps.py --backend-path "<live>"           # check only
     python -B tools/repair_live_backend_gaps.py --backend-path "<live>" --apply   # write (after a clean check)
     ... --only gate           # one repair
+    ... --only note-edit
     ... --only history
     ... --only timer
     ... --only unknown-risk
@@ -786,6 +801,53 @@ GATE_ROWS = Repair(
     why="the app builder's approval cards are unapprovable without these rows",
 )
 
+#: PR #1350 (merged 2026-11-17) gave the Obsidian notes editor's one action,
+#: `edit_vault_note`, an explicit `("yes", "local")` `_RISK` row in the published
+#: base - in an end-of-file `_RISK.update({...})` block, the region no patch's
+#: hunk claims. The live gate measured 2026-11-19 (the 2026-11-14 install) still
+#: predates it: `risk_for("edit_vault_note")` answered the `_UNKNOWN_RISK`
+#: fallback, `{"reversible": "no", "reach": "outbound", "classified": False}`.
+#:
+#: WHAT THAT COST, MEASURED RATHER THAN ASSUMED (2026-11-19). The field battery's
+#: FAVOURITES section seeds ONE throwaway favourite note and asks "add <token> to
+#: my favourite note"; the resolver's favourite tier picked the seeded note and
+#: the append card was raised with the right `note_append_waiting` route. Then
+#: `POST /api/approve` ran `jarvis_owner_check.approve_check`, which read the
+#: unclassified row as risky and demanded Windows Hello - 403 "The Windows Hello
+#: check could not be shown just now" - so a headless battery can never approve
+#: the card. The append job timed out and the battery reported FAIL. The tier
+#: ("ask") is unchanged by the row; only the false risk record and the Windows
+#: Hello demand go away.
+#:
+#: WHY THE ROW SITS INSIDE THE `_RISK` LITERAL HERE. This is the LIVE file, and
+#: no patch is applied to it afterwards, so the rule that keeps base-file rows in
+#: an `.update` block at the end (the owner's 2026-11-14 ruling) does not apply
+#: to this write - the same shape `tool-actions` below already uses. The row
+#: text itself is copied from the published base byte for byte.
+NOTE_EDIT_RISK = Repair(
+    name="note-edit",
+    filename="jarvis_gate.py",
+    probes=('"edit_vault_note": ("yes", "local",',),
+    anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+    replace_with=(
+        "_RISK: dict[str, tuple[str, str, str]] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-19, PR #1350): the\n"
+        "    # Obsidian notes editor's one action. The published base has this row\n"
+        "    # in an end-of-file `_RISK.update` block; this install predates it, so\n"
+        "    # the gate fell back to _UNKNOWN_RISK ('no'/'outbound', classified\n"
+        "    # False) and the owner's own note append raised a card only a Windows\n"
+        "    # Hello prompt could approve - a local, reversible change treated as\n"
+        "    # risky, and anything scripted (the field battery) can never approve\n"
+        "    # it. The tier stays the shipped 'ask' line either way; only the false\n"
+        "    # risk record and the Windows Hello demand go away. Copied from\n"
+        "    # jarvis-backend/jarvis_gate.py byte for byte.\n"
+        '    "edit_vault_note": ("yes", "local", "changes ONE note in your own Obsidian vault on this PC - a whole-note save, words added to the end, one tag, or one new note; the old text is copied by the File Guardian before it is replaced and a new note can be undone, so the change can be put back, and nothing is sent anywhere"),\n'
+    ),
+    why="without this row the owner's own note writes raise a card that demands "
+        "Windows Hello, so a headless battery (and any scripted approval) can "
+        "never approve them",
+)
+
 #: DEF-068's second half (2026-11-14). The `_RISK` rows above make both cards
 #: approvable, but `jarvis_gate.action_for_tool()` still answers
 #: "unclassified_tool" for the two tools, because `_TOOL_ACTIONS` on this
@@ -1163,8 +1225,8 @@ UNKNOWN_RISK = Repair(
 )
 
 
-REPAIRS = {r.name: r for r in (GATE_ROWS, GATE_TOOL_ACTIONS, HISTORY_ROUTES,
-                              CARD_TIMER, UNKNOWN_RISK)}
+REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK, GATE_TOOL_ACTIONS,
+                              HISTORY_ROUTES, CARD_TIMER, UNKNOWN_RISK)}
 
 
 class Refused(Exception):

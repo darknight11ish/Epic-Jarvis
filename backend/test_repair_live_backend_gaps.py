@@ -3,8 +3,12 @@
 The tool puts back the base-file / patch-carried pieces this PC's install never
 received: the app builder's two `_RISK` rows and the card timer in
 `jarvis_gate.py`, the `/api/history/pin` + `/api/history/archive` POST routes in
-`jarvis_hud.py`, and the unclassified-action rule + the eight `_RISK` rows from
-`unknown-risk-approvable.patch` (six disjoint pieces, applied as ONE write).
+`jarvis_hud.py`, the unclassified-action rule + the eight `_RISK` rows from
+`unknown-risk-approvable.patch` (six disjoint pieces, applied as ONE write), and
+the Obsidian notes editor's `edit_vault_note` `_RISK` row (PR #1350, missing
+from the live gate measured 2026-11-19 - without it the owner's own note append
+is classified as risky and its card demands Windows Hello, so a headless field
+battery can never approve it).
 
 Two repairs carry MORE than one edit in one file, and both are proved below to
 land as one write with one backup. The card timer is TWO hunks of
@@ -572,6 +576,187 @@ def t_a_gate_pinned_as_already_repaired_is_a_no_op():
               (live / "jarvis_gate.py").read_bytes() == before)
     finally:
         mod.LIVE_GATE_ALREADY_REPAIRED = frozenset({live_hash})
+
+
+def _tuple_rows(node) -> dict:
+    """The str -> tuple rows of one `{...}` literal node, read with `ast`."""
+    out = {}
+    if not isinstance(node, ast.Dict):
+        return out
+    for key, value in zip(node.keys, node.values):
+        if not isinstance(key, ast.Constant):
+            continue
+        if isinstance(value, ast.Tuple):
+            try:
+                out[key.value] = tuple(elt.value for elt in value.elts)
+            except AttributeError:
+                continue
+    return out
+
+
+def risk_table(text: str) -> dict:
+    """Every `_RISK` row Python would build from `text` - the table the gate RUNS.
+
+    The literal's own rows plus every module-level `_RISK.update({...})` call,
+    folded in file order. This is deliberately the table Python builds and not a
+    text match: `backend/test_gate_tool_actions.py` and
+    `backend/test_def068_entry.py` both had to fold these calls in for the same
+    reason (CLAUDE.md records the false "row missing" finding that a grep-only
+    test produced on a tree where the gate answered correctly).
+    """
+    rows = {}
+    for node in ast.parse(text).body:
+        if (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+                and node.target.id == "_RISK" and isinstance(node.value, ast.Dict)):
+            rows.update(_tuple_rows(node.value))
+            continue
+        expr = node.value if isinstance(node, ast.Expr) else None
+        call = expr if isinstance(expr, ast.Call) else None
+        if call is None or not isinstance(call.func, ast.Attribute):
+            continue
+        owner = call.func.value
+        if (call.func.attr != "update" or not isinstance(owner, ast.Name)
+                or owner.id != "_RISK" or not call.args):
+            continue
+        rows.update(_tuple_rows(call.args[0]))
+    return rows
+
+
+def load_owner_check():
+    """The published base's own approval-check module, loaded read-only.
+
+    The point of the test below is the real rule that decides whether a card
+    asks for Windows Hello (`jarvis_owner_check.is_risky`), not a retyped copy
+    of it. The module imports nothing but the standard library.
+    """
+    path = REPO / "jarvis-backend" / "jarvis_owner_check.py"
+    spec = importlib.util.spec_from_file_location("owner_check_for_repair_test", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["owner_check_for_repair_test"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def risk_key_uses(text: str, key: str) -> int:
+    """How many times `key` appears as a string constant in `text`, by `ast`.
+
+    A repair that inserted the same row twice would read 2. An AST walk cannot
+    be fooled by a comment or a docstring that merely mentions the name, and it
+    is not a source-text pin: this suite's own ceiling only turns down.
+    """
+    return sum(1 for node in ast.walk(ast.parse(text))
+               if isinstance(node, ast.Constant) and node.value == key)
+
+
+#: The risk record the gate gives an action with no `_RISK` row
+#: (`jarvis_gate.risk_for`'s unclassified fallback, read in the base). This is
+#: what the live gate handed the approval check on 2026-11-19, and why
+#: `POST /api/approve` demanded Windows Hello.
+UNCLASSIFIED_RISK = {"classified": False, "reversible": "no", "reach": "outbound"}
+
+
+def t_the_note_edit_row_repairs_a_live_gate_without_it():
+    """The measured 2026-11-19 failure: a live gate with no `edit_vault_note` row.
+
+    Without it `risk_for("edit_vault_note")` returns the unclassified fallback,
+    so the approval check treats the owner's own note append as risky and asks
+    Windows Hello - which a headless battery can never answer. The repair must
+    insert the published base's row byte for byte, and the result must be the
+    classified `("yes", "local")` pair the base carries.
+    """
+    mod = load_tool()
+    repair = mod.REPAIRS["note-edit"]
+    owner = load_owner_check()
+    base = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    base_row = risk_table(base).get("edit_vault_note")
+    check("the published base carries the action's risk row",
+          isinstance(base_row, tuple) and base_row[:2] == ("yes", "local"),
+          repr(base_row))
+    base_line = next((line for line in base.splitlines()
+                      if line.startswith('    "edit_vault_note": ("yes", "local",')),
+                     "")
+    check("... and the repair inserts that line byte for byte, not a retyped copy",
+          bool(base_line) and (base_line + "\n") in repair.replace_with)
+    check("... with the row itself as the positive probe",
+          repair.probes == ('"edit_vault_note": ("yes", "local",',), repair.probes)
+
+    unrepaired = a_live_folder()
+    live_rows = risk_table((unrepaired / "jarvis_gate.py").read_text(encoding="utf-8"))
+    check("a live-shaped gate without the row has no entry to classify",
+          live_rows.get("edit_vault_note") is None)
+    check("... so an unclassified card is RISKY - the Windows Hello demand the "
+          "battery could not answer",
+          owner.is_risky({"risk": dict(UNCLASSIFIED_RISK)}) is True)
+
+    check("the tool reports the note-edit row missing",
+          mod.check_one(unrepaired, repair) == "missing")
+    check("... and one apply writes it",
+          mod.apply_one(unrepaired, repair, stamp="test") == "applied")
+    gate_after = (unrepaired / "jarvis_gate.py").read_text(encoding="utf-8")
+    check("the repaired gate's _RISK table is the base's own row",
+          risk_table(gate_after).get("edit_vault_note") == base_row,
+          repr(risk_table(gate_after).get("edit_vault_note")))
+    landed = risk_table(gate_after)["edit_vault_note"]
+    classified = {"classified": True, "reversible": landed[0], "reach": landed[1]}
+    check("... which is classified local and reversible",
+          classified["classified"] is True and classified["reversible"] == "yes"
+          and classified["reach"] == "local", repr(classified))
+    check("... so the owner's own note-append card no longer demands Windows "
+          "Hello (the real approval rule answers not-risky)",
+          owner.is_risky({"risk": classified}) is False)
+    check("... and exactly one row was inserted",
+          risk_key_uses(gate_after, "edit_vault_note") == 1,
+          risk_key_uses(gate_after, "edit_vault_note"))
+    check("... a second apply is the idempotent no-op",
+          mod.apply_one(unrepaired, repair, stamp="test-2") == "already")
+    gate_after_again = (unrepaired / "jarvis_gate.py").read_text(encoding="utf-8")
+    check("... it did not insert a second copy",
+          risk_key_uses(gate_after_again, "edit_vault_note") == 1,
+          risk_key_uses(gate_after_again, "edit_vault_note"))
+    check("... with exactly one backup for the one write",
+          len(list(unrepaired.glob("jarvis_gate.py.before-repair-*"))) == 1)
+
+
+def t_a_gate_that_already_has_the_note_edit_row_is_a_no_op():
+    """The published base already carries the row: nothing may be staged.
+
+    This is the "no double insert" control. The base is used as the fixture, so
+    a repair that looked for the wrong probe (or inserted unconditionally) would
+    show up as a write here.
+    """
+    mod = load_tool()
+    repair = mod.REPAIRS["note-edit"]
+    base = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    live = a_live_folder(gate=base)
+    before = (live / "jarvis_gate.py").read_bytes()
+    check("a gate that already has the row is reported already",
+          mod.check_one(live, repair) == "already")
+    check("... apply is the same no-op", mod.apply_one(live, repair, stamp="test") == "already")
+    check("... and nothing was written",
+          (live / "jarvis_gate.py").read_bytes() == before)
+    check("... and no backup was left behind",
+          not any(live.glob("jarvis_gate.py.before-repair-*")))
+    check("... and the row is still there exactly once",
+          (live / "jarvis_gate.py").read_text(encoding="utf-8")
+          .count('"edit_vault_note"') == 1)
+
+
+def t_a_gate_with_the_wrong_shape_refuses_the_note_edit_row():
+    """An anchor the tool cannot prove is REFUSED, and nothing is written."""
+    mod = load_tool()
+    repair = mod.REPAIRS["note-edit"]
+    live = a_live_folder(gate="RISK = {}\n")     # no `_RISK` literal to anchor on
+    before = (live / "jarvis_gate.py").read_bytes()
+    refused = False
+    try:
+        mod.apply_one(live, repair, stamp="test")
+    except mod.Refused as exc:
+        refused = "anchor" in str(exc).lower() or "appear" in str(exc).lower()
+    check("a gate with no expected anchor is REFUSED, not guessed", refused)
+    check("... and the file is byte-identical afterwards",
+          (live / "jarvis_gate.py").read_bytes() == before)
+    check("... and no backup was left behind",
+          not any(live.glob("jarvis_gate.py.before-repair-*")))
 
 
 def main():
