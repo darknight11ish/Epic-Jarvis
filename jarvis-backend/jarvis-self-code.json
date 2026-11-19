@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "da24534c36ddbd22884ff0ce04e35204c6d7ae15",
- "built_at": "2026-11-18T17:08:08-08:00",
+ "ref": "b8de6ef15e85ef1448f88b6e3e5730c982071058",
+ "built_at": "2026-11-18T20:05:08-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4885,6 +4885,7 @@
     "changelog.d/2026-11-18-preset-cards.md",
     "changelog.d/2026-11-18-preset-switch-guard.md",
     "changelog.d/2026-11-18-recordings-in-chat.md",
+    "changelog.d/2026-11-18-the-deploy-knows-the-local-model-guard.md",
     "changelog.d/2026-11-18-unknown-lane-name-fails-closed.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -5171,6 +5172,7 @@
     "decisions.d/2026-11-18-preset-cards.md",
     "decisions.d/2026-11-18-preset-switch-guard.md",
     "decisions.d/2026-11-18-recordings-in-chat.md",
+    "decisions.d/2026-11-18-the-deploy-knows-the-local-model-guard.md",
     "decisions.d/2026-11-18-the-egress-gate-reads-code-not-prose.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5677,7 +5679,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 1188,
+   "file_count": 1190,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6187,6 +6189,8 @@
     "tools/hud-deltas/hud-static-route.txt",
     "tools/hud-deltas/jobs-routes-h3-new.txt",
     "tools/hud-deltas/jobs-routes-h3-old.txt",
+    "tools/hud-deltas/local-model-guard-new.txt",
+    "tools/hud-deltas/local-model-guard-old.txt",
     "tools/hud-deltas/reasoning-new.txt",
     "tools/hud-deltas/reasoning-old.txt",
     "tools/hud-deltas/status-cache.txt",
@@ -6240,7 +6244,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 539,
+   "file_count": 541,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6799,6 +6803,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "b8de6ef15e85ef1448f88b6e3e5730c982071058",
+   "date": "2026-11-18",
+   "subject": "fix(deploy): the reconcile tool knows the local-model-guard HUD line"
+  },
+  {
+   "sha": "554e6e4043494aabc94cae2267e4d10446a44dc2",
+   "date": "2026-11-18",
+   "subject": "fix(deploy): the reconcile tool knows the local-model-guard patch"
+  },
+  {
+   "sha": "7015328ea26f7a4b76feadd83045df394d170e07",
+   "date": "2026-11-18",
+   "subject": "chore(records): re-take the generated files on the capability-fix tip"
+  },
+  {
+   "sha": "488ff4277a517fc0f4e602d5e7de81af29e747a8",
+   "date": "2026-11-18",
+   "subject": "chore(records): re-take the self-code map and the recent-changes module on main (da24534c3)"
+  },
+  {
    "sha": "da24534c36ddbd22884ff0ce04e35204c6d7ae15",
    "date": "2026-11-18",
    "subject": "Merge pull request #1391 from darknight11ish/fix/a-merge-lost-two-capability-shapes-2026-11-18"
@@ -6877,26 +6901,6 @@
    "sha": "c0a6b896a0bf4e2afadf3fa6b4c53626661743c2",
    "date": "2026-11-18",
    "subject": "fix(lane): an unknown lane name is not a cloud provider"
-  },
-  {
-   "sha": "269e17e8828fef48615651c7167f71d0d0df90a7",
-   "date": "2026-11-18",
-   "subject": "fix(chat): the defect register answers from its own file, or refuses"
-  },
-  {
-   "sha": "23e92b51ef1553db0bdae596384eeef2e229472d",
-   "date": "2026-11-18",
-   "subject": "docs: the cloud-settings record names the proof it actually uses"
-  },
-  {
-   "sha": "689dc3f4b39cc065ee8668eb596c18c60f9dd3f7",
-   "date": "2026-11-18",
-   "subject": "fix(egress): the gate reads code, not prose"
-  },
-  {
-   "sha": "753592561e3bda380ff68714e8298afb20e10198",
-   "date": "2026-11-18",
-   "subject": "feat(chat): answer the owner's core GitHub reads deterministically, reads only resolve his own repo"
   }
  ],
  "top_level": [
@@ -6923,7 +6927,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 392
+   "files": 393
   },
   {
    "path": "jarvis-backend/",
@@ -6933,12 +6937,12 @@
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 293
+   "files": 295
   },
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 286
+   "files": 287
   },
   {
    "path": "videos/",
@@ -7022,8 +7026,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 6135,
-  "covered": 5650,
+  "tracked_files": 6139,
+  "covered": 5654,
   "excluded": 485,
   "subsystems": 27
  },

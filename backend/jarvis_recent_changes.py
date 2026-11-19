@@ -20,10 +20,10 @@ from pathlib import Path
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
     'An unknown lane name no longer becomes a cloud request',
+    'The deploy tool knows the local-model-guard patch',
     "A recording can be attached in the phone's chat - the owner's `.m4a` voice memo now attaches, and the PC transcribes it",
     'A preset switch can no longer load the pooled model on the everyday lane, and a preset no longer answers "applied" without reading the lane',
     'Reflective Coach and Pictures & Screens now run on all three graphics cards',
-    'Pictures into ONE PDF, and one picture into another format',
 )
 
 
