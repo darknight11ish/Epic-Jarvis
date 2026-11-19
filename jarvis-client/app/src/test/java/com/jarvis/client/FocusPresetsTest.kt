@@ -225,16 +225,19 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `General Uncensored is the measured uncensored preset, on the pooled lane`() {
+    fun `General Uncensored is the measured uncensored MoE, on the pooled lane`() {
         val uncensored = requireNotNull(view.preset("general_uncensored"))
         assertEquals("General Uncensored", uncensored.title)
         assertFalse("the model ref is confirmed now", uncensored.pending)
         // 2026-11-18, the external review's ruling: General keeps the aligned 26B
-        // and every uncensored model lives on THIS separate preset. The row names
-        // the MEASURED uncensored 27B on the pooled three-card lane at the
-        // 32,768-token window its own measurement supports (0.000 GiB spilled;
-        // 49,152 also measured zero spill and that is the maximum, not the choice).
-        assertEquals("orcarouter/Qwen3.8-27B-Uncensored:q4_K_M", uncensored.model)
+        // and every uncensored model lives on THIS separate preset. 2026-11-19,
+        // the same review's swap ruling: the downloaded 30B MoE beat the 27B on
+        // quality, speed and tool calls, so the row names it instead. It is the
+        // measured uncensored MoE on the pooled three-card lane at 32,768 tokens,
+        // the largest window its own measurement proved zero-spill (49,152
+        // measured 0.226 GiB spilled, so the 27B's headroom is gone).
+        assertEquals("huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M",
+            uncensored.model)
         assertEquals("pooled", uncensored.lane.key)
         assertEquals("all three cards", uncensored.lane.card)
         assertEquals(32768, uncensored.context)
@@ -245,10 +248,12 @@ class FocusPresetsTest {
         assertTrue("applying it starts the pooled lane on demand",
             uncensored.apply.laneStart)
         val measured = requireNotNull(uncensored.measured) { "measured figures missing" }
-        assertEquals(9.04, measured.tokensPerSecond)
-        assertEquals("2026-11-18", measured.measuredOn)
-        assertEquals(17.379, measured.sizeGib)
+        assertEquals(16.19, measured.tokensPerSecond)
+        assertEquals("2026-11-19", measured.measuredOn)
+        assertEquals(19.52, measured.sizeGib)
         assertEquals(0.0, measured.spillGib)
+        assertTrue("the note carries the range and its median",
+            measured.note!!.contains("16.19-20.22") && measured.note!!.contains("17.16"))
         assertFalse("the cost line no longer says PENDING",
             uncensored.cost.startsWith("PENDING:"))
         // The PC's own honest words travel with the row: the aligned 26B is the
@@ -258,6 +263,9 @@ class FocusPresetsTest {
             uncensored.worse.contains("22/24") && uncensored.worse.contains("52.3"))
         assertTrue("the unmeasured alternative is described",
             uncensored.worse.contains("muse-glimmer-uncensored:30b"))
+        assertTrue("the heavier cost and the lost 49,152-token headroom are said",
+            uncensored.worse.contains("2.1 GiB")
+                && uncensored.worse.contains("0.226"))
         // The words are still the PC's, and the row is rendered normally.
         assertNull(FocusPresets.blocker(view, uncensored, stale = false, linkUp = true))
         assertNotNull(FocusPresets.applyRoute(uncensored))
