@@ -105,6 +105,21 @@ the picture and screenshot tests the same way the 30B did. Its own `worse` line
 says picture quality has no scoring battery. The proof is in the preset-speeds
 section below and in `.dsh-scratch/preset-pictures-2026-11-18/`.
 
+**General Uncensored is the ONE place uncensored models live, and it names the
+measured uncensored 27B.** The external review's ruling of 2026-11-18 keeps the
+aligned `gemma4:26b-a4b-it-qat` on General and puts every uncensored row on this
+separate preset. It was measured on the real pooled lane on 2026-11-18 at
+32,768 tokens: **17.379 GiB resident with 0.000 GiB spilled**, a 47.4-57.1 s cold
+load and **9.04-13.05 tokens a second** over seven clean samples (median 9.99;
+the low end is the row's figure). 49,152 tokens also measured zero spill and is
+the largest zero-spill window measured; 65,536 spilled 1.507 GiB, so the row
+ships at 32,768. Its blind eight-task quality is **20/24** - two below the aligned
+26B's 22/24 at 52.3 tokens a second - which is why its own words say plainly
+that a bigger, uncensored model is not automatically better.
+`muse-glimmer-uncensored:30b` (15.77 GiB, already on this PC, tools and thinking)
+is described rather than chosen: it has **not** been benchmarked on this PC. The
+evidence is `.dsh-scratch/wave21/research/MEASURE-27B.md`.
+
 **Measured on this PC on 2026-11-17, on the pooled lane, across all three cards
 at 32,768 tokens.** The run is `.dsh-scratch/wave21/preset-truth/REPORT.md`;
 every raw row is `rows.jsonl` beside it:
@@ -1553,6 +1568,22 @@ own `tok_s_on` date, and the row's `worse` line says picture quality has no
 scoring battery. The evidence is
 `.dsh-scratch/preset-pictures-2026-11-18/` (`rows.jsonl`, `rows2.jsonl`,
 `rows3.jsonl`, `rows-logged.jsonl`).
+
+**General Uncensored replaced its abliterated 9B with the measured uncensored
+27B on 2026-11-18, and the row is a heavy pooled row now.** It runs
+`orcarouter/Qwen3.8-27B-Uncensored:q4_K_M` at 32,768 tokens on the pooled lane,
+measured **17.379 GiB resident with 0.000 GiB spilled, and 9.04-13.05 tok/s
+over seven clean samples (median 9.99; the row shows the low end)**, with its
+own `tok_s_on` date in the `measured` object. The project's stored **17.96
+tok/s** for this model (2026-11-07, only 49-53 generated tokens) did **not**
+reproduce: two runs and seven clean samples on a busy 2026-11-18 measured a
+best of 13.05 and a median of 9.99, so the old figure is not quoted as current
+anywhere. Its general quality is the blind eight-task battery's **20/24** at
+32,768 (2026-11-18), and the row's `worse` line says that is two below the
+aligned 26B. The two uncensored MoE candidates still downloading
+(`huihui_ai/qwen3-abliterated:30b-a3b`,
+`TrevorJS/gemma-4-26B-A4B-it-uncensored`) are benchmarks for later, never a
+figure now. Raw rows: `.dsh-scratch/wave21/research/`.
 
 ---
 
