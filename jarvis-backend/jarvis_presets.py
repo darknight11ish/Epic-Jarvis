@@ -99,6 +99,25 @@ address and red banner), and its general quality is the project's own blind
 eight-task battery's 21/24. The proof, the raw rows and the test pictures are in
 `.dsh-scratch/preset-pictures-2026-11-18/`; the decision is recorded in
 `decisions.d/2026-11-18-pictures-preset-zero-spill.md`.
+
+GENERAL UNCENSORED IS THE ONE PLACE UNCENSORED MODELS LIVE (the external review's
+ruling, 2026-11-18): General keeps the aligned `gemma4:26b-a4b-it-qat`, and the
+uncensored model stays on this separate preset. The row used to name an
+abliterated 9B on the everyday lane; it now names the measured uncensored 27B,
+`orcarouter/Qwen3.8-27B-Uncensored:q4_K_M`, on the same pooled three-card lane as
+the other heavy rows, at the window its own measurement supports: 32,768 tokens,
+where it loaded **17.379 GiB with 0.000 GiB spilled**; 49,152 also measured zero
+spill and 65,536 spilled 1.507 GiB, so the lower measured rung is what ships. It
+decodes at 9.04-13.05 tokens a second (median 9.99) on a busy machine - about a
+fifth of the aligned 26B's measured 52.3 - and scores 20/24 on the project's blind
+eight-task battery, two below the 26B's 22/24, which is why its own words say that
+a bigger, uncensored model is not automatically better. `muse-glimmer-uncensored:30b`
+(15.77 GiB, already on this PC, tools + thinking) is described in the row rather
+than chosen: it has NOT been benchmarked on this PC, so its tool behaviour is
+unverified. The two MoE candidates still downloading are not named as choices
+until they are measured. The evidence is `.dsh-scratch/wave21/research/MEASURE-27B.md`
+and the decision is recorded in
+`decisions.d/2026-11-18-general-uncensored-preset.md`.
 """
 from __future__ import annotations
 
@@ -227,7 +246,12 @@ MEDICAL_MEASURED_WORDS = (
 #: is kept in `docs/MODEL-TOPOLOGY.md`. Pictures & Screens applies the 12B row,
 #: measured fresh on 2026-11-18 after the 30B vision model it first named spilled
 #: 2.24 GiB - the old sentence is NOT kept as an allowance anywhere, because the
-#: row it described is gone.
+#: row it described is gone. General Uncensored applies the third row, the
+#: uncensored 27B, measured on the real lane on 2026-11-18; it is the same model
+#: and window as `jarvis_big_coder.MODES`' `creative` row, whose sentence below
+#: was re-pointed at the SAME 2026-11-18 measurement, because the 2026-11-07
+#: receipt's 17.96 tok/s did not reproduce on this PC and must not be quoted as
+#: current.
 GEMMA4_26B_MEASURED_WORDS = (
     "measured on this PC on 2026-11-17 at 32,768 tokens across all three "
     "cards: 15.50 GiB loaded with 0.68 GiB (4.4%) spilled into system memory, "
@@ -237,6 +261,11 @@ GEMMA4_12B_MEASURED_WORDS = (
     "measured on this PC on 2026-11-18 at 32,768 tokens across all three "
     "cards on the real pooled lane: 8.70 GiB loaded entirely in the cards' "
     "memory with 0 B spilled, a 20.3 s cold load and 28.1 tokens a second")
+UNCENSORED_27B_MEASURED_WORDS = (
+    "measured on this PC on 2026-11-18 at 32,768 tokens across all three "
+    "cards on the real pooled lane: 17.379 GiB loaded entirely in the cards' "
+    "memory with 0.000 GiB spilled, a 47.4-57.1 s cold load and 9.04-13.05 "
+    "tokens a second (median 9.99; the LOW end is the figure the row shows)")
 
 PRESETS = (
     Preset(
@@ -293,27 +322,84 @@ PRESETS = (
         id="general_uncensored", title="General Uncensored",
         focus="general work with the uncensored model",
         what="General everyday work with the uncensored model, for answers the "
-             "ordinary model's safety tuning would refuse or water down.",
-        cost="Measured 2026-10-18: cold load 18.5-20.5 s, 45.6 tokens a second at 8k "
-             "and 45-46 at 16k; 32k loads 7.3 GB at 100% GPU (it only splits across "
-             "cards when others are resident; no CPU spill). 6.3 GB on disk, "
-             "Apache-2.0, Qwen3.5 family, 8.95B parameters.",
-        worse="A one-run general rubric of 6 prompts (6/6) is not independent "
-              "evidence; it did beat the installed qwen2.5-14b fallback on the quality "
-              "tie and 45.6 against 30.6 tokens a second. Small known nit: it suggested "
-              "Homebrew on Windows.",
-        model="hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
-        lane="main", context=196608, pending=False,
-        measured={"tok_s": 42.6, "tok_s_on": "2026-11-17",
-                  "tok_s_note": "9.18 GiB, 0 spill, one card (RTX 2060), "
-                                "196,608 context",
-                  "tok_s_16k": 45.0, "cold_load_s": [18.5, 20.5],
-                  "vram_gib_32k": 7.3, "context_max": 262144, "params_b": 8.95,
-                  "disk_gib": 6.3, "licence": "Apache-2.0",
-                  "source": "measurement 2026-10-18: one-run 6-prompt general rubric, "
-                            "6/6; not independent; 45.6 tok/s at 8k, 45-46 at 16k"},
+             "ordinary model's safety tuning would refuse or water down. General "
+             "stays the aligned 26B; THIS is the separate preset uncensored "
+             "models live on, and it names the measured uncensored 27B rather "
+             "than a guess.",
+        cost="HEAVY MODE: it needs all three cards at once as one pooled lane (port "
+             "11450) and pauses the everyday model while it loads. Measured on this "
+             "PC on 2026-11-18 on that lane at 32,768 tokens: 17.379 GiB loaded "
+             "ENTIRELY in the cards' memory (0.000 GiB spilled), a 47.4-57.1 s cold "
+             "load and 9.04-13.05 tokens a second over seven clean samples (median "
+             "9.99, the low end shown). Its measured zero-spill window reaches "
+             "49,152 tokens; 65,536 measured 1.507 GiB spilled, so 32,768 is the "
+             "window this row runs.",
+        worse="A bigger, uncensored model is NOT automatically better. The aligned "
+              "26B on General scores 22/24 on the project's blind eight-task battery "
+              "at 52.3 tokens a second; this row scores 20/24 and writes about 10 "
+              "tokens a second, on three cards instead of one. It drops the second "
+              "half of a two-effect instruction (it appends the note but not the "
+              "pin), and on three deliberately benign probes the uncensored tag "
+              "changed nothing observable - what it does on material this project "
+              "deliberately never tested is unknown. `muse-glimmer-uncensored:30b` "
+              "(15.77 GiB, already on this PC, tools and thinking) is the other "
+              "local uncensored candidate: it is described here rather than chosen "
+              "because it has NOT been benchmarked on this PC, so its tool "
+              "behaviour is unverified. Two MoE candidates "
+              "(`huihui_ai/qwen3-abliterated:30b-a3b` and "
+              "`TrevorJS/gemma-4-26B-A4B-it-uncensored`) are still downloading "
+              "and will be benchmarked for this preset later; they are not named "
+              "as choices now. A window above 49,152 tokens is not offered, so very "
+              "long documents are Documents & Notes' job.",
+        model="orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+        lane="pooled", context=32768, pending=False,
+        heavy_mode=True, mode="general-uncensored",
+        heavy_words="This preset needs all three cards at once as one pooled lane. "
+                    "While it runs, the everyday model is paused - it comes back, "
+                    "proved from the model list, when you apply a preset that is "
+                    "not heavy, and a coding model another preset left loaded is "
+                    "ended first, because only one preset's model is loaded at a "
+                    "time. It loads about 17.4 GiB with nothing spilled into "
+                    "system memory, takes about a minute cold and writes about 10 "
+                    "tokens a second.",
+        measured={"tok_s": 9.04, "tok_s_on": "2026-11-18",
+                  "tok_s_note": "17.379 GiB, 0.000 GiB spill, all three cards, "
+                                "32,768 context; two runs of the measurement "
+                                "(the machine was busy) read 9.04-13.05 tok/s "
+                                "over seven clean fixed-prompt samples, median "
+                                "9.99 - the low end is the figure the row shows",
+                  "size_gib": 17.379, "vram_gib": 17.379, "spill_gib": 0.0,
+                  "cold_load_s": 57.1, "context_measured": 32768,
+                  "context_zero_spill": 49152,
+                  "spill_at_65536_gib": 1.507,
+                  "params_b": 27.3, "disk_gib": 16.52,
+                  "capabilities": ["completion", "vision", "tools", "thinking"],
+                  "quality_general": "20/24 on the blind eight-task battery of "
+                                     "2026-11-18 (one rater, model known while "
+                                     "marking; the mechanical cells are the firm "
+                                     "ones)",
+                  "tool_calls": "19/19 emitted (15 repo-bench samples + 4 notes "
+                                "tasks); 18/19 fully correct - the miss is t03, "
+                                "where only append_note was emitted and the pin "
+                                "was dropped",
+                  "alternative": "muse-glimmer-uncensored:30b, 15.77 GiB, "
+                                 "already on this PC with tools and thinking, "
+                                 "NOT benchmarked here - described, not chosen",
+                  "source": "measured on this PC on 2026-11-18 (16:20:45-16:47:06 "
+                            "PST) on the real pooled lane (port 11450, the two "
+                            "named lanes paused, one model resident): "
+                            "18,660,993,263 B resident and the same 18,660,993,263 "
+                            "B in the cards' memory at 32,768 tokens (0.000 GiB "
+                            "spilled); 49,152 also measured 0.000 GiB, 65,536 "
+                            "spilled 1.507 GiB; 9.04-13.05 tok/s over seven clean "
+                            "fixed-prompt samples (the stored 17.96 was NOT "
+                            "reproduced); 20/24 on the project's blind eight-task "
+                            "battery at 32,768; 19/19 tool calls emitted, 18/19 "
+                            "fully correct. Full evidence: "
+                            ".dsh-scratch/wave21/research/MEASURE-27B.md"},
         prompt="balanced", diet="balanced",
-        words=("uncensored", "no filter", "unfiltered", "general uncensored"),
+        words=("uncensored", "no filter", "unfiltered", "general uncensored",
+               "uncensored model"),
         strong=("general uncensored", "uncensored"),
     ),
     Preset(
@@ -658,28 +744,33 @@ _BY_ID = {p.id: p for p in PRESETS}
 
 
 def pooled_modes() -> tuple:
-    """The THREE pooled mode rows the preset layer owns (2026-11-09).
+    """The FOUR pooled mode rows the preset layer owns (2026-11-09).
 
     `jarvis_big_coder.MODES` owns coding/deep_think/creative. This is the preset
     layer's own extra rows: `medical`, derived from the Medical Preset row so its
-    model and window are typed once, plus the two measured candidates
-    (`gemma4-26b-a4b`, `gemma4-12b`). Reflective Coach applies the first and
-    Pictures & Screens the second, so their measured row is the ONE copy the
-    preset and the lane both read rather than two numbers that can drift.
+    model and window are typed once; the two measured candidates
+    (`gemma4-26b-a4b`, `gemma4-12b`), which Reflective Coach and Pictures &
+    Screens apply; and since 2026-11-18 `general-uncensored`, derived from the
+    General Uncensored row the same way `medical` is, so that preset's model and
+    32,768-token window are typed once. Each row is the ONE copy the preset and
+    the lane both read rather than two numbers that can drift.
     `gemma4:26b-a4b-it-qat` is also the General preset's model since 2026-11-18,
-    at the SAME 32,768-token window but on the everyday lane (11436) rather than
-    this pooled one (11450); only one preset's model is loaded at a time, so the
-    two rows never share a machine. The 2026-11-18 measurements replaced the
-    `qwen3-vl-30b-a3b` row: that 30B model spilled 2.24 GiB on the real lane (and
-    1.65 GiB at 16,384), so its allowance is not carried here - the 12B row's
-    allowance is ZERO, which is what `load_coder`'s zero-spill rule checks.
+    on this same pooled lane at the same 32,768-token window - `mode
+    "gemma4-26b-a4b"` is shared by General and Reflective Coach, and only one
+    preset's model is loaded at a time, so no two rows ever share a machine.
+    The 2026-11-18 measurements replaced the `qwen3-vl-30b-a3b` row: that 30B
+    model spilled 2.24 GiB on the real lane (and 1.65 GiB at 16,384), so its
+    allowance is not carried here - the 12B row's allowance is ZERO, which is
+    what `load_coder`'s zero-spill rule checks. The uncensored 27B row's
+    allowance is ZERO too: it measured 0.000 GiB spilled at 32,768 AND at
+    49,152, and it ships at the lower of those two measured rungs.
     Read by `jarvis_model_lanes` and `jarvis_big_coder` through lazy imports.
     Never raises; `()` when the Medical row is absent (a trimmed backend).
     """
     p = _BY_ID.get("medical")
     if p is None or not p.mode:
         return ()
-    return (
+    rows = [
         {"key": p.mode, "label": "Medical", "model": p.model,
          "num_ctx": p.context, "measured_words": MEDICAL_MEASURED_WORDS,
          "spill_allowance": 0, "needs_cards": 3},
@@ -691,7 +782,18 @@ def pooled_modes() -> tuple:
          "model": "gemma4:12b-it-qat", "num_ctx": 32768,
          "measured_words": GEMMA4_12B_MEASURED_WORDS,
          "spill_allowance": 0, "needs_cards": 3},
-    )
+    ]
+    # The uncensored row, derived from its own Preset row (model and window
+    # typed once there). It is listed only when that preset really names a
+    # pooled mode, so a future row that moves lane cannot leave a stale mode
+    # behind for the lane to load.
+    u = _BY_ID.get("general_uncensored")
+    if u is not None and u.mode and u.lane == "pooled":
+        rows.append({"key": u.mode, "label": "General Uncensored",
+                     "model": u.model, "num_ctx": u.context,
+                     "measured_words": UNCENSORED_27B_MEASURED_WORDS,
+                     "spill_allowance": 0, "needs_cards": 3})
+    return tuple(rows)
 
 
 OLD_IDS = ("everyday", "coding", "admin", "long", "specialist")
@@ -2143,7 +2245,8 @@ def _preset_spill_allowance(p) -> int:
 
     A HEAVY preset runs on the pooled lane, and a pooled mode's row carries the
     spill that mode was measured with (`pooled_modes()` -> `spill_allowance`:
-    General/Reflective Coach 0.68 GiB, Coding, Medical and Pictures & Screens 0).
+    General/Reflective Coach 0.68 GiB; Coding, Medical, Pictures & Screens and
+    General Uncensored 0).
     The apply's lane read-back is the only place that number has a say, and it is
     read from the ONE mode row rather than typed again here.
     Every preset that is not heavy keeps the zero-spill rule.
@@ -2284,8 +2387,8 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     starts no model and switches nothing) - stated here and in JARVIS-API
     section 145 rather than claiming nothing happens before the card.
 
-    THE HEAVY ROWS ARE General, Coding, Reflective Coach, Pictures & Screens
-    and Medical, and since 2026-11-02 their lane exists. General joined them on
+    THE HEAVY ROWS ARE General, General Uncensored, Coding, Reflective Coach,
+    Pictures & Screens and Medical, and since 2026-11-02 their lane exists. General joined them on
     2026-11-18: its model needs all three cards, and the everyday lane is
     pinned to one 12 GB card, so pointing it there was ruled out. A heavy
     preset's model cannot run on either named single-card lane; its lane is
@@ -3212,8 +3315,11 @@ def recommendations() -> dict:
                                 f"{POOLED_PLAN_PORT}) across ALL the cards at "
                                 f"{p.context:,} tokens: HEAVY MODE, it pauses the "
                                 f"everyday model while it runs"),
-                    "general_uncensored": (f"{everyday}: main chat / everyday "
-                                           f"uncensored, {p.context:,} window"),
+                    "general_uncensored": (f"{p.model} on ONE pooled lane (port "
+                                           f"{POOLED_PLAN_PORT}) across ALL the "
+                                           f"cards at {p.context:,} tokens: HEAVY "
+                                           f"MODE, it pauses the everyday model "
+                                           f"while it runs"),
                     "coding": (f"{p.model} on ONE pooled lane (port "
                                f"{POOLED_PLAN_PORT}) across ALL the cards: it is "
                                f"too big for one card, so applying this preset "
@@ -3241,7 +3347,7 @@ def recommendations() -> dict:
                 }[p.id]
                 role_text = {
                     "general": pooled_card,
-                    "general_uncensored": everyday,
+                    "general_uncensored": pooled_card,
                     "coding": pooled_card,
                     "fast": everyday,
                     "agentic_vision": everyday,
@@ -3282,12 +3388,13 @@ def recommendations() -> dict:
                            "Forms at 196,608 tokens, Fast and Agentic + Vision at "
                            f"16,384. The pooled lane (port {POOLED_PLAN_PORT}) "
                            "sees ALL THREE cards and carries every heavy preset - "
-                           "General's 26B at 32,768, Coding, Reflective Coach, "
-                           "Pictures & Screens and Medical - and it pauses the "
-                           "everyday model while it runs, because no preset has to "
-                           "keep a card free for another. So any preset may use all "
-                           "three cards where its model warrants it. There is no "
-                           "one-lane-per-GPU split any more."),
+                           "General's 26B at 32,768, General Uncensored's 27B at "
+                           "32,768, Coding, Reflective Coach, Pictures & Screens "
+                           "and Medical - and it pauses the everyday model while "
+                           "it runs, because no preset has to keep a card free for "
+                           "another. So any preset may use all three cards where "
+                           "its model warrants it. There is no one-lane-per-GPU "
+                           "split any more."),
                 "cards": [
                     {"role": ("everyday lane: ONE card (the RTX 2060), port 11436 - "
                               "the 9B long-window rows at 196,608; Fast and "
@@ -3295,8 +3402,9 @@ def recommendations() -> dict:
                      "card": _role_words(cards, roles, "main"), "context": 196608},
                     {"role": ("pooled lane, started on demand: all three cards, "
                               f"port {POOLED_PLAN_PORT} - General's 26B at 32,768, "
-                              "Coding, Reflective Coach, Pictures & Screens and "
-                              "Medical; it pauses the everyday model while it runs"),
+                              "General Uncensored's 27B at 32,768, Coding, "
+                              "Reflective Coach, Pictures & Screens and Medical; it "
+                              "pauses the everyday model while it runs"),
                      "card": f"all three cards (pooled lane, port {POOLED_PLAN_PORT})",
                      "context": 32768},
                 ],
@@ -3306,8 +3414,11 @@ def recommendations() -> dict:
                                  f"General (gemma4:26b-a4b-it-qat at 32,768), Coding "
                                  f"(qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), "
                                  f"Medical (medgemma:27b at 32,768), Reflective Coach "
-                                 f"(gemma4:26b-a4b-it-qat at 32,768) and Pictures & "
-                                 f"Screens (gemma4:12b-it-qat at 32,768). "
+                                 f"(gemma4:26b-a4b-it-qat at 32,768), Pictures & "
+                                 f"Screens (gemma4:12b-it-qat at 32,768) and "
+                                 f"General Uncensored "
+                                 f"(orcarouter/Qwen3.8-27B-Uncensored:q4_K_M at "
+                                 f"32,768). "
                                  f"Each is too big for one card, which is why a heavy "
                                  f"preset splits one model across the cards; every "
                                  f"preset that is not heavy runs on the one everyday "
@@ -3317,9 +3428,16 @@ def recommendations() -> dict:
                               "loading time, not a lane: the everyday model is loaded "
                               "once across all three cards on the pooled lane, so the link is paid at "
                               "load, not per token."),
-                "future_not_a_preset": ("Qwen3.8-27B pooled to 28 GB across cards is a future "
-                                        "'max quality' experiment only; it is not a preset and "
-                                        "no figure is claimed until it is measured."),
+                "future_not_a_preset": ("The two uncensored MoE candidates still "
+                                        "downloading - "
+                                        "huihui_ai/qwen3-abliterated:30b-a3b and "
+                                        "TrevorJS/gemma-4-26B-A4B-it-uncensored - "
+                                        "are not presets and no figure is claimed "
+                                        "for them until each is measured on this "
+                                        "PC. The uncensored 27B itself is a preset "
+                                        "now: General Uncensored runs it on the "
+                                        "pooled lane at 32,768 tokens, measured at "
+                                        "17.379 GiB with 0.000 GiB spilled."),
             }}
 
 

@@ -225,14 +225,39 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `General Uncensored is a measured preset after the contract landed`() {
+    fun `General Uncensored is the measured uncensored preset, on the pooled lane`() {
         val uncensored = requireNotNull(view.preset("general_uncensored"))
         assertEquals("General Uncensored", uncensored.title)
         assertFalse("the model ref is confirmed now", uncensored.pending)
-        assertTrue(uncensored.model.startsWith("hf.co/"))
-        assertNotNull("measured figures are carried now", uncensored.measured)
-        assertFalse("the cost line no longer says PENDING", uncensored.cost.startsWith("PENDING:"))
-        assertFalse(uncensored.heavyMode)
+        // 2026-11-18, the external review's ruling: General keeps the aligned 26B
+        // and every uncensored model lives on THIS separate preset. The row names
+        // the MEASURED uncensored 27B on the pooled three-card lane at the
+        // 32,768-token window its own measurement supports (0.000 GiB spilled;
+        // 49,152 also measured zero spill and that is the maximum, not the choice).
+        assertEquals("orcarouter/Qwen3.8-27B-Uncensored:q4_K_M", uncensored.model)
+        assertEquals("pooled", uncensored.lane.key)
+        assertEquals("all three cards", uncensored.lane.card)
+        assertEquals(32768, uncensored.context)
+        assertTrue("General Uncensored is a heavy preset on the pooled lane",
+            uncensored.heavyMode)
+        // The contract's own rule: lane_start = lane != "main", so applying it
+        // starts the pooled lane on demand - the same shape General now has.
+        assertTrue("applying it starts the pooled lane on demand",
+            uncensored.apply.laneStart)
+        val measured = requireNotNull(uncensored.measured) { "measured figures missing" }
+        assertEquals(9.04, measured.tokensPerSecond)
+        assertEquals("2026-11-18", measured.measuredOn)
+        assertEquals(17.379, measured.sizeGib)
+        assertEquals(0.0, measured.spillGib)
+        assertFalse("the cost line no longer says PENDING",
+            uncensored.cost.startsWith("PENDING:"))
+        // The PC's own honest words travel with the row: the aligned 26B is the
+        // better measured row, and the other local candidate is described, not
+        // chosen because it has not been benchmarked.
+        assertTrue("the aligned 26B comparison is in the row",
+            uncensored.worse.contains("22/24") && uncensored.worse.contains("52.3"))
+        assertTrue("the unmeasured alternative is described",
+            uncensored.worse.contains("muse-glimmer-uncensored:30b"))
         // The words are still the PC's, and the row is rendered normally.
         assertNull(FocusPresets.blocker(view, uncensored, stale = false, linkUp = true))
         assertNotNull(FocusPresets.applyRoute(uncensored))

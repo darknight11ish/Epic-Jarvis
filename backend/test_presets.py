@@ -165,19 +165,22 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
     pooled_words = f"all the cards (pooled lane, port {P.POOLED_PLAN_PORT})"
     check("every named-lane 3-GPU row names the ONE everyday card",
           all(three[k]["card"] == everyday_words
-              for k in ("general_uncensored", "fast",
-                        "agentic_vision", "documents", "browser")),
+              for k in ("fast", "agentic_vision", "documents", "browser")),
           {k: three[k]["card"] for k in three})
-    check("... and every heavy row - General included - says the pooled lane on "
-          "all the cards",
+    check("... and every heavy row - General and General Uncensored included - says "
+          "the pooled lane on all the cards",
           all(three[k]["card"] == pooled_words
-              for k in ("general", "coding", "reflect", "pictures", "medical")),
+              for k in ("general", "general_uncensored", "coding", "reflect",
+                        "pictures", "medical")),
           {k: three[k]["card"] for k in three})
-    check("... General's row names the 32,768 window it really runs, and every "
-          "heavy row says it pauses the everyday model (never 'the other lanes')",
+    check("... General's and General Uncensored's rows name the 32,768 window they "
+          "really run, and every heavy row says it pauses the everyday model "
+          "(never 'the other lanes')",
           "32,768" in three["general"]["note"]
+          and "32,768" in three["general_uncensored"]["note"]
           and all("pauses the everyday model" in three[k]["note"]
-                  for k in ("general", "coding", "reflect", "pictures", "medical")),
+                  for k in ("general", "general_uncensored", "coding", "reflect",
+                            "pictures", "medical")),
           {k: three[k]["note"] for k in three})
     check("... the rows never print an invented array position ('card 2')",
           all(not re.match(r"^card \d+$", row["card"]) for row in three.values()),
@@ -310,10 +313,11 @@ def t_every_pooled_preset_carries_a_measured_dict():
     the lane would load a model the preset never named.
     """
     pooled = [p for p in P.PRESETS if p.lane == "pooled"]
-    check("FIVE presets take all three cards today: General (joined 2026-11-18), "
-          "Coding, Reflective Coach, Pictures & Screens and Medical",
-          [p.id for p in pooled] == ["general", "coding", "reflect",
-                                     "pictures", "medical"],
+    check("SIX presets take all three cards today: General (joined 2026-11-18), "
+          "General Uncensored (the uncensored 27B, same day), Coding, Reflective "
+          "Coach, Pictures & Screens and Medical",
+          [p.id for p in pooled] == ["general", "general_uncensored", "coding",
+                                     "reflect", "pictures", "medical"],
           [p.id for p in pooled])
     check("... every one of them is heavy_mode",
           all(p.heavy_mode for p in pooled),
@@ -333,9 +337,10 @@ def t_every_pooled_preset_carries_a_measured_dict():
           [(p.id, p.measured.get("source")) for p in pooled])
     modes = {m["key"]: m for m in P.pooled_modes()}
     named = [p for p in pooled if p.mode]
-    check("four of the five name their own pooled mode (General shares Reflective "
+    check("five of the six name their own pooled mode (General shares Reflective "
           "Coach's measured row), and Coding keeps the lane's own default",
-          [p.id for p in named] == ["general", "reflect", "pictures", "medical"]
+          [p.id for p in named] == ["general", "general_uncensored", "reflect",
+                                    "pictures", "medical"]
           and P.by_id("coding").mode == "", [p.id for p in named])
     check("... every named mode is a row pooled_modes() publishes, at the SAME model "
           "and window the preset row states",
@@ -344,17 +349,71 @@ def t_every_pooled_preset_carries_a_measured_dict():
           [(p.id, p.mode) for p in named])
     check("... so no preset can point at a mode the lane would refuse to load",
           all(m["needs_cards"] == 3 for m in P.pooled_modes()))
-    moved = (P.by_id("reflect"), P.by_id("pictures"))
-    check("... and both moved rows quote their own numbers in plain words, not only "
-          "in a dict the owner never sees (Reflective Coach's is the 2026-11-17 run; "
-          "Pictures & Screens is the 2026-11-18 real-lane run that replaced the "
-          "spilling 30B, a single run, so it carries no range)",
+    moved = (P.by_id("general_uncensored"), P.by_id("reflect"),
+             P.by_id("pictures"))
+    check("... and the three moved rows quote their own numbers in plain words, not "
+          "only in a dict the owner never sees (Reflective Coach's is the 2026-11-17 "
+          "run; General Uncensored's and Pictures & Screens' are the 2026-11-18 "
+          "real-lane runs, each with its own range or single run in the note)",
           all(p.measured["tok_s_on"] in ("2026-11-17", "2026-11-18") for p in moved)
           and all(str(p.measured["tok_s"]) in p.measured["tok_s_note"] for p in moved)
           and all(str(p.measured["size_gib"]) in p.cost
                   or f"{p.measured['size_gib']:.2f}" in p.cost for p in moved)
           and all("all three cards" in p.heavy_words for p in moved),
           [(p.id, p.measured["tok_s_note"]) for p in moved])
+
+
+def t_general_uncensored_is_the_measured_uncensored_preset():
+    """2026-11-18, the external review's ruling: General keeps the aligned 26B and
+    the uncensored model lives on this separate preset.
+
+    This check FAILS on the tree before the change: that tree's row named the
+    abliterated 9B on the one-card everyday lane at 196,608 tokens, carried its
+    2026-10-18 figures, and no pooled mode existed for it. The new row is a heavy
+    row on the pooled three-card lane at the 32,768-token window the 2026-11-18
+    measurement supports (49,152 also measured zero spill; 65,536 spilled
+    1.507 GiB), with the measured numbers and their date, not invented ones.
+    """
+    fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(
+        encoding="utf-8"))
+    row = next(p for p in fixture["presets"] if p["id"] == "general_uncensored")
+    gen = next(p for p in fixture["presets"] if p["id"] == "general")
+    modes = [m for m in P.pooled_modes() if m["key"] == "general-uncensored"]
+    check("the rendered contract carries General Uncensored as a heavy pooled row "
+          "at 32,768 naming orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+          row["model"] == "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M"
+          and row["lane"]["key"] == "pooled"
+          and row["lane"]["port"] == 11450
+          and row["context"] == 32768
+          and row["heavy_mode"] is True
+          and row["apply"]["lane_start"] is True, row)
+    check("... the rendered row carries the 2026-11-18 measured figures: 9.04 tok/s, "
+          "17.379 GiB, 0.000 GiB spilled and a 32,768-token window",
+          row["measured"]["tok_s"] == 9.04
+          and row["measured"]["tok_s_on"] == "2026-11-18"
+          and row["measured"]["size_gib"] == 17.379
+          and row["measured"]["vram_gib"] == 17.379
+          and row["measured"]["spill_gib"] == 0.0
+          and row["measured"]["cold_load_s"] == 57.1
+          and row["measured"]["context_measured"] == 32768, row["measured"])
+    check("... and the rendered words say the aligned 26B is the better row at "
+          "22/24 and 52.3 tok/s, and describe the unmeasured muse candidate "
+          "instead of choosing it",
+          "22/24" in row["worse"] and "52.3" in row["worse"]
+          and "NOT automatically better" in row["worse"]
+          and "muse-glimmer-uncensored:30b" in row["worse"]
+          and "NOT been benchmarked" in row["worse"], row["worse"])
+    check("... the pooled mode the apply starts exists exactly once, at the same "
+          "model and window, with its measured zero spill allowance",
+          len(modes) == 1
+          and modes[0]["model"] == row["model"]
+          and modes[0]["num_ctx"] == row["context"]
+          and modes[0]["spill_allowance"] == 0
+          and modes[0]["needs_cards"] == 3, modes)
+    check("... and General itself still names the aligned 26B, so the two rows "
+          "cannot be confused",
+          gen["model"] == "gemma4:26b-a4b-it-qat"
+          and gen["model"] != row["model"], (gen["model"], row["model"]))
 
 
 def main() -> int:
@@ -441,14 +500,60 @@ def main() -> int:
           and "no separate fast card" in P.by_id("fast").what,
           (P.by_id("fast").lane, P.by_id("fast").what))
     gu = P.by_id("general_uncensored")
-    check("General Uncensored now names the measured abliterated Qwen3.5 ref",
+    check("2026-11-18 (the review's ruling): General Uncensored is the ONE place "
+          "uncensored models live, and it names the MEASURED uncensored 27B on the "
+          "pooled three-card lane at a 32,768-token window - General keeps the "
+          "aligned 26B and never this model",
           gu.pending is False
-          and gu.model == "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M"
-          and gu.measured["tok_s"] == 42.6 and gu.measured["context_max"] == 262144
-          and gu.measured["licence"] == "Apache-2.0", gu.model)
-    check("... its words say one-run rubric, not independent, and the Homebrew nit",
-          "6/6" in gu.measured["source"] and "not independent" in gu.measured["source"]
-          and "Homebrew" in gu.worse)
+          and gu.model == "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M"
+          and gu.lane == "pooled" and gu.heavy_mode is True
+          and gu.mode == "general-uncensored" and gu.context == 32768
+          and gu.model != P.by_id("general").model,
+          (gu.model, gu.lane, gu.mode, gu.context))
+    check("... its measured figures are the 2026-11-18 lane run: 17.379 GiB, 0.000 "
+          "GiB spilled, ALL of it in the cards' memory, a 57.1 s cold load and "
+          "9.04-13.05 tok/s over seven clean samples (the low end is the figure)",
+          gu.measured["tok_s"] == 9.04
+          and gu.measured["tok_s_on"] == "2026-11-18"
+          and gu.measured["size_gib"] == 17.379
+          and gu.measured["vram_gib"] == 17.379
+          and gu.measured["spill_gib"] == 0.0
+          and gu.measured["cold_load_s"] == 57.1
+          and gu.measured["context_measured"] == 32768
+          and gu.measured["context_zero_spill"] == 49152
+          and gu.measured["spill_at_65536_gib"] == 1.507,
+          gu.measured)
+    check("2026-11-18 (the review's ruling): General keeps the aligned 26B - "
+          "the measured 22/24 at 52.3 tok/s row - not the uncensored model",
+          P.by_id("general").model == "gemma4:26b-a4b-it-qat"
+          and P.by_id("general").lane == "pooled"
+          and "22/24" in gu.worse and "52.3" in gu.worse)
+    check("... and its own words say a bigger, uncensored model is NOT "
+          "automatically better, with this row's 20/24 and 19/19 tool calls",
+          "NOT automatically better" in gu.worse
+          and "20/24" in gu.measured["quality_general"]
+          and "19/19" in gu.measured["tool_calls"]
+          and "two-effect" in gu.worse, gu.worse)
+    check("... the other local uncensored candidate is DESCRIBED, not chosen: "
+          "muse-glimmer-uncensored:30b is named with its size and the fact that it "
+          "has NOT been benchmarked on this PC",
+          "muse-glimmer-uncensored:30b" in gu.worse
+          and "15.77" in gu.worse
+          and "NOT been benchmarked" in gu.worse, gu.worse)
+    check("... the two MoE candidates are named as still-to-be-measured, never as "
+          "choices, and the old abliterated 9B ref is nowhere in the shipped rows",
+          "huihui_ai/qwen3-abliterated:30b-a3b" in gu.worse
+          and "TrevorJS/gemma-4-26B-A4B-it-uncensored" in gu.worse
+          and all(p.model != "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M"
+                  for p in P.PRESETS)
+          and all(m["model"] != "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M"
+                  for m in P.pooled_modes()), gu.worse)
+    check("... it says the everyday model is paused on the pooled lane and that "
+          "only one preset's model is loaded at a time - the designed contract",
+          "all three cards" in gu.heavy_words
+          and "paused" in gu.heavy_words
+          and "one preset's model is loaded at a time" in gu.heavy_words,
+          gu.heavy_words)
     check("Agentic+Vision is qwen3.5:9b on the 2060 (never the display card)",
           P.by_id("agentic_vision").model == "qwen3.5:9b"
           and P.by_id("agentic_vision").lane == "main" and P.by_id("agentic_vision").context == 16384)
@@ -470,10 +575,13 @@ def main() -> int:
               if "two runs" in p["measured"].get("tok_s_note", "")}
     check("... the rows run twice carry their range, and tok_s is its LOW end "
           "(General's 26B row is the same twice-measured pooled load as "
-          "Reflective Coach's, so it carries the range too; Pictures & Screens was "
-          "measured once on 2026-11-18, when its whole model changed, so it is not "
-          "one of the ranged rows and says so in its note)",
-          set(ranged) == {"general", "coding", "reflect", "medical"}
+          "Reflective Coach's, so it carries the range too; General Uncensored's "
+          "measurement was run twice on a busy machine and its note says so; "
+          "Pictures & Screens was measured once on 2026-11-18, when its whole "
+          "model changed, so it is not one of the ranged rows and says so in its "
+          "note)",
+          set(ranged) == {"general", "coding", "reflect", "medical",
+                          "general_uncensored"}
           and all(re.search(r"read " + re.escape(str(m["tok_s"])) + r"-",
                             m["tok_s_note"]) for m in ranged.values())
           and "one run" in P.by_id("pictures").measured["tok_s_note"],
@@ -576,19 +684,25 @@ def main() -> int:
     check("... and it is appended LAST, so the nine older rows keep their order",
           P.PRESET_IDS[-1] == "medical" and len(P.PRESETS) == 10, P.PRESET_IDS)
     modes = P.pooled_modes()
-    check("pooled_modes(): three named rows - Medical from its Preset row, and the two "
-          "measured candidates Reflective Coach and Pictures & Screens now apply",
-          [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "gemma4-12b"]
+    check("pooled_modes(): FOUR named rows - Medical from its Preset row, the "
+          "uncensored 27B from the General Uncensored row (both derived so model "
+          "and window are typed once), and the two measured candidates Reflective "
+          "Coach and Pictures & Screens apply",
+          [m["key"] for m in modes] == ["medical", "gemma4-26b-a4b", "gemma4-12b",
+                                        "general-uncensored"]
           and modes[0]["model"] == med.model and modes[0]["num_ctx"] == med.context
-          and [m["num_ctx"] for m in modes] == [32768, 32768, 32768]
+          and modes[3]["model"] == P.by_id("general_uncensored").model
+          and modes[3]["num_ctx"] == P.by_id("general_uncensored").context
+          and [m["num_ctx"] for m in modes] == [32768, 32768, 32768, 32768]
           and all(m["needs_cards"] == 3 for m in modes), modes)
-    check("... the two candidates are exactly the models the two moved presets run, "
-          "and the 12B row's measured spill allowance is ZERO (it was measured with "
-          "nothing spilled) while the 26B keeps its measured 0.68 GiB",
+    check("... the candidates are exactly the models the moved presets run, and the "
+          "12B and uncensored-27B rows' measured spill allowance is ZERO (measured "
+          "with nothing spilled) while the 26B keeps its measured 0.68 GiB",
           modes[1]["model"] == P.by_id("reflect").model
           and modes[2]["model"] == P.by_id("pictures").model
           and modes[1]["spill_allowance"] == round(0.681 * 1024 ** 3)
-          and modes[2]["spill_allowance"] == 0,
+          and modes[2]["spill_allowance"] == 0
+          and modes[3]["spill_allowance"] == 0,
           [m["model"] for m in modes])
     check("... so the pictures apply is read back with the zero-spill rule, not a "
           "2.24 GiB allowance for a replaced model",
@@ -596,6 +710,12 @@ def main() -> int:
           and "0 B spilled" in modes[2]["measured_words"],
           (P._preset_spill_allowance(P.by_id("pictures")),
            modes[2]["measured_words"]))
+    check("... and the General Uncensored apply keeps the ZERO-spill rule too - its "
+          "lane run really measured 0.000 GiB spilled at 32,768 and 49,152",
+          P._preset_spill_allowance(P.by_id("general_uncensored")) == 0
+          and "0.000 GiB spilled" in modes[3]["measured_words"],
+          (P._preset_spill_allowance(P.by_id("general_uncensored")),
+           modes[3]["measured_words"]))
     rec3 = P.recommendations()["by_gpu_count"]["3"]
     check("every preset has a 3-GPU recommendation row (the id-keyed GPU dicts cover the catalogue)",
           set(rec3) == set(P.PRESET_IDS), sorted(rec3))
@@ -697,13 +817,22 @@ def main() -> int:
           and str(P.POOLED_PLAN_PORT) in rec["by_gpu_count"]["2"]["coding"]["note"]
           and "main model on the 2060" not in rec["by_gpu_count"]["2"]["coding"]["note"],
           rec["by_gpu_count"]["2"]["coding"]["note"])
-    check("the pooled Qwen3.8-27B 28 GB is named as future-only, not a preset",
-          "not a preset" in rec["three_gpu_plan"]["future_not_a_preset"]
-          and "28 GB" in rec["three_gpu_plan"]["future_not_a_preset"])
-    check("General Uncensored is measured in the 2-GPU rows now",
-          rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 42.6
-          and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
+    check("the two uncensored MoE candidates are named as future-only, never a "
+          "preset or a figure, and the measured 27B is on General Uncensored now",
+          "not presets" in rec["three_gpu_plan"]["future_not_a_preset"]
+          and "huihui_ai/qwen3-abliterated:30b-a3b"
+          in rec["three_gpu_plan"]["future_not_a_preset"]
+          and "17.379" in rec["three_gpu_plan"]["future_not_a_preset"])
+    check("General Uncensored is a heavy pooled row in the 2-GPU rows now, with its "
+          "measured 9.04 tok/s and the 32,768 window it really runs",
+          rec["by_gpu_count"]["2"]["general_uncensored"]["card"].startswith(
+              "all three cards (pooled lane")
+          and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True
+          and rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 9.04
+          and rec["by_gpu_count"]["2"]["general_uncensored"]["context"] == 32768,
+          rec["by_gpu_count"]["2"]["general_uncensored"])
 
+    t_general_uncensored_is_the_measured_uncensored_preset()
     t_every_pooled_preset_carries_a_measured_dict()
     t_three_gpu_rows_name_the_cards_by_role_not_by_index()
     t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane()
