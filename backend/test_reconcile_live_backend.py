@@ -6503,9 +6503,14 @@ def t_a_target_missing_a_called_name_is_refused():
               lines)
         check("... it says the deploy never carries a patched base file",
               "never" in text and "patched base file" in text, lines)
-        check("... it says what to do: apply the stack, or record the gap "
-              "deliberately", "apply-patches.ps1 -BackendPath" in text
-              and "record that gap deliberately" in text, lines)
+        check("... it says what to do: apply the stack, or refresh that ONE "
+              "file from the published base",
+              "apply-patches.ps1 -BackendPath" in text
+              and "refresh_patched_base.py --backend-path" in text, lines)
+        check("... and it says a hand-written shim is not a way out any more "
+              "(the review ruling, no third shim)",
+              "no third" in text and "shim" in text
+              and "temporary debt to clear" in text, lines)
         check("... and it is a refusal, not a warning",
               R.CROSS_FILE_RULE in text and "REFUSED" in text, lines)
     finally:

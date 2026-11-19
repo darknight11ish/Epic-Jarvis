@@ -69,7 +69,9 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
 - for the five patched base files it adds only the HUD deltas a patch really
   needs, and **refuses** when an anchor is missing, when a patch has no rule, or
   when it cannot prove the patch is absent (see "A patch is PROVED applied or
-  absent" below) - it never guesses;
+  absent" below) - it never guesses. It never CARRIES one of those five files,
+  because the live copy is normally newer than the base; a file whose live copy
+  is *behind* the base is fixed by section 2b, not by this deploy;
 - it also carries the HUD fixes that live in the published base but in **no**
   `.patch` as literal deltas (DEF-002's status cache, its start call and the
   cached `/api/status` route, and the reasoning fallback); a REPLACE delta's old
@@ -179,6 +181,72 @@ the program does not have. `BLOCKED_DELTAS` is now empty, the dry run reports
 **0 blocked deltas**, and the retention remains tested where it ships
 (`backend/test_sqlite_perf.py`). This is not a claim that a writer exists: the
 cap acts only if a store from an older build or a backup restore appears.
+
+## 2b. `tools/refresh_patched_base.py` - bringing ONE patched-base file up to date
+
+**Dry-run by default; `--apply --file <name>` is the only thing that writes,
+and it writes one file.** Added 2026-11-19 on the review ruling that the two
+hand-written shims appended to the live `jarvis_models.py` (2026-11-18:
+`ollama_url_on_this_pc`; 2026-11-19: `is_pooled_model` + `probe_refusal`) are
+**temporary debt to clear**, that **no third shim may be added**, and that the
+deploy's cross-file guard stays absolute.
+
+What happened: the live `jarvis_models.py` is one of the five patched base
+files, and its bytes date from a 2026-10-06 published base - so the shipped
+modules that call `jarvis_models.ollama_url_on_this_pc()` raised
+`AttributeError`, `GET /api/presets` answered 503, and the deploy's cross-file
+guard (`reconcile_live_backend.py`, #1400) correctly refused to go on. The
+published base has every one of those functions; the deploy must not copy it
+over the live file, because for the other four of the five the live copy is
+NEWER than the base (it carries applied patches), and a blind copy would lose
+them.
+
+This tool is the clean path for the other direction. It proves what the target
+is before it writes anything:
+
+- the target must be exactly an **older published base version** - a real blob
+  from `jarvis-backend/<file>`'s own history at `--ref` - optionally plus the
+  `$PATCHES` entries that write that file, replayed hunk by hunk in stack order;
+- a patch that no longer applies because it was REWRITTEN after the base version
+  is recognised by `backend/patch-history`'s recorded older version: the old
+  shape being in the target is "baked in", not an unexplained edit
+  (`gpu-offload.patch` on the live `jarvis_models.py` is the real case);
+- a contiguous SUFFIX of module-level definitions appended after the published
+  bytes - **the hand-shim shape** - is accepted only when every name it binds is
+  absent from the published bytes (a gap repair, not a redefinition) and bound
+  by the CURRENT base. Only `def`/`class`/assignment/`import` statements may be
+  in it: a top-level call would be an effect, and dropping it would drop that
+  effect. The dry run names every appended definition and says it will be
+  **replaced by the published base's own**.
+
+The new file is the current published base (plus any patch the target carries
+that the base does not yet), and the tool REFUSES rather than writes when the
+refresh would lose a module-level name, drop a patch the base cannot take, fail
+to bind one of the deploy's declared cross-file names, or not compile. Anything
+else - an edit no published base and no patch explains, e.g. the deploy's own
+DELTA_TABLE literal repairs - is refused with its reason and nothing is
+written: those files belong to the deploy's delta path.
+
+```
+py -3 tools/refresh_patched_base.py --backend-path "<live backend>"                                  # check all five
+py -3 tools/refresh_patched_base.py --backend-path "<live backend>" --file jarvis_models.py         # check one
+py -3 tools/refresh_patched_base.py --backend-path "<live backend>" --file jarvis_models.py --apply # write it
+```
+
+`--apply` keeps `<file>.before-refresh-<stamp>` beside the file, writes a
+temporary copy, compiles it, swaps it in, and then re-plans the written file -
+a second check that is not "current" restores the backup and refuses. Exit
+codes: 0 every examined file is already the current base, 1 a refresh is
+available and nothing was written, 2 REFUSED (nothing was left half-written).
+
+**After a refresh**, restart Jarvis and run the deploy again: the cross-file
+guard must pass, and the deploy is still what proves the whole folder fits
+together. `backend/test_patched_base_refresh.py` proves all of the above on
+temporary fixtures (including a real temporary git repository) and, when the
+full git history is available, on a fixture built from the REAL
+`jarvis-backend/jarvis_models.py` history plus the three shim names - the two
+hand shims are replaced, and the deploy's guard passes on the result and still
+refuses when `probe_refusal` is taken back out.
 
 ## 3. `tools/reseal_live_install.py` - the half the deploy must not write
 

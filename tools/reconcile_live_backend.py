@@ -197,11 +197,19 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
         proved - REFUSES the run with exit 2 BEFORE any write, naming the module,
         the function and the patch stack entries that own the file, and saying
         the two ways out: apply the stack
-        (`scripts/apply-patches.ps1 -BackendPath <live>`), or record the gap
-        deliberately by repairing that one live file by hand (2026-11-18's
-        appended shim is the worked example). The deploy still never carries a
+        (`scripts/apply-patches.ps1 -BackendPath <live>`), or refresh that one
+        live file from the published base with
+        `tools/refresh_patched_base.py --backend-path <live> --file <name>
+        --apply`. That refresh is the clean path the review ruling of
+        2026-11-19 requires: the two hand shims appended to the live
+        `jarvis_models.py` on 2026-11-18/19 are TEMPORARY DEBT TO CLEAR, and NO
+        THIRD SHIM MAY BE ADDED. The refresh tool proves the target is an older
+        published base plus a replayable patch set before it writes, backs the
+        file up, and replaces an appended gap-repair block with the base's own
+        definitions. The deploy still never carries a
         patched base file - a bigger copy list is NOT the fix, because copying
-        the published base over the live copy would lose the patches' hunks.
+        the published base over the live copy would lose the patches' hunks, and
+        this deploy has no whole-file proof to know which case it is in.
         A second run on a correct folder passes the same check again, so the PASS
         line means the pieces were proved to fit.
 
@@ -3465,17 +3473,20 @@ def cross_file_refusal_lines(target: Path, gaps, unproven, *,
         "powershell -ExecutionPolicy Bypass",
         "      -File scripts/apply-patches.ps1 -BackendPath "
         f"\"{target}\" (then restart Jarvis), or",
-        "    * if the target's copy is deliberately older than the published "
-        "base (the",
-        "      2026-11-18 copy dated from 2026-10-19), record that gap "
-        "deliberately: back up",
-        "      that ONE live file and add the missing name by hand (the "
-        "2026-11-18 shim",
-        "      appended to the live jarvis_models.py is the worked example), "
-        "then re-run.",
+        "    * refresh that ONE file from the published base - the clean path:",
+        "      py -3 tools/refresh_patched_base.py --backend-path "
+        f"\"{target}\" --file <name> --apply",
+        "      It proves the target is an older published base plus a replayable",
+        "      patch set before it writes, backs the file up, refuses an edit it",
+        "      cannot prove, and REPLACES an appended gap-repair block with the",
+        "      published base's own definitions. A hand-written shim is NOT a way",
+        "      out any more (review ruling, 2026-11-19): the two shims appended to",
+        "      the live jarvis_models.py are temporary debt to clear, and no third",
+        "      shim may be added.",
         "      Never make this deploy carry a patched-base file: copying the "
         "published base",
-        "      over it would lose the patches' applied hunks.",
+        "      over it would lose the patches' applied hunks. The refresh tool is",
+        "      not this deploy - it rebuilds and proves the whole file first.",
         f"  {CROSS_FILE_RULE}",
     ]
     return lines
