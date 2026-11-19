@@ -1,0 +1,3 @@
+            _agent_ok = False
+        use_tools = (lane == local_model
+                     and _agent_ok)
