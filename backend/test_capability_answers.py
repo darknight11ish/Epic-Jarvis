@@ -101,15 +101,17 @@ WHAT THIS SUITE CHECKS
      sweep above caught a real cross-pull-request break - two PRs that each
      touched jarvis_quick.py were green alone and changed each other's
      behaviour when merged, and main went red on "cloud-escalation 63 < 65".
-     So every PR now runs a fast CORE SUBSET (239 pinned cases: one question
+     So every PR now runs a fast CORE SUBSET (237 pinned cases: one question
      per catalogue row naming its own title, plus the 53 answers the capability
      fix changed), and the full 5,410-question sweep runs only when
      features/features.json or the feature catalogue
      (backend/jarvis_feature_catalogue.py or its twin) changed - ci.yml's
      backend-shard job computes that with its own changed-file step and sets
      JARVIS_CAPABILITY_FULL_SWEEP=1 for one step. The two questions a later
-     cloud-settings merge has already lost are recorded, printed on every run,
-     and never counted as passes; a NEW loss fails the core subset.
+     cloud-settings merge had lost were fixed on 2026-11-18 ("cloud-escalation"
+     answers its own row again) and removed from the dated list, which is EMPTY
+     today; a recorded loss is still printed on every run and never counted as
+     a pass, and a NEW loss still fails the core subset.
 
 No model runs, no network, no owner file is touched: the answers read the
 catalogue and a made-up scheduler only.
@@ -593,7 +595,7 @@ def _ordinary_shapes(row):
 # catalogue change can add a row whose questions the every-PR job has no
 # budget to learn. The review's ruling, implemented here:
 #
-#   * EVERY PR runs the core subset below - 239 cases, measured at 3.8-4.1 s
+#   * EVERY PR runs the core subset below - 237 cases, measured at 3.8-4.1 s
 #     on its own - in the required `backend` job;
 #   * the FULL sweep runs only when `features/features.json` or
 #     `backend/jarvis_feature_catalogue.py` (or its twin
@@ -620,14 +622,17 @@ def _ordinary_shapes(row):
 # should never have named. These are the questions a later matcher change is
 # most likely to disturb, so they are pinned by name.
 #
-# CORE_KNOWN_LOST (2): the same measurement re-run on THIS tree also shows two
-# questions LOST after the fix, by the later cloud-settings lane:
-# "Does Jarvis escalate to the cloud?" and "What is cloud escalation?" now
-# answer `cloud_settings` instead of the `cloud-escalation` row. That is the
-# full sweep's "cloud-escalation 63 < 65", measured on main tonight. They are
-# printed on EVERY run and NEVER counted as passes, and a loss that is NOT on
-# this dated list fails the core subset. Remove an entry once its row is fixed
-# again - the run prints "FIXED, remove me" when it passes.
+# CORE_KNOWN_LOST (0 today): the same measurement re-run on THIS tree had also
+# shown two questions LOST after the fix, by the later cloud-settings lane:
+# "Does Jarvis escalate to the cloud?" and "What is cloud escalation?" answered
+# `cloud_settings` instead of the `cloud-escalation` row - the full sweep's
+# "cloud-escalation 63 < 65", measured on main on 2026-11-18. That row was
+# fixed on 2026-11-18: the sweep now prints "FIXED" for both and they were
+# removed, so this dated list is EMPTY. Keep the mechanism: an entry added here
+# is printed on EVERY run and NEVER counted as a pass, a loss that is NOT on
+# this list fails the core subset, and an entry whose row is fixed again prints
+# "FIXED, remove me" (backend/test_capability_core_subset.py proves both halves
+# by planting entries, since the live list is empty today).
 CORE_OWNER_WORDED = (
     ('What is Type a message and read the answer?', 'typing'),
     ('What is Check a prompt before you send it?', 'prompt-coach'),
@@ -871,10 +876,10 @@ CORE_REGRESSION = (
     ('Do you have a feature for When the connection is catching up?', 'stale-link'),
 )
 
-CORE_KNOWN_LOST = (
-    ('Does Jarvis escalate to the cloud?', 'cloud-escalation', 'cloud_settings'),
-    ('What is cloud escalation?', 'cloud-escalation', 'cloud_settings'),
-)
+#: EMPTY today: the two cloud-escalation questions this dated list recorded on
+#: 2026-11-18 were fixed on 2026-11-18 and removed. Keep the mechanism - a new
+#: loss that is NOT on this list fails the core subset.
+CORE_KNOWN_LOST = ()
 
 #: The ONE variable that turns the full 5,410-question sweep on. ci.yml's
 #: `backend-shard` job sets it for a commit that changed the feature catalogue
@@ -1263,14 +1268,15 @@ def t_the_exact_name_lane_steals_no_other_row_s_question():
 #       when the feature catalogue changed)
 # --------------------------------------------------------------------------
 def t_the_core_subset_holds():
-    """The 239 cases every pull request runs, proving the per-row ratchet.
+    """The 237 cases every pull request runs, proving the per-row ratchet.
 
     Three groups, all questions the full sweep below already asks:
       * CORE_OWNER_WORDED - one question naming each catalogue row's own title;
       * CORE_REGRESSION - the 53 answers the capability fix changed;
-      * CORE_KNOWN_LOST - the two answers a LATER merge has since taken away
-        (the full sweep's "cloud-escalation 63 < 65"), named on every run and
-        never counted as a pass; any loss NOT on that list fails here.
+      * CORE_KNOWN_LOST - a dated allowance that is EMPTY today: the two
+        answers a later merge had taken away (the full sweep's "cloud-escalation
+        63 < 65") were fixed on 2026-11-18 and removed. Any loss NOT on the
+        list fails here, so the list can only ever shrink honestly.
     """
     rows = {row["id"] for row in C.FEATURES}
     pinned = {row_id for _sentence, row_id in CORE_OWNER_WORDED}
@@ -1286,8 +1292,9 @@ def t_the_core_subset_holds():
           "row's own title to CORE_OWNER_WORDED")
     check("... its 53 regression-sensitive cases",
           len(CORE_REGRESSION) == 53, str(len(CORE_REGRESSION)))
-    check("... and its two dated known-loss entries",
-          len(CORE_KNOWN_LOST) == 2, str(len(CORE_KNOWN_LOST)))
+    check("... and no dated known-loss entries today (the two cloud-escalation "
+          "questions were fixed on 2026-11-18 and removed)",
+          len(CORE_KNOWN_LOST) == 0, str(len(CORE_KNOWN_LOST)))
 
     known = {sentence for sentence, _row, _wrong in CORE_KNOWN_LOST}
     questions = ([sentence for sentence, _row in CORE_OWNER_WORDED]
@@ -1331,8 +1338,8 @@ def t_the_core_subset_holds():
                   for sentence, _row in CORE_OWNER_WORDED + CORE_REGRESSION
                   if sentence not in known
                   and _row_of(matches[sentence]) != _row]
-    check("the only core cases that did not answer from their row are the two "
-          "dated, named known losses - any NEW loss fails here",
+    check("every core case answers from its own row - the dated known-loss list "
+          "is empty today, so any NEW loss fails here",
           not unexpected, "; ".join(unexpected[:8]))
     print(f"   the full 5,410-question sweep is "
           f"{'RUNNING' if full_sweep_enabled() else 'NOT running in this mode; it runs when features/features.json or the feature catalogue changed'}")
@@ -1663,7 +1670,7 @@ def main(argv=None):
 
     `--core` runs ONLY the fast core subset, and is how ci.yml's named
     every-PR guard calls it (`backend/test_capability_answers.py --core`): the
-    239 pinned cases, without the other measured lists this suite carries,
+    237 pinned cases, without the other measured lists this suite carries,
     because those already run in the required backend sweep. The full suite -
     every measured list plus the core subset - is what `run_suites.py` runs,
     and the full 5,410-question sweep inside it is gated on

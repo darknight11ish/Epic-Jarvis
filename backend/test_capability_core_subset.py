@@ -13,10 +13,12 @@ pinned cases), and the full sweep only when `features/features.json` or
 `backend/jarvis_feature_catalogue.py` (or its twin) changed.
 
 WHAT THIS PROVES, and each check bites:
-1. THE COUNTS. The core is exactly 239 cases: 184 owner-worded (one question
+1. THE COUNTS. The core is exactly 237 cases: 184 owner-worded (one question
    naming each catalogue row's own title) + 53 regression-sensitive (every
-   answer the 2026-11-18 capability fix changed) + 2 dated known losses that
-   are printed but never counted as passes.
+   answer the 2026-11-18 capability fix changed). The dated known-loss list is
+   EMPTY today - its two cloud-escalation entries were fixed on 2026-11-18 and
+   removed - and the mechanism is still proved by planting entries, because a
+   recorded loss is printed but never counted as a pass.
 2. THE SUBSET. Every core question is a question the full sweep already asks,
    generated from the SAME row's own words - so the core cannot drift into a
    second sweep, and a core case is always a real full-sweep case.
@@ -112,12 +114,13 @@ def t_the_core_has_its_counts():
     check("... 53 regression-sensitive cases (the capability fix's changed"
           " answers)", len(CAP.CORE_REGRESSION) == 53,
           str(len(CAP.CORE_REGRESSION)))
-    check("... and two dated known losses, named but never counted as passes",
-          len(CAP.CORE_KNOWN_LOST) == 2, str(len(CAP.CORE_KNOWN_LOST)))
+    check("... and no dated known-loss entries today - the two cloud-escalation "
+          "questions were fixed on 2026-11-18 and removed from the list",
+          len(CAP.CORE_KNOWN_LOST) == 0, str(len(CAP.CORE_KNOWN_LOST)))
     total = (len(CAP.CORE_OWNER_WORDED) + len(CAP.CORE_REGRESSION)
              + len(CAP.CORE_KNOWN_LOST))
-    check("the routed total is 239 cases (~230: the review's estimate)",
-          total == 239, str(total))
+    check("the routed total is 237 cases (~230: the review's estimate)",
+          total == 237, str(total))
     check("no question appears twice across the pinned lists",
           len({q for q, _ in CAP.CORE_OWNER_WORDED}
               | {q for q, _ in CAP.CORE_REGRESSION}
@@ -215,22 +218,62 @@ def t_a_pinned_wrong_row_fails_the_core():
 
 
 def t_a_lost_title_question_fails_the_core():
-    """A row whose own-title question stops reaching it is a failed core."""
-    # The known-lost entries are the live example: the check reports them, and
-    # the only reason the suite is green is that they are on the dated list.
-    check("the dated known losses are exactly the two cloud-escalation questions",
-          {row for _s, row, _w in CAP.CORE_KNOWN_LOST} == {"cloud-escalation"},
-          str(CAP.CORE_KNOWN_LOST))
-    out = io.StringIO()
+    """A row whose own-title question stops reaching it is a failed core.
+
+    The dated known-loss list is EMPTY today - the two cloud-escalation
+    questions it recorded on 2026-11-18 were fixed and removed - so the
+    REPORTING mechanism is proved by PLANTING entries on a copy of the tuple,
+    the same way `t_a_pinned_wrong_row_fails_the_core` proves the pinned list:
+
+      * a planted "known loss" that really answers its own row is STALE, and the
+        run must say "FIXED, remove from CORE_KNOWN_LOST";
+      * a planted "known loss" that does NOT answer its recorded row is really
+        LOST: it is printed as "KNOWN LOST ... NOT a pass" and the core stays
+        green, which is exactly what a dated allowance is for.
+
+    The live run with the real (empty) list is checked green here too, so an
+    entry can only ever be removed honestly.
+    """
+    check("the dated known-loss list is empty today: the two cloud-escalation "
+          "questions answer their own row again and were removed on 2026-11-18",
+          CAP.CORE_KNOWN_LOST == (), str(CAP.CORE_KNOWN_LOST))
+    original = CAP.CORE_KNOWN_LOST
+    passed_before, failed_before = len(CAP.PASSED), len(CAP.FAILED)
+    try:
+        # (a) a STALE entry: it answers its own row, so the run asks to remove it.
+        CAP.CORE_KNOWN_LOST = (
+            ("What is The talk button?", "talk-button", "cloud_settings"),)
+        stale_out = io.StringIO()
+        with contextlib.redirect_stdout(stale_out):
+            CAP.t_the_core_subset_holds()
+        stale = stale_out.getvalue()
+        # (b) a REAL loss: the planted row is wrong, so it prints KNOWN LOST.
+        CAP.CORE_KNOWN_LOST = (
+            ("What is The talk button?", "cloud-escalation", "cloud_settings"),)
+        lost_out = io.StringIO()
+        with contextlib.redirect_stdout(lost_out):
+            CAP.t_the_core_subset_holds()
+        lost = lost_out.getvalue()
+    finally:
+        CAP.CORE_KNOWN_LOST = original
+        del CAP.PASSED[passed_before:]
+        del CAP.FAILED[failed_before:]
+    check("a recorded loss that starts answering its own row is reported FIXED, "
+          "never counted as a pass",
+          "FIXED, remove from CORE_KNOWN_LOST" in stale
+          and "KNOWN LOST" not in stale, stale[-500:])
+    check("a recorded loss that is really lost prints KNOWN LOST and NOT a pass",
+          lost.count("KNOWN LOST") == 1 and "NOT a pass" in lost, lost[-500:])
     before = len(CAP.FAILED)
-    with contextlib.redirect_stdout(out):
+    live_out = io.StringIO()
+    with contextlib.redirect_stdout(live_out):
         CAP.t_the_core_subset_holds()
-    printed = out.getvalue()
+    printed = live_out.getvalue()
     check("the live core subset passes with no NEW losses", len(CAP.FAILED) == before,
           printed[-600:])
-    check("... and prints both known losses on every run, as KNOWN LOST, never ok",
-          printed.count("KNOWN LOST") == 2
-          and "NOT a pass" in printed, printed[-800:])
+    check("... and with the list empty it prints no loss at all",
+          "KNOWN LOST" not in printed and "FIXED, remove" not in printed,
+          printed[-600:])
 
 
 # --------------------------------------------------------------------------
