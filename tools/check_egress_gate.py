@@ -174,13 +174,6 @@ ALLOWED = {
     "backend/test_speed_record.py":
         "a suite; its host and URL are fixture strings on a fake usage record, and no "
         "socket is opened",
-    # A SUITE, not a sender (2026-11-19). test_cloud_answer_bound.py builds
-    # the lane state a priced request would carry, in order to assert the
-    # answer bound: the host and URL are fixture STRINGS on a fake record and
-    # the request itself is never made (the body is composed, not sent).
-    "backend/test_cloud_answer_bound.py":
-        "a suite; its host and URL are fixture strings on a fake lane record, and no "
-        "socket is opened",
     # ------------------------------------------------------------------
     # Production senders the audit found and this round did NOT wire.
     # Each waits for the lane that owns it, and says so plainly: a "not
