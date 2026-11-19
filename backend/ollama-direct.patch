@@ -22,7 +22,7 @@
      return headers
  
  
-@@ -2842,6 +2852,59 @@
+@@ -2842,6 +2852,88 @@
              "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
          )
  
@@ -53,6 +53,35 @@
 +                _state = _api.lane_state(lane if lane != local_model else "")
 +            except Exception:
 +                _state = {}
++            # FAIL CLOSED on a lane this PC cannot place (2026-11-18, the
++            # owner's ruling on the caller half of the rule-1 guard).
++            # `jarvis_chatbot_api.lane_service()` now answers ("", "") for
++            # every name outside `CLOUD_LANES`, and `lane_state()` hands that
++            # back as an empty `pid` and `model`. That is a REFUSAL, not the
++            # local signal: with no address the block below would fall back to
++            # the LOCAL endpoint while `body["model"]` still held a name this
++            # PC has no model for, and the owner would get a 503 from an
++            # endpoint they never chose. So a cloud-intent lane that names no
++            # service is refused here, by name, BEFORE any URL is built. It
++            # travels as a 404 - a client error, deliberately NOT one of
++            # `DEGRADABLE`'s codes, so the degrade loop cannot turn the
++            # refusal into a silent local answer - and the relay's own reader
++            # sends this body straight to the app. The local lane is asked for
++            # as the empty name below, and a local-intent fallback lane is
++            # exempt: that name is a local model, not a lost cloud lane.
++            if (lane != local_model
++                    and not bool(getattr(decision, "inject_memory", False))
++                    and not _state.get("pid")
++                    and not _state.get("model")):
++                label = " ".join(
++                    "".join(c if c.isprintable() else " " for c in str(lane)).split())[:60]
++                refusal = (f'There is no lane called "{label}" on this PC, so '
++                           "nothing was sent. Pick the local model, or a lane "
++                           "this PC offers, and ask again.")
++                import io
++                raise urllib.error.HTTPError(
++                    "jarvis://no-such-lane", 404, "no such lane", None,
++                    io.BytesIO(refusal.encode("utf-8")))
 +            # A provider's address and key come from ONE call, but the key is
 +            # a SECOND read of Credential Manager and can come back empty.
 +            # `_auth_headers` would then fall back to Jarvis's own pairing

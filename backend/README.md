@@ -184,7 +184,7 @@ on a throwaway copy instead.
 | `gate-entries.patch` | `jarvis_gate.py` | **Eleven tools Jarvis offered the model were not in the gate's tool table at all.** `action_for_tool()` fell through to `unclassified_tool`, which is `"ask"` in the shipped config — so nothing ran unattended, but every call to a timer, a reminder, the to-do list, the calendar, email, notes, Home Assistant or the browser asked for no reason. Adds the missing `_TOOL_ACTIONS` lines only; the tiers themselves are unchanged. Goes right after `ui-control-wiring.patch`, the last patch above it that writes into that dict — see its own section. |
 | `gate-action-name.patch` | `jarvis_gate.py` | **The gate renamed an action on its way out.** For the 58 `_TOOL_ACTIONS` entries whose value is a *tier literal* (`"calculator": "auto"`), `action_for_tool()` returned `tool:calculator` as the action name — the string handed to the checker, written to the audit log, and shown on "What can Jarvis reach". No config, page or suite has ever used that name. It now returns the bare name, and still registers it in `_SYNTH_TIERS` (which is load-bearing: a tier literal is not a key of `[autonomy.tiers]`). One hunk, last in the list — see its own section. |
 | `tutorials.patch` | `jarvis_hud.py` | **Tutorials and the FAQ** (the owner's request of 2026-10-05; `docs/TUTORIALS-DESIGN.md`, `docs/JARVIS-API.md` section 114). ONE install block at the end of the chain before `_loopback_companion` - right after `chatbot-limits-hud.patch`'s own block, which is what its context names: `GET /api/tutorials`, `POST /api/tutorials/progress` and `GET /api/faq`. One catalogue and the owner's reading progress, kept on this PC and shared by both apps: it writes its own one JSON file in the config folder, raises no card and calls nothing out. Needs `jarvis_tutorials.py` (shipped whole); without it, or on any error, the banner says so and the routes are simply not there. |
-| `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
+| `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead. Since 2026-11-18 it also REFUSES a cloud-intent lane that `jarvis_chatbot_api.lane_service()` gives no service for (a name outside `CLOUD_LANES`), with a 404 naming the lane, instead of sending the unknown name to Ollama as a 503 — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
 | `bind-wildcard.patch` | `jarvis_hud.py` | **`0`, `0x0` and `000.000.000.000` bind every network interface too**, and only the exact text `0.0.0.0` was being caught. Refuses every spelling at startup. Needs `loopback-too.patch` — see its own section. |
@@ -3178,6 +3178,32 @@ own `_open`:
 - a cloud lane that fails to answer now says so with the host it really tried
   (`The cloud model is not answering at api.deepseek.com.`), instead of
   blaming `JARVIS_URL` and telling the owner to pick the local model.
+
+**And a lane this PC cannot place is refused, not sent anywhere (2026-11-18).**
+The owner's ruling on the caller half of the rule-1 guard, after
+`jarvis_chatbot_api.lane_service()` was made to fail closed (#1384):
+`lane_service()` answers `("", "")` for every name outside `CLOUD_LANES` - a
+local model's name, a lane an older config still names, anything a client puts
+in the lane field - and `lane_state()` hands that back as an empty `pid` and
+`model`. That is a refusal, not the local signal, and `_completions_url` now
+treats it as one for a cloud-intent lane: the turn is refused with a **404**
+whose body is the plain sentence the apps show - `There is no lane called
+"<name>" on this PC, so nothing was sent.` - and no URL is built at all. Before
+this, "no address" fell through to the LOCAL endpoint with the unknown name
+still in `body["model"]`, so Ollama, which has no such model, produced a 503
+from an endpoint the owner never chose. The 404 code is deliberate: it is not
+one of `_open`'s `DEGRADABLE` codes, so the degrade loop cannot turn the
+refusal into a silent local answer, and `_open`'s existing
+`except urllib.error.HTTPError` reader is the one that puts the sentence on
+both apps' screens. The check is narrow on purpose: a local-intent
+fallback lane (`decision.inject_memory`, the router's replacement model from
+#1378) is a LOCAL model's name, not a lost cloud lane, so it still reaches this
+PC's Ollama exactly as before. `backend/test_hud_empty_service.py` drives the
+real helper for all three cases and also reverses the patch out of the stack's
+after-image and re-applies it byte for byte. It is its own suite rather than a
+hunk of `test_ollama_direct.py` because `backend/run_suites.py` skips that file
+by name when the owner's `jarvis_hud.py` is absent, so a check written only
+there would never run in the required `backend` job.
 
 The whole resolution lives inside `_completions_url` on purpose: `_open`'s own
 body is `cloud-one-turn.patch`'s context, and a change there would stop that

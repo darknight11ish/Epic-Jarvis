@@ -58,6 +58,21 @@ only the owner's own machine can prove. What it does instead is run the lifted
 text with a stand-in `jarvis_chatbot_api` in `sys.modules`, so the whole
 decision can be exercised here, with no socket.
 
+AND THE EMPTY SERVICE IS A REFUSAL (2026-11-18, the owner's ruling on the
+caller half of the rule-1 guard; `jarvis_chatbot_api.lane_service()` fails
+closed as of 2026-11-18). `lane_service()` answers ("", "") for every name
+outside `CLOUD_LANES`, and `lane_state()` hands that back as an empty `pid` and
+`model`. `_completions_url` used to treat "no address" as "the local lane", so
+an unknown lane name fell through to THIS PC's Ollama with the name still in
+`body["model"]` - Ollama has no such model, and the owner got a 503 from an
+endpoint they did not choose. The helper now REFUSES a cloud-intent lane whose
+service is empty, by name, before any URL exists. That refusal has its own
+suite, `test_hud_empty_service.py`, because `backend/run_suites.py` skips THIS
+file by name when the owner's `jarvis_hud.py` is absent (CI) - a check written
+only here would never run in the required `backend` job. `FakeApi(known=False)`
+below is the fixture that suite drives; the checks here stay the local half
+this file was built for.
+
     python3 test_ollama_direct.py
 """
 import ast
@@ -66,6 +81,7 @@ import sys
 import textwrap
 import traceback
 import types
+import urllib.error
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -106,13 +122,19 @@ class FakeApi:
     real module does, and `last_lane_state()` reads it back - which is how the
     HUD's header builder gets the key without any caller passing it around.
 
+    `known=False` is `lane_service()` FAILING CLOSED (2026-11-18): a name
+    outside `CLOUD_LANES` gets no service and no model, so `lane_state()`
+    answers with an empty `pid`/`model` and its own plain sentence - the
+    answer the HUD's refusal is about.
+
     `calls` is what the HUD asked for, so a test can say that the LOCAL lane is
     asked for as the empty name (which is how the real module is told to clear
     a cloud lane's key off the thread)."""
 
-    def __init__(self, *, ready=True, model="deepseek-flash",
+    def __init__(self, *, ready=True, model="deepseek-flash", known=True,
                  key="the-deepseek-key", why="No monthly money limit is set for DeepSeek."):
         self.ready, self.model, self.key, self.why = ready, model, key, why
+        self.known = known
         self.calls = []
         self.state = {"lane": "", "pid": "", "model": "", "host": "", "url": "",
                       "key": "", "cap": 0, "problem": ""}
@@ -123,6 +145,11 @@ class FakeApi:
         if not lane:
             self.state = {"lane": "", "pid": "", "model": "", "host": "", "url": "",
                           "key": "", "cap": 0, "problem": ""}
+        elif not self.known:
+            self.state = {"lane": lane, "pid": "", "model": "", "host": "", "url": "",
+                          "key": "", "cap": 0,
+                          "problem": (f'The lane "{lane}" is not one this PC knows, '
+                                      "so nothing is sent to a cloud service.")}
         elif not self.ready:
             self.state = {"lane": lane, "pid": "deepseek_api", "model": self.model,
                           "host": "", "url": "", "key": "", "cap": 0, "problem": self.why}
@@ -159,15 +186,19 @@ def _with_api(api, fn):
             sys.modules.pop("jarvis_chatbot_api", None)
 
 
-def _completions(source, api, lane=LANE):
+def _completions(source, api, lane=LANE, inject_memory=False):
     """(url, body, api) after running the REAL `_completions_url` for `lane`.
 
     `body` is the request body the real `_open` has in hand - the same dict the
     helper is handed and may put the service's model on. It is passed in, as
     the file passes it, because it must be: the helper reads no `body` from
-    around itself (see `_sent_by_open`)."""
+    around itself (see `_sent_by_open`). `inject_memory` is the turn's own
+    flag from `do_POST`'s decision - True for a LOCAL-intent fallback lane,
+    False for a cloud-intent one - which is what tells the new empty-service
+    refusal apart from the local fallback that is still answered here."""
     ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "JARVIS_URL": "http://127.0.0.1:8000",
-          "local_model": LOCAL, "body": {"model": lane}}
+          "local_model": LOCAL, "body": {"model": lane}, "urllib": urllib,
+          "decision": types.SimpleNamespace(inject_memory=inject_memory)}
     _with_api(api, lambda: exec(_lifted(source, "_completions_url"), ns))
     url = _with_api(api, lambda: ns["_completions_url"](lane, ns["body"]))
     return url, ns["body"], api
@@ -236,10 +267,15 @@ def _sent_by_open(source, api, lane=LANE):
                "        return body\n")
     ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "JARVIS_URL": "http://127.0.0.1:8000",
           "local_model": LOCAL, "JARVIS_API_KEY": PAIRING_TOKEN, "json": json,
+          "decision": types.SimpleNamespace(inject_memory=False),
           "isinstance": isinstance, "_CHAT_CLIENT_FIELDS": set(),
           "_chat_client_fields_off": lambda msgs: msgs,
           "payload": json.loads(request),
+          # `.error` is the REAL urllib (the empty-service refusal raises
+          # `urllib.error.HTTPError` before `_open` ever builds a request);
+          # `.request` is the spy that keeps whatever request is really built.
           "urllib": types.SimpleNamespace(
+              error=urllib.error,
               request=types.SimpleNamespace(Request=_Request, urlopen=sent.open))}
     _with_api(api, lambda: exec(_lifted(source, "_auth_headers"), ns))
     _with_api(api, lambda: exec(compile(wrapper, "<do_POST-like>", "exec"), ns))
@@ -308,7 +344,8 @@ def t_a_lane_whose_key_read_came_back_empty_is_answered_here():
         return skip(where)
     api = FakeApi(key="")
     ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "local_model": LOCAL,
-          "body": {"model": LANE},
+          "body": {"model": LANE}, "urllib": urllib,
+          "decision": types.SimpleNamespace(inject_memory=False),
           "active_ollama_url": lambda: "http://127.0.0.1:11434"}
     _with_api(api, lambda: exec(compile(block, "<cloud _completions_url>", "exec"), ns))
     url = _with_api(api, lambda: ns["_completions_url"](LANE, ns["body"]))
