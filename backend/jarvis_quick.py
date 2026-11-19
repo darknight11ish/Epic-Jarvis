@@ -32244,36 +32244,124 @@ def in_manner(reply: str, manner: Optional[str] = None) -> str:
 _OWN_WORDS = ("typed", "voice")
 
 
+def _newest_plain_message(body):
+    """(message, words) for a request whose newest turn is ONE plain user
+    message - or (None, None) when the request is not that shape.
+
+    The shape half of `newest_own_words` and `newest_untagged_question`, and
+    deliberately nothing more: what is checked here is what BOTH readers must
+    refuse for the same reasons - the app sent text of its own (a `system`
+    message, audit M1), a picture (the model's job), a share or the clipboard
+    riding with the words, or no words at all. WHO the words belong to is the
+    caller's own test, because the two callers read one shape for two
+    different reasons (see `newest_untagged_question`).
+
+    Read off the request AS IT ARRIVED - the provenance tags come off before
+    any model sees the messages (chat-history.patch)."""
+    if not isinstance(body, dict):
+        return None, None
+    msgs = body.get("messages")
+    if not isinstance(msgs, list) or not msgs:
+        return None, None
+    msgs = [m for m in msgs if isinstance(m, dict)]
+    if not msgs:
+        return None, None
+    if any(m.get("role") == "system" for m in msgs):
+        return None, None   # the app sent text of its own (audit M1)
+    last = msgs[-1]
+    if last.get("role") != "user":
+        return None, None
+    if len(msgs) > 1 and msgs[-2].get("role") == "user" \
+            and msgs[-2].get("provenance") in ("shared", "clipboard"):
+        return None, None   # sent with a share or the clipboard
+    content = last.get("content")
+    if isinstance(content, list):
+        if any(isinstance(p, dict) and p.get("type") not in (None, "text") for p in content):
+            return None, None   # a picture: the model's job
+        content = " ".join(str(p.get("text") or "") for p in content if isinstance(p, dict))
+    if not isinstance(content, str) or not content.strip():
+        return None, None
+    return last, content
+
+
 def newest_own_words(body) -> Optional[str]:
     """The newest message's words when they are the owner's own and nothing
     else came with them; None otherwise (then the model answers, as before).
 
     Read off the request AS IT ARRIVED - the provenance tags come off before
     any model sees the messages (chat-history.patch)."""
-    if not isinstance(body, dict):
-        return None
-    msgs = body.get("messages")
-    if not isinstance(msgs, list) or not msgs:
-        return None
-    msgs = [m for m in msgs if isinstance(m, dict)]
-    if not msgs:
-        return None
-    if any(m.get("role") == "system" for m in msgs):
-        return None         # the app sent text of its own (audit M1)
-    last = msgs[-1]
-    if last.get("role") != "user" or last.get("provenance") not in _OWN_WORDS:
-        return None
-    if len(msgs) > 1 and msgs[-2].get("role") == "user" \
-            and msgs[-2].get("provenance") in ("shared", "clipboard"):
-        return None         # sent with a share or the clipboard
-    content = last.get("content")
-    if isinstance(content, list):
-        if any(isinstance(p, dict) and p.get("type") not in (None, "text") for p in content):
-            return None     # a picture: the model's job
-        content = " ".join(str(p.get("text") or "") for p in content if isinstance(p, dict))
-    if not isinstance(content, str) or not content.strip():
+    last, content = _newest_plain_message(body)
+    if last is None or last.get("provenance") not in _OWN_WORDS:
         return None
     return content
+
+
+#: THE MEASURED FIELD FAILURE OF 2026-11-19, and why this reader exists.
+#: A client posted the owner's sentence the way a script does -
+#:
+#:     {"messages": [{"role": "user", "content": "How many open defects are in
+#:                    the register?"}]}
+#:
+#: - with NO `provenance` tag. `newest_own_words` returned None, so the whole
+#: deterministic fast path was skipped: the question went to the model, which
+#: cannot read `docs/defect-register.tsv` and offered the `check_records` tool
+#: instead ("I can run a read-only check on your repository's records"). The
+#: lane itself was healthy the whole time (`jarvis_quick._run_defect_register`
+#: answered from the file in one short sentence), and a request that DID carry
+#: the tag fired it through the same route - so the defect was the request
+#: shape, not the lane.
+#:
+#: `newest_untagged_question` reads the same plain shape that `newest_own_words`
+#: reads, but when NOBODY said where the words came from (no tag on the newest
+#: message and none on the body). It is used for ONE thing only: `answer_turn`
+#: asks `match()` about such a sentence and answers it HERE when the intent is
+#: one of `UNTAGGED_RECORD_READS` below - a question whose answer only reads
+#: this PC's own record. An ACTION still needs the owner's own typed or said
+#: words, exactly as before (a mutating intent from an untagged request returns
+#: None and the model gets it), and a system message, a picture or a
+#: share/clipboard turn still refuses the whole fast path through
+#: `_newest_plain_message`. A request that DOES carry a tag keeps its existing
+#: rule untouched - pasted, shared, clipboard and picture-caption text is still
+#: not the owner's own words.
+def newest_untagged_question(body) -> Optional[str]:
+    """The newest user message's words when NOTHING tagged where they came from,
+    or None. Read-only answers only - see the block comment above."""
+    last, content = _newest_plain_message(body)
+    if last is None:
+        return None
+    if last.get("provenance") not in (None, ""):
+        return None         # a tag means a client that says where they came from
+    if isinstance(body, dict) and body.get("provenance") not in (None, ""):
+        return None         # the same, said once for the whole request
+    return content
+
+
+#: THE "THIS INTENT IS ANSWERED HERE" GATE for an untagged request (2026-11-19).
+#: `answer_turn` answers one of these from a request that carries no provenance
+#: tag - the measured field-test request shape - and nothing else.
+#:
+#: WHY IT IS AN EXPLICIT LIST AND NOT `READ_ONLY_INTENTS`. That set means "an
+#: answer with nothing for 'cancel that' to take back"; it is NOT "an answer
+#: that does nothing". It also holds answers that FILE A CHAT (`chat_tag`, whose
+#: handler writes through jarvis_chat_log) and answers that ask the app to open
+#: or change something (`open_chat`, `open_app`, `settings_open`,
+#: `menu_visibility`, `face_tuning`, ...). Widening those to an untagged request
+#: would act on words nobody attributed to the owner - `backend/test_chat_tags.py`
+#: caught exactly that in the first draft of this fix, which is why the gate is
+#: explicit. Every intent listed here must be an answer that (a) reads this
+#: PC's own record and (b) writes nothing, raises no card and asks the client to
+#: do nothing; the four self-code answers and the change digest are the family
+#: the register answer belongs to. Adding one is a deliberate act with a test -
+#: not a side effect of some other set growing.
+UNTAGGED_RECORD_READS = frozenset({
+    "defect_register",     # docs/defect-register.tsv, through its own checker
+    "recent_changes",      # the shipped change digest
+    "self_changes",        # the local change journal
+    "self_code_overview",  # jarvis-self-code.json beside the backend
+    "self_code_lookup",
+    "self_code_recent",
+    "self_code_repo",
+})
 
 
 _CONVERSATION = re.compile(r"[A-Za-z0-9_-]{8,64}")
@@ -32351,6 +32439,24 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     # change in that chat only, never written to manner.json.
     temporary = _temporary_body(body)
     text = newest_own_words(body)
+    if text is None and not private:
+        # THE MEASURED FIELD FAILURE OF 2026-11-19 is answered here: a request
+        # that carries the owner's sentence but no `provenance` tag used to skip
+        # the whole fast path, so "How many open defects are in the register?"
+        # reached the model, which cannot read the register and offered a tool
+        # instead. A question about this PC's own record changes nothing, so it
+        # is answered here whatever tagged the words - but ONLY one of
+        # `UNTAGGED_RECORD_READS`, which is the explicit purity gate (see its
+        # comment: `READ_ONLY_INTENTS` is not that set). An ACTION, a client
+        # command and every other intent still need the owner's own tag, so they
+        # go to the model exactly as before (pinned by test_schedule.py and
+        # test_chat_tags.py). `private` is excluded because a private chat's own
+        # list (_PRIVATE_DETERMINISTIC_READS) is the stricter rule there.
+        plain = newest_untagged_question(body)
+        if plain is not None:
+            got = match(plain, now, conversation)
+            if got is not None and got.name in UNTAGGED_RECORD_READS:
+                text = plain
     # `desktop`: the app's own report of the build that sent this chat, built
     # in Rust (commands.rs `chat_extras`) and never by a page. The update
     # answers need it, and nothing else reads it (2026-10-26).
