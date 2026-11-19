@@ -2,6 +2,7 @@ package com.jarvis.client.service
 
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
+import com.jarvis.client.net.CardDetail
 import com.jarvis.client.net.PendingItem
 
 /**
@@ -104,10 +105,22 @@ object ApprovalNotificationPolicy {
         body: String,
     ): Plan {
         val tooLong = shownText(title, body).trim().length > MAX_SHOWN_CHARS
+        // A CARD THAT CANNOT SAY WHAT IT WOULD CHANGE HAS NO APPROVE HERE
+        // EITHER (2026-11-18, measured on the owner's phone: a cloud
+        // `change_own_config` card drew no detail and a normal Approve, and a
+        // notification must not become the back door to the same blank cheque).
+        // The words shown here are the PC's notice title/body, built from the
+        // action NAME and never from the payload - so a card whose own `detail`
+        // did not arrive still says only "change one of its settings". It gets
+        // Review in Jarvis, exactly like a redacted card: the owner can be taken
+        // to the card, where `net/CardDetail` draws Refresh instead of Approve,
+        // and nothing is approved sight-unseen.
+        val described = CardDetail.readable(item.detail)
         // The only cards this surface may approve at all: the words fit, the
-        // owner can see them, and neither "only the PC may approve this" nor
-        // "which plan did you mean" applies.
-        val mayOfferApprove = !locked && !tooLong && !item.pcOnly && !item.needsChoice
+        // owner can see them, the card says what it would change, and neither
+        // "only the PC may approve this" nor "which plan did you mean" applies.
+        val mayOfferApprove = !locked && !tooLong && described &&
+            !item.pcOnly && !item.needsChoice
         val direct = mayOfferApprove &&
             SecurityRules.isSmall(item) &&
             !SecurityRules.approvalNeedsCheck(security, item)
@@ -115,7 +128,7 @@ object ApprovalNotificationPolicy {
         // A redacted card gets Review, never Approve: the owner can still be
         // taken to the card, where the app lock and the card's own gate apply,
         // but nothing is approved from words the notification did not show.
-        val review = locked || tooLong || item.pcOnly || item.needsChoice
+        val review = locked || tooLong || !described || item.pcOnly || item.needsChoice
 
         val offered = buildList {
             when {

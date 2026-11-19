@@ -54,6 +54,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.AsksFirst
+import com.jarvis.client.net.CardDetail
 import com.jarvis.client.net.CardSummary
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.FormReview
@@ -114,6 +115,7 @@ fun ApprovalCard(
     onApprove: () -> Unit,
     onDeny: () -> Unit,
     onAmend: suspend (note: String) -> Unit = {},
+    onRefresh: () -> Unit = {},
     swipeAllowed: Boolean = true,
     security: Security = Security(),
     signedApprovals: SignedApproval.State? = null,
@@ -131,6 +133,7 @@ fun ApprovalCard(
     onApprove = { _ -> onApprove() },
     onDeny = { _ -> onDeny() },
     onAmend = onAmend,
+    onRefresh = onRefresh,
     swipeAllowed = swipeAllowed,
     security = security,
     signedApprovals = signedApprovals,
@@ -164,6 +167,20 @@ fun ApprovalCard(
     focused: Boolean = false,
     onApprove: (onReset: () -> Unit) -> Unit,
     onDeny: (onReset: () -> Unit) -> Unit,
+    /**
+     * Re-read the waiting list - drawn in Approve's place on a card whose
+     * detail did not arrive ([CardDetail]).
+     *
+     * WHY REFRESH AND NOT A DISABLED APPROVE. The owner was shown a
+     * `change_own_config` card about his cloud settings with no detail on it and
+     * a normal Approve (2026-11-18). The fix at the cause keeps the detail the
+     * backend sent (`normalisePendingRow`); this action is the safety net for
+     * any row that still arrives without one: the card says [CardDetail.MISSING_LINE]
+     * and offers Deny and a re-read, never a yes to something it cannot show.
+     * Defaulted, so a caller that draws no queue read is unchanged in behaviour
+     * except that the Approve it would have drawn is a Refresh.
+     */
+    onRefresh: () -> Unit = {},
     /**
      * A note typed before the first decision - AUTONOMY-PROPOSALS.md §3b.
      * NOT a decision and approves nothing. The desktop
@@ -256,6 +273,13 @@ fun ApprovalCard(
     // PC whose notice carries no short words yet (an older backend): the same
     // fallback jarvis_card_words.summary_for uses, so the two agree.
     val foldedLine = shown.summary ?: CardWords.summaryFallback(item.notice?.full, item.title)
+    // WHAT THIS CARD CAN SAY IT IS ASKING FOR - the blank-cheque guard
+    // (2026-11-18, measured on the owner's phone: a cloud `change_own_config`
+    // card drew no detail and a normal Approve). [CardDetail] owns the rule so
+    // the drawing and the JVM test cannot disagree: a readable detail keeps the
+    // ordinary Approve, and an absent one replaces Approve with Refresh and
+    // adds the plain sentence below. Deny is untouched either way.
+    val detailOffers = CardDetail.actions(item.detail)
     var showContext by rememberSaveable(item.id) { mutableStateOf(false) }
     var showAmend by rememberSaveable(item.id) { mutableStateOf(false) }
     var amendText by rememberSaveable(item.id) { mutableStateOf("") }
@@ -324,7 +348,13 @@ fun ApprovalCard(
     // and the phone's approve route carries none yet (AUTONOMY-PROPOSALS §3b's
     // decide route is not built on any backend). So approving is refused here
     // and the card says where to choose. Denying needs no option and stays.
-    val canApprove = canDecide && !item.needsChoice && !item.pcOnly && heavyGateOk
+    //
+    // AND A CARD WITH NO READABLE DETAIL HAS NO APPROVE AT ALL (2026-11-18):
+    // the sRGB button would send a yes to a change the owner was never shown.
+    // The swipe below reads this same fact, so the gesture cannot approve what
+    // the button refuses.
+    val canApprove = canDecide && !item.needsChoice && !item.pcOnly &&
+        heavyGateOk && detailOffers.approve
 
     // WHAT PRESSING APPROVE WILL ASK FOR (the owner's ruling of 2026-10-30,
     // corrected for DEF-022 on 2026-10-31). Null when Approve asks for nothing,
@@ -337,7 +367,7 @@ fun ApprovalCard(
     // would only offer to turn signed approvals on says THAT, never a
     // fingerprint prompt.
     val approveCheck =
-        if (item.pcOnly || item.needsChoice) {
+        if (item.pcOnly || item.needsChoice || !detailOffers.approve) {
             null
         } else {
             SecurityRules.approveCheckWords(security, item, signedApprovals)
@@ -857,6 +887,25 @@ fun ApprovalCard(
             }
         }
 
+        // THE BLANK CHEQUE, SAID OUT LOUD (2026-11-18). The owner was shown a
+        // live `change_own_config` card about his cloud settings with no detail
+        // on it and a normal Approve. The renderer now keeps the detail the
+        // backend sent (`normalisePendingRow`), and this line plus the Refresh
+        // below are what happens when a row still arrives without one: the card
+        // says so in plain words and cannot be approved - the only ways forward
+        // are a re-read or a refusal. Not drawn on an expired card: it is no
+        // longer decidable either way, and DEF-010 already draws the one reason
+        // where the buttons were.
+        if (!expired && detailOffers.refresh) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = CardDetail.MISSING_LINE,
+                style = MaterialTheme.typography.labelMedium,
+                color = chrome.badInk,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
         // Filled against outlined, not green against red.
         //
@@ -903,7 +952,23 @@ fun ApprovalCard(
             // the phone's own sentence a lie.
             if (!expired) {
                 Refuse(CardWords.BUTTONS[0], enabled = canDeny && !decided, onClick = deny)
-                if (!item.pcOnly) {
+                // APPROVE BECOMES REFRESH WHEN THE CARD CANNOT SAY WHAT IT IS
+                // ASKING FOR (2026-11-18, [CardDetail]): a yes the owner was
+                // never shown the meaning of is the blank cheque this card
+                // exists to prevent. It is REPLACED, not dimmed - a faded button
+                // captioned by a line nobody connects to it reads as a bug
+                // (DEF-010's lesson). Deny is outside this branch on purpose:
+                // refusing needs no reading and is never held.
+                //
+                // It is drawn for a pc-only card too: the PC still owns the
+                // decision there, and a re-read is just as useful on that card.
+                if (detailOffers.refresh) {
+                    Quiet(
+                        CardDetail.REFRESH,
+                        enabled = !decided,
+                        onClick = onRefresh,
+                    )
+                } else if (!item.pcOnly) {
                     // Review ruling 8.2: on a state-replacing card the first
                     // press only arms it - the label says which press this is,
                     // so a person reading the button sees the state change and

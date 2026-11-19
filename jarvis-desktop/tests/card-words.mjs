@@ -17,6 +17,8 @@ import {
   CARD_BUTTONS,
   CARD_KICKER,
   CARD_NO_ACTION,
+  CARD_NO_DETAIL,
+  CARD_REFRESH,
   CARD_TIMED_OUT,
   CARD_TIMED_OUT_NEXT,
   CARD_VOICE,
@@ -54,8 +56,15 @@ const replaceGuard = HUD.slice(
   HUD.indexOf("/* == replace-confirm guard begin =="),
   HUD.indexOf("/* == replace-confirm guard end =="));
 assert.ok(replaceGuard.length > 100, "jarvis_hud.html lost its replace-confirm block markers");
+// The page cannot import this module, so its blank-cheque sentences are its own
+// copies; they are injected here from the module and the page's literals are
+// checked below.
+const hudConsts = `const APPR_NO_DETAIL = ${JSON.stringify(CARD_NO_DETAIL)};\n`
+  + `const APPR_REFRESH = ${JSON.stringify(CARD_REFRESH)};`;
 const hud = new Function(
-  `${replaceGuard}\n${["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised", "apprRiskLine", "apprCutOff",
+  `${hudConsts}\n${replaceGuard}\n${["apprEscape", "apprDescribe", "apprDetailWords",
+      "apprFieldWords", "apprLabel", "apprObjectWords", "apprListWords",
+      "apprCardHtml", "apprRaised", "apprRiskLine", "apprCutOff",
       "apprTitle"].map(lift).join("\n")}; return { apprCardHtml, apprTitle };`)();
 
 check("the label, the button order and the no-action title are the PC's", () => {
@@ -120,12 +129,41 @@ check("a spoken question hears the same card lines as on the phone", () => {
   assert.equal(v.onStatus("approved"), null, "a new question starts with nothing waiting");
 });
 
+check("a card with no readable detail says the PC's words and offers the PC's Refresh", () => {
+  // 2026-11-18, the blank cheque measured on the owner's phone: a card that
+  // cannot say what it would change draws this sentence and a Refresh where
+  // Approve was, keeping Deny - and the phone draws the same two
+  // (net/CardDetail.kt holds them against the same fixture).
+  assert.equal(CARD_NO_DETAIL, CASES.no_detail);
+  assert.equal(CARD_REFRESH, CASES.refresh);
+  assert.match(CARD_NO_DETAIL, /^Jarvis did not describe this change\./);
+  // The HUD page's own copies are the same words - it cannot import the module.
+  const detailCopy = HUD.match(/const APPR_NO_DETAIL = "([^"]+)";/);
+  assert.ok(detailCopy, "jarvis_hud.html no longer declares APPR_NO_DETAIL");
+  assert.equal(detailCopy[1], CARD_NO_DETAIL);
+  const refreshCopy = HUD.match(/const APPR_REFRESH = "([^"]+)";/);
+  assert.ok(refreshCopy, "jarvis_hud.html no longer declares APPR_REFRESH");
+  assert.equal(refreshCopy[1], CARD_REFRESH);
+  // And the card REALLY draws them: no Approve, a Refresh and a Deny.
+  const blank = hud.apprCardHtml({ id: "n", action: "change_own_config", tier: "ask" }, 0);
+  assert.ok(blank.includes(CARD_NO_DETAIL));
+  assert.match(blank, /class="refresh"/);
+  assert.match(blank, /class="no"/);
+  assert.doesNotMatch(blank, /class="yes"/);
+  // No other desktop surface re-types these sentences out.
+  for (const name of ["main.js", "widget.js", "jarvis-link.js", "hud-safety.js"]) {
+    assert.equal(page(name).split(CARD_NO_DETAIL).length - 1, 0,
+      `${name} types the empty-detail sentence out instead of importing it`);
+  }
+});
+
 check("Deny is left of Approve on every desktop surface", () => {
   const bar = page("index.html");
   assert.ok(bar.indexOf('id="approval-deny"') < bar.indexOf('id="approval-approve"'), "Jarvis bar");
   const widget = page("widget.html");
   assert.ok(widget.indexOf('id="btn-appr-no"') < widget.indexOf('id="btn-appr-yes"'), "widget");
-  const html = hud.apprCardHtml({ id: "h", action: "send_email", tier: "ask" }, 0);
+  const html = hud.apprCardHtml({ id: "h", action: "send_email", tier: "ask",
+    detail: "To: doctor@clinic.example" }, 0);
   assert.ok(html.indexOf('class="no"') < html.indexOf('class="yes"'), "HUD");
   assert.deepEqual([...CARD_BUTTONS], ["Deny", "Approve"]);
 });

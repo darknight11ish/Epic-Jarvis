@@ -76,10 +76,17 @@ class PendingRowsContractTest {
         // Object detail.
         val egress = byId("abc123")
         assertTrue(egress.detail!!.contains("dr.okafor@clinic.example"))
-        // A command is the summary itself, and not repeated underneath.
+        // A command's summary is the visible command, AND the detail still
+        // carries the object the card must show (2026-11-18). The row used to
+        // be removed here as a "repeat" - but the card draws the PC's notice,
+        // not this derived summary, so removing it left the exact command
+        // nowhere on the card. See CardDetailTest.
         val shell = byId("12")
         assertEquals("rm -rf ~/Documents", shell.summary)
-        assertNull(shell.detail)
+        assertTrue(
+            "and the command is never dropped from the card: ${shell.detail}",
+            shell.detail!!.contains("rm -rf ~/Documents"),
+        )
         // The agent's plan, carried as {"text": plan} inside a JSON string.
         assertTrue(byId("r4").summary.contains("click \"Send\""))
     }

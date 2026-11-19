@@ -6619,7 +6619,12 @@ const LINK = (page, detail) => page.evaluate((d) => window.__jarvisFeed("link", 
 const APPROVALS_RAISED = [{ id: "91", action: "send_email", tier: "ask", replaces: false,
   raised: { quote: "<script>alert(1)</script> act now", source: "an email" },
   expires_in: 120 }];
-const PLAIN_CARD = [{ id: "91", action: "send_email", tier: "ask", replaces: false, expires_in: 120 }];
+// A card the page can actually approve. Since 2026-11-18 a card with no
+// readable `detail` draws Refresh where Approve would be (approvals-contract.mjs
+// proves that rule); these checks are about what the safety rail does to a real
+// Approve button, so the card carries the change the way the gate sends it.
+const PLAIN_CARD = [{ id: "91", action: "send_email", tier: "ask", replaces: false, expires_in: 120,
+  detail: { tool: "send_email", args: "to: sam@example.com, subject: Lunch" } }];
 
 /** Does a box overlap `#hud-safety`? Boxes only; no screenshots. */
 async function safetyOverlaps(page) {
@@ -6795,7 +6800,8 @@ await check("H4: linked is silent here (the one status row already says it)", as
 
 await check("H4: offline uses Rust's own first sentence, and Deny stays enabled", async () => {
   const { page, problems } = await openHud(browser,
-    { jarvis: true, ollama: true, proxy: false, pending: [{ id: "92", action: "read_files" }] });
+    { jarvis: true, ollama: true, proxy: false, pending: [{ id: "92", action: "read_files",
+      detail: { tool: "read_files", args: "path: Downloads" } }] });
   await LINK(page, { connected: false, stale: true, error: "Jarvis is not answering. Start it on the PC." });
   await page.waitForTimeout(300);
   const words = await page.locator("#hud-safety-link").innerText();

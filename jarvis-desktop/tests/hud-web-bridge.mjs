@@ -458,7 +458,11 @@ await check("browser: catching up holds Approve and keeps Deny enabled, then lin
   server.config.sseChunks = ['event: hello\ndata: {"stale":false}\n\n'];
   server.config.sseKeepOpen = true;
   server.config.pending = [{ id: "91", action: "send_email", tier: "ask",
-    replaces: false, expires_in: 120 }];
+    replaces: false, expires_in: 120,
+    // The change the card asks for, in the gate's shape: since 2026-11-18 a
+    // card with no readable `detail` draws Refresh, not Approve, so a card
+    // that must prove Approve is held needs its detail.
+    detail: { tool: "send_email", args: "to: sam@example.com, subject: Lunch" } }];
   const app = await openWeb(server);
   await K.until(app.page, "the approval card to paint", async () =>
     (await app.page.evaluate(() => document.querySelectorAll("#approvals .appr").length)) >= 1,
@@ -681,7 +685,10 @@ await check("browser: a risky approval the PC refuses says to answer it on the P
   server.config.pendingMode = "ok";
   server.config.approveMode = "risky";
   server.config.pending = [{ id: "92", action: "delete_files", tier: "risky",
-    replaces: false, expires_in: 120 }];
+    replaces: false, expires_in: 120,
+    // A readable detail keeps the ordinary Approve (2026-11-18); this check is
+    // about what the PC says when it refuses that approval.
+    detail: { tool: "delete_files", args: "path: Downloads" } }];
   const app = await openWeb(server);
   await K.until(app.page, "the risky card to paint", async () =>
     (await app.page.evaluate(() => document.querySelectorAll("#approvals .appr").length)) >= 1,

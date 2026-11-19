@@ -56,6 +56,23 @@ export const CARD_TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it 
 export const CARD_TIMED_OUT_NEXT = "Ask the desktop to raise this again.";
 
 /**
+ * WHAT A CARD WITH NO READABLE DETAIL SAYS, and the action drawn where Approve
+ * would be on it (2026-11-18). Measured on the owner's phone: a waiting
+ * `change_own_config` card about his cloud settings drew no detail at all and
+ * still drew a normal Approve - a blank cheque for a change nobody could see.
+ * Both clients now refuse that: a card that cannot say what it would change
+ * says this sentence and offers a Refresh instead, keeping Deny. One copy here,
+ * from backend/jarvis_card_words.py's `NO_DETAIL` / `REFRESH` through the
+ * generated fixture - the same one-source rule as CARD_TIMED_OUT, and the
+ * phone's CardWords.kt carries the same two.
+ */
+export const CARD_NO_DETAIL =
+  "Jarvis did not describe this change. Refresh, or deny it and ask again.";
+
+/** The action drawn in Approve's place on that card - the PC's own word. */
+export const CARD_REFRESH = "Refresh";
+
+/**
  * How long a card has left, in plain words: "14m 59s left", then "42s left"
  * with the warning once it is under a minute.
  *

@@ -4964,6 +4964,12 @@ class MainActivity : FragmentActivity() {
                                 // desktop's backend/task-control.patch: see
                                 // JarvisRuntime's own doc comments on each.
                                 onAmend = { id, note -> JarvisRuntime.amendPending(id, note) },
+                                // The blank-cheque guard's only action: a card
+                                // with no readable detail draws Refresh where
+                                // Approve would be (net/CardDetail). This is the
+                                // same read the beat makes - it approves and
+                                // refuses nothing.
+                                onRefreshPending = { scope.launch { JarvisRuntime.refreshPending() } },
                                 onPauseTask = { JarvisRuntime.pauseTask() },
                                 onResumeTask = { JarvisRuntime.resumeTask() },
                                 onStopTask = { JarvisRuntime.stopTask() },

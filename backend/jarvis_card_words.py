@@ -785,6 +785,22 @@ TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself."
 #: The phone's second sentence on the same card. Never shown on the PC.
 TIMED_OUT_NEXT = "Ask the desktop to raise this again."
 
+#: WHAT A CARD WITH NO READABLE DETAIL SAYS, and the button drawn where Approve
+#: would be on it (2026-11-18). Measured on the owner's phone: a waiting
+#: `change_own_config` card about his cloud settings drew no detail at all and
+#: still drew a normal Approve - a blank cheque for a change nobody could see.
+#: A card that cannot say what it would change must not be approvable, so both
+#: apps say this sentence and offer Refresh in Approve's place, keeping Deny
+#: (refusing needs no reading). One copy here, written into both apps' fixtures
+#: by tools/gen_card_words_cases.py and held to it by each app's own test - the
+#: same one-source mechanism KICKER and TIMED_OUT already use, so the phone and
+#: the PC cannot word the blank cheque two different ways.
+NO_DETAIL = "Jarvis did not describe this change. Refresh, or deny it and ask again."
+
+#: The action drawn in Approve's place on that card. Shared for the same reason
+#: BUTTONS is: the two apps' controls must read the same words.
+REFRESH = "Refresh"
+
 #: The one sentence a hands-free read-out ends with (2026-11-04,
 #: `jarvis_handsfree.read_out`): the card's own notice words, then this, so the
 #: owner knows what to say. Its two lists are `jarvis_handsfree.CONFIRM` and

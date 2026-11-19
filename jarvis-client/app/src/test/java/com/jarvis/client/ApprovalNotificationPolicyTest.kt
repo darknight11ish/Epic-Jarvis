@@ -34,15 +34,23 @@ class ApprovalNotificationPolicyTest {
     private fun item(json: String): PendingItem =
         JarvisJson.decodeFromString(PendingItem.serializer(), json)
 
-    /** A card with the given action and risk row; everything else minimal. */
+    /**
+     * A card with the given action and risk row; everything else minimal.
+     *
+     * [detail] is the row's own `detail` - the words that name the change. It
+     * is non-empty on purpose (2026-11-18): a card with NO readable detail must
+     * not offer Approve on any surface, so every approve test below is about a
+     * card that says what it would change. The no-detail rule has its own test.
+     */
     private fun card(
         id: String,
         action: String,
         risk: String = """{"reversible":"yes","reach":"local","swipe_ok":true,"classified":true}""",
         extra: String = "",
+        detail: String = "A short change.",
     ): PendingItem = item(
         """{"id":"$id","title":"Jarvis wants to do a thing","summary":"A short summary.",
-             "tier":"ask","action":"$action","risk":$risk$extra}""",
+             "tier":"ask","detail":"$detail","action":"$action","risk":$risk$extra}""",
     )
 
     /** `search_the_web` is on SecurityRules.SMALL_ACTIONS and changes nothing. */
@@ -80,6 +88,32 @@ class ApprovalNotificationPolicyTest {
         )
         assertFalse(ApprovalNotificationPolicy.plan(card, Security(), false, card.title, "Body")
             .offers(Action.DENY))
+    }
+
+    @Test
+    fun `a card that cannot say what it would change is reviewed in Jarvis, never approved`() {
+        // THE BLANK CHEQUE, 2026-11-18: the owner was shown a cloud
+        // `change_own_config` card with no detail and a normal Approve. The
+        // notification must not become the back door to the same yes: its words
+        // are the PC's notice (built from the action NAME), so a card whose own
+        // `detail` did not arrive gets Review in Jarvis - where the card draws
+        // Refresh in Approve's place - and Deny. Every shape a missing detail
+        // arrives in is covered.
+        for (detail in listOf("", "   ", "{}", """{\"why\":null}""")) {
+            val blank = card("n1", "search_the_web", detail = detail)
+            assertFalse("'$detail' must not approve: ${blank.detail}", ApprovalNotificationPolicy.plan(
+                blank, Security(), false, blank.title, "A short summary.",
+            ).offers(Action.APPROVE_DIRECT))
+            assertFalse("'$detail' must not open-for-approve either", ApprovalNotificationPolicy.plan(
+                blank, Security(), false, blank.title, "A short summary.",
+            ).offers(Action.APPROVE_IN_APP))
+            assertTrue("'$detail' is Review in Jarvis", ApprovalNotificationPolicy.plan(
+                blank, Security(), false, blank.title, "A short summary.",
+            ).offers(Action.REVIEW))
+            assertTrue("and Deny is kept", ApprovalNotificationPolicy.plan(
+                blank, Security(), false, blank.title, "A short summary.",
+            ).offers(Action.DENY))
+        }
     }
 
     // ---------------------------------------------------------------- point 2

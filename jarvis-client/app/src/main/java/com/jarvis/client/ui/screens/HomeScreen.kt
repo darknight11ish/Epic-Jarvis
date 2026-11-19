@@ -968,6 +968,17 @@ data class HomeActions(
     val onOpenHudCard: (String) -> Unit = {},
     val blockerFor: (PendingItem) -> String?,
     /**
+     * Re-read the waiting approval queue - the action drawn in Approve's place
+     * on a card whose detail did not arrive (`net/CardDetail`, measured on the
+     * owner's phone 2026-11-18: a cloud `change_own_config` card with no detail
+     * offered a normal Approve).
+     *
+     * A READ, so it is never held: refreshing the list changes no decision and
+     * approves nothing. Defaulted to nothing so a caller that has no queue read
+     * still compiles; Home always passes the runtime's own `refreshPending`.
+     */
+    val onRefreshPending: () -> Unit = {},
+    /**
      * The deny direction's blocker, which is the same rule minus the stale arm:
      * a stale link holds Approve and never Deny (2026-10-17). A separate
      * function because the card greys its two buttons from two calls.
@@ -1965,6 +1976,9 @@ private fun ConversationList(
                         if (handler != null) handler(item, onReset) else actions.onDeny(item)
                     },
                     onAmend = { note -> actions.onAmend(item.id, note) },
+                    // The blank-cheque guard's only action: a card with no
+                    // readable detail draws this in Approve's place (net/CardDetail).
+                    onRefresh = actions.onRefreshPending,
                     swipeAllowed = state.swipeDecides,
                     security = state.security,
                     signedApprovals = state.signedApprovals,
