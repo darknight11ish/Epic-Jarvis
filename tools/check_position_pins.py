@@ -98,6 +98,11 @@ POSITION_PIN_CEILING: dict[str, int] = {
     # day it landed - not an approval, and the ratchet only turns DOWN from
     # here, so rewriting those seven to walk `ast` lowers this number.
     "backend/test_phone_authorized_update.py": 7,
+    # 2026-11-19: the note-edit repair asserts on the row it inserted by
+    # reading the (reversible, reach) tuple the base gives it, in the
+    # order the base writes it. One pin, recorded debt, not an approval;
+    # the ratchet only turns DOWN.
+    "backend/test_repair_live_backend_gaps.py": 1,
     "backend/test_security_pc.py": 1,
     "backend/test_stop_all.py": 1,
     "backend/test_tasks.py": 1,
