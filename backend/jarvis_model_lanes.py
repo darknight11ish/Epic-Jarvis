@@ -393,8 +393,9 @@ def _preset_mode_rows() -> list:
     """The preset layer's own pooled modes, read lazily.
 
     `jarvis_big_coder.MODES` owns the three measured modes; these are the rows
-    a preset adds (2026-11-09: `medical`, plus the two measured candidates no
-    preset points at). Never raises: a backend without the presets module keeps
+    a preset adds (2026-11-09: `medical`; since 2026-11-18 also the
+    `general-uncensored` row plus the measured candidates the capability rows
+    apply). Never raises: a backend without the presets module keeps
     the three modes it always had.
     """
     try:

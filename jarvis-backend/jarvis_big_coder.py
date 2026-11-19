@@ -209,7 +209,9 @@ MODES = (
          0, NEEDS_CARDS, ("speed", "general"), None, None, ""),
     Mode("creative", "Creative", "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
          32768,
-         "measured on all three cards with no CPU spill at 17.7 tokens a second",
+         "measured on all three cards with no CPU spill; the 2026-11-18 "
+         "re-measurement read 9.04-13.05 tokens a second over seven clean "
+         "samples (median 9.99), not the 17.7 first recorded",
          0, NEEDS_CARDS, ("speed", "general"), None, None, ""),
 )
 
@@ -221,7 +223,8 @@ MODE_KEYS = tuple(m.key for m in MODES)
 
 
 def _preset_modes() -> tuple:
-    """The preset layer's pooled modes (`medical` and two candidates), as `Mode` rows.
+    """The preset layer's pooled modes (`medical`, `general-uncensored` and the
+    measured candidates), as `Mode` rows.
 
     `jarvis_presets.pooled_modes()` is read lazily; a backend without it keeps
     the three modes above. `MODES`, `MODE_KEYS` and `modes_view()` do NOT gain

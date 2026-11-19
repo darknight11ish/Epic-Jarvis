@@ -318,9 +318,24 @@ def t_no_preset_default_is_changed():
           presets["coding"].lane == "pooled")
     check("the Coding preset's window is unchanged",
           int(presets["coding"].context) == 49152)
-    check("deep_think and creative are not offered as presets yet",
+    check("deep_think is not offered as a preset yet",
           all(m.model not in {p.model for p in P.PRESETS}
-              for m in B.MODES if m.key != "coding"))
+              for m in B.MODES if m.key == "deep_think"))
+    # 2026-11-18: the review ruled the uncensored model onto the SEPARATE
+    # general_uncensored preset. It is the same model and window `creative` has
+    # carried since Wave 9, but it reaches the lane through the preset layer's
+    # own mode row (`pooled_modes()`), never by widening the big-coder route's
+    # three keys or by renaming `creative` into a preset.
+    gu = presets["general_uncensored"]
+    check("creative's MODEL is offered - on the separate General Uncensored preset "
+          "(the 2026-11-18 ruling) - and it is still not the `creative` mode key",
+          gu.model == B.mode_profile("creative").model
+          and gu.mode != "creative"
+          and B.mode_profile(gu.mode).model == gu.model
+          and gu.id not in B.MODE_KEYS,
+          (gu.model, gu.mode))
+    check("... and the big-coder route's three mode keys did not move",
+          B.MODE_KEYS == ("coding", "deep_think", "creative"))
 
 
 if __name__ == "__main__":
