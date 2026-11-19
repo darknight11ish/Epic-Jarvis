@@ -127,6 +127,29 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+      # THE DESKTOP LOCKFILE MUST MATCH package.json (2026-11-18, the two CI
+      # guards the external review asked for). `Desktop release` installs with
+      # `npm ci`, which REFUSES a desynced pair. PR #1319 added `typescript` to
+      # jarvis-desktop/package.json and never regenerated package-lock.json, and
+      # EIGHT `Desktop release` runs then failed at that step - unnoticed for
+      # two days, because no REQUIRED job ran `npm ci`. #1386 fixed the
+      # lockfile; this is the guard that stops the recurrence.
+      #
+      # WHY IT IS HERE AND NOT IN `audit`. The review's ruling, and this job is
+      # the reason: `audit` is INFORMATIONAL - it cannot hold a merge, which is
+      # exactly how two days passed. This step runs inside `frontend-shard`,
+      # whose fan-in job owns the ruleset's required `frontend` check, so a
+      # desync blocks the pull request that introduces it.
+      #
+      # IT RUNS IN SHARD 1 ONLY (the four shards are otherwise identical copies
+      # of this job), needs no npm and no network - it is a Python comparison of
+      # the two JSON files - and is measured at about 0.2 s. It checks on every
+      # pull request, so it necessarily checks whenever package.json changes.
+      # The fix command it prints is `npm install --package-lock-only` (run in
+      # jarvis-desktop/); the release workflow keeps the real `npm ci`.
+      - name: Desktop lockfile matches package.json (the release's npm ci would refuse)
+        if: matrix.shard == 1
+        run: python3 ../tools/check_desktop_lockfile.py
       # No bundler and no test framework: the pages are plain ES modules, so a
       # parse check is what there is. It is the floor, and it had to be made to
       # hold: on 2026-10-06 a `settings.js` that could not be parsed at all - a
@@ -383,6 +406,53 @@ jobs:
           # committed copy differs. In a shallow clone it has nothing to
           # read, and with CI set it fails rather than skip.
           fetch-depth: 0
+      # DID THE FEATURE CATALOGUE CHANGE? (2026-11-18, the two CI guards the
+      # external review asked for.) The capability suite pins a fast CORE
+      # SUBSET on every pull request; the full 5,410-question reach ratchet is
+      # only worth paying for when the catalogue itself moved, so it runs when
+      # this step says one of the three paths below is in the diff. The paths
+      # are the ruling's own filter: features/features.json,
+      # backend/jarvis_feature_catalogue.py, and that module's published twin
+      # jarvis-backend/jarvis_feature_catalogue.py.
+      #
+      # WHY A GIT DIFF RATHER THAN `on.pull_request.paths`. A workflow-level
+      # path filter is not usable here: ci.yml's `pull_request` trigger has no
+      # filter ON PURPOSE (a required check on a pull request must always
+      # report, not wait for a run that never starts), and GitHub has no
+      # per-job path filter. The whole history is checked out above
+      # (fetch-depth: 0), so the comparison costs a fraction of a second.
+      - name: Did the feature catalogue change?
+        id: catalogue
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            what="the pull request's base"
+          else
+            base="${{ github.event.before }}"
+            what="the previous push"
+          fi
+          changed=""
+          if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$base...HEAD" 2>/dev/null || true)
+          fi
+          if [ -z "$changed" ]; then
+            changed=$(git diff --name-only HEAD^ HEAD 2>/dev/null || true)
+            echo "::notice::compared against the last commit: $what ($base) is not in this checkout"
+          fi
+          echo "Changed files (first 40):"
+          # `|| true` on the pipe: `head` closing early can SIGPIPE `printf`,
+          # which `set -o pipefail` upstairs would read as a failed step.
+          printf '%s\n' "$changed" | head -40 || true
+          hit=$(printf '%s\n' "$changed" | grep -E '^(features/features\.json|backend/jarvis_feature_catalogue\.py|jarvis-backend/jarvis_feature_catalogue\.py)$' || true)
+          if [ -n "$hit" ]; then
+            echo "catalogue=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::the feature catalogue changed ($hit) - the full 5,410-question sweep runs below"
+          else
+            echo "catalogue=false" >> "$GITHUB_OUTPUT"
+            echo "The feature catalogue did not change - the full sweep does not run; the fast core subset does (and every PR already runs it)."
+          fi
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -551,6 +621,70 @@ jobs:
             echo ""
             echo '```'
             grep -E '^(FAIL |skip |SKIPPED|[0-9]+ passed|shard: )' "$RUNNER_TEMP/backend-suites.txt" | head -120 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      # THE FAST CAPABILITY CORE SUBSET, ON EVERY PULL REQUEST (2026-11-18, the
+      # two CI guards the external review asked for). The suite above already
+      # runs it (backend/test_capability_answers.py defaults to core mode), and
+      # this step names it: 239 pinned cases - one question naming each
+      # catalogue row's own title, plus the 53 answers the capability fix
+      # changed. Measured at about 4 s; the four shards are identical, so it
+      # runs in shard 1 only.
+      #
+      # WHY THE CORE EXISTS, in one measured sentence: two PRs that each
+      # touched backend/jarvis_quick.py were green alone and changed each
+      # other's behaviour when merged, and main is red on the full sweep's
+      # "cloud-escalation 63 < 65". The 5,410-question sweep is the exhaustive
+      # ratchet and it still runs (below), but on every PR the row-by-row core
+      # is what keeps that class of break cheap enough to check always.
+      - name: The capability core subset (every PR - 239 cases, about 4 seconds)
+        if: matrix.shard == 1
+        run: |
+          set +e
+          python backend/test_capability_answers.py --core 2>&1 | tee "$RUNNER_TEMP/capability-core.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### The capability core subset (every PR)"
+            echo ""
+            echo "239 pinned cases: one question per catalogue row (its own title),"
+            echo "plus the 53 answers the 2026-11-18 capability fix changed."
+            echo "The full 5,410-question sweep runs only when the feature"
+            echo "catalogue changed."
+            echo ""
+            echo '```'
+            grep -E '^(ok |FAIL |   KNOWN LOST|   FIXED|   the full|[0-9]+ passed)' "$RUNNER_TEMP/capability-core.txt" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      # THE FULL 5,410-QUESTION SWEEP, ONLY WHEN THE CATALOGUE CHANGED
+      # (2026-11-18). The condition is the changed-file step at the top of this
+      # job: the ruling's path filter, computed from git rather than from a
+      # workflow-level `paths:` key (a filtered pull request would never report
+      # a required check; GitHub has no per-job path filter). When it does run,
+      # the suite's own strict per-row baseline ratchet runs with it - the
+      # check that is red on main tonight - and a failure names every row that
+      # lost reach.
+      - name: The full capability sweep (only when the feature catalogue changed)
+        if: matrix.shard == 1 && steps.catalogue.outputs.catalogue == 'true'
+        env:
+          # The only thing that turns the full sweep on. Nothing else in this
+          # workflow sets it, so an ordinary pull request never pays for it.
+          JARVIS_CAPABILITY_FULL_SWEEP: "1"
+        run: |
+          set +e
+          python backend/test_capability_answers.py 2>&1 | tee "$RUNNER_TEMP/capability-full.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### The full capability sweep (the feature catalogue changed)"
+            echo ""
+            echo "5,410 questions over every catalogue row's aliases, title and id"
+            echo "words. The strict 184-row reach baseline is the ratchet."
+            echo ""
+            echo '```'
+            grep -E '^(ok |FAIL |   KNOWN LOST|   FIXED|[0-9]+ passed)' "$RUNNER_TEMP/capability-full.txt" | tail -40 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

@@ -97,6 +97,19 @@ WHAT THIS SUITE CHECKS
      origin/main at 8a20b523c and again after the change. A row may gain reach,
      never lose it: 4429 -> 4476 own-row answers, 53 changed, 47 gained, 0
      regressed. The full per-row baseline is pinned below as a ratchet.
+ 12. THE TWO CI GUARDS (2026-11-18, the external review's ruling). The full
+     sweep above caught a real cross-pull-request break - two PRs that each
+     touched jarvis_quick.py were green alone and changed each other's
+     behaviour when merged, and main went red on "cloud-escalation 63 < 65".
+     So every PR now runs a fast CORE SUBSET (239 pinned cases: one question
+     per catalogue row naming its own title, plus the 53 answers the capability
+     fix changed), and the full 5,410-question sweep runs only when
+     features/features.json or the feature catalogue
+     (backend/jarvis_feature_catalogue.py or its twin) changed - ci.yml's
+     backend-shard job computes that with its own changed-file step and sets
+     JARVIS_CAPABILITY_FULL_SWEEP=1 for one step. The two questions a later
+     cloud-settings merge has already lost are recorded, printed on every run,
+     and never counted as passes; a NEW loss fails the core subset.
 
 No model runs, no network, no owner file is touched: the answers read the
 catalogue and a made-up scheduler only.
@@ -565,6 +578,316 @@ def _ordinary_shapes(row):
     return out
 
 
+# --------------------------------------------------------------------------
+#   THE FAST CORE SUBSET (2026-11-18, the two CI guards the review asked for)
+# --------------------------------------------------------------------------
+# WHY. The 5,410-question sweep below is the exhaustive reach ratchet, and it
+# found a REAL cross-pull-request break on 2026-11-18: two PRs that each touched
+# `backend/jarvis_quick.py` were green alone, merged, and changed each other's
+# behaviour - main is red on "no ordinary shape lost its row", cloud-escalation
+# 63 < 65. The full sweep is cheap enough to keep (measured on 2026-11-18 on
+# the owner's PC, three runs: the whole suite with the sweep 32-36 s, the same
+# suite without it 10.4-12.7 s, so the sweep itself is about 22 s), but it is
+# the wrong shape for the every-PR gate: it is one aggregate check over every
+# row, so ONE slow question and 5,409 fast ones are all-or-nothing, and a
+# catalogue change can add a row whose questions the every-PR job has no
+# budget to learn. The review's ruling, implemented here:
+#
+#   * EVERY PR runs the core subset below - 239 cases, measured at 3.8-4.1 s
+#     on its own - in the required `backend` job;
+#   * the FULL sweep runs only when `features/features.json` or
+#     `backend/jarvis_feature_catalogue.py` (or its twin
+#     `jarvis-backend/jarvis_feature_catalogue.py`) changed. ci.yml's
+#     `backend-shard` job computes that with its own changed-file step and
+#     sets `JARVIS_CAPABILITY_FULL_SWEEP=1` for one step; nothing else sets it,
+#     so a normal pull request never pays for it.
+#
+# WHAT THE CORE IS - two pinned lists, both questions the full sweep already
+# asks, so "the core is a subset of the full sweep" is a fact this file can
+# prove (and `backend/test_capability_core_subset.py` does prove).
+#
+# CORE_OWNER_WORDED (184): one ordinary question naming each catalogue row's
+# own title - the words the owner reads on the Features pages. It is the
+# per-row ratchet, one question per row, so a row that loses its own words
+# fails on every PR. 184 is the catalogue's own length; the review's "180" was
+# the live audit's measured-row count, and a row added without a reachable
+# title question fails here the same way.
+#
+# CORE_REGRESSION (53): every sweep question whose answer the 2026-11-18
+# capability fix CHANGED, measured on the pre-fix tree (origin/main at
+# 8a20b523c) and again on the fixed tree: 53 changed, 47 gained their own row,
+# 0 regressed, and six multi-row answers stopped naming a second row they
+# should never have named. These are the questions a later matcher change is
+# most likely to disturb, so they are pinned by name.
+#
+# CORE_KNOWN_LOST (2): the same measurement re-run on THIS tree also shows two
+# questions LOST after the fix, by the later cloud-settings lane:
+# "Does Jarvis escalate to the cloud?" and "What is cloud escalation?" now
+# answer `cloud_settings` instead of the `cloud-escalation` row. That is the
+# full sweep's "cloud-escalation 63 < 65", measured on main tonight. They are
+# printed on EVERY run and NEVER counted as passes, and a loss that is NOT on
+# this dated list fails the core subset. Remove an entry once its row is fixed
+# again - the run prints "FIXED, remove me" when it passes.
+CORE_OWNER_WORDED = (
+    ('What is Type a message and read the answer?', 'typing'),
+    ('What is Check a prompt before you send it?', 'prompt-coach'),
+    ('What is The talk button?', 'talk-button'),
+    ('What is Say "Hey Jarvis"?', 'wake-word'),
+    ('What is Jarvis reads its answers aloud?', 'read-aloud'),
+    ('What is Short answers to spoken questions?', 'spoken-style'),
+    ('What is Teach Jarvis your voice?', 'voice-training'),
+    ('What is How strict the voice check is?', 'voice-check'),
+    ('What is The voice Jarvis speaks with?', 'custom-voices'),
+    ('What is How Jarvis talks?', 'manner'),
+    ('What is Write like me?', 'write-like-me'),
+    ('What is Anti-Slop filter?', 'anti-slop'),
+    ('What is Interrupt Jarvis while it talks?', 'interrupt'),
+    ('What is Jarvis Live?', 'live'),
+    ('What is The extras around Live?', 'live-extras'),
+    ('What is Talk-to-type?', 'talk-to-type'),
+    ('What is The whole conversation, and carrying it on?', 'chat-thread'),
+    ('What is Incognito chat?', 'temporary-chat'),
+    ('What is Private chat?', 'private-chat'),
+    ('What is Search what was said?', 'history-search'),
+    ('Tell me about The morning briefing.', 'briefing'),
+    ('What is Timers, alarms, reminders and lists?', 'coming-up'),
+    ('What is A reminder that asks you a question?', 'reminder-asks'),
+    ('What is Today?', 'today'),
+    ('What is Widgets you describe?', 'widgets'),
+    ('What is Background jobs?', 'jobs'),
+    ('What is What Jarvis is doing right now?', 'now'),
+    ('What is How much Jarvis may interrupt you?', 'attention-budget'),
+    ('What is Focus session?', 'focus'),
+    ('What is Play or pause what is on this PC?', 'media-transport'),
+    ('What is The Memory tab?', 'memory-tab'),
+    ('What is Facts Jarvis saved by itself?', 'memory-saved'),
+    ('What is Facts waiting for your yes?', 'memory-waiting'),
+    ('What is What Jarvis knows about you?', 'memory-known'),
+    ('What is People and things?', 'memory-people'),
+    ('What is Person dossier?', 'people-dossier'),
+    ('What is Always keep in mind?', 'pinned-facts'),
+    ('What is Between us?', 'between-us'),
+    ('What is Topics?', 'topics'),
+    ('What is The learning switches?', 'memory-learning'),
+    ('What is The wiki Jarvis builds?', 'wiki'),
+    ('What is Deep questions?', 'deep-questions'),
+    ('What is What did I believe on this date??', 'memory-as-of'),
+    ('What is Bring in old chats?', 'import-chats'),
+    ('What is Your past chats?', 'history'),
+    ('What is Chat tags?', 'chat-tags'),
+    ('What is Forget a time frame?', 'forget-range'),
+    ('What is Galaxy?', 'galaxy'),
+    ('What is Read the words in a recording or video?', 'media-read'),
+    ('What is Where did I put things?', 'places'),
+    ('What is Look at this?', 'look-at-this'),
+    ('What is Watch with me?', 'watch-with-me'),
+    ('What is Picture mode?', 'picture-mode'),
+    ('What is Photo to reminder?', 'photo-reminder'),
+    ('What is Show Jarvis the camera in Live?', 'live-camera'),
+    ('What is Quiz me on a text?', 'quiz'),
+    ('What is Ask for a picture, and keep it?', 'pictures'),
+    ('What is Search what was said in audio and video?', 'search-audio-video'),
+    ('What is My study decks?', 'decks'),
+    ('What is Write a note for you?', 'notes-write'),
+    ('What is Create and customize your notes?', 'notes-editor'),
+    ('What is Folders Jarvis may look in?', 'folders'),
+    ('What is Ask about a PDF, a Word file or a Notion page?', 'documents'),
+    ('What is Tutorials and the FAQ?', 'tutorials'),
+    ('What is PC help?', 'pc-help'),
+    ('What is Web search?', 'web-search'),
+    ('What is A browser without a window?', 'browser-engine'),
+    ("What is What's new on GitHub?", 'github-watchlist'),
+    ('What is Read and act on your own GitHub?', 'connected-github'),
+    ('What is Talk to a chatbot for me?', 'chatbot'),
+    ('What is Deal with customer support for me?', 'support'),
+    ('What is Projects?', 'projects'),
+    ('What is Goals?', 'goals'),
+    ('What is Progress?', 'progress'),
+    ('What is File from your PC?', 'file-from-pc'),
+    ('What is Send a document from your phone?', 'document-from-phone'),
+    ('What is Import a Notion export into an Obsidian vault?', 'notion-import'),
+    ('What is Organize an Obsidian vault?', 'vault-organizer'),
+    ("What is Make a PDF from pictures, or change a picture's format?", 'picture-conversion'),
+    ('What is Spending summaries?', 'spending'),
+    ('What is Retirement what-if?', 'retirement'),
+    ('What is Chatbot keys and a monthly money limit?', 'chatbot-money'),
+    ('What is Health and money facts wait for your yes?', 'sensitive-facts'),
+    ('What is Crisis help?', 'crisis-help'),
+    ('What is What a parking stay costs, and free parking?', 'parking'),
+    ('What is Flight prices and a price history?', 'price-radar'),
+    ('What is Habit check-ins?', 'habit-checkins'),
+    ('What is Mood log?', 'mood-log'),
+    ("What is Check a product's reviews?", 'product-check'),
+    ('What is Ask how the house is?', 'home-status'),
+    ('What is Lights, plugs and fans?', 'lights'),
+    ('What is Locks, doors, alarms and covers?', 'locks'),
+    ('What is Read your own calendar?', 'calendar'),
+    ('What is Jarvis Calendar?', 'jarvis-calendar'),
+    ('What is Weather and the sky behind the animals?', 'weather-sky'),
+    ('What is Jarvis reads your email?', 'email-read'),
+    ('What is Send an email for you?', 'email-send'),
+    ('What is Save a draft to your Drafts folder?', 'email-drafts'),
+    ('What is Tidy the inbox by voice?', 'inbox-tidy'),
+    ('What is News headlines, and pages that change?', 'news-and-page-watches'),
+    ('What is Pairing and the connection?', 'connection'),
+    ('What is Devices?', 'devices'),
+    ('What is Let Jarvis read phone notifications?', 'phone-notifications'),
+    ('What is Smartwatch notifications?', 'phone-watch'),
+    ('What is Set up a new phone from a settings backup?', 'phone-settings-backup'),
+    ('What is Floating Jarvis?', 'phone-floating'),
+    ('What is Picture-in-picture?', 'phone-pip'),
+    ('What is Quick Settings tiles?', 'phone-tiles'),
+    ('What is Screen refresh rate?', 'phone-screen-rate'),
+    ('What is Also on my phone?', 'also-on-phone'),
+    ('What is Ring my phone?', 'find-phone'),
+    ('What is What the phone deliberately does not do?', 'phone-limits'),
+    ('What is Open an app on your phone?', 'phone-apps'),
+    ('What is Record a phone call and file it as a note?', 'call-recording'),
+    ('What is Appearance?', 'appearance'),
+    ('What is Hang and crash notes?', 'crash-notes'),
+    ("What is Choose Jarvis's face?", 'faces'),
+    ('What is Animal options?', 'animal-options'),
+    ('What is Set up Jarvis?', 'first-run'),
+    ('What is First-time setup questionnaire?', 'setup-questionnaire'),
+    ('What is Show or hide menus?', 'menu-visibility'),
+    ('What is Keyboard shortcuts?', 'shortcuts'),
+    ('What is Models?', 'models'),
+    ('What is Compute?', 'compute'),
+    ('What is Skills?', 'skills'),
+    ('What is Memory on the Model page?', 'model-memory'),
+    ('What is Notifications?', 'notifications'),
+    ('What is Starting Jarvis for you?', 'start-jarvis'),
+    ('What is The Work tab?', 'work-tab'),
+    ('What is Jobs that keep going after the chat ends?', 'job-list'),
+    ('What is Hardware and models?', 'hardware'),
+    ('Tell me about Focus presets.', 'focus-presets'),
+    ('What is Cloud (an API service you choose)?', 'cloud-escalation'),
+    ('What is The second graphics card?', 'second-card'),
+    ('What is The big model (slow)?', 'big-model'),
+    ('What is Updates?', 'updates'),
+    ('What is Check for tool updates?', 'tool-updates'),
+    ('What is The settings file, the logs and starting with Windows?', 'settings-file'),
+    ('What is What this backend supports?', 'backend-supports'),
+    ('What is About Jarvis?', 'about'),
+    ('What is The big HUD window?', 'hud-window'),
+    ('What is Backups?', 'backup'),
+    ('What is Accounts and keys?', 'accounts'),
+    ('What is What Jarvis can reach?', 'reach'),
+    ('What is Undo?', 'undo'),
+    ('What is Activity: cards you already decided?', 'past-approvals'),
+    ('What is Limits and frequency?', 'limits'),
+    ('What is Change a setting by asking, in any words?', 'settings-by-asking'),
+    ('What is Start the local model when it is not running?', 'start-the-model-lane'),
+    ('What is Jarvis starts the local model again by itself when it dies?', 'restart-the-model-lane'),
+    ('What is Clipboard history, and three one-press cleanups for what you copy?', 'clipboard-time-machine'),
+    ('What is File history?', 'file-history'),
+    ('What is A reminder that opens something, or asks to do one task?', 'reminder-actions'),
+    ('What is Thinking levels?', 'thinking-levels'),
+    ('What is Do arithmetic?', 'calculator'),
+    ('What is Open a program or Windows panel by name?', 'open-programs'),
+    ('What is Find and grade a library on GitHub?', 'github-research'),
+    ('What is Click and type in another program?', 'computer-control'),
+    ('What is Drive one browser tab?', 'browser-control'),
+    ('What is Run one shell command?', 'shell-commands'),
+    ('What is Read one web page out loud?', 'read-web-page'),
+    ('What is Inspect a program or app statically?', 'reverse-engineering'),
+    ('What is Build the Android app in a project task?', 'android-builder'),
+    ('What is Docker containers Jarvis ships?', 'docker-containers'),
+    ('What is Ask which model is answering?', 'model-knowledge'),
+    ('What is A second voice program (VoiceStudio)?', 'voicestudio'),
+    ('What is Reconnect to Wi-Fi by itself?', 'wifi-auto-reconnect'),
+    ('What is Creator mode: put a skill or a plug-in in a waiting folder?', 'creator-mode'),
+    ('What is Approval cards?', 'approvals'),
+    ('What is What asks first?', 'what-asks-first'),
+    ('What is Lock Jarvis, and hide what it remembers?', 'app-lock'),
+    ('What is Hand a captcha to your phone ("Solve it here")?', 'captcha-handoff'),
+    ('What is When the connection is catching up?', 'stale-link'),
+    ('What is Stop everything?', 'stop-everything'),
+    ('What is Trust: content risk and the audit chain?', 'trust'),
+    ('What is A warning when text tried to rush you?', 'rush-latch'),
+    ('What is Jarvis marks what it read from outside?', 'outside-text'),
+    ('What is Settings itself?', 'settings-entry'),
+    ('What is Small Python scripts for sums and averages?', 'data-sandbox'),
+    ('Tell me about Protected from Jarvis.', 'protected-items'),
+    ('What is A short plan of several steps, one card?', 'propose-plan'),
+    ('What is A short card, then Explain more?', 'card-summary'),
+    ('What is A receipt for every change?', 'receipts'),
+    ('What is Turn a drop-in module on or off by asking?', 'plugin-switch'),
+)
+
+CORE_REGRESSION = (
+    ('Do you have a feature for Type a message and read the answer?', 'typing'),
+    ('Do you have a way to learn what you sound like, so it only listens to you?', 'voice-training'),
+    ('Do you have a feature for learn what you sound like, so it only listens to you?', 'voice-training'),
+    ('Do you have a feature for Timers, alarms, reminders and lists?', 'coming-up'),
+    ('Do you have a way to reminder buttons?', 'reminder-asks'),
+    ('Do you have a feature for reminder buttons?', 'reminder-asks'),
+    ('Do you have a way to reminder answer?', 'reminder-asks'),
+    ('Do you have a feature for reminder answer?', 'reminder-asks'),
+    ('Do you have a feature for A reminder that asks you a question?', 'reminder-asks'),
+    ('Do you have a feature for reminder asks?', 'reminder-asks'),
+    ('Do you have a feature for How much Jarvis may interrupt you?', 'attention-budget'),
+    ('Do you have a feature for Read the words in a recording or video?', 'media-read'),
+    ('Do you have a feature for Photo to reminder?', 'photo-reminder'),
+    ('Do you have a feature for photo reminder?', 'photo-reminder'),
+    ('Do you have a way to asks me my saved study questions again on a schedule?', 'decks'),
+    ('Do you have a feature for asks me my saved study questions again on a schedule?', 'decks'),
+    ('Do you have a way to reads a pdf or a word file and answers questions about it?', 'documents'),
+    ('Do you have a feature for reads a pdf or a word file and answers questions about it?', 'documents'),
+    ('Do you have a feature for Goals?', 'goals'),
+    ('Do you have a feature for goals?', 'goals'),
+    ('Do you have a feature for Locks, doors, alarms and covers?', 'locks'),
+    ('Do you have a way to make your phone ring, to help you find it?', 'find-phone'),
+    ('Do you have a feature for make your phone ring, to help you find it?', 'find-phone'),
+    ('Do you have a feature for Ring my phone?', 'find-phone'),
+    ('Do you have a way to tells me when a newer build of this app exists and installs it?', 'updates'),
+    ('Do you have a feature for tells me when a newer build of this app exists and installs it?', 'updates'),
+    ('Do you have a feature for Jarvis starts the local model again by itself when it dies?', 'restart-the-model-lane'),
+    ('Do you have a way to reminder action?', 'reminder-actions'),
+    ('Do you have a feature for reminder action?', 'reminder-actions'),
+    ('Do you have a way to open a page from a reminder?', 'reminder-actions'),
+    ('Do you have a feature for open a page from a reminder?', 'reminder-actions'),
+    ('Do you have a way to open a file from a reminder?', 'reminder-actions'),
+    ('Do you have a feature for open a file from a reminder?', 'reminder-actions'),
+    ('Do you have a way to reminder that opens?', 'reminder-actions'),
+    ('Do you have a feature for reminder that opens?', 'reminder-actions'),
+    ('Do you have a way to run a task from a reminder?', 'reminder-actions'),
+    ('Do you have a feature for run a task from a reminder?', 'reminder-actions'),
+    ('Do you have a feature for A reminder that opens something, or asks to do one task?', 'reminder-actions'),
+    ('Do you have a feature for reminder actions?', 'reminder-actions'),
+    ('Do you have a feature for Click and type in another program?', 'computer-control'),
+    ('Do you have a way to read a web page?', 'read-web-page'),
+    ('Do you have a feature for read a web page?', 'read-web-page'),
+    ('Do you have a way to read a page?', 'read-web-page'),
+    ('Do you have a feature for read a page?', 'read-web-page'),
+    ('Do you have a way to read a link?', 'read-web-page'),
+    ('Do you have a feature for read a link?', 'read-web-page'),
+    ('Do you have a way to reading a link?', 'read-web-page'),
+    ('Do you have a feature for reading a link?', 'read-web-page'),
+    ('Do you have a feature for Read one web page out loud?', 'read-web-page'),
+    ('Do you have a feature for read web page?', 'read-web-page'),
+    ('Do you have a way to put a skill in a waiting folder?', 'creator-mode'),
+    ('Do you have a feature for put a skill in a waiting folder?', 'creator-mode'),
+    ('Do you have a feature for When the connection is catching up?', 'stale-link'),
+)
+
+CORE_KNOWN_LOST = (
+    ('Does Jarvis escalate to the cloud?', 'cloud-escalation', 'cloud_settings'),
+    ('What is cloud escalation?', 'cloud-escalation', 'cloud_settings'),
+)
+
+#: The ONE variable that turns the full 5,410-question sweep on. ci.yml's
+#: `backend-shard` job sets it for a commit that changed the feature catalogue
+#: (see the changed-file step there); nothing else ever sets it.
+FULL_SWEEP_ENV = "JARVIS_CAPABILITY_FULL_SWEEP"
+
+
+def full_sweep_enabled(environ=None):
+    """Is this run allowed to pay for the full 5,410-question sweep?"""
+    env = os.environ if environ is None else environ
+    return env.get(FULL_SWEEP_ENV, "") == "1"
+
+
 #: The measured crisis sentence and the words the wrong answer contained.
 CRISIS_SENT = ("Do you have a feature that answers with crisis help lines if "
                "a message sounds like a crisis? Answer in one sentence.")
@@ -936,7 +1259,87 @@ def t_the_exact_name_lane_steals_no_other_row_s_question():
 
 
 # --------------------------------------------------------------------------
-#   1f. the before/after sweep over EVERY row's ordinary shapes
+#   1f. THE FAST CORE SUBSET (every pull request), and the full sweep (only
+#       when the feature catalogue changed)
+# --------------------------------------------------------------------------
+def t_the_core_subset_holds():
+    """The 239 cases every pull request runs, proving the per-row ratchet.
+
+    Three groups, all questions the full sweep below already asks:
+      * CORE_OWNER_WORDED - one question naming each catalogue row's own title;
+      * CORE_REGRESSION - the 53 answers the capability fix changed;
+      * CORE_KNOWN_LOST - the two answers a LATER merge has since taken away
+        (the full sweep's "cloud-escalation 63 < 65"), named on every run and
+        never counted as a pass; any loss NOT on that list fails here.
+    """
+    rows = {row["id"] for row in C.FEATURES}
+    pinned = {row_id for _sentence, row_id in CORE_OWNER_WORDED}
+    new_rows = sorted(rows - pinned)
+    old_rows = sorted(pinned - rows)
+    check(f"the core subset carries its {len(CORE_OWNER_WORDED)} owner-worded "
+          "cases, one for EVERY catalogue row",
+          len(CORE_OWNER_WORDED) == len(C.FEATURES) == 184
+          and pinned == rows and not new_rows and not old_rows,
+          f"{len(CORE_OWNER_WORDED)} cases, {len(C.FEATURES)} rows; "
+          f"rows with no core question: {new_rows[:5]}; pinned ids that are "
+          f"no longer rows: {old_rows[:5]} - add one question naming the new "
+          "row's own title to CORE_OWNER_WORDED")
+    check("... its 53 regression-sensitive cases",
+          len(CORE_REGRESSION) == 53, str(len(CORE_REGRESSION)))
+    check("... and its two dated known-loss entries",
+          len(CORE_KNOWN_LOST) == 2, str(len(CORE_KNOWN_LOST)))
+
+    known = {sentence for sentence, _row, _wrong in CORE_KNOWN_LOST}
+    questions = ([sentence for sentence, _row in CORE_OWNER_WORDED]
+                 + [sentence for sentence, _row in CORE_REGRESSION]
+                 + [sentence for sentence, _row, _wrong in CORE_KNOWN_LOST])
+    matches = {sentence: Q.match(sentence) for sentence in questions}
+
+    lost = []
+    for sentence, row_id in CORE_OWNER_WORDED:
+        got = _row_of(matches[sentence])
+        if got != row_id and sentence not in known:
+            lost.append(f"{sentence!r} -> {got!r}, not {row_id!r}")
+    check(f"every catalogue row still answers a question naming its own title "
+          f"({len(CORE_OWNER_WORDED)} rows, 0 lost required)",
+          not lost, "; ".join(lost[:8]))
+
+    broken = []
+    for sentence, row_id in CORE_REGRESSION:
+        got = _row_of(matches[sentence])
+        if got != row_id and sentence not in known:
+            broken.append(f"{sentence!r} -> {got!r}, not {row_id!r}")
+    check(f"every one of the {len(CORE_REGRESSION)} answers the capability fix "
+          "changed still reaches its own row (0 regressions required)",
+          not broken, "; ".join(broken[:8]))
+
+    # The dated known losses: reported ALWAYS, never counted as passes, and a
+    # NEW loss fails. A recorded one that starts passing asks to be removed.
+    for sentence, row_id, _wrong in CORE_KNOWN_LOST:
+        intent = matches[sentence]
+        got = _row_of(intent)
+        if got == row_id:
+            print(f"   FIXED, remove from CORE_KNOWN_LOST: {sentence!r} answers "
+                  f"{row_id!r} again")
+        else:
+            where = repr(got) if got else f"no catalogue row (intent " \
+                f"{getattr(intent, 'name', None)!r})"
+            print(f"   KNOWN LOST (recorded 2026-11-18, the cloud-settings "
+                  f"merge; NOT a pass): {sentence!r} must answer {row_id!r}, "
+                  f"it answers {where}")
+    unexpected = [f"{sentence!r} -> {_row_of(matches[sentence])!r}"
+                  for sentence, _row in CORE_OWNER_WORDED + CORE_REGRESSION
+                  if sentence not in known
+                  and _row_of(matches[sentence]) != _row]
+    check("the only core cases that did not answer from their row are the two "
+          "dated, named known losses - any NEW loss fails here",
+          not unexpected, "; ".join(unexpected[:8]))
+    print(f"   the full 5,410-question sweep is "
+          f"{'RUNNING' if full_sweep_enabled() else 'NOT running in this mode; it runs when features/features.json or the feature catalogue changed'}")
+
+
+# --------------------------------------------------------------------------
+#   1g. the before/after sweep over EVERY row's ordinary shapes
 # --------------------------------------------------------------------------
 def t_no_ordinary_shape_lost_its_row():
     """Every row's aliases, title and id words, in ordinary question shapes.
@@ -961,6 +1364,14 @@ def t_no_ordinary_shape_lost_its_row():
     holds every shipped twin - so one in-process run on the checkout's copy is
     enough here.
     """
+    if not full_sweep_enabled():
+        print("SKIP the full 5,410-question sweep: this run is the every-PR "
+              "CORE subset, which passed above. The full sweep runs only when "
+              "features/features.json or the feature catalogue (or its twin) "
+              "changed - ci.yml's backend-shard job sets "
+              f"{FULL_SWEEP_ENV}=1 for that run. This is NOT a pass for the "
+              "full sweep: it did not run here.")
+        return
     twin = REPO / "jarvis-backend" / "jarvis_quick.py"
     check("the swept matcher has a byte-identical twin in jarvis-backend",
           twin.is_file() and twin.read_bytes() == (HERE / "jarvis_quick.py").read_bytes())
@@ -1247,7 +1658,29 @@ def t_the_measured_report_quote_is_reproduced():
               new.reply[:160] if new else "")
 
 
-def main():
+def main(argv=None):
+    """Run this suite.
+
+    `--core` runs ONLY the fast core subset, and is how ci.yml's named
+    every-PR guard calls it (`backend/test_capability_answers.py --core`): the
+    239 pinned cases, without the other measured lists this suite carries,
+    because those already run in the required backend sweep. The full suite -
+    every measured list plus the core subset - is what `run_suites.py` runs,
+    and the full 5,410-question sweep inside it is gated on
+    JARVIS_CAPABILITY_FULL_SWEEP=1 (see full_sweep_enabled above).
+    """
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if "--core" in argv:
+        print("--- t_the_core_subset_holds (--core: the every-PR subset only) ---")
+        try:
+            t_the_core_subset_holds()
+        except Exception:
+            FAILED.append("t_the_core_subset_holds")
+            traceback.print_exc()
+        print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+        if FAILED:
+            print("failed: " + ", ".join(FAILED))
+        return 1 if FAILED else 0
     for fn in (t_the_owner_trap_sentences,
                t_the_owner_s_phone_file_question,
                t_the_phone_door_and_a_pc_only_row_are_both_said_plainly,
@@ -1256,6 +1689,7 @@ def main():
                t_a_feature_question_with_and_reaches_its_row,
                t_the_last_fourteen_measured_questions_reach_their_rows,
                t_the_exact_name_lane_steals_no_other_row_s_question,
+               t_the_core_subset_holds,
                t_no_ordinary_shape_lost_its_row,
                t_the_measured_availability_questions,
                t_the_measured_howto_questions,
