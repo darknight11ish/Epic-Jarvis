@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -110,6 +111,20 @@ def _inside(path, parent):
         return False
 
 
+def _command_name(token):
+    """The last path part of one command word, whichever slash it was written with.
+
+    Both separators are split on, not just this platform's: a command line
+    handed to a guard can spell a path in the other platform's style, and this
+    guard runs on Linux in CI as well as on the owner's Windows PC. The whole
+    point is a case the suite pins - `C:\\Python312\\Scripts\\pip.exe` must read
+    as `pip` on a POSIX runner too. `Path(token).name` follows only THIS
+    platform's separator, so on POSIX it hands back the whole string and the
+    manager is missed.
+    """
+    return re.split(r"[\\/]", str(token))[-1].lower()
+
+
 def manager_from_command(command):
     """"pip" or "uv" when the command line says which manager will run.
 
@@ -120,7 +135,7 @@ def manager_from_command(command):
     """
     tokens = [str(token) for token in command]
     for index, token in enumerate(tokens):
-        name = Path(token).name.lower()
+        name = _command_name(token)
         if name.endswith(".exe"):
             name = name[:-4]
         if name in ("pip", "pip3"):
