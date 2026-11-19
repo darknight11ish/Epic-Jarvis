@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The Wi-Fi reconnect checkbox now shows the state the PC really holds',
     'An unknown lane name no longer becomes a cloud request',
-    "A recording can be attached in the phone's chat - the owner's `.m4a` voice memo now attaches, and the PC transcribes it",
-    'A preset switch can no longer load the pooled model on the everyday lane, and a preset no longer answers "applied" without reading the lane',
-    'Reflective Coach and Pictures & Screens now run on all three graphics cards',
-    'Pictures into ONE PDF, and one picture into another format',
+    'Two CI guards the external review asked for: the capability core subset runs on every pull request, and a desktop lockfile desync now blocks a merge',
+    "The tool diet can no longer hide a tool the owner's own words name",
+    'The deploy tool knows the local-model-guard patch',
 )
 
 
