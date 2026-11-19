@@ -1629,6 +1629,13 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _goals_question(text)
     if got is not None:
         return got
+    # The project store's three reads (2026-11-19, PM1): "what am I working
+    # on", "what should I work on next" and "what's blocking X", answered from
+    # projects.db in one short sentence instead of the model's guess. Whole
+    # question shapes only (their own regexes), read-only, no card.
+    got = _projects_question(text)
+    if got is not None:
+        return got
     got = _price_radar_flight_question(text, now)
     if got is not None:
         return got
@@ -10305,6 +10312,344 @@ def _goals_question(raw) -> Optional[Intent]:
         return Intent("goal_capability")
     return None
 
+
+
+# --------------------------------------------------------------------------
+# The project store's three reads (2026-11-19, PM1)
+# --------------------------------------------------------------------------
+# jarvis_projects.py keeps the owner's projects in projects.db, and this PR
+# adds a plan store to that SAME file (docs/JARVIS-API.md section 88.7). These
+# are the only three things this step adds to chat: no route, no app screen,
+# no model tool and no card. Each answer names the file it read and the date
+# it read it, and each empty answer is honest - "nothing is recorded" is a
+# real answer, never an invented project or item.
+#: How many project names one answer shows (the rest is "and N more").
+_MAX_PROJECT_NAMES = 5
+#: How many next things one answer names, as every quick answer caps.
+_MAX_NEXT_ITEMS = 3
+PROJECTS_MISSING = ("Your PC's Jarvis cannot keep projects yet - run apply-patches.ps1 "
+                    "on the PC.")
+
+
+def _project_date(now: Optional[float]) -> str:
+    """The day the answer read its file, in the same shape the defect-register
+    answer names (`YYYY-MM-DD`)."""
+    return time.strftime("%Y-%m-%d", time.localtime(time.time() if now is None else now))
+
+
+def _project_count(n, word: str) -> str:
+    n = int(n)
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def _project_status_words(status) -> str:
+    return str(status or "").replace("_", " ")
+
+
+def _project_unreadable(date: str) -> str:
+    return (f"I cannot read projects.db on this PC right now, so I will not guess "
+            f"(read {date}).")
+
+
+def _project_brief(PJ, project: dict, plan: Optional[dict] = None) -> str:
+    """One project as an answer's own words: its kind, its plan state if set,
+    its work list, its benchmark count and its plan size. No instruction, no
+    note and no number is quoted."""
+    bits = [str(project.get("kind") or "project")]
+    state = (plan or {})
+    if state.get("status"):
+        bits.append(f"status {_project_status_words(state['status'])}")
+    if state.get("target_date"):
+        bits.append(f"target {state['target_date']}")
+    work = project.get("work_list") or {}
+    if work.get("name"):
+        bits.append(f'work list "{work["name"]}"')
+    else:
+        bits.append("no work list")
+    app = project.get("app") or {}
+    if app.get("name"):
+        bits.append(f'app "{app["name"]}"')
+    bits.append(_project_count(int(project.get("benchmarks") or 0), "benchmark"))
+    items = int((state or {}).get("work_items") or 0)
+    if items:
+        ready = int(state.get("ready") or 0)
+        bits.append(_project_count(items, "work item")
+                    + (f" ({ready} ready)" if ready else ""))
+    return f'"{project["name"]}" (' + "; ".join(bits) + ")"
+
+
+def _project_working_words(PJ, date: str) -> str:
+    """"What am I working on?": every project, its kind, work list and plan
+    size, from projects.db. Read-only - nothing is created when there is no
+    projects.db, and an empty store is SAID, not dressed up."""
+    try:
+        store = PJ.get()
+        if not store.exists():
+            return (f"You have no projects on this PC yet - projects.db does not exist "
+                    f"(read {date}).")
+        projects = store.list()
+        if not projects:
+            return (f"You have no projects on this PC - projects.db has no project rows "
+                    f"(read {date}).")
+        counts = store.plan_counts()
+    except Exception:                       # noqa: BLE001 - a read that failed
+        return _project_unreadable(date)
+    coding = sum(1 for p in projects if p.get("kind") == "coding")
+    life = len(projects) - coding
+    shown = projects[:_MAX_PROJECT_NAMES]
+    briefs, plan_read = [], True
+    for project in shown:
+        plan = None
+        if plan_read:
+            try:
+                plan = store.plan_state(project.get("id"))
+            except Exception:               # noqa: BLE001 - show it without the plan
+                plan_read = False
+        briefs.append(_project_brief(PJ, project, plan or {}))
+    more = len(projects) - len(shown)
+    said = (f"You have {_project_count(len(projects), 'project')} on this PC "
+            f"({coding} coding, {life} life). projects.db (read {date}): "
+            + "; ".join(briefs) + (f"; and {more} more" if more else "") + ".")
+    if plan_read:
+        totals = {"milestones": 0, "work_items": 0, "ready": 0, "events": 0}
+        for plan in counts.values():
+            for key in totals:
+                totals[key] += int(plan.get(key) or 0)
+        if any(totals.values()):
+            said += (f" The plan store holds {_project_count(totals['milestones'], 'milestone')}, "
+                     f"{_project_count(totals['work_items'], 'work item')} "
+                     f"({totals['ready']} ready) and "
+                     f"{_project_count(totals['events'], 'event')}.")
+        else:
+            said += (" No milestones, work items or events are recorded in the plan "
+                     "store yet.")
+    else:
+        said += " The plan store could not be counted right now."
+    return said
+
+
+def _project_next_item_words(items: list) -> str:
+    """"B, then A, then C" - each next thing with the one or two facts that
+    make it that answer (its project and priority/due date, or the goal it is
+    a step of)."""
+    parts = []
+    for item in items:
+        if item.get("kind") == "work_item":
+            tail = []
+            if item.get("project"):
+                tail.append(str(item["project"]))
+            if item.get("priority") is not None:
+                tail.append(f"priority {item['priority']}")
+            if item.get("by"):
+                tail.append(f"due {item['by']}")
+            parts.append(f'"{item["text"]}"' + (f" ({'; '.join(tail)})" if tail else ""))
+        elif item.get("kind") == "goal":
+            parts.append(f'"{item["text"]}" (next step of the goal "{item.get("goal")}")')
+        else:
+            parts.append(f'"{item["text"]}" '
+                         f'({item.get("project") or "work list"} work-list item)')
+    return "; ".join(parts)
+
+
+def _project_next_words(PJ, date: str, sched, project_name: Optional[str] = None) -> str:
+    """"What should I work on next?": the store's one union (`project_next`:
+    ready work items by priority then due date, active goals' next open step,
+    and each project's first open work-list item). One answer, not three."""
+    try:
+        store = PJ.get()
+        if not store.exists():
+            return (f"Nothing is ready to work on right now - projects.db does not exist "
+                    f"on this PC yet (read {date}).")
+        scope = None
+        if project_name:
+            found = _project_resolve(store, project_name)
+            if found is None or found[0] != "project":
+                return (f"I don't see a project called \"{project_name}\" in projects.db "
+                        f"(read {date}), so I won't guess.")
+            scope = found[1]
+        out = store.project_next(_MAX_NEXT_ITEMS, sched=sched,
+                                 project_id=(scope["id"] if scope else None))
+    except Exception:                       # noqa: BLE001 - a read that failed
+        return _project_unreadable(date)
+    items, sources = out["items"], out["sources"]
+    if items:
+        if scope:
+            return (f'Next in the "{scope["name"]}" project, from projects.db and its '
+                    f"work list (read {date}): " + _project_next_item_words(items) + ".")
+        return (f"Next on this PC, from projects.db and the goal and work-list sources "
+                f"(read {date}): " + _project_next_item_words(items) + ".")
+    if scope:
+        parts = ["projects.db has no ready work item"]
+        parts.append("the scheduler has no open work-list item for it"
+                     if sources.get("work_lists") is not None
+                     else "I could not read the scheduler's work list")
+        return (f'Nothing is ready to work on in the "{scope["name"]}" project right '
+                f"now (read {date}): " + "; ".join(parts) + ".")
+    parts = ["projects.db has no ready work item"]
+    if sources.get("goals") is None:
+        parts.append("I could not read goals.db")
+    else:
+        parts.append("goals.db has no active goal step")
+    if sources.get("work_lists") is None:
+        parts.append("I could not read the scheduler's work lists")
+    else:
+        parts.append("the scheduler has no open work-list item")
+    return (f"Nothing is ready to work on right now (read {date}): "
+            + "; ".join(parts) + ".")
+
+
+def _project_resolve(store, target) -> Optional[tuple]:
+    """("project", summary) or ("work_item", item view) for a name the owner
+    said, or None. An EXACT name first, then ONE unambiguous substring - two
+    candidates are "I don't know which you mean", never a guess."""
+    wanted = " ".join(str(target or "").casefold().split())
+    if not wanted:
+        return None
+    projects = store.list()
+    for project in projects:
+        if str(project.get("name") or "").casefold() == wanted:
+            return ("project", project)
+    items = store.work_items()
+    for item in items:
+        if str(item.get("title") or "").casefold() == wanted:
+            return ("work_item", item)
+    found = [p for p in projects if wanted in str(p.get("name") or "").casefold()]
+    if len(found) == 1:
+        return ("project", found[0])
+    found = [i for i in items if wanted in str(i.get("title") or "").casefold()]
+    if len(found) == 1:
+        return ("work_item", found[0])
+    return None
+
+
+def _project_blocking_words(PJ, date: str, target: str) -> str:
+    """"What's blocking X?": the store's recorded `blocks` links, and nothing
+    invented. With no edge rows at all the answer says exactly that; a link
+    whose blocker is done says "nothing is blocking it now"; a recorded open
+    blocker is named. X may be a project or a work item, by name."""
+    if not str(target or "").strip():
+        return (f"Tell me which project or work item you mean, and I will read the "
+                f"blockers recorded in projects.db (read {date}).")
+    target = " ".join(str(target).split())
+    try:
+        store = PJ.get()
+        if not store.exists():
+            return (f"There is no projects.db on this PC yet, so no blocker is recorded "
+                    f"for \"{target}\" (read {date}).")
+        found = _project_resolve(store, target)
+        if found is None:
+            return (f"I don't see a project or work item called \"{target}\" in "
+                    f"projects.db (read {date}), so I won't guess.")
+        kind, row = found
+        if kind == "project":
+            if store.edge_count(project_id=row["id"], kind="blocks") == 0:
+                return (f'No blockers are recorded for the "{row["name"]}" project in '
+                        f"projects.db (read {date}).")
+            blocked = store.blocked_items(row["id"])
+            if not blocked:
+                return (f'Nothing is blocking the "{row["name"]}" project right now - '
+                        f"every blocker recorded in projects.db is already done "
+                        f"(read {date}).")
+            parts = []
+            for pair in blocked[:_MAX_NEXT_ITEMS]:
+                names = ", ".join(
+                    f'"{b["title"]}" ({_project_status_words(b["status"])})'
+                    for b in pair["blockers"])
+                parts.append(f'"{pair["item"]["title"]}" is waiting on {names}')
+            more = len(blocked) - len(parts)
+            tail = (f" and {_project_count(more, 'more blocked item')}" if more > 0 else "")
+            said = (f'In the "{row["name"]}" project, '
+                    f'{_project_count(len(blocked), "item")} '
+                    f'{"are" if len(blocked) != 1 else "is"} blocked (read {date}): '
+                    + "; ".join(parts) + tail + ".")
+            return said
+        chain = store.blocking_chain(row["id"])
+        title = chain["item"]["title"]
+        if chain["edges"] == 0:
+            return (f'No blockers are recorded for "{title}" in projects.db '
+                    f"(read {date}).")
+        if not chain["blockers"]:
+            return (f'Nothing is blocking "{title}" right now - every blocker recorded '
+                    f"in projects.db is already done (read {date}).")
+        names = ", ".join(
+            f'"{b["title"]}" ({_project_status_words(b["status"])})'
+            for b in chain["blockers"][:5])
+        return f'"{title}" is blocked by {names} (projects.db, read {date}).'
+    except Exception:                       # noqa: BLE001 - a read that failed
+        return _project_unreadable(date)
+
+
+_PROJECT_WORKING_RX = re.compile(
+    r"^(?:so\s+)?what\s+am\s+i\s+(?:currently\s+)?working\s+on"
+    r"(?:\s+(?:right\s+now|today|at\s+the\s+moment))?$|"
+    r"^(?:so\s+)?what\s+projects?\s+(?:am\s+i\s+working\s+on|do\s+i\s+have|"
+    r"are\s+(?:open|active))$")
+_PROJECT_NEXT_RX = re.compile(
+    r"^(?:so\s+)?what\s+should\s+i\s+work\s+on\s+next"
+    r"(?:\s+(?:on|for|in)\s+(?P<name>.{1,80}))?$")
+_PROJECT_NEXT_MINE_RX = re.compile(
+    r"^(?:so\s+)?what'?s\s+next\s+(?:on|for|in)\s+(?:my\s+)?projects?$")
+_PROJECT_BLOCKING_RX = re.compile(
+    r"^(?:so\s+)?what(?:'s|\s+is)\s+blocking\s+(?P<name>.{1,90})$|"
+    r"^(?:so\s+)?what\s+blocks\s+(?P<name2>.{1,90})$|"
+    r"^(?:so\s+)?what(?:'s|\s+is)\s+the\s+blocker\s+(?:on|for)\s+(?P<name3>.{1,90})$")
+
+
+def _projects_question(raw) -> Optional[Intent]:
+    """The three project questions, as whole sentences only. A near miss
+    ("my project is on the table", "that's blocking the door") is NOT ours and
+    keeps going to the model, exactly as before this lane existed."""
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?(?:jarvis|atlas)[,: ]+", "", text)
+    if not text or len(text) > 200:
+        return None
+    found = _PROJECT_BLOCKING_RX.fullmatch(text)
+    if found:
+        name = (found.groupdict().get("name") or found.groupdict().get("name2")
+                or found.groupdict().get("name3") or "").strip()
+        name = re.sub(r"^(?:the|my)\s+", "", name)
+        name = re.sub(r"\s+(?:project|work\s+item|item)$", "", name)
+        name = re.sub(r"\s+(?:right\s+now|now|at\s+the\s+moment)$", "", name)
+        if not name:
+            return None
+        return Intent("project_blocking", {"target": name})
+    found = _PROJECT_NEXT_RX.fullmatch(text)
+    if found:
+        name = (found.groupdict().get("name") or "").strip()
+        name = re.sub(r"^(?:the|my)\s+", "", name)
+        name = re.sub(r"\s+(?:project|work\s+item|item)$", "", name)
+        return Intent("project_next", {"name": name} if name else {})
+    if _PROJECT_NEXT_MINE_RX.fullmatch(text):
+        return Intent("project_next")
+    if _PROJECT_WORKING_RX.fullmatch(text):
+        return Intent("project_working")
+    return None
+
+
+def _run_project_answers(name: str, f: dict, sched, now: Optional[float]) -> Result:
+    """Answer one of the three questions from projects.db. Every unreadable
+    state is one plain sentence - never a count, a name or an item the store
+    did not give."""
+    try:
+        import jarvis_projects as PJ
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(PROJECTS_MISSING, name, private=True)
+    date = _project_date(now)
+    fields = f if isinstance(f, dict) else {}
+    try:
+        if name == "project_working":
+            said = _project_working_words(PJ, date)
+        elif name == "project_next":
+            wanted = str(fields.get("name") or fields.get("project") or "")
+            said = _project_next_words(PJ, date, sched,
+                                       project_name=wanted or None)
+        else:
+            said = _project_blocking_words(PJ, date, str(fields.get("target") or ""))
+    except Exception:                       # noqa: BLE001 - never a chat crash
+        said = _project_unreadable(date)
+    # The reply quotes the owner's own project and work-item names, so it is
+    # kept on screen like every other answer built from the owner's list.
+    return Result(said, name, private=True)
 
 
 # --------------------------------------------------------------------------
@@ -30064,6 +30409,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_android(n, _android_state())
     if n in _GOAL_INTENTS:
         return _run_goals(n, f, _client_surface(peer, local, client_surface))
+    if n in _PROJECT_INTENTS:
+        # The project store's three reads (2026-11-19, PM1): projects.db, the
+        # goals store and the one scheduler, read and nothing else. No card,
+        # no write, no model; the answer names its file and the date it read.
+        return _run_project_answers(n, f, sched, now)
     if n == "price_radar_flight":
         return _run_price_radar_flight(f)
     if n in _PRICE_RADAR_INTENTS:
@@ -31122,6 +31472,11 @@ _PRICE_RADAR_INTENTS = frozenset({"price_radar_state", "price_radar_about", "pri
 #: The goal answers (2026-10-31): fixed words plus the PC's real goal list.
 _GOAL_INTENTS = frozenset({"goal_capability", "goal_list", "goal_state", "goal_about", "goal_update"})
 
+#: The project store's three reads (2026-11-19, PM1). A DISPATCH set: every
+#: name here is routed to `_run_project_answers` before the rest of the chain,
+#: and each is listed in READ_ONLY_INTENTS because it changes nothing.
+_PROJECT_INTENTS = frozenset({"project_working", "project_next", "project_blocking"})
+
 #: The Android-builder answers (2026-10-31): fixed words, no card.
 _ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_needs",
                               "android_build_install"})
@@ -31287,6 +31642,11 @@ READ_ONLY_INTENTS = frozenset({
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
     "price_radar_book", "price_radar_lookup", "price_radar_track",
     "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
+    # The project store's three reads (2026-11-19, PM1): "what am I working
+    # on", "what should I work on next" and "what's blocking X" read
+    # projects.db (and, for the union, the goals store and the one scheduler)
+    # and write nothing - so none may take away what "cancel that" would undo.
+    "project_working", "project_next", "project_blocking",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
     "skill_menu_info",
@@ -32361,6 +32721,12 @@ UNTAGGED_RECORD_READS = frozenset({
     "self_code_lookup",
     "self_code_recent",
     "self_code_repo",
+    # The project store's three reads (2026-11-19, PM1): each answers from
+    # projects.db (and, for the union, the goals store and the one scheduler)
+    # in one sentence, writes nothing, raises no card and asks the client to
+    # do nothing - the family this gate exists for. Their purity (no write, no
+    # card, no file, an action still refused) is proved in test_projects.py.
+    "project_working", "project_next", "project_blocking",
 })
 
 

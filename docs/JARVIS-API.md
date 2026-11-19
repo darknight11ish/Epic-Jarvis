@@ -19098,11 +19098,15 @@ marked `"runnable": false`; Jarvis changing code (`project_edit`, after the
 facts (step 4); the chat-history `project` column (step 4 - nothing can
 set it until `/api/chat` carries a project id); and anything the Shareable
 switch would one day let out (it is a switch only; nothing is ever sent).
-Goals (section 59) are on main now, but the link is not built yet: a
-project still keeps a list of goal ids on its own side, unchecked, and
-neither app can set or show them; the goals.db `project` column, the
-`GET /api/goals?project=` filter and a goal step's measure are still to come
-(cohesiveness audit, 2026-09-29).
+Goals (section 59) are on main now, but the link from a project to its goals
+is not built yet: a project still keeps a list of goal ids on its own side,
+unchecked, and neither app can set or show them; the goals.db `project`
+column and the `GET /api/goals?project=` filter are still to come
+(cohesiveness audit, 2026-09-29). **A goal step's `measure` is NOT still to
+come** - it is built and documented in section 101: a step is met when its
+benchmark's latest number reaches the target, and `step_states` marks
+`met_by_number`. This paragraph said the measure was still to come until
+2026-11-19; the measure had already shipped when section 101 was written.
 
 ### 88.1 Who may do what, and which ask first
 
@@ -19272,6 +19276,121 @@ when Jarvis made the mark).
 
 **Kept in backups and checked by data health** (§45, §49) since the same
 audit: `projects.db` was missing from both.
+
+### 88.7 The plan store and the three plan answers (added 2026-11-19)
+
+The project-management step 1 (`backend/jarvis_projects.py`, shipped whole).
+`projects.db` already existed, already held the owner's projects and was
+already in the encrypted backup (§45) - so this is an **extension of that one
+file**, not a migration to a second store and not a second database. No route,
+no app screen, no model tool and no card is added by this step: it is the
+store, its reads, and three deterministic chat answers.
+
+**What is added.** Four new tables appended after the five originals, and
+seven new columns appended to `projects` through the existing guarded
+`ALTER TABLE ... ADD COLUMN` block. Additive only: nothing is dropped,
+renamed or rebuilt, ids stay 32-hex, and no foreign key is declared (this file
+keeps that shape everywhere). All seven columns are **nullable** - that is the
+rule the migration keeps rather than a style choice, because
+`ALTER TABLE ... ADD COLUMN x TEXT NOT NULL` with no default raises
+`OperationalError` and changes nothing; a nullable column always applies. A
+refused ALTER is an availability failure ("cannot read projects"), never data
+loss: the exception leaves the store un-ready, the next call retries, and the
+table is unchanged.
+
+Before any of that runs, an EXISTING `projects.db` that really is about to gain
+something gets its own timestamped copy - `projects.db.before-migrate-<stamp>`,
+written through SQLite's own backup API by the migration helper itself, before
+the first `CREATE`/`ALTER` (owner ruling 5.2, 2026-11-19), in addition to
+`jarvis_backup.py`'s coverage of the file (§45). A file that is already
+up-to-date needs no migration and writes no backup, so there is never a trail
+of copies; a brand-new file has no rows to protect and gets none; and a backup
+that cannot be written **refuses the migration** - nothing is altered rather
+than the file being changed without a way back. The backup's name never ends
+in `.db`, so the backup module's list of source databases is unchanged.
+
+| Added to `projects` | Meaning |
+|---|---|
+| `objective`, `success_criteria` | the owner's own words for what this project is for and what done looks like |
+| `status`, `target_date` | `planned`/`active`/`paused`/`done`/`archived`, and a day (`YYYY-MM-DD`) |
+| `linked_repo`, `linked_note_path` | references only; nothing is fetched or opened by this step |
+| `slug` | optional display handle; it is **never** a key (the id stays 32-hex) |
+
+`milestones` (`id`, `project`, `title`, `status`, `due_date`, `position`,
+`created`, `changed`), `work_items` (`id`, `project`, `milestone`, `title`,
+`detail`, `status`, `priority`, `due_date`, `created`, `changed`),
+`work_edges` (`id`, `project`, `kind` in `blocks`/`parent_child`/`related`/
+`discovered_from`, `src`, `dst`, `created`; one row per link) and
+`project_events` (`id`, `project`, `at`, `kind`, `subject`, `detail`). An
+event row is **append-only**: a trigger refuses an `UPDATE` outright, the
+store exposes no way to rewrite or remove one event, and deleting a project
+takes its event history with it exactly as it already takes its benchmarks.
+Ids and transitions only - a title, a name or a number is never copied into
+the log.
+
+**Reading it (all pure, read-only, no write and no card).**
+`ready_next()` is the items that can be started now: not started or finished,
+their project not closed, and no OPEN `blocks` link pointing at them; ordered
+by priority (lower first), then due date (earlier first), then the order they
+were written, with NULLS LAST both ways. `blocking_chain(item)` is the open
+items that block one item directly or through other `blocks` links, walked
+once each so a circle already in the rows cannot hang it; it also says how
+many links point at the item **at all**, so "no blocker recorded" and "every
+blocker is done" stay different answers. `project_next()` is the ONE
+canonical "what's next", unioning this store's ready items with the two
+sources that already held next-work: an active goal's first open step
+(`jarvis_goals`, read-only) and each project's first open work-list item (the
+one scheduler, read-only). The Today cockpit's own next-step list is **not
+rewired** by this step - `project_next()` is the one answer the chat path
+uses, and Today keeps its existing projection until it is moved over
+deliberately. `project_doctor()` reports contradictory rows - an orphan row,
+a link to a missing item, a link across projects, a self-link, a closed item
+still blocked by an open one, an unknown status or link kind, and a circle of
+`blocks`/`parent_child` - and repairs none of them.
+
+Writing a plan is the store's own door (`add_milestone`, `add_work_item`,
+`set_work_item_status`, `add_edge`, `set_plan_fields`); no route calls them in
+this step. Before a `blocks` or `parent_child` link is written, a depth-first
+walk refuses a link that would close a circle and writes **nothing at all** -
+no edge, no event. `related` and `discovered_from` may cross projects;
+`blocks` and `parent_child` join two items of one project.
+
+**The three answers** (`backend/jarvis_quick.py`, before the model in the
+same fast path as every other deterministic answer; read-only, cardless, and
+kept on screen):
+
+- `"what am I working on?"` → the real projects with their kind, work list,
+  benchmark count and plan size, from `projects.db`.
+- `"what should I work on next?"` → `project_next()` (at most three items).
+  The one answer can be empty, and then it says so: *"Nothing is ready to
+  work on right now (read YYYY-MM-DD): projects.db has no ready work item;
+  goals.db has no active goal step; the scheduler has no open work-list
+  item."* - never an invented item.
+- `"what's blocking X?"` → X is a project or a work item, by name, resolved
+  exactly and then unambiguously (never guessed). With no link rows it
+  answers exactly *"No blockers are recorded for ... in projects.db (read
+  YYYY-MM-DD)."*; with a recorded open blocker it names it; with only done
+  blockers it says nothing is blocking it now.
+
+Every one of the three names the file it read and the date it read it, like
+the defect-register answer (§112), and every empty answer is a real answer.
+They are listed in `READ_ONLY_INTENTS` (they change nothing for "cancel that"
+to take back) **and** in `UNTAGGED_RECORD_READS` - the explicit 2026-11-19
+gate that lets a request carrying no provenance tag (the shape a script
+posts) use a record read, and nothing else. An action, a chat-filing intent
+and a file write still need the owner's own tagged words; the purity proof
+and those controls are in `backend/test_projects.py`.
+
+**What this step deliberately does not do:** no `/api/projects` shape change
+(the two apps' frozen contract keeps its exact keys - the plan fields are read
+by `plan_state()` only), no route, no tool, no gate row, no new patch, no
+backup change (`projects.db` was already covered), no scheduler/tasks/
+arbiter/plan change, and no Kanban or phone screen. Those are later steps.
+`backend/test_projects.py` proves all of it against real SQLite files in a
+temporary folder (never the owner's live `projects.db`), including a store
+shaped like the owner's own (2 coding projects, 1 app, 1 work list, 0
+benchmarks, 0 linked goals, 0 goals and 0 to-dos): `python3
+backend/test_projects.py`.
 
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 
