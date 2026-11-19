@@ -945,6 +945,142 @@ def tokens_for_turn(query: str, base: int, *, cap: int = 0) -> int:
     return max(lo, min(grown, hi))
 
 
+# ============================================================================
+#   The 2-strike local-failure fallback for coding turns (2026-11-19)
+# ============================================================================
+#
+# THE RULING (external review, 2026-11-19, 6.1): keep the deterministic
+# `complexity >= 0.40` pre-gate as Stage 1, and PAIR it with a 2-strike /
+# local-failure fallback for coding tasks - do NOT replace it with raw
+# log-probs. In this codebase that means: when a CODING turn has failed on this
+# PC TWICE in the SAME conversation (the local model returned no usable answer,
+# or the tool path failed), the third attempt may reach the cloud even though
+# its complexity score is under the threshold - and it still has to pass EVERY
+# safety gate choose() runs, every time, in the same order.
+#
+# WHY A COUNTER, when complexity is the pre-gate. A coding request can be long
+# on code and short on prose ("fix this" plus a stack trace), so its score can
+# sit under 0.40 while the local model demonstrably cannot answer it. Two
+# failed local attempts are direct evidence of exactly that, and they have
+# already cost the owner two turns - so the third may spend a little money
+# instead of failing a third time. TWO, not one: one failure can be a transient
+# load or a cancelled request, and a fallback that fires on it would spend
+# money on every hiccup.
+#
+# WHAT IT DOES NOT DO. It never bypasses a gate: the cloud-model, no-lane,
+# Lockdown, taint, image, file, screen, private, pasted-secret and budget gates
+# all still run, and it still needs the owner's yes / this PC's standing switch
+# at gate 6 - the fallback replaces the COMPLEXITY stage only. A private turn
+# with two strikes still answers here.
+#
+# KEYING AND RESET. Strikes are kept per CONVERSATION, in memory, keyed by the
+# conversation id the caller records against ("" when it has none). A NEW
+# conversation is a NEW key, so it starts at zero by construction;
+# `reset_local_failures()` forgets one explicitly for a caller that reuses an
+# id. The store is bounded and drops the oldest conversation first, so a
+# long-lived HUD cannot grow it without limit. It holds counts only - never a
+# word of the conversation.
+STRIKES_FOR_FALLBACK = 2
+_STRIKES_MAX_CONVERSATIONS = 128
+_LOCAL_FAILURES: dict = {}
+_LOCAL_FAILURES_LOCK = threading.Lock()
+
+
+def _conversation_key(conversation) -> str:
+    """The counter key for one conversation: printable, short, never a secret."""
+    text = "".join(c if c.isprintable() else " " for c in str(conversation or ""))
+    return " ".join(text.split())[:120]
+
+
+def local_failure_strikes(conversation: str = "") -> int:
+    """How many local failures have been recorded for one conversation."""
+    with _LOCAL_FAILURES_LOCK:
+        return int(_LOCAL_FAILURES.get(_conversation_key(conversation), 0) or 0)
+
+
+def note_local_failure(conversation: str = "") -> int:
+    """Record ONE local failure for a conversation, and return the new count.
+
+    ONE failure is a local attempt that produced no usable answer - the local
+    model failed, or the tool path failed. The caller is whatever saw the
+    failure (the relay after a local attempt that produced nothing usable);
+    `choose()` reads the count for a coding turn only, and only after every
+    safety gate has run. Nothing here decides anything, sends anything, or
+    keeps any of the owner's words.
+    """
+    key = _conversation_key(conversation)
+    with _LOCAL_FAILURES_LOCK:
+        count = int(_LOCAL_FAILURES.pop(key, 0) or 0) + 1
+        _LOCAL_FAILURES[key] = count
+        while len(_LOCAL_FAILURES) > _STRIKES_MAX_CONVERSATIONS:
+            _LOCAL_FAILURES.pop(next(iter(_LOCAL_FAILURES)), None)
+    return count
+
+
+def reset_local_failures(conversation: str = "") -> None:
+    """Forget a conversation's local-failure count.
+
+    A genuinely new conversation needs no call - it is a new key and starts at
+    zero. This is for a caller that REUSES one conversation id, and for a
+    caller that knows the conversation ended.
+    """
+    with _LOCAL_FAILURES_LOCK:
+        _LOCAL_FAILURES.pop(_conversation_key(conversation), None)
+
+
+#: The words the CODING preset itself already uses to recognise coding work
+#: (`jarvis_presets.by_id("coding").words`, read lazily so this module imports
+#: with no presets module at all). Only the fallback when that module cannot
+#: answer.
+_CODING_WORDS = ("code", "coding", "program", "debug", "bug", "python", "kotlin",
+                 "script", "compile", "repository", "git", "android", "app")
+
+
+def is_coding_turn(query: str, *, local_model: str = "",
+                   coding: Optional[bool] = None) -> bool:
+    """Is this turn a coding one? The ONE coding definition, shared by the
+    2-strike fallback here and by jarvis_chatbot_api's deep-answer tier.
+
+    THREE EXISTING SIGNALS, in order, and no new classifier:
+      * `coding` when the caller has its own answer (the tool in play - the
+        relay knows which tool set is loaded - and it wins, because a caller
+        that knows must not be overruled by a word match);
+      * the LOCAL MODEL'S NAME: a coder model loaded as the everyday model
+        ("qwen3-coder-...") means the owner is working in code;
+      * the Coding preset's own trigger words and applied state, which
+        `jarvis_presets` already owns for /api/work/recommend.
+    An unreadable answer reads as False: this only ever ADDS a second chance to
+    a coding turn, so a missed coding turn keeps the stage-1 gate - the safe
+    direction.
+    """
+    if coding is not None:
+        return bool(coding)
+    if local_model and re.search(r"cod(?:e|er|ing)", str(local_model), re.I):
+        return True
+    text = " ".join(str(query or "").lower().split())
+    if not text:
+        return False
+    try:
+        import jarvis_presets as P
+        if str(getattr(P, "choice", lambda: None)() or "") == "coding":
+            return True
+        row = P.by_id("coding") if hasattr(P, "by_id") else None
+        words = tuple(getattr(row, "words", ()) or ()) or _CODING_WORDS
+    except Exception:
+        words = _CODING_WORDS
+    # WHOLE WORDS only: the preset's own trigger list holds "app" and "git",
+    # and a plain substring test reads "happens" or "digit" as coding. A word
+    # misses the plural "apps"; erring toward NOT deep is the safe direction
+    # (the turn keeps the standard ceiling and Stage 1).
+    pattern = (r"(?<![A-Za-z0-9])(?:"
+               + "|".join(re.escape(str(w).lower()) for w in words if str(w).strip())
+               + r")(?![A-Za-z0-9])")
+    try:
+        return bool(re.search(pattern, text))
+    except re.error:
+        return False
+
+
 def lockdown_on() -> bool:
     """Is Lockdown on (jarvis_asks_first.py, 2026-09-28)? False without that
     module - the feature is not there. Its own reading fails closed (a
@@ -964,7 +1100,8 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            has_image: bool = False, conversation_tainted: bool = False,
            budget: Optional[Budget] = None, tainted: Optional[bool] = None,
            owner_said_yes: bool = False, has_screen: bool = False,
-           has_file: bool = False,
+           has_file: bool = False, conversation: str = "",
+           coding: Optional[bool] = None,
            **_extra) -> Decision:
     """Which lane answers this turn.
 
@@ -982,11 +1119,28 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
          or a FILE the owner attached (2026-10-29)
       2. private content matched     -> local
       3. a real secret was found     -> local, unconditionally
-      4. not complex enough          -> local
+      4. not complex enough          -> local, UNLESS the 2-strike fallback
+                                        below applies to a coding turn
       5. budget spent                -> local
       6. the owner has not said yes  -> local, with the cloud lane OFFERED
          for THIS question
       otherwise                      -> the first cloud lane
+
+    STAGE 1 AND THE 2-STRIKE PAIRING (2026-11-19, external review ruling 6.1).
+    Gate 4 is still the deterministic `complexity >= threshold` pre-gate - it
+    was not replaced by anything statistical. It is now PAIRED with a fallback
+    that only ever ADDS a way out for one narrow, measured case: a CODING turn
+    whose local attempts have failed TWICE in the SAME conversation
+    (`note_local_failure(conversation)`, read here) may pass gate 4 even under
+    the threshold, because two failures are direct evidence the local model
+    cannot answer it. "Coding" is the existing signal
+    (`is_coding_turn`: the caller's tool-in-play answer, a coder model's name,
+    or the Coding preset's own trigger words). It replaces NOTHING: every gate
+    above gate 4 and both gates after it still run, the order is unchanged, and
+    gate 6 still demands the owner's yes / this PC's standing switch. So a
+    private coding turn with two failures still answers here, and a turn with
+    one failure keeps the stage-1 gate. The count is keyed by `conversation`,
+    so a new conversation starts at zero; it holds counts only, never words.
 
     Gates 1b, 2, 3 and 4 all come BEFORE the budget and the offer, and that is
     the policy rather than an accident: there is no budget to spend and no offer
@@ -1170,7 +1324,18 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision(
             "secret", f"the message contains what looks like {secret}, not "
                       f"just a word for one, so it stayed on this machine")
-    if c < float(_cfg("routing", "complexity_threshold", 0.40) or 0.40):
+    # GATE 4 - STAGE 1, the deterministic complexity pre-gate (ruling 6.1 keeps
+    # it), PAIRED with the 2-strike fallback for coding turns. The fallback can
+    # only turn a would-be local answer into "carry on to gate 5", and only for
+    # a coding turn that failed locally twice in THIS conversation: every gate
+    # above has already passed, and gates 5 and 6 still run below. It never
+    # lifts a refusal, and it never runs for a non-coding turn.
+    threshold = float(_cfg("routing", "complexity_threshold", 0.40) or 0.40)
+    strikes = local_failure_strikes(conversation)
+    fallback = (c < threshold
+                and strikes >= STRIKES_FOR_FALLBACK
+                and is_coding_turn(query, local_model=local_model, coding=coding))
+    if c < threshold and not fallback:
         return local_decision("complexity", f"complexity {c} is under the threshold")
 
     b = budget or Budget.load()
@@ -1179,6 +1344,14 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision("budget", f"the {which} cloud budget is spent")
 
     lane = lanes[0]
+    # The lead-in both the offer and the escalation reason use. The fallback's
+    # own sentence says WHY a turn under the threshold is here at all, in the
+    # route header the owner can read.
+    if fallback:
+        lead = (f"complexity {c} is under the threshold, but this coding turn "
+                f"failed on this PC {strikes} times in this conversation")
+    else:
+        lead = f"complexity {c}"
     # WHO SAID YES, and it can only ever be one of three (2026-10-27):
     #   * `owner_said_yes` - the per-question click both apps already had
     #     ("Try the cloud model"), unchanged;
@@ -1199,17 +1372,17 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
     standing = False if clicked else standing_escalation()
     if not (clicked or standing or asked):
         d = local_decision(
-            "offer", f"complexity {c}: {lane} could answer this, but the cloud is used "
+            "offer", f"{lead}: {lane} could answer this, but the cloud is used "
                      f"only when you say yes for this question")
         d.offer = lane
         return d
     auto = bool(asked or standing)
     if asked:
-        why = f"complexity {c}, budget available, and you asked for the cloud in this message"
+        why = f"{lead}, budget available, and you asked for the cloud in this message"
     elif clicked:
-        why = f"complexity {c}, budget available, and you said yes for this question"
+        why = f"{lead}, budget available, and you said yes for this question"
     else:
-        why = (f"complexity {c}, budget available, and cloud escalation is on for this PC "
+        why = (f"{lead}, budget available, and cloud escalation is on for this PC "
                f"in the Presets menu")
     return Decision(lane, why, "escalate", c,
                     inject_memory=False, tainted=conversation_tainted, auto=auto)
