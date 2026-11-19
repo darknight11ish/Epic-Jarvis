@@ -293,10 +293,11 @@ RUNS_PER_PAGE = 5
 #: How many rows ONE PAGE of a pull-request / issue / repository list read asks
 #: for when the single `PER_PAGE` read was CUT at `MAX_BYTES`. A pull request row
 #: carries its whole body and both repositories' objects, so the cap is reached by
-#: COUNT, not by one huge row: the field battery's ten open pull requests measured
-#: 227,073 characters against a 200,000 cap on 2026-11-18, so the JSON could not
-#: be parsed and the answer was `CUT_ANSWER` with no numbers in it (the diagnosis
-#: is `.dsh-scratch/wave21/coverage/GITHUB-FIELD-FAIL.md`). Five rows fit one
+#: COUNT, not by one huge row: a ten-row open pull request list measured
+#: 227,073 characters against a 200,000 cap on 2026-11-18 (and the field run's
+#: ten were reported even larger), so the JSON could not be parsed and the answer
+#: was `CUT_ANSWER` with no numbers in it (the diagnosis is
+#: `.dsh-scratch/wave21/coverage/GITHUB-FIELD-FAIL.md`). Five rows fit one
 #: read, and `_list_pages` re-reads the SAME list five at a time ONLY after that
 #: cut - an ordinary list still costs its one read.
 LIST_PAGE = 5
@@ -4576,9 +4577,10 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
             and answers and CUT_MARKER in str(answers[-1][1] or "")):
         # A LIST BIGGER THAN ONE READ IS READ AGAIN IN PAGES, NOT REFUSED
         # (2026-11-18). The cap is a hard byte cut on one GET, so a long list
-        # arrives as unparseable JSON even though GitHub answered it. The field
-        # battery's ten open pull requests measured 227,073 characters against
-        # the 200,000 cap and the reply was `CUT_ANSWER` - "longer than Jarvis
+        # arrives as unparseable JSON even though GitHub answered it. A ten-row
+        # open pull request list measured 227,073 characters against the
+        # 200,000 cap (the field run's ten were reported even larger) and the
+        # reply was `CUT_ANSWER` - "longer than Jarvis
         # reads in one go" - with no number in it. `_paged_list_result` reads the
         # same list again a few rows at a time and joins the pages, so the answer
         # is the list and every row it states. ONLY after a cut: a small list
@@ -4939,12 +4941,12 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
     doc, err = _read(fetch, r.steps[0].path if r.steps else "", headers, token)
     list_truncated = False
     if err == CUT_ANSWER:
-        # The open pull requests are more than ONE read holds - the field
-        # battery's ten measured 227,073 characters against the 200,000 cap on
-        # 2026-11-18 - so the same list is read again in pages instead of
-        # refusing the cockpit the owner asked for. `MAX_PRS` is the most this
-        # read names, and the header says "at least" when that many was reached
-        # (the list may hold more).
+        # The open pull requests are more than ONE read holds - a ten-row list
+        # measured 227,073 characters against the 200,000 cap on 2026-11-18 (the
+        # field run's ten were reported even larger) - so the same list is read
+        # again in pages instead of refusing the cockpit the owner asked for.
+        # `MAX_PRS` is the most this read names, and the header says "at least"
+        # when that many was reached (the list may hold more).
         doc, err, list_truncated = _list_pages(
             fetch, r.steps[0].path if r.steps else "", headers, token,
             limit=max(MAX_PRS, LIST_PAGE))
@@ -7199,9 +7201,10 @@ def _list_pages(fetch: Callable, path: str, headers: dict, token: str, *,
     WHY THIS EXISTS (2026-11-18). A list read asks for `PER_PAGE` rows in ONE
     answer, and the read layer applies a hard byte cut (`MAX_BYTES`) to that one
     answer. A pull request row carries its whole body and both repositories'
-    objects, so the cap is reached by COUNT, not by one huge row: the field
-    battery's ten open pull requests measured 227,073 characters against the
-    200,000 cap, the JSON could not be parsed, and the answer became
+    objects, so the cap is reached by COUNT, not by one huge row: a ten-row
+    open pull request list measured 227,073 characters against the 200,000 cap
+    on 2026-11-18 (the field run's ten were reported even larger), the JSON
+    could not be parsed, and the answer became
     `CUT_ANSWER` - "longer than Jarvis reads in one go" - about a list GitHub
     had really sent. This reads the SAME list `LIST_PAGE` rows at a time (a page
     of five fits one read) and joins the pages, de-duplicated by their own
