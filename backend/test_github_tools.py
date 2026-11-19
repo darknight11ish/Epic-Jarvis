@@ -4569,6 +4569,178 @@ def t_an_invented_target_is_refused_before_anything_else_is_sent():
           not asked, asked)
 
 
+# --------------------------------------------------------------------------
+#   github_search: the REAL tool path against a fake transport (gap 3)
+# --------------------------------------------------------------------------
+#
+# The review's gap 3 (2026-11-19): `github_search` was the only GitHub tool
+# with no behavioural test. Its body is `jarvis_research` (the read-only
+# library search) reached through `jarvis_agent`'s own Tool contract:
+#
+#     Tool.prepare(args)  ->  jarvis_research.plan() + describe()   (no socket)
+#     Tool.execute(...)   ->  jarvis_research.run(approved=True) + matrix()
+#
+# The network lives behind `jarvis_research._get`, which `run()` reads at call
+# time (its `fetch` seam is exactly for this). These checks swap it for a fake,
+# swap the token lookup for "" (so nothing reads the owner's real credential),
+# and drive the SAME prepare()/execute() the model's call reaches.
+
+#: The idea and capabilities the fake searches answer for. The plan makes one
+#: request per (capability x language): two capabilities x Kotlin/Java = four.
+SEARCH_ARGS = {"idea": "a small plant watering reminder app",
+               "capabilities": ["offline sqlite sync", "background location"]}
+
+
+def _search_repo(name, stars, lic, pushed_days=10, archived=False):
+    """One repository in the shape GitHub's search answers with."""
+    import time
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                          time.gmtime(time.time() - pushed_days * 86400))
+    return {"full_name": name, "html_url": "https://github.com/" + name,
+            "stargazers_count": stars,
+            "license": {"spdx_id": lic} if lic else None,
+            "pushed_at": stamp, "archived": archived}
+
+
+def _search_tool(fetch, args=None):
+    """(state, card, result) from the REAL github_search Tool.
+
+    `fetch` stands in for the network; the token lookup answers "" so this
+    never touches the owner's saved GitHub token. Both are restored afterwards,
+    even when the tool raises.
+    """
+    import jarvis_research as R
+    was_get, was_token = R._get, R._token
+    R._get, R._token = fetch, (lambda: "")
+    try:
+        state, card = AG.TOOLS["github_search"].prepare(dict(args or SEARCH_ARGS))
+        return state, card, AG.TOOLS["github_search"].execute(dict(args or SEARCH_ARGS),
+                                                              state)
+    finally:
+        R._get, R._token = was_get, was_token
+
+
+def t_github_search_runs_the_real_path_against_a_fake_transport():
+    import tomllib
+    seen = []
+
+    def fetch(url):
+        seen.append(url)
+        # Answer by language, as the real search does: the SAME popular
+        # repository can appear under both, but GitHub's own items are the
+        # thing this test shapes - one list per request.
+        if "language%3Akotlin" in url:
+            return {"items": [
+                _search_repo("acme/good", 1200, "MIT"),              # ADOPT
+                _search_repo("acme/gpl", 800, "GPL-3.0"),            # copyleft
+                "not-a-repository",         # junk in the list is skipped, never crash
+            ]}
+        return {"items": [
+            _search_repo("acme/stale", 300, "Apache-2.0", pushed_days=400),
+        ]}
+
+    state, card, out = _search_tool(fetch)
+    check("the plan asks once per language, two per capability",
+          len(state.queries) == 4, len(state.queries))
+    check("... every request is the public repository search on api.github.com",
+          all(q.url.startswith("https://api.github.com/search/repositories?")
+              for q in state.queries)
+          and {q.host for q in state.queries} == {"api.github.com"},
+          [q.url for q in state.queries])
+    check("the approval card prints every request in full, and says no credential "
+          "is sent",
+          all(q.url in card for q in state.queries)
+          and "4 request(s)" in card
+          and "No account of yours is used and no credential is sent." in card, card[:400])
+    check("the real run sent exactly the URLs the card showed",
+          seen == [q.url for q in state.queries], (seen, [q.url for q in state.queries]))
+
+    check("a search returns the shaped Redundancy Matrix", out.get("ok") is True
+          and len(out.get("rows") or []) == 2, out)
+    by = {r["capability"]: r for r in out["rows"]}
+    row = by.get("offline sqlite sync") or {}
+    check("... one row per capability, best first, with the winner ADOPT",
+          row.get("verdict") == "ADOPT" and (row.get("best") or {}).get("name") == "acme/good",
+          row)
+    best = row.get("best") or {}
+    check("... the best row carries the graded fields the tool promises",
+          set(best) == {"name", "url", "stars", "licence", "archived",
+                        "days_since_push", "verdict", "why"}
+          and best.get("url") == "https://github.com/acme/good"
+          and best.get("stars") == 1200 and best.get("licence") == "mit"
+          and best.get("verdict") == "ADOPT", best)
+    check("... the candidates it rejected are kept, and a non-repository is dropped",
+          [c["name"] for c in row.get("considered") or []] == ["acme/gpl", "acme/stale"]
+          and "not-a-repository" not in json.dumps(out), row.get("considered"))
+    check("... nothing failed, so no request is reported as unaudited",
+          out.get("errors") == [], out.get("errors"))
+
+    # ---- an empty result says so honestly, never "nothing exists" --------
+    _state, _card, empty = _search_tool(lambda url: {"items": []})
+    check("an empty search is still an answer, not a failure",
+          empty.get("ok") is True and empty.get("errors") == [], empty)
+    check("... every capability reads BUILD CUSTOM, with no invented winner",
+          all(r["verdict"] == "BUILD CUSTOM" and r["best"] is None
+              for r in empty["rows"]) and len(empty["rows"]) == 2, empty)
+    check("... and says in words that this is weaker than 'nothing exists'",
+          all("weaker statement than 'nothing exists'" in (r.get("note") or "")
+              for r in empty["rows"]), empty["rows"])
+
+    # ---- a failed search is a REFUSAL, never an empty "nothing found" ----
+    def http_error(code, why):
+        return lambda url: (_ for _ in ()).throw(urllib.error.HTTPError(
+            url, code, why, {}, None))
+
+    for label, fetch, plain in (
+            ("403", http_error(403, "Forbidden"), "refused"),
+            ("429", http_error(429, "Too Many Requests"), "limiting"),
+            ("timeout", lambda url: (_ for _ in ()).throw(TimeoutError("timed out")),
+             "did not answer")):
+        _state, _card, failed = _search_tool(fetch)
+        why = str(failed.get("error") or "")
+        check(f"a {label} search is a refusal, not an empty result",
+              failed.get("ok") is False and "rows" not in failed, failed)
+        check(f"... its sentence says the audit was not made, in plain words ({label})",
+              "could not be searched" in why
+              and "not a finding that nothing exists" in why
+              and plain in why, why)
+        check(f"... and every failed request is named for the reader ({label})",
+              len(failed.get("errors") or []) == 4, failed.get("errors"))
+        check(f"... with no HTTP code in the sentence the owner would read ({label})",
+              "403" not in why and "429" not in why and "HTTPError" not in why, why)
+
+    # ---- the gate and the tier are unchanged -----------------------------
+    # Both the token lookups below are STUBBED, not read: this PC has a real
+    # GitHub token in Windows Credential Manager, and a suite must never read
+    # the owner's credential (the same rule `_Token` keeps for jarvis_github).
+    import jarvis_research as R
+    was = R._token
+    try:
+        R._token = lambda: "ghp_" + "testonly" * 5
+        with_token = AG._github_search_action_name()
+        R._token = lambda: ""
+        without_token = AG._github_search_action_name()
+    finally:
+        R._token = was
+    check("with a token saved the SAME tool is decided under its authenticated "
+          "read action", with_token == "github_search_run_authenticated", with_token)
+    check("with no token it is its plain read action",
+          without_token == "github_search_run", without_token)
+    check("both are its own gate actions, not the generic research ones",
+          AG.TOOLS["github_search"].gate_lookup_name({})
+          in ("github_search_run", "github_search_run_authenticated"))
+    check("... the tool is card-free (not in NEEDS_A_PERSON)",
+          "github_search" not in AG.NEEDS_A_PERSON)
+    for toml_path in TOMLS:
+        tiers = tomllib.loads(toml_path.read_text(encoding="utf-8"))["autonomy"]["tiers"]
+        check(f"{toml_path.name}: the two github_search actions still ship auto",
+              tiers.get("github_search_run") == "auto"
+              and tiers.get("github_search_run_authenticated") == "auto")
+        check(f"{toml_path.name}: ... and no other research egress was loosened",
+              tiers.get("web_research") == "ask"
+              and tiers.get("search_the_web") == "ask")
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {GATE_BASE}")
@@ -4645,7 +4817,8 @@ if __name__ == "__main__":
                    t_one_renderer_answers_both_ci_questions,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
                    t_review_tools_are_card_free_and_in_the_master_switch,
-                   t_an_invented_target_is_refused_before_anything_else_is_sent):
+                   t_an_invented_target_is_refused_before_anything_else_is_sent,
+                   t_github_search_runs_the_real_path_against_a_fake_transport):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

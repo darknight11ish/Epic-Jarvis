@@ -318,4 +318,61 @@ class ApproveAsksFingerprintTest {
         }
         error("$rel not found above ${System.getProperty("user.dir")}")
     }
+
+    // ---------------------- the monthly money cap's raise (gap 2, 2026-11-19) --
+
+    /**
+     * THE REVIEW'S GAP 2, PINNED ON THIS PHONE: the monthly money cap can be
+     * raised from chat, and that raise is ONE `raise_api_limit` card. The
+     * owner's ruling of 2026-10-11 - "Let the phone raise it too, with its own
+     * fingerprint" - is why a phone may answer it at all; this test says HOW:
+     * with this phone's own check, never by the card alone and never through a
+     * path that sends the decision unsigned.
+     *
+     * The PC's own gate row for the action is ("no", "local"): raising the cap
+     * sends nothing anywhere, but it lets Jarvis spend more of the owner's
+     * money and cannot be taken back - so it is risky, and it is NOT one of
+     * the read-only cards the owner allowed to be approved by the card alone
+     * (2026-11-01).
+     */
+    private val moneyRaise = PendingItem(
+        id = "money-raise",
+        action = "raise_api_limit",
+        risk = Risk(reversible = "no", reach = "local", classified = true),
+    )
+
+    @Test
+    fun `the money cap raise takes this phone's own fingerprint, never the card alone`() {
+        // Risky, and NOT small: the card-alone exemption is for read-only
+        // cards, so it can never reach the raise.
+        assertTrue(SecurityRules.riskyByToday(moneyRaise))
+        assertFalse(SecurityRules.isSmall(moneyRaise))
+        // Under the shipped default (only small read-only cards skip the
+        // check) the raise still asks, and the signed path is what it takes.
+        assertTrue(SecurityRules.approvalNeedsCheck(Security(), moneyRaise))
+        assertTrue(SecurityRules.approveTakesSignedPath(Security(), moneyRaise))
+        // The line under the buttons names this phone's fingerprint (or PIN).
+        assertEquals(
+            SecurityRules.APPROVE_ASKS_FINGERPRINT_OR_PIN,
+            SecurityRules.approveCheckWords(Security(), moneyRaise, SignedApproval.State.ON),
+        )
+        // Signed approvals ON - the shipped path - is the challenge + the
+        // fingerprint prompt with the approval key + the signature.
+        assertEquals(
+            SignedApproval.Path.SIGNED,
+            SignedApproval.pathFor(risky = true, state = SignedApproval.State.ON),
+        )
+        // Signed approvals OFF sends NOTHING: the offer path, not a no-check yes.
+        assertEquals(
+            SignedApproval.Path.OFFER,
+            SignedApproval.pathFor(risky = true, state = SignedApproval.State.OFF),
+        )
+        // CONTROL: the risk class carries the check. A card the PC says can be
+        // undone and stays local is not risky, so it asks nothing here.
+        val safe = PendingItem(
+            id = "safe",
+            risk = Risk(reversible = "yes", reach = "local", classified = true),
+        )
+        assertFalse(SecurityRules.approveTakesSignedPath(Security(), safe))
+    }
 }

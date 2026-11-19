@@ -859,6 +859,18 @@ def _load() -> dict:
         if not isinstance(v, dict):
             raise MoneyFileError("it is not in the expected shape")
         out[k] = v
+    # A MISSING "months" KEY IS AN UPGRADE; a month that is not an object is a
+    # refusal (2026-11-19, the month-rollover review). `got.get("months", {})`
+    # above already upgrades a file written before the key existed, and that is
+    # right - nothing is lost by starting the record at this month. But the
+    # month VALUES were never checked, and `spent_of`/`record_spend` then read
+    # a string as a service table: measured on this tree, a ledger holding
+    # {"months": {"2026-09": "oops"}} made `money_check` raise AttributeError
+    # instead of refusing, which is a crash where this module's whole contract
+    # is fail-closed ("an unreadable file must not read as nothing spent").
+    for row in out["months"].values():
+        if not isinstance(row, dict):
+            raise MoneyFileError("it is not in the expected shape")
     return out
 
 

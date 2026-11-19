@@ -975,6 +975,164 @@ def t_money_counted_per_month():
     check("December's next month is January", API.next_month_words() == "January 1")
 
 
+def write_ledger(months=None, limits=None):
+    """A real money file in THIS suite's temp settings folder, never the
+    owner's. `months`/`limits` are written as given (a missing key is omitted,
+    so the upgrade path can be driven too)."""
+    data = {"version": 1, "limits": dict(limits or {}), "prices": {}}
+    if months is not None:
+        data["months"] = months
+    p = API.money_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return p
+
+
+def t_money_rollover_boundary():
+    """THE `YYYY-MM` ROLLOVER BOUNDARY, pinned deterministically (review gap 1).
+
+    The rollover checks above read one September total under a moved clock;
+    they never WRITE across the boundary, so a `record_spend` that wrote into
+    the newest month in the file instead of THIS month - or a `spent_of` that
+    summed every month - would pass them. This drives the write against a real
+    `api-money.json` in this suite's own temp folder (never the owner's):
+
+      * a ledger whose newest month is LAST month, then a spend: the new month
+        gets its own entry and the old month is preserved, unchanged;
+      * the cap is PER MONTH: last month's spend (even at or past the cap) does
+        not consume this month's;
+      * the crossing is DECEMBER -> JANUARY, not just one month to the next;
+      * a ledger with no `months` key UPGRADES; one whose `months` - or a month
+        row inside it - is malformed REFUSES with `MoneyFileError` rather than
+        crashing. Both were measured on this tree; the month-row crash is what
+        `_load`'s own validation now closes.
+    """
+    clean()
+    # ---- the newest month is last month, then a spend ---------------------
+    write_ledger({"2026-08": {"openai_api": {"dollars": 1.25, "requests": 3}}},
+                 limits={"openai_api": 5.0})
+    API._now = lambda: at(2026, 9, 15)
+    check("the clock says the ledger's newest month is last month",
+          API.month_key() == "2026-09" and API.spent_of("openai_api") == 0.0)
+    # 1,000,000 in and 100,000 out at the default $0.25 / $2.00: $0.45.
+    used = API.record_spend("openai_api", "gpt-5-mini", 1_000_000, 100_000)
+    d = money_file()
+    check("a spend in the new month is counted there", abs(used - 0.45) < 1e-9, used)
+    check("... into its own YYYY-MM entry",
+          sorted((d.get("months") or {})) == ["2026-08", "2026-09"], d.get("months"))
+    check("... and the month before is preserved, byte for byte",
+          d["months"]["2026-08"] == {"openai_api": {"dollars": 1.25, "requests": 3}},
+          d["months"].get("2026-08"))
+    check("... and each month reads back its own total",
+          abs(API.spent_of("openai_api") - 0.45) < 1e-9
+          and abs(API.spent_of("openai_api", month="2026-08") - 1.25) < 1e-9)
+
+    # ---- the cap is per month --------------------------------------------
+    # Last month is AT its cap and this month has spent nothing: the service
+    # is allowed. A total summed over months would read "reached" here.
+    write_ledger({"2026-08": {"openai_api": {"dollars": 5.0}}},
+                 limits={"openai_api": 5.0})
+    API._now = lambda: at(2026, 9, 15)
+    why, cap = API.money_check("openai_api", "gpt-5-mini")
+    check("last month's spend does not consume this month's cap", why == "", why)
+    check("... and the next message still fits the month's cap", cap == 0, cap)
+    # The same month IS at its cap: that refuses, so the check above is not
+    # passing because the cap is ignored altogether.
+    write_ledger({"2026-09": {"openai_api": {"dollars": 5.0}}},
+                 limits={"openai_api": 5.0})
+    why = API.money_check("openai_api", "gpt-5-mini")[0]
+    check("... while THIS month at its cap refuses, in the owner's words",
+          why.startswith("You set $5.00 a month for OpenAI"), why)
+
+    # ---- December -> January crosses the YEAR ----------------------------
+    write_ledger({"2025-12": {"openai_api": {"dollars": 2.5}}},
+                 limits={"openai_api": 5.0})
+    API._now = lambda: at(2026, 1, 1, 0, 30)
+    check("the first minute of January is the new YEAR, month 01",
+          API.month_key() == "2026-01" and API.next_month_words() == "February 1")
+    API.record_spend("openai_api", "gpt-5-mini", 100, 50)
+    d = money_file()
+    check("a December -> January spend lands under 2026-01, not 2025-12",
+          sorted((d.get("months") or {})) == ["2025-12", "2026-01"], d.get("months"))
+    check("... and December's total is preserved",
+          d["months"].get("2025-12") == {"openai_api": {"dollars": 2.5}},
+          d["months"].get("2025-12"))
+    check("... the year boundary reads back as two separate months",
+          API.spent_of("openai_api", month="2025-12") == 2.5
+          and abs(API.spent_of("openai_api") - 0.000125) < 1e-12)
+    check("... and January starts with the whole cap, not December's spend",
+          API.money_check("openai_api", "gpt-5-mini")[0] == "")
+
+    # ---- the 13-month window: rolling over must not drop LAST month ------
+    write_ledger({f"2025-{m:02d}": {"openai_api": {"dollars": 1.0}}
+                  for m in range(1, 13)}, limits={"openai_api": 5.0})
+    API._now = lambda: at(2026, 1, 5)
+    API.record_spend("openai_api", "gpt-5-mini", 10, 10)
+    kept = sorted(money_file()["months"])
+    check("a 13th month is kept beside the 12 before it", len(kept) == 13
+          and kept[0] == "2025-01" and kept[-1] == "2026-01", kept)
+    older = {f"2025-{m:02d}": {"openai_api": {"dollars": 1.0}} for m in range(1, 13)}
+    older["2024-12"] = {"openai_api": {"dollars": 1.0}}
+    write_ledger(older, limits={"openai_api": 5.0})
+    API._now = lambda: at(2026, 1, 5)
+    API.record_spend("openai_api", "gpt-5-mini", 10, 10)
+    kept = sorted(money_file()["months"])
+    check("a 14th month drops the OLDEST, never a recent one",
+          len(kept) == API.KEEP_MONTHS and "2024-12" not in kept
+          and "2025-01" in kept and "2026-01" in kept, kept)
+
+    # ---- a missing "months" key upgrades --------------------------------
+    write_ledger(None, limits={"openai_api": 5.0})
+    check("a ledger written before the months key existed still loads",
+          API._load().get("months") == {} and API.spent_of("openai_api") == 0.0)
+    API.record_spend("openai_api", "gpt-5-mini", 10, 10)
+    check("... and upgrades on the next spend, rather than refusing",
+          sorted(money_file()["months"]) == ["2026-01"], money_file().get("months"))
+
+    # ---- a malformed months value REFUSES, never crashes ----------------
+    def outcome(fn):
+        try:
+            return fn()
+        except API.MoneyFileError:
+            return "MoneyFileError"
+        except Exception as exc:            # noqa: BLE001 - the point is the type
+            return type(exc).__name__
+
+    write_ledger(["2026-09"])               # months is a list: the old refusal
+    check("a months value that is not an object is refused",
+          outcome(API._load) == "MoneyFileError", outcome(API._load))
+    why, cap = API.money_check("openai_api", "gpt-5-mini")
+    check("... money_check refuses in the module's own words, not a crash",
+          why.startswith("Jarvis's record of API spending")
+          and API.MONEY_FILE in why and cap == 0, why)
+    check("... and record_spend raises the refusal a caller can catch",
+          outcome(lambda: API.record_spend("openai_api", "gpt-5-mini", 1, 1))
+          == "MoneyFileError")
+
+    # The measured 2026-11-19 crash: months is an object, but one month's
+    # value is not. Before `_load` validated month rows, `money_check` raised
+    # AttributeError instead of refusing, and `spent_of` did the same.
+    write_ledger({"2026-09": "oops"}, limits={"openai_api": 5.0})
+    check("a month entry that is not an object is refused, not crashed on",
+          outcome(API._load) == "MoneyFileError", outcome(API._load))
+    check("... money_check refuses it in words",
+          outcome(lambda: API.money_check("openai_api", "gpt-5-mini")) != "AttributeError"
+          and API.money_check("openai_api", "gpt-5-mini")[0].startswith(
+              "Jarvis's record of API spending"),
+          outcome(lambda: API.money_check("openai_api", "gpt-5-mini")))
+    check("... spent_of refuses it too, rather than reading a string as a row",
+          outcome(lambda: API.spent_of("openai_api")) == "MoneyFileError",
+          outcome(lambda: API.spent_of("openai_api")))
+    write_ledger({"2026-09": {"openai_api": {"dollars": 1.0}}},
+                 limits={"openai_api": 5.0})
+    API._now = lambda: at(2026, 9, 15)
+    check("CONTROL: a well-shaped ledger is still read, so the refusal above is "
+          "about the malformed row and not about every ledger",
+          API.spent_of("openai_api") == 1.0
+          and outcome(API._load) != "MoneyFileError", outcome(API._load))
+    API._now = lambda: MID_SEPT
+
+
 def t_money_refused_at_the_limit():
     clean()
     point_all(limit=1.0)
