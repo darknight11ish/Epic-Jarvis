@@ -229,8 +229,12 @@ await check("the three copies of the HUD page stay byte-identical", () => {
  * would have made answered here.
  * ════════════════════════════════════════════════════════════════════════ */
 
+// The change the card is asking for, in the shape the gate sends it: since
+// 2026-11-18 a card with no readable `detail` draws Refresh, not Approve, and
+// this check is about the pill bar counting a card whose own buttons are there.
 const PLAIN_APPROVAL = {
   id: "91", action: "send_email", tier: "ask", replaces: false, expires_in: 120,
+  detail: { tool: "send_email", args: "to: sam@example.com, subject: Lunch" },
 };
 
 const { base, close } = await K.serve();
