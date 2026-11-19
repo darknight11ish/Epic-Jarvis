@@ -2179,8 +2179,7 @@ def point_at(pid: str, base_url: str) -> Preset:
 # this one service, so the two extra names were a label and a model name and
 # never a route. They are gone (`docs/DECISIONS.md`, 2026-10-27), and
 # `jarvis_router.cloud_lanes()` refuses any other name, so an older config that
-# still lists them cannot bring a second lane back. Every other non-local lane
-# falls to DEFAULT_LANE, with its own line saying so in the refusal words below.
+# still lists them cannot bring a second lane back.
 #
 # THE SERVICE IS THE OWNER'S CHOICE (2026-11-07). The table below is what a lane
 # means when NO cloud provider has been chosen in the Presets menu - the owner's
@@ -2189,10 +2188,16 @@ def point_at(pid: str, base_url: str) -> Preset:
 # sends to that service and its own model instead. That is the fix the
 # options-understanding audit called B1: before it, picking Mistral in the
 # Presets menu still sent the words to api.deepseek.com, while the Presets row,
-# the approval card and `/api/reach` all named Mistral. A lane name this table
-# does not know falls to DEFAULT_LANE only while no choice is recorded; with a
-# choice it goes to that same service, because this PC has ONE cloud service at
-# a time.
+# the approval card and `/api/reach` all named Mistral.
+#
+# IT FAILS CLOSED (2026-11-18, the owner's ruling). ONLY a name in CLOUD_LANES
+# names a cloud service. The empty name is the local signal, and every other
+# name this table does not know - an old `degrade_chain` entry, a local model's
+# name, anything else a caller puts in the lane field - gets NO service and NO
+# model from `lane_service()`. Until this ruling an unknown name fell to
+# DEFAULT_LANE (or the chosen provider), so a lane field holding a local model's
+# name could have sent a private turn to a cloud service. A name this module
+# cannot place is answered on this PC; it is never treated as a cloud lane.
 CLOUD_LANES = {
     # The fallback when no provider is chosen: DeepSeek, the owner's decision of
     # 2026-10-06. The model is this project's choice, not DeepSeek's: the
@@ -2201,10 +2206,12 @@ CLOUD_LANES = {
     "jarvis-escalate": ("deepseek_api", "deepseek-flash"),
 }
 
-#: (service, model) for any other non-local lane name - a name left in the
-#: owner's `degrade_chain` that this table does not know. DeepSeek's cheap,
-#: current model, because "offered a lane we do not recognise" must still
-#: mean something real rather than a silent nothing.
+#: (service, model) the PC's cloud default, for the empty lane name and for a
+#: real lane while no provider is chosen: the chosen provider overrides it,
+#: exactly as it does for the table. It is what `lane_status()` reports as its
+#: fallback - NOT what an unknown lane name falls to (that gets no service at
+#: all; `lane_service` fails closed, 2026-11-18). DeepSeek's cheap, current
+#: model, the owner's 2026-10-06 choice.
 DEFAULT_LANE = ("deepseek_api", "deepseek-flash")
 
 #: The most characters of one message the check assumes when a lane is asked
@@ -2257,6 +2264,31 @@ def _owner_model_set(pid: str) -> bool:
         return False
 
 
+def _owner_model(pid: str, model: str) -> tuple:
+    """(pid, model), with the owner's own `[chatbot] <id>_model` line winning
+    over the lane's default. An explicit choice always wins; an unreadable line
+    leaves the default in place rather than guessing."""
+    if _owner_model_set(pid):
+        try:
+            chosen, problem = model_for(pid)
+        except Exception:
+            chosen, problem = "", "the model line could not be read"
+        if chosen and not problem:
+            return pid, chosen
+    return pid, model
+
+
+def _default_service() -> tuple:
+    """(pid, model) the PC's cloud default: the provider chosen in the Presets
+    menu, else DEFAULT_LANE, with the owner's own model line on top.
+
+    This is what `lane_status()` reports as its fallback. It is NOT the answer
+    for an unknown lane name - that gets no service at all, because
+    `lane_service()` fails closed (2026-11-18)."""
+    pid, model = _chosen_service() or DEFAULT_LANE
+    return _owner_model(pid, model)
+
+
 def lane_service(lane: str) -> tuple:
     """(service id, model) for a cloud lane name. Never raises.
 
@@ -2266,23 +2298,25 @@ def lane_service(lane: str) -> tuple:
     happened to be written into the table. Without a recorded choice the table
     above is what a lane means, and the model is that preset's own default
     unless the owner's `[chatbot] <id>_model` line is set - an explicit choice
-    always wins. A lane name the table does not know falls back the same way:
-    to the chosen service when one is recorded, else to DEFAULT_LANE's real
-    service.
+    always wins.
+
+    FAIL CLOSED (2026-11-18, the owner's ruling). Only a name in CLOUD_LANES
+    names a service. The empty name is the local signal, and a name the table
+    does not know is not a cloud lane either: both answer ("", "") - no
+    service, no model - so the caller answers on this PC. Until this ruling an
+    unknown name fell back to DEFAULT_LANE (or the chosen provider), which
+    meant a lane field holding a local model's name could have sent a private
+    turn to a cloud service.
 
     Reads only that one small choice file; opens no socket and touches no key."""
-    pid, model = CLOUD_LANES.get(str(lane or ""), DEFAULT_LANE)
+    name = str(lane or "")
+    if name not in CLOUD_LANES:
+        return "", ""
+    pid, model = CLOUD_LANES[name]
     chosen = _chosen_service()
     if chosen:
         pid, model = chosen
-    if _owner_model_set(pid):
-        try:
-            chosen, problem = model_for(pid)
-        except Exception:
-            chosen, problem = "", "the model line could not be read"
-        if chosen and not problem:
-            return pid, chosen
-    return pid, model
+    return _owner_model(pid, model)
 
 
 def cloud_lane(lane: str, *, chars: int = LANE_ASSUMED_CHARS, messages: int = 1) -> Optional[dict]:
@@ -2300,8 +2334,14 @@ def cloud_lane(lane: str, *, chars: int = LANE_ASSUMED_CHARS, messages: int = 1)
     address - https, its own pinned host), cap (the answer-length cap to
     send, 0 for none) and why ("" when it can be used). Opens no socket and
     reads no message: only the chosen-provider file (which service the lane
-    means), Credential Manager (whether a key is SAVED) and the money file."""
+    means), Credential Manager (whether a key is SAVED) and the money file.
+
+    A lane name this module does not know is not a cloud lane at all, so it is
+    None as well (fail closed, 2026-11-18): the caller answers on this PC
+    rather than sending to any service."""
     pid, model = lane_service(lane)
+    if not pid:
+        return None                 # not a cloud lane: nothing may be sent
     p = PRESETS[pid]
     chars, messages = max(0, int(chars)), max(1, int(messages))
     why = ready_for(pid)
@@ -2320,6 +2360,8 @@ def lane_key(lane: str) -> Optional[str]:
     Manager (rule 3: never logged, never written to disk in plain text,
     never sent anywhere but that service's own host)."""
     pid, _ = lane_service(lane)
+    if not pid:
+        return None                 # no cloud lane, so nothing to read a key for
     return _read_key(pid)
 
 
@@ -2348,6 +2390,11 @@ LANE_NOT_PAID = ("The cloud lane cannot be paid for on this PC: the message coul
                  "month's money limit for the service behind it. Raise the limit on the PC, "
                  "or ask something shorter.")
 
+#: Said for a lane name this module does not know (fail closed, 2026-11-18). It
+#: names no service, so the turn is answered on this PC and nothing is sent.
+LANE_UNKNOWN = ('The lane "{lane}" is not one this PC knows, so nothing is sent to a cloud '
+                'service; this answer stays on this PC.')
+
 
 def lane_state(lane: str) -> dict:
     """Everything `jarvis_hud.py` needs to send ONE lane, resolved here.
@@ -2364,6 +2411,10 @@ def lane_state(lane: str) -> dict:
     has no price, this month's money limit is reached, or a message of the
     assumed size could not be paid for. The caller then answers on this PC.
 
+    A lane name this module does not know is not a cloud lane: `url`, `key` and
+    `model` stay empty, `problem` says so in plain words, and the caller answers
+    on this PC (fail closed, 2026-11-18).
+
     An empty `lane` (the local one - this module never sees the local model's
     name) resolves to `NO_LANE_STATE`. It is stored, not just returned, so it
     CLEARS whatever this thread resolved for the request before it.
@@ -2378,12 +2429,18 @@ def lane_state(lane: str) -> dict:
     if state["lane"]:
         pid, model = lane_service(state["lane"])
         state["pid"], state["model"] = pid, model
-        how = cloud_lane(state["lane"])
-        if how:
-            state.update(model=how["model"], host=how["host"], url=how["url"],
-                         cap=int(how.get("cap") or 0), key=lane_key(state["lane"]) or "")
+        if not pid:
+            # Fail closed (2026-11-18): a lane name this module does not know
+            # names no service, so there is no address, no key and no model -
+            # the caller answers on this PC.
+            state["problem"] = LANE_UNKNOWN.format(lane=state["lane"])
         else:
-            state["problem"] = ready_for(pid) or LANE_NOT_PAID
+            how = cloud_lane(state["lane"])
+            if how:
+                state.update(model=how["model"], host=how["host"], url=how["url"],
+                             cap=int(how.get("cap") or 0), key=lane_key(state["lane"]) or "")
+            else:
+                state["problem"] = ready_for(pid) or LANE_NOT_PAID
     _LANE_STATE.state = dict(state)
     return dict(state)
 
@@ -2399,9 +2456,12 @@ def last_lane_state() -> dict:
 def lane_status() -> dict:
     """What the PC can say about the cloud lanes without sending anything:
     the lane names, the service and model each one means, and whether each
-    can be used right now. Counts and names only - never a key, never a
-    message. This is what "What Jarvis can reach", the health light and the
-    apps' own status read; it opens no socket."""
+    can be used right now. It also reports `default_pid`/`fallback_model`, the
+    PC's cloud default (the chosen provider, else DEFAULT_LANE) - not what an
+    unknown lane name resolves to, because an unknown name has no service at
+    all (`lane_service` fails closed, 2026-11-18). Counts and names only -
+    never a key, never a message. This is what "What Jarvis can reach", the
+    health light and the apps' own status read; it opens no socket."""
     lanes = []
     for lane in list(CLOUD_LANES) + [""]:
         if not lane:
@@ -2416,9 +2476,11 @@ def lane_status() -> dict:
             "ready": not why, "why": why,
             "money": money_view(pid),
         })
-    # The fallback is what an unknown lane name resolves to - `lane_service()`'s
-    # own answer - so it names the CHOSEN provider too, never a second service.
-    fallback_pid, fallback_model = lane_service("")
+    # The fallback names the PC's cloud default - the chosen provider, else
+    # DEFAULT_LANE - for the callers that show "which service would answer".
+    # It is NOT what an unknown lane name resolves to: such a name gets no
+    # service at all (`lane_service`, fail closed 2026-11-18).
+    fallback_pid, fallback_model = _default_service()
     return {"available": True, "lanes": lanes,
             "ready": [r["lane"] for r in lanes if r["ready"]],
             "fallback_model": fallback_model,

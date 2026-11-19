@@ -153,16 +153,58 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # what the merged text needs, not the higher of the two sides.
                    # This branch's pre-merge 1,580 would be UNDER the merged
                    # 1,582 and would fail.
-                   "github_pr_scan": 1400, "github_merge_pr": 1620,
-                   "github_fix_and_push": 480,
+                   # RAISED AGAIN 2026-11-18, by the same rule, for ONE reason:
+                   # every GitHub tool that takes a `repo` now carries
+                   # `jarvis_github.REPO_ARG_HINT` - the sentence saying a bare
+                   # "Epic-Jarvis", "my repo" or "this repository" is a valid
+                   # argument and Jarvis fills in the owner, so the model must
+                   # call the tool instead of asking who owns it. Measured on
+                   # this tree with this module's own rule: github_pr_scan
+                   # 1439, github_merge_pr 1631, github_fix_and_push 523,
+                   # github_open_pr 482, github_issue_state 408, github_edit_pr
+                   # 394. Each pin is that measurement plus the same small
+                   # headroom the older entries use; the cost is still paid
+                   # only when the `github` group is opened.
+                   "github_pr_scan": 1500, "github_merge_pr": 1660,
+                   "github_fix_and_push": 540,
                    # The 2026-11-10 22:30 ruling's actions carry no whole-surface
                    # sentence, but three are a little over the 300 default legitimately:
                    # open_pr names stage/base/branch/body semantics (433), edit_pr
                    # shows the old/new title/body pin (345) and issue_state pins the
                    # title and the close/reopen direction (359). Measured on this
                    # tree; each is its own action with its own one-shot card.
-                   "github_open_pr": 440, "github_edit_pr": 355,
-                   "github_issue_state": 370,
+                   "github_open_pr": 500, "github_edit_pr": 420,
+                   "github_issue_state": 420,
+                   # The five repo-taking tools the 2026-11-18 REPO_ARG_HINT
+                   # sentence pushed over the 300 default, measured on this tree
+                   # with this module's own rule: github_pr_review 347,
+                   # github_list 337, github_workflow 314, github_pr_detail
+                   # 304. github_issue_labels and github_read_file are pinned
+                   # with the full-name measurement below. Paid only when the
+                   # `github` group is opened, never on every turn.
+                   "github_pr_review": 360, "github_list": 400,
+                   "github_workflow": 330,
+                   "github_pr_detail": 360,
+                   # 2026-11-18, the SAME sentence plus a measured call trigger:
+                   # the live 17:57 battery got no GitHub tool call for "what is
+                   # the latest commit on main in Epic-Jarvis?" and the model
+                   # denied having access, so {github_list, github_ci_status,
+                   # github_pr_scan, github_pr_detail} now open with a "Call this
+                   # when the owner asks ..." sentence - the shape the settings
+                   # tool was measured into (0 of 21 calls -> 18 of 21,
+                   # SETTINGS_TOOL above). Measured on this tree: github_list 384,
+                   # github_ci_status 339, github_pr_scan 1471, github_pr_detail
+                   # 346. Paid only when the `github` group is opened.
+                   "github_ci_status": 360,
+                   # The 2026-11-18 ruling added the owner's FULL repository
+                   # name to the sentence ("Epic-Jarvis" is
+                   # darknight11ish/Epic-Jarvis), which grew every repo-taking
+                   # description by 13 tokens with this module's own rule:
+                   # github_read_file 301, github_issue_labels 323 (the two the
+                   # measured numbers above did not already cover), github_list
+                   # 397, github_workflow 327, github_pr_review 359, github_pr_detail
+                   # 359. The cost is still paid only when the group is opened.
+                   "github_read_file": 310, "github_issue_labels": 330,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six
                    # format names and two "use that" lines. Measured 329 with

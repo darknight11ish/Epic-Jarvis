@@ -18,9 +18,9 @@ none of them needs the owner's PC, a network or a model:
    patches the chosen provider IN MEMORY (the way the audit did; no file is
    written) for all six services and asserts `lane_service`, `lane_status` and
    `cloud_lane` resolve to THAT service, company, host, model and endpoint -
-   and that the fallback for an unknown lane name follows the choice too. The
-   "is my key saved?" answer is checked separately: with a non-DeepSeek provider
-   chosen it must name that provider, never DeepSeek.
+   and that an unknown lane name names NO service at all (fail closed,
+   2026-11-18). The "is my key saved?" answer is checked separately: with a
+   non-DeepSeek provider chosen it must name that provider, never DeepSeek.
 
 2. B2 - "how do I add a mistral key?" IS NOT A REMINDER QUESTION.
    `_REMINDER_HOWTO_HOW_RX` read ANY "how do I add ..." as a reminder how-to
@@ -238,12 +238,14 @@ def t_the_cloud_lane_follows_the_chosen_provider():
             check(f"{pid}: lane_key reads that service's own key",
                   API.lane_key("jarvis-escalate") == KEY)
 
-        # An unknown lane name (an old degrade_chain entry) must keep meaning
-        # ONE cloud service - the chosen one - not a second, unpaired service.
+        # Fail closed (2026-11-18): an unknown lane name (an old degrade_chain
+        # entry, or a local model's name) must name NO service - not the
+        # chosen one, not DeepSeek. A lane field is not a permission to send.
         P.cloud_chosen = lambda: "mistral_api"
-        check("an unknown lane name goes to the chosen service, not to DeepSeek",
-              API.lane_service("jarvis-vision")[0] == "mistral_api",
-              API.lane_service("jarvis-vision"))
+        check("an unknown lane name names no service, even with one chosen",
+              API.lane_service("jarvis-vision") == ("", "")
+              and API.lane_service("qwen3.5:9b") == ("", ""),
+              (API.lane_service("jarvis-vision"), API.lane_service("qwen3.5:9b")))
         check("... and lane_status names no lane that is not in the table",
               len(API.lane_status()["lanes"]) == len(API.CLOUD_LANES))
 

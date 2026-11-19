@@ -704,6 +704,14 @@ SHIPPED = (
     # correction are not.
     "jarvis_chatbot_limits.py",
     "jarvis_chatbot_local.py",
+    # The hybrid/cloud settings, answered and changed from chat (2026-11-18,
+    # shipped whole; jarvis_quick.py's fast path calls it): which cloud service
+    # is chosen, the standing escalation switch and the monthly cap are read
+    # from the PC's own three files and named with the file and its date; the
+    # changes go through jarvis_presets.apply_cloud / cloud_escalate and
+    # jarvis_chatbot_limits.change - the doors that already exist - so this
+    # module adds no route, no file writer and no second mechanism.
+    "jarvis_cloud_settings.py",
     # "Look at this" and "Watch with me": the session rules, pause rules,
     # caps, the Never look at list and the routes (screen.patch installs
     # them); jarvis_screen_win.py is the Windows half - what is in front,
