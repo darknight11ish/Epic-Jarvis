@@ -157,7 +157,27 @@ real PC:
       the no-rule, drifted, half-edited and duplicated states all refuse rather
       than guess.
 
-  19. the 2026-10-28 patch the tool silently skipped: `cloud-honesty.patch`
+  19. the 2026-11-18 live AttributeError, and the guard that makes it impossible
+      to deploy past again: the deploy at `b8de6ef15` printed `RESULT: PASS -
+      backend reconciled`, then `GET /api/presets` answered 503 with
+      `AttributeError: module 'jarvis_models' has no attribute
+      'ollama_url_on_this_pc'`. The shipped modules were byte-current; the live
+      `jarvis_models.py` is a PATCHED base file the deploy never carries, and its
+      copy (2026-10-19) predated the function. Deploy step 2c now derives every
+      unguarded name the shipped `.py` modules call on the five patched base
+      files, checks the TARGET folder's copy binds each one (a static `hasattr` -
+      the target source is parsed, never imported), and REFUSES exit 2 before any
+      write, naming the module, the function and the patch that owns the file.
+      These tests build the tonight shape out of `jarvis-backend/` by deleting the
+      function (refusal) and prove the correct base passes; drive the refusal
+      through `run_deploy` in a dry run AND an apply with nothing written and no
+      backup folder; pin `CROSS_FILE_DEPENDENCIES` to the repository's own
+      shipped modules (so a new cross-file call fails the pin, not a live route);
+      and pin the rules that make it usable - `try/except` and `getattr()`
+      fallbacks are not requirements, a dynamic namespace is "cannot prove"
+      rather than a guess, and the target's five patched files are read without
+      a byte written.
+  20. the 2026-10-28 patch the tool silently skipped: `cloud-honesty.patch`
       (merged in #937, THREE hunks in `jarvis_hud.py`: the wellbeing check asks
       `jarvis_wellbeing.crisis_in_turn`, a crisis turn picked onto a cloud lane
       is answered locally with `cloud_refused: "crisis"`, and the cloud stream
@@ -358,6 +378,23 @@ MINI_HUD += (
 )
 
 
+def _cross_file_stub(module: str) -> str:
+    """A compilable stand-in binding every DECLARED cross-file dependency.
+
+    The deploy's step 2c proves each shipped module's unguarded call into a
+    patched base file is backed by the target folder's copy. The fixture live
+    folder is the target, so its stubs must bind the declared names - otherwise
+    every end-to-end test would (rightly) be refused by a check aimed at the
+    2026-11-18 shape. A test that wants the refusal deletes one of these.
+    """
+    lines = ["", "# declared cross-file dependencies (fixture)"]
+    for dep in R.CROSS_FILE_DEPENDENCIES:
+        if dep.file == module:
+            lines += ["", f"def {dep.name}(*args, **kwargs):",
+                      "    return None"]
+    return "\n".join(lines) + "\n"
+
+
 def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Path:
     live = root / "live"
     live.mkdir(parents=True, exist_ok=True)
@@ -373,9 +410,11 @@ def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Pa
     # (see MINI_GATE below). Without it, every test that plans the whole
     # DELTA_TABLE with literals=True would (rightly) be refused for a gate file
     # that cannot hold the guard change - a fixture gap, not a deploy finding.
-    write(live / "jarvis_gate.py", MINI_GATE)
+    # The declared cross-file dependencies are appended so step 2c passes here.
+    write(live / "jarvis_gate.py", MINI_GATE + _cross_file_stub("jarvis_gate.py"))
     for name in ("jarvis_extract.py", "jarvis_models.py", "jarvis_skills.py"):
-        write(live / name, "# a live patched base file\n")
+        write(live / name, "# a live patched base file\n"
+              + _cross_file_stub(name))
     write(live / "_jarvis-state.json", json.dumps({"patchList": [
         "rebuilt-patches/demo-old.patch"]}))
     toml = "[tools]\nenabled = []\n"
@@ -6306,6 +6345,172 @@ def t_the_local_model_guard_is_carried_by_an_adapted_hunk():
 
 
 # --------------------------------------------------------------------------
+#   19. the cross-file check: the pieces must fit on the TARGET folder (step 2c)
+# --------------------------------------------------------------------------
+#
+# The deploy at b8de6ef15 printed `RESULT: PASS - backend reconciled`, and the
+# live app then answered GET /api/presets with 503:
+#
+#     AttributeError: module 'jarvis_models' has no attribute
+#     'ollama_url_on_this_pc'
+#
+# Every shipped module imported; the CALL raised, because the live
+# `jarvis_models.py` is one of the five patched base files this tool deliberately
+# never carries (the patch stack owns it), and its copy dated from 2026-10-19 -
+# before the published base gained that function. Step 2c now proves every
+# unguarded name the shipped modules call on those five files is bound by the
+# TARGET folder's copy, in a dry run AND an apply, before anything is written.
+# These tests prove the tonight shape is refused, a correct folder passes, the
+# declaration matches the repository's own shipped modules, and the static
+# `hasattr` the check stands on cannot be fooled by dynamic namespaces.
+
+def _repo_shipped_sources() -> dict:
+    """{live name: bytes} for every Python file in $SHIPPED, from this checkout.
+
+    The deploy reads these same bytes from `--ref`, so the derivation here is the
+    real repository's - never a hand-typed list that can drift from it.
+    """
+    script = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
+    shipped = R.flatten_shipped(R.parse_powershell_list(script, "SHIPPED"))
+    sources = {}
+    for repo_path, live_name in shipped:
+        if not live_name.endswith(".py"):
+            continue
+        path = REPO / "backend" / repo_path
+        if path.is_file():
+            sources[live_name] = path.read_bytes()
+    return sources
+
+
+def _repo_derived_dependencies() -> dict:
+    derived, _notes = R.derive_cross_file_dependencies(_repo_shipped_sources())
+    return derived
+
+
+def _repo_needs() -> list:
+    """The declared floor with the real repository's unguarded callers attached."""
+    derived = _repo_derived_dependencies()
+    return [R.CrossFileDependency(dep.file, dep.name,
+                                  tuple(derived.get((dep.file, dep.name), ())))
+            for dep in R.CROSS_FILE_DEPENDENCIES]
+
+
+def _patched_target(root: Path, *, drop=()) -> Path:
+    """A target folder holding the PUBLISHED BASE's five patched files.
+
+    That is the correct shape a live folder is supposed to have after the patch
+    stack: the base binds every unguarded name the shipped modules call. `drop`
+    takes (file, function) pairs to delete a module-level `def`, which is how the
+    pre-#1360 live shape is carved out of it.
+    """
+    target = root / "target"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in R.PATCHED_FILES:
+        text = (REPO / "jarvis-backend" / name).read_text(encoding="utf-8")
+        for file, function in drop:
+            if file != name:
+                continue
+            tree = ast.parse(text)
+            node = next((item for item in tree.body
+                         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                         and item.name == function), None)
+            if node is None:
+                raise AssertionError(f"{name} has no top-level def {function}")
+            lines = text.splitlines(keepends=True)
+            del lines[node.lineno - 1:(node.end_lineno or node.lineno)]
+            text = "".join(lines)
+        write(target / name, text)
+    return target
+
+
+def _real_patch_show(_repo, _ref, name):
+    return (REPO / "backend" / Path(name).name).read_bytes()
+
+
+def t_the_cross_file_table_matches_the_shipped_modules():
+    """The declared floor IS the repository's derivation, pinned.
+
+    Every deploy derives its requirements from the ref's shipped bytes, so a new
+    call is checked without editing this tool. This pin keeps the DECLARED table
+    describing the repository as well: a pull request that adds a cross-file call
+    fails here, naming the exact entry to declare.
+    """
+    derived = _repo_derived_dependencies()
+    declared = {(dep.file, dep.name) for dep in R.CROSS_FILE_DEPENDENCIES}
+    check("the declared cross-file table is the shipped modules' own derivation",
+          declared == set(derived)
+          and len(R.CROSS_FILE_DEPENDENCIES) == len(declared),
+          {"only derived (declare these)": sorted(set(derived) - declared),
+           "only declared (re-derive or remove)": sorted(declared - set(derived))})
+    check("... the 2026-11-18 dependency is declared first",
+          (R.CROSS_FILE_DEPENDENCIES[0].file,
+           R.CROSS_FILE_DEPENDENCIES[0].name)
+          == ("jarvis_models.py", "ollama_url_on_this_pc"),
+          R.CROSS_FILE_DEPENDENCIES[0])
+    callers = derived.get(("jarvis_models.py", "ollama_url_on_this_pc"), ())
+    check("... jarvis_presets.py is an unguarded caller (the route that died)",
+          "jarvis_presets.py" in callers and len(callers) >= 10, callers)
+    check("... a call the shipped module wraps in try/except is NOT required",
+          ("jarvis_gate.py", "tier_of") not in derived, sorted(derived))
+    check("... every declared file is one of the five patched base files",
+          bool(declared) and all(file in R.PATCHED_FILES
+                                 for file, _name in declared), sorted(declared))
+
+
+def t_a_target_missing_a_called_name_is_refused():
+    """The tonight shape: a base module without the function refuses, by name.
+
+    The correct target (the published base's five files) passes; deleting
+    `ollama_url_on_this_pc` from `jarvis_models.py` makes the pre-#1360 live copy,
+    which must refuse with the module, the function, the patch that owns the file
+    and the two documented ways out.
+    """
+    root = tmpdir()
+    try:
+        needs = _repo_needs()
+        good = _patched_target(root / "good")
+        gaps, unproven = R.cross_file_gaps(good, needs)
+        check("the published base's five patched files PASS the cross-file check",
+              gaps == [] and unproven == [], (gaps, unproven))
+
+        tonight = _patched_target(root / "tonight",
+                                  drop=(("jarvis_models.py",
+                                         "ollama_url_on_this_pc"),))
+        model = (tonight / "jarvis_models.py").read_text(encoding="utf-8")
+        check("the fixture really is the tonight shape (the def is gone)",
+              "def ollama_url_on_this_pc" not in model)
+        gaps, unproven = R.cross_file_gaps(tonight, needs)
+        missing = {(gap.file, gap.name) for gap in gaps}
+        check("... and the check REFUSES that target, naming the function",
+              ("jarvis_models.py", "ollama_url_on_this_pc") in missing,
+              (gaps, unproven))
+        check("... with the unguarded callers, jarvis_presets.py among them",
+              any(gap.file == "jarvis_models.py"
+                  and gap.name == "ollama_url_on_this_pc"
+                  and "jarvis_presets.py" in gap.callers
+                  for gap in gaps), gaps)
+        check("... and it is the ONLY thing missing from the tonight shape",
+              len(gaps) == 1 and unproven == [], (gaps, unproven))
+
+        lines = R.cross_file_refusal_lines(
+            tonight, gaps, unproven,
+            patches=("gpu-offload.patch", "vram-estimate.patch"),
+            repo=REPO, ref="origin/main", show=_real_patch_show)
+        text = "\n".join(lines)
+        check("the refusal names the module, the function and the owning patch",
+              "jarvis_models.py" in text and "ollama_url_on_this_pc" in text
+              and "gpu-offload.patch" in text and "vram-estimate.patch" in text,
+              lines)
+        check("... it says the deploy never carries a patched base file",
+              "never" in text and "patched base file" in text, lines)
+        check("... it says what to do: apply the stack, or record the gap "
+              "deliberately", "apply-patches.ps1 -BackendPath" in text
+              and "record that gap deliberately" in text, lines)
+        check("... and it is a refusal, not a warning",
+              R.CROSS_FILE_RULE in text and "REFUSED" in text, lines)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
 #   19. cloud-honesty.patch (2026-10-28, #937): the measured silent skip
 # --------------------------------------------------------------------------
 #
@@ -6524,6 +6729,155 @@ def t_the_cloud_honesty_patch_is_carried_from_the_live_shape():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_the_deploy_refuses_on_the_target_shape_and_writes_nothing():
+    """Dry run AND apply: the missing name refuses exit 2 before any write.
+
+    The fixture live folder is the target. Removing the declared function from its
+    `jarvis_models.py` is the tonight shape one invocation away from the real
+    deploy; restoring it must pass the same check both ways.
+    """
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        marker = "def ollama_url_on_this_pc(*args, **kwargs):\n    return None\n"
+        model = (live / "jarvis_models.py").read_text(encoding="utf-8")
+        check("the correct fixture binds the declared name", marker in model)
+        write(live / "jarvis_models.py", model.replace(marker, ""))
+        before = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        for apply in (False, True):
+            label = "apply" if apply else "dry run"
+            lines = []
+            code = run_fixture(repo, live, apply=apply, out_lines=lines)
+            text = "\n".join(lines)
+            check(f"cross-file: the {label} refuses (exit 2)", code == 2,
+                  (code, lines[-6:]))
+            check(f"cross-file: the {label} prints the named refusal",
+                  "CROSS-FILE CHECK - REFUSED" in text, lines[-20:])
+            check(f"cross-file: the {label} names the module and the function",
+                  "jarvis_models.py" in text
+                  and "ollama_url_on_this_pc" in text, lines[-20:])
+            check(f"cross-file: the {label} wrote nothing",
+                  {p.name: p.read_bytes() for p in live.iterdir()
+                   if p.is_file()} == before)
+            check(f"cross-file: the {label} made no backup folder",
+                  not any(p.name.startswith("_jarvis-deploy-backup-tool-")
+                          for p in live.iterdir()))
+
+        write(live / "jarvis_models.py", model)
+        for apply in (False, True):
+            label = "apply" if apply else "dry run"
+            lines = []
+            code = run_fixture(repo, live, apply=apply, out_lines=lines)
+            text = "\n".join(lines)
+            check(f"cross-file: a correct target {label}s cleanly", code == 0,
+                  (code, lines[-8:]))
+            check(f"cross-file: ... the {label} prints the check PASS",
+                  "CROSS-FILE CHECK (" in text
+                  and "PASS - every one is bound" in text, lines[-12:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_target_binding_reader_is_a_static_hasattr():
+    """`module_level_names` is the static `hasattr` the check stands on.
+
+    It must see every way a module binds a name, must not mistake a function-local
+    name for a module attribute, and must report a dynamic namespace as unprovable
+    rather than guessing - absence is only refused when the file PROVES it.
+    """
+    source = textwrap.dedent('''
+        """module doc"""
+        import os
+        from json import dumps
+        CONST = 1
+        A, B = 2, 3
+        if True:
+            def conditional():
+                pass
+        try:
+            from missing import maybe
+        except ImportError:
+            maybe = None
+        def helper():
+            local_only = 1
+            return local_only
+        class Thing:
+            marker = 1
+    ''')
+    names, unproven = R.module_level_names(source)
+    check("the static hasattr sees def/class/assignment/import bindings",
+          {"conditional", "maybe", "helper", "Thing", "CONST", "A", "B",
+           "os", "dumps"} <= set(names), sorted(names))
+    check("... it does not count a function-local name as a module attribute",
+          "local_only" not in names, sorted(names))
+    check("... and a plain module is provable", unproven == "", unproven)
+    _star, star_why = R.module_level_names("from os import *\nX = 1\n")
+    check("a 'from ... import *' namespace cannot be proved to lack a name",
+          bool(star_why) and "import *" in star_why, star_why)
+    _getter, getter_why = R.module_level_names(
+        "def __getattr__(name):\n    return 1\n")
+    check("... and neither can a module-level __getattr__",
+          bool(getter_why) and "__getattr__" in getter_why, getter_why)
+
+    target = tmpdir()
+    try:
+        missing_names, missing_why = R.target_module_bindings(target, "nope.py")
+        check("a target file that is not there cannot be proved either way",
+              missing_names == frozenset() and "no nope.py" in missing_why,
+              missing_why)
+        write(target / "broken.py", "def (\n")
+        broken_names, broken_why = R.target_module_bindings(target, "broken.py")
+        check("... and neither can a target file that is not Python",
+              broken_names == frozenset()
+              and "not valid Python" in broken_why, broken_why)
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def t_an_unguarded_call_is_required_and_a_fallback_is_not():
+    """Derivation: a bare call is a requirement, a handled one is not.
+
+    This is the rule that keeps the check from refusing every deploy over a
+    compatibility probe the shipped module already owns (e.g.
+    `jarvis_gate.tier_of()` inside `try: ... except Exception:` falling back to
+    `jarvis_gate._tiers()`).
+    """
+    source = textwrap.dedent('''
+        import jarvis_models
+        import jarvis_gate as gate
+
+        def hard():
+            return jarvis_models.ollama_url_on_this_pc()
+
+        def fallback():
+            try:
+                return gate.maybe_missing()
+            except Exception:
+                return None
+
+        def getattr_fallback():
+            fn = getattr(jarvis_models, "another_missing", None)
+            return fn
+
+        def imported_as():
+            return gate.check("x", {}, prompt="y")
+    ''')
+    derived, notes = R.derive_cross_file_dependencies({"module.py": source})
+    check("an unguarded cross-file call is REQUIRED",
+          ("jarvis_models.py", "ollama_url_on_this_pc") in derived, derived)
+    check("... a call under try/except Exception is NOT required",
+          ("jarvis_gate.py", "maybe_missing") not in derived, derived)
+    check("... a getattr() lookup is not a call",
+          ("jarvis_models.py", "another_missing") not in derived, derived)
+    check("... and an aliased module import still resolves to its file",
+          derived.get(("jarvis_gate.py", "check")) == ("module.py",), derived)
+    check("... the shipped module parses, so no NOT CHECKED note is raised",
+          notes == [], notes)
+    _deps, bad_notes = R.derive_cross_file_dependencies({"broken.py": "def ("})
+    check("a shipped module that cannot be parsed is reported as NOT CHECKED",
+          bool(bad_notes) and "broken.py" in bad_notes[0], bad_notes)
+
+
 def main():
     for fn in (t_release_markers_carry_the_version_and_the_beside_files,
                t_release_marker_writes_are_in_the_planned_and_wrote_counts,
@@ -6613,6 +6967,11 @@ def main():
                t_the_real_lane_guard_runs_in_the_deploy_path,
                t_the_cli_lane_flag_reaches_the_deploy,
                t_the_local_model_guard_is_carried_by_an_adapted_hunk,
+               t_the_cross_file_table_matches_the_shipped_modules,
+               t_a_target_missing_a_called_name_is_refused,
+               t_the_deploy_refuses_on_the_target_shape_and_writes_nothing,
+               t_the_target_binding_reader_is_a_static_hasattr,
+               t_an_unguarded_call_is_required_and_a_fallback_is_not,
                t_the_cloud_honesty_patch_is_carried_from_the_live_shape):
         fn()
     print()

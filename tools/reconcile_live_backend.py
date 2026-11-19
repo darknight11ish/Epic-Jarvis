@@ -177,6 +177,34 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
         the same commit, ref and version - the bytes carry no timestamp, so a
         second run really does plan nothing.
 
+    2c. CROSS-FILE CHECK - the pieces must fit together on the TARGET folder.
+        The five PATCHED_FILES are never carried (the patch stack owns them), so
+        every shipped module can be byte-current while a call it makes into one
+        of them raises. That is the 2026-11-18 live failure: the deploy at
+        `b8de6ef15` printed `RESULT: PASS - backend reconciled`, then
+        `GET /api/presets` answered 503 with `AttributeError: module
+        'jarvis_models' has no attribute 'ollama_url_on_this_pc'` - the live
+        `jarvis_models.py` (a patched base file dating from 2026-10-19) never
+        gained the function the newly shipped modules call. So for every name in
+        `CROSS_FILE_DEPENDENCIES`, plus every unguarded cross-file name derived
+        from the ref's shipped `.py` bytes, this step proves the target folder's
+        copy of the patched file BINDS that name. The check is a static
+        `hasattr`: the target source is parsed (`module_level_names`), never
+        imported, because importing a module from the live folder executes it and
+        a dry run must not do that. A call inside `try/except Exception` or under
+        a `getattr()` fallback is the shipped module's own fallback and is not
+        required. A missing name - or a target file whose namespace cannot be
+        proved - REFUSES the run with exit 2 BEFORE any write, naming the module,
+        the function and the patch stack entries that own the file, and saying
+        the two ways out: apply the stack
+        (`scripts/apply-patches.ps1 -BackendPath <live>`), or record the gap
+        deliberately by repairing that one live file by hand (2026-11-18's
+        appended shim is the worked example). The deploy still never carries a
+        patched base file - a bigger copy list is NOT the fix, because copying
+        the published base over the live copy would lose the patches' hunks.
+        A second run on a correct folder passes the same check again, so the PASS
+        line means the pieces were proved to fit.
+
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
        file is touched. If compilation fails, nothing is written.
 
@@ -243,11 +271,14 @@ EXIT CODES
     0 success (dry run planned cleanly, or apply + all probes PASS)
     1 a plugin add or a route probe failed
     2 refused before writing (bad arguments, working tree not at --ref, unknown HUD
-      delta, missing anchor, a patch whose presence cannot be proved, rehearsal)
+      delta, missing anchor, a patch whose presence cannot be proved, a shipped
+      module calling a name the target folder's patched base file does not bind,
+      rehearsal)
 """
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import py_compile
@@ -2965,6 +2996,492 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
 
 
 # ---------------------------------------------------------------------------
+#   The cross-file check: the pieces must fit together on the TARGET folder
+# ---------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (2026-11-18). The deploy at b8de6ef15 reported
+# `RESULT: PASS - backend reconciled`, and minutes later the live app answered
+# GET /api/presets with 503:
+#
+#     {"available": false, "error": "AttributeError: module 'jarvis_models'
+#      has no attribute 'ollama_url_on_this_pc'"}
+#
+# Every shipped module imported fine; the CALL raised. The deploy had written
+# `jarvis_router.py`, `jarvis_agent.py` and others, all byte-current - but they
+# call `jarvis_models.ollama_url_on_this_pc()`, a function the published base
+# gained in #1360, and the live `jarvis_models.py` is one of the five PATCHED
+# base files this tool deliberately NEVER carries. Its live copy dated from
+# 2026-10-19 (before #1360), so the call raised and the presets route died. "Every
+# shipped file's bytes are current" is true and useless when the code calls
+# across a file boundary the deploy does not own.
+#
+# So this step proves the pieces fit: for every module-level name a shipped
+# Python module calls on one of the five `PATCHED_FILES`, the TARGET folder's copy
+# of that patched file must bind the name. That is a static `hasattr`: the source
+# is parsed and its module-level bindings collected, NEVER imported, because
+# importing a module from the live folder is not a read - it executes the file
+# (bytecode, config, background work) and a dry run must not do that.
+#
+# Only UNGUARDED calls are required. A call inside `try: ... except Exception:`
+# or under a `getattr(...)` fallback is a dependency the shipped module itself
+# handles - e.g. `jarvis_arbiter.py` calls `jarvis_gate.tier_of()` but falls back
+# to `jarvis_gate._tiers()` - so a target that lacks it is not broken. Refusing
+# on those would block every deploy for no live failure.
+#
+# The declared table is a checked-in snapshot of the derivation at this commit,
+# pinned by `backend/test_reconcile_live_backend.py`. Every deploy ALSO derives
+# from the ref's shipped bytes, so a new call in a future module is checked even
+# if nobody remembers this file; the declaration is the floor that survives a
+# failed/empty derivation and the place the 2026-11-18 incident is written down.
+
+#: The five patched base files, as module stems. `PurePosixPath` keeps this honest
+#: for a name with a dot in it that is not the extension.
+_PATCHED_MODULE_STEMS = {PurePosixPath(name).stem: name for name in PATCHED_FILES}
+
+#: Exception types that make a call a FALLBACK the shipped module owns, not a
+#: requirement on the patched base file. A bare `except:` counts too (its handler
+#: type is None).
+_FALLBACK_HANDLERS = frozenset({
+    "AttributeError", "Exception", "BaseException", "ImportError",
+})
+
+
+@dataclass(frozen=True)
+class CrossFileDependency:
+    """One module-level name a shipped module needs from a patched base file."""
+    file: str                 # a PATCHED_FILES entry, e.g. "jarvis_models.py"
+    name: str                 # e.g. "ollama_url_on_this_pc"
+    callers: tuple = ()       # the $SHIPPED modules that call it without a fallback
+
+
+@dataclass(frozen=True)
+class CrossFileGap:
+    """One required name the target folder's patched base file does not bind."""
+    file: str
+    name: str
+    callers: tuple
+
+
+#: The declared floor. Every entry was DERIVED from the shipped modules at this
+#: commit (see `derive_cross_file_dependencies`); `ollama_url_on_this_pc` is first
+#: because it is the measured 2026-11-18 incident. The pinning test in
+#: `backend/test_reconcile_live_backend.py` fails, naming this table, when the
+#: repository's shipped modules and this list stop agreeing - that is the reminder
+#: to add a new dependency here. The deploy's own derivation would still check it,
+#: but the pin keeps this table describing the repository instead of drifting.
+#:
+#: This is a floor, not an exhaustive inventory. A reference reached through a
+#: module PASSED IN as a function parameter (e.g. `jarvis_intake.propose(extract,
+#: ...)`, called with `jarvis_extract`) is not attributed to a patched file by a
+#: static scan, and is deliberately not guessed at: a wrong requirement blocks a
+#: deploy, and the ordinary call shape - which is the one the 2026-11-18 failure
+#: had - is what this covers.
+CROSS_FILE_DEPENDENCIES = (
+    CrossFileDependency("jarvis_models.py", "ollama_url_on_this_pc"),
+    CrossFileDependency("jarvis_gate.py", "check"),
+    CrossFileDependency("jarvis_gate.py", "pending"),
+    CrossFileDependency("jarvis_models.py", "discover"),
+    CrossFileDependency("jarvis_models.py", "probe_refusal"),
+    CrossFileDependency("jarvis_models.py", "rollback"),
+    CrossFileDependency("jarvis_models.py", "safe_ref"),
+    CrossFileDependency("jarvis_models.py", "switch_to"),
+)
+
+#: One sentence appended to a cross-file refusal: the deploy is fail-closed here.
+CROSS_FILE_RULE = (
+    "A refusal, not a warning: a deploy that carries on ships a live "
+    "AttributeError.")
+
+
+def _module_bindings(tree: ast.Module) -> dict:
+    """{local name: set of what it is bound to} for one module's source.
+
+    A module imported (`import jarvis_models`, `import jarvis_models as M`) records
+    the module root; anything else that binds a name (a variable, a function, a
+    parameter, a loop target...) records `"<other>"`. Resolution only trusts a
+    name whose WHOLE binding set is one patched module root, so a file that reuses
+    `M` for `jarvis_models` in one function and `jarvis_memory` in another is
+    skipped rather than guessed at - a false requirement is a deploy blocker, and
+    this check is a floor, not the only line of defence.
+    """
+    bindings = {}
+
+    def add(name, what):
+        if name:
+            bindings.setdefault(name, set()).add(what)
+
+    def add_target(target):
+        if isinstance(target, ast.Name):
+            add(target.id, "<other>")
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for element in target.elts:
+                add_target(element)
+        elif isinstance(target, ast.Starred):
+            add_target(target.value)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".")[0]
+                add(alias.asname or root, root)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name != "*":
+                    add(alias.asname or alias.name, "<other>")
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                add_target(target)
+        elif isinstance(node, ast.AugAssign):
+            add_target(node.target)
+        elif isinstance(node, ast.AnnAssign):
+            add_target(node.target)
+        elif isinstance(node, ast.NamedExpr):
+            add_target(node.target)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            add(node.name, "<other>")
+            arguments = node.args
+            for argument in (list(arguments.posonlyargs) + list(arguments.args)
+                             + list(arguments.kwonlyargs)):
+                add(argument.arg, "<other>")
+            if arguments.vararg:
+                add(arguments.vararg.arg, "<other>")
+            if arguments.kwarg:
+                add(arguments.kwarg.arg, "<other>")
+        elif isinstance(node, ast.ClassDef):
+            add(node.name, "<other>")
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            add_target(node.target)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                if item.optional_vars is not None:
+                    add_target(item.optional_vars)
+        elif isinstance(node, ast.comprehension):
+            add_target(node.target)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            add(node.name, "<other>")
+    return bindings
+
+
+def _handler_names(handler_type) -> tuple:
+    """The exception names one `except` clause names, or ("",) for a bare except."""
+    if handler_type is None:
+        return ("",)
+    if isinstance(handler_type, ast.Name):
+        return (handler_type.id,)
+    if isinstance(handler_type, ast.Tuple):
+        names = tuple(element.id for element in handler_type.elts
+                      if isinstance(element, ast.Name))
+        return names or ("",)
+    if isinstance(handler_type, ast.Attribute):
+        return (handler_type.attr,)
+    return ("",)
+
+
+def _is_guarded(node, parents: dict) -> bool:
+    """True when the shipped module itself handles this call's failure.
+
+    An enclosing `try` whose handler catches AttributeError/Exception/BaseException
+    (or a bare except), or an enclosing `getattr(...)`/`hasattr(...)` call, means
+    the module owns the fallback: a target missing the name is not a failure there.
+    """
+    current = node
+    while current in parents:
+        parent = parents[current]
+        if isinstance(parent, (getattr(ast, "TryStar", ast.Try), ast.Try)):
+            for handler in parent.handlers:
+                if any(name in _FALLBACK_HANDLERS or not name
+                       for name in _handler_names(handler.type)):
+                    return True
+        if (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
+                and parent.func.id in ("getattr", "hasattr")):
+            return True
+        current = parent
+    return False
+
+
+def _resolved_patched_module(local: str, bindings: dict) -> str:
+    """The PATCHED_FILES entry `local` names, or "" when it safely cannot be one."""
+    roots = bindings.get(local) or set()
+    if len(roots) != 1:
+        return ""
+    return _PATCHED_MODULE_STEMS.get(next(iter(roots)), "")
+
+
+def derive_cross_file_dependencies(sources) -> tuple:
+    """({(file, name): callers}, notes) from the shipped modules' own source.
+
+    `sources` maps a shipped live name (e.g. "jarvis_agent.py") to its text or
+    bytes. Only a `.py` file can call across a module boundary, and only an
+    UNGUARDED reference becomes a requirement (see `_is_guarded`). A file that
+    cannot be parsed is a NOTE, not a refusal: the declared floor is still checked,
+    and this suite's pin fails on a shipped module that does not parse anyway.
+    """
+    found = {}
+    notes = []
+    for live_name in sorted(sources):
+        if not str(live_name).endswith(".py"):
+            continue
+        text = sources[live_name]
+        if isinstance(text, bytes):
+            text = text.decode("utf-8", "replace")
+        try:
+            tree = ast.parse(text)
+        except SyntaxError as exc:
+            notes.append(f"{live_name}: not scanned ({exc.msg}); the declared "
+                         f"dependencies are still checked")
+            continue
+        parents = {}
+        for node in ast.walk(tree):
+            for child in ast.iter_child_nodes(node):
+                parents[child] = node
+        bindings = _module_bindings(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                module_file = _resolved_patched_module(node.value.id, bindings)
+                if not module_file or _is_guarded(node, parents):
+                    continue
+                found.setdefault((module_file, node.attr), set()).add(live_name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                module_file = _PATCHED_MODULE_STEMS.get(
+                    node.module.split(".")[0], "")
+                if not module_file or _is_guarded(node, parents):
+                    continue
+                for alias in node.names:
+                    if alias.name != "*":
+                        found.setdefault((module_file, alias.name),
+                                         set()).add(live_name)
+    return ({key: tuple(sorted(callers)) for key, callers in found.items()}, notes)
+
+
+def cross_file_needs(ship_actions) -> tuple:
+    """(requirements, notes) for a deploy: the declared floor + the ref's derivation.
+
+    `ship_actions` are the plan's ShippedActions, whose `blob` is the ref's byte
+    content for every shipped file - so this asks what the target folder will
+    contain AFTER the deploy, not what the checkout says.
+    """
+    sources = {}
+    for action in ship_actions:
+        name = str(getattr(action, "live_name", ""))
+        blob = getattr(action, "blob", None)
+        if name.endswith(".py") and blob:
+            sources[name] = blob
+    derived, notes = derive_cross_file_dependencies(sources)
+    needs = []
+    seen = set()
+    for declared in CROSS_FILE_DEPENDENCIES:
+        callers = derived.get((declared.file, declared.name), ())
+        needs.append(CrossFileDependency(declared.file, declared.name,
+                                         tuple(sorted(callers))))
+        seen.add((declared.file, declared.name))
+    for key in sorted(derived):
+        if key not in seen:
+            needs.append(CrossFileDependency(key[0], key[1],
+                                             tuple(sorted(derived[key]))))
+    return needs, notes
+
+
+def module_level_names(source: str) -> tuple:
+    """(every name `hasattr(module, name)` can answer True for, why unprovable).
+
+    Static, no import. Module-level bindings are collected from `def`/`class`,
+    assignments (including inside a module-level `if`/`try`/`with`/loop), imports
+    and `from`-imports. A module whose namespace is built dynamically - a
+    `from ... import *`, a module-level `__getattr__`, a module-level
+    `exec()`/`setattr()`/`globals()` call - cannot be proved to lack a name, and
+    says so instead of guessing either way.
+    """
+    tree = ast.parse(source)
+    names = set()
+    unproven = ""
+
+    def target_names(target):
+        if isinstance(target, ast.Name):
+            names.add(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for element in target.elts:
+                target_names(element)
+        elif isinstance(target, ast.Starred):
+            target_names(target.value)
+
+    def book(body):
+        nonlocal unproven
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                 ast.ClassDef)):
+                names.add(node.name)
+                if node.name == "__getattr__":
+                    unproven = unproven or ("it defines a module-level "
+                                            "__getattr__")
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    target_names(target)
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+                target_names(node.target)
+            elif isinstance(node, ast.NamedExpr):
+                target_names(node.target)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    names.add(alias.asname or alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name == "*":
+                        unproven = unproven or ("it has a 'from ... import *'")
+                    else:
+                        names.add(alias.asname or alias.name)
+            elif isinstance(node, (ast.If, ast.Try, ast.With, ast.For,
+                                   ast.While, ast.AsyncWith, ast.AsyncFor,
+                                   getattr(ast, "TryStar", ast.Try))):
+                book(node.body)
+                book(getattr(node, "orelse", ()) or ())
+                book(getattr(node, "finalbody", ()) or ())
+                for handler in getattr(node, "handlers", ()) or ():
+                    book(handler.body)
+            elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                func = node.value.func
+                called = getattr(func, "id", "") or getattr(func, "attr", "")
+                owner = getattr(getattr(func, "value", None), "id", "")
+                if called in ("exec", "setattr") or owner == "globals":
+                    unproven = unproven or ("it calls "
+                                            "exec()/setattr()/globals() at "
+                                            "module level")
+    book(tree.body)
+    return frozenset(names), unproven
+
+
+def target_module_bindings(target: Path, file: str) -> tuple:
+    """(the target folder's `file` names, "" or why they cannot be proved)."""
+    path = Path(target) / file
+    if not path.is_file():
+        return frozenset(), f"the target folder has no {file}"
+    try:
+        source = path.read_text(encoding="utf-8", errors="surrogateescape")
+    except OSError as exc:
+        return frozenset(), f"{file} could not be read ({exc})"
+    try:
+        return module_level_names(source)
+    except SyntaxError as exc:
+        return frozenset(), (f"{file} is not valid Python "
+                             f"({exc.msg}, line {exc.lineno})")
+
+
+def cross_file_gaps(target: Path, needs) -> tuple:
+    """(gaps, unproven) - required names the target folder cannot back.
+
+    `unproven` is one line per patched file whose names could not be established;
+    it is a refusal too, because a deploy that cannot prove the fit has no business
+    printing PASS - the very lie this check exists to stop.
+    """
+    cache = {}
+    gaps = []
+    unproven = []
+    unproven_files = set()
+    for need in needs:
+        if need.file not in cache:
+            cache[need.file] = target_module_bindings(Path(target), need.file)
+        names, why = cache[need.file]
+        if need.name in names:
+            continue
+        if why:
+            if need.file not in unproven_files:
+                unproven.append(f"{need.file}: {why}")
+                unproven_files.add(need.file)
+            continue
+        gaps.append(CrossFileGap(need.file, need.name, tuple(need.callers)))
+    return gaps, unproven
+
+
+def patches_writing_file(file: str, patches, *, repo: Path, ref: str,
+                         show=None) -> tuple:
+    """(the $PATCHES entries whose diff writes `file`, "" or why it was not read).
+
+    Asked only when a refusal needs to name the patch that OWNS the file, so the
+    cost of walking the patch stack lands on the failure path, not every run.
+    """
+    show = show or git_show
+    owners = []
+    try:
+        for patch in patches:
+            raw = show(Path(repo), ref, str(patch))
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", errors="replace")
+            if file in parse_patch_files(raw):
+                owners.append(str(patch))
+    except Refused as exc:
+        return [], str(exc)
+    return owners, ""
+
+
+def cross_file_refusal_lines(target: Path, gaps, unproven, *,
+                             patches=(), repo: Optional[Path] = None,
+                             ref: str = "", show=None) -> list:
+    """The operator-facing refusal: the module, the function, the owning patch.
+
+    One block, printed in full (never summarised away): every missing name with
+    its unguarded callers, the patch stack entries that own each file, and the two
+    documented ways out - apply the stack, or record the gap deliberately.
+    """
+    repo = Path(repo) if repo is not None else Path(__file__).resolve().parent.parent
+    lines = [
+        "CROSS-FILE CHECK - REFUSED (nothing has been written):",
+        "  the target folder cannot back what this deploy ships, and this tool "
+        "never",
+        "  carries a patched base file - the patch stack owns them:",
+    ]
+    for gap in gaps:
+        if gap.callers:
+            lines.append(f"    {gap.file}: no module-level {gap.name!r} - called "
+                         f"without a fallback by {len(gap.callers)} shipped "
+                         f"module(s): {', '.join(gap.callers[:6])}"
+                         + (" ..." if len(gap.callers) > 6 else ""))
+        else:
+            lines.append(f"    {gap.file}: no module-level {gap.name!r} - a "
+                         f"declared cross-file dependency of the shipped modules")
+    seen = set()
+    for gap in gaps:
+        if gap.file in seen:
+            continue
+        seen.add(gap.file)
+        owners, why = patches_writing_file(gap.file, patches, repo=repo, ref=ref,
+                                           show=show)
+        if owners:
+            lines.append(f"      the patch(es) that own {gap.file} in $PATCHES: "
+                         + ", ".join(owners))
+        elif why:
+            lines.append(f"      the patch stack could not be read to name "
+                         f"{gap.file}'s owner ({why})")
+        else:
+            lines.append(f"      no patch in $PATCHES writes {gap.file}; the "
+                         f"published base owns it")
+    for note in unproven:
+        lines.append(f"    cannot prove: {note}")
+    lines += [
+        "  This is the 2026-11-18 live failure shape: every shipped file was",
+        "  byte-current, the call raised AttributeError, and a route died. That",
+        "  incident's own message was: module 'jarvis_models' has no attribute",
+        "  'ollama_url_on_this_pc'. This run would deploy the same shape again.",
+        "  What to do, then re-run this tool:",
+        "    * apply the patch stack that owns the file: "
+        "powershell -ExecutionPolicy Bypass",
+        "      -File scripts/apply-patches.ps1 -BackendPath "
+        f"\"{target}\" (then restart Jarvis), or",
+        "    * if the target's copy is deliberately older than the published "
+        "base (the",
+        "      2026-11-18 copy dated from 2026-10-19), record that gap "
+        "deliberately: back up",
+        "      that ONE live file and add the missing name by hand (the "
+        "2026-11-18 shim",
+        "      appended to the live jarvis_models.py is the worked example), "
+        "then re-run.",
+        "      Never make this deploy carry a patched-base file: copying the "
+        "published base",
+        "      over it would lose the patches' applied hunks.",
+        f"  {CROSS_FILE_RULE}",
+    ]
+    return lines
+
+
+# ---------------------------------------------------------------------------
 #   Rehearsal, backup and writing
 # ---------------------------------------------------------------------------
 
@@ -3838,6 +4355,34 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
             f"SOURCE-COMMIT and the beside-files):")
         for line in release_lines(plan.release):
             out(line)
+
+    # 2c. CROSS-FILE CHECK. The pieces must fit on the TARGET folder, not merely be
+    #     byte-current: the five PATCHED_FILES are never carried (the patch stack
+    #     owns them), so a shipped module can be exactly right and still call a
+    #     name the target's older patched copy does not bind - the 2026-11-18 live
+    #     AttributeError. This runs in BOTH modes and BEFORE anything is written,
+    #     so a refusal leaves the live folder untouched. What it checks is the
+    #     POST-deploy state: the ref's shipped bytes against the target's patched
+    #     files, which this run never changes.
+    out("")
+    try:
+        needs, derivation_notes = cross_file_needs(plan.shipped)
+    except Exception as exc:                                  # noqa: BLE001
+        out(f"REFUSED: the cross-file check could not be prepared "
+            f"({type(exc).__name__}: {exc}); nothing has been written.")
+        return 2
+    gaps, unproven = cross_file_gaps(live, needs)
+    if gaps or unproven:
+        for line in cross_file_refusal_lines(live, gaps, unproven,
+                                             patches=patches, repo=repo, ref=ref,
+                                             show=show):
+            out(line)
+        return 2
+    out(f"CROSS-FILE CHECK ({len(needs)} name(s) the shipped modules call on the "
+        f"five patched base files):")
+    out("  PASS - every one is bound by the target folder's own copy")
+    for note in derivation_notes:
+        out(f"  NOT CHECKED: {note}")
 
     # 3. Rehearse before anything is swapped.
     errors = rehearse(staged)

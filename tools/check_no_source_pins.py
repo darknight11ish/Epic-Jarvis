@@ -276,7 +276,11 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # so all ten comparisons against `gate_text` count. Measured with
     # `--measure` on this tree, 485 -> 495; recorded as debt, not approval -
     # the ratchet only turns DOWN.
-    "backend/test_reconcile_live_backend.py": 10,
+    # 11, raised from 10 on 2026-11-18 with this reason: the cross-file
+    # reference rule (#1400) adds ONE shape check on the fixture it builds
+    # ("the fixture really is the tonight shape" - it reads the file it just
+    # wrote, not repository source). Every other pin in this file is older.
+    "backend/test_reconcile_live_backend.py": 11,
     "backend/test_referee.py": 3,
     "backend/test_retirement.py": 3,
     "backend/test_retrieve_count.py": 1,
