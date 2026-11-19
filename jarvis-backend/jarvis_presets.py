@@ -110,8 +110,11 @@ row now names `huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M` (30.5B
 parameters, a mixture of experts with 8 of 128 active per token) on the same
 pooled three-card lane at the 32,768-token window, where it loaded **19.520 GiB
 with 0.000 GiB spilled**. It tied the 27B's blind quality at **20/24**, emitted
-**22/22 correct tool calls** against the 27B's 18/19, and decodes **16.19-20.22
-tokens a second (median 17.16)** against the 27B's 9.04-13.05. The trade is
+**22/22 correct tool calls** against the 27B's 18/19, and decodes **about 21
+tokens a second** - the median of three separate loads on a PC with no test load,
+published **with its spread** because the three runs disagreed (19.71, 21.04 and
+62.55 tok/s; the cards' clock state, not competing load), which is ruling 5.4's
+shape - against the 27B's 9.04-13.05. The trade is
 running cost: 2.1 GiB more resident memory, a 55.1-66.3 s cold load against
 47.4-57.1 s, only a 32,768-token proven zero-spill window (49,152 measured
 0.226 GiB spilled, so the 27B's 49,152-token headroom is gone) and no vision.
@@ -268,8 +271,10 @@ GEMMA4_12B_MEASURED_WORDS = (
 UNCENSORED_MOE_MEASURED_WORDS = (
     "measured on this PC on 2026-11-19 at 32,768 tokens across all three "
     "cards on the real pooled lane: 19.520 GiB loaded entirely in the cards' "
-    "memory with 0.000 GiB spilled, a 55.1-66.3 s cold load and 16.19-20.22 "
-    "tokens a second (median 17.16; the LOW end is the figure the row shows)")
+    "memory with 0.000 GiB spilled, a 55.1-66.3 s cold load and about 21 "
+    "tokens a second (three separate loads on a PC with no test load; the three "
+    "read 19.71, 21.04 and 62.55 tok/s - spread 203.6% - so the median 21.04 "
+    "is published WITH that spread, never as a stable figure)")
 
 PRESETS = (
     Preset(
@@ -335,12 +340,24 @@ PRESETS = (
              "11450) and pauses the everyday model while it loads. Measured on this "
              "PC on 2026-11-19 on that lane at 32,768 tokens: 19.520 GiB loaded "
              "ENTIRELY in the cards' memory (0.000 GiB spilled), a 55.1-66.3 s cold "
-             "load and 16.19-20.22 tokens a second over ten clean fixed-prompt "
-             "samples (median 17.16, the low end shown). 49,152 tokens measured "
+             "load and about 21 tokens a second - the median of three separate "
+             "loads on a PC with no test load. The three disagreed (19.71-62.55 "
+             "tok/s, spread 203.6%) because of the cards' clock state, not "
+             "competing load, so the row publishes the median and that spread; "
+             "the PC was running its own assistant and browser (12-17% CPU on the perf counter; no test load), so ~21 is a floor, not a best case. 49,152 tokens measured "
              "0.226 GiB spilled, so 32,768 is the largest proven zero-spill window "
              "and the window this row runs.",
         worse="The speed and the tool actions are measured gains; quality is a TIE, "
-              "not a gain. The aligned 26B on General still scores 22/24 on the "
+              "not a gain. Speed is ONE rounded figure - the median of three "
+              "separate loads on a PC with no test load on 2026-11-19 - and the "
+              "three runs disagreed widely (19.71, 21.04 and 62.55 tok/s; spread "
+              "203.6% of the median), which is the cards' clock state, not "
+              "competing load. The PC was running its own assistant and browser "
+              "during the measurement (12-17% CPU on the perf counter; no test load), so ~21 is a "
+              "floor, not a best case; the row publishes the median plus the "
+              "spread, never a stability claim. The earlier ten-sample set on a "
+              "busy PC read 16.19-20.22 tok/s. The aligned 26B on General still "
+              "scores 22/24 on the "
               "project's blind eight-task battery at 52.3 tokens a second, so a "
               "bigger, uncensored model is NOT automatically better: this row "
               "scores 20/24, exactly the 27B it replaced. The trade for the speed "
@@ -374,16 +391,24 @@ PRESETS = (
                     "not heavy, and a coding model another preset left loaded is "
                     "ended first, because only one preset's model is loaded at a "
                     "time. It loads about 19.5 GiB with nothing spilled into "
-                    "system memory, takes 55-66 seconds cold and writes about 16 "
+                    "system memory, takes 55-66 seconds cold and writes about 21 "
                     "tokens a second.",
-        measured={"tok_s": 16.19, "tok_s_on": "2026-11-19",
+        measured={"tok_s": 21, "tok_s_on": "2026-11-19",
+                  "tok_s_runs": [62.55, 19.71, 21.04], "tok_s_median": 21.04,
+                  "tok_s_spread_pct": 203.6,
                   "tok_s_note": "19.520 GiB, 0.000 GiB spill, all three cards, "
-                                "32,768 context; ten clean fixed-prompt samples at "
-                                "temperature 0 read 16.19-20.22 tok/s, median "
-                                "17.16 - the low end is the figure the row shows. "
-                                "Two further passes of the same loaded model read "
-                                "18-73 tok/s as the cards' clock state moved, so "
-                                "the like-for-like range is the one quoted here",
+                                "32,768 context; THREE separate loads on a PC with "
+                                "no test load, one fixed-prompt decode each at "
+                                "temperature 0, read 62.55, 19.71, 21.04 tok/s - median 21.04, "
+                                "published as the rounded figure ~21. The three "
+                                "disagree by 203.6% of the median: the cards' "
+                                "clock state, not competing load (run 1's RTX 2060 "
+                                "at 1,995 MHz, runs 2 and 3 near 800 MHz). The PC "
+                                "was running its own assistant and browser (12-17% CPU on the perf counter; no test load), so ~21 is a floor, "
+                                "not a best case, and the row publishes the median "
+                                "plus this spread rather than a stable-looking "
+                                "number (ruling 5.4). The earlier ten-sample set "
+                                "on a busy PC read 16.19-20.22 tok/s (median 17.16)",
                   "size_gib": 19.520, "vram_gib": 19.520, "spill_gib": 0.0,
                   "cold_load_s": 66.3, "cold_load_range_s": [55.1, 66.3],
                   "context_measured": 32768,
@@ -412,15 +437,25 @@ PRESETS = (
                             "resident): 20,959,251,656 B resident and the same "
                             "20,959,251,656 B in the cards' memory at 32,768 "
                             "tokens (0.000 GiB spilled); 49,152 measured 0.226 GiB "
-                            "spilled and was disqualified; 16.19-20.22 tok/s over "
-                            "ten clean fixed-prompt samples (median 17.16, the low "
-                            "end is the figure the row shows); 20/24 on the "
+                            "spilled and was disqualified; the speed is the median "
+                            "of THREE separate loads on a PC with no test load (the "
+                            "three decodes read 62.55, 19.71, 21.04 tok/s; median 21.04, spread "
+                            "203.6%, published as ~21), with zero suite "
+                            "runners, no LLM call in flight, no model download and "
+                            "every GPU idle before each load; the PC's own assistant "
+                            "and browser held a 12-17% CPU baseline on the perf counter (no test load), so the "
+                            "figure is a floor; the earlier ten-sample busy-PC set "
+                            "read 16.19-20.22 (median 17.16), kept as the honest "
+                            "limit, never the figure; 20/24 on the "
                             "project's blind eight-task battery at 32,768; 22/22 "
                             "tool calls emitted and 22/22 fully correct; a "
                             "55.1-66.3 s cold load over three cold loads; /api/show "
                             "reports completion, tools and thinking and NO vision. "
                             "Full evidence: "
-                            ".dsh-scratch/wave21/research/MEASURE-MOE.md"},
+                            ".dsh-scratch/wave21/research/MEASURE-MOE.md; the "
+                            "quiet-machine three-run median and its spread: "
+                            ".dsh-scratch/wave21/research/quiet-median-2026-11-19/ "
+                            "(median-run.json, SUMMARY.md)"},
         prompt="balanced", diet="balanced",
         words=("uncensored", "no filter", "unfiltered", "general uncensored",
                "uncensored model"),

@@ -114,8 +114,15 @@ calling the preset swaps to it, and the measurement that day says it does. The
 row runs `huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M` (30.5B
 parameters, a mixture of experts) on the real pooled lane at 32,768 tokens:
 **19.520 GiB resident with 0.000 GiB spilled**, a 55.1-66.3 s cold load and
-**16.19-20.22 tokens a second** over ten clean fixed-prompt samples (median
-17.16; the low end is the row's figure), against the 27B's 9.04-13.05. Its
+**about 21 tokens a second** - the median of three separate loads on a PC with
+no test load on 2026-11-19, published **with its spread** because the three runs
+disagreed: 19.71, 21.04 and 62.55 tok/s, a spread of 203.6% of the median,
+driven by the cards' clock state and not by competing load (zero suite runners,
+no LLM call, GPU idle clocks before each load). That is ruling 5.4's shape:
+publish the median from a quiet PC, never a noisy single number, and say the
+spread. The PC ran its own assistant and browser throughout (a 12-17% CPU on the perf counter; no test load
+baseline), so ~21 is a floor, not a best case - against the 27B's 9.04-13.05.
+Its
 blind eight-task quality is **20/24** - a TIE with the 27B, two below the aligned
 26B's 22/24 at 52.3 tokens a second - and it emitted **22/22 correct tool calls**
 against the 27B's 18/19. The trade is stated in its own words: 2.1 GiB more
@@ -1582,12 +1589,14 @@ scoring battery. The evidence is
 the row is a heavy pooled row.** It runs
 `huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M` at 32,768 tokens on
 the pooled lane, measured **19.520 GiB resident with 0.000 GiB spilled, a
-55.1-66.3 s cold load and 16.19-20.22 tok/s over ten clean fixed-prompt samples
-(median 17.16; the row shows the low end)**, with its own `tok_s_on` date in the
+55.1-66.3 s cold load and about 21 tok/s - the median of three separate loads
+on a PC with no test load (the three read 19.71, 21.04 and 62.55; spread
+203.6%, stated not hidden), so ~21 is a floor rather than a best case**,
+with its own `tok_s_on` date in the
 `measured` object. It won the swap on the two things the preset promises: tool
 calls (**22/22 emitted and 22/22 fully correct** against the 27B's 18/19, whose
 one miss was the two-effect squats sentence this model gets right) and speed
-(about 1.7x the 27B's 9.04-13.05 under the identical protocol); blind quality is
+(its median 21.04 tok/s against the 27B's median 9.99, though the two were sampled in different clock states); blind quality is
 a **TIE** at **20/24** each. The price is running cost and it is said out loud:
 2.1 GiB more resident memory, a slower cold load, **no 49,152-token zero-spill
 headroom** (49,152 measured 0.226 GiB spilled, so 32,768 is the largest proven

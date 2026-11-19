@@ -376,8 +376,9 @@ def t_general_uncensored_is_the_measured_uncensored_moe():
     `huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M` on the SAME
     pooled three-card lane and 32,768-token window, with the 2026-11-19
     measurement on this PC: 19.520 GiB loaded entirely in the cards' memory
-    (0.000 GiB spilled), 16.19-20.22 tok/s over ten clean fixed-prompt samples
-    (median 17.16; the low end is the row's figure), a 55.1-66.3 s cold load, a
+    (0.000 GiB spilled), about 21 tok/s - the median of three separate loads
+    on a PC with no test load, published WITH its spread because the runs
+    disagreed (19.71-62.55 tok/s, 203.6%), a 55.1-66.3 s cold load, a
     TIE at 20/24 on the blind eight-task battery, and 22/22 tool calls fully
     correct against the 27B's 18/19. 49,152 tokens measured 0.226 GiB spilled,
     so the 27B's 49,152-token headroom is GONE, and the model reports no
@@ -407,10 +408,18 @@ def t_general_uncensored_is_the_measured_uncensored_moe():
           and all(p.model != "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M"
                   for p in P.PRESETS),
           (row["model"], [p.model for p in P.PRESETS]))
-    check("... the rendered row carries the 2026-11-19 measured figures: 16.19 "
-          "tok/s (the low end), 19.520 GiB, 0.000 GiB spilled, a 66.3 s cold load "
-          "and the 32,768-token window",
-          row["measured"]["tok_s"] == 16.19
+    check("... the rendered row carries the 2026-11-19 measured figures: the "
+          "rounded ~21 tok/s (the quiet-machine median of three separate "
+          "loads) WITH its spread, 19.520 GiB, 0.000 GiB spilled, a 66.3 s cold "
+          "load and the 32,768-token window",
+          row["measured"]["tok_s"] == 21
+          and len(row["measured"]["tok_s_runs"]) == 3
+          and row["measured"]["tok_s_median"] == round(
+              sorted(row["measured"]["tok_s_runs"])[1], 2)
+          and row["measured"]["tok_s"] == round(row["measured"]["tok_s_median"])
+          and row["measured"]["tok_s_spread_pct"] == 203.6
+          and "19.71" in row["measured"]["tok_s_note"]
+          and "62.55" in row["measured"]["tok_s_note"]
           and row["measured"]["tok_s_on"] == "2026-11-19"
           and row["measured"]["size_gib"] == 19.52
           and row["measured"]["vram_gib"] == 19.52
@@ -555,9 +564,12 @@ def main() -> int:
           (gu.model, gu.lane, gu.mode, gu.context))
     check("... its measured figures are the 2026-11-19 lane run: 19.520 GiB, 0.000 "
           "GiB spilled, ALL of it in the cards' memory, a 66.3 s cold load and "
-          "16.19-20.22 tok/s over ten clean samples (the low end is the figure); "
-          "49,152 spilled 0.226 GiB, so there is no bigger proven window",
-          gu.measured["tok_s"] == 16.19
+          "about 21 tok/s - the median of three separate loads on a PC with no "
+          "test load, published with its 203.6% spread; 49,152 spilled 0.226 "
+          "GiB, so there is no bigger proven window",
+          gu.measured["tok_s"] == 21
+          and len(gu.measured["tok_s_runs"]) == 3
+          and gu.measured["tok_s_spread_pct"] == 203.6
           and gu.measured["tok_s_on"] == "2026-11-19"
           and gu.measured["size_gib"] == 19.520
           and gu.measured["vram_gib"] == 19.520
@@ -637,15 +649,23 @@ def main() -> int:
           and "one run" in P.by_id("pictures").measured["tok_s_note"],
           {k: v.get("tok_s_note") for k, v in ranged.items()})
     moe = P.by_id("general_uncensored").measured
-    check("... and General Uncensored's 2026-11-19 speed is ten clean samples of ONE "
-          "fixed-prompt protocol quoted at its LOW end (16.19), with the clock-state "
-          "spread that moved the same model up to 73 tok/s said out loud rather than "
-          "hidden - so it is not one of the twice-run rows",
-          "16.19-20.22" in moe["tok_s_note"]
-          and "median 17.16" in moe["tok_s_note"]
+    check("... and General Uncensored's 2026-11-19 speed is the MEDIAN of three "
+          "separate loads on a PC with no test load (ruling 5.4), published with "
+          "its spread because the runs disagreed by more than 15%: the row keeps "
+          "the three figures and the clock-state explanation instead of dressing "
+          "the median up as stable, and it says the assistant running beside the "
+          "measurement makes ~21 a floor, not a best case",
+          len(moe["tok_s_runs"]) == 3
+          and moe["tok_s"] == 21
+          and round(sorted(moe["tok_s_runs"])[1]) == moe["tok_s"]
+          and moe["tok_s_median"] == round(sorted(moe["tok_s_runs"])[1], 2)
+          and moe["tok_s_spread_pct"] == 203.6
+          and "19.71" in moe["tok_s_note"]
+          and "21.04" in moe["tok_s_note"]
+          and "62.55" in moe["tok_s_note"]
           and "clock state" in moe["tok_s_note"]
-          and "18-73" in moe["tok_s_note"]
-          and moe["tok_s"] == 16.19,
+          and "floor, not a best case" in moe["tok_s_note"]
+          and "16.19-20.22" in moe["tok_s_note"],
           moe["tok_s_note"])
     av = fixture["presets"][3]
     check("Agentic+Vision now uses qwen3.5:9b on the 2060 at 16,384",
@@ -888,11 +908,12 @@ def main() -> int:
           and "19.520" in rec["three_gpu_plan"]["future_not_a_preset"]
           and "creative" in rec["three_gpu_plan"]["future_not_a_preset"])
     check("General Uncensored is a heavy pooled row in the 2-GPU rows now, with its "
-          "measured 16.19 tok/s and the 32,768 window it really runs",
+          "measured ~21 tok/s (quiet-machine median, spread stated) and the "
+          "32,768 window it really runs",
           rec["by_gpu_count"]["2"]["general_uncensored"]["card"].startswith(
               "all three cards (pooled lane")
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True
-          and rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 16.19
+          and rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 21
           and rec["by_gpu_count"]["2"]["general_uncensored"]["context"] == 32768,
           rec["by_gpu_count"]["2"]["general_uncensored"])
 

@@ -248,12 +248,17 @@ class FocusPresetsTest {
         assertTrue("applying it starts the pooled lane on demand",
             uncensored.apply.laneStart)
         val measured = requireNotNull(uncensored.measured) { "measured figures missing" }
-        assertEquals(16.19, measured.tokensPerSecond)
+        // Ruling 5.4: the median of three separate loads on a PC with no test
+        // load, published WITH its spread because the runs disagreed; the busy
+        // range stays in the note as the honest limit.
+        assertEquals(21.0, measured.tokensPerSecond)
         assertEquals("2026-11-19", measured.measuredOn)
         assertEquals(19.52, measured.sizeGib)
         assertEquals(0.0, measured.spillGib)
-        assertTrue("the note carries the range and its median",
-            measured.note!!.contains("16.19-20.22") && measured.note!!.contains("17.16"))
+        assertTrue("the note carries the median, the spread and the busy-PC limit",
+            measured.note!!.contains("spread")
+                && measured.note!!.contains("62.55")
+                && measured.note!!.contains("16.19-20.22"))
         assertFalse("the cost line no longer says PENDING",
             uncensored.cost.startsWith("PENDING:"))
         // The PC's own honest words travel with the row: the aligned 26B is the
