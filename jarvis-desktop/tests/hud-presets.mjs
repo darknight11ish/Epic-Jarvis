@@ -312,7 +312,12 @@ async function openHud(browser, options = {}) {
           // page's 30 s poll (and apprPoll on the event) paints it; the test
           // clicks Approve, which posts /api/approve - then this resolves.
           state.pending = [{ id: 42, action: "switch_model", raised: { text: "Switch the model for Coding?" },
-            source: "the HUD", reversible: "yes", reach: "local" }];
+            source: "the HUD", reversible: "yes", reach: "local",
+            // The change itself, in the gate's `switch_model` shape - a card
+            // with no readable detail draws Refresh instead of Approve since
+            // 2026-11-18, and this check is about the preset flow reaching
+            // /api/approve.
+            detail: { from: "qwen3.5:9b", to: "qwen3.5:35b", why: "the Coding preset" } }];
           await new Promise((resolve) => { state.applyWait = resolve; });
           state.pending = [];
         }
@@ -438,9 +443,13 @@ await check("the rail lists the PC's ten presets in the contract's order, titles
   assert.deepEqual(rows.map((r) => r.speed),
     FIXTURE.presets.map((p) => `${p.measured.tok_s} tok/s`),
     "the dated speed is not in every rail row");
-  // ... and the note is the detail behind it, in the row's tooltip.
+  // ... and the note is the detail behind it, in the row's tooltip. Each row
+  // says the date ITS OWN figure was measured on - the 2026-11-17 live run for
+  // most rows, and 2026-11-18 for Pictures & Screens, which was re-measured
+  // when its model changed. A fixed date here would be a list the contract does
+  // not keep, exactly what this suite exists to catch.
   for (const [i, p] of FIXTURE.presets.entries()) {
-    assert.match(rows[i].titleWords, new RegExp(`Measured 2026-11-17`),
+    assert.match(rows[i].titleWords, new RegExp(`Measured ${p.measured.tok_s_on}`),
       `the note is not in ${p.id}'s tooltip: ${rows[i].titleWords}`);
   }
   assert.deepEqual(problems, []);

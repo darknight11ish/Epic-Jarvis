@@ -772,7 +772,20 @@ def _read_state() -> dict:
 
 def _write_state(st: dict) -> bool:
     """Temp file plus os.replace. A half-written state file would leave the
-    router with no model at all, which is worse than a stale one."""
+    router with no model at all, which is worse than a stale one.
+
+    A suite or probe may not write the owner's LIVE `model-state.json`: the
+    2026-11-18 review's guard in `jarvis_framework` refuses it in plain words
+    before this touches the folder, and says which file it was. Without that
+    module - or with a suite's stand-in copy of it, which carries only the
+    attributes that suite reads - there is no resolver to name the live folder
+    with, so nothing is refused; the same shape as the rest of this module's
+    fallbacks.
+    """
+    guard = (getattr(fw, "refuse_live_config_write", None)
+             if fw is not None else None)
+    if guard is not None:
+        guard(STATE)
     try:
         with _LOCK:
             STATE.parent.mkdir(parents=True, exist_ok=True)

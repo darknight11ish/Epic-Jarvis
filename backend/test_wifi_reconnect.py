@@ -221,6 +221,47 @@ def the_switch() -> None:
 
 
 # --------------------------------------------------------------------------
+#   1b. The switch and the answer name the SAME state (2026-11-18)
+# --------------------------------------------------------------------------
+
+def the_switch_and_the_answer_agree() -> None:
+    """The Settings tick and the chat/Live answer read one state (2026-11-18).
+
+    The owner reported the Settings row saying "The auto Wi-Fi reconnect is
+    already on. Nothing was changed." over an unticked box. The state was ON and
+    the answer was right; only the page read the wrong field (`on`, which no
+    answer carries, instead of `enabled`). This holds the two LANES together at
+    run time: whatever `state()` says - the GET body whose `enabled` the page
+    ticks its box from - the chat/Live sentence says the same, in both
+    positions. A change that lets the answer drift from the state is caught here
+    even while the page is right, and the page's own half is
+    `jarvis-desktop/tests/wifi-reconnect.mjs`.
+    """
+    _reset()
+    code, out = W.handle_get(W.ROUTE_PATH)
+    check("GET carries a real boolean `enabled` - the one field the page ticks",
+          code == 200 and isinstance(out.get("enabled"), bool)
+          and out["enabled"] is W.enabled(), out.get("enabled"))
+    on = W.state()
+    check("ON: the state's enabled and the answer's sentence are one state",
+          on["enabled"] is True and W.state_words() == W.STATE_ON,
+          (on["enabled"], W.state_words()))
+    check("ON: a change that changes nothing answers 'already on'",
+          W.set_words(True) == W.ALREADY_ON)
+    check("ON -> OFF answers 'off now'", W.set_words(False) == W.SET_OFF)
+
+    _reset(enabled=False)
+    off = W.state()
+    check("OFF: the state's enabled and the answer's sentence are one state",
+          off["enabled"] is False and W.state_words() == W.STATE_OFF,
+          (off["enabled"], W.state_words()))
+    check("OFF: a change that changes nothing answers 'already off'",
+          W.set_words(False) == W.ALREADY_OFF)
+    check("OFF -> ON answers 'on now'", W.set_words(True) == W.SET_ON)
+    _reset()
+
+
+# --------------------------------------------------------------------------
 #   2. The 2-hour spacing
 # --------------------------------------------------------------------------
 
@@ -879,6 +920,7 @@ def main() -> int:
     _require_own_home()
     for name, fn in [
         ("the switch", the_switch),
+        ("the switch and the answer", the_switch_and_the_answer_agree),
         ("the spacing", the_spacing),
         ("the diagnosis", the_diagnosis),
         ("the saved store", the_saved_store),

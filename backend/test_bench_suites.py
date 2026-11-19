@@ -945,10 +945,17 @@ def t_view_and_cancel():
 #   8. Promotion is read-only and Q2's three checks
 # ==========================================================================
 
-#: The pair the Q2 checks are exercised on. `coding_q4` was RETIRED on
-#: 2026-11-09 (its candidate tag was deleted), so the pair that still exists
-#: carries the checks; the retired id keeps its own refusals below.
-PAIR = next(p for p in B.PROMOTION_PAIRS if p["id"] == "general_12b")
+#: The pair the Q2 checks are exercised on. It is a FIXTURE row, NOT one of
+#: `B.PROMOTION_PAIRS`: `coding_q4` was RETIRED on 2026-11-09 (its candidate tag
+#: was deleted) and `general_12b` on 2026-11-18 (its candidate
+#: `gemma4:12b-it-qat` became the Pictures & Screens preset's own model), so the
+#: shipped list is EMPTY and the machinery is exercised on this row instead of a
+#: shipped one. That keeps the road tested for the next real pair.
+PAIR = {"id": "general_12b", "preset": "general",
+        "incumbent": "qwen3.5:9b",
+        "candidate": "gemma4:12b-it-qat",
+        "ctx": 196608, "suites": ("speed", "general", "tool_calling"),
+        "why": "the retired general_12b row, kept here as the machinery's fixture"}
 GENERAL_PAIR = PAIR
 
 
@@ -1018,31 +1025,39 @@ def t_pair_verdict_reads_the_store_shape_and_stays_read_only():
         for suite in PAIR["suites"]:
             if suite != "speed":
                 cards[(bare, suite)] = _score(suite, model, score_pct=100.0)
-    verdict = B.pair_verdict(PAIR["id"], scores=cards)
+    # The shipped list is empty (both pairs retired), so the store-reading road
+    # is proved against the fixture row by putting it in place for the call and
+    # taking it out again - the machinery must stay tested for the next pair.
+    saved = B.PROMOTION_PAIRS
+    B.PROMOTION_PAIRS = (PAIR,)
+    try:
+        verdict = B.pair_verdict(PAIR["id"], scores=cards)
+        plan = B.promotion_plan(PAIR["id"])
+    finally:
+        B.PROMOTION_PAIRS = saved
     check("pair_verdict finds both models by bare name",
           verdict["ok"] is True and verdict["promote"] is True, verdict)
     check("pair_verdict never applies anything",
           verdict["applied"] is False)
     unknown = B.pair_verdict("nope")
-    check("an unknown pair says what exists",
-          unknown["ok"] is False and PAIR["id"] in unknown["why"])
+    check("an unknown pair is refused, and says none exists",
+          unknown["ok"] is False and "no promotion pair called" in unknown["why"],
+          unknown)
     retired = B.pair_verdict("coding_q4")
-    check("the RETIRED coding pair is refused by name, with the ids that exist",
-          retired["ok"] is False and "coding_q4" in retired["why"]
-          and PAIR["id"] in retired["why"], retired)
-    plan = B.promotion_plan(PAIR["id"])
+    check("the RETIRED coding pair is refused by name",
+          retired["ok"] is False and "coding_q4" in retired["why"], retired)
     check("the plan names both models and the window",
           plan["ok"] is True and plan["ctx"] == PAIR["ctx"]
           and plan["pair"]["candidate"] == PAIR["candidate"])
-    check("no pair is called coding_q4 or names the deleted q4 build",
-          all(p["id"] != "coding_q4" for p in B.PROMOTION_PAIRS)
-          and all(p["candidate"] != "qwen3-coder:30b-a3b-q4_K_M"
-                  for p in B.PROMOTION_PAIRS))
+    check("no pair ships any more: both were retired, not left as dead rows, "
+          "and the retired one's candidate is now a preset model",
+          B.PROMOTION_PAIRS == ()
+          and PAIR["candidate"] in {pr.model
+                                    for pr in __import__("jarvis_presets").PRESETS})
     view = B.promotion_pairs_view(store=B.ScoreLog(Path(tempfile.gettempdir())
                                                     / "no-such-scores.jsonl"))
-    check("the pairs view offers the one surviving pair, none applied",
-          len(view["pairs"]) == 1
-          and all(p["applied"] is False for p in view["pairs"]))
+    check("the pairs view offers no pairs, and offers nothing to apply",
+          view["pairs"] == [])
     check("an empty store promotes nothing",
           all(p["promote"] is False for p in view["pairs"]))
 
@@ -1066,9 +1081,10 @@ def t_no_preset_default_is_changed_by_this_work():
           getattr(general, "model", None))
     check("the General preset's window is the 32,768 the owner chose on 2026-11-18",
           int(general.context) == 32768, getattr(general, "context", None))
-    check("the pairs are only candidates, not presets",
-          all(p["candidate"] not in {pr.model for pr in P.PRESETS}
-              for p in B.PROMOTION_PAIRS))
+    check("no promotion pair ships any more: the last candidate became a preset "
+          "model on 2026-11-18, so the list is empty rather than a dead row",
+          B.PROMOTION_PAIRS == ()
+          and PAIR["candidate"] in {pr.model for pr in P.PRESETS})
 
 
 # ==========================================================================

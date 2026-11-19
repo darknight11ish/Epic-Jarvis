@@ -182,6 +182,111 @@ def _direct_test_log_dir(where: Path) -> Path:
     return _DIRECT_TEST_WHERE or where
 
 
+# --------------------------------------------------------------------------
+#   A suite or probe can never write the owner's live settings folder
+#   (2026-11-18, the review's ruling after the config incident)
+# --------------------------------------------------------------------------
+#
+# THE INCIDENT THIS ANSWERS. A lane admitted it briefly wrote the owner's live
+# config while probing: it turned the standing escalation switch off and
+# lowered his monthly money cap to $5, then restored both, and while it was in
+# that state the app showed him a card saying "$5.00 of $5.00" while the money
+# file said $10.00. The rule from the review has two halves: the harness keeps
+# its rule that no scratch lane writes live config, and the product gets this
+# fail-fast guard so the mistake cannot stay silent when a process that has
+# SAID it is a test or a probe reaches the owner's folder.
+#
+# THE MARKER IS NOT NEW. `backend/_where.py` sets JARVIS_SUITE_RUNNING=1 for
+# every suite, and it already gates three behaviours in `jarvis_presets` and
+# the history keeper. Reusing it is the point: a second "is this a test"
+# variable would be a second thing to keep right, and the two could disagree.
+#
+# WHY THE LIVE FOLDER IS NOT `CONFIG_DIR`. CONFIG_DIR is the folder this
+# process was ASKED to use, and with OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR
+# pointing somewhere temporary it is already safe - that is exactly what
+# backend/run_suites.py does for every suite. This guard is the last line, for
+# the target that reached the owner's own `~/.openjarvis` anyway: a module that
+# resolved the live default before the override was set, a hard-coded default,
+# or a probe that built the path itself. Reads are NOT touched: a test may
+# legitimately read the owner's ledger and settings, and that is how the
+# battery measures.
+#
+# IT REFUSES BY RAISING, never by quietly redirecting the write to a temporary
+# folder: a silent redirect lets a suite that believes it wrote the live path
+# report a pass it never earned. Every writer of a live settings file calls
+# `refuse_live_config_write(target)` before it creates a folder or a file, so a
+# refused write leaves the owner's folder exactly as it was. The live backend
+# never sets the marker, so this is inert on the owner's own PC.
+
+#: The environment variable that says "this process is a suite or a probe".
+#: `backend/_where.py` sets it at import for every suite in this repository.
+SUITE_RUNNING_ENV = "JARVIS_SUITE_RUNNING"
+
+
+def suite_running() -> bool:
+    """True when this process says it is a test/probe (JARVIS_SUITE_RUNNING)."""
+    return bool(os.environ.get(SUITE_RUNNING_ENV))
+
+
+def live_config_dir() -> Path:
+    """The owner's own settings folder: `~/.openjarvis`, expanded fresh.
+
+    Deliberately NOT built from CONFIG_DIR: an explicit
+    OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR that resolves to the live folder
+    is still the live folder, and the safe answer for a suite is a folder that
+    is not this one.
+    """
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+class LiveConfigWriteRefused(RuntimeError):
+    """A suite or probe tried to write the owner's live settings folder.
+
+    Raised instead of writing. The message names the file that was about to be
+    written, says that nothing was written, and says which folder a suite must
+    pass instead - the plain sentence the review asked for.
+    """
+
+
+def is_live_config_path(path) -> bool:
+    """Whether `path` is (or is inside) the owner's live settings folder.
+
+    Compared the way this platform compares names - separators and, on
+    Windows, letter case are normalised - and normalised, so
+    `~/.openjarvis/../.openjarvis/x` and (on Windows) an upper-case spelling
+    are caught too. Never raises: a path it cannot read is not called live, and
+    the refusal that matters is checked with the paths the writers really pass.
+    """
+    try:
+        if isinstance(path, bytes):
+            path = os.fsdecode(path)
+        got = os.path.expanduser(os.fspath(path))
+        got = os.path.normcase(os.path.normpath(os.path.abspath(got)))
+        live = os.path.normcase(os.path.normpath(
+            os.path.abspath(os.fspath(live_config_dir()))))
+        return got == live or got.startswith(live + os.sep)
+    except Exception:
+        return False
+
+
+def refuse_live_config_write(path) -> None:
+    """Refuse a live-settings write while this process is a suite or a probe.
+
+    A no-op in the live backend and in any suite that points its settings
+    folder somewhere temporary; raises LiveConfigWriteRefused for a suite or
+    probe that resolved the owner's `~/.openjarvis`. It writes nothing itself,
+    so a refusal always means "the folder is exactly as it was".
+    """
+    if not suite_running() or not is_live_config_path(path):
+        return
+    raise LiveConfigWriteRefused(
+        "a suite or probe tried to write the owner's live settings file "
+        f"{os.fspath(path)}, so nothing was written. A suite must pass a "
+        "temporary settings folder (--config-dir / OPENJARVIS_CONFIG_DIR) and "
+        f"never write {live_config_dir()}."
+    )
+
+
 def _explicit() -> Optional[Path]:
     """The JARVIS_FRAMEWORK_TOML override, and a complaint if it is wrong.
 

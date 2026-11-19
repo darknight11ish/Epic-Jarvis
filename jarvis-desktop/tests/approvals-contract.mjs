@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { normaliseApproval, quickActionable, expiryWords } from "../src/jarvis-link.js";
+import { CARD_NO_DETAIL, CARD_REFRESH } from "../src/card-words.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(HERE, "..", "..", "jarvis-client", "app", "src", "test", "resources",
@@ -158,9 +159,16 @@ const replaceGuard = HUD.slice(
   HUD.indexOf("/* == replace-confirm guard begin =="),
   HUD.indexOf("/* == replace-confirm guard end =="));
 assert.ok(replaceGuard.length > 100, "jarvis_hud.html lost its replace-confirm block markers");
-const hudSrc = [replaceGuard].concat(["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised",
-                 "apprRiskLine", "apprCutOff", "apprTitle"].map(lift)).join("\n");
-const hud = new Function(`${hudSrc}; return { apprCardHtml, apprCutOff, apprTitle };`)();
+// The page cannot import card-words.js, so its two blank-cheque sentences are
+// its own copies; they are injected here from the module (card-words.mjs holds
+// the page's literals to the same module and the generated fixture).
+const hudConsts = `const APPR_NO_DETAIL = ${JSON.stringify(CARD_NO_DETAIL)};\n`
+  + `const APPR_REFRESH = ${JSON.stringify(CARD_REFRESH)};`;
+const hudSrc = [replaceGuard].concat(["apprEscape", "apprDescribe", "apprDetailWords",
+                 "apprFieldWords", "apprLabel", "apprObjectWords", "apprListWords",
+                 "apprCardHtml", "apprRaised", "apprRiskLine", "apprCutOff",
+                 "apprTitle"].map(lift)).join("\n");
+const hud = new Function(`${hudConsts}\n${hudSrc}; return { apprCardHtml, apprCutOff, apprTitle };`)();
 
 check("the HUD card shows the rush warning, its quote and the risk sentence", () => {
   const html = hud.apprCardHtml(rows.find((r) => r.id === "abc123"), Date.now());
@@ -214,6 +222,54 @@ check("the HUD draws 'REPLACES CURRENT DATA' only on the marked cards", () => {
   assert.doesNotMatch(hud.apprCardHtml({ id: "s4", action: "backup_restore", tier: "ask",
                                          detail: "{}", prompt: "card" }, 0),
                       /REPLACES CURRENT DATA/);
+});
+
+// ---- THE BLANK CHEQUE (2026-11-18, measured on the owner's phone) ----------
+//
+// A waiting `change_own_config` card about the owner's cloud settings drew no
+// detail at all and still drew a normal Approve: a yes to a change nobody could
+// see. The backend HAD sent the detail; the phone dropped it. The desktop had
+// its own version of the same hole - apprDescribe() fell back to "(no detail)"
+// and the card still offered Approve. A card that cannot say what it would
+// change must not be approvable, on both apps.
+check("a card that cannot say what it would change has no Approve - Refresh and Deny", () => {
+  const blank = hud.apprCardHtml({ id: "n1", action: "change_own_config", tier: "ask",
+    notice: { title: "Jarvis wants to change one of its settings" } }, 0);
+  assert.ok(blank.includes(CARD_NO_DETAIL), "the card does not say the detail did not arrive");
+  assert.match(blank, /class="refresh"/, "no Refresh is drawn where Approve would be");
+  assert.match(blank, /class="no"/, "Deny must survive");
+  assert.doesNotMatch(blank, /class="yes"/, "Approve is still offered on a card with no detail");
+  assert.doesNotMatch(blank, /\(no detail\)/, "the old empty fallback is still drawn");
+  assert.match(blank, /Jarvis wants to change one of its settings/);
+  // Every shape a missing detail arrives in: an empty object, machine JSON with
+  // nothing sayable, and a blank string are all "no detail".
+  for (const detail of ["{}", '{"why":null}', "", "   "]) {
+    assert.doesNotMatch(hud.apprCardHtml({ id: "n2", action: "x", detail }, 0), /class="yes"/,
+      `detail ${JSON.stringify(detail)} was treated as readable`);
+  }
+});
+
+check("a card with the change in its detail still approves normally", () => {
+  // The exact wire shape of the cloud provider card: jarvis_presets.apply_cloud
+  // passes {"text": ...}, which the gate stores as JSON text.
+  const text = "Send hard questions to OpenAI instead of answering them on this PC.";
+  const html = hud.apprCardHtml({ id: "d1", action: "change_own_config",
+    detail: JSON.stringify({ text }) }, 0);
+  assert.match(html, /class="yes"/);
+  assert.doesNotMatch(html, /class="refresh"/);
+  assert.match(html, /Send hard questions to OpenAI/);
+  // The sibling escalation card sends two extra keys - it must keep Approve too.
+  const esc = hud.apprCardHtml({ id: "d2", action: "change_own_config",
+    detail: JSON.stringify({
+      text: "Jarvis may send a hard question to the cloud without asking first.",
+      costs_money: "cloud", pid: "openai",
+    }) }, 0);
+  assert.match(esc, /class="yes"/);
+  assert.match(esc, /Jarvis may send a hard question to the cloud/);
+  // A command, and a plan carried as {"text": ...}, are readable word for word.
+  assert.match(hud.apprCardHtml({ id: "d3", action: "run_shell_on_host",
+    detail: "rm -rf ~/Documents" }, 0), /class="yes"/);
+  assert.match(hud.apprCardHtml(rows.find((r) => r.id === "r4"), Date.now()), /class="yes"/);
 });
 
 console.log(fails.length ? `\n${fails.length} failed` : "\nall approval-row checks passed");

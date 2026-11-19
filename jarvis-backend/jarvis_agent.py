@@ -11812,7 +11812,10 @@ def more_tools_groups(allowed, *, short: bool, plugins: bool = False) -> list:
 #: the tools whose own words appear in it are shown - at most this many. A
 #: question with NO recognisable subject falls back to the full list (the safe
 #: side: an unknown question must never lose a tool), and the short list, when
-#: on, keeps its own fixed core + more_tools path untouched.
+#: on, keeps its own fixed core + more_tools path untouched. A question that
+#: NAMES one of the owner's things (a repository, pull request, commit, branch,
+#: defect, workflow - see NAMED_ACTION_TOOLS below) is never treated as
+#: unrecognised: its read tools are added first and the cap cannot cut them.
 TOOL_DIET_LIMIT = 8
 #: Off only when the owner sets `[tools] tool_diet = false`; the default is on
 #: so the real-model eval measures what ships. A tool not shown can still be
@@ -12070,9 +12073,16 @@ TOOL_HINTS = {
     # "how do I turn it on". Deliberately narrower than change_setting's own
     # hints: a plain "what is ..." must not pull a tool in for every question,
     # so only the feature-worded phrasings here are recognised.
+    # The "is it on" hint is ANCHORED at the end of the sentence (2026-11-18):
+    # `\bis the .* (?:on|off)\b` matched its own words ANYWHERE, so the
+    # measured question "what is the latest commit on main in Epic-Jarvis?"
+    # pulled this settings tool in on "is the" + "on". A feature question ends
+    # on the on/off ("is the prompt coach on?"), which is what this asks for;
+    # the pronoun forms are separate alternatives and keep matching anywhere.
     "feature_guide": (r"\bfeatures?\b", r"\bexplain\b", r"prompt coach",
                       r"what does .* do\b", r"how do i (?:turn|switch|enable|disable)",
-                      r"\bis the .* (?:on|off)\b"),
+                      r"\bis the .{1,40} (?:on|off)(?:\s+right now)?\s*[?.!]?\s*$",
+                      r"\bis (?:it|that|this) (?:on|off)\b"),
     "rea_investigate": (r"\breverse[- ]?engineer", r"\bdecompil", r"\basar\b",
                         r"\belectron\b", r"\bghidra\b", r"\bjadx\b", r"\bapk\b",
                         r"\.dll\b", r"\.exe\b", r"\bbinar(y|ies)\b",
@@ -12183,6 +12193,109 @@ _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
 
 
+# --------------------------------------------------------------------------
+#   The named-thing floor (2026-11-18 live battery)
+#   A tool the question NAMES the thing for is never dieted away
+# --------------------------------------------------------------------------
+#
+# WHAT WENT WRONG, measured on the owner's PC (2026-11-18 17:57Z, eight real
+# questions asked through the live /api/chat). The diet above scores a tool by
+# whether the owner's words appear in THE TOOL'S OWN HINTS. Every GitHub
+# tool's hints open with `github` - and the owner does not say "GitHub" when
+# he means his own repository; he says "Epic-Jarvis". "What is the latest
+# commit on main in Epic-Jarvis?" therefore matched only `web_search`
+# ("latest") and `feature_guide` (a settings tool, by accident), and EVERY
+# GitHub tool was hidden. The model cannot call a tool it cannot see, so it
+# answered "I don't have direct access to your GitHub repositories" - a false
+# denial of an ability this backend has, and the exact false-denial shape the
+# owner asked to be fixed. A tool being hidden also stopped the safe
+# full-list fallback: two incidental words were enough to count as a
+# "recognised subject".
+#
+# WHY A FLOOR AND NOT MORE HINT WORDS. A hint is a SCORE: a competing word
+# can beat it, the top-K cap can crowd it out, and every new way the owner
+# phrases his question would need its own word. The floor is unconditional:
+# when the sentence NAMES the thing a tool is for, that tool is shown
+# whatever the scores say, and the cap cannot take it away. The words here
+# are the owner's OBJECT words - "repository", "pull request", "commit",
+# "branch", "defect register", "workflow"/"CI" - not the tools' descriptions,
+# plus his repository's own name, read from `jarvis_github.OWN_REPO` so this
+# file holds no second copy of it.
+#
+# READ-ONLY ON PURPOSE. Every tool below is a card-free READ: the floor shows
+# the read that answers the question the owner named, and it never puts a
+# WRITE tool in front of the model on its own. The GitHub writes keep their
+# own action words in TOOL_HINTS above (merge, push, comment...) and their
+# own cards in jarvis_gate; a tool offered is not a tool run either way.
+#
+# WHAT IT CANNOT DO. It cannot show a tool that is not in `allowed` - the
+# owner's settings switches still decide what a turn may offer. It cannot
+# widen a tier: it touches no gate and no configuration (see the note beside
+# TOOL_DIET_DEFAULT: check_call reads `names`, the allowed list, never the
+# shown one). And it cannot hide anything: on a question where it fires it
+# ADDS the named tools to what the hints already chose.
+NAMED_ACTION_TOOLS = (
+    # (the owner's own word for the thing, the read-only tools that answer
+    # about it). Order is irrelevant: the shown list keeps `allowed` order.
+    (r"\b(?:repos?|repositories|repository)\b", ("github_list",)),
+    (r"\bpull requests?\b|\bprs?\b", ("github_pr_scan", "github_pr_detail")),
+    (r"\bcommits?\b", ("github_ci_status",)),
+    (r"\bbranches?\b", ("github_pr_scan",)),
+    (r"\bdefects?\b|\bdefect register\b", ("check_records",)),
+    (r"\bworkflows?\b|\bci\b", ("github_ci_status",)),
+)
+#: Compiled once: the table is fixed text, and the regex module caches anyway.
+_NAMED_ACTION_RX = tuple((re.compile(rx, re.I), names)
+                         for rx, names in NAMED_ACTION_TOOLS)
+
+
+def _owner_repo_rx():
+    """The owner's own repository NAME as a pattern, or None.
+
+    Read from its ONE home, `jarvis_github.OWN_REPO` ("darknight11ish/
+    Epic-Jarvis"), so a question that says just "Epic-Jarvis" is a question
+    about a repository even though the word "github" is not in it. The
+    separator is optional and either case, so "Epic Jarvis" and "epic-jarvis"
+    are the same word the owner typed. None when the module is missing (an
+    older backend) or the name is a single word that would match too much.
+    """
+    try:
+        import jarvis_github as GH
+        repo = str(getattr(GH, "OWN_REPO", "") or "")
+    except Exception:                        # noqa: BLE001 - older backend is a state
+        return None
+    name = repo.rsplit("/", 1)[-1].strip()
+    words = [w for w in re.split(r"[^0-9A-Za-z]+", name) if w]
+    if len(words) < 2:
+        return None
+    body = r"[-_ ]?".join(re.escape(w) for w in words)
+    return re.compile(r"\b" + body + r"\b", re.I)
+
+
+def named_action_floor(question, allowed) -> list:
+    """The tools a question NAMES the thing for, in `allowed` order.
+
+    Pure and deterministic: the same words always name the same tools. A tool
+    that is not in `allowed` is never returned, so the owner's own switches
+    still bound what a turn can show. Empty when the sentence names none of
+    the owner's things, which is every ordinary question - the diet then
+    behaves exactly as before.
+    """
+    allowed = list(allowed or ())
+    text = str(question or "").strip()
+    if not text or not allowed:
+        return []
+    aset = set(allowed)
+    named = set()
+    for rx, names in _NAMED_ACTION_RX:
+        if rx.search(text):
+            named.update(n for n in names if n in aset)
+    repo_rx = _owner_repo_rx()
+    if repo_rx is not None and repo_rx.search(text) and "github_list" in aset:
+        named.add("github_list")
+    return [n for n in allowed if n in named]
+
+
 def tool_diet_on() -> bool:
     """`[tools] tool_diet` in jarvis-framework.toml; TOOL_DIET_DEFAULT when it
     is not set or cannot be read. Only a real `false` turns it off."""
@@ -12200,12 +12313,15 @@ def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,
                         extra_hints: Optional[dict] = None) -> dict:
     """What a question shows from `allowed`, and how sure the selector is.
 
-    {"tools": [...], "fallback": bool, "matched": n}. `fallback` is True when
-    the question has NO word any tool's hints recognise - the safe side, and
+    {"tools": [...], "fallback": bool, "matched": n, "named": n}. `fallback`
+    is True when the question has NO word any tool's hints recognise AND names
+    none of the owner's things (see NAMED_ACTION_TOOLS) - the safe side, and
     the caller then shows every allowed tool exactly as before. A question
-    with at least one match shows the matched tools in TOOLS order, at most
-    `limit`; the model can still CALL any allowed tool (check_call reads the
-    allowed list), so nothing is made impossible, only unshown.
+    with at least one match, or one that NAMES a repository, pull request,
+    commit, branch, defect or workflow, shows the matched tools in `allowed`
+    order, at most `limit`; the named-thing floor is added first and is never
+    cut by the cap. The model can still CALL any allowed tool (check_call
+    reads the allowed list), so nothing is made impossible, only unshown.
 
     `extra_hints`: {name: (compiled regexes,)} for tools whose hints are not
     in _TOOL_HINTS_RX - the plug-in programs' (jarvis_mcp.py, F4). They are
@@ -12216,33 +12332,54 @@ def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,
     allowed = list(allowed or ())
     limit = max(1, int(limit))
     if not allowed:
-        return {"tools": [], "fallback": False, "matched": 0}
+        return {"tools": [], "fallback": False, "matched": 0, "named": 0}
     text = str(question or "").strip().lower()
     if not text:
-        return {"tools": allowed, "fallback": True, "matched": 0}
+        return {"tools": allowed, "fallback": True, "matched": 0, "named": 0}
     extra_hints = extra_hints or {}
     scored = []
     for name in allowed:
         patterns = _TOOL_HINTS_RX.get(name) or extra_hints.get(name, ())
         scored.append((sum(1 for rx in patterns if rx.search(text)), name))
     hit = [(score, name) for score, name in scored if score > 0]
-    if not hit:
-        return {"tools": allowed, "fallback": True, "matched": 0, "multi_step": False}
+    floor = named_action_floor(text, allowed)
+    if not hit and not floor:
+        return {"tools": allowed, "fallback": True, "matched": 0, "named": 0,
+                "multi_step": False}
     order = {name: i for i, name in enumerate(allowed)}
     hit.sort(key=lambda pair: (-pair[0], order[pair[1]]))
+    hits = [name for _score, name in hit]
     multi = looks_multi_step(text)
     if multi:
-        # A chain gets the small always-on core plus the matched tools, under a
-        # larger cap - still far short of the full 31-tool list.
-        chosen = [n for n in CHAIN_CORE if n in allowed]
-        for _score, name in hit:
+        # A chain gets the small always-on core plus the matched tools plus
+        # anything the sentence NAMED, under a larger cap - still far short of
+        # the full list. The floor and the chain core are in first, so the cap
+        # can never take either away.
+        chosen = list(floor)
+        for n in CHAIN_CORE:
+            if n in allowed and n not in chosen:
+                chosen.append(n)
+        for name in hits:
             if name not in chosen:
                 chosen.append(name)
-        return {"tools": chosen[:max(limit, TOOL_DIET_MULTI_LIMIT)],
-                "fallback": False, "matched": len(hit), "multi_step": True,
+        cap = max(limit, TOOL_DIET_MULTI_LIMIT,
+                  len(floor) + sum(1 for n in CHAIN_CORE if n in allowed))
+        return {"tools": chosen[:cap], "fallback": False, "matched": len(hit),
+                "named": len(floor), "multi_step": True,
                 "chain_core": [n for n in CHAIN_CORE if n in allowed]}
-    return {"tools": [name for _score, name in hit[:limit]],
-            "fallback": False, "matched": len(hit), "multi_step": False}
+    # Single-step: the named tools are never cut by the cap (the cap grows to
+    # fit them if the table ever named more than the diet size), then the
+    # hint-matched tools fill the rest. With no named tool this is EXACTLY the
+    # top-K diet it was before: hit[:limit], in the same order.
+    cap = max(limit, len(floor))
+    chosen = list(floor)
+    for name in hits:
+        if len(chosen) >= cap:
+            break
+        if name not in chosen:
+            chosen.append(name)
+    return {"tools": chosen, "fallback": False, "matched": len(hit),
+            "named": len(floor), "multi_step": False}
 
 
 def tool_diet(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,

@@ -2499,15 +2499,21 @@ PROMOTION_DECODE_FLOOR = {"coding": 75.0, "general": 40.0,
 #: installed is a dead row in the packet, not a pending promotion. The models
 #: stay in `docs/MEASURED-2026-11-07-THREE-GPU.md` as measured; only the pair is
 #: gone. `pair_verdict("coding_q4")` now refuses it by name.
-PROMOTION_PAIRS = (
-    {"id": "general_12b", "preset": "general",
-     "incumbent": "qwen3.5:9b",
-     "candidate": "gemma4:12b-it-qat",
-     "ctx": 196608, "suites": ("speed", "general", "tool_calling"),
-     "why": "the 12B is a newer build than the everyday 9B; the preset's own "
-            "196,608-token window is the hard part, and routing/OCR must not "
-            "regress (Q2)"},
-)
+#:
+#: THE GENERAL PAIR IS RETIRED TOO (2026-11-18), and this list is now EMPTY.
+#: `general_12b` proposed `gemma4:12b-it-qat` as a candidate for the General
+#: preset's 196,608-token window; on 2026-11-18 that candidate became the
+#: Pictures & Screens preset's own model (32,768 tokens on the pooled lane,
+#: measured 8.70 GiB with 0 B spilled), and a pair's candidate must not be a
+#: model a preset already runs - a promotion row that proposes a shipped default
+#: is a dead row in the packet, not a pending promotion. Its premise had already
+#: moved as well: the General preset has run `gemma4:26b-a4b-it-qat` since
+#: 2026-11-18, not the qwen3.5:9b incumbent this row named. No verdict was ever
+#: measured for it and none is claimed. The machinery below (`promotion_verdict`,
+#: `pair_verdict`, `promotion_plan`, `promotion_pairs_view`) is unchanged and is
+#: still exercised against a fixture row in `test_bench_suites.py`, so the next
+#: real pair has a tested road back in.
+PROMOTION_PAIRS = ()
 
 #: The sentences a screen shows. One constant each, so the desktop, the phone
 #: and the card cannot word the same refusal three ways.
@@ -4169,8 +4175,9 @@ def promotion_plan(pair_id: str) -> dict:
     pair = next((p for p in PROMOTION_PAIRS if p["id"] == pair_id), None)
     if pair is None:
         return {"ok": False,
-                "why": f"no promotion pair called {pair_id!r}; there are: "
-                       + ", ".join(p["id"] for p in PROMOTION_PAIRS)}
+                "why": (f"no promotion pair called {pair_id!r}; there are "
+                        + (", ".join(p["id"] for p in PROMOTION_PAIRS)
+                           or "none yet"))}
     return {"ok": True, "pair": dict(pair),
             "message": (f"Measure {pair['candidate']} and {pair['incumbent']} on "
                         f"a throwaway server at {pair['ctx']:,} tokens, then "
@@ -4279,8 +4286,9 @@ def pair_verdict(pair_id: str, *, scores: Optional[dict] = None,
     pair = next((p for p in PROMOTION_PAIRS if p["id"] == pair_id), None)
     if pair is None:
         return {"ok": False, "applied": False,
-                "why": f"no promotion pair called {pair_id!r}; there are: "
-                       + ", ".join(p["id"] for p in PROMOTION_PAIRS)}
+                "why": (f"no promotion pair called {pair_id!r}; there are "
+                        + (", ".join(p["id"] for p in PROMOTION_PAIRS)
+                           or "none yet"))}
     cards = scores if scores is not None else latest_scorecards(store=store)
     out = promotion_verdict(pair, _rows_for(cards, pair["incumbent"]),
                             _rows_for(cards, pair["candidate"]))

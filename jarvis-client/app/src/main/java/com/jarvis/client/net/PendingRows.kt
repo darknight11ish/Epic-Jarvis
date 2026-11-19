@@ -230,10 +230,33 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     }
     val summary = textOf(obj["summary"]) ?: preview ?: textOf(obj["prompt"]) ?: ""
     out["summary"] = JsonPrimitive(summary)
-    // Show detail only when it adds something to what the card already shows.
-    val detailRepeats = preview != null && preview == summary &&
-        (detailObj == null || detailObj.keys == setOf(previewKey))
-    if (detailText == null || detailRepeats) out.remove("detail") else out["detail"] = JsonPrimitive(detailText)
+    // THE DETAIL IS NEVER DROPPED (2026-11-18, measured on the owner's phone).
+    //
+    // `summary` above is this phone's OWN reading of the detail, and this file
+    // used to delete `detail` whenever that reading repeated it - "show detail
+    // only when it adds something to what the card already shows". That was
+    // true when the card drew `item.summary` under the title. It has NOT been
+    // true since approval cards read short (c08d768a1, 2026-10-10): the card
+    // draws the PC's `notice.summary` (a phrase built from the action NAME,
+    // never from the payload) and `notice.full`, and the derived `summary` is
+    // read by the widget and the notification but NEVER by the card. So for
+    // every row whose readable text was carried by `detail` - a command, a
+    // plan, `{"text": "…"}`, or the ONE-key object a cloud settings card sends
+    // - the deletion removed the only words naming the actual change.
+    //
+    // What that looked like in the owner's hand (2026-11-18): a waiting
+    // `change_own_config` card about his cloud settings drew no detail at all
+    // and still drew a normal Approve, while the sibling cloud card (a detail
+    // with two extra keys, so its text was not a "repeat") drew its own. A card
+    // nobody can read must not be approvable - `CardDetail` draws that rule on
+    // the screen - but the first fix is to stop dropping the detail the backend
+    // sent: the whole point of the card is to say what would change.
+    //
+    // A row that repeats itself (a command that is also the fallback summary)
+    // now draws that text once in the folded line and again when the card is
+    // opened. That is a deliberate trade: the words are exactly what is being
+    // agreed to, and losing them is the blank cheque.
+    if (detailText == null) out.remove("detail") else out["detail"] = JsonPrimitive(detailText)
     // A tag-suggestion card (TagSuggest): keep the PC's hidden version beside
     // the whole one, and never show the raw detail (it holds both texts, and the
     // whole one has the chat's title). Which text shows is decided at draw time.
