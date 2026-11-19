@@ -871,10 +871,14 @@ CORE_REGRESSION = (
     ('Do you have a feature for When the connection is catching up?', 'stale-link'),
 )
 
-CORE_KNOWN_LOST = (
-    ('Does Jarvis escalate to the cloud?', 'cloud-escalation', 'cloud_settings'),
-    ('What is cloud escalation?', 'cloud-escalation', 'cloud_settings'),
-)
+CORE_KNOWN_LOST = ()
+#: EMPTY since 2026-11-18: both entries that lived here
+#: ("Does Jarvis escalate to the cloud?" and "What is cloud escalation?") were
+#: fixed by #1391 -- `jarvis_cloud_settings` no longer claims the
+#: `cloud-escalation` row's own two questions, so the row answers them again and
+#: the full sweep's "cloud-escalation 63 < 65" regression is gone. The list stays
+#: -- a NEW loss must be added here to be named, and the run prints
+#: "FIXED, remove me" for any entry that starts passing again.
 
 #: The ONE variable that turns the full 5,410-question sweep on. ci.yml's
 #: `backend-shard` job sets it for a commit that changed the feature catalogue
@@ -1268,7 +1272,9 @@ def t_the_core_subset_holds():
     Three groups, all questions the full sweep below already asks:
       * CORE_OWNER_WORDED - one question naming each catalogue row's own title;
       * CORE_REGRESSION - the 53 answers the capability fix changed;
-      * CORE_KNOWN_LOST - the two answers a LATER merge has since taken away
+      * CORE_KNOWN_LOST - the answers a LATER merge has taken away. EMPTY since
+  2026-11-18: the two cloud-escalation questions were fixed by #1391, so a
+  NEW loss fails here until it is named in that list
         (the full sweep's "cloud-escalation 63 < 65"), named on every run and
         never counted as a pass; any loss NOT on that list fails here.
     """
@@ -1286,8 +1292,8 @@ def t_the_core_subset_holds():
           "row's own title to CORE_OWNER_WORDED")
     check("... its 53 regression-sensitive cases",
           len(CORE_REGRESSION) == 53, str(len(CORE_REGRESSION)))
-    check("... and its two dated known-loss entries",
-          len(CORE_KNOWN_LOST) == 2, str(len(CORE_KNOWN_LOST)))
+    check("... and NO dated known-loss entries: both were fixed by #1391",
+          len(CORE_KNOWN_LOST) == 0, str(len(CORE_KNOWN_LOST)))
 
     known = {sentence for sentence, _row, _wrong in CORE_KNOWN_LOST}
     questions = ([sentence for sentence, _row in CORE_OWNER_WORDED]

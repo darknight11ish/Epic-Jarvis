@@ -112,12 +112,12 @@ def t_the_core_has_its_counts():
     check("... 53 regression-sensitive cases (the capability fix's changed"
           " answers)", len(CAP.CORE_REGRESSION) == 53,
           str(len(CAP.CORE_REGRESSION)))
-    check("... and two dated known losses, named but never counted as passes",
-          len(CAP.CORE_KNOWN_LOST) == 2, str(len(CAP.CORE_KNOWN_LOST)))
+    check("... and NO dated known losses: both were fixed by #1391",
+          len(CAP.CORE_KNOWN_LOST) == 0, str(len(CAP.CORE_KNOWN_LOST)))
     total = (len(CAP.CORE_OWNER_WORDED) + len(CAP.CORE_REGRESSION)
              + len(CAP.CORE_KNOWN_LOST))
-    check("the routed total is 239 cases (~230: the review's estimate)",
-          total == 239, str(total))
+    check("the routed total is 237 cases (~230: the review's estimate)",
+          total == 237, str(total))
     check("no question appears twice across the pinned lists",
           len({q for q, _ in CAP.CORE_OWNER_WORDED}
               | {q for q, _ in CAP.CORE_REGRESSION}
@@ -218,8 +218,8 @@ def t_a_lost_title_question_fails_the_core():
     """A row whose own-title question stops reaching it is a failed core."""
     # The known-lost entries are the live example: the check reports them, and
     # the only reason the suite is green is that they are on the dated list.
-    check("the dated known losses are exactly the two cloud-escalation questions",
-          {row for _s, row, _w in CAP.CORE_KNOWN_LOST} == {"cloud-escalation"},
+    check("the dated known losses are now an EMPTY set (both fixed by #1391)",
+          {row for _s, row, _w in CAP.CORE_KNOWN_LOST} == set(),
           str(CAP.CORE_KNOWN_LOST))
     out = io.StringIO()
     before = len(CAP.FAILED)
@@ -228,9 +228,9 @@ def t_a_lost_title_question_fails_the_core():
     printed = out.getvalue()
     check("the live core subset passes with no NEW losses", len(CAP.FAILED) == before,
           printed[-600:])
-    check("... and prints both known losses on every run, as KNOWN LOST, never ok",
-          printed.count("KNOWN LOST") == 2
-          and "NOT a pass" in printed, printed[-800:])
+    check("... and prints NO known losses on this tree: nothing is KNOWN LOST",
+          printed.count("KNOWN LOST") == 0, printed[-800:])
+
 
 
 # --------------------------------------------------------------------------
