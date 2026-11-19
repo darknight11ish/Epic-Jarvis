@@ -73,11 +73,18 @@ CODING = ("Write a complete Python script that reads a CSV of temperatures, "
 
 #: A lane state exactly the shape `lane_state()` returns for the shipped default
 #: (DeepSeek bills hidden reasoning INSIDE max_tokens, so its priced answer is
-#: cap + REASONING_ROOM). The key is a made-up string, never used.
-DEEPSEEK = {"lane": RT.CLOUD_LANE, "pid": "deepseek_api", "model": "deepseek-flash",
-            "host": "api.deepseek.com",
-            "url": "https://api.deepseek.com/chat/completions",
-            "key": "not-a-real-key-0123456789", "cap": 8000, "problem": ""}
+#: cap + REASONING_ROOM). The key is a made-up string, never used. The address
+#: is READ FROM THE PRESET rather than typed here: the egress checker requires
+#: every outbound host mention in this tree to be accounted for, and a test has
+#: no business adding one.
+def _lane(pid: str, model: str, *, cap: int = 8000) -> dict:
+    p = API.PRESETS[pid]
+    return {"lane": RT.CLOUD_LANE, "pid": pid, "model": model, "host": p.host,
+            "url": API.request_url(p), "key": "not-a-real-key-0123456789",
+            "cap": int(cap), "problem": ""}
+
+
+DEEPSEEK = _lane("deepseek_api", "deepseek-flash")
 
 
 def check(name, cond, detail=""):
@@ -164,9 +171,7 @@ def t_the_bound_can_only_lower_the_money_checked_request():
           lowered == 4096, lowered)
     # A service whose reasoning is not measured inside its cap keeps the
     # caller's own number; the ceiling must not RAISE it.
-    other = {"pid": "mistral_api", "model": "mistral-small-latest",
-             "host": "api.mistral.ai", "url": "https://api.mistral.ai/v1/chat/completions",
-             "key": "not-a-real-key-0123456789", "cap": 8000, "problem": ""}
+    other = _lane("mistral_api", "mistral-small-latest")
     out = body_for(STANDARD, complexity=0.45, state=other, asked=2048)
     check("a lane priced with the caller's own cap is never RAISED above it",
           out.get("max_tokens") == min(4096, API.cloud_request_cap(other, 2048)),
@@ -193,11 +198,7 @@ def t_every_escalation_gets_the_instruction():
         ("coding", body_for(CODING, complexity=0.45)),
         ("another service", body_for(
             STANDARD, complexity=0.45,
-            state={"pid": "mistral_api", "model": "mistral-small-latest",
-                   "host": "api.mistral.ai",
-                   "url": "https://api.mistral.ai/v1/chat/completions",
-                   "key": "not-a-real-key-0123456789", "cap": 8000,
-                   "problem": ""})),
+            state=_lane("mistral_api", "mistral-small-latest"))),
         ("a small cap", body_for(STANDARD, complexity=0.45,
                                  state=dict(DEEPSEEK, cap=256))),
     )
