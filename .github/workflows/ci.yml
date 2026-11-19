@@ -2137,6 +2137,26 @@ jobs:
       - name: Pre-build guards for the document, GitHub and publishing waves
         run: python3 ../../tools/prebuild_guards/test_guards.py
 
+      # ---------------------------------------------------------------------
+      # A PACKAGE INSTALL MUST NOT WRITE INTO THE CHECKOUT (2026-11-18).
+      #
+      # That night a delegated agent ran pip with the repository root as its
+      # working directory and TMP/TEMP pointing inside the tree. Pip left
+      # SEVENTEEN pip-metadata-* and pip-unpack-* folders at the root,
+      # untracked and unremarked until somebody noticed by accident - and one
+      # `git add -A` would have committed them.
+      # tools/check_package_install_context.py refuses that context for pip and
+      # for uv, names the offending folder and says the fix. This step runs
+      # BEFORE this job's own `python3 -m pip install` (the claims step's
+      # dependencies) further down: GitHub Actions stops the job on a failed
+      # step, so a working directory moved back to the root, or a TMP/TEMP
+      # pointing inside the checkout, stops the install before it starts rather
+      # than after it has scattered folders. The required `backend` job runs
+      # backend/test_package_install_guards.py, which proves every refusal this
+      # step can print and that this exact working directory passes.
+      - name: A package install would not write into the repository
+        run: python3 ../../tools/check_package_install_context.py --manager pip
+
       # The plug-in catalogue must match the patch stack. It drifted and nothing
       # caught it: plugins/registry.json held 134 entries against the stack's 136,
       # so scripts/list-plugins.ps1 and add-plugin.ps1 - which read that file -
@@ -2557,6 +2577,25 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Which audited areas have moved since their last audit
         run: python3 ../../tools/check_stale_area.py --all
+
+      # ---------------------------------------------------------------------
+      # THE SECOND HALF OF THE 2026-11-18 GUARD. If an install ever bypasses
+      # the context guard above, its leftovers must not sit in the root
+      # unnoticed. On 2026-11-18 pip left seventeen pip-metadata-* and
+      # pip-unpack-* folders at the root, untracked, one `git add -A` from
+      # being committed; a person found them by accident.
+      # tools/check_package_manager_temp_artifacts.py fails on a tracked or
+      # untracked root path matching pip's temp patterns, a root *.dist-info or
+      # a TRACKED root node_modules, names every path and prints the commands
+      # that remove them. It deliberately does not fire on a `pip-*` name
+      # inside a test fixture, under the ignored .dsh-scratch/, or on an
+      # untracked node_modules that .gitignore line 36 already covers. It is
+      # green on main today (measured: no root entry matches).
+      # backend/test_package_install_guards.py proves the bite and the
+      # clean-after-removal run on a real fixture repository it makes and
+      # removes, so this step going red means real folders really are there.
+      - name: No package-manager temporary folder is in the repository root
+        run: python3 ../../tools/check_package_manager_temp_artifacts.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
