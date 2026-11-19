@@ -813,6 +813,28 @@ def money_path() -> Path:
     return base / "chatbot" / MONEY_FILE
 
 
+def _refuse_live_write(path) -> None:
+    """Refuse a spending-file write while this process is a suite or a probe.
+
+    The live folder and the plain refusal sentence are `jarvis_framework`'s ONE
+    guard (2026-11-18, the review's ruling): a lane probing the product briefly
+    wrote the owner's live config - it lowered his monthly money cap to $5 and
+    turned the escalation switch off, then restored both - so the card showed
+    "$5.00 of $5.00" while the money file said $10.00. Imported lazily, the same
+    way money_path() above resolves the folder, because this module must import
+    with no framework module at all. A suite that fakes `jarvis_framework`
+    (a stand-in module carrying only what its own code reads) has no guard in
+    it, and is left as it was: there is no real live folder for it to name.
+    """
+    try:
+        import jarvis_framework as fw
+    except Exception:
+        return
+    guard = getattr(fw, "refuse_live_config_write", None)
+    if guard is not None:
+        guard(path)
+
+
 def _empty() -> dict:
     return {"version": 1, "limits": {}, "prices": {}, "months": {}}
 
@@ -842,6 +864,7 @@ def _load() -> dict:
 
 def _save(data: dict) -> None:
     p = money_path()
+    _refuse_live_write(p)
     p.parent.mkdir(parents=True, exist_ok=True)
     for old in sorted(data.get("months", {}))[:-KEEP_MONTHS]:
         data["months"].pop(old, None)
