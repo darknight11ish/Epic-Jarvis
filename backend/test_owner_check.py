@@ -70,6 +70,10 @@ CASES = REPO / "jarvis-desktop" / "tests" / "fixtures" / "risky-approval-cases.j
 RULES_RS = REPO / "jarvis-desktop" / "src-tauri" / "src" / "lock" / "rules.rs"
 SECURITY_KT = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
                / "client" / "data" / "Security.kt")
+APPROVAL_KEY_KT = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com"
+                   / "jarvis" / "client" / "platform" / "ApprovalKey.kt")
+MAIN_ACTIVITY_KT = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com"
+                    / "jarvis" / "client" / "MainActivity.kt")
 
 
 def _block(src, marker):
@@ -1901,6 +1905,123 @@ def t_the_phone_may_approve_a_tool_enable_card_too():
           "for - so the class is what carries the check",
           OC.is_risky(safe) is False)
 
+
+# ------------------ the monthly money cap's raise, answered on the phone --
+#
+# THE REVIEW'S GAP 2 (2026-11-19): the cap can be changed from chat behind ONE
+# card, and that card is answered with Windows Hello on the PC or with the
+# asking phone's own fingerprint/PIN. The owner's own ruling of 2026-10-11
+# ("Let the phone raise it too, with its own fingerprint") is what makes this
+# card approvable from a phone at all; these checks pin that the route is the
+# phone's own SIGNED approval and not a bypass - the raise is not a small card
+# (so the card alone cannot approve it), it is not PC-only (so a phone MAY
+# answer it), and a phone yes without its device signature is refused.
+
+MONEY_RAISE = "raise_api_limit"
+
+
+def _money_raise_row(rid="money1"):
+    """The raise card as the gate really raises it, with the gate's OWN risk
+    row for the action (reconstructed from the patch stack, exactly as
+    `_tool_enable_row` does) and the card's own words in `detail`."""
+    import test_approval_contract as AC
+    rev, reach, why = AC._risk_table()[MONEY_RAISE]
+    asked = ("Let Jarvis spend up to $15.00 a month on DeepSeek, instead of "
+             "$5.00?")
+    return {"id": rid, "action": MONEY_RAISE, "tier": "ask",
+            "created": time.time() - 5, "expires_in": 150,
+            "raised": None, "prompt": asked,
+            "detail": json.dumps({"text": asked, "service": "deepseek",
+                                  "company": "DeepSeek", "was": "$5.00",
+                                  "now": "$15.00", "leaves_this_pc": False}),
+            "risk": {"reversible": rev, "reach": reach, "why": why,
+                     "swipe_ok": False, "classified": True}}
+
+
+def t_the_money_raise_is_approved_on_the_phone_with_its_own_signature():
+    row = _money_raise_row()
+    check("the gate's own row for raising a money cap is irreversible, so a "
+          "person must confirm it", row["risk"]["reversible"] == "no", row["risk"])
+    check("... so is_risky() is True and the PC asks Windows Hello for its own yes",
+          OC.is_risky(row) is True, row["risk"])
+    check("... it is NOT a small card, so the card alone can never approve it",
+          OC.is_small(row) is False, row["action"])
+    check("... and it is NOT the PC's own ceremony, so a paired phone MAY answer it",
+          MONEY_RAISE not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+
+    import jarvis_devices as D
+    real = D.check_signed_approval
+    seen = []
+
+    def signed(body, r, dev):
+        seen.append((dev, r.get("action")))
+        return None                     # the phone's own signature checked out
+    try:
+        D.check_signed_approval = signed
+        _fresh_stamps()
+        got = OC.approve_check({"id": "money1"}, peer=PHONE_PEER[0],
+                               local=PHONE_PEER[1], pending=lambda: [row],
+                               own=(), device="dev1")
+    finally:
+        D.check_signed_approval = real
+    check("a yes on the raise from a paired phone is checked against THAT "
+          "phone's signature for THAT action",
+          got is None and seen == [("dev1", MONEY_RAISE)], (got, seen))
+    check("... and only then is the approval stamped", OC.take_stamp("money1", MONEY_RAISE))
+
+    def no_key(body, r, dev):
+        return 403, {"ok": False, "owner_check": "no_approval_key",
+                     "error": "Turn on signed approvals for this phone first."}
+    _fresh_stamps()
+    row2 = _money_raise_row("money2")
+    try:
+        D.check_signed_approval = no_key
+        got = OC.approve_check({"id": "money2"}, peer=PHONE_PEER[0],
+                               local=PHONE_PEER[1], pending=lambda: [row2],
+                               own=(), device="dev1")
+    finally:
+        D.check_signed_approval = real
+    check("a phone with no approval key cannot raise the cap: refused in the "
+          "frozen sentence, so it offers to turn signing on",
+          got is not None and got[0] == 403
+          and got[1].get("owner_check") == "no_approval_key", got)
+    check("... and a refusal is never stamped", not OC.take_stamp("money2", MONEY_RAISE))
+    # CONTROL: the check is carried by the gate's risk row, not by the action
+    # name - the same card classed safe would need no signature.
+    safe = dict(row)
+    safe["risk"] = {"reversible": "yes", "reach": "local", "why": "control",
+                    "swipe_ok": True, "classified": True}
+    check("CONTROL: without the risky row the raise would not ask the phone's "
+          "signature at all", OC.is_risky(safe) is False)
+
+
+def t_the_phones_signed_yes_is_its_own_biometric_prompt():
+    """The phone half of the same path, read from the app's own sources: the
+    key its signed approval uses cannot be operated without the owner's
+    biometric (strong) or device credential, and the SIGNED branch asks the
+    phone's `BiometricGate` (its `BiometricPrompt`) for that signature before
+    anything is sent. So a raise approved on the phone is approved with the
+    phone's own check, not by a code path that sends the decision unsigned."""
+    key = APPROVAL_KEY_KT.read_text(encoding="utf-8")
+    check("the approval key cannot be used without the owner's biometric or "
+          "device credential",
+          "setUserAuthenticationRequired(true)" in key
+          and "AUTH_BIOMETRIC_STRONG" in key
+          and "AUTH_DEVICE_CREDENTIAL" in key, key[:400])
+    check("... and the prompt unlocks a BiometricPrompt.CryptoObject around it",
+          "CryptoObject" in key)
+    main = MAIN_ACTIVITY_KT.read_text(encoding="utf-8")
+    signed_body = _block(main, "private suspend fun signedApprove(")
+    check("the signed branch asks this phone's BiometricGate for the signature, "
+          "then signs with it",
+          "BiometricGate.sign" in signed_body and "unlocked.sign()" in signed_body,
+          signed_body[:300])
+    approve_body = _block(main, "private suspend fun approveItem(")
+    check("... and the approval path routes a risky card down that branch, "
+          "never straight to a plain POST",
+          "approveTakesSignedPath" in approve_body
+          and "SignedApproval.pathFor" in approve_body
+          and "Path.SIGNED -> signedApprove" in approve_body, approve_body[:400])
 
 
 #------------------------------------------------------- the words --

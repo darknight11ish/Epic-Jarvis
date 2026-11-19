@@ -395,6 +395,177 @@ def t_removing_a_limit_that_is_not_there_says_so():
           "Removed" not in json.dumps(body), body.get("said"))
 
 
+# ========================================== 2b. the whole cap-change path
+#
+# The review's gap 2 (2026-11-19): the cap is changed from chat behind one
+# card, so the PATH is what has to be pinned, not only each isolated rule.
+# These drive the real `jarvis_chatbot_limits.change()` (and, for the chat
+# door, `jarvis_cloud_settings.set_cap()`) against the real, unmodified
+# `jarvis_chatbot_api` money file in this suite's temporary folder - never the
+# owner's - and look at the LEDGER after each decision, because "the limit
+# moved" and "the file says so" are two different claims.
+
+
+def money_written() -> dict:
+    """The ledger as it is on disk right now."""
+    return json.loads(money_file().read_text(encoding="utf-8"))
+
+
+def t_an_approved_raise_writes_the_limit_and_the_ledger_reads_it_back():
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    arm(YES)
+    code, body = post({"action": "raise_limit", "service": "openai", "dollars": 10})
+    check("an approved raise answers 200", code == 200, body)
+    check("the new limit is in the LEDGER itself, not only in the answer",
+          money_written().get("limits", {}).get("openai_api") == 10.0,
+          money_written().get("limits"))
+    check("... and the money module reads it back", API.limit_of("openai_api") == 10.0)
+    check("... so the next spend is checked against $10, not $3",
+          API.money_check("openai_api", "gpt-5-mini")[0] == "")
+    row = next(r for r in body["services"] if r["service"] == "openai")
+    check("... and the answer's own view row says the amount the PC writes",
+          row["limit"] == 10.0 and row["limit_words"] == "$10.00"
+          and row["left_words"] == "$10.00", row)
+
+
+def t_a_denied_raise_writes_nothing_at_all():
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    before = money_file().read_bytes()
+    arm(NO)
+    code, body = post({"action": "raise_limit", "service": "openai", "dollars": 10})
+    check("a denied raise is refused, not approved", code == 409
+          and body.get("error") == "not_approved", body)
+    check("... and the ledger is byte-for-byte untouched", money_file().read_bytes() == before)
+    check("... and the limit still reads as before", API.limit_of("openai_api") == 3.0)
+    arm(LATE)
+    code, body = post({"action": "raise_limit", "service": "openai", "dollars": 10})
+    check("a timed-out raise writes nothing either",
+          code == 409 and body.get("error") == "not_approved"
+          and money_file().read_bytes() == before, body)
+
+
+def t_a_lowering_is_cardless_instant_and_the_ledger_shows_it():
+    wipe()
+    API.set_limit("openai_api", 5.0)
+    before = money_written()["limits"]
+    arm()
+    code, body = post({"action": "lower_limit", "service": "openai", "dollars": 2})
+    check("a lowering answers 200", code == 200, body)
+    check("... with NO card raised at all", GATE_CALLS == [], GATE_CALLS)
+    check("... the ledger holds the lower limit immediately",
+          money_written()["limits"].get("openai_api") == 2.0,
+          (before, money_written().get("limits")))
+    check("... and the money module enforces the lower cap at once",
+          API.limit_of("openai_api") == 2.0)
+    row = next(r for r in body["services"] if r["service"] == "openai")
+    check("... and the answer says what is left under the new cap",
+          row["limit_words"] == "$2.00" and row["left_words"] == "$2.00", row)
+
+
+def t_an_amount_above_the_ceiling_is_refused_before_a_card():
+    """The most a limit may be set to is the API module's own ceiling
+    (`MOST_LIMIT`). Above it the request is refused BEFORE the gate is asked,
+    so no card is ever raised for an amount the module cannot store - and
+    nothing is written."""
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    before = money_file().read_bytes()
+    arm(YES)
+    over = API.MOST_LIMIT + 1
+    code, body = post({"action": "raise_limit", "service": "openai", "dollars": over})
+    check("an amount above the ceiling is refused", code == 400
+          and body.get("error") == "bad_amount", body)
+    check("... BEFORE any card is raised", GATE_CALLS == [], GATE_CALLS)
+    check("... and nothing is written", money_file().read_bytes() == before)
+    # The ceiling itself is still a real amount: it raises the ordinary card.
+    arm(YES)
+    code, body = post({"action": "raise_limit", "service": "openai",
+                       "dollars": API.MOST_LIMIT})
+    check("the ceiling itself is allowed - with the ordinary card",
+          code == 200 and [c["action"] for c in GATE_CALLS] == [L.RAISE_ACTION], body)
+    # The chat door must not be a way round it: it passes through the same
+    # `change()`, so the same refusal comes back before any card.
+    import jarvis_cloud_settings as CS
+    arm(YES)
+    code, body = CS.set_cap(over, provider="openai_api", peer="127.0.0.1", local="127.0.0.1")
+    check("the chat door refuses it too, before a card",
+          code == 400 and body.get("error") == "bad_amount" and GATE_CALLS == [],
+          (code, body, GATE_CALLS))
+
+
+def t_the_cap_can_be_raised_from_chat_from_the_phone_behind_the_same_card():
+    """The owner's ask of 2026-11-18 ("manage cloud settings from phone chat")
+    and the 2026-10-11 ruling ("let the phone raise it too, with its own
+    fingerprint") meet here: a phone asks in chat, the chat door calls the
+    route's own `change()`, and THAT raises the SAME one `raise_api_limit`
+    card - not a chat-only shortcut, and not a write before the yes.
+
+    The phone's fingerprint half is pinned where the approval is decided:
+    `test_owner_check.py` proves this action's card from another device needs
+    that device's signed approval, and the phone's own Kotlin test proves a
+    risky card takes the fingerprint prompt path. This test pins the DOOR.
+    """
+    import jarvis_cloud_settings as CS
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    before = money_file().read_bytes()
+    arm(NO)
+    saved = L._from_this_pc
+    L._from_this_pc = lambda *_a, **_k: False       # the request came from a phone
+    try:
+        status, body = CS.set_cap(10, provider="openai_api",
+                                  peer="100.100.5.9", local="100.64.0.1")
+        check("a chat cap raise from the phone asks the SAME raise card",
+              [c["action"] for c in GATE_CALLS] == [L.RAISE_ACTION],
+              [c["action"] for c in GATE_CALLS])
+        check("... the card is the ordinary one, answered on the phone "
+              "(it does not leave this PC)",
+              GATE_CALLS and GATE_CALLS[0]["detail"].get("leaves_this_pc") is False,
+              GATE_CALLS)
+        check("... a no on that card writes nothing",
+              money_file().read_bytes() == before
+              and "Nothing was changed" in CS.change_words("cap", status, body,
+                                                           provider="openai"),
+              (status, body))
+        arm(YES)
+        status, body = CS.set_cap(10, provider="openai_api",
+                                  peer="100.100.5.9", local="100.64.0.1")
+    finally:
+        L._from_this_pc = saved
+    check("... a yes writes the raise the card named",
+          status == 200 and money_written()["limits"].get("openai_api") == 10.0,
+          (status, money_written().get("limits")))
+    words = CS.change_words("cap", status, body, provider="openai")
+    check("... and the chat sentence reports the change, never a maybe",
+          "10.00" in words and "Nothing was changed" not in words, words)
+
+
+def t_the_phone_cannot_approve_a_money_raise_without_its_own_check():
+    """The anti-bypass half of gap 2, read off the PC's own rules: a raise is
+    NOT a small card (the card-alone exemption of 2026-11-01 cannot approve
+    it), and it IS risky in the way that makes the PC's gate demand the
+    asking phone's own signed approval. The Kotlin test in
+    `ApproveAsksFingerprintTest` proves the phone routes that same card down
+    the fingerprint path."""
+    import jarvis_owner_check as OC
+    check("raise_api_limit is NOT a small card, so the card alone cannot approve it",
+          L.RAISE_ACTION not in OC.SMALL_ACTIONS, sorted(OC.SMALL_ACTIONS))
+    check("... and it is not the PC's own ceremony either, so a phone MAY answer it",
+          L.RAISE_ACTION not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+    check("a risky card from another device is signed by that device - the rule "
+          "the raise relies on",
+          "_signed_check(body, row, device)" in
+          (REPO / "backend" / "jarvis_owner_check.py").read_text(encoding="utf-8"))
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "data" / "Security.kt").read_text(encoding="utf-8")
+    start = kt.find("val SMALL_ACTIONS: Set<String>")
+    block = kt[start:kt.find(")", start)]
+    check("the phone's own small list does not contain it either",
+          start >= 0 and L.RAISE_ACTION not in block, block[:400])
+
+
 # ======================================================= 3. PC only
 
 
@@ -762,6 +933,12 @@ if __name__ == "__main__":
                t_a_raise_that_names_no_more_than_now_is_a_tightening_not_a_card,
                t_the_first_limit_on_a_service_is_a_raise_and_gets_a_card,
                t_removing_a_limit_that_is_not_there_says_so,
+               t_an_approved_raise_writes_the_limit_and_the_ledger_reads_it_back,
+               t_a_denied_raise_writes_nothing_at_all,
+               t_a_lowering_is_cardless_instant_and_the_ledger_shows_it,
+               t_an_amount_above_the_ceiling_is_refused_before_a_card,
+               t_the_cap_can_be_raised_from_chat_from_the_phone_behind_the_same_card,
+               t_the_phone_cannot_approve_a_money_raise_without_its_own_check,
                t_a_raise_from_the_phone_raises_the_card_and_applies_when_it_is_confirmed,
                t_a_denied_card_on_the_phone_leaves_the_limit_exactly_where_it_was,
                t_a_lowering_or_a_removal_from_the_phone_needs_no_card_at_all,

@@ -964,6 +964,37 @@ def _prepare_github_search(args: dict):
     return p, R.describe(p)
 
 
+#: Said when NOT ONE search request came back (2026-11-19, the review's gap):
+#: "github_search has no execution test". The row that gap found is here -
+#: `jarvis_research.run()` answers a request that FAILED with `ok: True` and an
+#: `errors` list, and `matrix()` then renders no rows at all. A model reading
+#: that shape can only conclude "nothing exists", which is the one thing a
+#: failed search cannot establish. So the tool's own result says what happened
+#: in words, as a refusal, and never a matrix built out of no data.
+GITHUB_SEARCH_FAILED = ("GitHub could not be searched, so no library audit was made: {why}. "
+                        "That is not a finding that nothing exists.")
+
+
+def _github_search_failure_words(errors) -> str:
+    """What went wrong, in plain words: never a bare HTTP code, the rule the
+    other GitHub tools' failure sentences already keep (`jarvis_github.py`,
+    pinned in `test_github_tools.py`). `errors` is the library's own list of
+    {"url", "error"} rows."""
+    first = ""
+    try:
+        first = str(((errors or [{}])[0] or {}).get("error") or "")
+    except (AttributeError, IndexError, KeyError, TypeError):
+        first = ""
+    low = first.lower()
+    if "429" in first or "rate limit" in low:
+        return "GitHub is limiting how many searches this PC may make"
+    if "403" in first:
+        return "GitHub refused the search"
+    if "timeout" in low or "timed out" in low:
+        return "GitHub did not answer in time"
+    return "the request to GitHub failed"
+
+
 def _run_github_search(args: dict, plan_obj, **_) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "research is not available here"}
@@ -971,7 +1002,16 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
     out = R.run(plan_obj, approved=True)
     if not out.get("ok"):
         return out
-    return R.matrix(out)
+    got = R.matrix(out)
+    if not got.get("rows") and got.get("errors"):
+        # Every request failed, so there is no data and no matrix. See
+        # GITHUB_SEARCH_FAILED - a guess dressed as an empty result is the
+        # failure this refuses.
+        return {"ok": False,
+                "error": GITHUB_SEARCH_FAILED.format(
+                    why=_github_search_failure_words(got["errors"])),
+                "errors": got["errors"]}
+    return got
 
 
 # --------------------------------------------------------------------------
