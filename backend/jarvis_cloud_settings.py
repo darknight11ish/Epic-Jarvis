@@ -813,9 +813,16 @@ _Q_ESCALATION = re.compile(
     r"(?:is|are)\s+(?:the\s+)?(?:cloud\s+)?escalation\s+"
     r"(?:on|off|enabled|disabled|turned\s+(?:on|off)|switched\s+(?:on|off))\b.*"
     r"|(?:is|are)\s+(?:the\s+)?(?:cloud\s+)?escalation\s+switch\s+(?:on|off)\b.*"
+    # The WHAT that goes up is REQUIRED here (2026-11-18), and that is the fix
+    # for the merge with #1379's exact-name sweep: the bare row alias in the
+    # "Does Jarvis ...?" shape - "does jarvis escalate to the cloud?" - is the
+    # `cloud-escalation` CATALOGUE row's own ordinary question ("Does Jarvis
+    # <alias>?"), so the catalogue lane must answer it instead. The switch
+    # question the owner asks is "will you send things to the cloud by
+    # yourself?", which says what goes up.
     r"|(?:will|would|do|does)\s+(?:you|jarvis)\s+(?:automatically\s+|ever\s+)?"
     r"(?:send|share|use|escalate)\s+(?:things|stuff|questions|anything|messages?|"
-    r"words?)?\s*(?:to\s+)?(?:the\s+)?cloud\b.*"
+    r"words?)\s+(?:to\s+)?(?:the\s+)?cloud\b.*"
     r"|(?:will|would|do|does)\s+(?:you|jarvis)\s+(?:send|escalate|share)\b.*"
     r"(?:by\s+yourself|on\s+your\s+own|without\s+asking|automatically)\b.*"
     r"|send\s+things\s+to\s+the\s+cloud\s+by\s+yourself\b.*")
@@ -825,10 +832,13 @@ _Q_WHAT_IT_DOES = re.compile(
     r"(?:do|mean|change|send|allow)\b.*"
     r"|what\s+happens\s+(?:when|if)\s+(?:cloud\s+)?escalation\s+"
     r"(?:is\s+on|is\s+enabled|turns?\s+on|goes?\s+on)\b.*"
-    r"|what\s+(?:is|does)\s+(?:the\s+)?(?:cloud\s+)?(?:standing\s+)?"
+    # "what is cloud escalation?" is the `cloud-escalation` CATALOGUE row's own
+    # id words in an ordinary shape, so the catalogue lane answers it (2026-11-18,
+    # the merge fix): the compound "cloud escalation" is deliberately NOT a
+    # subject here. The switch's own words are "escalation" and "cloud switch".
+    r"|what\s+(?:is|does)\s+(?:the\s+|my\s+)?(?:standing\s+)?"
     r"(?:escalation|cloud\s+switch)\b.*"
     r"|explain\s+(?:the\s+)?(?:cloud\s+)?escalation\b.*"
-    r"|what\s+is\s+cloud\s+escalation\b.*"
     r"|what\s+can\s+(?:go|be\s+sent)\s+to\s+the\s+cloud\b.*")
 
 _Q_CAP = re.compile(

@@ -312,6 +312,16 @@ def t_the_older_doors_keep_their_own_sentences():
         ("turn cloud escalation off", "cloud_escalation_set"),
         ("is cloud escalation on?", "cloud_settings"),
         ("what is the cloud?", "feature_explain"),
+        # THE TWO THE 2026-11-18 MERGE LOST (see the sweep in
+        # test_capability_answers.py): the `cloud-escalation` CATALOGUE row's
+        # own ordinary shapes. "what is cloud escalation?" is that row's id
+        # words in a "What is X?" shape, and "does jarvis escalate to the
+        # cloud?" is its "escalate to the cloud" alias in a "Does Jarvis X?"
+        # shape. Both must reach the catalogue lane, never this settings lane:
+        # a definition/capability question about the feature is not a read of
+        # the switch's state.
+        ("does jarvis escalate to the cloud?", "capability_answer"),
+        ("what is cloud escalation?", "feature_explain"),
     )
     for sentence, name in cases:
         got = Q.match(sentence, now=0)
