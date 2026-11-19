@@ -295,10 +295,10 @@
       "id": "pictures",
       "title": "Pictures & Screens",
       "focus": "reading a screenshot or a picture",
-      "what": "For looking at a picture or a screenshot and talking about it: a 30B vision model that uses all three cards at once. Agentic + Vision is the version that also drives tools.",
-      "cost": "HEAVY MODE: it needs all three cards at once as one pooled lane and pauses the everyday 9B model while it works. Measured on this PC: 19.88 GiB loaded with 2.24 GiB (11.2%) spilled into system memory, 89% in the cards' memory and a 54.8 s cold load (2026-11-09); the 2026-11-17 re-measurement read 14.6-25.4 tokens a second, and the LOW end (14.6) is the figure this row shows.",
-      "worse": "Picture QUALITY through this row is not measured - the 2026-11-09 receipt measured speed and memory, not whether its answers about a picture are better than the 9B's. It is slower than the single-card row it replaces (14.6 tokens a second, the low end of two 2026-11-17 runs, against that card's measured 41.89 at this 32,768 window on 2026-11-07), it spills 2.24 GiB into system memory, and it pauses the everyday model for about a minute while it loads. Live phone-camera frames are explicitly unmeasured.",
-      "model": "qwen3-vl:30b-a3b-instruct",
+      "what": "For looking at a picture or a screenshot and talking about it: a 12B vision model on the all-three-card lane that holds the whole model in the cards' memory. Agentic + Vision is the version that also drives tools.",
+      "cost": "HEAVY MODE: it needs all three cards at once as one pooled lane and pauses the everyday 9B model while it works. Measured on this PC on 2026-11-18 on that lane at 32,768 tokens: 8.70 GiB loaded ENTIRELY in the cards' memory (0 B spilled), a 20.3 s cold load and 28.1 tokens a second.",
+      "worse": "Picture QUALITY has no scoring battery. The measured check behind this row is a generated picture and a generated settings screenshot: it read the picture's words and shapes and named the screenshot's Save button, server address and red banner exactly as the 30B vision model did - but that is a reading test, not a score against other models. It is a 12B model, smaller than the 30B it replaces, so a busy or hard screenshot can be read less well; its general quality is the project's own blind eight-task battery's 21/24 (2026-11-17), one below the 26B's 22/24. It pauses the everyday model for about 20 seconds while it loads. Live phone-camera frames are explicitly unmeasured.",
+      "model": "gemma4:12b-it-qat",
       "lane": {
         "key": "pooled",
         "card": "all three cards",
@@ -315,20 +315,22 @@
         ]
       },
       "measured": {
-        "tok_s": 14.6,
-        "tok_s_on": "2026-11-17",
-        "tok_s_note": "19.88 GiB, 2.24 GiB spill, all three cards, 32,768 context; two runs read 14.6-25.4 tok/s, the low end is shown",
-        "size_gib": 19.88,
-        "spill_gib": 2.24,
-        "spill_pct": 11.2,
-        "vram_pct": 89,
-        "cold_load_s": 54.8,
+        "tok_s": 28.08,
+        "tok_s_on": "2026-11-18",
+        "tok_s_note": "8.70 GiB, 0 spill, all three cards, 32,768 context; one run on the real pooled lane read 28.08 tok/s",
+        "size_gib": 8.696,
+        "vram_gib": 8.696,
+        "spill_gib": 0.0,
+        "cold_load_s": 20.3,
         "context_measured": 32768,
-        "source": "model matrix 2026-11-09: qwen3-vl:30b-a3b-instruct at 32,768 tokens loaded 19.88 GiB with 2.24 GiB (11.2%) spilled into system memory (89% in the cards' memory), a 54.8 s cold load and 33.1 tok/s; the 2026-11-17 re-measurement of the same row read 14.6-25.4 tok/s, low end shown. Same row as QWEN3_VL_30B_MEASURED_WORDS above; picture quality was not measured."
+        "picture_test": "read 'ATLAS 42' and the two shapes from a generated picture, then named the Save button, the server address and the red banner from a generated screenshot - the same answers the 30B gave",
+        "quality_general": "21/24 on the blind eight-task battery of 2026-11-17",
+        "replaced": "qwen3-vl:30b-a3b-instruct at 32,768 measured 2.24 GiB spilled on 2026-11-18 (and 1.65 GiB at 16,384), so it was not kept",
+        "source": "measured on this PC 2026-11-18 on the real pooled lane (port 11450, the three named lanes paused, one model resident, thinking off - the app's ordinary turn): 9,336,929,643 B resident and 9,336,929,643 B in video memory (0 B spilled), a 20.3 s cold load and 28.08 tok/s warm. The supplied picture and screenshot tests are in .dsh-scratch/preset-pictures-2026-11-18/ (screenshot-test.png, rows3.jsonl); the quality battery is .dsh-scratch/wave21/quality-battery/REPORT.md."
       },
       "pending": false,
       "heavy_mode": true,
-      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday 9B model is paused - it comes back, proved from the model list, when you apply a preset that is not heavy. It loads about 19.88 GiB, spills 2.24 GiB into system memory, takes about 55 s cold and writes about 14.6 tokens a second (the low end of two 2026-11-17 runs).",
+      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday 9B model is paused - it comes back, proved from the model list, when you apply a preset that is not heavy. It loads about 8.70 GiB with NOTHING spilled into system memory, takes about 20 s cold and writes about 28 tokens a second.",
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -574,7 +576,7 @@
         },
         "pictures": {
           "preset": "pictures",
-          "model": "qwen3-vl:30b-a3b-instruct",
+          "model": "gemma4:12b-it-qat",
           "card_index": 0,
           "card": "card 0",
           "context": 32768,
@@ -686,14 +688,14 @@
         },
         "pictures": {
           "preset": "pictures",
-          "model": "qwen3-vl:30b-a3b-instruct",
+          "model": "gemma4:12b-it-qat",
           "card_index": 0,
           "card": "all three cards (pooled lane, port 11450)",
           "context": 32768,
-          "tok_s": 14.6,
+          "tok_s": 28.08,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: qwen3-vl:30b-a3b-instruct on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
+          "note": "HEAVY MODE: gemma4:12b-it-qat on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         },
         "documents": {
           "preset": "documents",
@@ -798,14 +800,14 @@
         },
         "pictures": {
           "preset": "pictures",
-          "model": "qwen3-vl:30b-a3b-instruct",
+          "model": "gemma4:12b-it-qat",
           "card_index": 0,
           "card": "all the cards (pooled lane, port 11450)",
           "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "qwen3-vl:30b-a3b-instruct on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
+          "note": "gemma4:12b-it-qat on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
         },
         "documents": {
           "preset": "documents",
@@ -858,7 +860,7 @@
           "context": 32768
         }
       ],
-      "heavy_pooled": "on demand, a heavy preset pauses the everyday model and loads ONE model on the pooled lane on port 11450 across all the cards: General (gemma4:26b-a4b-it-qat at 32,768), Coding (qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), Medical (medgemma:27b at 32,768), Reflective Coach (gemma4:26b-a4b-it-qat at 32,768) and Pictures & Screens (qwen3-vl-30b-a3b-instruct at 32,768). Each is too big for one card, which is why a heavy preset splits one model across the cards; every preset that is not heavy runs on the one everyday lane, one model at a time.",
+      "heavy_pooled": "on demand, a heavy preset pauses the everyday model and loads ONE model on the pooled lane on port 11450 across all the cards: General (gemma4:26b-a4b-it-qat at 32,768), Coding (qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), Medical (medgemma:27b at 32,768), Reflective Coach (gemma4:26b-a4b-it-qat at 32,768) and Pictures & Screens (gemma4:12b-it-qat at 32,768). Each is too big for one card, which is why a heavy preset splits one model across the cards; every preset that is not heavy runs on the one everyday lane, one model at a time.",
       "link_note": "the third card likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane: the everyday model is loaded once across all three cards on the pooled lane, so the link is paid at load, not per token.",
       "future_not_a_preset": "Qwen3.8-27B pooled to 28 GB across cards is a future 'max quality' experiment only; it is not a preset and no figure is claimed until it is measured."
     }
