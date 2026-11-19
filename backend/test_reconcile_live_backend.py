@@ -140,6 +140,23 @@ real PC:
       the second plan is a no-op, and proves a PRISTINE pre-image still replays the
       patch's own hunk instead of being refused.
 
+  18. the 2026-11-18 deploy blocker: `local-model-guard.patch` (merged in #1378,
+      ONE hunk that rewrites the split `use_tools` assignment in `jarvis_hud.py`
+      so a local turn the router fell back on still answers through the agent
+      loop) was absent from the owner's live HUD and had no `DELTA_TABLE` rule,
+      so the dry run refused it by name and the wave-21 deploy could not start.
+      Its own pre-image cannot be replayed on this PC: two of its seven context
+      lines are `cloud-honesty.patch`'s crisis block, which the live HUD does not
+      carry. The entry adapts hunk 1 with an OLD -> NEW pair - the three lines the
+      live shape AND the stack shape really hold, replaced in place by the same
+      context with the patch's added lines between them. The test builds the
+      unpatched live shape from the published base HUD and the stack shape by
+      applying cloud-honesty's hunks; it proves the insert changes ONLY that
+      block, proves `git apply` produces the same bytes on the stack shape, proves
+      a second plan stages nothing (so the block can never double), and proves
+      the no-rule, drifted, half-edited and duplicated states all refuse rather
+      than guess.
+
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
 uses, and the published base files under `jarvis-backend/` - used as realistic FIXTURES
@@ -6046,6 +6063,228 @@ def t_the_cli_lane_flag_reaches_the_deploy():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   18. local-model-guard.patch (2026-11-18, #1378): the deploy's measured blocker
+# --------------------------------------------------------------------------
+#
+# MEASURED on a worktree at origin/main `7015328ea` (read-only, 2026-11-18): the dry
+# run's only refusal was "local-model-guard.patch touches jarvis_hud.py and is not
+# present, but there is no insertion rule for it" - and a refused HUD-delta plan
+# stops the whole deploy, so the ten-PR wave-21 deploy could not start.
+#
+# The patch has ONE hunk in `jarvis_hud.py` and it REWRITES the two-line `use_tools`
+# assignment; its own seven-line pre-image cannot be replayed on this PC, because
+# its last two context lines are cloud-honesty.patch's crisis block, and the live
+# HUD does not carry that block (measured read-only: the block 0 times, the three
+# lines both shapes share exactly once). The rule therefore adapts hunk 1: the
+# three-line block BOTH shapes really hold (`_agent_ok = False` and the split
+# assignment - cloud-honesty's own hunk-2 pre-image) is replaced IN PLACE by those
+# context lines with the patch's comment lines and rewritten assignment between.
+#
+# The fixtures are repository bytes only: the UNPATCHED live shape is the published
+# base HUD (`jarvis-backend/jarvis_hud.py`, the same region byte for byte), and the
+# STACK shape is that file with cloud-honesty.patch's three hunks applied - the file
+# local-model-guard.patch was cut against. `git apply` is the independent oracle on
+# that shape, so the adapted pair is proved to carry the patch's own bytes and not
+# a copy of itself.
+
+LOCAL_MODEL_GUARD = "local-model-guard.patch"
+
+
+def _cloud_honesty_applied(text: str) -> str:
+    """The published base HUD with cloud-honesty.patch's three hunks applied.
+
+    This is the shape local-model-guard.patch was cut against. It is a TEMP-FIXTURE
+    builder, not a deploy: nothing is written outside the caller's temp folder. The
+    hunks are the real patch's own bytes, applied through the tool's own parser.
+    """
+    raw = patch_text("cloud-honesty.patch").decode("utf-8")
+    for hunk in R.patch_hunks(raw, "jarvis_hud.py"):
+        old = "\n".join(hunk["old"])
+        new = "\n".join(hunk["new"])
+        count = text.count(old)
+        if count != 1:
+            raise AssertionError(f"a cloud-honesty hunk pre-image appears {count} "
+                                 f"time(s) in the base HUD; expected exactly 1")
+        text = text.replace(old, new, 1)
+    return text
+
+
+def t_the_local_model_guard_is_carried_by_an_adapted_hunk():
+    """(a)/(b)/(c) the blocker, the idempotent second run, and the refusals.
+
+    (a) an unpatched live-shaped HUD plans ONE insert, the staged HUD is the live
+        bytes with exactly that block changed, and the plan includes the patched
+        HUD line; on the stack-shaped pre-image the staged HUD is `git apply`'s
+        own result, byte for byte;
+    (b) the already-patched HUD plans nothing (0 refusals, nothing staged) and the
+        block is still there exactly once - a second application is impossible,
+        not merely unlikely;
+    (c) the rule does not make the tool optimistic: with no entry the measured
+        blocker refusal is reproduced, and a drifted shape, a half-edited HUD and
+        a duplicated OLD block all REFUSE with their sentence and stage nothing."""
+    patch_path = REPO / "backend" / LOCAL_MODEL_GUARD
+    if not patch_path.is_file():
+        print(f"SKIPPED  t_the_local_model_guard_is_carried_by_an_adapted_hunk - "
+              f"backend/{LOCAL_MODEL_GUARD} is not in this ref. This test did NOT "
+              f"run, and it did NOT pass.")
+        return
+    root = tmpdir()
+    try:
+        raw = patch_path.read_text(encoding="utf-8")
+        files = R.parse_patch_files(raw)
+        added = files["jarvis_hud.py"]["added"]
+        hunks = R.patch_hunks(raw, "jarvis_hud.py")
+        pre = R.patch_pre_image(raw, "jarvis_hud.py")
+        entry = (R.DELTA_TABLE.get(LOCAL_MODEL_GUARD) or {}).get("jarvis_hud.py") or {}
+        probes = tuple(str(p) for p in (entry.get("probes") or ()))
+        adapted = (entry.get("adapted_hunks") or {}).get(1) or {}
+        old_block = "\n".join(R._delta_lines(str(adapted.get("replace_file") or "")))
+        new_block = "\n".join(R._delta_lines(str(adapted.get("file") or "")))
+        old_lines = old_block.splitlines()
+        new_lines = new_block.splitlines()
+
+        # (0) the entry itself, before any plan.
+        check("the blocker patch has ONE HUD hunk and a DELTA_TABLE entry for it",
+              len(hunks) == 1 and set(files) == {"jarvis_hud.py"}
+              and entry.get("hunks") is True, (len(hunks), sorted(files), entry))
+        check("... carried as the adapted OLD -> NEW pair, not a plain hunk replay",
+              adapted.get("replace_file") == R.LOCAL_MODEL_GUARD_OLD_FILE
+              and adapted.get("file") == R.LOCAL_MODEL_GUARD_NEW_FILE, adapted)
+        check("... both probes are patch-ADDED lines, absent from its pre-image",
+              len(probes) == 2
+              and all(any(p in a for a in added) for p in probes)
+              and all(p not in pre for p in probes), probes)
+        check("... the OLD block is the patch's own three-line pre-image slice",
+              len(old_lines) == 3 and old_block in pre, old_lines)
+        check("... the NEW block is that slice's context with every added line "
+              "between", len(old_lines) == 3 and len(new_lines) == len(added) + 2
+              and old_lines[0] == new_lines[0] and old_lines[-1] == new_lines[-1]
+              and all(a in new_lines for a in added), (len(new_lines), len(added)))
+
+        # The two shapes this PC can be in, built from repository bytes only.
+        base = BASE_HUD.read_text(encoding="utf-8")
+        check("the measured live shape: the patch's own 7-line pre-image is NOT in "
+              "the published base HUD (its context holds cloud-honesty's block)",
+              base.count(pre) == 0 and base.count(old_block) == 1,
+              (base.count(pre), base.count(old_block)))
+        check("... and both probes are absent from it",
+              all(p not in base for p in probes), probes)
+        stack = _cloud_honesty_applied(base)
+        check("the stack shape (cloud-honesty applied) holds the patch's own "
+              "pre-image exactly once",
+              stack.count(pre) == 1 and stack.count(old_block) == 1
+              and all(p not in stack for p in probes),
+              (stack.count(pre), stack.count(old_block)))
+
+        show = lambda repo, ref, repo_path: raw.encode("utf-8")  # noqa: E731
+        only = {LOCAL_MODEL_GUARD: R.DELTA_TABLE[LOCAL_MODEL_GUARD]}
+
+        # (a) UNPATCHED: one insert, and the live bytes change ONLY in that block.
+        live = make_base_live(root, "local-model-guard", {"jarvis_hud.py": base})
+        deltas, staged, refusals = R.plan_deltas(
+            live, [LOCAL_MODEL_GUARD], show=show, repo=REPO, state_patches=[],
+            table=only)
+        check("(a) the unpatched live-shaped HUD plans ONE insert with no refusal",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [(LOCAL_MODEL_GUARD, "insert")], (refusals, deltas))
+        out = staged.get("jarvis_hud.py", "")
+        check("(a) ... the plan includes the patched HUD line",
+              all(p in out for p in probes), probes)
+        check("(a) ... the OLD block is gone and the NEW block appears exactly ONCE",
+              old_block not in out and out.count(new_block) == 1,
+              (old_block in out, out.count(new_block)))
+        check("(a) ... and NOTHING else in the live file changed",
+              out == base.replace(old_block, new_block, 1))
+        check("(a) ... and the staged HUD still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("(a) ... the live fixture file was not written",
+              (live / "jarvis_hud.py").read_text(encoding="utf-8") == base)
+
+        # (b) ALREADY PATCHED: a second application cannot duplicate the block.
+        (live / "jarvis_hud.py").write_bytes(out.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [LOCAL_MODEL_GUARD], show=show, repo=REPO, state_patches=[],
+            table=only)
+        check("(b) the already-patched HUD plans NOTHING - no refusal, no staged file",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"],
+              (again, staged2, refusals2))
+        check("(b) ... and the guard's block is still there exactly ONCE, never "
+              "doubled", out.count(new_block) == 1 and out.count(probes[1]) == 1)
+
+        # (d) STACK SHAPE: `git apply` is the independent oracle.
+        git_result = git_apply_oracle(stack, [LOCAL_MODEL_GUARD], "jarvis_hud.py")
+        live_stack = make_base_live(root, "local-model-guard-stack",
+                                    {"jarvis_hud.py": stack})
+        _d, staged_stack, refusals_stack = R.plan_deltas(
+            live_stack, [LOCAL_MODEL_GUARD], show=show, repo=REPO,
+            state_patches=[], table=only)
+        check("(d) on the stack-shaped pre-image the staged HUD is `git apply`'s own "
+              "result, byte for byte",
+              refusals_stack == [] and staged_stack.get("jarvis_hud.py") == git_result,
+              (refusals_stack, len(staged_stack.get("jarvis_hud.py", ""))))
+
+        # (c) THE GUARD MUST NOT BECOME OPTIMISTIC: a state the rule cannot place
+        # the block in is REFUSED with nothing staged. First the measured blocker.
+        live_none = make_base_live(root, "local-model-guard-noentry",
+                                   {"jarvis_hud.py": base})
+        _d, staged3, refusals3 = R.plan_deltas(
+            live_none, [LOCAL_MODEL_GUARD], show=show, repo=REPO,
+            state_patches=[], table={})
+        check("(c) with NO rule the measured blocker refusal is reproduced exactly",
+              len(refusals3) == 1
+              and "local-model-guard.patch touches jarvis_hud.py" in refusals3[0]
+              and "no insertion rule" in refusals3[0] and staged3 == {},
+              refusals3)
+        drifted = base.replace(
+            old_block,
+            "            _agent_ok = False\n"
+            "        use_tools = (lane == local_model and _agent_ok)", 1)
+        live_drift = make_base_live(root, "local-model-guard-drifted",
+                                    {"jarvis_hud.py": drifted})
+        _d, staged4, refusals4 = R.plan_deltas(
+            live_drift, [LOCAL_MODEL_GUARD], show=show, repo=REPO,
+            state_patches=[], table=only)
+        check("(c) a HUD whose assignment was edited into a third shape is REFUSED, "
+              "never re-inserted",
+              len(refusals4) == 1
+              and "local-model-guard.patch -> jarvis_hud.py" in refusals4[0]
+              and "appears 0 time(s)" in refusals4[0]
+              and "Refusing rather than guessing" in refusals4[0]
+              and staged4 == {}, refusals4)
+        half = base.replace(
+            old_block,
+            "\n".join([new_lines[0]]
+                      + [line for line in new_lines[1:]
+                         if line.strip().startswith("#")]
+                      + old_lines[1:]), 1)
+        live_half = make_base_live(root, "local-model-guard-half",
+                                   {"jarvis_hud.py": half})
+        _d, staged5, refusals5 = R.plan_deltas(
+            live_half, [LOCAL_MODEL_GUARD], show=show, repo=REPO,
+            state_patches=[], table=only)
+        check("(c) a half-edited HUD (comment in, assignment still old) is REFUSED, "
+              "not completed on a guess",
+              probes[0] in half and probes[1] not in half
+              and len(refusals5) == 1
+              and "local-model-guard.patch -> jarvis_hud.py" in refusals5[0]
+              and "Refusing rather than guessing" in refusals5[0]
+              and staged5 == {}, refusals5)
+        dup = base.replace(old_block, old_block + "\n" + old_block, 1)
+        live_dup = make_base_live(root, "local-model-guard-dup",
+                                  {"jarvis_hud.py": dup})
+        _d, staged6, refusals6 = R.plan_deltas(
+            live_dup, [LOCAL_MODEL_GUARD], show=show, repo=REPO,
+            state_patches=[], table=only)
+        check("(c) ... and a duplicated OLD block is REFUSED, not doubled",
+              len(refusals6) == 1
+              and "appears 2 time(s)" in refusals6[0]
+              and staged6 == {}, refusals6)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_release_markers_carry_the_version_and_the_beside_files,
                t_release_marker_writes_are_in_the_planned_and_wrote_counts,
@@ -6133,7 +6372,8 @@ def main():
                t_a_lane_launcher_disagreement_refuses_the_one_step_deploy,
                t_a_not_checked_lane_preflight_does_not_block,
                t_the_real_lane_guard_runs_in_the_deploy_path,
-               t_the_cli_lane_flag_reaches_the_deploy):
+               t_the_cli_lane_flag_reaches_the_deploy,
+               t_the_local_model_guard_is_carried_by_an_adapted_hunk):
         fn()
     print()
     if FAILED:
