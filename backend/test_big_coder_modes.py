@@ -155,9 +155,19 @@ def t_no_preset_default_is_changed():
           int(presets["coding"].context) == 49152)
     check("the General preset runs the 26B the owner chose on 2026-11-18",
           presets["general"].model == "gemma4:26b-a4b-it-qat")
-    check("no new mode is offered as a preset row",
+    check("deep_think is still not offered as a preset row",
           all(m.model not in {p.model for p in P.PRESETS}
-              for m in B.MODES if m.key != "coding"))
+              for m in B.MODES if m.key == "deep_think"))
+    # 2026-11-18: the review put creative's MODEL on the SEPARATE General
+    # Uncensored preset, reached through the preset layer's own pooled-mode row -
+    # not by turning either mode key into a preset. `creative` itself is still
+    # not a preset, and the big-coder route's mode keys are untouched.
+    gu = presets["general_uncensored"]
+    check("creative's model is a preset now, on General Uncensored, while the "
+          "creative mode key itself is still not one",
+          gu.model == B.mode_profile("creative").model
+          and gu.mode != "creative"
+          and gu.id not in B.MODE_KEYS)
 
 
 # ==========================================================================
