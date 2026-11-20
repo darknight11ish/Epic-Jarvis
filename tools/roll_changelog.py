@@ -116,7 +116,58 @@ def planned_block(fragments: Path) -> list[str]:
     return block
 
 
-def roll(fragments: Path, changelog: Path, *, dry_run: bool = False) -> tuple:
+#: The claims register, whose `source` column may cite a changelog fragment.
+CLAIMS = Path(__file__).resolve().parents[1] / "docs" / "CLAIMS.tsv"
+
+
+def reanchor_claims(fragments: Path, changelog: Path, claims: Path,
+                    *, dry_run: bool = False) -> int:
+    """Point claims that cite a rolled fragment at CHANGELOG.md instead.
+
+    The roll removes the fragment files, so a claim whose `source` names one
+    would then name a missing file (`backend/test_claims.py`, "every source is
+    a file and a line inside it"). For each source `changelog.d/<name>:<line>`
+    this finds that fragment's own bullet in the rolled CHANGELOG.md and
+    rewrites the source to `CHANGELOG.md:<line>`. Returns how many rows moved.
+    """
+    if not claims.is_file() or not changelog.is_file():
+        return 0
+    text = changelog.read_text(encoding="utf-8")
+    moves = []
+    for path in sorted(fragments.glob("*.md")):
+        if path.name.lower() == "readme.md":
+            continue
+        body = path.read_text(encoding="utf-8").strip()
+        if not body:
+            continue
+        at = text.find(body.splitlines()[0][:80])
+        if at < 0:
+            continue
+        moves.append((path.name, text.count("\n", 0, at) + 1))
+    if not moves:
+        return 0
+    out, changed = [], 0
+    for row in claims.read_text(encoding="utf-8").splitlines():
+        if not row or row.startswith("#"):
+            out.append(row)
+            continue
+        cells = row.split("\t")
+        source = cells[-1].strip()
+        if source.startswith("changelog.d/"):
+            name = source.split(":", 1)[0].split("/", 1)[1]
+            for fragment_name, line in moves:
+                if fragment_name == name:
+                    cells[-1] = f"CHANGELOG.md:{line}"
+                    changed += 1
+                    break
+        out.append("\t".join(cells))
+    if changed and not dry_run:
+        claims.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
+    return changed
+
+
+def roll(fragments: Path, changelog: Path, *, dry_run: bool = False,
+         claims: Path | None = None) -> tuple:
     """Insert every fragment's bullet under the heading; return (lines, count).
 
     The files are removed only after the new CHANGELOG text has been read back
@@ -140,6 +191,8 @@ def roll(fragments: Path, changelog: Path, *, dry_run: bool = False) -> tuple:
         if missing:
             raise SystemExit(f"{changelog}: the roll did not stick for "
                              f"{len(missing)} line(s); leaving the fragments alone")
+        if claims is not None:
+            reanchor_claims(fragments, changelog, claims)
         for path in fragment_paths(fragments):
             path.unlink()
     return len(block), len(block)
@@ -153,6 +206,8 @@ def main(argv: list) -> int:
                     help="print the bullets a roll would insert; write nothing")
     ap.add_argument("--fragments", default=str(ROOT / "changelog.d"))
     ap.add_argument("--changelog", default=str(ROOT / "CHANGELOG.md"))
+    ap.add_argument("--claims", default=str(CLAIMS),
+                    help="the claims register whose changelog.d sources are re-anchored")
     args = ap.parse_args(argv)
     fragments, changelog = Path(args.fragments), Path(args.changelog)
     found = problems(fragments, changelog)
@@ -173,7 +228,10 @@ def main(argv: list) -> int:
         print(f"\n[{len(planned_block(fragments))} bullet(s) would be inserted, "
               f"then that many fragment file(s) removed]")
         return 0
-    count, _ = roll(fragments, changelog)
+    # Only the REAL tree re-anchors the register: a test or a copy pointed at
+    # another folder must never rewrite the repository's claims.
+    real = (fragments == ROOT / "changelog.d" and changelog == ROOT / "CHANGELOG.md")
+    count, _ = roll(fragments, changelog, claims=Path(args.claims) if real else None)
     if count == 0:
         print("changelog.d is empty - nothing to roll")
     else:

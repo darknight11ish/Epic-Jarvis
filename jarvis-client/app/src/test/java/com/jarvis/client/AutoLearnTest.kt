@@ -8,6 +8,7 @@ import com.jarvis.client.net.AutoLearn.Switch
 import com.jarvis.client.net.AutoLearn.Which
 import com.jarvis.client.net.DesktopWrite
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.LearningRow
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
@@ -554,7 +555,22 @@ class AutoLearnTest {
     @Test
     fun offWhileWaitingIsWiredAndWithdrawsInTheRuntime() {
         val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
-        assertTrue(plate.contains("AutoLearn.Switch.ON, AutoLearn.Switch.WAITING -> true"))
+        // The row's position, its sentence and its enabled rule all come from
+        // the family's ONE mapper (net/StateRow.kt) since the 2026-11-18
+        // settings audit; the plate no longer projects them itself.
+        assertTrue(plate.contains("enabled = row.enabled"))
+        // A waiting switch stays pressable so OFF can be sent, which withdraws
+        // the card - the rule the old plate line carried.
+        assertTrue(
+            "a WAITING row must stay pressable so OFF can withdraw the card",
+            LearningRow.auto(
+                Which.AUTO,
+                Switch.WAITING,
+                learningOn = true,
+                autoOn = true,
+                canAct = false,
+            ).enabled,
+        )
         assertTrue(plate.contains("if (AutoLearn.mayPress(switch, want)) {"))
         // 2026-11-02: one waiting-card set over ALL the switches (the third
         // joined them), found by each switch's own action.
@@ -641,7 +657,17 @@ class AutoLearnTest {
         assertTrue(item, item.contains("SavedAutomaticallySection(") && item.contains("privateHidden = privateHidden,"))
         // Forget and switching ON are greyed on a stale link as well as refused.
         assertTrue(plate.contains("enabled = canAct && busyId == null"))
-        assertTrue(plate.contains("AutoLearn.Switch.OFF -> canAct"))
+        assertTrue(plate.contains("enabled = row.enabled"))
+        // The switch rows' stale-link rule moved into the family's one mapper
+        // (net/StateRow.kt) with the audit's fix; proved here on the mapper.
+        assertFalse(
+            "an OFF row must not be pressable on a stale link",
+            LearningRow.auto(Which.AUTO, Switch.OFF, learningOn = true, autoOn = true, canAct = false).enabled,
+        )
+        assertTrue(
+            "an OFF row is pressable on a live link",
+            LearningRow.auto(Which.AUTO, Switch.OFF, learningOn = true, autoOn = true, canAct = true).enabled,
+        )
     }
 
     // ------------------------------------------------- 2026-11-02 (C1) ---

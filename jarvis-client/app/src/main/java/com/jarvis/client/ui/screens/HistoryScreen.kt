@@ -59,6 +59,7 @@ import com.jarvis.client.data.HistoryViewPrefs
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatFork
+import com.jarvis.client.net.ChatHistoryRow
 import com.jarvis.client.net.ChatInfo
 import com.jarvis.client.net.ChatLog
 import com.jarvis.client.net.ChatMark
@@ -1232,6 +1233,11 @@ fun HistoryScreen(
             // list is hidden: they say nothing about what was said.
             item(key = "settings") {
                 val switch = ChatLog.switchState(status, cardInQueue)
+                // ONE READ, ONE ROW (the 2026-11-18 settings audit): the tick
+                // and the sentence come from ChatHistoryRow, so the UNKNOWN
+                // "Couldn't tell whether chat history is on." can no longer sit
+                // beside an unticked switch - UNKNOWN draws no switch at all.
+                val row = ChatHistoryRow.of(switch, status, canAct, busy)
                 Section(ChatLog.HISTORY_SETTINGS) {
                     Quiet(
                         if (settingsOpen) "Hide" else "Show",
@@ -1246,15 +1252,8 @@ fun HistoryScreen(
                         SwitchRow(
                             title = ChatLog.SWITCH,
                             detail = ChatLog.UNDER,
-                            checked = switch == ChatLog.Switch.ON,
-                            // OFF always goes; ON waits for a live link. Not
-                            // while a card is already up, or before the PC
-                            // has said which way it is.
-                            enabled = !busy && when (switch) {
-                                ChatLog.Switch.ON -> true
-                                ChatLog.Switch.OFF -> canAct
-                                ChatLog.Switch.WAITING, ChatLog.Switch.UNKNOWN -> false
-                            },
+                            checked = row.checked,
+                            enabled = row.enabled,
                             onChange = { want ->
                                 busy = true
                                 said = null
@@ -1270,7 +1269,7 @@ fun HistoryScreen(
                         )
                         Gap(4)
                         Text(
-                            if (busy) "Asking your PC…" else ChatLog.stateLine(switch, status),
+                            if (busy) "Asking your PC…" else row.words,
                             style = MaterialTheme.typography.bodySmall,
                             color = when {
                                 busy -> chrome.textMid

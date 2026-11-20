@@ -21,12 +21,34 @@ import kotlinx.serialization.json.put
  * `backend/fixtures/work_presets.json` (tools/gen_work_presets.py; regenerate,
  * never hand-edit), and [FocusPresetsTest] reads that real file.
  *
- * The new contract's answer carries the nine `presets[]`, the PC's `hardware`
- * (with the `questionnaire`) and `recommendations`, plus the saved `chosen`
- * id when the PC has one. This object keeps those blocks so the client parses
- * the WHOLE shape rather than only the rows, but only [presets] and [chosen]
- * change what the screens draw; the chip and the plate render one row per
- * preset, never a hardcoded list.
+ * The new contract's answer carries the `presets[]` rows (the PC's own list -
+ * no count typed here), the PC's `hardware` (with the `questionnaire`) and
+ * `recommendations`, the saved `chosen` id when the PC has one, and the lane
+ * the PC's chat points at right now (`active_lane`, and the same lane in the
+ * PC's own words as `lane`). This object keeps those blocks so the client
+ * parses the WHOLE shape rather than only the rows; what the screens draw is
+ * [presets], [chosen] and the live lane. The chip and the plate render one row
+ * per preset, never a hardcoded list.
+ *
+ * WHAT A PRESS ASKS FOR (the sentence's rule, and what the PC sends about it).
+ * On the route both apps' own preset controls call (`POST /api/work/apply`)
+ * EVERY row in `presets[]` applies with NO approval card - the heavy ones too
+ * since 2026-11-16 - and the ONE row that still raises a card is Cloud, which
+ * the PC sends as a separate `cloud_preset` row, never inside `presets[]`.
+ * The contract carries NO per-row card field: `apply` is action/route/
+ * lane_start/auto only, on the GET answer and on the apply answer alike, so
+ * [HOW_PICKING_WORKS] cannot be derived and is plain words instead of a typed
+ * id list (a client never names a preset; that is how the old sentence drifted).
+ * The day the PC sends a per-row `carded` flag the sentence must be derived
+ * from it - [FocusPresetsTest] fails then, on purpose, so this note is read.
+ *
+ * WHAT "CURRENT" MEANS. [chosen] is what the PC saved as picked; `active_lane`
+ * is the lane its chat uses now. They can disagree after the PC restarts or
+ * reconciles a dead pooled lane, so a row is marked [CHOSEN] only while the
+ * PC's own lane agrees with the preset's, and [CHOSEN_NOT_RUNNING] otherwise.
+ * Neither field names a MODEL, so the phone says which LANE answers, never
+ * which model is loaded - a same-lane model switch is invisible here, and a
+ * running-model field is the thing that would settle it (see the PR body).
  *
  * Generic over the list: the owner added `general_uncensored` as a fifth
  * preset and may change Agentic+Vision's model after a measurement, so this
@@ -67,6 +89,37 @@ object FocusPresets {
     const val NO_CHOICE = "No preset chosen"
     const val USE_THIS = "Use this preset"
     const val CHOSEN = "Current"
+    /**
+     * The mark when the PC saved this preset but its chat is on a DIFFERENT
+     * lane now (the restart/reconcile case). "Current" beside a row that is not
+     * running is the same lie as a switch drawn as off before the PC answered,
+     * so the row says what it really is.
+     */
+    const val CHOSEN_NOT_RUNNING = "Chosen - not running now"
+    /** The chip's short form of [CHOSEN_NOT_RUNNING], after the preset's name. */
+    const val NOT_RUNNING = "not running"
+    /**
+     * What the plate says ONE press does, before the rows. Plain words, no
+     * preset id and no model in it: a client must never name a preset (that is
+     * how the old "Coding and Medical raise one approval card" sentence drifted
+     * from the PC). Every claim is the PC's rule for the route both apps' own
+     * preset controls call: a local row applies at once with no card (the heavy
+     * ones included since 2026-11-16), the old model stops first, a heavy row
+     * fills all three cards, the same preset asked for in chat still asks, and
+     * Cloud - the one row still carded, and the one row this list does not
+     * draw - is chosen from the PC's menu or in chat, never here. It is a
+     * constant so [FocusPresetsTest] holds it against the PC's own proof
+     * instead of a composable hiding the words where no test can read them.
+     */
+    const val HOW_PICKING_WORKS =
+        "Presets choose the local model and card for the work you are about to do. " +
+            "Picking one applies the change straight away, with no approval card: the " +
+            "old model stops first, and cold loads on this PC measured about 12 " +
+            "seconds to about a minute. A heavy preset also fills all three cards " +
+            "while it runs - its row says what that costs. Asking for the same " +
+            "preset in chat still asks you first; Cloud is the one row whose own " +
+            "pick still raises one card, and it is chosen on the PC's menu or in " +
+            "chat, never from this list."
     const val WHY = "What it is for:"
     const val COST = "What it costs:"
     const val WORSE = "What it is worse at:"
@@ -177,6 +230,29 @@ object FocusPresets {
         val apply: Apply,
     )
 
+    /**
+     * `active_lane: {key, base_url}` - the lane the PC's chat points at right
+     * now. [key] is the PC's own lane key ("main", "pooled") and null when the
+     * address is not a lane the PC knows. It names a LANE, never a preset: many
+     * presets share one lane, and it does not name the loaded model either.
+     */
+    data class ActiveLane(val key: String?, val baseUrl: String?)
+
+    /**
+     * `lane: {key, card, words, label, ready, why}` - the same lane in the PC's
+     * own words (`live_status`), so the screen can say what is running without
+     * writing a sentence of its own. `ready == false` means the PC has applied
+     * no preset yet and [why] is its own reason.
+     */
+    data class LaneNow(
+        val key: String?,
+        val card: String,
+        val words: String,
+        val label: String,
+        val ready: Boolean,
+        val why: String,
+    )
+
     data class View(
         val presets: List<Preset>,
         val chosen: String?,
@@ -190,8 +266,10 @@ object FocusPresets {
         val questionnaire: JsonObject? = null,
         /** The 1/2/3-GPU rows the PC worked out; parsed, not drawn by this feature yet. */
         val recommendations: JsonObject? = null,
-        /** The lane the PC's chat points at right now, and the two contract paths. */
-        val activeLane: JsonObject? = null,
+        /** The lane the PC's chat points at right now (a lane, never a preset). */
+        val activeLane: ActiveLane? = null,
+        /** The same lane in the PC's own words; older PCs send none. */
+        val laneNow: LaneNow? = null,
         val applyPath: String? = null,
         /**
          * The PC's cloud block on the same answer (additive, 2026-10-27; older
@@ -256,9 +334,11 @@ object FocusPresets {
             ?: presets.firstOrNull { root.bool("chosen") == true }?.id
         // The live GET /api/work answer (jarvis_presets.live_status) carries
         // `hardware` as the detected-card block and `questionnaire` beside it;
-        // the generated fixture's `hardware` wraps both. Accept both, and keep
-        // the active lane and apply path parsed so the live shape is checked
-        // here. This feature draws only the preset rows and the chosen id.
+        // the generated fixture's `hardware` wraps both. Accept both, keep the
+        // apply path parsed, and parse BOTH live-lane blocks: `active_lane` is
+        // the pointer the PC keeps and `lane`/`lane_status` carries the same
+        // answer in its own words. The chip and the plate now draw the lane, so
+        // the running-vs-picked state is read here, not in a composable.
         val hardware = root.obj("hardware")
         val detected = hardware?.obj("detected") ?: hardware
         val questionnaire = hardware?.obj("questionnaire") ?: root.obj("questionnaire")
@@ -271,7 +351,8 @@ object FocusPresets {
             detected = detected,
             questionnaire = questionnaire,
             recommendations = root.obj("recommendations"),
-            activeLane = root.obj("active_lane"),
+            activeLane = parseActiveLane(root.obj("active_lane")),
+            laneNow = parseLaneNow(root.obj("lane") ?: root.obj("lane_status")),
             applyPath = root.str("apply_path"),
             cloud = root.obj("cloud")?.let { c ->
                 val escalate = c.obj("escalate")
@@ -339,8 +420,93 @@ object FocusPresets {
 
     fun applyRoute(preset: Preset): String? = preset.apply.postRoute
 
-    /** A short line for the chat chip: the current preset's PC title, or a local prompt. */
-    fun chipLabel(view: View?): String = view?.current?.title ?: NO_CHOICE
+    /**
+     * A short line for the chat chip: the picked preset's PC title, or a local
+     * prompt. When the PC's own lane says that preset is not the one running,
+     * the chip says so too - the chip is where the owner reads which preset the
+     * phone is talking about ([CHOSEN_NOT_RUNNING] would not fit on it).
+     */
+    fun chipLabel(view: View?): String {
+        val chosen = view?.current ?: return NO_CHOICE
+        return if (chosenNotRunning(view)) "${chosen.title} ($NOT_RUNNING)" else chosen.title
+    }
+
+    /**
+     * The lane the PC's chat uses now, or null when the PC does not say. It
+     * prefers the `active_lane` pointer and falls back to the `lane` block's
+     * key, so a PC that sends only one of the two is still read.
+     */
+    fun runningKey(view: View?): String? =
+        view?.activeLane?.key?.takeIf { it.isNotBlank() }
+            ?: view?.laneNow?.key?.takeIf { it.isNotBlank() }
+
+    /**
+     * True only when the PC named BOTH the saved preset and the lane its chat
+     * uses, and the preset's own lane is not that lane - the restart/reconcile
+     * case the PC keeps a `restart_reconcile` record for. A PC that sends one
+     * of the two, or neither, is never called mismatched: silence is not proof,
+     * and the screen must not invent a disagreement it cannot see. It also
+     * cannot see a model swapped on the same lane (the PC sends no
+     * running-model field), so this compares lanes, never models.
+     */
+    fun chosenNotRunning(view: View?): Boolean {
+        val v = view ?: return false
+        val chosen = v.current ?: return false
+        val running = runningKey(v) ?: return false
+        return chosen.lane.key.isNotBlank() && chosen.lane.key != running
+    }
+
+    /**
+     * The mark after a row's title: [CHOSEN] only while the PC's own lane
+     * agrees, [CHOSEN_NOT_RUNNING] when it does not, null on every other row.
+     */
+    fun rowMark(view: View, preset: Preset): String? = when {
+        view.chosen != preset.id -> null
+        chosenNotRunning(view) -> CHOSEN_NOT_RUNNING
+        else -> CHOSEN
+    }
+
+    /**
+     * What the PC says it is running now, in the PC's own words, or null when
+     * it does not say. `lane.label` is the PC's own "card · words" sentence; an
+     * older PC that sends only `active_lane` gets the same lane's words from
+     * the preset rows (they carry the contract's lane table), and a PC that
+     * sends neither gets no sentence at all - never a guess, and never "nothing
+     * is running".
+     */
+    fun runningLine(view: View?): String? {
+        val v = view ?: return null
+        val lane = v.laneNow
+        if (lane != null) {
+            if (!lane.ready) {
+                val why = lane.why.trim()
+                return if (why.isEmpty()) null else "Your PC says: $why"
+            }
+            val words = lane.label.trim().ifEmpty { laneWords(lane.card, lane.words) }
+            if (words.isNotEmpty()) return "Your PC's chat is on $words now."
+        }
+        val key = v.activeLane?.key?.takeIf { it.isNotBlank() } ?: return null
+        val row = v.presets.firstOrNull { it.lane.key == key } ?: return null
+        val words = laneWords(row.lane.card, row.lane.words)
+        return if (words.isEmpty()) null else "Your PC's chat is on $words now."
+    }
+
+    /**
+     * The sentence under the list when the saved preset and the PC's lane
+     * disagree: what was picked, that the PC is not running it, and the one
+     * press that puts it back. Null when there is no disagreement to report.
+     */
+    fun chosenElsewhereLine(view: View?): String? {
+        val v = view ?: return null
+        if (!chosenNotRunning(v)) return null
+        val chosen = v.current ?: return null
+        return "${chosen.title} is the preset you picked last, but your PC is not " +
+            "running it now. Use ${chosen.title} again to switch your PC back to it."
+    }
+
+    /** "card · words" from the contract's own lane strings; never a client label. */
+    private fun laneWords(card: String, words: String): String =
+        listOf(card.trim(), words.trim()).filter { it.isNotEmpty() }.joinToString(" · ")
 
     /** One line per preset for a closed list: title, then the backend's focus words. */
     fun headLine(preset: Preset): String =
@@ -471,6 +637,35 @@ object FocusPresets {
             return null
         }
         return Measured(tokens, sizeGib, vramGib, spillGib, measuredOn, note)
+    }
+
+    /**
+     * `active_lane: {key, base_url}`, both optional: a PC that has applied no
+     * preset yet sends a null key with its default address. A key is kept as
+     * the PC wrote it; this parser never translates it into a preset.
+     */
+    private fun parseActiveLane(o: JsonObject?): ActiveLane? = o?.let {
+        ActiveLane(
+            key = it.str("key")?.trim()?.takeIf { key -> key.isNotEmpty() },
+            baseUrl = it.str("base_url")?.trim()?.takeIf { url -> url.isNotEmpty() },
+        )
+    }
+
+    /**
+     * `lane: {key, card, words, label, ready, why}`. `ready` defaults to true
+     * when the field is absent but the block exists (an older PC that sent a
+     * lane without the flag is not "not ready"); `why` is only read when
+     * `ready` is false.
+     */
+    private fun parseLaneNow(o: JsonObject?): LaneNow? = o?.let {
+        LaneNow(
+            key = it.str("key")?.trim()?.takeIf { key -> key.isNotEmpty() },
+            card = it.str("card").orEmpty(),
+            words = it.str("words").orEmpty(),
+            label = it.str("label").orEmpty(),
+            ready = it.bool("ready") ?: true,
+            why = it.str("why").orEmpty(),
+        )
     }
 
     private fun parseLane(o: JsonObject?): Lane? = o?.let {

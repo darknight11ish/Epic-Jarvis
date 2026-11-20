@@ -1083,33 +1083,51 @@ internal fun OptionChip(
  * no-op callback: the Toggle's own touch area takes the tap before the row
  * sees it, so a no-op there would make the one part that looks like a switch
  * the one part that does nothing.
+ *
+ * NULL MEANS NOT KNOWN (2026-11-18, the settings audit). When the PC has not
+ * answered, the row cannot know which way the switch is: [checked] is null,
+ * NO switch is drawn, and the row is not tappable. A null position is never
+ * painted in the off slot, because "off" and "could not ask" are not the same
+ * thing and only one of them is safe to believe - the rule this app already
+ * writes down in `VoiceSwitchesPlate.kt` and in the voice-check card. The
+ * words in [detail] say it instead, and they come from the same row object as
+ * the position (`net/StateRow.kt`), so the tick and the sentence cannot
+ * disagree.
  */
 @Composable
 internal fun SwitchRow(
     title: String,
     detail: String?,
-    checked: Boolean,
+    /**
+     * The switch's position, or null when it is not known - and then no switch
+     * is drawn and the row cannot be pressed.
+     */
+    checked: Boolean?,
     onChange: (Boolean) -> Unit,
     /** False: shown as it is, but cannot be changed here (the phone is holding it). */
     enabled: Boolean = true,
 ) {
     val chrome = LocalChrome.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .toggleable(
-                value = checked,
-                interactionSource = remember { MutableInteractionSource() },
-                // No ripple, like every other control built on `pressable`.
-                indication = null,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = onChange,
-            )
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val modifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = 48.dp)
+        .then(
+            if (checked != null) {
+                Modifier.toggleable(
+                    value = checked,
+                    interactionSource = remember { MutableInteractionSource() },
+                    // No ripple, like every other control built on `pressable`.
+                    indication = null,
+                    enabled = enabled,
+                    role = Role.Switch,
+                    onValueChange = onChange,
+                )
+            } else {
+                Modifier
+            },
+        )
+        .padding(vertical = 4.dp)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -1132,8 +1150,10 @@ internal fun SwitchRow(
         // stop for the same setting. A finger on the Toggle itself still flips
         // it - semantics are only what TalkBack reads, not what takes touches -
         // and it calls the same `onChange` the row does.
-        Box(Modifier.clearAndSetSemantics { }) {
-            Toggle(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        checked?.let { position ->
+            Box(Modifier.clearAndSetSemantics { }) {
+                Toggle(checked = position, onCheckedChange = onChange, enabled = enabled)
+            }
         }
     }
 }

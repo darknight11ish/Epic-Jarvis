@@ -33,6 +33,8 @@
  * @module pictures-settings
  */
 
+import { liveRow } from "./settings-live.js";
+
 const els = {};
 for (const id of ["pc-title", "pc-subtitle", "pc-state", "pc-body", "pc-detail",
   "pc-switch", "pc-switch-label", "pc-runtime", "pc-install", "pc-folder",
@@ -195,6 +197,7 @@ if (els["pc-choose"]) {
   });
 }
 
-// Read once when the window opens, and again whenever the link comes back:
-// nothing is written, so there is nothing to keep on this side.
-read();
+// Read when the window opens, then keep reading (the ONE refresh rule): a
+// chat sentence can change "Making pictures" too, so a value read once is a
+// stale claim while this page is open (DESKTOP-STATE-DRIFT row 23).
+liveRow({ read });

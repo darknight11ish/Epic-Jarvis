@@ -27,6 +27,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.AutoLearn
+import com.jarvis.client.net.LearningRow
 import com.jarvis.client.net.MemoryErase
 import com.jarvis.client.net.MemoryProfile
 import com.jarvis.client.net.MemoryShared
@@ -123,19 +124,24 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
     for (which in AutoLearn.Which.entries) {
         val cardInQueue = which in waitingNow
         val switch = AutoLearn.switchState(status, which, cardInQueue)
+        // ONE READ, ONE ROW (the 2026-11-18 settings audit): the tick, the
+        // enabled rule and the sentence come from LearningRow, so a "Couldn't
+        // tell" line can never sit beside a switch drawn as a definite off -
+        // UNKNOWN is checked = null and draws no switch at all.
+        val row = LearningRow.auto(
+            which = which,
+            switch = switch,
+            learningOn = learningOn,
+            autoOn = status?.auto,
+            canAct = canAct,
+            busy = busy != null,
+        )
         Gap(8)
         SwitchRow(
             title = which.title,
             detail = which.under,
-            // Waiting shows the switch in the position it was asked for, so
-            // it can be turned OFF - which takes the request back. The line
-            // under it says it is only waiting, never that it is on.
-            checked = switch == AutoLearn.Switch.ON || switch == AutoLearn.Switch.WAITING,
-            enabled = busy == null && when (switch) {
-                AutoLearn.Switch.ON, AutoLearn.Switch.WAITING -> true
-                AutoLearn.Switch.OFF -> canAct
-                AutoLearn.Switch.UNKNOWN -> false
-            },
+            checked = row.checked,
+            enabled = row.enabled,
             onChange = { want ->
                 // Never a second ON while one waits.
                 if (AutoLearn.mayPress(switch, want)) {
@@ -153,8 +159,7 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
             },
         )
         Text(
-            if (busy == which) "Asking your PC…" else
-                AutoLearn.stateLine(which, switch, learningOn, status?.auto),
+            if (busy == which) "Asking your PC…" else row.words,
             style = MaterialTheme.typography.bodySmall,
             color = if (switch == AutoLearn.Switch.WAITING) chrome.warnInk else chrome.textMid,
         )

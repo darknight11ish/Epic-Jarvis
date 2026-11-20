@@ -13,8 +13,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.net.LearningRow
 import com.jarvis.client.net.MemoryCounts
 import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
@@ -64,9 +66,14 @@ internal fun LearningSection(canAct: Boolean) {
     LaunchedEffect(cardWaiting) { if (!cardWaiting) reads += 1 }
     LaunchedEffect(reads) { learning = JarvisRuntime.memoryLearning() }
 
-    // Waiting shows the switch in the position it was asked for, so it can be
-    // turned OFF - which takes the request back. The line says "waiting".
-    val checked = learning == true || cardWaiting
+    // ONE ROW, ONE READ (2026-11-18, the settings audit's finding A). The tick
+    // and the sentence used to come from two readers - the state read OR the
+    // approval queue for the tick, the state read alone for the sentence - so
+    // while the ON card waited this row was TICKED beside its own sentence
+    // saying "Background learning is off". LearningRow.background returns both
+    // from one place, and a state it cannot prove (no read) is `checked = null`:
+    // no switch is drawn and the words say "Couldn't tell...".
+    val row = LearningRow.background(learning, cardWaiting, canAct, busy)
     Section("Learning") {
         Text(
             LEARNING_NOTE,
@@ -76,10 +83,9 @@ internal fun LearningSection(canAct: Boolean) {
         Gap(8)
         SwitchRow(
             title = "Background learning",
-            detail = MemoryCounts.learningLine(learning),
-            checked = checked,
-            // ON needs a live link (it raises a card); OFF never waits.
-            enabled = !busy && (canAct || checked),
+            detail = row.words,
+            checked = row.checked,
+            enabled = row.enabled,
             onChange = { want ->
                 if (!busy) {
                     busy = true
@@ -95,15 +101,17 @@ internal fun LearningSection(canAct: Boolean) {
                 }
             },
         )
+        if (row.checked == null) {
+            // The PC did not answer. The words above say so; this is the one
+            // way to ask again, and it is NOT the switch (a null position is
+            // not pressable, so nothing here can claim a state the phone does
+            // not have). Same shape as VoiceSwitchesPlate's "Ask the desktop
+            // again".
+            Gap(4)
+            Quiet("Check again", color = chrome.textMid, onClick = { reads += 1 })
+        }
         if (busy) {
             Text("Asking your PC…", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-        }
-        if (cardWaiting) {
-            Text(
-                MemoryCounts.waitingLine(),
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.warnInk,
-            )
         }
         Gap(8)
         AutoLearnSwitches(canAct = canAct, learningOn = learning, refresh = reads)

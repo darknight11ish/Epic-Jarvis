@@ -327,6 +327,40 @@ then `--apply`), `repair_live_backend_gaps.py --apply`, this tool (dry run,
 then `--apply`), a restart, then `selftest.py --preflight`, whose patch check is
 the one thing left that says whether the patcher still has work to do.
 
+## 3b. `tools/field_battery.py` - the proof that the deployed build works
+
+Merged code is not a working feature: only a run against the build that is
+actually on the PC proves it. After the backend is reconciled, Jarvis is
+restarted and the install is resealed, run:
+
+```powershell
+py -3 tools/field_battery.py
+```
+
+It drives the deployed build itself - the routes, the chats, the lanes, the
+cards - and prints one PASS / FAIL / SKIP line per section plus a final table.
+**Exit code 0 means every section is PASS or SKIP; a FAIL is never hidden.** It
+refuses to report a green run for a build that is not the commit under test
+(the stale-build guard), it says which sections spend money before it spends
+it, and every row it cannot reach says SKIP with the reason - a skipped row is
+never a pass.
+
+Two rows exist because of real outages:
+
+- **PREFLIGHT's two-address check.** The phone reaches the PC through a SECOND
+  HUD process (`JARVIS_HUD_BIND`); a restart that lost it left localhost
+  healthy while both phones were offline, twice. When remote access is
+  configured the battery requires both addresses to answer, and names the one
+  that did not. When it is not configured the row SKIPs and says so.
+- **PROJECT-ANSWERS / PROJECT-CHAT / CLOUD-BOUND.** The project store's three
+  answers, a chat scoped to a project, and the bounded cloud answer are on the
+  machine because of features merged on 2026-11-19/20; these rows are the
+  repeatable form of the hand checks that proved them.
+
+`--self-test` runs the battery's own assertion cases offline (no HUD, no
+network, no token) and is what `backend/test_field_battery.py` runs in CI;
+`--section NAME` re-runs one section, e.g. `--section section_project_chat`.
+
 ## 4. The old one-off scripts are superseded
 
 The 2026-10-20 deploy used two throwaway scripts kept in scratch:

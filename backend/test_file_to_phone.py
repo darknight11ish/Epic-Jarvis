@@ -420,9 +420,19 @@ def t_the_records_agree():
           '"/api/files/send"' in parity and '"/api/files/download"' in parity
           and '"phone-only"' in parity)
     frag = repo / "changelog.d" / "2026-10-31-send-file-to-phone.md"
-    check("ONE changelog fragment is there with one bold bullet",
-          frag.is_file() and frag.read_text(encoding="utf-8").count("\n- **") == 0
-          and frag.read_text(encoding="utf-8").startswith("- **"))
+    if frag.is_file():
+        body = frag.read_text(encoding="utf-8")
+        ok = body.startswith("- **") and body.count("\n- **") == 0
+        where = str(frag)
+    else:
+        # The roll folds the fragment into CHANGELOG.md and removes the file
+        # (tools/roll_changelog.py), so the record is read from whichever form
+        # the tree holds - and it must exist in one of them.
+        rolled = repo / "CHANGELOG.md"
+        text = rolled.read_text(encoding="utf-8") if rolled.is_file() else ""
+        ok = "Send one file from the PC to the phone" in text
+        where = f"{rolled} (the rolled form)"
+    check("ONE changelog fragment is there with one bold bullet", ok, where)
     check("no decisions fragment was added by this lane",
           not (repo / "decisions.d" / "2026-10-31-send-file-to-phone.md").exists())
 

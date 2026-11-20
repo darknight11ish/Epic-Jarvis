@@ -19,6 +19,7 @@
 
 import { currentLink, linkWords, onLink } from "./jarvis-link.js";
 import { neverView, PICTURE, pictureView, refusedWords, SETTINGS } from "./look-rules.js";
+import { liveRow } from "./settings-live.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -287,7 +288,11 @@ if (el.pBody) {
   el.pCopy.addEventListener("click", pCopy);
   el.pLineText.addEventListener("focus", () => el.pLineText.select());
   onLink(() => pPaint());
-  pLoad();
+  // The ONE refresh rule: a chat sentence can change picture mode too, so the
+  // tick and the PC's line re-read on the approval queue, when this window
+  // comes back into view, and on a bounded steady poll (DESKTOP-STATE-DRIFT
+  // row 21).
+  liveRow({ read: pLoad });
 }
 
 if (el.section) {

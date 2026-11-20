@@ -220,6 +220,49 @@ class FeatureDirectoryTest {
     }
 
     @Test
+    fun `a PC-only default is never drawn as the setting's current value`() {
+        // PHONE-STATE-DRIFT.md section 4.1 (MISMATCH-WORDS): four PC-only
+        // settings said "on/off by default" on a phone that has no control and
+        // no route that could read them - a default presented as the current
+        // state, the same words-with-no-reader shape as the desktop Wi-Fi row.
+        // The phone now keeps the default and says plainly that it cannot see
+        // the value; the contract itself is untouched, because the desktop
+        // page's copy is drawn beside the real control.
+        val defaultClaim = Regex("(?i)\\b(on|off) by default\\b")
+        val sayingADefault = rows.filter {
+            it.surface == "desktop" && defaultClaim.containsMatchIn(it.why)
+        }
+        assertEquals(
+            "the audit named exactly four PC-only settings whose phone row " +
+                "states a default; the set changed, so read PHONE-STATE-DRIFT 4.1 again",
+            setOf("wifi-auto-reconnect", "voicestudio", "product-check", "vault-organizer"),
+            sayingADefault.map { it.id }.toSet(),
+        )
+        for (row in sayingADefault) {
+            assertTrue(
+                "a PC-only default is still drawn as the current value with no read " +
+                    "behind it: ${row.id} (${row.why})",
+                row.why.contains(
+                    "The phone cannot see its current setting, so the PC's own screen " +
+                        "is the one to check.",
+                ),
+            )
+        }
+        // The contract is the source: each of the four rows must still name a
+        // default, so the test above is not passing by the words having been
+        // quietly deleted from the generated copy.
+        val features = contract["features"]!!.jsonArray.map { it.jsonObject }
+        for (id in setOf("wifi-auto-reconnect", "voicestudio", "product-check", "vault-organizer")) {
+            val feature = features.first { it["id"]!!.jsonPrimitive.content == id }
+            assertTrue(
+                "$id no longer names a default in contract/feature-controls.json - " +
+                    "the phone's caveat now describes nothing",
+                defaultClaim.containsMatchIn(feature["where"]!!.jsonPrimitive.content),
+            )
+        }
+    }
+
+    @Test
     fun `the switches with no Settings row of their own are still findable`() {
         // These are the BOOL_SETTINGS names the phone has no Settings row for
         // (Brain, a plate, or the PC changes them). The directory is the answer
