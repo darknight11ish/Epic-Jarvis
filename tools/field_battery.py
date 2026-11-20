@@ -174,7 +174,8 @@ DEFECT_CHECKER = REPO / "tools" / "check_defect_register.py"
 PORT = 4719
 
 #: Where the phone-facing listener should be, if remote access is configured.
-REMOTE_BIND_FILE = REPO / "jarvis-backend" / "jarvis-framework.toml"
+REMOTE_BIND_FILE = LIVE / "jarvis-framework.toml"
+REMOTE_BIND_FALLBACK = REPO / "jarvis-backend" / "jarvis-framework.toml"
 
 
 def remote_bind() -> str:
@@ -188,10 +189,13 @@ def remote_bind() -> str:
     env = (os.environ.get("JARVIS_HUD_BIND") or "").strip()
     value = env
     if not value:
-        try:
-            text = REMOTE_BIND_FILE.read_text(encoding="utf-8")
-        except OSError:
-            text = ""
+        text = ""
+        for candidate in (REMOTE_BIND_FILE, REMOTE_BIND_FALLBACK):
+            try:
+                text = candidate.read_text(encoding="utf-8")
+                break
+            except OSError:
+                continue
         in_section = False
         for line in text.splitlines():
             stripped = line.strip()
@@ -524,7 +528,7 @@ class Turn:
             setattr(self, key, kw.get(key))
 
 
-def chat(text, *, timeout=300, attachment=None, provenance=False):
+def chat(text, *, timeout=300, attachment=None, provenance=False, project=None):
     """One /api/chat turn. Handles both answer shapes the HUD can send.
 
     A deterministic fast-path answer comes back as JSON (or plain text); a
@@ -533,6 +537,9 @@ def chat(text, *, timeout=300, attachment=None, provenance=False):
     deployed build falls through to the model (measured 2026-11-18)."""
     message = {"role": "user", "content": text}
     body = {"messages": [message]}
+    if project is not None:
+        # A chat that belongs to one project (2026-11-20): the id or the name.
+        body["project"] = project
     if provenance:
         message["provenance"] = "typed"
         body["provenance"] = "typed"
@@ -809,8 +816,13 @@ def section_preflight():
     bind = remote_bind()
     STATE["remote_bind"] = bind
     if not bind:
-        REC.skip("remote access is not configured, so there is no second address "
-                 "to check (localhost only)")
+        # No row can be demanded when the install says loopback only: the phone
+        # listener on this PC is started by the desktop app with JARVIS_HUD_BIND
+        # in ITS environment, which this process cannot see. The durable fix is
+        # the HUD reporting phone_listener on /api/status (ruling 5.5, unbuilt).
+        REC.info("remote access is not configured in the settings this battery "
+                 "can read (bind_address is loopback), so there is no second "
+                 "address to check here")
     else:
         local_code = address_answers("127.0.0.1")
         remote_code = address_answers(bind)
@@ -3537,7 +3549,15 @@ def main(only=None):
         section_bounded_cloud,
     ]
     if only:
-        sections = [sec for sec in sections if sec.__name__ == only]
+        wanted = [sec for sec in sections if sec.__name__ == only]
+        if not wanted:
+            print(f"unknown section: {only!r} (have: "
+                  + ", ".join(sec.__name__ for sec in sections) + ")")
+            return 2
+        # PREFLIGHT always runs: a later row needs STATE["ready"] to mean
+        # something, and a section run on an unchecked build is not a proof.
+        sections = [section_preflight] + [sec for sec in wanted
+                                          if sec is not section_preflight]
     for section in sections:
         try:
             section()
